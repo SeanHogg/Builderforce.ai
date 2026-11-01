@@ -238,7 +238,9 @@ describe('cloud adapter conformance - the shared scripted task through runCloudA
     const { outcome, events } = await driveCloud(SCRIPT, { requiredSignoff: { roleKey: 'qa-tester' }, maxSteps: 1 });
     expect(outcome.kind).toBe('finished');
     expect(conformanceTrace(events)).toContain('tool.dispatched:builtin_kanban_signoff:ok');
-    console.log('DBG', JSON.stringify(conformanceTrace(events)), JSON.stringify(events.filter((e) => e.kind === 'finish.blocked')));
+    const finishes = conformanceTrace(events).filter((fact) => fact.startsWith('tool.dispatched:finish'));
+    expect(finishes).toEqual(['tool.dispatched:finish:error', 'tool.dispatched:finish:ok']);
+    expect((outcome as { state: RunState }).state.finish.reviewVerdictRecorded).toBe(true);
   });
 });
 

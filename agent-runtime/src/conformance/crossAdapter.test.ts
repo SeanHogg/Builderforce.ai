@@ -8,13 +8,14 @@
 
 import { Type } from "@sinclair/typebox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RunEvent } from "@builderforce/agent-run";
+import type { RunEvent, RunOutcome } from "@builderforce/agent-run";
 import {
   CONFORMANCE_ANSWER,
   CONFORMANCE_PROMPT,
   CONFORMANCE_SCRIPT,
   CONFORMANCE_TRACE,
-  CONFORMANCE_TRACE_CLOSED_CATALOG,
+  CONFORMANCE_TOOL,
+  conformanceCapabilities,
   conformanceTrace,
 } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, ModelTransport } from "@builderforce/agent-run";
@@ -25,7 +26,7 @@ import type { AgentTool } from "../builderforce/model/agent-types.js";
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { runOnPremAgent } from "../run/onPremAdapter.js";
 
-const seen = vi.hoisted(() => ({ events: [] as RunEvent[] }));
+const seen = vi.hoisted(() => ({ events: [] as RunEvent[], outcome: undefined as RunOutcome | undefined }));
 
 // Observe the one call every adapter makes: the agent runs exactly as it would, with the adapter's own event sink wrapped to
 // copy what it is told into `seen.events`.
@@ -33,13 +34,17 @@ vi.mock("@builderforce/agent-run", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@builderforce/agent-run")>();
   return {
     ...actual,
-    runAgent: (input: Parameters<typeof actual.runAgent>[0]) =>
-      actual.runAgent({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, seen.events) } }),
+    runAgent: async (input: Parameters<typeof actual.runAgent>[0]) => {
+      const outcome = await actual.runAgent({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, seen.events) } });
+      seen.outcome = outcome;
+      return outcome;
+    },
   };
 });
 
 beforeEach(() => {
   seen.events.length = 0;
+  seen.outcome = undefined;
 });
 
 /** A model that replays the shared script and records what it was asked. */
@@ -59,12 +64,13 @@ describe("on-prem tickets under the shared scripted task", () => {
   it("emits the shared RunEvent trace and the shared answer", async () => {
     const sinks = { onAssistantText: vi.fn(), onToolUse: vi.fn(), onResult: vi.fn(), onSteerApplied: vi.fn(), onOutcome: vi.fn() };
     const result = await runOnPremAgent(
-      { prompt: CONFORMANCE_PROMPT, cwd: "/work/ticket", anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k", transport: scripted(), capabilities: { capabilities: new Set() } },
+      { prompt: CONFORMANCE_PROMPT, cwd: "/work/ticket", anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k", transport: scripted(), capabilities: conformanceCapabilities() },
       sinks,
     );
 
     expect(conformanceTrace(seen.events)).toEqual(CONFORMANCE_TRACE);
     expect(result).toEqual({ ok: true, text: CONFORMANCE_ANSWER });
+    expect(seen.outcome).toMatchObject({ kind: "finished", output: CONFORMANCE_ANSWER });
   });
 });
 
@@ -107,26 +113,26 @@ describe("channels and cron under the shared scripted task", () => {
       });
       return stream;
     };
-    const idle: AgentTool = {
-      name: "idle",
-      label: "idle",
-      description: "does nothing",
+    // The channel's catalog is its own: the runner's tools, here one of the shared tool's name.
+    const listFiles: AgentTool = {
+      name: CONFORMANCE_TOOL,
+      label: CONFORMANCE_TOOL,
+      description: "lists files",
       parameters: Type.Object({}),
-      execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
+      execute: async () => ({ content: [{ type: "text", text: JSON.stringify({ ok: true, paths: [] }) }], details: {} }),
     };
-    const agent = new Agent({ model, tools: [idle], systemPrompt: "sys" });
+    const agent = new Agent({ model, tools: [listFiles], systemPrompt: "sys" });
     agent.streamFn = streamFn;
 
     const produced = await agent.prompt([{ role: "user", content: CONFORMANCE_PROMPT, timestamp: 0 }]);
 
-    // FINDING (reported, not masked): a channel run differs from the shared trace in exactly two ways, both of the adapter's
-    // port choices, and this pins them as they are:
-    //  1. the channel's model port names a model `<provider>/<id>` (`p/fake-model`); the gateway and the cloud report the bare id;
-    //  2. the channel's catalog is CLOSED to the runner's own tools and has no `finish`, so the scripted call is refused and the run
-    //     ends on the model's next prose turn (CONFORMANCE_TRACE_CLOSED_CATALOG, which the Creation Canvas shows too).
-    const expected = CONFORMANCE_TRACE_CLOSED_CATALOG.map((fact) => fact.replace("model.completed:fake-model", "model.completed:p/fake-model"));
+    // FINDING (reported, pinned as it is): the ONE difference from the golden is that the channel's model port names a model
+    // `<provider>/<id>` (`p/fake-model`), where the gateway and the cloud report the bare id. The run keys its pins and fallbacks on the
+    // ref, so the trace keeps it; the outcome row is normalised to the bare id (`channelAdapter.ts`, `channelOutcome.test.ts`).
+    const expected = CONFORMANCE_TRACE.map((fact) => fact.replace("model.completed:fake-model", "model.completed:p/fake-model"));
     expect(conformanceTrace(seen.events)).toEqual(expected);
-    // ...and the answer is the shared one.
+    // ...and the run ends the same way: the agent's own outcome, not just the reply the session recorded.
+    expect(seen.outcome).toMatchObject({ kind: "finished", output: CONFORMANCE_ANSWER });
     expect(JSON.stringify(produced.at(-1))).toContain(CONFORMANCE_ANSWER);
   });
 });

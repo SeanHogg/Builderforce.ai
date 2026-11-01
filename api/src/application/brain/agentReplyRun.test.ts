@@ -8,16 +8,33 @@ import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 const h = vi.hoisted(() => ({
   script: [] as Array<{ content: string; toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }> }>,
   turn: 0,
+  /** The model the fake gateway says served the turn. */
+  model: 'reply-model',
   requests: [] as Array<Record<string, unknown>>,
   callTool: vi.fn(async (..._a: unknown[]) => ({ tasks: [] })),
   fail: undefined as Error | undefined,
   report: vi.fn(),
+  /** What the agent emitted and ended with, observed at the one `runAgent` call the reply makes. */
+  events: [] as unknown[],
+  outcome: undefined as unknown,
 }));
+// Observe the one call the reply makes: the agent runs exactly as it would, with its event sink wrapped to copy the trace.
+vi.mock('@builderforce/agent-run', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@builderforce/agent-run')>();
+  return {
+    ...actual,
+    runAgent: async (input: Parameters<typeof actual.runAgent>[0]) => {
+      const outcome = await actual.runAgent({ ...input, ports: { ...input.ports, events: actual.teeEvents(input.ports.events, h.events as never) } });
+      h.outcome = outcome;
+      return outcome;
+    },
+  };
+});
 vi.mock('./brainLlmCall', () => ({
   completeTraced: async (_db: unknown, _service: unknown, body: Record<string, unknown>) => {
     h.requests.push(body);
     if (h.fail) throw h.fail;
-    return { resolvedModel: 'reply-model', resolvedVendor: 'v', byoFunded: false, response: { status: 200 }, script: h.script[Math.min(h.turn++, h.script.length - 1)] };
+    return { resolvedModel: h.model, resolvedVendor: 'v', byoFunded: false, response: { status: 200 }, script: h.script[Math.min(h.turn++, h.script.length - 1)] };
   },
 }));
 vi.mock('../llm/LlmProxyService', () => ({
@@ -51,7 +68,7 @@ const input = (): AgentReplyRunInput => ({
   plan: { effectivePlan: 'free', premiumOverride: false }, call: {} as never,
 });
 
-beforeEach(() => { vi.clearAllMocks(); h.turn = 0; h.requests.length = 0; h.fail = undefined; });
+beforeEach(() => { vi.clearAllMocks(); h.turn = 0; h.requests.length = 0; h.fail = undefined; h.events.length = 0; h.outcome = undefined; h.model = 'reply-model'; });
 
 describe('runAgentReply', () => {
   it('runs a platform tool as the user, then replies; the trace names the catalog id and the model turns', async () => {
@@ -92,5 +109,33 @@ describe('runAgentReply', () => {
     h.fail = new TypeError('cannot read properties of undefined');
     await expect(runAgentReply(input())).rejects.toBe(h.fail);
     expect(h.report).toHaveBeenCalledWith(h.fail, expect.objectContaining({ operation: 'agentReply' }));
+  });
+});
+
+import { CONFORMANCE_ANSWER, CONFORMANCE_MODEL, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } from '@builderforce/agent-run';
+import type { RunEvent } from '@builderforce/agent-run';
+
+// The ONE scripted task every entry point is held to (`@builderforce/agent-run` conformanceTask.ts), through the @-reply's production
+// call (`runAgentReply`): its own model port, catalog extension, policy and event sink. Only the gateway and the catalog call are faked.
+describe('runAgentReply under the shared scripted task', () => {
+  it('emits the shared RunEvent trace and ends with the shared answer', async () => {
+    h.script = CONFORMANCE_SCRIPT.map((c) => ({
+      content: c.content,
+      ...(c.toolCalls ? { toolCalls: c.toolCalls.map((call) => ({ id: call.id, name: call.name, args: JSON.parse(call.arguments) as Record<string, unknown> })) } : {}),
+    }));
+    h.model = CONFORMANCE_MODEL;
+    const base = input();
+    const s = await runAgentReply({
+      ...base,
+      convo: [{ role: 'system', content: 'You are Ada.' }, { role: 'user', content: CONFORMANCE_PROMPT }],
+      toolset: {
+        tools: [{ type: 'function', function: { name: CONFORMANCE_TOOL, description: 'list', parameters: { type: 'object', properties: {} } } }, ASK_USER_TOOL_SPEC],
+        nameToTool: new Map([[CONFORMANCE_TOOL, 'files.list']]), nameFor: () => CONFORMANCE_TOOL,
+      } as never,
+    });
+
+    expect(conformanceTrace(h.events as RunEvent[])).toEqual(CONFORMANCE_TRACE);
+    expect(h.outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
+    expect(s.text).toBe(CONFORMANCE_ANSWER);
   });
 });
