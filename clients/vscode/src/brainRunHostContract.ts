@@ -77,6 +77,12 @@ export interface BrainRunHostPorts {
    * Omitted ⇒ the run's chat id is itself a server chat.
    */
   chatIdentity?(chatId: number): Promise<{ serverChatId: number | null; clientChatId?: string }>;
+  /**
+   * PRD 36: an upper bound (ms) on how long a run awaits the identity bind before it
+   * degrades to the UNBOUND identity (local path). A slow/unreachable identity endpoint
+   * must not hold the run. Omitted ⇒ the default (see `CHAT_IDENTITY_TIMEOUT_MS`).
+   */
+  chatIdentityTimeoutMs?: number;
   /** PRD 36: wrap the run's streamer so every call lands in the chat's usage ledger. */
   recordUsage?(stream: BrainStreamFn, run: { chatId: number; runKey: number; mode?: "chat" | "work" }): BrainStreamFn;
   /** The editor's per-run settings — stage models, pipeline routing, the USD cap

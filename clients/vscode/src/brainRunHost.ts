@@ -66,6 +66,34 @@ export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry
 export { OWNER_NAME } from "./brainRunHostContract";
 export type { BrainRunHost, BrainRunHostPorts, RunContextPack, RunNoteOptions, ToolRunInfo } from "./brainRunHostContract";
 
+/**
+ * PRD 36: the default upper bound (ms) on the identity bind a run awaits before turn 1.
+ * The bind reaches over the network (`chatIdentity`); a slow or unreachable endpoint
+ * must degrade the run to the UNBOUND identity (local path), never hold it.
+ */
+export const CHAT_IDENTITY_TIMEOUT_MS = 5_000;
+
+/**
+ * The identity bind, bounded. Resolves to the bound identity when the bind lands in
+ * time; on a timeout OR a rejected bind (the same shape a dead endpoint reports) it
+ * resolves to `undefined` = UNBOUND, so the run proceeds on the local chat id instead
+ * of hanging. Never rejects — a bind failure is a degradation, not a run failure.
+ */
+async function bindIdentityWithin(
+  bind: (() => Promise<{ serverChatId: number | null; clientChatId?: string }>) | undefined,
+  timeoutMs: number,
+): Promise<{ serverChatId: number | null; clientChatId?: string } | undefined> {
+  if (!bind) return undefined;
+  try {
+    return await Promise.race([
+      bind(),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+    ]);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const relay = createRunRelay();
   const notes = new Map<number, RunKnowledgeRecorder>();
@@ -240,9 +268,14 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const stream: BrainStreamFn = ports.recordUsage
       ? ports.recordUsage(routed, { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) })
       : routed;
-    // The run's chat OFF this machine (PRD 36) — bound now when signed in. Without the
-    // port the chat id is itself a server chat (and is what the server calls name).
-    const identity = ports.chatIdentity ? await ports.chatIdentity(chatId) : undefined;
+    // The run's chat OFF this machine (PRD 36) — bound now when signed in, bounded by
+    // `CHAT_IDENTITY_TIMEOUT_MS`: a slow/unreachable identity endpoint degrades the run
+    // to the UNBOUND identity (local path) instead of holding it. Without the port the
+    // chat id is itself a server chat (and is what the server calls name).
+    const identity = await bindIdentityWithin(
+      ports.chatIdentity ? () => ports.chatIdentity!(chatId) : undefined,
+      ports.chatIdentityTimeoutMs ?? CHAT_IDENTITY_TIMEOUT_MS,
+    );
     const serverChatId = identity ? identity.serverChatId : chatId;
     const surface = p.modelSurface ?? null;
     // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
