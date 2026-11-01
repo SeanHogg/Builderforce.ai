@@ -146,6 +146,21 @@ export interface PlatformTools {
    * model reads the message that follows. The names are the surface's own; absent ⇒ the shared registry's commands only.
    */
   interruptible?(name: string, args: Record<string, unknown>): boolean;
+  /**
+   * The surface's `execute` watches the person's steers itself (additive): a foreground command it runs is stopped, and a wait on a
+   * background job cut short, inside its own runner, and the result it returns already says so. The agent then does not wrap the call in
+   * its own watcher - a second one would encode the same interruption twice and hide it from the surface's failure count.
+   */
+  watchesItself?: true;
+  /**
+   * The surface's say over a call BEFORE it dispatches (additive), asked from the kernel's `beforeDispatch` slot - which the loop does
+   * not race against the person's Stop, so a long step of it (a hand-off that files tickets and starts children) ends before the run
+   * settles. A `result` answers the call (it is not dispatched); a `rewrite` dispatches another call in its place (the tool router);
+   * nothing back ⇒ the call dispatches as it is. Also asked of a call whose arguments never parsed (`malformed`).
+   */
+  preflight?(call: { id: string; name: string; args: Record<string, unknown>; arguments: string; malformed: boolean }, env: { step: number }):
+    | Promise<{ result: PlatformToolResult } | { rewrite: { name: string; args: Record<string, unknown> } } | void>
+    | { result: PlatformToolResult } | { rewrite: { name: string; args: Record<string, unknown> } } | void;
   /** How a call whose arguments never parsed is declined. Absent ⇒ the shared wording, no hint. */
   malformed?: MalformedCallPolicy;
 }
@@ -247,6 +262,11 @@ export interface DeliveryLedger {
   };
   /** The answer a turn that cleared every rung settles on. Used when {@link DeliveryLedger.owns}`.settle`. */
   accept?(content: string): string;
+  /**
+   * The turn's text as the stall judgement and the gates read it (additive): the model's own words, reasoning included, where the
+   * transcript holds the turn as it is replayed. Absent ⇒ the replayed text.
+   */
+  judged?(content: string): string;
   /** The turn moved to another model (for the surface's session bookkeeping). */
   handedOff?(from: string | undefined, to: string): void;
   /** The wording of a provider failure's recovery. Absent ⇒ the failure is routed in silence. */
@@ -275,6 +295,14 @@ export interface StallStyle {
   failoverNudgeOnly?: true;
   /** The stall is judged against the tools the turn ADVERTISED (its menu), not every tool the surface could run. */
   menu?: true;
+  /**
+   * What the person steered in while the last prose turn was written is taken FIRST, before any judgement of the turn: the turn is sent
+   * back with their words (several join into ONE row, which is not marked the person's own), and nothing the turn owed is spent.
+   * Absent ⇒ the turn is judged first and a steer arriving meanwhile is taken at the end.
+   */
+  steersFirst?: true;
+  /** The re-prompt budget counts across the whole run until a turn calls a tool or the run fails over, whichever model served (absent ⇒ keyed by the model it was spent against). */
+  runWideBudget?: true;
   /** A turn that said nothing is still the model's row: it is quoted before the correction, empty, so the next request reads what the model did. */
   quoteEmpty?: true;
 }

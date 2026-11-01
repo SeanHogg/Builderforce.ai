@@ -95,7 +95,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   /** When each call started, so a call's duration is MEASURED, not inferred from the events around it. */
   const starts = new Map<string, number>();
 
-  const { takeSteers, lateSteerNote, takeFollowUps } = steeringTakers(run, contextAt);
+  const { takeSteers, takeJoined, lateSteerNote, takeFollowUps } = steeringTakers(run, contextAt);
 
   return {
     beforeTurn: async (ctx) => {
@@ -170,7 +170,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
     },
 
-    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeFollowUps }),
+    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeJoined, takeFollowUps }),
 
     onRepetitionLoop: async (ctx, loop) => {
       await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });
@@ -219,6 +219,16 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         // The run asked for what it already holds: the cache answered, and a run that does little else is circling.
         run.cache.served(ctx.step);
         return { result: stub };
+      }
+      // The surface's own say over the call (`PlatformTools.preflight`): here, where the loop does not race it against the person's Stop.
+      const platform = ports.platform;
+      if (platform?.preflight && ownsCall(ports, call.name)) {
+        const pre = await platform.preflight({ id: call.id, name: call.name, args: call.args, arguments: call.raw.arguments, malformed: call.malformed }, { step: ctx.step });
+        if (pre && "result" in pre) return { result: { data: pre.result.data, ...(pre.result.isError ? { isError: true } : {}) } };
+        if (pre && "rewrite" in pre) {
+          const { name, args } = pre.rewrite;
+          return { rewrite: { ...call, name, args, raw: { ...call.raw, name, arguments: JSON.stringify(args) } } };
+        }
       }
       return undefined;
     },

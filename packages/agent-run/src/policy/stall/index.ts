@@ -81,7 +81,7 @@ function currentModel(ctx: PolicyContext): string | undefined {
 function budgetOf(ctx: PolicyContext): StallState {
   const slot = ctx.state.stall;
   const model = currentModel(ctx);
-  if (slot && typeof slot.recoveriesUsed === "number" && slot.model === model) return { ...slot };
+  if (slot && typeof slot.recoveriesUsed === "number" && (slot.model === model || ctx.ports?.delivery?.stall?.runWideBudget)) return { ...slot };
   return model !== undefined ? { model, recoveriesUsed: 0 } : { recoveriesUsed: 0 };
 }
 
@@ -199,7 +199,7 @@ function narratesFirst(delivery: DeliveryLedger): boolean {
  * on a re-prompt and on nothing else - no failover, no stop, no change to the run's state - so the judgement can be asked twice.
  */
 function narrationRecover(ctx: PolicyContext, only?: "nudge"): StallDecision | undefined {
-  const text = typeof ctx.content === "string" ? ctx.content : "";
+  const text = ctx.judged ?? (typeof ctx.content === "string" ? ctx.content : "");
   const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
   const style = ctx.ports?.delivery?.stall;
   // The model that served the turn is the one a failover must skip; the run's held model is the fallback.

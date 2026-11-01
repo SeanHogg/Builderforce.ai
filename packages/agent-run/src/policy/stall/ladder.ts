@@ -91,7 +91,7 @@ function restatement(ctx: PolicyContext, rung: LadderRung, attempt: number, nudg
 /** The turn a ledger judges, as the stall hook's context describes it. */
 function deliveryTurn(ctx: PolicyContext) {
   return {
-    content: ctx.content ?? "",
+    content: ctx.judged ?? ctx.content ?? "",
     ...(ctx.served?.interruption ? { interruption: ctx.served.interruption } : {}),
     ...(ctx.served?.model ? { model: ctx.served.model } : {}),
   };

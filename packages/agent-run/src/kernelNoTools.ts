@@ -10,7 +10,7 @@
 
 import type { LoopHooks } from "@builderforce/agent-loop";
 
-import type { RunMessage } from "./contract.js";
+import type { RunMessage, RunPart } from "./contract.js";
 import type { PolicyContext } from "./policy/index.js";
 import { emit } from "./runContext.js";
 import type { KernelRun } from "./kernelHooks.js";
@@ -22,6 +22,7 @@ export interface NoToolCallsDeps {
   contextAt(step: number, turn: number): PolicyContext;
   append(...rows: RunMessage[]): void;
   takeSteers(ctx: StepAt): Promise<"none" | "stop" | "applied">;
+  takeJoined(ctx: { step: number }): Promise<"none" | "stop" | { text: string; parts: RunPart[] }>;
   takeFollowUps(ctx: { step: number }): Promise<boolean>;
 }
 
@@ -40,12 +41,12 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
    * transcript as its own row, then the correction — so the next turn reads both, never
    * two user rows in a row with the model's words lost.
    */
-  const requeue = async (pctx: PolicyContext, step: number, said: string, note: string, kept: "block" | "reply" = "block"): Promise<void> => {
+  const requeue = async (pctx: PolicyContext, step: number, said: string, note: string, kept: "block" | "reply" = "block", parts: readonly RunPart[] = []): Promise<void> => {
     await sentBack(step, said, kept);
     // A surface that settles a reply itself has the model's row read as that reply (an empty turn is its placeholder).
     const quoted = kept === "reply" && ports.delivery?.owns?.settle && hooks.stall.settle ? hooks.stall.settle(pctx, said) : said;
     if (quoted.trim() || ports.delivery?.stall?.quoteEmpty) append({ role: "assistant", content: quoted, ...run.turnNative });
-    append({ role: "user", content: note });
+    append({ role: "user", content: note, ...(parts.length > 0 ? { parts: [...parts] } : {}) });
   };
 
   return async (ctx, turn) => {
@@ -54,8 +55,21 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     const pctx = deps.contextAt(ctx.step, ctx.stepInCall);
     pctx.content = turn.content;
     pctx.served = { ...(run.facts.model ? { model: run.facts.model } : {}), ...(run.facts.interruption ? { interruption: run.facts.interruption } : {}) };
+    const judged = ports.delivery?.judged?.(turn.content);
+    if (judged !== undefined) pctx.judged = judged;
     // A surface that judges a stall against the menu the turn advertised, not everything it could run, says so (`DeliveryLedger.stall.menu`).
     if (ports.delivery?.stall?.menu && run.selection?.tools) pctx.tools = [...run.selection.tools];
+    // What the person (or a child) steered in while this turn was written comes first, before any judgement of the turn: a surface that
+    // says so (`stall.steersFirst`) never spends a gate or a re-prompt on a turn a steer has already outdated, nor strands the steer.
+    const steersFirst = ports.delivery?.stall?.steersFirst === true;
+    if (steersFirst) {
+      const steered = await deps.takeJoined(ctx);
+      if (steered === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (steered !== "none") {
+        await requeue(pctx, ctx.step, turn.content, steered.text, "block", steered.parts);
+        return { action: "continue" };
+      }
+    }
     // An owner never ends with children still working: their reports would strand.
     const children = await hooks.finish.liveChildren?.(pctx);
     if (children) {
@@ -110,6 +124,15 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
       return { action: "continue" };
     }
     const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
+    // Words that arrived while the verdict was being given: the turn is sent back with them, as the model wrote it (not as it was settled).
+    if (steersFirst) {
+      const late = await deps.takeJoined(ctx);
+      if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (late !== "none") {
+        await requeue(pctx, ctx.step, turn.content, late.text, "block", late.parts);
+        return { action: "continue" };
+      }
+    }
     if (output.trim()) append({ role: "assistant", content: output, ...run.turnNative });
     // A message steered in while this last turn was in flight is never lost (§6.3): the
     // run takes one more turn for it instead of finishing past it. What the model said stays as its own block.

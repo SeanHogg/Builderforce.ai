@@ -288,8 +288,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
   }
   try {
     const box: { control?: LoopDispatchResult["control"]; failed?: boolean; killed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult } = {};
-    const data = await runToolWithWatch(
-      async (name, args, stepSignal) => {
+    const exec = async (name: string, args: unknown, stepSignal?: AbortSignal): Promise<unknown> => {
         const run = stepSignal ?? signal;
         const extension = ports.extensions;
         if (extension?.handles(name)) {
@@ -314,13 +313,11 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
         const result = await registryOf(ports).dispatch(name, args as Record<string, unknown>, { caps: ports.capabilities, ...(run ? { signal: run } : {}) });
         box.control = result.control;
         return extension?.shape ? extension.shape(name, result.data) : result.data;
-      },
-      watch,
-      signal,
-      call.name,
-      call.args,
-      own ? platform?.interruptible : undefined,
-    );
+    };
+    // A surface whose runner watches the person's steers itself is not wrapped in a second watcher (`PlatformTools.watchesItself`).
+    const data = own && platform?.watchesItself
+      ? await exec(call.name, call.args)
+      : await runToolWithWatch(exec, watch, signal, call.name, call.args, own ? platform?.interruptible : undefined);
     // A surface that guards its own context says its share; any other result is capped by the tool's table row, sized by the window.
     const surfaceCap = own ? platform?.resultCap?.(state.model.model) : undefined;
     const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model));

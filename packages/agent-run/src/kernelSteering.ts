@@ -4,7 +4,7 @@
  * the decisions (a stop command, how a steer is worded) are `policy/steering`'s.
  */
 
-import type { RunMessage } from "./contract.js";
+import type { RunMessage, RunPart } from "./contract.js";
 import type { PolicyContext } from "./policy/index.js";
 import { isStopSteer, steerInput } from "./policy/steering/index.js";
 import { appendRows, emit } from "./runContext.js";
@@ -42,6 +42,23 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
   };
 
   /**
+   * What the user steered in while the last prose turn was written, for a surface that takes it FIRST (`DeliveryLedger.stall.steersFirst`):
+   * the words of every steer joined into ONE user turn (their pictures riding it), acknowledged with `steer.applied` each. A stop
+   * command ends the run, as it does anywhere else. The caller sends the turn back with the words.
+   */
+  const takeJoined = async (ctx: { step: number }): Promise<"none" | "stop" | { text: string; parts: RunPart[] }> => {
+    const steered = ((await ports.steering?.drain({ step: ctx.step })) ?? []).map(steerInput);
+    if (steered.length === 0) return "none";
+    const texts = steered.map((s) => s.text);
+    if (stopsOn(texts)) {
+      run.stopped = true;
+      return "stop";
+    }
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    return { text: texts.join("\n\n"), parts: steered.flatMap((s) => s.parts ?? []) };
+  };
+
+  /**
    * What the user steered in while a `finish` call was in flight, as the note the finish is
    * answered with; null when nothing was steered (the finish stands). A stop command lets
    * the finish stand and settles the run cancelled, as it does anywhere else.
@@ -72,5 +89,5 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
     return true;
   };
 
-  return { takeSteers, lateSteerNote, takeFollowUps };
+  return { takeSteers, takeJoined, lateSteerNote, takeFollowUps };
 }

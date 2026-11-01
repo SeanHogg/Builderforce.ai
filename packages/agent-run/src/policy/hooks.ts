@@ -40,6 +40,8 @@ export interface PolicyContext {
   tools: readonly ToolSchema[];
   /** The turn's assistant content, when the hook runs after the model answered. */
   content?: string;
+  /** The turn's text as the surface's stall judgement reads it (`DeliveryLedger.judged`); absent ⇒ {@link content}. */
+  judged?: string;
   /** The turn's tool calls, when the hook runs around them. */
   toolCalls?: readonly PolicyToolCall[];
   /** The cancellation signal, when the caller supplied one. */
@@ -72,6 +74,8 @@ export interface CompactionResult {
   messages: RunMessage[];
   /** How many messages were dropped. */
   dropped: number;
+  /** The only change is the row that tells the incoming model it took over (a model hand-off that dropped nothing): the context did not shrink, so the run does not count it as a compaction. */
+  noteOnly?: true;
   /** The tokens reserved for the answer. */
   reserveTokens?: number;
   /** What the fold cost and saved, for the run's timeline. */
