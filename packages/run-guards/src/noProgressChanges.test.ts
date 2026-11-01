@@ -187,9 +187,11 @@ describe("platform progress: a turn that moved the board is not idle", () => {
     }
   });
 
-  it("still trips when the platform tool is read-only (a list)", () => {
+  it("still trips on a read-only platform tool (a list) with no other progress", () => {
     const d = new ProgressDetector({}, { ...ports, ...platformPorts });
-    d.observe("read_file", { path: "a.ts" }, okData);
+    // First call names a new target (ground). Then repeated identical lists are neither
+    // ground nor churn, so the no-progress window fills and trips.
+    d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
     d.endTurn();
     for (let i = 0; i < NO_PROGRESS_TURNS - 1; i++) {
       d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
@@ -201,6 +203,7 @@ describe("platform progress: a turn that moved the board is not idle", () => {
 });
 
 
+describe("churn is bounded", () => {
   function run(d: ProgressDetector, turn: (i: number) => void, turns: number): Array<string | undefined> {
     const kinds: Array<string | undefined> = [];
     for (let i = 0; i < turns; i++) {
