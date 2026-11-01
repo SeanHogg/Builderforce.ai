@@ -20,8 +20,7 @@ if (!pkg) {
 }
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const files = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'oracle.files.txt'), 'utf8')
-  .split(/?
-/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && l.startsWith(`${pkg}/`))
+  .split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && l.startsWith(`${pkg}/`))
   .map((l) => l.slice(pkg.length + 1));
 if (files.length === 0) {
   console.error(`no oracle files under ${pkg}`);
