@@ -13,6 +13,13 @@
  * replay that writes a local receipt instead of calling platform fetch. The
  * journal row stays, so a later grant can still flush it. This is not
  * `runNetworkDenialScenario` and not a sync coordinator.
+ *
+ * The PRODUCTION page's activation-time acceptance — a self-check of the real
+ * guarded fetch after the policy boot applies the snapshot — lives in
+ * `./webNetworkDenialSelfCheck.ts`, fired by `bootWebPlatformPolicy`
+ * (`./platformPolicy.ts`). This module is the node/test durable-write proof;
+ * it deliberately does not run at page boot (writing a ticket on every load
+ * is scaffolding, not activation).
  */
 import {
   bootDeniedHost,

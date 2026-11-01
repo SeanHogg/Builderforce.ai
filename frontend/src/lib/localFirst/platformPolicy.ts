@@ -47,6 +47,9 @@ import {
 import { isSessionStorageKey } from '../auth';
 import { bootWebHostStore, type BootWebHostOptions, type WebHostBoot } from './bootWebHost';
 import {
+  runWebNetworkDenialSelfCheckOnce,
+} from './webNetworkDenialSelfCheck';
+import {
   WEB_INFERENCE_MODE_STORAGE_KEY,
   notifyWebInferenceMode,
   webSignedIn,
@@ -191,6 +194,19 @@ export function bootWebPlatformPolicy(): void {
     if (relevant) applyPolicy();
   });
   (window as unknown as Record<string, boolean>)[WEB_PLATFORM_POLICY_BOOTED] = true;
+
+  // G27 (ticket #6379) — the VSIX runs its activation-time network-denial
+  // self-check once its policy binds; the web was missing that composition.
+  // Run ours AFTER the snapshot is applied, so the probe goes through the
+  // REAL guarded fetch (`webPlatformFetch`) against the derived policy. The
+  // runner never rejects and reports a skip when the snapshot permits
+  // synchronize; it fires in production bundles only (vitest runs as
+  // NODE_ENV=test), so tests boot the policy without paying for the probe.
+  if (process.env.NODE_ENV === 'production') {
+    runWebNetworkDenialSelfCheckOnce().catch((error: unknown) => {
+      console.error(`BuilderForce web network-denial self-check: crashed — ${String(error)}`);
+    });
+  }
 }
 
 /** Test hook: re-arm the bootstrap and return the policy to the API-denied default. */
