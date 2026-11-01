@@ -22,6 +22,7 @@ import { createLocalFirstPersistence } from '../persistence/localFirstPersistenc
 import { broadcastMessageChanges, createRovrBrainPersistence } from '../persistence/rovrBrainPersistence';
 import { chromeKeyValue } from '../platform/keyValue';
 import { createRovrGuardedFetch } from '../platform/guardedFetch';
+import { runNetworkDenialSelfCheck, type NetworkDenialAccount } from '../platform/networkDenialSelfCheck';
 import { createRovrPlatformPolicy, type RovrPlatformPolicy } from '../platform/policy';
 import { createSettings, type RovrSettings } from '../platform/settings';
 import { createSitePermissions, type SitePermissions } from '../platform/sitePermissions';
@@ -96,7 +97,19 @@ export async function createPanelServices(): Promise<PanelServices> {
   // Same gate the service worker uses. A raw fetch here would be a second, ungated
   // platform call — loopback and direct-provider URLs still pass through ungated.
   const rovrPolicy = createRovrPlatformPolicy(local);
-  const fetchImpl = createRovrGuardedFetch({ policy: rovrPolicy });
+  const requestAccount: NetworkDenialAccount = { attempted: 0, blocked: 0 };
+  const fetchImpl = createRovrGuardedFetch({
+    policy: rovrPolicy,
+    onRequest: (record) => {
+      requestAccount[record.outcome] += 1;
+    },
+  });
+  // PACKAGED network-denial self-check (gap #6378): prove the guard just installed
+  // refuses a denied platform request before the network and lets a non-platform URL
+  // through. Non-blocking; the panel awaits `rovrPolicy.ready()` below first, so the
+  // policy snapshot is in force by the time the self-check reads it.
+  void runNetworkDenialSelfCheck({ fetchImpl, policy: rovrPolicy, account: requestAccount })
+    .catch((error: unknown) => console.error('Rovr network-denial self-check: failed to run', error));
   await rovrPolicy.ready();
   const session = createSession({ storage: local, baseUrl, fetch: fetchImpl, now: Date.now });
   await session.ready();

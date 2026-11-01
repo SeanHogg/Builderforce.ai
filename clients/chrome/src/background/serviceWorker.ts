@@ -22,6 +22,7 @@ import { createSession } from '../auth/session';
 import { DEFAULT_BASE_URL, ERROR_OUTBOX_DB, LOCAL_DB, SYNC_ALARM, SYNC_ALARM_MINUTES, SYNC_OUTBOX_DB } from '../config';
 import { createRovrGuardedFetch } from '../platform/guardedFetch';
 import { chromeKeyValue, type KeyValueStore } from '../platform/keyValue';
+import { runNetworkDenialSelfCheck, type NetworkDenialAccount } from '../platform/networkDenialSelfCheck';
 import { createRovrPlatformPolicy } from '../platform/policy';
 import { createSettings } from '../platform/settings';
 import { createIdbRecords } from '../store/idbRecords';
@@ -79,12 +80,23 @@ export function bootRovrServiceWorker(options: BootRovrServiceWorkerOptions = {}
   // classified into a capability and refused (before `fetch` is called) unless the policy
   // allows it; any other origin — loopback inference, a provider called directly — passes
   // through untouched.
+  const requestAccount: NetworkDenialAccount = { attempted: 0, blocked: 0 };
   const fetchImpl = createRovrGuardedFetch({
     policy: platformPolicy,
     onRequest: (record) => {
+      requestAccount[record.outcome] += 1;
       if (record.outcome === 'blocked') console.warn(`Rovr platform: ${record.capability} denied (${record.url})`);
     },
   });
+
+  // PACKAGED network-denial self-check (gap #6378): prove the guard the boot just installed
+  // actually refuses a denied platform request before the network and lets a non-platform
+  // URL through. Real boots only — a `network: 'denied'` boot asserts the fetch stub is
+  // never called, so it must not probe. Non-blocking; every failure is logged loudly.
+  if (!networkDenied) {
+    void runNetworkDenialSelfCheck({ fetchImpl, policy: platformPolicy, account: requestAccount })
+      .catch((error: unknown) => console.error('Rovr network-denial self-check: failed to run', error));
+  }
 
   const session = createSession({ storage: local, baseUrl: DEFAULT_BASE_URL, fetch: fetchImpl, now: Date.now });
   const settings = createSettings(local);
