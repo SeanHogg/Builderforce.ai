@@ -3,7 +3,6 @@ import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type { PluginRegistry } from "../plugins/registry.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createRegistry } from "./server.e2e-registry-helpers.js";
-import { connectGatewayClient } from "./test-helpers.e2e.js";
 import {
   connectOk,
   installGatewayTestHooks,
@@ -86,12 +85,7 @@ beforeAll(async () => {
   ws = started.ws;
   port = started.port;
   gatewayToken = process.env.BUILDERFORCE_AGENTS_GATEWAY_TOKEN ?? "";
-  const { connectReq } = await import("./test-helpers.server.js");
-  const res = await connectReq(ws);
-  if (!res.ok) {
-    throw new Error(`connect failed: ${JSON.stringify(res.error)}`);
-  }
-  expect((res.payload as { type?: unknown } | undefined)?.type).toBe("hello-ok");
+  await connectOk(ws);
 });
 
 afterAll(async () => {
@@ -125,6 +119,7 @@ describe("channels.configure downlink (portal → on-prem host)", () => {
   test("round-trip: portal configureChannel → host applies and acknowledges", async () => {
     setRegistry(defaultRegistry);
     const { readConfigFileSnapshot } = await loadConfigHelpers();
+    const { connectGatewayClient } = await import("./test-helpers.e2e.js");
 
     // Simulated on-prem host; the portal is a GatewayClient connected to it.
     const client = await connectGatewayClient({
