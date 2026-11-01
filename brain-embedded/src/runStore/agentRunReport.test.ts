@@ -51,6 +51,8 @@ describe('the report a settled Brain run makes', () => {
 
   it('a graded run reports through the grade callback alone, once, with the loop source and fields and the agent telemetry as extras', async () => {
     const records: Record[] = [];
+    // The parity record is NORMALISED (rule 7 drops the agent's 17 telemetry fields from `outcome.reported`), so the raw report is read here.
+    const raw: Record[] = [];
     const emptyHanded: Scenario = {
       id: 'report-graded',
       rows: [],
@@ -58,17 +60,21 @@ describe('the report a settled Brain run makes', () => {
       async run(host) {
         host.tools({ list_files: () => ({ ok: true, paths: [] }) });
         host.script([...Array.from({ length: 22 }, (_, i) => calls([call('list_files', { i }, 'c' + i)])), reply('I read everything.')]);
-        await host.start({ userTurn: 'Please fix the bug in the handler.', entryPoint: 'web', reportRunRecord: async (r) => { records.push(r as Record); } });
+        await host.start({ userTurn: 'Please fix the bug in the handler.', entryPoint: 'web', reportOutcome: async (o) => { raw.push(o as Record); }, reportRunRecord: async (r) => { records.push(r as Record); } });
       },
     };
     const loop = await runScenario(emptyHanded, 'loop');
     const agent = await runScenario(emptyHanded, 'agent');
-    expect(loop.outcome.reported).toHaveLength(1);
-    expect(agent.outcome.reported).toHaveLength(1);
-    // The grade is the loop: same runs, same source, same fields; the agent adds only the optional §8.2 telemetry.
-    expect(agent.outcome.reported[0]).toMatchObject(loop.outcome.reported[0] as object);
-    expect((agent.outcome.reported[0] as Record).source).toBe('ide');
-    expect(agent.outcome.reported[0]).toMatchObject({ entryPoint: 'web' });
+    // The host's own callback is told ONCE per engine run (the loop's, then the agent's), and the grade is the loop's.
+    expect(raw).toHaveLength(2);
+    const [loopGrade, agentGrade] = raw;
+    expect(agentGrade).toMatchObject({ ...loopGrade, clientRunId: expect.any(String) });
+    expect(agentGrade!.source).toBe('ide');
+    // Only the agent's grade carries its §8.2 telemetry, as optional fields: the entry point the host declared among them.
+    expect(loopGrade).not.toHaveProperty('entryPoint');
+    expect(agentGrade).toMatchObject({ entryPoint: 'web', toolCalls: expect.any(Number) });
+    // The normalised parity record sees the two as equal.
+    expect(agent.outcome.reported).toEqual(loop.outcome.reported);
     // One report per run: the record port is not also told.
     expect(records).toEqual([]);
   });
