@@ -1,6 +1,7 @@
 /**
  * Guards the oracle list (`oracle.files.txt`): every test file that drives `startRun` is in it, and every entry exists.
- * The oracle is only an oracle if a new test cannot slip past it, so the list is derived the same way it was made.
+ * The list is what CI runs for the Brain's run store (`release.yml`, `runOracle.mjs`), so a new test that drives a run cannot
+ * slip past it: the list is derived the same way it was made. The parity directory runs whole, as its own CI step.
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -9,10 +10,9 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../../..');
-const DRIVES_A_RUN = /startRun\b|brainRunStore|startEngineRun|driveRun|test\/continueHarness|brainRunHarness|draftHost|mirrorRun/;
-/** A test that names BOTH engines itself (`engineKit`, the area harnesses under `run/areaR/`) is a parity test, not an oracle: the oracle's engine is the environment's. */
-const CHOOSES_ITS_OWN_ENGINE = /engineKit|bothEngines|run\/parity\/harness/;
-const OWN_ENGINE_DIRS = [join('src', 'run', 'areaR'), join('src', 'run', 'parity')];
+const DRIVES_A_RUN = /startRun\b|brainRunStore|startEngineRun|test\/continueHarness|brainRunHarness|draftHost|mirrorRun|test\/engineKit|from '\.\/harness'/;
+/** The parity directory runs whole in CI (`release.yml`): its suites are not listed one by one. */
+const RUNS_WHOLE_DIRS = [join('src', 'run', 'parity')];
 
 function testFiles(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -31,8 +31,8 @@ describe('the oracle list', () => {
   it('names every test file that drives startRun, and nothing else', () => {
     const found = ['brain-embedded/src', 'clients/chrome/src', 'clients/vscode/src']
       .flatMap((d) => testFiles(join(root, d)))
-      .filter((f) => !OWN_ENGINE_DIRS.some((d) => f.includes(d)))
-      .filter((f) => { const text = readFileSync(f, 'utf8'); return DRIVES_A_RUN.test(text) && !CHOOSES_ITS_OWN_ENGINE.test(text); })
+      .filter((f) => !RUNS_WHOLE_DIRS.some((d) => f.includes(d)))
+      .filter((f) => DRIVES_A_RUN.test(readFileSync(f, 'utf8')))
       .map((f) => relative(root, f).split(String.fromCharCode(92)).join('/'))
       .sort();
     expect(listed.slice().sort()).toEqual(found);

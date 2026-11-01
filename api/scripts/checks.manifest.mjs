@@ -60,15 +60,14 @@ export default [
   // the full sweep; frontend's runs only its own tree for fast local feedback.
   ['check:silent-catches', '../../scripts/check-silent-catches.mjs'],
   // Repo-level (PRD 35 §3.3 / §5.1): guards for the one-agent-one-kernel program.
-  // check:one-execution is a RATCHET: it fails on any import of `runAgentLoop` outside the
-  // one agent that is not in its BASELINE (only the Brain's runLoop.ts until the WS4 ship
-  // gate), on any reach into agent-run's `policy/*`, and on a second driver inside
-  // agent-run. check:tests-unchanged ENFORCES §5.1: a pre-existing test changed by a program
+  // check:one-execution runs ENFORCED, with an empty allowlist: it fails on any import of
+  // `runAgentLoop` outside the one agent, on any reach into agent-run's `policy/*`, and on a
+  // second driver inside agent-run. check:tests-unchanged ENFORCES §5.1: a pre-existing test changed by a program
   // commit, and every test brought along into packages/agent-run (against its source as it was
   // before the program), may differ only by imports unless scripts/tests-unchanged.approved.mjs
   // lists the change; a new skip marker or a lower case count fails. The `guards` CI leg
   // unshallows the clone first, because the originals are read from git history.
-  ['check:one-execution', '../../scripts/check-one-execution.mjs'],
+  ['check:one-execution', '../../scripts/check-one-execution.mjs', '--enforce'],
   ['check:tests-unchanged', '../../scripts/check-tests-unchanged.mjs'],
   // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the
   // one validated read. Seeded 2026-09-06; the counts can only fall.

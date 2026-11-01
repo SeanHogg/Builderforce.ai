@@ -1,5 +1,5 @@
 /**
- * check:one-execution — PRD 35 §3.3, a RATCHET.
+ * check:one-execution — PRD 35 §3.3, ENFORCED with an empty allowlist.
  *
  * The whole point of the one-agent-one-kernel split is that `runAgent` (`packages/agent-run/src/runAgent.ts`) is the ONLY thing that
  * drives `runAgentLoop` (`@builderforce/agent-loop`), and `packages/agent-run` the only place run policy is composed. §3.3's
@@ -16,8 +16,8 @@
  *
  * It exits 1 on a kernel importer that is not in BASELINE, on any policy reach-in from outside the package, on a second kernel driver
  * inside `packages/agent-run`, and on a BASELINE entry whose file no longer imports the kernel (a slack entry would let a new
- * importer in at that path). BASELINE can only shrink: it holds the one importer that still waits on the deletion of the Brain's old
- * loop (`brain-embedded/src/runStore/runLoop.ts`). Pass `--enforce` for the empty-allowlist verdict: every importer fails.
+ * importer in at that path). BASELINE is empty (the Brain's old loop, its last importer, is deleted) and the checks manifest runs this guard with `--enforce`:
+ * every importer fails.
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, posix, resolve } from 'node:path';
@@ -40,10 +40,8 @@ const THE_DRIVER = 'packages/agent-run/src/runAgent.ts';
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const KERNEL_NAME = 'runAgentLoop';
 
-/** Today's only kernel importer outside the one agent; it goes when the Brain's old loop is deleted. The list only ever shrinks. */
-const BASELINE = [
-  'brain-embedded/src/runStore/runLoop.ts',
-];
+/** Kernel importers allowed outside the one agent: none. */
+const BASELINE = [];
 
 const ts = loadTypeScript(repoRoot);
 
