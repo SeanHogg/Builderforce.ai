@@ -634,6 +634,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # check:tests-unchanged reads test files as they were before the PRD 35 program (git show), which a depth-1 clone cannot.
+      - name: Full history for the test-oracle guard
+        if: matrix.name == 'guards'
+        run: git fetch --unshallow --quiet || true
+
       - uses: pnpm/action-setup@v6
         with:
           version: 10.23.0

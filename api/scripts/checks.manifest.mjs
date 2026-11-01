@@ -63,9 +63,11 @@ export default [
   // check:one-execution is a RATCHET: it fails on any import of `runAgentLoop` outside the
   // one agent that is not in its BASELINE (only the Brain's runLoop.ts until the WS4 ship
   // gate), on any reach into agent-run's `policy/*`, and on a second driver inside
-  // agent-run. check:tests-unchanged compares every edited pre-existing test with main, and
-  // every test brought along into packages/agent-run with the source test it names, so
-  // §5.1's import-only rule is visible; it is report-only (see its header).
+  // agent-run. check:tests-unchanged ENFORCES §5.1: a pre-existing test changed by a program
+  // commit, and every test brought along into packages/agent-run (against its source as it was
+  // before the program), may differ only by imports unless scripts/tests-unchanged.approved.mjs
+  // lists the change; a new skip marker or a lower case count fails. The `guards` CI leg
+  // unshallows the clone first, because the originals are read from git history.
   ['check:one-execution', '../../scripts/check-one-execution.mjs'],
   ['check:tests-unchanged', '../../scripts/check-tests-unchanged.mjs'],
   // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the

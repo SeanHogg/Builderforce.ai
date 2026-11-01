@@ -107,11 +107,11 @@ to date at WS7 (2026-10-31): **Lives in now** names where the behaviour is, and 
 
 ## §5.1 exceptions: brought-along tests that are not import-only
 
-`node scripts/check-tests-unchanged.mjs --enforce` reports these. Each is named with what differs, measured at WS7
-against the source test **as it was before the program** (`git show 468d080d2~1:<path>`), not against the source as
-it stands now (the guard compares against the shrunken source, which is why it over-reports `runEndMemory` and
-`learnedFacts`). **None is approved by the planning model yet.** Where the row says "needs approval", an intended test
-change is waiting on that decision; this ledger does not treat it as closed.
+`check:tests-unchanged` (enforced) holds each of these to the planning model's decision, which lives as DATA in
+`scripts/tests-unchanged.approved.mjs` (file, what changed, why, who approved). The table below is the measured detail, against the
+source test **as it was before the program** (`git show 468d080d2~1:<path>`). Entries marked approved there are decided; two
+findings still wait on a decision and are listed in that file as `PENDING` (`test/steering/steering.test.ts`, whose queue returns
+steer objects where the Brain's returned strings, and the deleted scratch file `brain-embedded/src/zzdbg.test.ts`).
 
 | Test (new home ← source) | What differs from the original source | Verdict |
 |---|---|---|
