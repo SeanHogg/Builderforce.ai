@@ -215,10 +215,12 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
       }
       // Governance gates: every embedded run served here (a channel reply, a cron job, a command) is
       // held to the TENANT's gates, resolved at this one seam so no caller has to remember to feed
-      // them. A ticket is dispatched through the relay with its own gates and does not run here, so
-      // this never overrides a payload. Model probes are not governed runs. A run nobody can approve
-      // in time (`unattended`) has its approval gates turned into refusals.
-      const policyGates: readonly PolicyGate[] = isProbeSession
+      // them. That holds inside a gateway process, which owns the host's link; a one-off CLI command
+      // run outside one has no link and so no gates. A ticket is dispatched through the relay with its own gates and does not run here, so
+      // this never overrides a payload. Model probes are not governed runs (the host sets `modelProbe`; the
+      // client-chosen `probe-` session prefix decides nothing here). A run nobody can approve in time
+      // (`unattended`) has its approval gates turned into refusals.
+      const policyGates: readonly PolicyGate[] = params.modelProbe === true
         ? []
         : forUnattendedRun(await resolveHostPolicyGates(), params.unattended === true);
       const prevCwd = process.cwd();

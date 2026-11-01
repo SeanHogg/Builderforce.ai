@@ -78,8 +78,15 @@ describe("runEmbeddedAgent governance gates", () => {
     expect(mockedAttempt.mock.calls[0]![0]).not.toHaveProperty("policyGates");
   });
 
-  it("a model probe is not a governed run and costs no fetch", async () => {
-    await runEmbeddedAgent({ ...base, sessionId: "probe-abc", runId: "r4" });
+  it("a client-chosen `probe-` session id does NOT skip governance: the gateway takes any sessionId from a client", async () => {
+    await runEmbeddedAgent({ ...base, sessionId: "probe-client-picked", runId: "r6" });
+
+    expect(mocks.resolveGates).toHaveBeenCalledTimes(1);
+    expect(mockedAttempt.mock.calls[0]![0]).toMatchObject({ policyGates: tenantGates });
+  });
+
+  it("a model probe (set by the host, not by a session id) is not a governed run and costs no fetch", async () => {
+    await runEmbeddedAgent({ ...base, sessionId: "probe-abc", runId: "r4", modelProbe: true });
 
     expect(mocks.resolveGates).not.toHaveBeenCalled();
     expect(mockedAttempt.mock.calls[0]![0]).not.toHaveProperty("policyGates");

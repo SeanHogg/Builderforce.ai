@@ -315,6 +315,7 @@ async function probeTarget(params: {
       agentDir,
       config: cfg,
       prompt: PROBE_PROMPT,
+      modelProbe: true,
       provider: target.model.provider,
       model: target.model.model,
       authProfileId: target.profileId,

@@ -68,6 +68,12 @@ export type RunEmbeddedAgentParams = {
   /** Disable built-in tools for this run (LLM-only mode). */
   disableTools?: boolean;
   /**
+   * This run is a model liveness probe (`models list --probe`), the one caller that sets it: it is not a governed run, so it
+   * resolves no tenant gates. Set by the host's own code, never by a client: a session id's `probe-` prefix is client-chosen
+   * (`agent` accepts any `sessionId`) and decides nothing about governance.
+   */
+  modelProbe?: boolean;
+  /**
    * No person can approve anything during this run in time (a memory flush runs between turns).
    * Governance `require-approval` gates then refuse at once instead of waiting for an approver;
    * `block` gates behave as always.

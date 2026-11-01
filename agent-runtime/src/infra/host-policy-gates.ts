@@ -6,7 +6,8 @@
  * and never reaches this module. A channel reply or a cron job is not dispatched by the
  * platform, so nothing carried a gate to it: a tenant `block` gate stopped a tool on a
  * ticket and not on a chat reply. Two entries ask here, so no caller has to feed them:
- *   - `runEmbeddedAgent` (the embedded runner: channel replies, cron, commands);
+ *   - `runEmbeddedAgent` (the embedded runner: channel replies, cron, and commands run inside a gateway process, which holds the
+ *     host's link; a one-off CLI command outside one has none and so no gates);
  *   - `runCliAgent` (a CLI-backend model, which cannot be gated at the tool seam).
  *
  * The api owns the gates (`GET /api/agent/governance/policy-gates`, the host-key door
