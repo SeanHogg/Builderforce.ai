@@ -2,6 +2,15 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.119] — Faster on big histories, and clearer about where a model runs
+
+- **Your message shows as soon as you send it.** It no longer waits for local storage, and neither does the original request on a ticket.
+- **Saving no longer slows down as your history grows.** Each save writes only what changed. The first start after this update moves your history to the new format once.
+- **Typing stays quick while a reply streams.**
+- **Chat shows which model answered.**
+- **Hosted models are no longer called "on this device".** Kimi Code runs on Kimi's servers using your own account.
+- **After installing, reload every VS Code window.** A window still on the old version keeps saving to the old file.
+
 ## [2026.10.117] — Stop means stop, and nothing you type is lost
 
 - **Stop acts at once, wherever you press it.** It drops turns still waiting to send, and you can cancel a single stage of a run.

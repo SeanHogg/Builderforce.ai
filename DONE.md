@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-11-01 — Local store commits cost the change, not the store; typing and the first bubble stop waiting on them (VS Code 2026.10.119 · frontend 2026.10.101 · brain-embedded 2026.10.74 · brain-ui 2026.10.32 · local-first 2026.10.27 · Rovr 2026.10.36)
+
+One commit on a store of 20,627 records took about 10 s on the extension-host thread and ran twice, so a first response or the "Original request" row could take two minutes, and every keystroke re-rendered the surface.
+
+- **Measured on a copy of that store (20,847 records):** one commit p50 23 ms, p95 29 ms, against about 10.4 s run twice before. First import 3.3 s, later opens 1.5–3.4 s. Record, message and event counts matched through import, reopen and compaction.
+- **Delta journal.** New file `local-first-v3.journal` holds `BFJF2` delta frames; `BFJF1` snapshots stay readable. The v2 file is imported under the lock and never written to, because an old window would truncate delta frames. Copy-on-write transactions, `scan`/`scanPending`, `selectRecords`/`selectPending`, `onCommit`, `applyDelta` and change hints replace whole-store clones; compaction is chunked, tail-based (8192 frames or 64 MB), and other windows read the tail.
+- **Two journal stores retired.** `offlineLocalFirstStore.ts`, `createJournaledLocalFirstStore`, `JournalIo` and `JournaledLocalFirstStore` are deleted.
+- **Local store rewriting every message on every commit:** closed by the delta journal. The second payload copy stays open as the unbound-rows entry in ROADMAP.md.
+- **Typing.** `createComposerDraftStore` with `useDraftText`/`useDraftIsEmpty`: only the text box re-renders per key on VS Code, web and Rovr; render-count tests hold it in `packages/brain-ui`, `frontend` and `clients/chrome`.
+- **First bubble.** `usePendingTurns`/`announceTurn` show the turn before the commit; `useBrainChats` shows `originalRequest` optimistically.
+- **Model shown, wording corrected.** `servedModelLabel`, `servedBy`/`liveModel` in the timeline. Hosted models called from your machine (Kimi Code) are no longer labelled as running on this device: `runsOnDevice` is separate from `isLocalModelRef`, and `hostedTip` plus "Your account" are translated in VS Code, web and Rovr.
+- `packages/brain-ui/vitest.config.ts` dedupes React, which the linked `brain-embedded` otherwise loads twice.
+
 ## ✅ RESOLVED 2026-11-01 — PRD 35 closed: VS Code, web and Rovr chat and on-prem channels run on the one agent; the Brain's `runLoop` and the engine switch are deleted (VS Code 2026.10.118 · api 2026.10.96 · frontend 2026.10.100 · agent-runtime 2026.10.24 · brain-embedded 2026.10.73 · brain-ui 2026.10.31 · agent-run 2026.10.85 · agent-loop 2026.10.15 · agent-tools 2026.10.18 · run-guards 2026.10.4 · Rovr 2026.10.35)
 
 Many entry points → ONE agent (`packages/agent-run`) → ONE kernel (`packages/agent-loop`). Nothing outside those two packages imports `runAgentLoop`, and `check:one-execution` enforces that with an empty allowlist.
