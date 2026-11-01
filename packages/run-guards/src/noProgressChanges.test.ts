@@ -175,7 +175,11 @@ describe("re-ground: spaced revisits across a wide survey are re-engagement, not
 });
 
 describe("platform progress: a turn that moved the board is not idle", () => {
-  const platformPorts = { isPlatformProgress: (tool: string) => tool.startsWith("builtin_") };
+  // Mirrors the host wiring: isMutatingPlatformTool credits any builtin_* that is NOT
+  // read-only — so a ticket update counts, a list does not.
+  const platformPorts = {
+    isPlatformProgress: (tool: string) => tool.startsWith("builtin_") && !tool.includes("_list_"),
+  };
 
   it("credits a mutating platform call (ticket update) as progress", () => {
     const d = new ProgressDetector({}, { ...ports, ...platformPorts });
