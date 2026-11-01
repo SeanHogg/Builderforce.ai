@@ -32,18 +32,33 @@ export function isTicketCompletion(tool: string, args: unknown): boolean {
  * A ticket should only be marked done when:
  * 1. The code has been shipped to main/master (not a feature branch)
  * 2. OR the user explicitly asked not to commit/push
+ * 3. OR there is no branch evidence either way (a delta ticket minted with
+ *    `gitBranch: null` and no unshipped code-write in this run). In that case the
+ *    guard must NOT assert non-landing — absence of a recorded branch is not proof
+ *    the code is off-base (ticket #6434).
  *
- * This prevents the issue where tickets appear done but code is still on a feature branch.
+ * This prevents the issue where tickets appear done but code is still on a feature branch,
+ * WITHOUT firing a false positive on tickets that carry no git linkage at all.
  */
 export function canCompleteTicket(
   isOnBaseBranch: boolean,
   userDeclinedShipping: boolean,
+  opts?: { wroteCodeThisRun?: boolean; ticketGitBranch?: string | null },
 ): boolean {
   // Always allow if code is on base branch (main/master)
   if (isOnBaseBranch) return true;
   // Allow if user explicitly declined shipping (asked to leave uncommitted)
   if (userDeclinedShipping) return true;
-  // Otherwise, prevent marking as done - code must be on base branch first
+  // A ticket that records a concrete branch: that branch is the ground truth. When it is
+  // not the base branch, completion is blocked (the real unshipped case).
+  const branch = (opts?.ticketGitBranch ?? '').trim();
+  if (branch && branch !== 'main' && branch !== 'master') return false;
+  // No recorded branch. Only block when THIS run wrote code and the events show it is
+  // unshipped — that is affirmative evidence of unfinished work. When the ticket has no
+  // branch linkage and this run made no unshipped write, there is no evidence to conclude
+  // the code is off-base, so do not assert it.
+  if (opts?.wroteCodeThisRun === false) return true;
+  // Otherwise (wrote code this run and it is unshipped), prevent marking as done.
   return false;
 }
 

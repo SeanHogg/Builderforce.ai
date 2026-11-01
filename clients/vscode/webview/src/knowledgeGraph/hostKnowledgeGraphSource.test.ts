@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KnowledgeGraph, ReviewPlan, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { ReviewFailure, type KnowledgeReviewEvent } from '@builderforce/knowledge-graph-view';
 import type { KnowledgeCall, KnowledgeEvent } from '../../../src/knowledge/knowledgeProtocol';
-import { createHostKnowledgeGraphSource, type KnowledgeTransport } from './hostKnowledgeGraphSource';
+import { ABORT_GRACE_MS, createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
 const PLAN: ReviewPlan = { rootId: 'ws', files: 2, byPack: { docs: 2 }, unchanged: 0, changed: ['a.md', 'b.md'], removed: [], skipped: [], estimatedModelCalls: 2 };
 const REPORT: ReviewReport = {
@@ -15,7 +15,7 @@ const GRAPH: KnowledgeGraph = {
 };
 
 /** A scripted host: records every call; `run` posts progress then the report. */
-function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; failPlan?: boolean; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
+function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; silentRun?: boolean; failPlan?: boolean; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
   const calls: KnowledgeCall[] = [];
   const listeners = new Set<(e: KnowledgeEvent) => void>();
   const emit = (e: KnowledgeEvent) => { for (const l of [...listeners]) l(e); };
@@ -34,6 +34,7 @@ function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; 
           return null as T;
         }
         case 'run':
+          if (opts.silentRun) return { started: true } as T;
           queueMicrotask(() => {
             emit({ stream: 'r1', type: 'progress', progress: { phase: 'extract', done: 1, total: 2, path: 'a.md' } });
             emit({ stream: 'other', type: 'failed', error: 'not mine' });
@@ -140,7 +141,7 @@ describe('the editor knowledge source — planning rides the stream, not a reque
     const done = drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true, abort.signal)));
     await tick();
     abort.abort();
-    expect((await done).map((e) => e.type)).toEqual(['cancelled']);
+    expect(await done).toEqual([]); // Stop ends the run quietly: no `cancelled` over the consumer's 'aborted'
     host.emit({ stream: host.planStream(), type: 'planned', reply: { reviewId: 'r9', rootId: 'ws', plan: PLAN } });
     await tick();
     expect(host.calls.at(-1)).toEqual({ op: 'discard', reviewId: 'r9' });
@@ -154,6 +155,62 @@ describe('the editor knowledge source — planning rides the stream, not a reque
     await drain(source.review!({}, control(false)));
     await expect(drain(createHostKnowledgeGraphSource(fakeHost({ failPlan: true }).t, { onReviewActive: (a) => seen.push(a) }).review!({}, control(true)))).rejects.toThrow();
     expect(seen).toEqual([true, false, true, false]);
+  });
+
+  it('keeps the flag held while a superseding review is live after the first one ends', async () => {
+    const host = fakeHost();
+    const seen: boolean[] = [];
+    const source = createHostKnowledgeGraphSource(host.t, { onReviewActive: (a) => seen.push(a) });
+    const first = source.review!({}, control(true));
+    const second = source.review!({}, control(true));
+    await first.next(); // plan yielded: first is live
+    await second.next(); // second is live too
+    await first.return(undefined); // the superseded one ends while the second is live
+    let count = 0;
+    const counts = seen.map((a) => (count = reviewCount(count, a)));
+    expect(seen).toEqual([true, true, false]);
+    expect(counts).toEqual([1, 2, 1]); // never 0 while the second review is live
+    await second.return(undefined);
+    expect(reviewCount(counts.at(-1)!, false)).toBe(0);
+  });
+});
+
+describe('the editor knowledge source — Stop with a silent host', () => {
+  const abortAtConfirm = () => {
+    const abort = new AbortController();
+    return { confirm: async () => { abort.abort(); return true; }, signal: abort.signal };
+  };
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('lets go once the grace period passes without a terminal event', async () => {
+    const host = fakeHost({ silentRun: true });
+    const seen: boolean[] = [];
+    const source = createHostKnowledgeGraphSource(host.t, { onReviewActive: (a) => seen.push(a) });
+    let events: KnowledgeReviewEvent[] | undefined;
+    void drain(source.review!({}, abortAtConfirm())).then((e) => { events = e; });
+    await vi.advanceTimersByTimeAsync(ABORT_GRACE_MS - 1);
+    expect(events).toBeUndefined();
+    expect(seen).toEqual([true]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(events?.map((e) => e.type)).toEqual(['plan']);
+    expect(seen).toEqual([true, false]);
+    expect(host.listeners.size).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(host.calls.some((c) => c.op === 'stop')).toBe(true);
+  });
+
+  it('still yields a done report that arrives inside the grace period', async () => {
+    const host = fakeHost({ silentRun: true });
+    let events: KnowledgeReviewEvent[] | undefined;
+    void drain(createHostKnowledgeGraphSource(host.t).review!({}, abortAtConfirm())).then((e) => { events = e; });
+    await vi.advanceTimersByTimeAsync(ABORT_GRACE_MS / 2);
+    host.emit({ stream: 'r1', type: 'done', rootId: 'ws', report: { ...REPORT, aborted: true } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(events?.map((e) => e.type)).toEqual(['plan', 'done']);
+    expect(events?.[1]).toMatchObject({ report: { aborted: true } });
+    expect(host.listeners.size).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

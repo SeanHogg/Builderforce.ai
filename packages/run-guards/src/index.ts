@@ -42,6 +42,7 @@ export { EditRevertTracker, changesContent, type EditRevert, type EditRevertStat
 export {
   CHURN_TURNS,
   NO_PROGRESS_TURNS,
+  REGROUND_TURNS,
   NoProgressTracker,
   isCheckCallDefault,
   isTestPath,

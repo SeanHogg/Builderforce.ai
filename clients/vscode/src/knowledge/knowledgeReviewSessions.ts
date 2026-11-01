@@ -16,7 +16,7 @@ import * as vscode from "vscode";
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import { logLine } from "../errorReporter";
 import { logReviewFailure } from "./knowledgeFailureLog";
-import type { KnowledgeEvent, KnowledgePlanReply, KnowledgeReviewRequest } from "./knowledgeProtocol";
+import type { KnowledgeEvent, KnowledgeReviewRequest } from "./knowledgeProtocol";
 import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
 
@@ -30,13 +30,6 @@ interface Session {
 }
 
 let nextReview = 0;
-
-/** A plan failure already logged; carries what the view is sent. */
-class PlanFailure extends Error {
-  constructor(readonly sent: ReturnType<typeof logReviewFailure>) {
-    super(sent.error);
-  }
-}
 
 /** The folder a review request names: a known root, a target, the picker, else the first workspace folder. */
 export async function reviewRootFor(req: KnowledgeReviewRequest): Promise<KnowledgeRoot | undefined> {
@@ -60,6 +53,7 @@ export async function reviewRootFor(req: KnowledgeReviewRequest): Promise<Knowle
 
 export class KnowledgeReviewSessions implements vscode.Disposable {
   private readonly sessions = new Map<string, Session>();
+  private disposed = false;
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
@@ -72,34 +66,34 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     return { log: logLine, host: this.hostLabel };
   }
 
-  /** Plans in the background; the outcome is an event on `stream`, never a rejection. */
+  /**
+   * Plans in the background; the outcome is an event on `stream`, never a rejection. A plan that
+   * lands after `dispose()` is neither stored nor posted: the panel it was for is gone.
+   */
   planOver(req: KnowledgeReviewRequest, stream: string): void {
-    this.plan(req).then(
-      (reply) => this.post({ stream, type: "planned", reply }),
-      (error: unknown) => this.post({ stream, type: "failed", ...this.planFailure(error) }),
-    ).catch(() => undefined);
+    void this.planAndPost(req, stream).catch(() => undefined);
   }
 
-  /** What the view is sent for a failed plan; a failure past the logged one (the picker) is logged here. */
-  private planFailure(error: unknown) {
-    return error instanceof PlanFailure ? error.sent : logReviewFailure(this.sink, { stage: "plan" }, error);
-  }
-
-  private async plan(req: KnowledgeReviewRequest): Promise<KnowledgePlanReply> {
-    const root = await reviewRootFor(req);
-    if (!root) return { cancelled: true };
-    const force = !!req.force;
-    let review: RootReview;
-    let plan: PlanDetail;
+  private async planAndPost(req: KnowledgeReviewRequest, stream: string): Promise<void> {
+    let root: KnowledgeRoot | undefined;
+    let event: KnowledgeEvent;
     try {
-      review = reviewRoot(this.secrets, root);
-      plan = await review.plan(force);
+      root = await reviewRootFor(req);
+      if (!root) {
+        event = { stream, type: "planned", reply: { cancelled: true } };
+      } else {
+        const force = !!req.force;
+        const review = reviewRoot(this.secrets, root);
+        const plan = await review.plan(force);
+        const reviewId = `review-${++nextReview}`;
+        if (!this.disposed) this.sessions.set(reviewId, { review, plan, force });
+        event = { stream, type: "planned", reply: { reviewId, rootId: root.rootId, plan: plan.plan } };
+      }
     } catch (error) {
-      throw new PlanFailure(logReviewFailure(this.sink, { stage: "plan", rootId: root.rootId, rootPath: root.rootPath }, error));
+      const where = root ? { stage: "plan" as const, rootId: root.rootId, rootPath: root.rootPath } : { stage: "plan" as const };
+      event = { stream, type: "failed", ...logReviewFailure(this.sink, where, error) };
     }
-    const reviewId = `review-${++nextReview}`;
-    this.sessions.set(reviewId, { review, plan, force });
-    return { reviewId, rootId: root.rootId, plan: plan.plan };
+    if (!this.disposed) this.post(event);
   }
 
   /** Starts a planned review; false when the id is unknown (already run or discarded). */
@@ -146,6 +140,7 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
 
   /** The panel closed: planned reviews are dropped; a running one finishes (it is writing memory). */
   dispose(): void {
+    this.disposed = true;
     for (const [id, session] of this.sessions) if (!session.abort) this.sessions.delete(id);
   }
 }

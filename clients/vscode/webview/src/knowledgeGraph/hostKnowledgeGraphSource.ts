@@ -38,9 +38,15 @@ export interface KnowledgeTransport {
 export interface HostKnowledgeSourceOptions {
   /** Marks the files changed since the graph was built (the shared Live overlay). */
   overlay?(graph: KnowledgeGraph, changed: readonly string[]): KnowledgeGraph;
-  /** True when a review starts, false when it ends however it ends (planning, confirm and run included). */
+  /** True when a review starts, false when it ends however it ends (planning, confirm and run included). Reviews may overlap: count them with {@link reviewCount}. */
   onReviewActive?(active: boolean): void;
 }
+
+/** How long, after Stop, the review waits for the host's terminal event before letting go. */
+export const ABORT_GRACE_MS = 30_000;
+
+/** The live-review count after one review starts (`active`) or ends: overlapping reviews hold the flag until the LAST ends. */
+export const reviewCount = (count: number, active: boolean): number => Math.max(0, count + (active ? 1 : -1));
 
 let streams = 0;
 const nextStream = (prefix: string): string => `${prefix}-${++streams}`;
@@ -118,7 +124,9 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
 
   async function* reviewFlow(req: ReviewRequest, ctl: ReviewControl): AsyncGenerator<KnowledgeReviewEvent> {
     const reply = await planOverStream(t, req, ctl.signal);
-    if (reply === 'aborted' || 'cancelled' in reply) { yield { type: 'cancelled' }; return; }
+    // Stop while planning: the consumer already marked the run aborted, so end quietly.
+    if (reply === 'aborted') return;
+    if ('cancelled' in reply) { yield { type: 'cancelled' }; return; }
     const { reviewId, plan } = reply;
     yield { type: 'plan', plan };
     if (!(await ctl.confirm(plan))) {
@@ -128,20 +136,30 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     }
     // Subscribed BEFORE the run starts: its first progress can beat the call's answer.
     const events = streamOf(t, reviewId);
-    const stop = (): void => { void t.call({ op: 'stop', reviewId }).catch(() => undefined); };
+    // After Stop the host still owes a terminal event (its `done` carries what was written), but a
+    // host that never sends one must not hold the panel: the wait is bounded by the grace period.
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    let expire = (): void => undefined;
+    const expired = new Promise<'expired'>((resolve) => { expire = () => resolve('expired'); });
+    const stop = (): void => {
+      void t.call({ op: 'stop', reviewId }).catch(() => undefined);
+      graceTimer ??= setTimeout(expire, ABORT_GRACE_MS);
+    };
     ctl.signal.addEventListener('abort', stop, { once: true });
     try {
       const started = await t.call<{ started: boolean }>({ op: 'run', reviewId });
       if (!started.started) throw new Error('knowledge: the review could not start');
-      if (ctl.signal.aborted) stop();
+      if (ctl.signal.aborted && graceTimer === undefined) stop();
       for (;;) {
-        const e = await events.next();
+        const e = await Promise.race([events.next(), expired]);
+        if (e === 'expired') return;
         if (e.type === 'progress') yield { type: 'progress', progress: e.progress };
         else if (e.type === 'done') { yield { type: 'done', rootId: e.rootId, report: e.report }; return; }
         else if (e.type === 'failed') throw failureOf(e);
       }
     } finally {
       events.close();
+      clearTimeout(graceTimer);
       ctl.signal.removeEventListener('abort', stop);
     }
   }

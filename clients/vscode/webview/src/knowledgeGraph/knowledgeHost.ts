@@ -11,7 +11,7 @@ import { onHostMessage, request } from '../vscodeBridge';
 import {
   KNOWLEDGE_CALL, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, type KnowledgeEventFrame, type KnowledgeFocusFrame,
 } from '../../../src/knowledge/knowledgeProtocol';
-import { createHostKnowledgeGraphSource, type KnowledgeTransport } from './hostKnowledgeGraphSource';
+import { createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
 /** `knowledge.call` round-trips and `knowledge.event` frames over the bridge. */
 export const bridgeKnowledgeTransport: KnowledgeTransport = {
@@ -31,8 +31,10 @@ export interface KnowledgeHost {
 }
 
 export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: readonly string[]) => KnowledgeGraph): KnowledgeHost {
-  const [reviewing, setReviewing] = useState(false);
-  const onReviewActive = useCallback((active: boolean) => setReviewing(active), []);
+  // A COUNT of live reviews: a superseded review's end must not clear the flag of the one that replaced it.
+  const [liveReviews, setLiveReviews] = useState(0);
+  const reviewing = liveReviews > 0;
+  const onReviewActive = useCallback((active: boolean) => setLiveReviews((n) => reviewCount(n, active)), []);
   const source = useMemo(() => createHostKnowledgeGraphSource(bridgeKnowledgeTransport, { overlay, onReviewActive }), [overlay, onReviewActive]);
   const [focus, setFocus] = useState<KnowledgeFocusFrame | null>(null);
   const [focusRequests, setFocusRequests] = useState(0);
