@@ -12824,6 +12824,7 @@ var EditRevertTracker = class {
 
 // ../packages/run-guards/src/noProgress.ts
 var NO_PROGRESS_TURNS = 4;
+var CHURN_TURNS = 12;
 var MAX_SEEN = 500;
 var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
 var TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
@@ -12847,20 +12848,27 @@ function resultDigest(result) {
 }
 var NoProgressTracker = class {
   seen;
+  changes;
   idleTurns;
   lastCheck;
-  progressedThisTurn = false;
+  groundThisTurn = false;
+  churnThisTurn = false;
+  churnTurns;
+  lastGround = false;
   targetOf;
   isCheckCall;
   constructor(state, ports = {}) {
     this.seen = new Set(state?.seen ?? []);
+    this.changes = new Set(state?.changes ?? []);
     this.idleTurns = state?.idleTurns ?? 0;
+    this.churnTurns = state?.churnTurns ?? 0;
     this.lastCheck = state?.lastCheck;
     this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
     this.isCheckCall = ports.isCheckCall ?? isCheckCallDefault;
   }
   /**
-   * One call of the current turn ran. `wrote` = it changed file content. Returns
+   * One call of the current turn ran. `wrote` = it changed content (a file edit, or a
+   * mutating command that names no file). Returns
    * whether the call was a check whose result CHANGED — a failing check that answers
    * differently each time is the run fixing things, not repeating a failure.
    */
@@ -12869,29 +12877,56 @@ var NoProgressTracker = class {
     if (path2 && !this.seen.has(path2)) {
       this.seen.add(path2);
       if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
-      this.progressedThisTurn = true;
+      this.groundThisTurn = true;
     }
-    if (outcome.ok && outcome.wrote && path2 && isTestPath(path2)) this.progressedThisTurn = true;
+    if (outcome.ok && outcome.wrote) {
+      if (path2 && isTestPath(path2)) this.groundThisTurn = true;
+      const fingerprint = contentHash(callFingerprint(tool, args));
+      if (!this.changes.has(fingerprint)) {
+        this.changes.add(fingerprint);
+        if (this.changes.size > MAX_SEEN) this.changes.delete(this.changes.values().next().value);
+        this.churnThisTurn = true;
+      }
+    }
     if (!this.isCheckCall(tool, args)) return { checkChanged: false };
     const digest = resultDigest(outcome.result);
     if (digest === this.lastCheck) return { checkChanged: false };
-    this.progressedThisTurn = true;
+    this.groundThisTurn = true;
     this.lastCheck = digest;
     return { checkChanged: true };
   }
   /** The turn's calls all ran. Returns the idle-turn streak after it. */
   endTurn() {
-    this.idleTurns = this.progressedThisTurn ? 0 : this.idleTurns + 1;
-    this.progressedThisTurn = false;
+    let progressed2 = this.groundThisTurn;
+    if (this.groundThisTurn) this.churnTurns = 0;
+    else if (this.churnThisTurn) {
+      this.churnTurns += 1;
+      progressed2 = this.churnTurns <= CHURN_TURNS;
+    }
+    this.lastGround = this.groundThisTurn;
+    this.idleTurns = progressed2 ? 0 : this.idleTurns + 1;
+    this.groundThisTurn = false;
+    this.churnThisTurn = false;
     return this.idleTurns;
+  }
+  /** Whether the turn {@link endTurn} last closed made GROUND progress (not churn alone). */
+  get lastTurnGround() {
+    return this.lastGround;
   }
   /** Start the window over (the run was steered, escalated or resumed by a human). */
   reset() {
     this.idleTurns = 0;
-    this.progressedThisTurn = false;
+    this.groundThisTurn = false;
+    this.churnThisTurn = false;
   }
   snapshot() {
-    return { seen: [...this.seen], idleTurns: this.idleTurns, ...this.lastCheck ? { lastCheck: this.lastCheck } : {} };
+    return {
+      seen: [...this.seen],
+      idleTurns: this.idleTurns,
+      ...this.changes.size ? { changes: [...this.changes] } : {},
+      ...this.churnTurns ? { churnTurns: this.churnTurns } : {},
+      ...this.lastCheck ? { lastCheck: this.lastCheck } : {}
+    };
   }
 };
 
@@ -12960,6 +12995,7 @@ var UnkeptClaimTracker = class {
 };
 
 // ../packages/run-guards/src/progressDetector.ts
+var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
   edit_revert: 0,
   repeated_failure: 1,
@@ -12991,6 +13027,7 @@ var ProgressDetector = class {
     this.trips = state.trips ?? 0;
     this.tripsBySignal = { ...state.tripsBySignal ?? {} };
     this.unkeptTurns = state.unkeptTurns ?? 0;
+    this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
   }
   ports;
@@ -13002,6 +13039,7 @@ var ProgressDetector = class {
   trips;
   tripsBySignal;
   unkeptTurns;
+  quietTurns;
   steer;
   turnSignal = null;
   raise(signal) {
@@ -13015,8 +13053,8 @@ var ProgressDetector = class {
   observe(tool, args, result) {
     this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
     const ok = succeeded2(result);
-    const wrote = ok && changesContent(args);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    const wrote = ok && (changesContent(args) || unscoped && this.ports.isReadOnly?.(tool, args) !== true);
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
@@ -13060,7 +13098,16 @@ var ProgressDetector = class {
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
-    if (!signal) return null;
+    if (!signal) {
+      if (this.progress.lastTurnGround) this.quietTurns += 1;
+      else if (idle > 0) this.quietTurns = 0;
+      if (this.quietTurns >= LADDER_RESET_TURNS) {
+        this.trips = 0;
+        this.quietTurns = 0;
+      }
+      return null;
+    }
+    this.quietTurns = 0;
     this.trips += 1;
     this.tripsBySignal[signal.kind] = (this.tripsBySignal[signal.kind] ?? 0) + 1;
     this.progress.reset();
@@ -13097,8 +13144,9 @@ var ProgressDetector = class {
       progress: this.progress.snapshot(),
       ...this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {},
       ...this.trips ? { trips: this.trips } : {},
-      ...this.trips ? { tripsBySignal: { ...this.tripsBySignal } } : {},
+      ...Object.keys(this.tripsBySignal).length ? { tripsBySignal: { ...this.tripsBySignal } } : {},
       ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
+      ...this.quietTurns ? { quietTurns: this.quietTurns } : {},
       ...this.steer ? { steer: this.steer } : {}
     };
   }
@@ -21967,7 +22015,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const streamRetries = streamRetriesInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
-  const answeredInProse = answeredInProseInTrace(events);
+  const answeredInProse = toolEvents2.length === 0 && answeredInProseInTrace(events);
   const noToolsAdvertised = exposure.min === 0 && toolEvents2.length === 0;
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
   const progress = computeRunProgress(events, messages);

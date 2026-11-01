@@ -1042,7 +1042,12 @@ export function computeBrainDiagnostics(
   // A turn that WAS offered tools but answered in prose (zero structured calls) did
   // nothing, yet reads clean on every other signal — no error, no truncation, no
   // pressure. Without this it scored "healthy" while accomplishing nothing.
-  const answeredInProse = answeredInProseInTrace(events);
+  // The gate matters: a run that made its tool calls and then SUMMARISED the result in
+  // prose (the normal, healthy shape — see `healthy-baseline`) also has a prose-only
+  // turn, and must NOT read as a fault. Only a run that accomplished no tool work at
+  // all is flagged — the same "did anything execute?" test the announced-call twin
+  // (`detectAnnouncedButUnmadeToolCall`) applies.
+  const answeredInProse = toolEvents.length === 0 && answeredInProseInTrace(events);
   // A turn offered ZERO tools cannot emit one. That is a configuration/catalog failure
   // (the MCP catalog fetch failed, or nothing was registered), never a model fault.
   const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;

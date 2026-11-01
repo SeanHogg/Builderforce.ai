@@ -229,6 +229,21 @@ interface LocalFirstSnapshot {
  */
 type LocalFirstListener = (change?: LocalFirstChange) => void;
 interface LocalFirstStore {
+    /**
+     * Read through a transaction of the COMMITTED state. `read` never waits on a running
+     * commit and may fold in another window's committed tail first, so two `read`s can
+     * observe different snapshots — that is the point of the store. What each accessor
+     * hands back, by contract:
+     *   - CLONING accessors — `get`, `list`, `pending`, `mapping`, `cursor`, `conflicts` —
+     *     structuredClone their results, so what a caller receives is caller-owned: mutate
+     *     it, retain it, no effect on the store.
+     *   - VIEW accessors — `scan`, `scanPending` — visit the COMMITTED Maps directly and
+     *     hand the store's own rows to the callback without cloning (megabytes once the
+     *     store holds a whole chat history). NEVER mutate a visited row and NEVER retain one
+     *     past the callback: the next commit updates those Maps in place, so a retained row
+     *     is silently stale. Treat `scan` as the current committed snapshot, not as
+     *     caller-owned data; clone just the rows you keep (`selectRecords`).
+     */
     read<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
     transact<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
     export(): Promise<LocalFirstSnapshot>;
