@@ -91,7 +91,8 @@ describe('the Brain runner watches the steers, once', () => {
     expect(rows(run)).toHaveLength(1);
     const status = run.trace.filter((e) => e.label === 'command_status');
     expect(status).toHaveLength(1);
-    expect(status[0]!.isError).toBe(true);
+    // The tool answered `ok` (it ignored the abort), so the step is not an error: the value the old loop recorded too (parity run).
+    expect(status[0]!.isError).toBe(false);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { usdBudget, runBudgetCapMillicents, type UsdBudget } from '@builderforce/agent-run';
+import { budgetContainedReply, budgetWarning, usdBudget, runBudgetCapMillicents, type UsdBudget } from '@builderforce/agent-run';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { priceBookFromPrices } from '@builderforce/model-catalog';
 import { loopSpendMeter } from '../run/loopSpend';
@@ -175,5 +175,21 @@ describe('the run\'s USD cap', () => {
     } finally {
       cells.delete(7101);
     }
+  });
+});
+
+describe('the wording of the cap', () => {
+  it('the warning and the contained reply say "at least" and count the calls once any had no known price', () => {
+    expect(budgetWarning(850_000, 1_000_000, 2)).toContain('at least $8.50 (2 calls had no known price)');
+    expect(budgetWarning(850_000, 1_000_000, 0)).not.toContain('at least');
+    expect(budgetContainedReply(260_000, 250_000, 3)).toContain('at least $2.60 spent — 3 calls had no known price');
+    expect(budgetContainedReply(260_000, 250_000, 1)).toContain('1 call had no known price');
+  });
+
+  it('the contained reply names the cap and the setting', () => {
+    const text = budgetContainedReply(260_000, 250_000);
+    expect(text).toContain('$2.50');
+    expect(text).toContain('$2.60');
+    expect(text).toContain('builderforce.maxRunBudgetUsd');
   });
 });
