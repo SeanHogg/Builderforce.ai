@@ -295,6 +295,17 @@ export async function createPanelServices(): Promise<PanelServices> {
         now: new Date(),
       });
     },
+    // A settled run's outcome record, to the gateway's run-outcome door with the device key. Through the same guarded fetch as every platform
+    // call (a device kept Local only sends nothing); signed out, there is no key and nothing is sent.
+    async reportOutcome(outcome) {
+      const key = await session.key();
+      if (!key) return;
+      await fetchImpl(`${baseUrl}/llm/v1/run-outcome`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify(outcome),
+      });
+    },
     onDeclined(chatId, call) {
       const tab = working.current();
       void ledger.record(chatId, {

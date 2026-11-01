@@ -51,6 +51,8 @@ export interface RovrRunHostPorts {
   onDeclined?(chatId: number, call: { name: string; args: unknown }): void;
   /** The run's deterministic-first PreFetch port (`/review`, `/graph`, knowledge questions); absent or undefined ⇒ none. */
   prefetch?(): Promise<BrainRunRequest['prefetch']>;
+  /** Where a settled run's outcome record goes (the gateway's run-outcome door). Absent: nothing is reported. Best-effort. */
+  reportOutcome?: BrainRunRequest['reportOutcome'];
 }
 
 export interface RovrRunHost {
@@ -87,6 +89,7 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
         projectId: null,
         // The surface this run came in through: the label its uniform outcome row carries (telemetry only; nothing branches on it).
         entryPoint: 'rovr',
+        ...(ports.reportOutcome ? { reportOutcome: ports.reportOutcome } : {}),
         // The device's opt-in to the one agent (`builderforce.runEngine`): selects the engine and nothing else.
         ...storedRunEngineField(),
       };
