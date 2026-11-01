@@ -95,6 +95,11 @@ export interface JournalOpenScan extends JournalScan {
    * journal: it keeps a copy and rebuilds from elsewhere.
    */
   readonly corrupt: 'damaged-frame' | 'unclosed-base' | undefined;
+  /**
+   * The newest base chain reached its closing frame (or there is no base). Separate from
+   * `corrupt`: a `damaged-frame` after a closed base leaves `latest` a sound fold up to the damage.
+   */
+  readonly baseClosed: boolean;
 }
 
 interface Folded {
@@ -139,7 +144,7 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
   const walkedTo = bounds.length === 0 ? 0 : bounds[bounds.length - 1]!.end;
   const damaged = walkedTo < bytes.byteLength && damagedAfterStop(bytes, walkedTo);
   if (bounds.length === 0) {
-    return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt: damaged ? 'damaged-frame' : undefined };
+    return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt: damaged ? 'damaged-frame' : undefined, baseClosed: !damaged };
   }
   let start = 0;
   for (let index = bounds.length - 1; index >= 0; index -= 1) {
@@ -154,12 +159,14 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
     folded = yield* foldFrom(bytes, bounds, from);
   }
   const committed = from + folded.applied;
-  const corrupt = damaged ? 'damaged-frame' : folded.baseClosed ? undefined : 'unclosed-base';
-  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt };
+  // A crc-valid frame that fails to parse leaves committed < bounds.length: that is damage too, never truncated.
+  const corrupt = damaged || committed < bounds.length ? 'damaged-frame' : folded.baseClosed ? undefined : 'unclosed-base';
+  const baseClosed = folded.baseClosed;
+  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt, baseClosed: false };
   const committedBytes = bounds[committed - 1]!.end;
   const tailFrames = Math.max(0, committed - 1 - folded.baseEnd);
   const tailBytes = folded.baseEnd >= 0 ? committedBytes - bounds[folded.baseEnd]!.end : committedBytes;
-  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes, corrupt };
+  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes, corrupt, baseClosed };
 }
 
 function drive(steps: Generator<void, JournalOpenScan>): JournalOpenScan {

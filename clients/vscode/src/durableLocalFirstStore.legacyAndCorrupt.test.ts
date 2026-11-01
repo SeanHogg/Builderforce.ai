@@ -1,5 +1,5 @@
 import nodeFs from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -181,6 +181,87 @@ describe("a damaged v3 journal", () => {
     await reopened.transact(async (tx) => { await tx.put(ticket("three")); });
     expect(await idsOf(createDurableLocalFirstStore(root))).toEqual(["one", "three", "two"]);
     expect(names(root, ".corrupt-")).toEqual([]);
+  });
+});
+
+describe("a damaged v3 journal is rebuilt from the best source left", () => {
+  const sizeOf = (file: string): number => nodeFs.statSync(file).size;
+  const flip = (file: string, at: number): void => {
+    const bytes = nodeFs.readFileSync(file);
+    bytes[at] = (bytes[at]! + 1) % 256;
+    nodeFs.writeFileSync(file, bytes);
+  };
+
+  it("keeps the good rows committed after the import when the tail is damaged: v2 unused, sidecar untouched", async () => {
+    const root = await directory();
+    nodeFs.writeFileSync(nodePath.join(root, LEGACY_JOURNAL_FILE), encodeJournalFrame(snapshot([ticket("a"), ticket("b")], [], 1)));
+    const writer = createDurableLocalFirstStore(root);
+    await idsOf(writer);
+    await writer.transact(async (tx) => { await tx.put(ticket("good1")); });
+    const afterGood = sizeOf(writer.journalFile);
+    await writer.transact(async (tx) => { await tx.put(ticket("bad")); });
+    await writer.transact(async (tx) => { await tx.put(ticket("after-bad")); });
+    flip(writer.journalFile, afterGood + 20);
+    const sidecar = nodeFs.readFileSync(nodePath.join(root, IMPORT_SIDECAR_FILE));
+    const reports: string[] = [];
+    const reopened = createDurableLocalFirstStore(root, { onBackgroundError: (error) => reports.push(String((error as Error).message)) });
+    expect(await idsOf(reopened)).toEqual(["a", "b", "good1"]);
+    expect(names(root, `${JOURNAL_FILE}.corrupt-`)).toHaveLength(1);
+    expect(nodeFs.readFileSync(nodePath.join(root, IMPORT_SIDECAR_FILE)).equals(sidecar)).toBe(true);
+    expect(reports.some((line) => line.includes("rebuilt from the sound prefix"))).toBe(true);
+  });
+
+  it("keeps everything this window holds when the damage turns up on the commit path", async () => {
+    const root = await directory();
+    const window = createDurableLocalFirstStore(root);
+    await window.transact(async (tx) => { await tx.put(ticket("one")); });
+    const first = sizeOf(window.journalFile);
+    await window.transact(async (tx) => { await tx.put(ticket("two")); });
+    await window.transact(async (tx) => { await tx.put(ticket("three")); });
+    flip(window.journalFile, first + 20);
+    nodeFs.truncateSync(window.journalFile, sizeOf(window.journalFile) - 3); // the file is now shorter than this window tracked
+    await window.transact(async (tx) => { await tx.put(ticket("four")); });
+    expect(await idsOf(createDurableLocalFirstStore(root))).toEqual(["four", "one", "three", "two"]);
+    expect(names(root, `${JOURNAL_FILE}.corrupt-`)).toHaveLength(1);
+  });
+
+  it("falls back to the newer of the cache and v2 when the base itself is damaged", async () => {
+    const root = await directory();
+    const frames: Uint8Array[] = [];
+    for await (const frame of snapshotFrames(snapshot([ticket("x"), ticket("y")], [], 1), async () => undefined, { maxBytes: 1, maxRows: 1 })) frames.push(frame);
+    const damaged = Buffer.concat(frames);
+    damaged[13 + 5] = (damaged[13 + 5]! + 1) % 256;
+    nodeFs.writeFileSync(nodePath.join(root, JOURNAL_FILE), damaged);
+    const v2 = nodePath.join(root, LEGACY_JOURNAL_FILE);
+    const cache = nodePath.join(root, "local-first-v1.json");
+    nodeFs.writeFileSync(v2, encodeJournalFrame(snapshot([ticket("from-v2")], [], 2)));
+    nodeFs.writeFileSync(cache, JSON.stringify(snapshot([ticket("from-cache")], [], 2)));
+    const old = new Date(Date.now() - 60_000);
+    await utimes(v2, old, old);
+    expect(await idsOf(createDurableLocalFirstStore(root))).toEqual(["from-cache"]);
+  });
+
+  it("rejects when the base is damaged and there is no v2 and no cache", async () => {
+    const root = await directory();
+    const frames: Uint8Array[] = [];
+    for await (const frame of snapshotFrames(snapshot([ticket("x"), ticket("y")], [], 1), async () => undefined, { maxBytes: 1, maxRows: 1 })) frames.push(frame);
+    const damaged = Buffer.concat(frames);
+    damaged[13 + 5] = (damaged[13 + 5]! + 1) % 256;
+    nodeFs.writeFileSync(nodePath.join(root, JOURNAL_FILE), damaged);
+    await expect(createDurableLocalFirstStore(root).export()).rejects.toThrow("local_first_store_corrupt");
+  });
+});
+
+describe("a row v3 deleted", () => {
+  it("stays deleted when the older window edits it in v2", async () => {
+    const root = await directory();
+    const v2 = nodePath.join(root, LEGACY_JOURNAL_FILE);
+    nodeFs.writeFileSync(v2, encodeJournalFrame(snapshot([ticket("a"), ticket("c")], [], 1)));
+    const first = createDurableLocalFirstStore(root);
+    await idsOf(first);
+    await first.transact(async (tx) => { await tx.delete("ticket", "c"); });
+    nodeFs.appendFileSync(v2, encodeJournalFrame(snapshot([ticket("a"), ticket("c", 2)], [], 1)));
+    expect(await idsOf(createDurableLocalFirstStore(root))).toEqual(["a"]);
   });
 });
 

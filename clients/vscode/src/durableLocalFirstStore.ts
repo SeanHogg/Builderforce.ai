@@ -41,6 +41,7 @@ import {
 } from "@builderforce/local-first";
 import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalFirstFileLockOptions } from "./localFirstLock";
 import { LocalFirstStoreCorruptError, quarantineJournal } from "./localFirstCorruption";
+import { chooseRebuildSource, describeRebuild } from "./localFirstRebuild";
 import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
 import { createNodeJournalIo, yieldToEventLoop, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
@@ -165,7 +166,7 @@ export function createDurableLocalFirstStore(
     try {
       const raced = await io.load(yieldToEventLoop);
       if (raced.corrupt) {
-        await rebuildCorrupt();
+        await rebuildCorrupt(raced);
         return;
       }
       if (raced.latest) {
@@ -189,19 +190,18 @@ export function createDurableLocalFirstStore(
   };
 
   /**
-   * UNDER THE LOCK: v3 is damaged (not torn). It is copied aside whole and never truncated; the
-   * store is rebuilt from v2 by the import path, or — with no v2 to rebuild from — the open is
-   * refused with `local_first_store_corrupt` rather than opening partial.
+   * UNDER THE LOCK: v3 is damaged (not torn). It is copied aside whole and never truncated, then
+   * rebuilt from the best source left (`localFirstRebuild.ts`): this window's own state, the sound
+   * prefix, or the newer of the cache and v2. With none, the open is refused `local_first_store_corrupt`.
    */
-  const rebuildCorrupt = async (): Promise<void> => {
+  const rebuildCorrupt = async (loaded: LoadedJournal, held?: LocalFirstSnapshot): Promise<void> => {
     const copy = await quarantineJournal(io.journalFile);
-    const legacy = await statLegacyJournal(directory);
-    const source = await readLegacyJournal(directory, yieldToEventLoop);
-    if (!source || !snapshotHasState(source)) throw new LocalFirstStoreCorruptError(copy);
-    await io.compact(snapshotFrames(source, yieldToEventLoop));
-    replaceMemory(source, false);
-    await recordImportBaseline(source, legacy);
-    onBackgroundError(new Error(`local-first: journal damaged; original kept at ${copy}; rebuilt from the v2 journal`));
+    const plan = await chooseRebuildSource({ directory, snapshotFile, loaded, held, pause: yieldToEventLoop });
+    if (!plan) throw new LocalFirstStoreCorruptError(copy);
+    await io.compact(snapshotFrames(plan.snapshot, yieldToEventLoop));
+    replaceMemory(plan.snapshot, false);
+    if (plan.from === "v2") await recordImportBaseline(plan.snapshot, plan.legacy);
+    onBackgroundError(new Error(describeRebuild(plan, copy, loaded, (await fs.stat(copy)).size)));
   };
 
   /**
@@ -269,7 +269,7 @@ export function createDurableLocalFirstStore(
     if (read.kind === "deltas") applyTail(read);
     else if (read.kind === "reload") {
       const loaded = await io.load(yieldToEventLoop);
-      if (loaded.corrupt) await rebuildCorrupt();
+      if (loaded.corrupt) await rebuildCorrupt(loaded, io.frames() > 0 ? memory.view() : undefined); // only state this window really tracked
       else adopt(loaded, false);
     }
   };

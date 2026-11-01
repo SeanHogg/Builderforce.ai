@@ -17,7 +17,7 @@
  * send events twice. After a merge the baseline becomes everything v2 now holds, so a repeat
  * open is a no-op and a skipped row is never reconsidered. A crash between the v3 commit and
  * the sidecar write re-merges nothing: the rows are already at their version in v3 and the
- * events already in v3. Not merged: rows the old window deleted, mappings, receipts,
+ * events already in v3. A row v3 deleted stays deleted. Not merged: rows the old window deleted, mappings, receipts,
  * conflicts, cursors.
  */
 
@@ -123,6 +123,8 @@ export function planLegacyMerge(baseline: LegacyBaseline, legacy: LocalFirstSnap
     const known = baseline.rows[key];
     if (known !== undefined && row.version <= known) return false;
     const have = versions.get(key);
+    // Imported, and now gone from v3: v3 deleted it. An old-window edit does not bring it back.
+    if (known !== undefined && have === undefined) return false;
     return have === undefined || have < row.version;
   });
   const seen = new Set([...baseline.eventIds, ...current.events.map((event) => event.eventId), ...current.receipts.map((receipt) => receipt.eventId)]);

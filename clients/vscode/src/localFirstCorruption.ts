@@ -41,6 +41,13 @@ export async function quarantineJournal(journalFile: string, timestamp: number =
     }
   }
   const copy = `${journalFile}.corrupt-${timestamp}`;
-  await fs.writeFile(copy, original, { flag: "wx" });
+  // Durable before compaction replaces the original: the copy may be the only whole record left.
+  const handle = await fs.open(copy, "wx");
+  try {
+    await handle.write(original, 0, original.byteLength, 0);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   return copy;
 }

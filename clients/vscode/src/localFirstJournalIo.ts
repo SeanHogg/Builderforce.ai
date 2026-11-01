@@ -68,6 +68,8 @@ export interface LoadedJournal extends JournalOpen {
   identity: FileIdentity | undefined;
   /** The journal is damaged, not torn. Such a load can be read, never `adopt`ed (which would cut it). */
   corrupt?: JournalOpenScan["corrupt"];
+  /** The newest base chain closed, so `latest` is a sound fold up to any damage. */
+  baseClosed?: boolean;
 }
 
 export type TailRead =
@@ -168,6 +170,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       tailBytes: scan.tailBytes,
       identity: identityOf(stat),
       corrupt: scan.corrupt,
+      baseClosed: scan.baseClosed,
     };
   };
 
