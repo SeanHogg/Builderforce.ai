@@ -48,6 +48,24 @@ export interface BrainRunOutcome extends RunOutcomeTelemetry {
 /** The model turns a run completed, counted from ITS trace: the number the Brain has always reported as `steps` (the finishing turn included). */
 export const completedTurns = (trace: readonly BrainTraceEvent[]): BrainTraceEvent[] => trace.filter((e) => e.label === 'llm.complete' && !e.isError);
 
+/**
+ * The model a run asked for, for the record of a run that ended before any model completed (a refused ask, a Stop before the first token,
+ * a pinned model that broke): its row names no model, but the run did ask. In order: the model the host requested or pinned; the model its
+ * own trace names on the step that ended it (the failed `llm.complete`, the `agent.stopped`); else `default`, the Brain's own word for
+ * "the gateway chooses" (`requestedModel`). Never read from a completed turn: those are the row's own model.
+ */
+export function askedModelOf(requested: string | undefined, trace: readonly BrainTraceEvent[]): string {
+  const asked = requested?.trim();
+  if (asked) return asked;
+  for (let i = trace.length - 1; i >= 0; i -= 1) {
+    const e = trace[i]!;
+    if (e.label !== 'llm.complete' && e.label !== 'agent.stopped') continue;
+    const model = (e.args as { model?: unknown } | null | undefined)?.model;
+    if (typeof model === 'string' && model.trim()) return model.trim();
+  }
+  return 'default';
+}
+
 /** A turn that reported its own cost as exactly 0 (served on this device - `servedOnDevice`). */
 const reportedFree = (e: BrainTraceEvent): boolean => (e.args as { costMc?: unknown } | null | undefined)?.costMc === 0;
 

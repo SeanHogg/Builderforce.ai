@@ -6,7 +6,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { runScenario } from './../run/parity/harness';
-import { bulk, call, calls, reply } from './../run/parity/script';
+import { bulk, call, calls, fails, reply, streamsUntilStopped } from './../run/parity/script';
+import { brainRequestError } from './../chatError';
+import { stopRun } from './runControl';
 import type { Scenario } from './../run/parity/types';
 import type { RunEntryPoint } from './runTypes';
 
@@ -41,6 +43,56 @@ describe('the report a settled Brain run makes', () => {
       });
     });
   }
+
+  describe('a run that ended before any model completed still reports once, naming the model it asked for', () => {
+    const refused = (model: string | undefined, records: Record[]): Scenario => ({
+      id: 'report-refused',
+      rows: [],
+      title: 'the gateway answers 402 to the first ask',
+      async run(host) {
+        host.script([fails(brainRequestError(402, { error: 'needs a validated card', code: 'card_required' }))]);
+        await host.start({ ...(model ? { model } : {}), reportRunRecord: async (r) => { records.push(r as Record); } });
+      },
+    });
+
+    it('a 402 refusal: one record, the requested model, failed, never taught to routing', async () => {
+      const records: Record[] = [];
+      const record = await runScenario(refused('xai-oauth/grok-4.5', records), 'agent');
+      expect(record.outcome.reported).toEqual([]);
+      expect(record.outcome.ended).toHaveLength(1);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({ model: 'xai-oauth/grok-4.5', terminalStatus: 'failed', steps: 0, routingSignal: false });
+    });
+
+    it('a 402 refusal with no model named: one record, under the word for "the gateway chooses"', async () => {
+      const records: Record[] = [];
+      await runScenario(refused(undefined, records), 'agent');
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({ model: 'default', terminalStatus: 'failed', routingSignal: false });
+    });
+
+    it('a Stop before the first token: one record, the model the stopped request named, cancelled, never taught', async () => {
+      const records: Record[] = [];
+      const stopped: Scenario = {
+        id: 'report-stop-before-text',
+        rows: [],
+        title: 'Stop before a single token arrived',
+        async run(host) {
+          let streaming = false;
+          host.script([streamsUntilStopped(() => { streaming = true; }, [], 'xai-oauth/grok-4.6')]);
+          const run = host.begin({ userTurn: 'go', reportRunRecord: async (r) => { records.push(r as Record); } });
+          await host.until(() => streaming, 'the request is open');
+          stopRun(host.key);
+          await run;
+        },
+      };
+      const record = await runScenario(stopped, 'agent');
+      expect(record.outcome.reported).toEqual([]);
+      expect(record.outcome.ended).toHaveLength(1);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({ model: 'xai-oauth/grok-4.6', terminalStatus: 'cancelled', steps: 0, routingSignal: false });
+    });
+  });
 
   it('on the loop engine a run with no coder grade reports nothing, as before', async () => {
     const records: Record[] = [];

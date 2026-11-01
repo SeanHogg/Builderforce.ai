@@ -11,7 +11,7 @@ import { linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedC
 import { asksForChange } from '@builderforce/agent-stall';
 import { isChildReportText } from '@builderforce/agent-tools';
 import { contentText } from '../localSuccess/turnFeatures';
-import { codeRunOutcome, completedTurns } from '../runOutcomeReport';
+import { askedModelOf, codeRunOutcome, completedTurns } from '../runOutcomeReport';
 import { runOutcomeRequestOf, type RunOutcomeRow } from '@builderforce/agent-run';
 import { parseRunOutcomeTelemetry } from '@builderforce/learned-routing';
 import { attemptedDelegation } from '../delegationRequest';
@@ -230,7 +230,10 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       if (outcome) {
         void req.reportOutcome!(agentRow ? { ...parseRunOutcomeTelemetry({ ...agentRow }), ...outcome } : outcome).catch(() => undefined);
       } else if (agentRow && req.reportRunRecord) {
-        const record = runOutcomeRequestOf(agentRow, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
+        // A run that ended before any model completed (a refusal, a Stop before the first token, a pinned model that broke) has no model on
+        // its row but still reports, once, naming the model it asked for.
+        const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace) };
+        const record = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
         // `steps` is the number the Brain has always reported (its completed model turns, the finishing one included), not the row's own tally.
         if (record) void req.reportRunRecord({ ...record, steps: completedTurns(trace).length, routingSignal: false }).catch((e: unknown) => unrecorded(c, e));
       }
