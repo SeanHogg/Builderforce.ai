@@ -259,7 +259,7 @@ export function VisualizationPanel({
       {/* Mounted for as long as it is provided and merely hidden off-view: unmounting it would
           abort a running review (the review hook stops on unmount). */}
       {knowledge !== undefined && (
-        <div className="bf-viz__knowledge" hidden={state.view !== 'knowledge'}>{knowledge}</div>
+        <div className="bf-viz__knowledge-slot" hidden={state.view !== 'knowledge'}>{knowledge}</div>
       )}
       {state.view === 'changes' ? (
         <ChangeTree graph={visible} labels={labels ?? {}} hasEverWritten={hasChanges(state)} />

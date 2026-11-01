@@ -4,7 +4,7 @@
  * Open in graph chips, `/graph`), taken once on mount and then followed live.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
 import { onHostMessage, request } from '../vscodeBridge';
@@ -26,10 +26,14 @@ export interface KnowledgeHost {
   focusRequests: number;
   /** Fix with agent → the ONE composer (a chat seeded with the request). */
   compose(text: string): void;
+  /** A review is in flight (planning, confirm or running): the panel holds its view still. */
+  reviewing: boolean;
 }
 
 export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: readonly string[]) => KnowledgeGraph): KnowledgeHost {
-  const source = useMemo(() => createHostKnowledgeGraphSource(bridgeKnowledgeTransport, { overlay }), [overlay]);
+  const [reviewing, setReviewing] = useState(false);
+  const onReviewActive = useCallback((active: boolean) => setReviewing(active), []);
+  const source = useMemo(() => createHostKnowledgeGraphSource(bridgeKnowledgeTransport, { overlay, onReviewActive }), [overlay, onReviewActive]);
   const [focus, setFocus] = useState<KnowledgeFocusFrame | null>(null);
   const [focusRequests, setFocusRequests] = useState(0);
 
@@ -52,6 +56,7 @@ export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: reado
     source,
     focus,
     focusRequests,
+    reviewing,
     compose: (text) => { void bridgeKnowledgeTransport.call({ op: 'compose', text }).catch(() => undefined); },
   };
 }

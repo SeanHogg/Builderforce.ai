@@ -6,9 +6,9 @@ import { render, screen } from '@testing-library/react';
 // A WebGL scene has no DOM in jsdom: the Canvas stands in as a div and the scene's own
 // hooks are inert — the same approach as the room's 3D tests (`world3d`).
 vi.mock('@react-three/fiber', () => ({
-    Canvas: ({ children: _children }: { children: ReactNode }) => <div data-testid="r3f-canvas" />,
+    Canvas: ({ frameloop }: { children: ReactNode; frameloop?: string }) => <div data-testid="r3f-canvas" data-frameloop={frameloop} />,
     useFrame: () => undefined,
-    useThree: () => ({ camera: { position: { lerp: () => undefined } } }),
+    useThree: () => ({ camera: { position: { lerp: () => undefined } }, invalidate: () => undefined, gl: {} }),
 }));
 vi.mock('@react-three/drei', () => ({
     Html: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -31,7 +31,7 @@ describe('GraphScene', () => {
             />,
         );
         expect(screen.getByRole('img', { name: 'Knowledge graph' })).toBeTruthy();
-        expect(await screen.findByTestId('r3f-canvas')).toBeTruthy();
+        expect((await screen.findByTestId('r3f-canvas')).getAttribute('data-frameloop')).toBe('demand');
     });
 });
 

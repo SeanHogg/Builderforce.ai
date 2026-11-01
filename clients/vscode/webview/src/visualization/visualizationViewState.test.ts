@@ -290,3 +290,26 @@ describe('the Knowledge view (PRD 38)', () => {
     expect(drive([SYNC_ACTIVE, { type: 'run.tool', mutating: true }]).view).toBe('changes');
   });
 });
+
+describe('a knowledge review in flight', () => {
+  const MUTATE = { type: 'run.tool', mutating: true } as const;
+
+  it('counts a mutation but stays on the knowledge graph, without touching the pin', () => {
+    const state = drive([{ type: 'review.active', active: true }, MUTATE]);
+    expect(state.view).toBe('knowledge');
+    expect(state.mutations).toBe(1);
+    expect(state.pinned).toBe(false);
+  });
+
+  it('swaps as before on a later mutation once the review has ended, and does not jump when it ends', () => {
+    const ended = drive([{ type: 'review.active', active: true }, MUTATE, { type: 'review.active', active: false }]);
+    expect(ended.view).toBe('knowledge');
+    expect(visualizationViewReducer(ended, MUTATE).view).toBe('changes');
+  });
+
+  it('still obeys a view the user picks during the review', () => {
+    const state = drive([{ type: 'review.active', active: true }, { type: 'showChanges' }]);
+    expect(state.view).toBe('changes');
+    expect(state.reviewing).toBe(true);
+  });
+});

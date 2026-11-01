@@ -50,6 +50,7 @@ function Nodes({ layout, nodes, lens, colors, selected, onSelect }: {
     layout: Layout3D; nodes: readonly KNode[]; lens: LensDef; colors: ThemeColors; selected: string | null; onSelect(ref: string): void;
 }) {
     const mesh = useRef<InstancedMesh>(null);
+    const invalidate = useThree((s) => s.invalidate);
     const inst = useMemo(() => nodeInstances(nodes, layout, lens), [nodes, layout, lens]);
     useEffect(() => {
         const m = mesh.current;
@@ -68,7 +69,8 @@ function Nodes({ layout, nodes, lens, colors, selected, onSelect }: {
         m.instanceMatrix.needsUpdate = true;
         if (m.instanceColor) m.instanceColor.needsUpdate = true;
         m.computeBoundingSphere();
-    }, [inst, colors, selected]);
+        invalidate(); // matrices/colours are written straight to the mesh, which the reconciler never sees
+    }, [inst, colors, selected, invalidate]);
     const pick = (e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
         const ref = e.instanceId !== undefined ? inst.refs[e.instanceId] : undefined;
@@ -99,9 +101,9 @@ function Edges({ layout, edges, colors }: { layout: Layout3D; edges: readonly KE
 }
 
 function FlyTo({ target, controls }: { target: readonly [number, number, number] | null; controls: RefObject<OrbitHandle | null> }) {
-    const { camera } = useThree();
+    const { camera, invalidate } = useThree();
     const goal = useRef<Vector3 | null>(null);
-    useEffect(() => { goal.current = target ? new Vector3(...target) : null; }, [target]);
+    useEffect(() => { goal.current = target ? new Vector3(...target) : null; invalidate(); }, [target, invalidate]);
     useFrame(() => {
         const c = controls.current;
         if (!goal.current || !c) return;
@@ -110,7 +112,20 @@ function FlyTo({ target, controls }: { target: readonly [number, number, number]
         camera.position.lerp(offset, 0.08);
         c.update();
         if (c.target.distanceTo(goal.current) < 0.01) goal.current = null;
+        else invalidate(); // demand loop: keep drawing until the fly lands
     });
+    return null;
+}
+
+/** A canvas shown again at an unchanged size gets no resize from R3F, so ask for the frame. */
+function RepaintOnShow() {
+    const { gl, invalidate } = useThree();
+    useEffect(() => {
+        if (typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(([entry]) => { if (entry && entry.contentRect.width > 0) invalidate(); });
+        ro.observe(gl.domElement);
+        return () => ro.disconnect();
+    }, [gl, invalidate]);
     return null;
 }
 
@@ -124,11 +139,12 @@ export default function GraphScene({ rootId, nodes, edges, lens, selected, focus
         return (ref && layout?.positions.get(ref)) || null;
     }, [selected, focus, layout]);
     const span = Math.max(12, Math.sqrt(nodes.length) * 3);
+    // Canvas frameloop is 'demand': frames are drawn only on change (orbit, damping, fly invalidate), so an idle or hidden graph costs none.
 
     return (
         <div ref={setHost} role="img" aria-label={label} style={{ position: 'absolute', inset: 0, color: cssVar('text'), touchAction: 'none' }}>
             {colors && layout && (
-                <Canvas camera={{ position: [span, span * 0.7, span], fov: 50 }} dpr={[1, 2]} style={{ background: colors.bg }}>
+                <Canvas frameloop="demand" camera={{ position: [span, span * 0.7, span], fov: 50 }} dpr={[1, 2]} style={{ background: colors.bg }}>
                     <ambientLight intensity={0.75} />
                     <directionalLight position={[10, 20, 10]} intensity={0.8} />
                     {layout.planes.map((p) => (
@@ -146,6 +162,7 @@ export default function GraphScene({ rootId, nodes, edges, lens, selected, focus
                     <Nodes layout={layout} nodes={nodes} lens={lens} colors={colors} selected={selected} onSelect={onSelect} />
                     <OrbitControls ref={controls as never} makeDefault enableDamping />
                     <FlyTo target={target} controls={controls} />
+                    <RepaintOnShow />
                 </Canvas>
             )}
         </div>

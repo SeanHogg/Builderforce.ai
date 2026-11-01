@@ -6,7 +6,10 @@
  *
  * The review confirm handshake (`@builderforce/knowledge-graph-view` `types.ts`):
  *   1. `plan` — the host picks the folder (a known root, a workspace folder, or its folder
- *      picker) and plans it; nothing is written. No folder ⇒ `cancelled`.
+ *      picker) and plans it; nothing is written. No folder ⇒ `cancelled`. The call answers at
+ *      once and the plan arrives as a `planned` event on a stream this side opened first
+ *      (a big folder, or a picker left open, outlives any request timeout). Stop while
+ *      planning ends the wait and discards the session when the plan lands.
  *   2. yield the plan; await `ctl.confirm`. Cancel / *Re-review all* ⇒ `discard`, `cancelled`.
  *   3. `run` — the host starts the review on that plan; its progress and its report arrive as
  *      `knowledge.event`s on the review's stream (a review outlives any request timeout).
@@ -35,6 +38,8 @@ export interface KnowledgeTransport {
 export interface HostKnowledgeSourceOptions {
   /** Marks the files changed since the graph was built (the shared Live overlay). */
   overlay?(graph: KnowledgeGraph, changed: readonly string[]): KnowledgeGraph;
+  /** True when a review starts, false when it ends however it ends (planning, confirm and run included). */
+  onReviewActive?(active: boolean): void;
 }
 
 let streams = 0;
@@ -59,10 +64,61 @@ function streamOf(t: KnowledgeTransport, stream: string) {
   };
 }
 
+type FailedEvent = Extract<KnowledgeEvent, { type: 'failed' }>;
+
+const failureOf = (e: FailedEvent): ReviewFailure => new ReviewFailure(e.error, {
+  ...(e.detail ? { detail: e.detail } : {}), ...(e.host ? { host: e.host } : {}), ...(e.rootPath ? { rootPath: e.rootPath } : {}),
+});
+
+/**
+ * Asks the host to plan and waits for the `planned` event. The stream is subscribed BEFORE the
+ * call so the answer cannot be missed. Resolves `'aborted'` when `signal` fires first; the
+ * host's session is then discarded as soon as its plan lands.
+ */
+async function planOverStream(t: KnowledgeTransport, req: ReviewRequest, signal: AbortSignal): Promise<KnowledgePlanReply | 'aborted'> {
+  const stream = nextStream('review');
+  const events = streamOf(t, stream);
+  let abandoned = false;
+  try {
+    await t.call({ op: 'plan', req, stream });
+    const landed = events.next();
+    let onAbort = (): void => undefined;
+    const aborted = new Promise<'aborted'>((resolve) => {
+      onAbort = () => resolve('aborted');
+      if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true });
+    });
+    const first = await Promise.race([landed, aborted]);
+    signal.removeEventListener('abort', onAbort);
+    const discardWhenLanded = (e: KnowledgeEvent): void => {
+      if (e.type === 'planned' && 'reviewId' in e.reply) void t.call({ op: 'discard', reviewId: e.reply.reviewId }).catch(() => undefined);
+    };
+    if (first === 'aborted') {
+      abandoned = true;
+      void landed.then(discardWhenLanded).finally(events.close);
+      return 'aborted';
+    }
+    if (first.type === 'failed') throw failureOf(first);
+    if (first.type !== 'planned') throw new Error('knowledge: the plan answered with an unexpected event');
+    if (signal.aborted) { discardWhenLanded(first); return 'aborted'; }
+    return first.reply;
+  } finally {
+    if (!abandoned) events.close();
+  }
+}
+
 export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: HostKnowledgeSourceOptions = {}): KnowledgeGraphSource {
   async function* review(req: ReviewRequest, ctl: ReviewControl): AsyncGenerator<KnowledgeReviewEvent> {
-    const reply = await t.call<KnowledgePlanReply>({ op: 'plan', req });
-    if ('cancelled' in reply) { yield { type: 'cancelled' }; return; }
+    opts.onReviewActive?.(true);
+    try {
+      yield* reviewFlow(req, ctl);
+    } finally {
+      opts.onReviewActive?.(false);
+    }
+  }
+
+  async function* reviewFlow(req: ReviewRequest, ctl: ReviewControl): AsyncGenerator<KnowledgeReviewEvent> {
+    const reply = await planOverStream(t, req, ctl.signal);
+    if (reply === 'aborted' || 'cancelled' in reply) { yield { type: 'cancelled' }; return; }
     const { reviewId, plan } = reply;
     yield { type: 'plan', plan };
     if (!(await ctl.confirm(plan))) {
@@ -82,11 +138,7 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         const e = await events.next();
         if (e.type === 'progress') yield { type: 'progress', progress: e.progress };
         else if (e.type === 'done') { yield { type: 'done', rootId: e.rootId, report: e.report }; return; }
-        else if (e.type === 'failed') {
-          throw new ReviewFailure(e.error, {
-            ...(e.detail ? { detail: e.detail } : {}), ...(e.host ? { host: e.host } : {}), ...(e.rootPath ? { rootPath: e.rootPath } : {}),
-          });
-        }
+        else if (e.type === 'failed') throw failureOf(e);
       }
     } finally {
       events.close();

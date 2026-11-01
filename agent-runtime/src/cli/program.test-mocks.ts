@@ -56,6 +56,13 @@ export function installBaseProgramMocks() {
   vi.mock("../runtime.js", () => ({ defaultRuntime: runtime }));
   vi.mock("./channel-auth.js", () => ({ runChannelLogin, runChannelLogout }));
   vi.mock("../tui/tui.js", () => ({ runTui }));
+  // The tui action runs a pre-launch setup check (added with the Ink migration):
+  // without a stub it reads real config and can launch the interactive
+  // onboarding wizard, hanging CLI program tests before runTui is reached.
+  vi.mock("../tui/tui-setup-check.js", () => ({
+    checkIfSetupNeeded: async () => ({ needed: false }),
+    startGatewayBackground: async () => true,
+  }));
   vi.mock("../gateway/call.js", () => ({
     callGateway,
     randomIdempotencyKey: () => "idem-test",

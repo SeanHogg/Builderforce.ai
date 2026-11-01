@@ -10,8 +10,9 @@
  *                   (`builderforce.openKnowledgeGraph`).
  *
  * A review never rides one long request (a request times out; a review can take
- * minutes): `plan` answers with the plan and a review id, `run` only starts it, and its
- * progress and report arrive as events.
+ * minutes, and so can planning a big folder or leaving the folder picker open): `plan`
+ * answers at once and the plan arrives as a `planned` event on the stream the webview
+ * opened, `run` only starts the review, and its progress and report arrive as events.
  *
  * Types only, plus the frame names: no `vscode`, no React.
  */
@@ -34,7 +35,7 @@ export type KnowledgeCall =
   | { op: "scopes" }
   | { op: "load"; rootId: string; focus?: string[]; maxNodes?: number }
   | { op: "targets" }
-  | { op: "plan"; req: KnowledgeReviewRequest }
+  | { op: "plan"; req: KnowledgeReviewRequest; stream: string }
   | { op: "run"; reviewId: string }
   | { op: "stop"; reviewId: string }
   | { op: "discard"; reviewId: string }
@@ -63,7 +64,7 @@ export interface KnowledgeTargetRow {
   title?: string;
 }
 
-/** What `plan` answers: the plan to confirm, or nothing picked. */
+/** What the `planned` event carries: the plan to confirm, or nothing picked. */
 export type KnowledgePlanReply = { reviewId: string; rootId: string; plan: ReviewPlan } | { cancelled: true };
 
 export interface KnowledgeFocusFrame {
@@ -78,6 +79,7 @@ export interface KnowledgeEventFrame {
 
 /** A host → webview event on one stream (a review id, or a live subscription id). */
 export type KnowledgeEvent =
+  | { stream: string; type: "planned"; reply: KnowledgePlanReply }
   | { stream: string; type: "progress"; progress: ReviewProgress }
   | { stream: string; type: "done"; rootId: string; report: ReviewReport }
   // `error` is the reason shown to the person; the rest is the diagnostic detail the view's

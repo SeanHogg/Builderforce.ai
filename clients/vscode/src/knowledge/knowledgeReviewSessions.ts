@@ -2,8 +2,10 @@
  * The Knowledge view's reviews, held in the extension host between the plan and the run
  * (the view's confirm handshake, `knowledgeProtocol.ts`):
  *
- *   plan(req)  — which folder (a known root, a workspace folder, or the folder picker), then
- *                `planReview` — no writes; the session waits under a review id;
+ *   planOver(req, stream) — which folder (a known root, a workspace folder, or the folder
+ *                picker), then `planReview` — no writes; the session waits under a review
+ *                id. Returns at once: the outcome is posted as `planned` / `failed` on the
+ *                caller's stream, since planning can outlive any request timeout;
  *   start(id)  — the person confirmed: the review runs on that plan, its progress and its
  *                report posted as events on the id's stream;
  *   stop(id)   — Stop: the review aborts between files (what was written stays);
@@ -28,6 +30,13 @@ interface Session {
 }
 
 let nextReview = 0;
+
+/** A plan failure already logged; carries what the view is sent. */
+class PlanFailure extends Error {
+  constructor(readonly sent: ReturnType<typeof logReviewFailure>) {
+    super(sent.error);
+  }
+}
 
 /** The folder a review request names: a known root, a target, the picker, else the first workspace folder. */
 export async function reviewRootFor(req: KnowledgeReviewRequest): Promise<KnowledgeRoot | undefined> {
@@ -63,7 +72,20 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     return { log: logLine, host: this.hostLabel };
   }
 
-  async plan(req: KnowledgeReviewRequest): Promise<KnowledgePlanReply> {
+  /** Plans in the background; the outcome is an event on `stream`, never a rejection. */
+  planOver(req: KnowledgeReviewRequest, stream: string): void {
+    this.plan(req).then(
+      (reply) => this.post({ stream, type: "planned", reply }),
+      (error: unknown) => this.post({ stream, type: "failed", ...this.planFailure(error) }),
+    ).catch(() => undefined);
+  }
+
+  /** What the view is sent for a failed plan; a failure past the logged one (the picker) is logged here. */
+  private planFailure(error: unknown) {
+    return error instanceof PlanFailure ? error.sent : logReviewFailure(this.sink, { stage: "plan" }, error);
+  }
+
+  private async plan(req: KnowledgeReviewRequest): Promise<KnowledgePlanReply> {
     const root = await reviewRootFor(req);
     if (!root) return { cancelled: true };
     const force = !!req.force;
@@ -73,8 +95,7 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
       review = reviewRoot(this.secrets, root);
       plan = await review.plan(force);
     } catch (error) {
-      logReviewFailure(this.sink, { stage: "plan", rootId: root.rootId, rootPath: root.rootPath }, error);
-      throw error;
+      throw new PlanFailure(logReviewFailure(this.sink, { stage: "plan", rootId: root.rootId, rootPath: root.rootPath }, error));
     }
     const reviewId = `review-${++nextReview}`;
     this.sessions.set(reviewId, { review, plan, force });

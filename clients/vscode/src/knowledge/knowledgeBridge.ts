@@ -72,7 +72,7 @@ export class KnowledgeBridge implements vscode.Disposable {
         return graph;
       }
       case "targets": return this.targets();
-      case "plan": return this.reviews.plan(call.req);
+      case "plan": this.reviews.planOver(call.req, call.stream); return null;
       case "run": return { started: this.reviews.start(call.reviewId) };
       case "stop": this.reviews.stop(call.reviewId); return null;
       case "discard": this.reviews.discard(call.reviewId); return null;

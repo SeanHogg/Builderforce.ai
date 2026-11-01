@@ -272,6 +272,7 @@ function VisualizationBody({ init, diff, canvas }: { init: InitData; diff: strin
       labels={init.labels}
       diffText={diff}
       knowledgeRequests={knowledge.focusRequests}
+      reviewing={knowledge.reviewing}
       knowledge={(
         <KnowledgeView
           source={knowledge.source}

@@ -48,14 +48,14 @@ describe("stage timings", () => {
     await store.read(async () => undefined); // forces the first open/import
 
     const importStages = stagesOf(timings);
-    // load (read the file) -> decode (fold frames) -> rebuild (adopt into memory)
-    // -> persist (write the v3 base) -> open (all of it, emitted last).
-    for (const stage of ["import.load", "import.decode", "import.rebuild", "import.persist", "import.open"]) {
+    // This is the pure-legacy path: io.load returns on a missing v3 (no import.load), and
+    // the v2 decode lives in localFirstMigration (its own instrument). The store attributes
+    // rebuild -> persist, and the open wraps all of it (emitted last).
+    for (const stage of ["import.rebuild", "import.persist", "import.open"]) {
       expect(importStages).toContain(stage);
     }
-    expect(importStages.indexOf("import.load")).toBeLessThan(importStages.indexOf("import.decode"));
-    expect(importStages.indexOf("import.decode")).toBeLessThan(importStages.indexOf("import.rebuild"));
-    expect(importStages.indexOf("import.rebuild")).toBeLessThan(importStages.indexOf("import.persist"));
+    // The persist (writing the v3 base) lands BEFORE the in-memory rebuild, then open wraps all.
+    expect(importStages.indexOf("import.persist")).toBeLessThan(importStages.indexOf("import.rebuild"));
 
     timings.length = 0;
     await store.transact(async (tx) => { await tx.put(ticket("new")); });

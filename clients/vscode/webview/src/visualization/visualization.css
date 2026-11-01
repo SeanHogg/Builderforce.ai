@@ -139,9 +139,17 @@
   overflow: hidden;
 }
 
-/* Kept mounted while off-view (a review must survive a view change); `display: flex` above
-   would otherwise beat the UA `[hidden]` rule. */
-.bf-viz__knowledge[hidden] {
+/* The wrapper that keeps the Knowledge view mounted while off-view (a running review must
+   survive a view change). It is a flex column so the view inside fills it exactly as it
+   filled `.bf-viz`; `[hidden]` is restated because the `display` here would beat the UA rule. */
+.bf-viz__knowledge-slot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.bf-viz__knowledge-slot[hidden] {
   display: none;
 }
 

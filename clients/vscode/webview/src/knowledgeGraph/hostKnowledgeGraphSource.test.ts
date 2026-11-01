@@ -15,7 +15,7 @@ const GRAPH: KnowledgeGraph = {
 };
 
 /** A scripted host: records every call; `run` posts progress then the report. */
-function fakeHost(opts: { cancel?: boolean; fail?: boolean; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
+function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; failPlan?: boolean; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
   const calls: KnowledgeCall[] = [];
   const listeners = new Set<(e: KnowledgeEvent) => void>();
   const emit = (e: KnowledgeEvent) => { for (const l of [...listeners]) l(e); };
@@ -23,7 +23,16 @@ function fakeHost(opts: { cancel?: boolean; fail?: boolean; failDetail?: { detai
     async call<T>(call: KnowledgeCall): Promise<T> {
       calls.push(call);
       switch (call.op) {
-        case 'plan': return (opts.cancel ? { cancelled: true } : { reviewId: 'r1', rootId: 'ws', plan: PLAN }) as T;
+        case 'plan': {
+          // Answers at once (null); the outcome is an EVENT on the caller's stream.
+          const { stream } = call;
+          if (!opts.holdPlan) {
+            queueMicrotask(() => emit(opts.failPlan
+              ? { stream, type: 'failed', error: 'planning blew up' }
+              : { stream, type: 'planned', reply: opts.cancel ? { cancelled: true } : { reviewId: 'r1', rootId: 'ws', plan: PLAN } }));
+          }
+          return null as T;
+        }
         case 'run':
           queueMicrotask(() => {
             emit({ stream: 'r1', type: 'progress', progress: { phase: 'extract', done: 1, total: 2, path: 'a.md' } });
@@ -37,7 +46,8 @@ function fakeHost(opts: { cancel?: boolean; fail?: boolean; failDetail?: { detai
     },
     onEvent(cb) { listeners.add(cb); return () => listeners.delete(cb); },
   };
-  return { t, calls, emit, listeners };
+  const planStream = (): string => (calls.find((c) => c.op === 'plan') as Extract<KnowledgeCall, { op: 'plan' }>).stream;
+  return { t, calls, emit, listeners, planStream };
 }
 
 async function drain(it: AsyncIterable<KnowledgeReviewEvent>): Promise<KnowledgeReviewEvent[]> {
@@ -95,6 +105,55 @@ describe('the editor knowledge source — the review handshake', () => {
     const err = await drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true))).then(() => undefined, (e: unknown) => e);
     expect(err).toBeInstanceOf(ReviewFailure);
     expect((err as ReviewFailure).detail).toBeUndefined();
+  });
+});
+
+describe('the editor knowledge source — planning rides the stream, not a request', () => {
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it('is answered only by an event: the plan call itself carries no plan', async () => {
+    const host = fakeHost({ holdPlan: true });
+    const it = createHostKnowledgeGraphSource(host.t).review!({ rootId: 'ws' }, control(true));
+    const first = it.next();
+    await tick();
+    expect(host.calls.map((c) => c.op)).toEqual(['plan']);
+    let settled = false;
+    void first.then(() => { settled = true; });
+    await tick();
+    expect(settled).toBe(false); // no request answered it; only the event can
+    host.emit({ stream: host.planStream(), type: 'planned', reply: { reviewId: 'r1', rootId: 'ws', plan: PLAN } });
+    expect((await first).value).toMatchObject({ type: 'plan' });
+    await it.return(undefined);
+  });
+
+  it('surfaces a failed plan as a ReviewFailure', async () => {
+    const host = fakeHost({ failPlan: true });
+    const err = await drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true))).then(() => undefined, (e: unknown) => e);
+    expect(err).toBeInstanceOf(ReviewFailure);
+    expect(err).toMatchObject({ message: 'planning blew up' });
+    expect(host.listeners.size).toBe(0);
+  });
+
+  it('discards the host session when the review is stopped while planning', async () => {
+    const host = fakeHost({ holdPlan: true });
+    const abort = new AbortController();
+    const done = drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true, abort.signal)));
+    await tick();
+    abort.abort();
+    expect((await done).map((e) => e.type)).toEqual(['cancelled']);
+    host.emit({ stream: host.planStream(), type: 'planned', reply: { reviewId: 'r9', rootId: 'ws', plan: PLAN } });
+    await tick();
+    expect(host.calls.at(-1)).toEqual({ op: 'discard', reviewId: 'r9' });
+    expect(host.listeners.size).toBe(0);
+  });
+
+  it('reports the review active from its start to its end, however it ends', async () => {
+    const host = fakeHost();
+    const seen: boolean[] = [];
+    const source = createHostKnowledgeGraphSource(host.t, { onReviewActive: (a) => seen.push(a) });
+    await drain(source.review!({}, control(false)));
+    await expect(drain(createHostKnowledgeGraphSource(fakeHost({ failPlan: true }).t, { onReviewActive: (a) => seen.push(a) }).review!({}, control(true)))).rejects.toThrow();
+    expect(seen).toEqual([true, false, true, false]);
   });
 });
 
