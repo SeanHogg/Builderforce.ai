@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { runCliAgent } from "../../agents/cli-runner.js";
+import { governCliRun } from "../../agents/cli-runner/governance.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import { isCliProvider } from "../../agents/model-selection.js";
@@ -158,7 +159,7 @@ export async function runAgentTurnWithFallback(params: {
       const onToolResult = params.opts?.onToolResult;
       const fallbackResult = await runWithModelFallback({
         ...resolveModelFallbackOptions(params.followupRun.run),
-        run: (provider, model) => {
+        run: async (provider, model) => {
           // Notify that model selection is complete (including after fallback).
           // This allows responsePrefix template interpolation with the actual model.
           params.opts?.onModelSelected?.({
@@ -168,6 +169,10 @@ export async function runAgentTurnWithFallback(params: {
           });
 
           if (isCliProvider(provider, params.followupRun.run.config)) {
+            // The tenant's governance decides BEFORE this attempt announces itself: a CLI model it refuses moves the run to the next
+            // candidate without a lifecycle "start" / "error" pair, which the web chat would show as a failed run on every turn of a
+            // governed CLI primary (nothing about the run failed; it was routed elsewhere).
+            await governCliRun({ provider, model });
             const startedAt = Date.now();
             emitAgentEvent({
               runId,

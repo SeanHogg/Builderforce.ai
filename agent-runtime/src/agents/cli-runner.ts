@@ -9,7 +9,7 @@ import { getProcessSupervisor } from "../process/supervisor/index.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "./bootstrap-files.js";
 import { resolveCliBackendConfig } from "./cli-backends.js";
-import { governCliRun } from "./cli-runner/governance.js";
+import { deliverCliGovernance, governCliRun } from "./cli-runner/governance.js";
 import {
   appendImagePathsToPrompt,
   buildCliSupervisorScopeKey,
@@ -149,7 +149,9 @@ export async function runCliAgent(params: {
 
   let imagePaths: string[] | undefined;
   let cleanupImages: (() => Promise<void>) | undefined;
-  let prompt = params.prompt;
+  // The governance directives ride the system prompt, which a resumed session (`systemPromptWhen: "first"`) does not send again.
+  // On such a turn they go in front of the prompt instead, so a resumed CLI model is held to them as a new one is.
+  let prompt = deliverCliGovernance({ governance, systemPromptArg, prompt: params.prompt });
   if (params.images && params.images.length > 0) {
     const imagePayload = await writeCliImages(params.images);
     imagePaths = imagePayload.paths;

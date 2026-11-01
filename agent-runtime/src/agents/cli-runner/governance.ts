@@ -20,6 +20,7 @@
 
 import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-tools";
 import { resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
+import { logWarn } from "../../logger.js";
 import { FailoverError } from "../failover-error.js";
 
 /** A gate the CLI subprocess cannot be held to. */
@@ -30,6 +31,18 @@ function describeGate(gate: PolicyGate): string {
 }
 
 /**
+ * The prompt for this turn, with the governance directives in front of it when the system prompt (which carries them) is NOT sent
+ * this turn: a resumed session (`systemPromptWhen: "first"`), a backend that never sends one or has no flag for it. When the
+ * system prompt is sent they are already in it, and the prompt is returned as it is.
+ */
+export function deliverCliGovernance(params: { governance: string; systemPromptArg: string | null; prompt: string }): string {
+  if (!params.governance || params.systemPromptArg !== null) {
+    return params.prompt;
+  }
+  return [params.governance, params.prompt].join("\n\n");
+}
+
+/**
  * The governance directives to add to a CLI run's system prompt ("" when none).
  * Throws a failover-eligible `FailoverError` when an enforceable gate is in force.
  */
@@ -37,6 +50,11 @@ export async function governCliRun(target: { provider: string; model?: string })
   const gates = await resolveHostPolicyGates();
   const unenforceable = gates.filter(isUnenforceable);
   if (unenforceable.length > 0) {
+    // The run moves to the next model (an embedded one, when the chain has one): that can change who bills the turn.
+    logWarn(
+      `[cli-governance] ${target.provider}${target.model ? `/${target.model}` : ""} refused by tenant governance gate(s) ` +
+        `${unenforceable.map((g) => g.id).join(", ")}; the run moves to the next model, which can change billing`,
+    );
     throw new FailoverError(
       `The ${target.provider} CLI backend cannot be held to this tenant's governance gates, so it was not used. ` +
         `Gates in force: ${unenforceable.map(describeGate).join(", ")}.`,
