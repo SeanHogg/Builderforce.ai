@@ -98,7 +98,11 @@ describe("readRecentSessionNotes", () => {
     await fs.writeFile(path.join(memoryDir(root), ".gitkeep"), "", "utf-8");
     await fs.writeFile(path.join(memoryDir(root), "team-memory.json"), "{}", "utf-8");
     await fs.writeFile(path.join(memoryDir(root), "2026-08-20.md"), "real note", "utf-8");
-    expect(await readRecentSessionNotes(root)).toBe("real note");
+    const out = await readRecentSessionNotes(root);
+    // The note body survives; the block is wrapped in the cross-session guardrail.
+    expect(out).toContain("real note");
+    expect(out).toContain("OTHER sessions");
+    expect(out).not.toContain("team-memory");
   });
 
   it("keeps the TAIL when a day exceeds the budget — newest entries are appended last", async () => {
@@ -107,6 +111,43 @@ describe("readRecentSessionNotes", () => {
     await fs.writeFile(path.join(memoryDir(root), "2026-08-20.md"), `${"x".repeat(500)}NEWEST`, "utf-8");
     const out = await readRecentSessionNotes(root, { maxChars: 50 });
     expect(out).toContain("NEWEST");
-    expect(out.length).toBeLessThan(120);
+    expect(out.length).toBeLessThan(400);
+  });
+
+  it("redacts foreign session identifiers and drops steerable summaries", async () => {
+    const root = await workspace();
+    await fs.mkdir(memoryDir(root), { recursive: true });
+    await appendSessionNote(root, {
+      sessionKey: "chat-22844",
+      activity: { edited: ["Builderforce.ai/docs/specs/38-prd-knowledge-graph.md"], tools: ["read_file"] },
+      at: new Date("2026-08-20T10:00:00.000Z"),
+    });
+    const out = await readRecentSessionNotes(root);
+    // Another session's note must not hand this chat an actionable agenda.
+    expect(out).not.toContain("session:chat-22844");
+    expect(out).not.toContain("**Summary**");
+    // The block is labelled as other sessions' reference work.
+    expect(out).toContain("OTHER sessions");
+    expect(out).toContain("Never resume");
+    // The workspace-shape half of the loop (what was touched) still grounds.
+    expect(out).toContain("38-prd-knowledge-graph.md");
+  });
+
+  it("keeps the current chat's own session key identifiable", async () => {
+    const root = await workspace();
+    await fs.mkdir(memoryDir(root), { recursive: true });
+    await appendSessionNote(root, {
+      sessionKey: "chat-16805",
+      activity: { edited: ["src/a.ts"], tools: ["edit_file"] },
+      at: new Date("2026-08-20T10:00:00.000Z"),
+    });
+    await appendSessionNote(root, {
+      sessionKey: "chat-99999",
+      activity: { edited: ["src/b.ts"], tools: ["edit_file"] },
+      at: new Date("2026-08-20T11:00:00.000Z"),
+    });
+    const out = await readRecentSessionNotes(root, { currentSessionKey: "chat-16805" });
+    expect(out).toContain("session:chat-16805 (this chat)");
+    expect(out).not.toContain("session:chat-99999");
   });
 });
