@@ -85,11 +85,12 @@ function* chunks(snapshot: LocalFirstSnapshot, limits: CompactionFrameLimits): G
 
 const encoder = new TextEncoder();
 
-function frameOf(chunk: Chunk, snapshot: LocalFirstSnapshot, first: boolean, last: boolean): Uint8Array {
+function frameOf(chunk: Chunk, snapshot: LocalFirstSnapshot, first: boolean, last: boolean, generation?: string): Uint8Array {
   // `reset` MUST be the first key (`encodeDeltaFrame` / `isBaseFrame` rely on it).
   const parts: string[] = [];
   if (first) {
     parts.push('"reset":true');
+    if (generation) parts.push(`"generation":${JSON.stringify(generation)}`);
     parts.push(`"nextSequence":${JSON.stringify(snapshot.nextSequence)}`);
     parts.push(`"cursors":${JSON.stringify(snapshot.cursors ?? {})}`);
   }
@@ -106,22 +107,35 @@ function frameOf(chunk: Chunk, snapshot: LocalFirstSnapshot, first: boolean, las
  * as it arrives and the generator awaits `pause()` between frames, so no turn of the event
  * loop does more than one frame's worth of stringify + crc. `snapshot` is read-only here —
  * its rows may be a live store's own (`MemoryLocalFirstStore.view()`).
+ *
+ * `generation` (default: a freshly minted id) is written into the FIRST frame, so the
+ * sequence opens a base a reader can identify by id alone — what a host compares to know
+ * the file it is reading is still the one it tracked, even where stat identity is weak
+ * (NTFS reuses inode numbers). Pass a fixed id when rewriting the same logical base.
  */
 export async function* snapshotFrames(
   snapshot: LocalFirstSnapshot,
   pause: () => Promise<void>,
   limits: CompactionFrameLimits = DEFAULT_COMPACTION_FRAME,
+  generation: string = mintJournalGeneration(),
 ): AsyncGenerator<Uint8Array, void> {
   // One chunk of lookahead: only the final frame is marked `endsBase`.
   let held: Chunk | undefined;
   let first = true;
   for (const chunk of chunks(snapshot, limits)) {
     if (held) {
-      yield frameOf(held, snapshot, first, false);
+      yield frameOf(held, snapshot, first, false, first ? generation : undefined);
       first = false;
       await pause();
     }
     held = chunk;
   }
-  yield frameOf(held ?? {}, snapshot, first, true);
+  yield frameOf(held ?? {}, snapshot, first, true, first ? generation : undefined);
+}
+
+/** One opaque base-generation id per compaction (`crypto.randomUUID` when available). */
+export function mintJournalGeneration(): string {
+  const cryptoApi = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  return `gen-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

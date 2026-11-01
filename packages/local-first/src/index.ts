@@ -34,6 +34,7 @@ export {
   encodeDeltaFrame,
   encodeJournalFrame,
   isLocalFirstSnapshot,
+  mintJournalGeneration,
   readJournalTail,
   scanJournal,
   scanJournalAsync,

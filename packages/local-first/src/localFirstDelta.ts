@@ -32,6 +32,15 @@ export interface LocalFirstDelta {
   reset?: true;
   /** Marks the final frame of a compacted base chain (see `journalCompaction.ts`). */
   endsBase?: true;
+  /**
+   * The base GENERATION this frame opens: an opaque id a host mints per compaction and
+   * writes into the first frame of the new base. File identity `(ino, birthtimeMs)` is
+   * weak on NTFS (inode numbers are reused), so a reader that tracks the generation id
+   * knows a replaced journal from its first frame, not from a stat. Only the first frame
+   * of a base carries it; pre-migration journals have none, and hosts fall back to the
+   * stat identity for those.
+   */
+  generation?: string;
   /** Records written (created or overwritten). */
   records?: LocalRecord[];
   /** Records removed. */

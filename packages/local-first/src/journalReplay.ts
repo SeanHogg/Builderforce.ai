@@ -89,6 +89,13 @@ export interface JournalOpenScan extends JournalScan {
   /** Bytes of those frames. */
   readonly tailBytes: number;
   /**
+   * The base GENERATION of the newest base chain — the `generation` id the first frame of
+   * that base carries. A host compares it (not `(ino, birthtimeMs)`, weak on NTFS) to know
+   * the file it is reading is still the one it tracked. `undefined` for a pre-migration
+   * journal whose base frames carry no id: hosts fall back to stat identity for those.
+   */
+  readonly generation: string | undefined;
+  /**
    * Set when the journal is DAMAGED, not merely torn: a frame failed with committed bytes
    * behind it (`damaged-frame`), or the newest base never reached its closing `endsBase`
    * (`unclosed-base`). A torn tail is not corruption. A host must not truncate a corrupt
@@ -109,6 +116,8 @@ interface Folded {
   baseEnd: number;
   /** A base chain started and its closing frame was reached (or there is no base chain at all). */
   baseClosed: boolean;
+  /** The base generation id the newest base chain opened with (a delta base frame's `generation`). */
+  generation: string | undefined;
 }
 
 function* foldFrom(bytes: Uint8Array, bounds: readonly JournalFrameBound[], from: number): Generator<void, Folded> {
@@ -116,6 +125,7 @@ function* foldFrom(bytes: Uint8Array, bounds: readonly JournalFrameBound[], from
   let applied = 0;
   let lastBase = -1;
   let closedAt: number | undefined;
+  let generation: string | undefined;
   for (let index = from; index < bounds.length; index += 1) {
     const bound = bounds[index]!;
     const parsed = parseFrame(bytes, bound);
@@ -127,12 +137,13 @@ function* foldFrom(bytes: Uint8Array, bounds: readonly JournalFrameBound[], from
     if (base) {
       lastBase = index;
       closedAt = endsBase ? index : undefined;
+      generation = parsed.kind === 'delta' ? parsed.delta.generation : undefined;
     } else if (endsBase && closedAt === undefined && lastBase >= 0) {
       closedAt = index;
     }
     yield;
   }
-  return { state, applied, baseEnd: closedAt ?? lastBase, baseClosed: lastBase < 0 || closedAt !== undefined };
+  return { state, applied, baseEnd: closedAt ?? lastBase, baseClosed: lastBase < 0 || closedAt !== undefined, generation };
 }
 
 function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
@@ -144,7 +155,7 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
   const walkedTo = bounds.length === 0 ? 0 : bounds[bounds.length - 1]!.end;
   const damaged = walkedTo < bytes.byteLength && damagedAfterStop(bytes, walkedTo);
   if (bounds.length === 0) {
-    return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt: damaged ? 'damaged-frame' : undefined, baseClosed: !damaged };
+    return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, generation: undefined, corrupt: damaged ? 'damaged-frame' : undefined, baseClosed: !damaged };
   }
   let start = 0;
   for (let index = bounds.length - 1; index >= 0; index -= 1) {
@@ -162,11 +173,11 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
   // A crc-valid frame that fails to parse leaves committed < bounds.length: that is damage too, never truncated.
   const corrupt = damaged || committed < bounds.length ? 'damaged-frame' : folded.baseClosed ? undefined : 'unclosed-base';
   const baseClosed = folded.baseClosed;
-  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt, baseClosed: false };
+  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, generation: undefined, corrupt, baseClosed: false };
   const committedBytes = bounds[committed - 1]!.end;
   const tailFrames = Math.max(0, committed - 1 - folded.baseEnd);
   const tailBytes = folded.baseEnd >= 0 ? committedBytes - bounds[folded.baseEnd]!.end : committedBytes;
-  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes, corrupt, baseClosed };
+  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes, generation: folded.generation, corrupt, baseClosed };
 }
 
 function drive(steps: Generator<void, JournalOpenScan>): JournalOpenScan {

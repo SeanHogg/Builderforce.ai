@@ -43,6 +43,7 @@ export {
 export {
   DEFAULT_COMPACTION_FRAME,
   DEFAULT_JOURNAL_COMPACTION,
+  mintJournalGeneration,
   shouldCompactJournal,
   snapshotFrames,
   type CompactionFrameLimits,

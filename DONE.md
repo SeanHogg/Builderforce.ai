@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-11-01 — Local-first v3 store hardening: torn-fsync detection, generation-id identity, bounded EPERM retry (local-first)
+
+The four v3-review store-hardening items (ticket 6282) shipped in `packages/local-first`:
+
+- **Torn / failed-fsync frame.** Writes are length-prefixed/framed so a torn tail from a failed fsync is detectable and ignored, and fsync-failure handling never corrupts a committed frame another window may have applied.
+- **File identity.** The weak `(ino, birthtimeMs)` identity (unreliable on NTFS, where inode numbers are reused) is replaced by a base-generation id — an opaque per-compaction value (`mintJournalGeneration`, `crypto.randomUUID` when available) recorded in the first frame of the journal. A reader tracks the generation id rather than filesystem metadata.
+- **EPERM-on-rename.** A Windows EPERM on the compaction rename no longer triggers a full rewrite retry on every commit — the retry is bounded and falls through (keeps the last-good copy, retries on the next compaction window).
+- **`storeContract.ts`.** Now documents that `read`/`scan` return live, committed Maps (views of the committed state) that callers must not mutate.
+
+Verified: `packages/local-first` `tsc --noEmit` clean; the package's vitest suite passes **559/559**. See ROADMAP for the remaining local-first items still open (damaged-journal rescans, event-loop gaps, scans with no early exit).
+
+## ✅ RESOLVED 2026-11-01 — First send no longer waits on `identity.bind`; pending-turn wiring colocated; `UNUSED_STORE`/`clone` deduped (VSIX · brain-embedded · brain-ui · local-first)
+
+The two "first-send" and code-shape items landed together in commit 67f461953 on `origin/main`:
+
+- **`identity.bind` timeout (ticket 6309).** The first send in `brainRunHost.run` awaited the identity bind over the network indefinitely; the bubble didn't wait but the run did. The bind is now bounded by a documented upper bound (ms), so a slow/unreachable identity endpoint cannot stall the run; on timeout the run proceeds on the local/unbound path.
+- **Pending-turn / `servedBy` colocation + duplicate fold (ticket 6314).** `useBrainConversation.ts` had grown to ~730 lines and `VsCodeChatSurface.tsx` to ~403. The pending-turn wiring and `servedBy` handling moved next to `usePendingTurns` in brain-embedded. `UNUSED_STORE` (previously defined in `ComposerTextBox.tsx`, `BrainComposer.tsx`, and `useRecipientChoice.ts`) is now a single shared export in `brain-ui/src/composer/unusedDraftStore.ts`, and the two `clone` definitions in `local-first` (`store.ts`, `storeTransaction.ts`) were folded into one shared module.
+
+Verified: brain-embedded `tsc` clean; the `usePendingTurns` + `useBrainConversation` suites pass 46/46 (including the mockStream block). Behaviour-preserving refactor — no logic change.
+
 ## ✅ RESOLVED 2026-11-01 — Unbound chat rows no longer keep a full payload copy in the pending queue (brain-embedded)
 
 `journalWrite` in `brain-embedded/src/localChat/journal.ts` appended a journal event with the full `record.payload` for every unbound write, even though an unbound event is never sent (the coordinator refuses an unbound partition). On one machine 21,370 of these events held 39 MB and were carried through every compaction. The unbound frame now persists only a **marker** — ids, entity type, operation, a payload size, and an FNV-1a content hash of the real payload — with `payload: null`. The full payload stays owned by the record (and, once bound, by the authoritative `queueImport` / outbox send path), so after a later bind a previously-unbound row still imports and sends with its real payload, rebuilt from the record by `bindChatHistoryForSync`, never read back out of the marker. This is consistent with the G03 record-and-sync-in-one-frame contract: a bound frame still commits the record and its event together; only the never-sent unbound event drops its payload copy. On-disk format stays backward compatible — old frames that still carry a payload remain valid journal events and are read unchanged. One existing test was updated (the local-usage journal assertion now checks the record, since the journaled event is the marker), and a new test pins both halves: an unbound write leaves no full-payload copy, and a later bind still sends the row with its real payload from the record.
