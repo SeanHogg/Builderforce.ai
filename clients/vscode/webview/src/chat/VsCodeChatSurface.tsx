@@ -207,7 +207,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   // Multi-party chat: who a message goes to (the BRAIN executes; an invited agent/human is
   // talked to), and the live sub-agents a message can steer.
-  const audience = useChatAudience({ ticketAdapter, chatId, serverChatId, messages: conv.messages, ticketRefresh, draftStore, onRoster: setChatRoster });
+  const audience = useChatAudience({ ticketAdapter, chatId, serverChatId, messages: conv.messages, ticketRefresh, draftStore, personaAgents, onRoster: setChatRoster });
   const { participants, liveChildren, mentionable, recipient, chooseRecipient } = audience;
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives

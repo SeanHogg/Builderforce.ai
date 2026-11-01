@@ -28,6 +28,17 @@ let installed = false;
 
 export const webviewPlatformPolicy = () => policy;
 
+/**
+ * True when a platform read/write cannot run: the mode is `local-only` (nothing
+ * reaches the platform) or the connected-features capability is off. The composer
+ * uses this to swap `@`/`#` from server-backed (invited participants / linked
+ * tickets) to LOCAL candidates (live sub-agents, persona agents / local tickets)
+ * so the typeaheads still answer offline.
+ */
+export function webviewOffline(): boolean {
+  return mode === 'local-only' || !policy.snapshot().connectedFeatures;
+}
+
 export function webviewPlatformRequestAccount(): { attempted: number; blocked: number; recent: readonly PlatformRequestRecord[] } {
   return {
     attempted: requests.filter((record) => record.outcome === 'attempted').length,

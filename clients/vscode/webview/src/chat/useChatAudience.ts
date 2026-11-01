@@ -8,9 +8,10 @@ import { useEffect, useMemo } from 'react';
 import { chatRosterFromParticipants, type BrainMessage, type ChatRosterAgent, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useChatActivitySignal, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
+import { webviewOffline } from '../platformPolicy';
 import { childParticipants, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
-export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages, ticketRefresh, draftStore, onRoster }: {
+export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages, ticketRefresh, draftStore, personaAgents, onRoster }: {
   ticketAdapter: ReturnType<typeof createChatTicketsAdapter>;
   /** The chat's local view key — what its live sub-agents run under on this machine. */
   chatId: number | null;
@@ -20,6 +21,8 @@ export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages,
   ticketRefresh: number;
   /** The composer's text: only WHO a leading @mention names is read from it, so a keystroke re-renders nothing here. */
   draftStore: ComposerDraftStore;
+  /** The persona agents the Brain can answer as — the `@` picker's offline candidates. */
+  personaAgents: ReadonlyArray<{ ref: string; name: string }>;
   /**
    * Mirror of the roster for `useBrainConversation`. The conversation cannot read
    * `participants` directly: the activity signal below makes them depend on its
@@ -37,14 +40,25 @@ export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages,
   // is working) steers that child's run instead of starting a turn of the chat's own.
   const liveChildren = useChatChildren(chatId);
   const subagentRoster = useChatSubagentRoster(chatId);
-  const mentionable = useMemo(() => [...participants, ...childParticipants(liveChildren)], [participants, liveChildren]);
+  // OFFLINE `@`: with the platform denied there are no invited participants to read;
+  // the addressable set is who is actually HERE — the live local sub-agents and the
+  // persona agents the Brain can answer as — so `@` still routes a turn offline.
+  const offline = webviewOffline();
+  const localMentionable = useMemo<typeof participants>(
+    () => (offline ? [...childParticipants(liveChildren), ...personaAgents.map((a) => ({ kind: 'agent' as const, ref: a.ref, name: a.name }))] : []),
+    [offline, liveChildren, personaAgents],
+  );
+  const mentionable = useMemo(
+    () => (offline ? localMentionable : [...participants, ...childParticipants(liveChildren)]),
+    [offline, localMentionable, participants, liveChildren],
+  );
 
-  useEffect(() => { onRoster(chatRosterFromParticipants(participants)); }, [participants, onRoster]);
+  useEffect(() => { onRoster(chatRosterFromParticipants(offline ? localMentionable : participants)); }, [offline, localMentionable, participants, onRoster]);
 
   // The effective target (shared with the web composer): an explicit BRAIN pick wins;
   // else an explicit participant; else a leading @mention; else the BRAIN (null). The
   // pick resets on a chat switch and drops a participant who has since left.
   const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants: mentionable, draftStore, resetKey: chatId });
 
-  return { railRefresh, participants, liveChildren, subagentRoster, mentionable, recipient, chooseRecipient };
+  return { railRefresh, participants, liveChildren, subagentRoster, mentionable, recipient, chooseRecipient, personaAgents, offline };
 }

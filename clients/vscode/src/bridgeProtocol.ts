@@ -35,6 +35,13 @@ export const SHARED_HOST_MESSAGES = [
   'token.refresh',
   /** Run a host-local Brain persistence method (request/response). */
   'local.persistence',
+  /**
+   * The host's LOCAL ticket store (G05 `localWorkRepository`) — the `#` typeahead's
+   * offline fallback. Returns the live (not tombstoned) local tickets as
+   * `{ id, title, status }`, so a `#`-tag works when the platform is denied and the
+   * chat has no server id to read links from. Request/response.
+   */
+  'local.tickets',
   /** Run the sign-in command (the webview cannot execute commands). */
   'signin',
   /** A non-2xx API answer the webview received, for the output channel — see

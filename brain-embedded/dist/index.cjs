@@ -5781,6 +5781,24 @@ var importKey = (type, id) => `${type}:${id}:import`;
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
+function hashPayload(payload) {
+  const text2 = JSON.stringify(payload) ?? "null";
+  let hash2 = 2166136261;
+  for (let index = 0; index < text2.length; index += 1) {
+    hash2 ^= text2.charCodeAt(index);
+    hash2 = Math.imul(hash2, 16777619);
+  }
+  return `fnv1a:${(hash2 >>> 0).toString(16).padStart(8, "0")}`;
+}
+function unboundMarker(record3, operation) {
+  const text2 = JSON.stringify(record3.payload) ?? "null";
+  return {
+    operation,
+    payloadSize: text2.length,
+    payloadHash: hashPayload(record3.payload),
+    payload: null
+  };
+}
 async function dropPending(tx, record3) {
   const stale = await selectPending(tx, (event) => event.clientEntityId === record3.id && event.entityType === record3.entityType);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
@@ -5812,13 +5830,14 @@ async function journalWrite(tx, record3, operation, options) {
       idempotencyKey: options.key,
       clientEntityId: record3.id,
       entityType: record3.entityType,
-      operation,
       schemaVersion: record3.schemaVersion,
       occurredAt: record3.occurredAt,
       ...record3.baseVersion !== void 0 ? { baseVersion: record3.baseVersion } : {},
       dependsOn: options.dependsOn ?? [],
       destination: record3.destination,
-      payload: record3.payload
+      // The marker carries size + a content hash of the real payload, never the
+      // payload itself; the record is the only copy while unbound (module comment).
+      ...unboundMarker(record3, operation)
     });
     return;
   }

@@ -1449,6 +1449,13 @@ interface ChatHistoryChat {
     title: string;
     ticketCount?: number | null;
     ticketProgressPct?: number | null;
+    /**
+     * Per-row cost/progress chips the host wants beside the overflow menu — e.g. the
+     * VSIX history's `67% · $1.20/$3.40`. A short string the host has already composed;
+     * the row renders it verbatim (null/empty = no chip). Kept opaque so the shared row
+     * does not own each surface's spend formatting.
+     */
+    stats?: string | null;
 }
 interface ChatHistoryListProps {
     loading?: boolean;

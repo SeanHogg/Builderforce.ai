@@ -3194,6 +3194,7 @@ var ChatHistoryRow = (0, import_react18.memo)(function ChatHistoryRow2({
               }
             }
           ),
+          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats }),
           !renaming && hasActions && onToggleActions && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
             "button",
             {

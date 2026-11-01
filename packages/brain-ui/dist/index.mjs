@@ -2985,6 +2985,7 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
               }
             }
           ),
+          !renaming && chat.stats != null && chat.stats !== "" && /* @__PURE__ */ jsx27("span", { className: "bf-chatrow__stats", title: chat.stats, children: chat.stats }),
           !renaming && hasActions && onToggleActions && /* @__PURE__ */ jsx27(
             "button",
             {

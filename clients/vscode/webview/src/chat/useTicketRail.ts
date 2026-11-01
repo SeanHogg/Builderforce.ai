@@ -14,6 +14,8 @@ import { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { useChatChangedFiles } from '../useChatChangedFiles';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { getToken, refreshToken, type InitData } from '../vscodeBridge';
+import { request } from '../bridgeTransport';
+import { webviewOffline } from '../platformPolicy';
 import { spendLabelsFrom } from './composerLabels';
 
 /** A linked ticket as the composer's `#` typeahead lists it. */
@@ -66,15 +68,24 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
 
   // The composer's #-ticket typeahead: the chat's linked tickets. Read here, by the
   // SERVER id, beside every other rail read — the composer read them by the local view
-  // key (`/chats/6/tickets` for a chat bound to 172, a 404 on every refresh). An unbound
-  // chat has none and makes no request.
+  // key (`/chats/6/tickets` for a chat bound to 172, a 404 on every refresh).
+  //
+  // OFFLINE `#`: when the platform is denied there is no server chat to read links
+  // from, so the typeahead lists the host's LOCAL tickets (G05 `localWorkRepository`
+  // over the `local.tickets` bridge). An unbound chat offline reads local too.
   const [typeaheadTickets, setTypeaheadTickets] = useState<TypeaheadTicket[]>([]);
   useEffect(() => {
-    if (serverChatId == null) { setTypeaheadTickets([]); return; }
+    if (!webviewOffline() && serverChatId != null) {
+      let live = true;
+      ticketAdapter.listTickets(serverChatId).then((tickets) => {
+        if (live) setTypeaheadTickets(tickets.map((tk) => ({ id: parseInt(tk.ref) || tk.linkId, title: tk.label || tk.ref, status: tk.status, key: tk.ref })));
+      }).catch(() => { if (live) setTypeaheadTickets([]); });
+      return () => { live = false; };
+    }
     let live = true;
-    ticketAdapter.listTickets(serverChatId).then((tickets) => {
-      if (live) setTypeaheadTickets(tickets.map((tk) => ({ id: parseInt(tk.ref) || tk.linkId, title: tk.label || tk.ref, status: tk.status, key: tk.ref })));
-    }).catch(() => { if (live) setTypeaheadTickets([]); });
+    request<Array<{ id: number; title: string; status?: string }>>('local.tickets')
+      .then((tickets) => { if (live) setTypeaheadTickets(tickets.map((t) => ({ id: t.id, title: t.title, status: t.status }))); })
+      .catch(() => { if (live) setTypeaheadTickets([]); });
     return () => { live = false; };
   }, [serverChatId, ticketAdapter, ticketRefresh]);
 

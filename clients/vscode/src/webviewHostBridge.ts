@@ -9,6 +9,7 @@ import { isInferenceMode } from "@builderforce/local-first";
 import { setInferenceMode } from "./inferenceModeSetting";
 import { DOWNLOAD_LOCAL_MODEL_COMMAND } from "./noLocalModelPrompt";
 import { callLocalPersistence } from "./localPersistenceDispatch";
+import { createLocalWorkRepository } from "./localWorkRepository";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -200,6 +201,30 @@ export async function handleSharedHostMessage(
       const answer = await callLocalPersistence(localBrainApplication(ctx).persistence, request.method, request.args, logLine);
       if (answer.ok) respondToWebview(webview, msg.id, true, answer.result);
       else respondToWebview(webview, msg.id, false, undefined, answer.error);
+      return true;
+    }
+    /**
+     * The `#` typeahead's OFFLINE fallback: the host's local ticket store (G05). No
+     * network — the repository reads only the durable local-first store, so this
+     * answers (with the live, not-tombstoned tickets) when the platform is denied
+     * and a server `listTickets` cannot run. A host without the store still answers
+     * `[]`, never a refusal: an empty picker is a correct "no local tickets".
+     */
+    case "local.tickets": {
+      try {
+        const app = localBrainApplication(ctx);
+        const repo = createLocalWorkRepository({ store: app.store, deviceId: app.deviceId });
+        const tickets = await repo.listTickets();
+        respondToWebview(
+          webview,
+          msg.id,
+          true,
+          tickets.map((t) => ({ id: t.id, title: t.payload.title, status: t.payload.status })),
+        );
+      } catch (error) {
+        logLine(`[webview] local.tickets failed: ${error instanceof Error ? error.message : String(error)}`);
+        respondToWebview(webview, msg.id, true, []);
+      }
       return true;
     }
     case "signin":
