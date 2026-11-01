@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { BrainPanelContext } from './BrainPanelContext';
 import { BrainConversation } from './BrainConversation';
-import type { BrainPanelController } from '../hooks/useBrainPanelController';
+import type { BrainPanelController } from '@/lib/brain/hooks/useBrainPanelController';
 
 /**
  * WHAT RE-RENDERS WHEN, by count: the composer's text lives in a draft store, so typing re-renders the box

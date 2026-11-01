@@ -20,7 +20,7 @@ import { BRAIN_AUTO_APPROVE_DEFAULT, brainAutoApprovePersistence } from '@/lib/b
 import { useAttention } from '@/lib/useAttention';
 /** The docked panel shows the conversation or, toggled from the header, the chat list. */
 export type BrainDockedTab = 'chat' | 'history';
-import type { BrainPanelProps } from '../panel/brainPanelTypes';
+import type { BrainPanelProps } from '@/components/brain/panel/brainPanelTypes';
 import { useBrainProjectFilter } from './useBrainProjectFilter';
 import { useBrainProjects } from './useBrainProjects';
 import { useBrainChatStart } from './useBrainChatStart';

@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-11-01 — Brain panel controller extracted: `components/brain/hooks` + `captureDiagnostics` now live in `frontend/src/lib/brain` (frontend)
+
+The one Brain panel's controller — `useBrainPanelController` and its twenty focused hooks (chats, conversation turns, participants, models, seeds, capture, banners, …) plus the `captureDiagnosticsBlock` report helper — was embedded under `frontend/src/components/brain`. They now live in `frontend/src/lib/brain/hooks/` (and `lib/brain/captureDiagnostics.ts`), mirroring how the rest of the brain logic (capabilities, seeds, platform actions) is structured; `components/brain` is chrome only. `BrainPanel.tsx` is the seam: it composes the controller hook and hands it to the presentational sections through `BrainPanelContext`. No behaviour change; the three moved render-based hook test files carry the `@vitest-environment jsdom` docblock the vitest config requires for `src/lib`. Type-check (`tsc --noEmit`) and the moved + render-count suites pass.
+
 ## ✅ RESOLVED 2026-11-01 — Local-first v3 store hardening: torn-fsync detection, generation-id identity, bounded EPERM retry (local-first)
 
 The four v3-review store-hardening items (ticket 6282) shipped in `packages/local-first`:

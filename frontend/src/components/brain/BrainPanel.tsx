@@ -12,7 +12,7 @@
 
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { AssigneeProfilesProvider } from '../workforce/AssigneeProfilesContext';
-import { useBrainPanelController } from './hooks/useBrainPanelController';
+import { useBrainPanelController } from '@/lib/brain/hooks/useBrainPanelController';
 import { BrainPanelContext } from './panel/BrainPanelContext';
 import { BrainPageLayout } from './panel/BrainPageLayout';
 import { BrainDockedLayout } from './panel/BrainDockedLayout';

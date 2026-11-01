@@ -320,7 +320,6 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **Phase 3 browser/VM host.** *Blocker: prompt-injection defence first.*
 - **pi-tui is the last `@mariozechner/pi-*` dep.** 23 importers left; migrate to Ink.
 - **Engine convergence:** sandbox-aware provider; `read`, `exec`, `process` stay native; `RelayTaskEngine`.
-- **Brain panel controller** still lives in `frontend/src/components/brain`. Extract it.
 - **Portal channel config flows up only;** `channel.configure` doesn't exist. *Blocker: a running on-prem host.*
 - **`@builderforce` participant forgets tool work after restart;** native sessions tab needs the proposed API; sign-in untested (*blocker: a test tenant + `BF_EDITOR_KEY`*).
 
