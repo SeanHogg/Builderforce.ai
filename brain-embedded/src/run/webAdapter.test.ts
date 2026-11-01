@@ -122,7 +122,7 @@ describe('the Brain\'s ports', () => {
     const approved = human.approve?.(gate);
     expect(c.pendingConfirm).toMatchObject({ name: 'delete_file' });
     resolveRunConfirm(8150, true);
-    await expect(approved).resolves.toEqual({ kind: 'answered', answer: 'approved' });
+    await expect(approved).resolves.toEqual({ kind: 'answered', answer: 'approved', approved: true });
 
     const declined = human.approve?.(gate);
     stopRun(8150);

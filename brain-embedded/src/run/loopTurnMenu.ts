@@ -5,9 +5,11 @@
  * (`runStore/turnMenu.ts`, `progressBudget.ts`, `progressGuard.ts`) - this only asks them and answers in the agent's shape.
  */
 
+import { offersHandOff } from '@builderforce/run-policy';
 import type { TurnEnv, TurnMenu } from '@builderforce/agent-run';
 import type { ToolSchema } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from '../streamChatCompletion';
+import { HAND_OFF_TOOL } from '../planHandoff';
 import { DEFAULT_TOOL_LIMIT } from '../selectTools';
 import { routerToolSpecs } from '../toolRouter';
 import { nowIso, pushTrace } from '../runStore/runCells';
@@ -19,7 +21,9 @@ import { forcedTurnFor } from '../runStore/turnMenu';
 export async function loopTurnMenu(run: RunLoopContext, env: TurnEnv, catalogSize: number): Promise<TurnMenu | void> {
   // Analysis that has spent its budget ends HERE, BEFORE selection: the hand-off turn offers `hand_off` alone with a call required.
   const handOffTurn = planBudgetTurn(run, env.step);
-  const selected = (await env.select()) as unknown as BrainToolSpec[];
+  // Once the run is coding, the plan is handed off: `hand_off` is gone from the menu, so a coder can never re-plan the work it was just given.
+  const ranked = (await env.select()) as unknown as BrainToolSpec[];
+  const selected = offersHandOff(run.policy) ? ranked : ranked.filter((t) => t.function.name !== HAND_OFF_TOOL);
   const forced = forcedTurnFor(run, env.step, selected, handOffTurn);
   // A3's steer (or an escalation it could not force here) opens the turn.
   const steer = run.progress.steerNote();
@@ -37,5 +41,5 @@ export async function loopTurnMenu(run: RunLoopContext, env: TurnEnv, catalogSiz
     });
     return { tools: [...(selected as unknown as ToolSchema[]), ...(routerToolSpecs(catalogSize) as unknown as ToolSchema[])], ...(tail.length > 0 ? { tail } : {}) };
   }
-  return tail.length > 0 ? { tail } : undefined;
+  return { tools: selected as unknown as ToolSchema[], ...(tail.length > 0 ? { tail } : {}) };
 }

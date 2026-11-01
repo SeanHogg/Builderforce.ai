@@ -86,6 +86,14 @@ function toolFields(tool: BrainToolSpec): LexicalField[] {
   ];
 }
 
+/**
+ * The tools of `tools` that match `query`, best first (the shared lexical ranker over this module's fields). The relevance order of the
+ * selection below, and the one the agent's tools policy takes from the Brain as its ranker (`run/brainPlatformTools.ts`).
+ */
+export function relevantTools<T extends BrainToolSpec>(tools: readonly T[], query: string): T[] {
+  return rankLexically(tools, query, toolFields, tools.length);
+}
+
 export interface SelectToolsOptions {
   /** The turn's text — typically the latest user message. */
   query: string;
@@ -153,7 +161,7 @@ export function selectToolsForTurn(
   }
 
   // 1. Relevance to the turn — the ONE shared lexical ranker. Ties keep catalog order.
-  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
+  for (const tool of relevantTools(tools, options.query)) {
     if (chosen.length >= limit) break;
     take(tool);
   }

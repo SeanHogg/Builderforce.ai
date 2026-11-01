@@ -31,7 +31,9 @@ export function brainHumanChannel(runKey: RunKey): HumanChannel {
     },
     async approve(gate: PolicyGate) {
       const ok = await requestRunConfirm(runKey, confirmRequestFor(gate));
-      return ok ? { kind: 'answered', answer: 'approved' } : { kind: 'answered', answer: 'declined' };
+      // The decision is the STRUCTURED `approved` (the gate never reads it out of the answer's words): a card the person accepted
+      // is an approval, whatever the answer says; a decline - or a Stop that declined it - carries none and is refused.
+      return ok ? { kind: 'answered', answer: 'approved', approved: true } : { kind: 'answered', answer: 'declined' };
     },
   };
 }
