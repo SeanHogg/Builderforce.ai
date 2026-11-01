@@ -297,6 +297,11 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
+- **Web and Rovr still re-render the whole surface per keystroke.** They keep `value`/`onChange` on `BrainComposer`; move `frontend/src` and `clients/chrome` onto `createComposerDraftStore` as the editor did. *Blocker: operator split it into its own session (weekly limit, 2026-11-01).*
+- **New VS Code chat strings are English only.** Add de, es, fr and zh to `clients/vscode/l10n` and any web keys to `frontend/src/i18n/messages`. *Blocker: operator split it into its own session (weekly limit, 2026-11-01).*
+- **Unbound chat rows keep a full payload copy in the pending queue forever.** `journalWrite` in `brain-embedded/src/localChat/journal.ts` appends an event no one sends; 21,370 of them held 39 MB on one machine. Dropping the payload shrinks the store and every compaction. *Blocker: decide whether the G03 "record and sync event in one frame" contract needs the payload while unbound.*
+- **The pre-v3 store files stay on disk after import.** `local-first-v2.journal` and `local-first-v1.json.pre-v3` are the rollback copy (about 230 MB on one machine). Delete them on open once v3 has shipped. *Blocker: one release of v3 in the field.*
+- **`createIndexedDbLocalFirstStore` reads and rewrites the whole snapshot per call.** `packages/local-first/src/indexedDb.ts`: web work management and Rovr scale with store size, as the VSIX did. Needs per-row persistence or a delta frame. *Blocker: not started; needs an IndexedDB schema change outside the VSIX fix, and an operator call on when.*
 - **Local tool turns answered in prose are accepted.** `answered` in `localFirstTransport.ts`; the 0-tool case scores healthy. *Blocker: product decision on holding the first delta.*
 - **Ollama loaded at a larger `num_ctx` overstates our window.** *Blocker: move to `/api/chat` or an upstream route.*
 - **Windows command routed to bash loses backslashes** (`packages/agent-tools/src/node-posix-shell.ts`). *Blocker: a trace of the routing decision.*

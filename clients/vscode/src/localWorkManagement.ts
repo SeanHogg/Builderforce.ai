@@ -22,6 +22,7 @@
 import {
   UNBOUND_DESTINATION,
   newLocalRecord,
+  selectRecords,
   type EntityDestination,
   type LocalFirstStore,
   type LocalFirstTransaction,
@@ -55,7 +56,7 @@ function requireText(value: string, message: string): string {
 }
 
 async function live<T>(tx: LocalFirstTransaction, entityType: "project" | "ticket"): Promise<LocalRecord<T>[]> {
-  return (await tx.list<T>(entityType)).filter((record) => !record.deletedAt);
+  return selectRecords<T>(tx, entityType, (record) => !record.deletedAt);
 }
 
 async function projectFor(tx: LocalFirstTransaction, id: string): Promise<LocalProject> {

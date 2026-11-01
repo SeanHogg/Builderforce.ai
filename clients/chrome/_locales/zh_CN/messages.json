@@ -693,6 +693,10 @@
     "message": "通过 {runtime} 在本机运行——不占用套餐，可离线使用。",
     "description": "Funding line: on-device; keep {runtime}"
   },
+  "optHostedTip": {
+    "message": "已通过您自己的账户从本机发送至 {vendor}。模型不在本机运行。",
+    "description": "Model row tooltip: hosted runtime reached with your own account; keep {vendor}"
+  },
   "optEvermindLabel": {
     "message": "项目 Evermind",
     "description": "Model name for a project Evermind pin"

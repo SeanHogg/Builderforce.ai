@@ -10,10 +10,15 @@
  *
  * `jsdom` is declared so that test is possible, and `include` is pinned so the runner
  * cannot start picking up `dist/` once the package has been built.
+ *
+ * `resolve.dedupe` pins `react` / `react-dom` to one copy: `@seanhogg/builderforce-brain-embedded`
+ * is a `link:` dependency, so vite treats it as source and would otherwise resolve its bare
+ * `react` import from its own node_modules, giving two Reacts (null hooks dispatcher).
  */
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: { dedupe: ['react', 'react-dom'] },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],

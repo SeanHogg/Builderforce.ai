@@ -12,7 +12,7 @@ import type { BrainRunActivity } from '../runActivity';
 import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
 import type { BrainRunRequest } from './runTypes';
-import type { BrainRunSnapshot, RunTurn } from './runSnapshotTypes';
+import type { BrainRunSnapshot, RunServedBy, RunTurn } from './runSnapshotTypes';
 import type { PendingGateOutcome } from './prefetchGate';
 import type { RunClaim } from './runClaim';
 
@@ -155,6 +155,12 @@ export interface RunCell {
    * record of which model a Stop cut off: an aborted stream never returns its result.
    */
   liveTurn: LiveTurn | null;
+  /**
+   * The model that served the run's latest turn - set the moment its stream names the model
+   * and kept through the tool steps between turns; reset as a run begins (`beginRun`). What
+   * the live row names and what a reply settled without a recorded result is attributed to.
+   */
+  servedBy: RunServedBy | null;
   /** The request this chat last ran with: what a turn handed to it later runs with (`continueChat.ts`). */
   lastRequest: BrainRunRequest | null;
   /**
@@ -227,6 +233,7 @@ export function makeCell(): RunCell {
     lastServedModel: null,
     pendingGate: null,
     liveTurn: null,
+    servedBy: null,
     lastRequest: null,
     stopEpoch: 0,
     claim: null,

@@ -29,6 +29,8 @@ import { useRunSnapshot } from './useRunSnapshot';
 import { type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { useChatTranscript } from './useChatTranscript';
+import { usePendingTurns, type PendingTurn } from './usePendingTurns';
+import type { RunServedBy } from './runStore/runSnapshotTypes';
 import { useAutoReplyTrailingTurn } from './useAutoReplyTrailingTurn';
 import { startsRun, unansweredTurnIndex } from './userTurnRuns';
 import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
@@ -176,6 +178,24 @@ export interface UseBrainConversationOptions {
 
 export interface UseBrainConversation {
   messages: BrainMessage[];
+  /**
+   * The turn the person just sent, until its row is saved: set synchronously as `send` starts (or by
+   * {@link announceTurn} at submit, for a host with a pre-send stage), gone in the same update that appends the
+   * saved row and on every failure path (the turn goes back to the composer). Hand `pendingTurn?.text` to the
+   * transcript's `pendingUserText`; a draft chat with one shows the thread, not its empty state.
+   */
+  pendingTurn?: PendingTurn | null;
+  /**
+   * Show a turn at SUBMIT, before `send` is called - for a host whose send waits on its own pre-send stage (the editor's
+   * per-turn limbic fetch). `null` withdraws it (the stage said the send is not going: stopped, or another chat is
+   * showing). `chat` names the chat it was announced in when that is no longer the one showing. `send` takes it over.
+   */
+  announceTurn?(text: string | null, opts?: { chat?: number | null }): void;
+  /**
+   * The model doing this run's work, as the stream named it - from the moment the turn's route is known, kept through
+   * the tool steps. Undefined before that: the transcript never shows a guess.
+   */
+  servedBy?: RunServedBy;
   loadingMessages: boolean;
   /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
   reloadMessages: () => void;
@@ -365,6 +385,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // The latest transcript, for callbacks that must keep their identity across appends.
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  // The just-sent turn, drawn before its row is saved (`usePendingTurns`).
+  const pending = usePendingTurns(chatId, messages);
+  const { open: openPending, close: closePending, rekey: rekeyPending } = pending;
+  const announceTurn = useCallback((text: string | null, opts?: { chat?: number | null }) => {
+    const chat = opts && 'chat' in opts ? (opts.chat ?? null) : chatIdRef.current;
+    if (text == null) closePending(chat);
+    else openPending(chat, text.trim());
+  }, [openPending, closePending]);
 
   // Re-hydrate this viewer's thumbs from the persisted message metadata, so a
   // reopened chat shows what they already pressed. (The durable RATING fact lives in
@@ -468,6 +496,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // Claimed before a draft's row exists, so a double-submit cannot mint two chats.
       const origin = chatId;
       markSending(origin, true);
+      // On screen NOW, not when the row is saved (the files this turn carries are the composer's, or its own).
+      openPending(origin, trimmed, opts?.attachments ?? pendingAttachments);
       let id = chatId;
       // A tokenless send from a draft is the draft on screen's (the one `ensureChatId` would adopt); a Stop on THAT draft
       // reaches this send, and only this send's entry (`launchCancel.ts`).
@@ -484,6 +514,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (id == null) {
           if (draftSend) endDraftSend(draftSend);
           markSending(origin, false);
+          closePending(origin);
           setLocalError('Could not start a chat.');
           return false;
         }
@@ -491,6 +522,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (draftSend) draftSend.chat = id;
         markSending(id, true);
         markSending(origin, false);
+        rekeyPending(origin, id); // the draft's turn follows the chat its send created
       }
       const runChatId = id;
       const stillOpen = () => chatIdRef.current === runChatId || chatIdRef.current === origin;
@@ -522,7 +554,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
         const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
+        // One batch: the saved row joins the transcript and the optimistic one leaves it.
         updateMessages(id, (prev) => [...prev, userMsg]);
+        closePending(id);
         onActivity?.(id);
         // First user turn of this chat → let the host auto-name it from the topic
         // (so it stops reading "New chat"). Uses the raw typed text, not the
@@ -567,6 +601,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         return true;
       } catch (e) {
         // Saving the turn failed (an expired token): NOT saved. Files go back to the SHOWING composer, like the text.
+        closePending(id); // the turn goes back to the composer: it must not also stay in the transcript
         if (!given) composer.restore(attachments);
         if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'Send failed');
         return false;
@@ -574,9 +609,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         cancelledLaunchRef.current.delete(runChatId);
         if (draftSend) endDraftSend(draftSend);
         markSending(runChatId, false);
+        closePending(runChatId); // whichever way it ended, nothing of this send stays pending
       }
     },
-    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, drafts, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, beginDraftSend, endDraftSend],
+    [persistence, chatId, markSending, openPending, closePending, rekeyPending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, drafts, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, beginDraftSend, endDraftSend],
   );
 
   const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {
@@ -651,9 +687,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   return {
     messages,
+    pendingTurn: pending.pendingTurn,
+    announceTurn,
+    servedBy: snapshot.servedBy,
     loadingMessages,
     reloadMessages,
-    sending: localSending || isLive(chatId),
+    // A turn that is only announced (its host's pre-send stage is running) already counts as in flight: the transcript shows
+    // the same waiting row it shows between turns from the moment the person submits.
+    sending: localSending || isLive(chatId) || pending.pendingTurn != null,
     runLive: isLive(chatId),
     error: localError || snapshot.error,
     /** What the user can DO about `error` (reconnect / upgrade / add a card), when

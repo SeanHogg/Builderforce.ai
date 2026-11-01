@@ -248,6 +248,16 @@
   padding: 0 6px;
 }
 
+/* The model doing the work, named once its route is known. Mono like the reply chip's; never wider than the row. */
+.bf-tl__live-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  color: var(--bf-text-muted, #8a8a8a);
+  overflow-wrap: anywhere;
+}
+
 /* Indeterminate progress bar. Deliberately indeterminate: we do not know how
    long a tool will take, and a fake percentage would be a fabricated claim. */
 .bf-tl__live-bar {

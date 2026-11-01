@@ -29,7 +29,7 @@ import {
   type TicketValue,
 } from './records.js';
 import { resolveCreateDestination } from './creationDestination.js';
-import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstSnapshot, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { createMemoryLocalFirstStore, newLocalRecord, selectPending, selectRecords, type LocalFirstSnapshot, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 
 export const TRANSACTIONAL_SNAPSHOT_INVALID = 'transactional_record_snapshot_invalid';
 
@@ -384,9 +384,9 @@ export function createTransactionalRecordStore(
         });
         await hook('run');
 
-        const events = (await tx.pending(plan.destination)).filter((event) =>
+        const events = await selectPending(tx, (event) =>
           OWNED.includes(event.entityType) && event.clientEntityId !== undefined
-          && [plan.projectId, plan.ticketId, plan.chatId, plan.auditId, plan.runId].includes(event.clientEntityId));
+          && [plan.projectId, plan.ticketId, plan.chatId, plan.auditId, plan.runId].includes(event.clientEntityId), plan.destination);
         await hook('events');
 
         return {
@@ -403,15 +403,14 @@ export function createTransactionalRecordStore(
 
     async list(): Promise<TransactionalRecordListing> {
       return inner.read(async (tx) => {
-        const rows = await tx.list();
-        const live = (entityType: LocalEntityType): LocalRecord[] =>
-          rows.filter((row) => row.entityType === entityType && !row.deletedAt);
+        const live = <T>(entityType: LocalEntityType): Promise<LocalRecord<T>[]> =>
+          selectRecords<T>(tx, entityType, (row) => !row.deletedAt);
         return {
-          projects: live('project') as LocalRecord<ProjectValue>[],
-          tickets: live('ticket') as LocalRecord<TicketValue>[],
-          chats: live('chat') as LocalRecord<TransactionalChatValue>[],
-          audits: live('audit-run') as LocalRecord<TransactionalAuditValue>[],
-          runs: live('execution') as LocalRecord<ExecutionValue>[],
+          projects: await live<ProjectValue>('project'),
+          tickets: await live<TicketValue>('ticket'),
+          chats: await live<TransactionalChatValue>('chat'),
+          audits: await live<TransactionalAuditValue>('audit-run'),
+          runs: await live<ExecutionValue>('execution'),
           events: await tx.pending(),
         };
       });

@@ -18,7 +18,7 @@
 
 import type { EntityDestination, ExecutionStatus, LocalEntityType, LocalRecord } from './records.js';
 import { resolveCreateDestination } from './creationDestination.js';
-import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { newLocalRecord, selectRecords, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 
 export interface HostLineage {
   chatId: string;
@@ -153,7 +153,7 @@ function entityId(id: string | undefined): string {
   return id;
 }
 
-function lineageOf(record: LocalRecord<Owned>): string | undefined {
+function lineageOf(record: Readonly<LocalRecord<Owned>>): string | undefined {
   return record.payload.lineage?.chatId ?? record.payload.chatId;
 }
 
@@ -166,8 +166,11 @@ function bySeq(a: LocalRecord<Owned>, b: LocalRecord<Owned>): number {
 }
 
 async function nextSeq(tx: LocalFirstTransaction, entityType: LocalEntityType, chatId: string): Promise<number> {
-  const rows = await tx.list<Owned>(entityType);
-  return rows.filter((row) => !row.deletedAt && lineageOf(row) === chatId).length + 1;
+  let count = 0;
+  await tx.scan<Owned>(entityType, (row) => {
+    if (!row.deletedAt && lineageOf(row) === chatId) count += 1;
+  });
+  return count + 1;
 }
 
 async function requireOwned<T extends Owned>(
@@ -402,12 +405,13 @@ export function createHostChatLog(store: LocalFirstStore): HostChatLog {
       const id = requireText(chatId, 'chat_id_required');
       return store.read(async (tx) => {
         const chat = await tx.get<HostChatValue>('chat', id);
-        const owned = <T extends Owned>(rows: LocalRecord<T>[]): LocalRecord<T>[] =>
-          rows.filter((row) => !row.deletedAt && lineageOf(row) === id).sort(bySeq);
-        const turns = owned(await tx.list<HostTurnValue>('message'));
-        const runs = owned(await tx.list<HostRunValue>('execution'));
-        const steps = owned(await tx.list<HostStepValue>('step'));
-        const approvals = owned(await tx.list<HostApprovalValue>('approval'));
+        // This chat's rows only: scanned in place, and only the matches are cloned.
+        const owned = async <T extends Owned>(entityType: LocalEntityType): Promise<LocalRecord<T>[]> =>
+          (await selectRecords<T>(tx, entityType, (row) => !row.deletedAt && lineageOf(row) === id)).sort(bySeq);
+        const turns = await owned<HostTurnValue>('message');
+        const runs = await owned<HostRunValue>('execution');
+        const steps = await owned<HostStepValue>('step');
+        const approvals = await owned<HostApprovalValue>('approval');
         const visibleChat = chat && !chat.deletedAt ? chat : undefined;
         return {
           chatId: id,

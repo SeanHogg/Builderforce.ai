@@ -52,6 +52,10 @@ export function brainChatLabels(): Record<string, string> {
     "tl.apply": t("Apply"),
     "tl.createFile": t("Create file"),
     "tl.preview": t("Preview"),
+    // The reply chip's account badges: a hosted runtime reached from this machine (Kimi Code) is the person's
+    // OWN account; an engine that really runs on this device says so.
+    "tl.accountOwn": t("Your account"),
+    "tl.accountOnDevice": t("On this device"),
     // Evermind memory steps — recall before answering, a memory-first answer that skipped
     // the model, and learn / reconcile after. `{count}` / `{version}` / `{name}` /
     // `{projectId}` / `{reason}` are substituted by the renderer, not by l10n.

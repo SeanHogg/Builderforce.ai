@@ -11,14 +11,14 @@
  * control (who answers, who is addressed) arrives as `context`; anything shown above
  * the text (queued turns, starters) as `status`.
  */
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
 import { PromptPanel } from '../PromptPanel';
 import { PromptOptionsMenu } from '../promptOptions/PromptOptionsMenu';
 import { promptOptionsLabels, type PromptOptionsLabels } from '../promptOptions/types';
 import { InferenceModeFirstRun } from '../inferenceMode/InferenceModeFirstRun';
 import { useInferenceModeGate, type InferenceModeGate } from '../inferenceMode/useInferenceModeGate';
-import { useMentionAutocomplete, type UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
-import { useTicketAutocomplete, type UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
+import type { UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
+import type { UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
 import { WorkStatusPanel } from '../workStatus/WorkStatusPanel';
 import { WorkSpendPanel } from '../workStatus/WorkSpendPanel';
 import { spendLabels } from '../spend/labels';
@@ -35,7 +35,8 @@ import { AttachmentChips, type ComposerAttachment } from './AttachmentChips';
 import { composerOptionGroups, type ComposerOptions } from './composerOptions';
 import { SuggestionRow, type ComposerSuggestion } from './SuggestionRow';
 import { ContextMeter } from './ContextMeter';
-import type { ContextUsage } from '@seanhogg/builderforce-brain-embedded';
+import { createComposerDraftStore, useDraftIsEmpty, type ContextUsage } from '@seanhogg/builderforce-brain-embedded';
+import { ComposerTextBox, type ComposerTextSource } from './ComposerTextBox';
 import { composerLabels, type ComposerLabels } from './labels';
 
 export interface BrainComposerLabels {
@@ -48,9 +49,16 @@ export interface BrainComposerLabels {
   ticket?: UseTicketAutocompleteOptions['labels'];
 }
 
-export interface BrainComposerProps {
-  value: string;
-  onChange: (value: string) => void;
+/**
+ * The text comes from exactly ONE of:
+ *  - `draftStore` (`useComposerDraftStore()`): the box subscribes to the store, so a keystroke re-renders only the
+ *    textarea and its typeahead - never this frame, the menus or the host. The choice for a surface that owns more than the box.
+ *  - `value` + `onChange`: the host holds the text as React state (every key re-renders the host). Unchanged for
+ *    the hosts that have not moved to the store.
+ */
+export type BrainComposerProps = BrainComposerBaseProps & ComposerTextSource;
+
+export interface BrainComposerBaseProps {
   onSubmit: () => void;
   /** A run is streaming: Send queues behind it, an empty box offers Stop. */
   running?: boolean;
@@ -125,24 +133,35 @@ export interface BrainComposerProps {
   className?: string;
 }
 
-const NO_PARTICIPANTS: UseMentionAutocompleteOptions['participants'] = [];
-const NO_TICKETS: UseTicketAutocompleteOptions['tickets'] = [];
-const noop = () => undefined;
+/** Never written: stands in for the draft while a host controls the text itself (hooks cannot be skipped). */
+const UNUSED_STORE = createComposerDraftStore();
 
-export function BrainComposer(props: BrainComposerProps) {
+function BrainComposerInner(props: BrainComposerProps) {
   const {
-    value, onChange, onSubmit, running = false, onStop, onQueue, sendSteers, disabled = false, blockedNotice,
+    draftStore, value, onChange, onSubmit, running = false, onStop, onQueue, sendSteers, disabled = false, blockedNotice,
     placeholder, ariaLabel, rows = 2, submitOnEnter = true, focusToken, options, account,
     onAccountSettings, attachments, onAddContext, webBrowsing, addMenuItems, mentions, tickets,
     pickersDisabled = false, voice = false, context, contextUsage, above, suggestions, below, modeGate, labels: labelBundle, className,
   } = props;
   const labels = composerLabels(labelBundle?.composer);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  const getValue = useCallback(() => valueRef.current, []);
   const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
+
+  // "Is the box empty?" is all the frame needs of the text (Send, the suggestion chips, the active border): with a store
+  // it subscribes to THAT fact, so it re-renders when the box goes empty or non-empty - not on each key.
+  const storeEmpty = useDraftIsEmpty(draftStore ?? UNUSED_STORE);
+  const empty = draftStore ? storeEmpty : !(value ?? '').trim();
+  // The text right now, for the paths that act on it at call time (submit, dictation): the store's, else the last render's.
+  const valueRef = useRef(value ?? '');
+  valueRef.current = value ?? '';
+  const getValue = useCallback(() => (draftStore ? draftStore.get() : valueRef.current), [draftStore]);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const setValue = useCallback((next: string) => {
+    if (draftStore) draftStore.set(next);
+    else onChangeRef.current?.(next);
+  }, [draftStore]);
 
   useEffect(() => {
     if (focusToken == null) return;
@@ -152,43 +171,39 @@ export function BrainComposer(props: BrainComposerProps) {
     el.setSelectionRange(el.value.length, el.value.length);
   }, [focusToken]);
 
-  const mention = useMentionAutocomplete({
-    textareaRef, value, setValue: onChange, participants: mentions?.participants ?? NO_PARTICIPANTS,
-    onPick: mentions?.onPick ?? noop, disabled: disabled || pickersDisabled, labels: labelBundle?.mention,
-  });
-  const ticket = useTicketAutocomplete({
-    textareaRef, value, setValue: onChange, tickets: tickets?.tickets ?? NO_TICKETS,
-    onPick: tickets?.onPick ?? noop, disabled: disabled || pickersDisabled, labels: labelBundle?.ticket,
-  });
-
-  const canSubmit = value.trim().length > 0 && !disabled;
+  const canSubmit = !empty && !disabled;
   // The first-run question: a turn sent before the person chose where models run is held
   // behind it and sent the moment they answer (the mode applies first) — THE shared gate,
   // the host's when it owns one.
   const ownGate = useInferenceModeGate(options.inferenceMode);
   const gate = modeGate ?? ownGate;
-  const onSubmitRef = useRef(onSubmit);
-  onSubmitRef.current = onSubmit;
-  const submit = () => {
-    if (!canSubmit) return;
-    gate.request(() => onSubmitRef.current());
-  };
-  const onQueueRef = useRef(onQueue);
-  onQueueRef.current = onQueue;
-  const queue = () => {
-    const hold = onQueueRef.current;
-    if (!canSubmit || !hold) return;
-    gate.request(() => hold());
-  };
+  // The submit paths read their inputs at call time, so the textarea child keeps ONE identity for them.
+  const live = useRef({ onSubmit, onQueue, gate, disabled, getValue });
+  live.current = { onSubmit, onQueue, gate, disabled, getValue };
+  const submit = useCallback(() => {
+    const { onSubmit: send, gate: g, disabled: closed, getValue: read } = live.current;
+    if (closed || !read().trim()) return;
+    g.request(() => send());
+  }, []);
+  const queue = useCallback(() => {
+    const { onQueue: hold, gate: g, disabled: closed, getValue: read } = live.current;
+    if (closed || !hold || !read().trim()) return;
+    g.request(() => hold());
+  }, []);
 
-  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!attachments) return;
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  const onPaste = useCallback((e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const target = attachmentsRef.current;
+    if (!target) return;
     const files = Array.from(e.clipboardData?.items ?? [])
       .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
       .map((i) => i.getAsFile())
       .filter((f): f is File => !!f);
-    if (files.length) { e.preventDefault(); attachments.onAdd(files); }
-  };
+    if (files.length) { e.preventDefault(); target.onAdd(files); }
+  }, []);
+  const onFocus = useCallback(() => setFocused(true), []);
+  const onBlur = useCallback(() => setFocused(false), []);
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     setDragging(false);
     if (!attachments) return;
@@ -227,7 +242,7 @@ export function BrainComposer(props: BrainComposerProps) {
     : undefined;
 
   const chips = attachments ? <AttachmentChips items={attachments.items} onRemove={attachments.onRemove} labels={labels} /> : null;
-  const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
+  const showSuggestions = !!suggestions?.items.length && empty && !running;
   const modeQuestion = gate.asking
     ? <InferenceModeFirstRun labels={promptOptionsLabels(labelBundle?.options)} onChoose={gate.choose} />
     : null;
@@ -235,41 +250,40 @@ export function BrainComposer(props: BrainComposerProps) {
     ? <>{modeQuestion}{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}</>
     : undefined;
 
+  const source: ComposerTextSource = draftStore ? { draftStore } : { value: value ?? '', onChange: setValue };
+  const resolvedPlaceholder = placeholder ?? labels.placeholder;
+
   return (
     <div className={['bf-cmp', className].filter(Boolean).join(' ')}>
       {blockedNotice}
       <PromptPanel
-        active={focused || value.trim().length > 0}
+        active={focused || !empty}
         dragging={dragging}
         onDragOver={attachments ? (e) => { e.preventDefault(); setDragging(true); } : undefined}
         onDragLeave={attachments ? () => setDragging(false) : undefined}
         onDrop={attachments ? onDrop : undefined}
-        overlay={ticket.open ? ticket.popup : mention.popup}
         status={aboveBox}
         input={(
-          <textarea
-            ref={textareaRef}
-            className="bf-cmp-input"
+          <ComposerTextBox
+            {...source}
+            textareaRef={textareaRef}
             rows={rows}
-            value={value}
-            placeholder={placeholder ?? labels.placeholder}
-            aria-label={ariaLabel ?? placeholder ?? labels.placeholder}
+            placeholder={resolvedPlaceholder}
+            ariaLabel={ariaLabel ?? resolvedPlaceholder}
             disabled={disabled}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            submitOnEnter={submitOnEnter}
+            running={running}
+            canQueue={!!onQueue}
+            onSubmit={submit}
+            onQueue={queue}
             onPaste={onPaste}
-            onSelect={() => { mention.onSelect(); ticket.onSelect(); }}
-            onKeyDown={(e) => {
-              if (mention.onKeyDown(e)) return;
-              if (ticket.onKeyDown(e)) return;
-              if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                // Alt+Enter mid-run: hold it for after the run, where the host offers that.
-                if (e.altKey && running && onQueue) queue();
-                else submit();
-              }
-            }}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            mentions={mentions}
+            tickets={tickets}
+            pickersDisabled={pickersDisabled}
+            mentionLabels={labelBundle?.mention}
+            ticketLabels={labelBundle?.ticket}
           />
         )}
         actions={(
@@ -305,7 +319,7 @@ export function BrainComposer(props: BrainComposerProps) {
             onStop={onStop}
             {...(onQueue ? { onQueue: queue } : {})}
             {...(sendSteers !== undefined ? { sendSteers } : {})}
-            voice={voice ? { getValue, setValue: onChange } : undefined}
+            voice={voice ? { getValue, setValue } : undefined}
           />
         )}
       />
@@ -313,3 +327,9 @@ export function BrainComposer(props: BrainComposerProps) {
     </div>
   );
 }
+
+/**
+ * Memoized: with stable props (the host memoizes `options`, `labels`, its handlers) a stream token or an unrelated
+ * state change in the host's tree does not re-render the prompt area at all.
+ */
+export const BrainComposer = memo(BrainComposerInner);

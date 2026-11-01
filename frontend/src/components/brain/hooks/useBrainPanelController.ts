@@ -139,8 +139,7 @@ export function useBrainPanelController({
   }, [isPage, publishActiveChat, chats.activeChatId]);
 
   const {
-    input,
-    setInput,
+    draftStore,
     composerFocusToken,
     startNewChat,
     ensureChatId,
@@ -253,7 +252,7 @@ export function useBrainPanelController({
   // Who the next message goes to — the shared composer state the editor uses too:
   // reset when switching chats, drops a pick that has since left the roster, and
   // follows a leading @mention when nothing was picked explicitly.
-  const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants, input, resetKey: activeChatId });
+  const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants, draftStore, resetKey: activeChatId });
 
   const repoContext = useBrainRepoContext({
     repoProjectId: chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null,
@@ -278,7 +277,7 @@ export function useBrainPanelController({
   // THE ONE turn door (shared with every composer host), the exam gate, and text a
   // neighbouring surface hands the page's chat (docked, no close).
   const { queued, submitTurn, stopTurn, handleSend, handleQueueAfter, sendSteers } = useBrainPanelTurns({
-    conv, chats, drafts, recipient, chooseRecipient, input, setInput, showChatTab, acceptsHandover: !isPage && !onClose,
+    conv, chats, drafts, recipient, chooseRecipient, draftStore, showChatTab, acceptsHandover: !isPage && !onClose,
   });
   // After the door: an answered question or a replay is a turn like a typed one, and
   // queues behind a running turn the same way.
@@ -338,8 +337,7 @@ export function useBrainPanelController({
     ctxProjectId,
     newProject,
     // Composer
-    input,
-    setInput,
+    draftStore,
     handleSend,
     handleQueueAfter,
     sendSteers,

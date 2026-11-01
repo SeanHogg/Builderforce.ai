@@ -157,8 +157,16 @@ async function streamOnLocal(
   transport: BrainTransport,
   messages: ChatCompletionMessage[],
 ): Promise<StreamChatResult> {
-  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, handlers);
-  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}` };
+  // Whose account made the call is read off the runtime registry, never a runtime id: a HOSTED runtime reached from this
+  // machine (Kimi Code) is the person's OWN account, while an on-device engine has no account at all - the reply chip then
+  // says "on this device" from the ref itself (`runsOnDevice`). The stream's own `onModel` would name the bare model the
+  // provider echoes (`k3`); the full ref is what the live row and the settled reply both carry.
+  const account = localRuntime(target.provider).onDevice ? undefined : 'own';
+  const named: StreamHandlers = handlers.onModel
+    ? { ...handlers, onModel: () => handlers.onModel?.(target.ref, account) }
+    : handlers;
+  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, named);
+  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...(account ? { account } : {}) };
 }
 
 /** Where a pinned local stream may send a call that names a DIFFERENT model. */

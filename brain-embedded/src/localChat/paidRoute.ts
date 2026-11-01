@@ -30,8 +30,7 @@ export function paidRouteOf(rows: readonly RunUsageValue[], book: PriceBook): { 
 
 /** A chat's usage rows, oldest first. */
 export async function usageRowsOf(tx: LocalFirstTransaction, deviceId: string, clientChatId: string): Promise<RunUsageValue[]> {
-  return (await liveRecords<RunUsageValue>(tx, 'usage', deviceId))
+  return (await liveRecords<RunUsageValue>(tx, 'usage', deviceId, (row) => row.payload.clientChatId === clientChatId))
     .map((row) => row.payload)
-    .filter((row) => row.clientChatId === clientChatId)
     .sort((a, b) => a.at.localeCompare(b.at));
 }

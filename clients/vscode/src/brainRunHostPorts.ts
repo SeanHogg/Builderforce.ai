@@ -11,6 +11,7 @@ import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type 
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
+import { hostLog } from "./hostLog";
 import { editorRunSettings } from "./editorRunSettings";
 import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
@@ -31,7 +32,7 @@ import { installLocalDomainTools, type DomainToolRequest } from "./installLocalD
 import { classifyLocalDomainTool, type LocalDomainToolName } from "./localDomainTools";
 import { platformPolicy } from "./platformPolicy";
 import type { ToolDef } from "./fileTools";
-import type { LocalFirstStore } from "@builderforce/local-first";
+import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
 import type { LocalModelsConfig } from "./localModels";
 import { resolveRunPolicyGates } from "./policyGates";
 import { editorRunDirectives } from "./hooks/editorDirectives";
@@ -54,17 +55,6 @@ export interface VsCodeRunHostHooks {
    * never reaches `gateway` for them. Absent, tier 3 is skipped.
    */
   localModels?: () => LocalModelsConfig;
-}
-
-/**
- * The BuilderForce output channel. Imported lazily for the same reason
- * `projectState` is below: `errorReporter` pulls `vscode` (and an EventEmitter) into
- * the module graph of every suite that mocks it away.
- */
-function hostLog(line: string): void {
-  void import("./errorReporter")
-    .then(({ logLine }) => logLine(line))
-    .catch((error: unknown) => console.warn(line, error));
 }
 
 function workspaceRoot(): string {
@@ -382,8 +372,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   });
   const detachLifecycle = host.attach(lifecycle.sink);
   // A commit while chats run may have bound one of them (the run's own bind, a sync
-  // receipt, an adopt): re-read the bound ids. Commits are per message or model call.
-  const offBindings = local.store.subscribe(() => {
+  // receipt, an adopt): re-read the bound ids. Commits are per message or model call, so
+  // only one that touched a mapping or a chat row (or whose change is unknown) is worth the read.
+  const offBindings = local.store.subscribe((change) => {
+    if (change && !change.syncState && !changeTouches(change, "chat")) return;
     if (runsKey !== undefined && runsKey !== "|") reportRuns(getGlobalRunState(), true);
   });
   // Baseline before the turn, immutable change set after it. A duplicate start while

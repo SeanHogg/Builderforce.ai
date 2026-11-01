@@ -74,6 +74,7 @@ const OPTIONS_KEY: Readonly<Record<string, MessageKey>> = {
   byoDetail: 'optByoDetail',
   configuredDetail: 'optConfiguredDetail',
   localDetail: 'optLocalDetail',
+  hostedTip: 'optHostedTip',
   evermindLabel: 'optEvermindLabel',
   evermindDetail: 'optEvermindDetail',
   options: 'optOptions',

@@ -33,6 +33,13 @@ import { createWorkingTab } from '../tools/tabPort';
 import { ChatView } from './ChatView';
 import { ServicesContext } from './hooks';
 
+/** Counts the chat view's renders: it draws the surface once per render, so a keystroke that re-rendered the view would show here. */
+const counts = vi.hoisted(() => ({ surface: 0 }));
+vi.mock('@seanhogg/builderforce-brain-ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@seanhogg/builderforce-brain-ui')>();
+  return { ...actual, AiSurface: (props: Parameters<typeof actual.AiSurface>[0]) => { counts.surface += 1; return actual.AiSurface(props); } };
+});
+
 /** `chrome.*` as the panel reads it: no catalog (every `t()` is its key), English UI. */
 beforeEach(() => {
   vi.stubGlobal('chrome', {
@@ -127,6 +134,19 @@ const userRows = async (records: RovrRecords) => {
 };
 
 describe('Rovr ChatView on the shared conversation hook', () => {
+  it('typing 20 characters does not re-render the chat view (the text lives in the draft store)', async () => {
+    const { services } = await panel(vi.fn<BrainStreamFn>(async () => answer('x')));
+    render(<Harness services={services} />);
+    const box = screen.getByRole('textbox', { name: 'composerLabel' }) as HTMLTextAreaElement;
+    await act(async () => { await Promise.resolve(); });
+    const before = counts.surface;
+
+    for (let i = 1; i <= 20; i += 1) fireEvent.change(box, { target: { value: 'x'.repeat(i) } });
+
+    expect(box.value).toBe('x'.repeat(20));
+    expect(counts.surface).toBe(before);
+  });
+
   it('sends a typed turn through the hook: saved on the device, answered, shown', async () => {
     const stream = vi.fn<BrainStreamFn>(async () => answer('Hello from Rovr.'));
     const { services, records } = await panel(stream);

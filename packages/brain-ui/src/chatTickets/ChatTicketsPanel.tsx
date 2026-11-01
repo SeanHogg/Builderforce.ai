@@ -28,6 +28,7 @@ import type { SpendSavingsSummary } from '@seanhogg/builderforce-brain-embedded'
 import { LinkForm } from './LinkForm';
 import { MergeSection } from './MergeSection';
 import { PeopleSection } from './PeopleSection';
+import { OriginalRequest } from './OriginalRequest';
 import { QuestionsSection } from './QuestionsSection';
 import { S } from './panelStyles';
 import { parseChatTicketSort, sortChatTickets } from './sortChatTickets';
@@ -206,12 +207,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           Read-only history, not an editable field: it is what the user asked on turn one
           and the auto-title is only a ~60-char derivation of it. Hidden when absent so
           a pre-1245 chat renders exactly as before. */}
-      {originalRequest?.trim() && (
-        <div style={S.originalRequest}>
-          <span style={S.originalRequestLabel}>{labels.originalRequest}</span>
-          <span style={S.originalRequestText} title={labels.originalRequestText(originalRequest)}>{originalRequest}</span>
-        </div>
-      )}
+      <OriginalRequest text={originalRequest} labels={labels} />
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
       {tickets.length > 0 && (

@@ -63,7 +63,7 @@ describe("local-first journal transaction", () => {
     const state = new Map<string, unknown>();
     const writing = localBrainApplication(host(root, state));
     expect(nodePath.basename(writing.durableStore.snapshotFile)).toBe("local-first-v1.json");
-    expect(nodePath.basename(writing.durableStore.journalFile)).toBe("local-first-v2.journal");
+    expect(nodePath.basename(writing.durableStore.journalFile)).toBe("local-first-v3.journal");
 
     let sawRecordAndEvent = false;
     let snapshotAtAck = true;

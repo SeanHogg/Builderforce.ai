@@ -18,7 +18,7 @@ import type { LocalFirstStore } from '@builderforce/local-first';
 import type { PriceBook } from '@builderforce/model-catalog';
 import type { RouteRunRecord } from '@builderforce/pipeline-route';
 import { callCostOrUnknown } from './callCost';
-import { liveRecords } from './records';
+import { liveRecords, scanLive } from './records';
 import type { RunEndOutcome } from '../runStore/runTypes';
 import type { RunOutcomeValue } from './gateLedger';
 import type { RunUsageValue } from './usageLedger';
@@ -27,9 +27,8 @@ import type { RunUsageValue } from './usageLedger';
 export async function usageRowsSince(store: LocalFirstStore, deviceId: string, since: Date): Promise<RunUsageValue[]> {
   const from = since.toISOString();
   return store.transact(async (tx) =>
-    (await liveRecords<RunUsageValue>(tx, 'usage', deviceId))
+    (await liveRecords<RunUsageValue>(tx, 'usage', deviceId, (row) => row.payload.at >= from))
       .map((row) => row.payload)
-      .filter((row) => row.at >= from)
       .sort((a, b) => a.at.localeCompare(b.at)),
   );
 }
@@ -39,9 +38,9 @@ export async function runOutcomesSince(store: LocalFirstStore, deviceId: string,
   const from = since.toISOString();
   return store.transact(async (tx) => {
     const out = new Map<string, RunEndOutcome>();
-    for (const row of await liveRecords<RunOutcomeValue>(tx, 'run-outcome', deviceId)) {
+    await scanLive<RunOutcomeValue>(tx, 'run-outcome', deviceId, (row) => {
       if (row.payload.at >= from && row.payload.outcome) out.set(row.payload.runId, row.payload.outcome);
-    }
+    });
     return out;
   });
 }
@@ -91,9 +90,9 @@ export async function gateAcceptedSince(store: LocalFirstStore, deviceId: string
   const from = since.toISOString();
   return store.transact(async (tx) => {
     const out = new Map<string, boolean>();
-    for (const row of await liveRecords<RunOutcomeValue>(tx, 'run-outcome', deviceId)) {
+    await scanLive<RunOutcomeValue>(tx, 'run-outcome', deviceId, (row) => {
       if (row.payload.at >= from && typeof row.payload.gateAccepted === 'boolean') out.set(row.payload.runId, row.payload.gateAccepted);
-    }
+    });
     return out;
   });
 }

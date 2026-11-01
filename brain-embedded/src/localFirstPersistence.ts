@@ -2,6 +2,7 @@ import {
   newLocalRecord,
   UNBOUND_DESTINATION,
   type EntityDestination,
+  type LocalFirstChange,
   type LocalFirstStore,
   type LocalFirstTransaction,
   type LocalRecord,
@@ -15,7 +16,7 @@ import type { BrainChat, BrainMessage } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
 import { journalWrite } from './localChat/journal';
-import { liveRecords, type ChatValue, type MessageValue } from './localChat/records';
+import { chatRecordById, liveRecords, scanLive, type ChatValue, type MessageValue } from './localChat/records';
 import { importedUsageIds, ledgerSpend, usageRowsByChat } from './localChat/ledgerSpend';
 import type { RunUsageValue } from './localChat/usageLedger';
 
@@ -54,6 +55,9 @@ export interface LocalBrainPersistenceOptions {
 
 const chatValue = (record: LocalRecord<ChatValue>): BrainChat => record.payload.chat;
 
+/** A commit naming more message rows than this is not worth checking row by row: reload. */
+const MESSAGE_ID_CHECK_LIMIT = 64;
+
 /** A chat as its surfaces read it: its bound server id and its spend projected on. */
 interface ProjectionInput {
   record: LocalRecord<ChatValue>;
@@ -70,25 +74,39 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
   const blobs = new Map<string, string>();
 
   const chats = (tx: LocalFirstTransaction) => liveRecords<ChatValue>(tx, 'chat', options.deviceId);
-  const messages = (tx: LocalFirstTransaction) => liveRecords<MessageValue>(tx, 'message', options.deviceId);
+  /** This device's live messages, cloned — only the ones `where` keeps (a chat's, never every chat's). */
+  const messages = (tx: LocalFirstTransaction, where?: (row: Readonly<LocalRecord<MessageValue>>) => boolean) =>
+    liveRecords<MessageValue>(tx, 'message', options.deviceId, where);
   /** One chat's messages in `seq` order. */
   const chatMessages = (chatId: number): Promise<BrainMessage[]> => options.store.read(async (tx) =>
-    (await messages(tx))
-      .filter((row) => row.payload.chatId === chatId)
+    (await messages(tx, (row) => row.payload.chatId === chatId))
       .sort((a, b) => a.payload.message.seq - b.payload.message.seq)
       .map((row) => row.payload.message));
   const chatFor = async (tx: LocalFirstTransaction, id: number): Promise<LocalRecord<ChatValue>> => {
-    const chat = (await chats(tx)).find((row) => row.payload.chat.id === id);
+    const chat = await chatRecordById(tx, options.deviceId, id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
     return chat;
   };
+  /** One past the largest chat or message id — a scan, not a copy of every row. */
   const nextId = async (tx: LocalFirstTransaction): Promise<number> => {
-    const [chatRows, messageRows] = await Promise.all([chats(tx), messages(tx)]);
-    return Math.max(
-      0,
-      ...chatRows.map((row) => row.payload.chat.id),
-      ...messageRows.map((row) => row.payload.message.id),
-    ) + 1;
+    let highest = 0;
+    await scanLive<ChatValue>(tx, 'chat', options.deviceId, (row) => { highest = Math.max(highest, row.payload.chat.id); });
+    await scanLive<MessageValue>(tx, 'message', options.deviceId, (row) => { highest = Math.max(highest, row.payload.message.id); });
+    return highest + 1;
+  };
+  /** Does this commit touch the chat's messages? Row ids are looked up (`get`), never scanned. */
+  const touchesChatMessages = (chatId: number, change: LocalFirstChange): Promise<boolean> => {
+    const ids = change.records.get('message');
+    if (!ids || ids.size === 0) return Promise.resolve(false);
+    if (ids.size > MESSAGE_ID_CHECK_LIMIT) return Promise.resolve(true);
+    return options.store.read(async (tx) => {
+      for (const id of ids) {
+        const row = await tx.get<MessageValue>('message', id);
+        // A row that is gone cannot be placed in a chat: assume it was this one's.
+        if (!row || row.payload.chatId === chatId) return true;
+      }
+      return false;
+    });
   };
 
   /** Read the chats' projection inputs in one pass: bindings and ledger rows. */
@@ -210,7 +228,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
         await journalWrite(tx, deleted, 'delete', { key: chatDeleteKey });
-        const rows = (await messages(tx)).filter((row) => row.payload.chatId === id);
+        const rows = await messages(tx, (row) => row.payload.chatId === id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };
           await tx.put(tombstone, row.version);
@@ -260,22 +278,38 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
       const all = await chatMessages(chatId);
       return limit != null ? all.slice(-limit) : all;
     },
-    subscribeMessages: (_chatId, onChanged) => options.store.subscribe(onChanged),
+    // Only a commit that touched THIS chat's message rows (or whose change is unknown) is
+    // worth a reload: a step row in another chat, a usage row, a sync receipt is not.
+    subscribeMessages: (chatId, onChanged) => options.store.subscribe((change) => {
+      if (!change) {
+        onChanged();
+        return;
+      }
+      void touchesChatMessages(chatId, change)
+        .then((touched) => { if (touched) onChanged(); })
+        .catch(() => onChanged());
+    }),
     async sendMessages(chatId, input) {
       return options.store.transact(async (tx) => {
         const chat = await chatFor(tx, chatId);
-        const existing = (await messages(tx)).filter((row) => row.payload.chatId === chatId);
         const firstId = await nextId(tx);
         const stamp = now().toISOString();
         // A row sent again under the key it was saved with is the SAME row (`keyedRows.ts`): the saved one comes
-        // back, nothing is written - the server's upsert on (chat, event_key), kept on the device.
-        const known = new Map(existing.map((row) => [row.payload.eventKey, row.payload.message] as const));
+        // back, nothing is written - the server's upsert on (chat, event_key), kept on the device. Scanned
+        // without cloning: only the rows handed back below are copied.
+        const known = new Map<string, BrainMessage>();
+        let existing = 0;
+        await scanLive<MessageValue>(tx, 'message', options.deviceId, (row) => {
+          if (row.payload.chatId !== chatId) return;
+          existing += 1;
+          known.set(row.payload.eventKey, row.payload.message);
+        });
         const results: BrainMessage[] = [];
         const added: BrainMessage[] = [];
         const keys: string[] = [];
         for (const slot of slotKeyedRows(input, (key) => known.get(key))) {
           if (slot.kind === 'known') {
-            results.push(slot.prior);
+            results.push(structuredClone(slot.prior));
             continue;
           }
           if (slot.kind === 'repeat') {
@@ -288,7 +322,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
             role: message.role,
             content: message.content,
             metadata: message.metadata ?? null,
-            seq: existing.length + added.length + 1,
+            seq: existing + added.length + 1,
             createdAt: stamp,
           };
           results.push(row);
@@ -318,7 +352,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     },
     async setMessageFeedback(messageId, feedback, context) {
       return options.store.transact(async (tx) => {
-        const row = (await messages(tx)).find((candidate) => candidate.payload.message.id === messageId);
+        const row = (await messages(tx, (candidate) => candidate.payload.message.id === messageId))[0];
         if (!row) return {};
         const metadata = JSON.parse(row.payload.message.metadata ?? '{}') as Record<string, unknown>;
         metadata.feedback = feedback;

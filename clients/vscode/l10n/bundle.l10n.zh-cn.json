@@ -1065,5 +1065,7 @@
   "BuilderForce reviews folders inside the open workspace.": "BuilderForce 只审阅已打开工作区内的文件夹。",
   "This folder is not open in the workspace.": "此文件夹未在工作区中打开。",
   "Only a fact on the linked project can be deleted.": "只能删除已关联项目中的事实。",
-  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce：已将 {0} 个已审阅文件夹的知识上传到关联项目。"
+  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce：已将 {0} 个已审阅文件夹的知识上传到关联项目。",
+  "Sent to {provider} with your own account from this machine. The model does not run here.": "已通过您自己的账户从本机发送至 {provider}。模型不在本机运行。",
+  "Your account": "您的账户"
 }

@@ -9,7 +9,7 @@ import {
 } from './records.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
-import { isJournalEventId, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { isJournalEventId, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -110,8 +110,10 @@ async function mergePulled(
   now: Date,
 ): Promise<boolean> {
   const local = await tx.get(remote.entityType, remote.id);
-  const pending = await tx.pending(destination);
-  const hasPending = pending.some((event) => event.clientEntityId === remote.id);
+  let hasPending = false;
+  await tx.scanPending((event) => {
+    if (event.clientEntityId === remote.id) hasPending = true;
+  }, destination);
   if (local && hasPending) {
     const conflict: SyncConflict = {
       id: `${remote.entityType}:${remote.id}:${local.version}:${remote.version}`,
@@ -227,8 +229,14 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     fence: CoordinatorLeaseFence | undefined,
   ): Promise<SyncSummary> => {
     const pulled = await pull(destination, fence);
-    const pending = await options.store.read(async (tx) =>
-      wireDependencies(await tx.pending(destination), await tx.pending()));
+    const pending = await options.store.read(async (tx) => {
+      // The destination's events are what is sent, so they are cloned; the key lookup
+      // that orders them only reads every pending event, so it borrows them uncloned.
+      const every: JournalEvent[] = [];
+      await tx.scanPending((event) => { every.push(event as JournalEvent); });
+      every.sort((a, b) => a.localSequence - b.localSequence);
+      return wireDependencies(await selectPending(tx, undefined, destination), every);
+    });
     // G10: an unbound event parked in the bound partition (a record
     // rebound without its events, or a destination smuggled onto an
     // unbound value) is refused here, not pushed and not dropped. The
@@ -326,11 +334,16 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         const liveParent = input?.liveLookup ?? input?.liveParent;
         void input?.liveLookup;
         void input?.liveParent;
-        const { events, records } = await options.store.read(async (tx) => ({
-          events: await tx.pending(),
-          records: await tx.list(),
-        }));
-        const planned = destinationsForSync(events, records, liveParent);
+        // Planning only reads each row's destination (and copies it), so the rows are
+        // borrowed from the store, not cloned — every record and event of the store.
+        const planned = await options.store.read(async (tx) => {
+          const events: JournalEvent[] = [];
+          const records: LocalRecord[] = [];
+          await tx.scanPending((event) => { events.push(event as JournalEvent); });
+          events.sort((a, b) => a.localSequence - b.localSequence);
+          await tx.scan(undefined, (record) => { records.push(record as LocalRecord); });
+          return destinationsForSync(events, records, liveParent);
+        });
         const summary: SyncSummary = {
           pulled: 0,
           pushed: 0,

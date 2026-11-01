@@ -5,7 +5,7 @@
  * state for the rail's People section. Lifted out of the chat surface unchanged.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   consolidationMarkerContent,
   consolidationMetadata,
@@ -34,7 +34,8 @@ export function useChatVisibility(chatId: number | null, persistence: BrainPersi
 
 export function useSessionActions({ chatId, conv, persistence, activeChat, fallbackProjectId, setChatId, reloadChats, t }: {
   chatId: number | null;
-  conv: UseBrainConversation;
+  /** Only the parts this reads, so the result keeps one identity across a streamed token (the composer is memoized on it). */
+  conv: Pick<UseBrainConversation, 'messages' | 'sending' | 'clearError' | 'setError' | 'reloadMessages'>;
   persistence: BrainPersistenceAdapter;
   activeChat: BrainChat | null;
   /** Where a fork of a project-less chat lands (the sidebar's project). */
@@ -43,21 +44,22 @@ export function useSessionActions({ chatId, conv, persistence, activeChat, fallb
   reloadChats: () => void;
   t: (key: string, fallback: string) => string;
 }) {
+  const { messages, sending, clearError, setError, reloadMessages } = conv;
   // Async, so guard against double-clicks while in flight.
   const [consolidating, setConsolidating] = useState(false);
   const [forking, setForking] = useState(false);
 
   // The conversation loop seeds the next turn FROM the consolidation marker, so a long
   // chat sends its summary as the base context instead of the full history.
-  const canConsolidate = chatId != null && conv.messages.length >= 2 && !conv.sending;
+  const canConsolidate = chatId != null && messages.length >= 2 && !sending;
   const consolidate = useCallback(async () => {
     if (chatId == null || consolidating) return;
     setConsolidating(true);
-    conv.clearError();
+    clearError();
     try {
       const result = await persistence.summarizeChat(chatId);
       if ('error' in result || !result.summary) {
-        conv.setError(('error' in result && result.error) || t('app.nothingToConsolidate', 'Not enough conversation to consolidate yet.'));
+        setError(('error' in result && result.error) || t('app.nothingToConsolidate', 'Not enough conversation to consolidate yet.'));
         return;
       }
       await persistence.sendMessages(chatId, [{
@@ -65,24 +67,24 @@ export function useSessionActions({ chatId, conv, persistence, activeChat, fallb
         content: consolidationMarkerContent(result.summary),
         metadata: consolidationMetadata(),
       }]);
-      conv.reloadMessages();
+      reloadMessages();
       reloadChats();
     } catch (e) {
-      conv.setError(e instanceof Error ? e.message : 'Consolidate failed');
+      setError(e instanceof Error ? e.message : 'Consolidate failed');
     } finally {
       setConsolidating(false);
     }
-  }, [chatId, consolidating, persistence, conv, reloadChats, t]);
+  }, [chatId, consolidating, persistence, clearError, setError, reloadMessages, reloadChats, t]);
 
   // Continue a fresh, compact conversation (same project) without the whole history.
   const fork = useCallback(async () => {
     if (chatId == null || forking) return;
     setForking(true);
-    conv.clearError();
+    clearError();
     try {
       const result = await persistence.summarizeChat(chatId);
       if ('error' in result || !result.summary) {
-        conv.setError(('error' in result && result.error) || t('app.nothingToFork', 'Not enough conversation to fork yet.'));
+        setError(('error' in result && result.error) || t('app.nothingToFork', 'Not enough conversation to fork yet.'));
         return;
       }
       const sourceTitle = activeChat?.title || t('app.newChat', 'New chat');
@@ -97,14 +99,15 @@ export function useSessionActions({ chatId, conv, persistence, activeChat, fallb
       setChatId(chat.id);
       reloadChats();
     } catch (e) {
-      conv.setError(e instanceof Error ? e.message : 'Fork failed');
+      setError(e instanceof Error ? e.message : 'Fork failed');
     } finally {
       setForking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, forking, persistence, conv, reloadChats, activeChat?.title, activeChat?.projectId, fallbackProjectId, t]);
+  }, [chatId, forking, persistence, clearError, setError, reloadChats, activeChat?.title, activeChat?.projectId, fallbackProjectId, t, setChatId]);
 
-  return chatId != null
-    ? { canConsolidate, consolidating, forking, onConsolidate: consolidate, onFork: fork }
-    : undefined;
+  return useMemo(
+    () => (chatId != null ? { canConsolidate, consolidating, forking, onConsolidate: consolidate, onFork: fork } : undefined),
+    [chatId, canConsolidate, consolidating, forking, consolidate, fork],
+  );
 }

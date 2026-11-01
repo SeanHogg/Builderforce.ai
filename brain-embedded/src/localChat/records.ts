@@ -10,7 +10,7 @@
  * left out of every read here.
  */
 
-import type { LocalFirstTransaction, LocalRecord } from '@builderforce/local-first';
+import { selectRecords, type LocalFirstTransaction, type LocalRecord } from '@builderforce/local-first';
 import type { BrainChat, BrainMessage } from '../types';
 
 export interface ChatValue {
@@ -33,13 +33,38 @@ export function isOwnRecord(row: LocalRecord, deviceId: string): boolean {
   return row.provenance?.source !== 'imported' || row.provenance.deviceId === deviceId;
 }
 
-/** This device's live rows of one type. */
-export async function liveRecords<T>(tx: LocalFirstTransaction, type: 'chat' | 'message' | 'usage' | 'run-outcome', deviceId: string): Promise<LocalRecord<T>[]> {
-  const rows = await tx.list<T>(type);
-  return rows.filter((row) => !row.deletedAt && isOwnRecord(row, deviceId));
+/** A live row of this device: not tombstoned, and written here (or this device's write pulled back). */
+const isLiveOwn = (row: Readonly<LocalRecord>, deviceId: string): boolean => !row.deletedAt && isOwnRecord(row, deviceId);
+
+/**
+ * Visit this device's live rows of one type WITHOUT cloning them: a caller that only counts
+ * or takes a maximum needs no copy. The rows are the store's own — never mutate or keep one.
+ */
+export function scanLive<T>(
+  tx: LocalFirstTransaction,
+  type: 'chat' | 'message' | 'usage' | 'run-outcome',
+  deviceId: string,
+  visit: (row: Readonly<LocalRecord<T>>) => void,
+): Promise<void> {
+  return tx.scan<T>(type, (row) => {
+    if (isLiveOwn(row, deviceId)) visit(row);
+  });
+}
+
+/**
+ * This device's live rows of one type, cloned — only those `where` keeps. Reading one chat's
+ * messages out of every chat's costs that chat, not the whole history.
+ */
+export function liveRecords<T>(
+  tx: LocalFirstTransaction,
+  type: 'chat' | 'message' | 'usage' | 'run-outcome',
+  deviceId: string,
+  where?: (row: Readonly<LocalRecord<T>>) => boolean,
+): Promise<LocalRecord<T>[]> {
+  return selectRecords<T>(tx, type, (row) => isLiveOwn(row, deviceId) && (!where || where(row)));
 }
 
 /** A chat's record by its local view key, or undefined. */
 export async function chatRecordById(tx: LocalFirstTransaction, deviceId: string, id: number): Promise<LocalRecord<ChatValue> | undefined> {
-  return (await liveRecords<ChatValue>(tx, 'chat', deviceId)).find((row) => row.payload.chat.id === id);
+  return (await liveRecords<ChatValue>(tx, 'chat', deviceId, (row) => row.payload.chat.id === id))[0];
 }

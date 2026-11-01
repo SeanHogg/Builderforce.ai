@@ -39,6 +39,9 @@ export function modelChoiceLabels(): ModelChoiceLabels {
     // builder, so the sentence is translated once and the product names are not.
     categoryLocal: t("On this device"),
     localDetail: t("Runs on this machine via {runtime} — no plan usage, works offline."),
+    // A hosted runtime reached from this machine (Kimi Code): the row's tooltip says the call uses the person's own
+    // account and the model does not run here. Renamed `{provider}` -> `{vendor}` like `byoDetail`.
+    hostedTip: t("Sent to {provider} with your own account from this machine. The model does not run here.").replace("{provider}", "{vendor}"),
     evermindLabel: t("Project Evermind"),
     evermindDetail: t("Your project's own learned Evermind model."),
   };

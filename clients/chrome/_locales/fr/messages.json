@@ -693,6 +693,10 @@
     "message": "S’exécute sur cette machine via {runtime} — sans consommer le forfait, fonctionne hors ligne.",
     "description": "Funding line: on-device; keep {runtime}"
   },
+  "optHostedTip": {
+    "message": "Envoyé à {vendor} avec votre propre compte depuis cette machine. Le modèle ne s’exécute pas ici.",
+    "description": "Model row tooltip: hosted runtime reached with your own account; keep {vendor}"
+  },
   "optEvermindLabel": {
     "message": "Evermind du projet",
     "description": "Model name for a project Evermind pin"

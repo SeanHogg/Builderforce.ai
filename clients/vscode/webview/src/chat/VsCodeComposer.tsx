@@ -11,7 +11,7 @@
  * workspace file as context, and linking a `#`-tagged ticket to the chat.
  */
 
-import { useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { webviewInferenceMode } from './inferenceModeOption';
 import {
   DEFAULT_PERSONA,
@@ -19,8 +19,9 @@ import {
   type BrainPersonaChoice,
   type ChatMode,
   type ChatInputAttachment,
+  type ComposerDraftStore,
+  type ContextUsage,
   type DirectedRecipient,
-  type UseBrainConversation,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   BrainComposer,
@@ -62,9 +63,21 @@ export interface VsCodeComposerProps {
   composerId: string;
   init: InitData;
   apiReq: AuthedFetch;
-  conv: UseBrainConversation;
-  value: string;
-  onChange: (value: string) => void;
+  /** The composer's text (`useComposerDraftStore()`): the box subscribes to it, this component never re-renders on a key. */
+  draftStore: ComposerDraftStore;
+  /**
+   * What the conversation hands the composer, as narrow stable fields - NOT the per-render `conversation` object, which is
+   * new on every streamed token and would re-render the whole prompt area with each one.
+   */
+  /** A turn is in flight: Send steers it, an empty box offers Stop. */
+  running: boolean;
+  /** The files the next turn will carry, and the ports that add / remove them. */
+  pendingAttachments: readonly ChatInputAttachment[];
+  uploading: boolean;
+  onAttach: (file: File) => Promise<void>;
+  onRemoveAttachment: (key: string) => void;
+  /** How full the model's context was on the last turn. */
+  contextUsage: ContextUsage | null;
   onSubmit: () => void;
   /** Alt+Enter mid-run — `useChatSend().queueAfter`: hold the message for after the run
    *  (Send steers the running turn; this is the explicit alternative). */
@@ -108,14 +121,15 @@ export interface VsCodeComposerProps {
   suggest?: boolean;
 }
 
-export function VsCodeComposer(props: VsCodeComposerProps) {
+function VsCodeComposerInner(props: VsCodeComposerProps) {
   const {
-    composerId, init, apiReq, conv, value, onChange, onSubmit, onQueue, sendSteers, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
+    composerId, init, apiReq, draftStore, running, pendingAttachments, uploading, onAttach, onRemoveAttachment, contextUsage,
+    onSubmit, onQueue, sendSteers, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     chatTickets, linkTicket, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
     mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
   } = props;
-  const t = makeT(init.labels);
+  const t = useMemo(() => makeT(init.labels), [init.labels]);
   const labels = useMemo(
     () => brainComposerLabels(init.labels, init.modelLabels, init.locale),
     [init.labels, init.modelLabels, init.locale],
@@ -137,8 +151,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
   }, [ensureChatId, linkTicket]);
 
   const attachFiles = useCallback((files: File[]) => {
-    for (const f of files) void conv.attach(f);
-  }, [conv]);
+    for (const f of files) void onAttach(f);
+  }, [onAttach]);
 
   // "Add context": the host picks a workspace file (or the active selection) and the
   // text is attached like a dropped text file — the host keeps it and inlines it into
@@ -148,15 +162,17 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
       try {
         const ctx = await request<{ path: string; text: string } | null>('context.pick');
         if (!ctx || !ctx.text) return;
-        await conv.attach(new File([ctx.text], ctx.path || 'context.txt', { type: 'text/plain' }));
+        await onAttach(new File([ctx.text], ctx.path || 'context.txt', { type: 'text/plain' }));
       } catch { /* host cancelled / no workspace — nothing to attach */ }
     })();
-  }, [conv]);
+  }, [onAttach]);
 
   const { composerModels, modelSelection, chooseModel, catalogLoaded } = models;
   // "Pick a model" (the error banner beside this composer) opens this menu's Model tab.
   const openMenu = useComposerMenuRequest(composerId);
-  const options: ComposerOptions = {
+  // One object until a setting moves: the menu (and the composer around it) is memoized on it, so a streamed token or a
+  // keystroke elsewhere in the surface does not rebuild the model list.
+  const options = useMemo<ComposerOptions>(() => ({
     mode,
     // No project memory behind this chat ⇒ the switch gates nothing; it shows, and says so.
     memory: { enabled: memory.enabled, onChange: memory.onChange, available: projectId != null },
@@ -167,82 +183,103 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
     ...(openMenu ? { openMenu } : {}),
     autoMode,
     session,
-  };
+  }), [mode, memory.enabled, memory.onChange, projectId, shaping, composerModels, modelSelection, chooseModel, servedModel, init, catalogLoaded, openMenu, autoMode, session]);
+
+  const suggestions = useMemo(() => (suggest ? {
+    // Fixed next steps — a chip seeds the box; the person edits and sends it. The same
+    // list the empty state shows as tiles (`editorStarters`), so not both at once.
+    label: t('app.suggestions', 'Suggested next steps'),
+    items: editorStarters(t).map((s) => ({ id: s.id, label: s.label, onSelect: () => onPickStarter(s.prompt) })),
+  } : undefined), [suggest, t, onPickStarter]);
+  const placeholder = recipient
+    ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
+    : undefined;
+  const account = useMemo(
+    () => ({ request: apiReq, projectId, locale: init.locale, onUpgrade: openUpgrade, connections }),
+    [apiReq, projectId, init.locale, connections],
+  );
+  const attachments = useMemo(
+    () => ({ items: pendingAttachments, onAdd: attachFiles, onRemove: onRemoveAttachment, uploading }),
+    [pendingAttachments, attachFiles, onRemoveAttachment, uploading],
+  );
+  const webBrowsing = useMemo(
+    () => ({ on: shaping.webBrowsing, onChange: shaping.setWebBrowsing }),
+    [shaping.webBrowsing, shaping.setWebBrowsing],
+  );
+  const mentions = useMemo(() => ({ participants: mentionable, onPick: chooseRecipient }), [mentionable, chooseRecipient]);
+  const tickets = useMemo(() => ({ tickets: chatTickets, onPick: tagTicket }), [chatTickets, tagTicket]);
+  const openAccountSettings = useCallback(() => post('settings'), []);
+  const context = useMemo(() => (
+    <>
+      {/* Acting as — WHO the Brain answers as; hidden until there is someone else to be. */}
+      <PersonaPicker
+        value={persona}
+        onChange={onPersona}
+        modalities={personaModalities}
+        agents={personaAgents}
+        labels={personaLabels}
+        quietAt={DEFAULT_PERSONA}
+      />
+      {/* To — the BRAIN (executes) or a participant (talked to). Self-hides when solo. */}
+      <RecipientPicker
+        participants={participants}
+        recipient={recipient}
+        onChoose={chooseRecipient}
+        labels={recipientLabels}
+      />
+    </>
+  ), [persona, onPersona, personaModalities, personaAgents, personaLabels, participants, recipient, chooseRecipient, recipientLabels]);
+  // Messages queued behind the in-flight run — each sends on its own once the run
+  // finishes, or is steered into it now. Held turns — the shared chips; a turn addressed to the run (no participant) can be
+  // steered into it now instead of after it.
+  const above = useMemo(() => (
+    <QueuedTurnChips
+      items={queue}
+      textOf={(turn) => turn.text}
+      onRemove={onRemoveQueued}
+      {...(running && chatId != null ? {
+        onSteer: (item: QueuedItem<QueuedTurn>) => { steerRun(chatId, item.value.text, item.value.attachments); onRemoveQueued(item.id); },
+        canSteer: (item: QueuedItem<QueuedTurn>) => !item.value.recipient,
+      } : {})}
+      labels={queuedLabels}
+    />
+  ), [queue, onRemoveQueued, running, chatId, queuedLabels]);
 
   return (
     <BrainComposer
-      // Fixed next steps — a chip seeds the box; the person edits and sends it. The same
-      // list the empty state shows as tiles (`editorStarters`), so not both at once.
-      suggestions={suggest ? {
-        label: t('app.suggestions', 'Suggested next steps'),
-        items: editorStarters(t).map((s) => ({ id: s.id, label: s.label, onSelect: () => onPickStarter(s.prompt) })),
-      } : undefined}
+      suggestions={suggestions}
       className="bf-composer"
-      value={value}
-      onChange={onChange}
+      draftStore={draftStore}
       onSubmit={onSubmit}
-      running={conv.sending}
+      running={running}
       // Stop drops the held turns too — the person stopped the conversation, not one sentence.
       onStop={onStop}
       // Send steers the running turn; Alt+Enter holds the message for after it.
       {...(onQueue ? { onQueue } : {})}
       {...(sendSteers !== undefined ? { sendSteers } : {})}
       focusToken={focusToken}
-      placeholder={recipient
-        ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
-        : undefined}
+      placeholder={placeholder}
       options={options}
-      account={{ request: apiReq, projectId, locale: init.locale, onUpgrade: openUpgrade, connections }}
-      onAccountSettings={() => post('settings')}
-      attachments={{
-        items: conv.pendingAttachments,
-        onAdd: attachFiles,
-        onRemove: conv.removeAttachment,
-        uploading: conv.uploading,
-      }}
+      account={account}
+      onAccountSettings={openAccountSettings}
+      attachments={attachments}
       onAddContext={addContext}
-      webBrowsing={{ on: shaping.webBrowsing, onChange: shaping.setWebBrowsing }}
-      mentions={{ participants: mentionable, onPick: chooseRecipient }}
-      tickets={{ tickets: chatTickets, onPick: tagTicket }}
-      pickersDisabled={conv.sending && !hasLiveChildren}
+      webBrowsing={webBrowsing}
+      mentions={mentions}
+      tickets={tickets}
+      pickersDisabled={running && !hasLiveChildren}
       voice
-      context={<>
-        {/* Acting as — WHO the Brain answers as; hidden until there is someone else to be. */}
-        <PersonaPicker
-          value={persona}
-          onChange={onPersona}
-          modalities={personaModalities}
-          agents={personaAgents}
-          labels={personaLabels}
-          quietAt={DEFAULT_PERSONA}
-        />
-        {/* To — the BRAIN (executes) or a participant (talked to). Self-hides when solo. */}
-        <RecipientPicker
-          participants={participants}
-          recipient={recipient}
-          onChoose={chooseRecipient}
-          labels={recipientLabels}
-        />
-      </>}
+      context={context}
       // How full the model's context was on the last turn — the run compacts on its own.
-      contextUsage={conv.contextUsage}
-      // Messages queued behind the in-flight run — each sends on its own once the run
-      // finishes, or is steered into it now.
-      // Held turns — the shared chips; a turn addressed to the run (no participant) can be
-      // steered into it now instead of after it.
-      above={(
-        <QueuedTurnChips
-          items={queue}
-          textOf={(turn) => turn.text}
-          onRemove={onRemoveQueued}
-          {...(conv.sending && chatId != null ? {
-            onSteer: (item: QueuedItem<QueuedTurn>) => { steerRun(chatId, item.value.text, item.value.attachments); onRemoveQueued(item.id); },
-            canSteer: (item: QueuedItem<QueuedTurn>) => !item.value.recipient,
-          } : {})}
-          labels={queuedLabels}
-        />
-      )}
+      contextUsage={contextUsage}
+      above={above}
       labels={labels}
     />
   );
 }
+
+/**
+ * Memoized: every prop is a stable value (the surface memoizes the groups it builds), so a streamed token or a keystroke - which
+ * re-render the surface or only the textarea - leave the prompt area alone.
+ */
+export const VsCodeComposer = memo(VsCodeComposerInner);

@@ -115,6 +115,8 @@ export function emit(c: RunCell): void {
     byoUnresolved: c.byoUnresolved,
     providerCap: c.providerCap,
     turn: c.turn,
+    // Only when a turn's route is known: a snapshot of a run that has not named a model has no such key.
+    ...(c.servedBy ? { servedBy: c.servedBy } : {}),
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every

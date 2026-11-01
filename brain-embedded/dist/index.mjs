@@ -1059,6 +1059,22 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
 var UNBOUND_DESTINATION = { kind: "unbound" };
 
 // ../packages/local-first/src/store.ts
+var clone = (value) => structuredClone(value);
+async function selectRecords(tx, type, where) {
+  const matches = [];
+  await tx.scan(type, (row) => {
+    if (!where || where(row)) matches.push(row);
+  });
+  return clone(matches);
+}
+async function selectPending(tx, where, destination) {
+  const matches = [];
+  await tx.scanPending((event) => {
+    if (!where || where(event)) matches.push(event);
+  }, destination);
+  matches.sort((a, b) => a.localSequence - b.localSequence);
+  return clone(matches);
+}
 function newLocalRecord(input) {
   const at2 = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
   return {
@@ -1074,14 +1090,37 @@ function newLocalRecord(input) {
   };
 }
 
-// ../packages/local-first/src/journalStore.ts
-var JOURNAL_FRAME_MAGIC = "BFJF1";
-var MAGIC_BYTES = JOURNAL_FRAME_MAGIC.length;
-var HEADER_BYTES = MAGIC_BYTES + 8;
+// ../packages/local-first/src/journalCodec.ts
+var MAGIC_BYTES = 5;
+var JOURNAL_HEADER_BYTES = MAGIC_BYTES + 8;
+var RESET_PREFIX = new TextEncoder().encode('{"reset":true');
+var TABLES = (() => {
+  const tables = new Int32Array(8 * 256);
+  for (let n2 = 0; n2 < 256; n2 += 1) {
+    let c = n2;
+    for (let bit = 0; bit < 8; bit += 1) c = c & 1 ? c >>> 1 ^ 3988292384 : c >>> 1;
+    tables[n2] = c;
+  }
+  for (let n2 = 0; n2 < 256; n2 += 1) {
+    let c = tables[n2];
+    for (let k = 1; k < 8; k += 1) {
+      c = tables[c & 255] ^ c >>> 8;
+      tables[k * 256 + n2] = c;
+    }
+  }
+  return tables;
+})();
+
+// ../packages/local-first/src/journalCompaction.ts
 var DEFAULT_JOURNAL_COMPACTION = Object.freeze({
-  maxFrames: 32,
-  maxBytes: 8 * 1024 * 1024
+  maxFrames: 8192,
+  maxBytes: 64 * 1024 * 1024
 });
+var DEFAULT_COMPACTION_FRAME = Object.freeze({
+  maxBytes: 256 * 1024,
+  maxRows: 500
+});
+var encoder = new TextEncoder();
 
 // ../packages/local-first/src/creationDestination.ts
 var LOCAL_CREATE_PATHS = Object.freeze([
@@ -4179,7 +4218,7 @@ function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
 async function dropPending(tx, record3) {
-  const stale = (await tx.pending()).filter((event) => event.clientEntityId === record3.id && event.entityType === record3.entityType);
+  const stale = await selectPending(tx, (event) => event.clientEntityId === record3.id && event.entityType === record3.entityType);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
 function importPayload(record3, mapping) {
@@ -4243,12 +4282,17 @@ async function journalWrite(tx, record3, operation, options) {
 function isOwnRecord(row, deviceId) {
   return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
 }
-async function liveRecords(tx, type, deviceId) {
-  const rows = await tx.list(type);
-  return rows.filter((row) => !row.deletedAt && isOwnRecord(row, deviceId));
+var isLiveOwn = (row, deviceId) => !row.deletedAt && isOwnRecord(row, deviceId);
+function scanLive(tx, type, deviceId, visit) {
+  return tx.scan(type, (row) => {
+    if (isLiveOwn(row, deviceId)) visit(row);
+  });
+}
+function liveRecords(tx, type, deviceId, where) {
+  return selectRecords(tx, type, (row) => isLiveOwn(row, deviceId) && (!where || where(row)));
 }
 async function chatRecordById(tx, deviceId, id) {
-  return (await liveRecords(tx, "chat", deviceId)).find((row) => row.payload.chat.id === id);
+  return (await liveRecords(tx, "chat", deviceId, (row) => row.payload.chat.id === id))[0];
 }
 
 // src/localChat/chatIdentity.ts
@@ -4269,8 +4313,11 @@ function createLocalChatIdentity(options) {
     await store.transact(async (tx) => {
       if (await tx.mapping("chat", clientId, destination)) return;
       await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
-      const queued = (await tx.pending()).some((event) => event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import");
-      const record3 = queued ? (await liveRecords(tx, "chat", deviceId)).find((row) => row.id === clientId) : void 0;
+      let queued = false;
+      await tx.scanPending((event) => {
+        if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") queued = true;
+      });
+      const record3 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
       if (record3) await queueImport(tx, record3);
     });
   };
@@ -4291,8 +4338,12 @@ function createLocalChatIdentity(options) {
     clientIdFor: async (localId) => (await read(localId))?.chat.id,
     localIdFor: (serverId) => store.read(async (tx) => {
       const destination = port.destination();
-      for (const chat of await liveRecords(tx, "chat", deviceId)) {
-        if (await boundServerId(tx, chat.id, destination) === serverId) return chat.payload.chat.id;
+      const chats = [];
+      await scanLive(tx, "chat", deviceId, (row) => {
+        chats.push({ clientId: row.id, localId: row.payload.chat.id });
+      });
+      for (const chat of chats) {
+        if (await boundServerId(tx, chat.clientId, destination) === serverId) return chat.localId;
       }
       return void 0;
     }),
@@ -4398,36 +4449,51 @@ async function importedUsageIds(tx, rows, destination) {
 }
 async function usageRowsByChat(tx, deviceId) {
   const byChat2 = /* @__PURE__ */ new Map();
-  for (const row of await liveRecords(tx, "usage", deviceId)) {
+  await scanLive(tx, "usage", deviceId, (row) => {
     const list3 = byChat2.get(row.payload.clientChatId) ?? [];
-    list3.push(row.payload);
+    list3.push(structuredClone(row.payload));
     byChat2.set(row.payload.clientChatId, list3);
-  }
+  });
   return byChat2;
 }
 
 // src/localFirstPersistence.ts
 var chatValue = (record3) => record3.payload.chat;
+var MESSAGE_ID_CHECK_LIMIT = 64;
 function createLocalBrainPersistence(options) {
   const destination = options.destination ?? UNBOUND_DESTINATION;
   const now = options.now ?? (() => /* @__PURE__ */ new Date());
   const newId = options.newId ?? (() => crypto.randomUUID());
   const blobs = /* @__PURE__ */ new Map();
   const chats = (tx) => liveRecords(tx, "chat", options.deviceId);
-  const messages = (tx) => liveRecords(tx, "message", options.deviceId);
-  const chatMessages = (chatId) => options.store.read(async (tx) => (await messages(tx)).filter((row) => row.payload.chatId === chatId).sort((a, b) => a.payload.message.seq - b.payload.message.seq).map((row) => row.payload.message));
+  const messages = (tx, where) => liveRecords(tx, "message", options.deviceId, where);
+  const chatMessages = (chatId) => options.store.read(async (tx) => (await messages(tx, (row) => row.payload.chatId === chatId)).sort((a, b) => a.payload.message.seq - b.payload.message.seq).map((row) => row.payload.message));
   const chatFor = async (tx, id) => {
-    const chat = (await chats(tx)).find((row) => row.payload.chat.id === id);
+    const chat = await chatRecordById(tx, options.deviceId, id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
     return chat;
   };
   const nextId = async (tx) => {
-    const [chatRows, messageRows] = await Promise.all([chats(tx), messages(tx)]);
-    return Math.max(
-      0,
-      ...chatRows.map((row) => row.payload.chat.id),
-      ...messageRows.map((row) => row.payload.message.id)
-    ) + 1;
+    let highest = 0;
+    await scanLive(tx, "chat", options.deviceId, (row) => {
+      highest = Math.max(highest, row.payload.chat.id);
+    });
+    await scanLive(tx, "message", options.deviceId, (row) => {
+      highest = Math.max(highest, row.payload.message.id);
+    });
+    return highest + 1;
+  };
+  const touchesChatMessages = (chatId, change) => {
+    const ids2 = change.records.get("message");
+    if (!ids2 || ids2.size === 0) return Promise.resolve(false);
+    if (ids2.size > MESSAGE_ID_CHECK_LIMIT) return Promise.resolve(true);
+    return options.store.read(async (tx) => {
+      for (const id of ids2) {
+        const row = await tx.get("message", id);
+        if (!row || row.payload.chatId === chatId) return true;
+      }
+      return false;
+    });
   };
   const projectionInputs = async (tx, rows) => {
     const account = options.accountDestination?.();
@@ -4535,7 +4601,7 @@ function createLocalBrainPersistence(options) {
         const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
         await journalWrite(tx, deleted, "delete", { key: chatDeleteKey });
-        const rows = (await messages(tx)).filter((row) => row.payload.chatId === id);
+        const rows = await messages(tx, (row) => row.payload.chatId === id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };
           await tx.put(tombstone, row.version);
@@ -4583,20 +4649,35 @@ function createLocalBrainPersistence(options) {
       const all = await chatMessages(chatId);
       return limit != null ? all.slice(-limit) : all;
     },
-    subscribeMessages: (_chatId, onChanged) => options.store.subscribe(onChanged),
+    // Only a commit that touched THIS chat's message rows (or whose change is unknown) is
+    // worth a reload: a step row in another chat, a usage row, a sync receipt is not.
+    subscribeMessages: (chatId, onChanged) => options.store.subscribe((change) => {
+      if (!change) {
+        onChanged();
+        return;
+      }
+      void touchesChatMessages(chatId, change).then((touched) => {
+        if (touched) onChanged();
+      }).catch(() => onChanged());
+    }),
     async sendMessages(chatId, input) {
       return options.store.transact(async (tx) => {
         const chat = await chatFor(tx, chatId);
-        const existing = (await messages(tx)).filter((row) => row.payload.chatId === chatId);
         const firstId = await nextId(tx);
         const stamp = now().toISOString();
-        const known = new Map(existing.map((row) => [row.payload.eventKey, row.payload.message]));
+        const known = /* @__PURE__ */ new Map();
+        let existing = 0;
+        await scanLive(tx, "message", options.deviceId, (row) => {
+          if (row.payload.chatId !== chatId) return;
+          existing += 1;
+          known.set(row.payload.eventKey, row.payload.message);
+        });
         const results = [];
         const added = [];
         const keys = [];
         for (const slot of slotKeyedRows(input, (key) => known.get(key))) {
           if (slot.kind === "known") {
-            results.push(slot.prior);
+            results.push(structuredClone(slot.prior));
             continue;
           }
           if (slot.kind === "repeat") {
@@ -4609,7 +4690,7 @@ function createLocalBrainPersistence(options) {
             role: message.role,
             content: message.content,
             metadata: message.metadata ?? null,
-            seq: existing.length + added.length + 1,
+            seq: existing + added.length + 1,
             createdAt: stamp
           };
           results.push(row);
@@ -4639,7 +4720,7 @@ function createLocalBrainPersistence(options) {
     },
     async setMessageFeedback(messageId, feedback, context) {
       return options.store.transact(async (tx) => {
-        const row = (await messages(tx)).find((candidate) => candidate.payload.message.id === messageId);
+        const row = (await messages(tx, (candidate) => candidate.payload.message.id === messageId))[0];
         if (!row) return {};
         const metadata = JSON.parse(row.payload.message.metadata ?? "{}");
         metadata.feedback = feedback;
@@ -4691,7 +4772,7 @@ function paidRouteOf(rows, book2) {
   return fallback ? { prompt: fallback.input, completion: fallback.output } : void 0;
 }
 async function usageRowsOf(tx, deviceId, clientChatId) {
-  return (await liveRecords(tx, "usage", deviceId)).map((row) => row.payload).filter((row) => row.clientChatId === clientChatId).sort((a, b) => a.at.localeCompare(b.at));
+  return (await liveRecords(tx, "usage", deviceId, (row) => row.payload.clientChatId === clientChatId)).map((row) => row.payload).sort((a, b) => a.at.localeCompare(b.at));
 }
 
 // src/localChat/gateLedger.ts
@@ -4857,16 +4938,16 @@ function withRunUsage(stream, ledger, context, onError = () => void 0) {
 async function usageRowsSince(store, deviceId, since) {
   const from = since.toISOString();
   return store.transact(
-    async (tx) => (await liveRecords(tx, "usage", deviceId)).map((row) => row.payload).filter((row) => row.at >= from).sort((a, b) => a.at.localeCompare(b.at))
+    async (tx) => (await liveRecords(tx, "usage", deviceId, (row) => row.payload.at >= from)).map((row) => row.payload).sort((a, b) => a.at.localeCompare(b.at))
   );
 }
 async function runOutcomesSince(store, deviceId, since) {
   const from = since.toISOString();
   return store.transact(async (tx) => {
     const out = /* @__PURE__ */ new Map();
-    for (const row of await liveRecords(tx, "run-outcome", deviceId)) {
+    await scanLive(tx, "run-outcome", deviceId, (row) => {
       if (row.payload.at >= from && row.payload.outcome) out.set(row.payload.runId, row.payload.outcome);
-    }
+    });
     return out;
   });
 }
@@ -4903,9 +4984,9 @@ async function gateAcceptedSince(store, deviceId, since) {
   const from = since.toISOString();
   return store.transact(async (tx) => {
     const out = /* @__PURE__ */ new Map();
-    for (const row of await liveRecords(tx, "run-outcome", deviceId)) {
+    await scanLive(tx, "run-outcome", deviceId, (row) => {
       if (row.payload.at >= from && typeof row.payload.gateAccepted === "boolean") out.set(row.payload.runId, row.payload.gateAccepted);
-    }
+    });
     return out;
   });
 }
@@ -5483,10 +5564,15 @@ function prefetchConfirmOf(pending) {
 // src/localChat/chatSync.ts
 async function bindChatHistoryForSync(store, deviceId, destination) {
   if (destination.kind !== "bound") return 0;
-  const unbound = (rows) => rows.filter((row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId));
+  const unbound = (row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId);
   const anything = await store.read(async (tx) => {
-    for (const type of ["chat", "message", "usage"]) if (unbound(await tx.list(type)).length > 0) return true;
-    return false;
+    let found = false;
+    for (const type of ["chat", "message", "usage"]) {
+      await tx.scan(type, (row) => {
+        if (unbound(row)) found = true;
+      });
+    }
+    return found;
   });
   if (!anything) return 0;
   return store.transact(async (tx) => {
@@ -5495,12 +5581,12 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
       await tx.put(moved);
       return moved;
     };
-    const chats = unbound(await tx.list("chat"));
+    const chats = await selectRecords(tx, "chat", unbound);
     for (const chat of chats) await queueImport(tx, await rebind(chat));
-    for (const message of unbound(await tx.list("message"))) {
+    for (const message of await selectRecords(tx, "message", unbound)) {
       await queueImport(tx, await rebind(message), message.payload.chatClientId);
     }
-    for (const usage of unbound(await tx.list("usage"))) {
+    for (const usage of await selectRecords(tx, "usage", unbound)) {
       const moved = await rebind(usage);
       if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
     }
@@ -8615,18 +8701,18 @@ function normalizeAnalysis(dependencies, duplicates, unused, scope = ".") {
     }
   }
   const issues = [];
-  for (const clone of list(record(duplicates).duplicates)) {
-    const locations = [clone.firstFile, clone.secondFile].map((raw) => {
+  for (const clone2 of list(record(duplicates).duplicates)) {
+    const locations = [clone2.firstFile, clone2.secondFile].map((raw) => {
       const file = record(raw);
       return { path: path(file.name), startLine: line(file.start), endLine: line(file.end) };
     });
     locations.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.startLine - b.startLine);
-    const identity = typeof clone.fragment === "string" ? clone.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
+    const identity = typeof clone2.fragment === "string" ? clone2.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
     issues.push({
       id: `duplicate:${hash(JSON.stringify([locations.map((l) => l.path).sort(), identity]))}`,
       kind: "duplicate",
       locations,
-      ...typeof clone.fragment === "string" ? { snippet: clone.fragment.slice(0, 4e3) } : {}
+      ...typeof clone2.fragment === "string" ? { snippet: clone2.fragment.slice(0, 4e3) } : {}
     });
   }
   for (const file of list(record(unused).files)) issues.push({ id: `unused-file:${unusedPath(file)}`, kind: "unused-file", locations: [{ path: unusedPath(file), startLine: 1, endLine: 1 }] });
@@ -10228,8 +10314,10 @@ async function fittedFor(target, opts, fit, probes) {
   });
 }
 async function streamOnLocal(target, opts, handlers, transport, messages) {
-  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, handlers);
-  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}` };
+  const account = localRuntime(target.provider).onDevice ? void 0 : "own";
+  const named = handlers.onModel ? { ...handlers, onModel: () => handlers.onModel?.(target.ref, account) } : handlers;
+  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, named);
+  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...account ? { account } : {} };
 }
 function createLocalStream(endpoint, model, fetchImpl, route = {}) {
   const pin = parseLocalModelRef(route.ref);
@@ -11441,11 +11529,11 @@ function inBandError(e) {
   if (!(e instanceof PageEngineError)) return { message: errorMessage(e) };
   return { code: e.code, message: e.message.includes(e.code) ? e.message : `${e.code}: ${e.message}` };
 }
-var encoder = new TextEncoder();
-var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
+var encoder2 = new TextEncoder();
+var sseFrame = (data) => encoder2.encode(`data: ${JSON.stringify(data)}
 
 `);
-var DONE_FRAME = encoder.encode("data: [DONE]\n\n");
+var DONE_FRAME = encoder2.encode("data: [DONE]\n\n");
 function sseBody(first, chunks, signal) {
   let pending = first;
   return new ReadableStream({
@@ -18976,6 +19064,7 @@ function makeCell() {
     lastServedModel: null,
     pendingGate: null,
     liveTurn: null,
+    servedBy: null,
     lastRequest: null,
     stopEpoch: 0,
     claim: null,
@@ -19043,7 +19132,9 @@ function emit2(c) {
     activity: c.activity,
     byoUnresolved: c.byoUnresolved,
     providerCap: c.providerCap,
-    turn: c.turn
+    turn: c.turn,
+    // Only when a turn's route is known: a snapshot of a run that has not named a model has no such key.
+    ...c.servedBy ? { servedBy: c.servedBy } : {}
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
@@ -19272,6 +19363,8 @@ async function asLiveTurn(c, complete) {
 function liveTurnModel(c) {
   return (model, account) => {
     if (c.liveTurn) c.liveTurn = { model, account };
+    c.servedBy = { model, ...account ? { account } : {} };
+    emit2(c);
   };
 }
 function connectRetryStep(c, step) {
@@ -19441,6 +19534,7 @@ function applyRemoteRun(chatId, snapshot) {
   c.byoUnresolved = snapshot.byoUnresolved;
   c.providerCap = snapshot.providerCap;
   c.turn = snapshot.turn ?? null;
+  c.servedBy = snapshot.servedBy ?? null;
   emit2(c);
 }
 
@@ -25243,7 +25337,12 @@ async function settleBrainRun(run, outcome, last) {
   const text2 = outcome.kind === "paused" ? outcome.question : outcome.output;
   if (!text2.trim()) return;
   if (last.contained !== void 0 && text2 === last.contained) return persistBudgetStop(run, text2);
-  const result = last.result ?? { text: text2, toolCalls: [] };
+  const served = c.servedBy;
+  const result = last.result ?? {
+    text: text2,
+    toolCalls: [],
+    ...served ? { resolvedModel: served.model, ...served.account ? { account: served.account } : {} } : {}
+  };
   const assistantMsg = last.settled ?? await settleReply(run, text2, result, last.requested);
   emit2(c);
   emitEvermindLearnReconcile(run, assistantMsg, text2);
@@ -25975,6 +26074,7 @@ function beginRun(c, outcomeKey) {
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
   c.liveTurn = null;
+  c.servedBy = null;
   c.stoppedTurn = null;
   c.turn = null;
   if (typeof outcomeKey === "number") c.runId = runOutcomeId(outcomeKey, Date.now());
@@ -26289,6 +26389,7 @@ function useBrainChats(options = {}) {
   chatsRef.current = chats;
   const autoTitledRef = useRef4(/* @__PURE__ */ new Set());
   const originalRequestCapturedRef = useRef4(/* @__PURE__ */ new Set());
+  const pendingRequestRef = useRef4(/* @__PURE__ */ new Map());
   const isControlled = controlledActiveId !== void 0;
   const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
   const activeIdRef = useRef4(activeChatId);
@@ -26310,7 +26411,8 @@ function useBrainChats(options = {}) {
     try {
       const params = pinnedProjectId != null ? { projectId: String(pinnedProjectId) } : filterProjectId === "none" ? { projectId: "none" } : filterProjectId ? { projectId: filterProjectId } : void 0;
       const list3 = await persistence.listChats(params);
-      setChats(list3);
+      const shown = pendingRequestRef.current;
+      setChats(shown.size === 0 ? list3 : list3.map((c) => shown.has(c.id) && !c.originalRequest?.trim() ? { ...c, originalRequest: shown.get(c.id) } : c));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load chats");
     } finally {
@@ -26416,13 +26518,19 @@ function useBrainChats(options = {}) {
     const chat = chatsRef.current.find((c) => c.id === id);
     if (chat?.originalRequest?.trim()) return;
     originalRequestCapturedRef.current.add(id);
+    const before = chat?.originalRequest;
+    pendingRequestRef.current.set(id, request);
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, originalRequest: request } : c));
     try {
       const updated = await persistence.updateChat(id, { originalRequest: request });
+      pendingRequestRef.current.delete(id);
       setChats(
         (prev) => prev.map((c) => c.id === id ? { ...c, originalRequest: updated.originalRequest ?? request } : c)
       );
     } catch {
+      pendingRequestRef.current.delete(id);
       originalRequestCapturedRef.current.delete(id);
+      setChats((prev) => prev.map((c) => c.id === id && c.originalRequest === request ? { ...c, originalRequest: before } : c));
     }
   }, [persistence]);
   const summarize = useCallback4(async (id) => {
@@ -26533,7 +26641,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback11, useEffect as useEffect10, useMemo as useMemo6, useRef as useRef9, useState as useState9 } from "react";
+import { useCallback as useCallback12, useEffect as useEffect10, useMemo as useMemo7, useRef as useRef10, useState as useState10 } from "react";
 
 // src/useRunSnapshot.ts
 import { useCallback as useCallback6, useSyncExternalStore } from "react";
@@ -26614,12 +26722,26 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
   const [loadingMessages, setLoadingMessages] = useState7(false);
   const [reloadNonce, setReloadNonce] = useState7(0);
   const reloadMessages = useCallback7(() => setReloadNonce((n2) => n2 + 1), []);
+  const loadSeq = useRef6(0);
+  const loading = useRef6(false);
+  const trailing = useRef6(false);
+  const requestReload = useCallback7(() => {
+    if (loading.current) {
+      trailing.current = true;
+      return;
+    }
+    reloadMessages();
+  }, [reloadMessages]);
   useEffect7(() => {
     let cancelled = false;
+    const seq = loadSeq.current += 1;
+    trailing.current = false;
     if (chatId == null) {
+      loading.current = false;
       setHeld({ chatId: null, list: [] });
       return;
     }
+    loading.current = true;
     setLoadingMessages(true);
     cb.current.onLoadStart();
     persistence.getMessages(chatId).then((list3) => {
@@ -26627,12 +26749,19 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
     }).catch((e) => {
       if (!cancelled) cb.current.onLoadError(e instanceof Error ? e.message : "Failed to load messages");
     }).finally(() => {
-      if (!cancelled) setLoadingMessages(false);
+      if (cancelled) return;
+      setLoadingMessages(false);
+      if (seq !== loadSeq.current) return;
+      loading.current = false;
+      if (trailing.current) {
+        trailing.current = false;
+        reloadMessages();
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [persistence, chatId, reloadNonce]);
+  }, [persistence, chatId, reloadNonce, reloadMessages]);
   useEffect7(() => {
     if (chatId == null) return;
     let cancelled = false;
@@ -26645,8 +26774,8 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
   }, [persistence, chatId, reloadMessages]);
   useEffect7(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
-    return persistence.subscribeMessages(chatId, reloadMessages);
-  }, [persistence, chatId, reloadMessages]);
+    return persistence.subscribeMessages(chatId, requestReload);
+  }, [persistence, chatId, requestReload]);
   const lastMarkedRef = useRef6(null);
   useEffect7(() => {
     if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
@@ -26666,6 +26795,55 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
     updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
   }, [snapshot.messagesEpoch, snapshot.appended, chatId, updateMessages]);
   return { messages, updateMessages, loadingMessages, reloadMessages };
+}
+
+// src/usePendingTurns.ts
+import { useCallback as useCallback8, useMemo as useMemo6, useRef as useRef7, useState as useState8 } from "react";
+var NO_SLOTS = /* @__PURE__ */ new Map();
+function pendingTurnShown(slot, messages) {
+  if (!slot) return null;
+  const landed = messages.some((m) => m.role === "user" && !slot.seen.has(m.id) && m.content.includes(slot.text));
+  if (landed) return null;
+  return { text: slot.text, ...slot.attachments?.length ? { attachments: slot.attachments } : {} };
+}
+function usePendingTurns(chatId, messages) {
+  const [slots, setSlots] = useState8(NO_SLOTS);
+  const messagesRef = useRef7(messages);
+  messagesRef.current = messages;
+  const open = useCallback8((chat, text2, attachments) => {
+    setSlots((cur) => {
+      const have = cur.get(chat);
+      if (have && have.text === text2) return cur;
+      const next = new Map(cur);
+      next.set(chat, {
+        text: text2,
+        ...attachments && attachments.length > 0 ? { attachments: [...attachments] } : {},
+        seen: new Set(messagesRef.current.map((m) => m.id))
+      });
+      return next;
+    });
+  }, []);
+  const close = useCallback8((chat) => {
+    setSlots((cur) => {
+      if (!cur.has(chat)) return cur;
+      const next = new Map(cur);
+      next.delete(chat);
+      return next;
+    });
+  }, []);
+  const rekey = useCallback8((from, to) => {
+    setSlots((cur) => {
+      const slot2 = cur.get(from);
+      if (!slot2) return cur;
+      const next = new Map(cur);
+      next.delete(from);
+      next.set(to, slot2);
+      return next;
+    });
+  }, []);
+  const slot = slots.get(chatId);
+  const pendingTurn = useMemo6(() => pendingTurnShown(slot, messages), [slot, messages]);
+  return { pendingTurn, open, close, rekey };
 }
 
 // src/useAutoReplyTrailingTurn.ts
@@ -26702,11 +26880,11 @@ function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messa
 }
 
 // src/useComposerAttachments.ts
-import { useCallback as useCallback8, useState as useState8 } from "react";
+import { useCallback as useCallback9, useState as useState9 } from "react";
 function useComposerAttachments(persistence, imagePrep, onError) {
-  const [pending, setPending] = useState8([]);
-  const [uploading, setUploading] = useState8(false);
-  const attach2 = useCallback8(async (file) => {
+  const [pending, setPending] = useState9([]);
+  const [uploading, setUploading] = useState9(false);
+  const attach2 = useCallback9(async (file) => {
     setUploading(true);
     try {
       const attachment = await prepareAttachment(file, persistence, imagePrep);
@@ -26717,15 +26895,15 @@ function useComposerAttachments(persistence, imagePrep, onError) {
       setUploading(false);
     }
   }, [persistence, imagePrep, onError]);
-  const remove = useCallback8((key) => {
+  const remove = useCallback9((key) => {
     setPending((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const take = useCallback8((files) => {
+  const take = useCallback9((files) => {
     if (files.length === 0) return;
     const keys = new Set(files.map((a) => a.key));
     setPending((prev) => prev.some((a) => keys.has(a.key)) ? prev.filter((a) => !keys.has(a.key)) : prev);
   }, []);
-  const restore = useCallback8((files) => {
+  const restore = useCallback9((files) => {
     if (files.length === 0) return;
     setPending((prev) => {
       const have = new Set(prev.map((a) => a.key));
@@ -26737,11 +26915,11 @@ function useComposerAttachments(persistence, imagePrep, onError) {
 }
 
 // src/useContinuation.ts
-import { useCallback as useCallback9, useEffect as useEffect9, useRef as useRef7 } from "react";
+import { useCallback as useCallback10, useEffect as useEffect9, useRef as useRef8 } from "react";
 function useContinuation(persistence, prepareRun) {
-  const latest = useRef7({ persistence, prepareRun });
+  const latest = useRef8({ persistence, prepareRun });
   latest.current = { persistence, prepareRun };
-  const bound = useRef7(/* @__PURE__ */ new Map());
+  const bound = useRef8(/* @__PURE__ */ new Map());
   useEffect9(() => {
     const mine = bound.current;
     return () => {
@@ -26749,7 +26927,7 @@ function useContinuation(persistence, prepareRun) {
       mine.clear();
     };
   }, []);
-  return useCallback9((chatId) => {
+  return useCallback10((chatId) => {
     if (getRunDriver()) return;
     const binding = {
       ports: () => latest.current.persistence,
@@ -26882,29 +27060,29 @@ function withRating(ratings, messageId, rating) {
 }
 
 // src/launchCancel.ts
-import { useCallback as useCallback10, useRef as useRef8 } from "react";
+import { useCallback as useCallback11, useRef as useRef9 } from "react";
 function useLaunchCancel(sendingRef) {
-  const cancelledLaunchRef = useRef8(/* @__PURE__ */ new Set());
-  const launchingRef = useRef8(/* @__PURE__ */ new Set());
-  const draftMadeRef = useRef8(/* @__PURE__ */ new Map());
-  const beginDraftSend = useCallback10((token) => {
+  const cancelledLaunchRef = useRef9(/* @__PURE__ */ new Set());
+  const launchingRef = useRef9(/* @__PURE__ */ new Set());
+  const draftMadeRef = useRef9(/* @__PURE__ */ new Map());
+  const beginDraftSend = useCallback11((token) => {
     const send = { token, chat: null, cancelled: false };
     const sends = draftMadeRef.current.get(token);
     if (sends) sends.add(send);
     else draftMadeRef.current.set(token, /* @__PURE__ */ new Set([send]));
     return send;
   }, []);
-  const endDraftSend = useCallback10((send) => {
+  const endDraftSend = useCallback11((send) => {
     const sends = draftMadeRef.current.get(send.token);
     if (!sends) return;
     sends.delete(send);
     if (sends.size === 0) draftMadeRef.current.delete(send.token);
   }, []);
-  const stopChat = useCallback10((id) => {
+  const stopChat = useCallback11((id) => {
     if ((sendingRef.current.has(id) || launchingRef.current.has(id)) && !isRunning(id)) cancelledLaunchRef.current.add(id);
     stopRun(id);
   }, [sendingRef]);
-  const stopConversation = useCallback10((chatId, draft) => {
+  const stopConversation = useCallback11((chatId, draft) => {
     if (chatId != null) {
       for (const sends of draftMadeRef.current.values()) for (const send of sends) if (send.chat === chatId) send.cancelled = true;
       stopChat(chatId);
@@ -26948,10 +27126,10 @@ function useBrainConversation(options) {
     chatRoster,
     prepareRun
   } = options;
-  const sendingRef = useRef9(/* @__PURE__ */ new Set());
-  const [sendingChats, setSendingChats] = useState9(sendingRef.current);
+  const sendingRef = useRef10(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = useState10(sendingRef.current);
   const { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation } = useLaunchCancel(sendingRef);
-  const markSending = useCallback11((key, on) => {
+  const markSending = useCallback12((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
     else next.delete(key);
@@ -26959,20 +27137,27 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = useRef9(chatId);
+  const chatIdRef = useRef10(chatId);
   chatIdRef.current = chatId;
-  const [localError, setLocalError] = useState9("");
-  const [ratings, setRatings] = useState9({});
+  const [localError, setLocalError] = useState10("");
+  const [ratings, setRatings] = useState10({});
   const composer = useComposerAttachments(persistence, imagePrep, setLocalError);
   const { pending: pendingAttachments, uploading } = composer;
-  const autoRepliedChatIdRef = useRef9(null);
+  const autoRepliedChatIdRef = useRef10(null);
   const snapshot = useRunSnapshot(chatId);
   const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
     onLoadStart: () => setLocalError(""),
     onLoadError: setLocalError
   });
-  const messagesRef = useRef9(messages);
+  const messagesRef = useRef10(messages);
   messagesRef.current = messages;
+  const pending = usePendingTurns(chatId, messages);
+  const { open: openPending, close: closePending, rekey: rekeyPending } = pending;
+  const announceTurn = useCallback12((text2, opts) => {
+    const chat = opts && "chat" in opts ? opts.chat ?? null : chatIdRef.current;
+    if (text2 == null) closePending(chat);
+    else openPending(chat, text2.trim());
+  }, [openPending, closePending]);
   useEffect10(() => {
     const map = {};
     for (const msg of messages) {
@@ -26989,7 +27174,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = useCallback11(
+  const buildRequest = useCallback12(
     (history, researchFrom, userTurn, userTurnMessageId) => {
       const seed = transcriptSeedOf(history);
       return {
@@ -27022,7 +27207,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const bindContinuation = useContinuation(persistence, prepareRun);
-  const launch = useCallback11(async (id, request, draftSend = null) => {
+  const launch = useCallback12(async (id, request, draftSend = null) => {
     launchingRef.current.add(id);
     try {
       let extra = null;
@@ -27047,13 +27232,14 @@ ${extraSystem}` : resolvedSystemPrompt;
       cancelledLaunchRef.current.delete(id);
     }
   }, [prepareRun, persistence, updateMessages, bindContinuation, endDraftSend]);
-  const send = useCallback11(
+  const send = useCallback12(
     async (text2, opts) => {
       const trimmed = text2.trim();
       if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
       const addressedTo = opts?.addressedTo ?? null;
       const origin = chatId;
       markSending(origin, true);
+      openPending(origin, trimmed, opts?.attachments ?? pendingAttachments);
       let id = chatId;
       const draft = opts?.draft ?? (id == null && chatIdRef.current == null ? drafts?.adopt() : void 0);
       const draftSend = id == null && draft != null ? beginDraftSend(draft) : null;
@@ -27067,6 +27253,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         if (id == null) {
           if (draftSend) endDraftSend(draftSend);
           markSending(origin, false);
+          closePending(origin);
           setLocalError("Could not start a chat.");
           return false;
         }
@@ -27074,6 +27261,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         if (draftSend) draftSend.chat = id;
         markSending(id, true);
         markSending(origin, false);
+        rekeyPending(origin, id);
       }
       const runChatId = id;
       const stillOpen = () => chatIdRef.current === runChatId || chatIdRef.current === origin;
@@ -27088,6 +27276,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         updateMessages(id, (prev) => [...prev, userMsg]);
+        closePending(id);
         onActivity?.(id);
         if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
@@ -27117,6 +27306,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         });
         return true;
       } catch (e) {
+        closePending(id);
         if (!given) composer.restore(attachments);
         if (stillOpen()) setLocalError(e instanceof Error ? e.message : "Send failed");
         return false;
@@ -27124,16 +27314,17 @@ ${extraSystem}` : resolvedSystemPrompt;
         cancelledLaunchRef.current.delete(runChatId);
         if (draftSend) endDraftSend(draftSend);
         markSending(runChatId, false);
+        closePending(runChatId);
       }
     },
-    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, drafts, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, beginDraftSend, endDraftSend]
+    [persistence, chatId, markSending, openPending, closePending, rekeyPending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, drafts, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, beginDraftSend, endDraftSend]
   );
-  const replyToTrailingTurn = useCallback11((id, last) => {
+  const replyToTrailingTurn = useCallback12((id, last) => {
     setLocalError("");
     void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
   }, [messages, buildRequest, launch]);
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
-  const retryLastTurn = useCallback11(() => {
+  const retryLastTurn = useCallback12(() => {
     if (chatId == null || sendingRef.current.has(chatId) || isLive(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
@@ -27145,7 +27336,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
-  const rateMessage = useCallback11(async (msg, rating) => {
+  const rateMessage = useCallback12(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messagesRef.current, msg.id);
     const localVerdict = localRatingVerdict(messagesRef.current, msg.id, rating, chatId);
@@ -27159,15 +27350,15 @@ ${extraSystem}` : resolvedSystemPrompt;
     } catch {
     }
   }, [persistence, chatId]);
-  const resolveConfirm = useCallback11((ok) => {
+  const resolveConfirm = useCallback12((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = useCallback11(() => {
+  const clearError = useCallback12(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = useCallback11((draft) => stopConversation(chatId, draft), [chatId, stopConversation]);
-  const buildTriageReport = useCallback11(
+  const stop = useCallback12((draft) => stopConversation(chatId, draft), [chatId, stopConversation]);
+  const buildTriageReport = useCallback12(
     (agentLabel, surface2) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -27180,12 +27371,17 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [chatId, messages, localError, snapshot.error, model]
   );
-  const contextUsage = useMemo6(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
+  const contextUsage = useMemo7(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
   return {
     messages,
+    pendingTurn: pending.pendingTurn,
+    announceTurn,
+    servedBy: snapshot.servedBy,
     loadingMessages,
     reloadMessages,
-    sending: localSending || isLive(chatId),
+    // A turn that is only announced (its host's pre-send stage is running) already counts as in flight: the transcript shows
+    // the same waiting row it shows between turns from the moment the person submits.
+    sending: localSending || isLive(chatId) || pending.pendingTurn != null,
     runLive: isLive(chatId),
     error: localError || snapshot.error,
     /** What the user can DO about `error` (reconnect / upgrade / add a card), when
@@ -27364,6 +27560,16 @@ function createBrainRestPersistence(opts) {
       return signedBrainFileUrl(baseUrl, key, signed);
     }
   };
+}
+
+// src/servedModelLabel.ts
+function servedModelLabel(model) {
+  const parsed = parseLocalModelRef(model ?? void 0);
+  if (!parsed) return { name: void 0, onDevice: false, hostedFromHere: false };
+  const onDevice2 = runsOnDevice(model ?? void 0);
+  const catalogued = localCatalogModel(model)?.label;
+  const lastSegment = parsed.model.split("/").filter(Boolean).pop() ?? parsed.model;
+  return { name: catalogued ?? lastSegment, onDevice: onDevice2, hostedFromHere: !onDevice2 };
 }
 
 // src/chatStateReads.ts
@@ -27757,6 +27963,7 @@ var DEFAULT_MODEL_CHOICE_LABELS = {
   configuredDetail: "Saved workspace LLM configuration",
   categoryLocal: "On this device",
   localDetail: "Runs on this machine via {runtime} \u2014 no plan usage, works offline.",
+  hostedTip: "Sent to {vendor} with your own account from this machine. The model does not run here.",
   evermindLabel: "Project Evermind",
   evermindDetail: "Your project's own learned Evermind model."
 };
@@ -27805,13 +28012,15 @@ function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
   ];
   const normalized = (value) => typeof value === "string" ? { id: value } : value;
   const seen = /* @__PURE__ */ new Set();
-  const add = (id, label, detail, category) => {
+  const add = (id, label, detail, category, title) => {
     if (!id || seen.has(id)) return;
     seen.add(id);
-    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
+    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id }, ...title ? { title } : {} });
   };
+  const hosted = [];
   for (const model of options.local ?? []) {
-    add(model.id, model.label, labels.localDetail.replace("{runtime}", model.runtime), "local");
+    if (runsOnDevice(model.id)) add(model.id, model.label, labels.localDetail.replace("{runtime}", model.runtime), "local");
+    else hosted.push(model);
   }
   for (const value of options.free) {
     const model = normalized(value);
@@ -27828,6 +28037,9 @@ function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
   }
   if (options.byo.length && options.byoPool !== false) {
     items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
+  }
+  for (const model of hosted) {
+    add(model.id, model.label, labels.byoDetail.replace("{vendor}", model.runtime), "byo", labels.hostedTip.replace("{vendor}", model.runtime));
   }
   for (const model of options.byo) {
     add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", byoVendorLabel(model.vendor)), "byo");
@@ -27862,9 +28074,10 @@ function modelInUse(selection, items, labels, effective, identity = DEFAULT_MODE
     }
     const local = parseLocalModelRef(model);
     if (local) {
+      const runtime = localRuntime(local.provider);
       return item ? { name: item.label, detail: item.detail } : {
         name: localCatalogModel(model)?.label ?? local.model,
-        detail: labels.localDetail.replace("{runtime}", localRuntime(local.provider).label)
+        detail: runtime.onDevice ? labels.localDetail.replace("{runtime}", runtime.label) : labels.byoDetail.replace("{vendor}", runtime.label)
       };
     }
     if (!revealsModelId(identity)) return routed;
@@ -28581,7 +28794,7 @@ function isManagerRole(role) {
 }
 
 // src/ui/PromptInput.tsx
-import { useState as useState10 } from "react";
+import { useState as useState11 } from "react";
 import { jsx as jsx4, jsxs } from "react/jsx-runtime";
 var boxStyle = (active) => ({
   display: "flex",
@@ -28646,7 +28859,7 @@ function PromptInput({
   className,
   submitOnEnter = true
 }) {
-  const [focused, setFocused] = useState10(false);
+  const [focused, setFocused] = useState11(false);
   const empty = value.trim().length === 0;
   const canSubmit = !empty && !disabled && !busy;
   const showStop = busy && empty && !!onStop && !!stopLabel;
@@ -28692,22 +28905,22 @@ function withUsageSurface(fetchImpl, surface2) {
 }
 
 // src/useChatTurns.ts
-import { useCallback as useCallback15, useEffect as useEffect13, useRef as useRef13 } from "react";
+import { useCallback as useCallback16, useEffect as useEffect13, useRef as useRef14 } from "react";
 
 // src/doorStop.ts
-import { useCallback as useCallback12, useEffect as useEffect11, useMemo as useMemo7, useRef as useRef10, useState as useState11 } from "react";
+import { useCallback as useCallback13, useEffect as useEffect11, useMemo as useMemo8, useRef as useRef11, useState as useState12 } from "react";
 function useDoorStopMarks(running) {
-  const stoppingRef = useRef10(false);
-  const [, repaint] = useState11(false);
-  const markStopping = useCallback12((on) => {
+  const stoppingRef = useRef11(false);
+  const [, repaint] = useState12(false);
+  const markStopping = useCallback13((on) => {
     stoppingRef.current = on;
     repaint(on);
   }, []);
   useEffect11(() => {
     if (!running && stoppingRef.current) markStopping(false);
   }, [running, markStopping]);
-  const stopEpochs = useRef10(/* @__PURE__ */ new Map());
-  return useMemo7(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
+  const stopEpochs = useRef11(/* @__PURE__ */ new Map());
+  return useMemo8(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
 }
 var stopEpochOf = (marks, key) => marks.stopEpochs.current.get(key) ?? 0;
 function stopDoorTurns(ports, marks, clear) {
@@ -28724,10 +28937,10 @@ function stopDoorTurns(ports, marks, clear) {
 }
 
 // src/turnLanding.ts
-import { useCallback as useCallback14, useRef as useRef12 } from "react";
+import { useCallback as useCallback15, useRef as useRef13 } from "react";
 
 // src/useQueuedTurns.ts
-import { useCallback as useCallback13, useEffect as useEffect12, useMemo as useMemo8, useRef as useRef11, useState as useState12, useSyncExternalStore as useSyncExternalStore2 } from "react";
+import { useCallback as useCallback14, useEffect as useEffect12, useMemo as useMemo9, useRef as useRef12, useState as useState13, useSyncExternalStore as useSyncExternalStore2 } from "react";
 
 // src/draftBinding.ts
 function createDraftBinding() {
@@ -28813,31 +29026,31 @@ function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
 function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff: handOff2, drafts = NO_DRAFTS, landDraft }) {
-  const [queued, setQueued] = useState12([]);
-  const queueRef = useRef11([]);
-  const update = useCallback13((change) => {
+  const [queued, setQueued] = useState13([]);
+  const queueRef = useRef12([]);
+  const update = useCallback14((change) => {
     const next = change(queueRef.current);
     if (next === queueRef.current) return;
     queueRef.current = next;
     setQueued(next);
   }, []);
-  const nextId = useRef11(0);
-  const sendRef = useRef11(send);
+  const nextId = useRef12(0);
+  const sendRef = useRef12(send);
   sendRef.current = send;
-  const textOfRef = useRef11(textOf2);
+  const textOfRef = useRef12(textOf2);
   textOfRef.current = textOf2;
-  const handOffRef = useRef11(handOff2);
+  const handOffRef = useRef12(handOff2);
   handOffRef.current = handOff2;
-  const mayFlushRef = useRef11(mayFlush);
+  const mayFlushRef = useRef12(mayFlush);
   mayFlushRef.current = mayFlush;
-  const landDraftRef = useRef11(landDraft);
+  const landDraftRef = useRef12(landDraft);
   landDraftRef.current = landDraft;
   const draftOnScreen = useSyncExternalStore2(drafts.subscribe, drafts.current, drafts.current);
   const shown = resetKey === null ? draftOnScreen : null;
-  const shownRef = useRef11(shown);
+  const shownRef = useRef12(shown);
   shownRef.current = shown;
-  const runningRef = useRef11(running);
-  const submit = useCallback13((value, opts) => {
+  const runningRef = useRef12(running);
+  const submit = useCallback14((value, opts) => {
     const text2 = turnBody(value, textOfRef.current);
     if (!text2) return false;
     if (!runningRef.current) return false;
@@ -28851,14 +29064,14 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     return true;
   }, [update]);
   runningRef.current = running;
-  const remove = useCallback13((id) => update((current) => current.filter((item) => item.id !== id)), [update]);
-  const clear = useCallback13(() => update((current) => {
+  const remove = useCallback14((id) => update((current) => current.filter((item) => item.id !== id)), [update]);
+  const clear = useCallback14(() => update((current) => {
     const own = (item) => !item.draft || item.draft.token === shownRef.current;
     return current.some(own) ? current.filter((item) => !own(item)) : current;
   }), [update]);
-  const requeue2 = useCallback13((value) => update((current) => [{ id: nextId.current += 1, value }, ...current]), [update]);
-  const pushBack = useCallback13((value) => update((current) => [...current, { id: nextId.current += 1, value }]), [update]);
-  const takeFront = useCallback13(() => {
+  const requeue2 = useCallback14((value) => update((current) => [{ id: nextId.current += 1, value }, ...current]), [update]);
+  const pushBack = useCallback14((value) => update((current) => [...current, { id: nextId.current += 1, value }]), [update]);
+  const takeFront = useCallback14(() => {
     const first = queueRef.current.find((item) => !item.draft);
     if (!first) return void 0;
     update((current) => current.filter((item) => item !== first));
@@ -28869,7 +29082,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     if (mine.length > 0) update((current) => current.filter((item) => item.draft?.token !== token));
     landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft.followUp })), outcome, token);
   }), [drafts, update]);
-  const prev = useRef11({ key: resetKey, running });
+  const prev = useRef12({ key: resetKey, running });
   useEffect12(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
@@ -28878,7 +29091,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     const next = takeFront();
     if (next !== void 0) sendRef.current(next);
   }, [running, resetKey, takeFront]);
-  const heldIn = useRef11(resetKey);
+  const heldIn = useRef12(resetKey);
   useEffect12(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
@@ -28888,20 +29101,20 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     update((current) => current.filter((item) => item.draft));
     handOffRef.current?.(held, from);
   }, [resetKey, update]);
-  const items = useMemo8(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
+  const items = useMemo9(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
   return { items, count: items.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
 }
 
 // src/turnLanding.ts
 function useTurnLanding(ports) {
-  const flights = useRef12(/* @__PURE__ */ new Map());
-  const giveBackAll = useCallback14((turns) => {
+  const flights = useRef13(/* @__PURE__ */ new Map());
+  const giveBackAll = useCallback15((turns) => {
     const { restore: giveBack, join } = ports.current;
     if (!giveBack || turns.length === 0) return;
     if (join && turns.length > 1) giveBack(join(turns));
     else for (const turn of turns) giveBack(turn);
   }, [ports]);
-  const handOff2 = useCallback14((held, from) => {
+  const handOff2 = useCallback15((held, from) => {
     const { textOf: text2, attachmentsOf: attached2, isDirected: directed } = ports.current;
     const back = [];
     const chat = [];
@@ -28912,12 +29125,12 @@ function useTurnLanding(ports) {
     giveBackAll(back);
     if (chat.length > 0 && typeof from === "number") handToChat(from, chat);
   }, [giveBackAll, ports]);
-  const restoreFailed = useCallback14((token, flight) => {
+  const restoreFailed = useCallback15((token, flight) => {
     const turns = [...(flight.owned ?? []).map((send) => send.turn), ...flight.held];
     flights.current.delete(token);
     giveBackAll(turns);
   }, [giveBackAll]);
-  const landDraft = useCallback14((held, outcome, token) => {
+  const landDraft = useCallback15((held, outcome, token) => {
     const flight = flights.current.get(token);
     if (outcome === null) {
       if (!ports.current.restore) return;
@@ -28943,7 +29156,7 @@ function useTurnLanding(ports) {
     if (flight && flight.flying.length > 0) flight.chat = outcome;
     else releaseChat(outcome);
   }, [giveBackAll, ports]);
-  const sendOnce = useCallback14(async (turn) => {
+  const sendOnce = useCallback15(async (turn) => {
     const { send: deliver, runKey: key, drafts: binding } = ports.current;
     if (key !== null || !binding) return deliver(turn);
     const token = binding.begin();
@@ -29003,16 +29216,16 @@ function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
 function useChatTurns({ running, steerable = running, runKey, drafts, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
-  const ports = useRef13({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
+  const ports = useRef14({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
   ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts };
   const marks = useDoorStopMarks(running);
   const { stoppingRef } = marks;
-  const requeueRef = useRef13(() => void 0);
-  const takeFrontRef = useRef13(() => void 0);
-  const flushing = useRef13(/* @__PURE__ */ new Map());
+  const requeueRef = useRef14(() => void 0);
+  const takeFrontRef = useRef14(() => void 0);
+  const flushing = useRef14(/* @__PURE__ */ new Map());
   const flushingIn = (key) => flushing.current.get(key) ?? 0;
   const { handOff: handOff2, landDraft, sendOnce } = useTurnLanding(ports);
-  const flush = useCallback15(async (first) => {
+  const flush = useCallback16(async (first) => {
     const chat = ports.current.runKey;
     flushing.current.set(chat, flushingIn(chat) + 1);
     try {
@@ -29060,7 +29273,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   });
   const shown = useQueueWithWaiting(queued, runKey);
   const { submit: hold, clear, takeFront, pushBack } = queued;
-  const holdForDraft = useCallback15((turn, followUp) => {
+  const holdForDraft = useCallback16((turn, followUp) => {
     const { runKey: key, drafts: binding, running: live2 } = ports.current;
     const token = key === null && live2 ? binding?.current() : null;
     if (token == null || !binding) return false;
@@ -29073,18 +29286,18 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   }, [hold, landDraft]);
   requeueRef.current = queued.requeue;
   takeFrontRef.current = takeFront;
-  const itemsRef = useRef13(shown.items);
+  const itemsRef = useRef14(shown.items);
   itemsRef.current = shown.items;
-  const carriedIds = useRef13(/* @__PURE__ */ new Set());
-  const wasRunning = useRef13(false);
-  const wasSteerable = useRef13(false);
+  const carriedIds = useRef14(/* @__PURE__ */ new Set());
+  const wasRunning = useRef14(false);
+  const wasSteerable = useRef14(false);
   if (running !== wasRunning.current || steerable !== wasSteerable.current) {
     if (running && !wasRunning.current || steerable && !wasSteerable.current) carriedIds.current = new Set(shown.items.map((item) => item.id));
     wasRunning.current = running;
     wasSteerable.current = steerable;
   }
-  const heldThisRun = useCallback15(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
-  const steers = useCallback15((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
+  const heldThisRun = useCallback16(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
+  const steers = useCallback16((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
   useEffect13(() => {
     if (!running || !steerable) return;
@@ -29105,8 +29318,8 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
   }, [running, steerable, remove, runKey]);
-  const stopTurns = useCallback15(() => stopDoorTurns(ports.current, marks, clear), [clear, marks]);
-  const submit = useCallback15(async (turn) => {
+  const stopTurns = useCallback16(() => stopDoorTurns(ports.current, marks, clear), [clear, marks]);
+  const submit = useCallback16(async (turn) => {
     const { steer: route, textOf: text2, isDirected: directed, attachmentsOf: attached2, runKey: key, running: live2 } = ports.current;
     const body = turnBody(turn, text2);
     if (!body) return false;
@@ -29138,7 +29351,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
     }
     return await sendOnce(turn) !== false;
   }, [hold, holdForDraft, stopTurns, takeFront, pushBack, flush, steers, sendOnce]);
-  const queueAfter = useCallback15(async (turn) => {
+  const queueAfter = useCallback16(async (turn) => {
     const { textOf: text2 } = ports.current;
     if (!turnBody(turn, text2)) return false;
     if (holdForDraft(turn, false) || hold(turn)) return true;
@@ -29174,25 +29387,66 @@ function restoreTurn(turn, composer) {
 }
 
 // src/useComposerDraft.ts
-import { useMemo as useMemo9, useRef as useRef14 } from "react";
-function useComposerDraft(input, setInput) {
-  const ref = useRef14(input);
-  ref.current = input;
-  return useMemo9(() => ({
-    draft: () => ref.current,
-    setInput: (next) => {
-      ref.current = typeof next === "function" ? next(ref.current) : next;
-      setInput(next);
+import { useMemo as useMemo10, useRef as useRef15 } from "react";
+function useComposerDraft(inputOrStore, setInput) {
+  const store = typeof inputOrStore === "string" ? null : inputOrStore;
+  const ref = useRef15(typeof inputOrStore === "string" ? inputOrStore : "");
+  if (typeof inputOrStore === "string") {
+    ref.current = inputOrStore;
+  }
+  return useMemo10(() => {
+    if (store) return { draft: store.get, setInput: store.set };
+    return {
+      draft: () => ref.current,
+      setInput: (next) => {
+        ref.current = typeof next === "function" ? next(ref.current) : next;
+        setInput?.(next);
+      }
+    };
+  }, [store, setInput]);
+}
+
+// src/composerDraftStore.ts
+import { useState as useState14, useSyncExternalStore as useSyncExternalStore4 } from "react";
+function createComposerDraftStore(initial = "") {
+  let text2 = initial;
+  const listeners = /* @__PURE__ */ new Set();
+  return {
+    get: () => text2,
+    set(next) {
+      const value = typeof next === "function" ? next(text2) : next;
+      if (value === text2) return;
+      text2 = value;
+      for (const listener of [...listeners]) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     }
-  }), [setInput]);
+  };
+}
+function useComposerDraftStore(initial = "") {
+  return useState14(() => createComposerDraftStore(initial))[0];
+}
+function useDraftSelector(store, select) {
+  return useSyncExternalStore4(store.subscribe, () => select(store.get()), () => select(store.get()));
+}
+function useDraftText(store) {
+  return useSyncExternalStore4(store.subscribe, store.get, store.get);
+}
+var isBlank = (text2) => text2.trim().length === 0;
+function useDraftIsEmpty(store) {
+  return useDraftSelector(store, isBlank);
 }
 
 // src/useRunRefreshTick.ts
-import { useEffect as useEffect14, useRef as useRef15, useState as useState13 } from "react";
+import { useEffect as useEffect14, useRef as useRef16, useState as useState15 } from "react";
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
-  const [tick, setTick] = useState13(0);
-  const wasRunning = useRef15(running);
+  const [tick, setTick] = useState15(0);
+  const wasRunning = useRef16(running);
   useEffect14(() => {
     if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
@@ -29204,19 +29458,19 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback16, useEffect as useEffect15, useRef as useRef16, useState as useState14 } from "react";
+import { useCallback as useCallback17, useEffect as useEffect15, useRef as useRef17, useState as useState16 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
-  const chatIdRef = useRef16(chatId);
+  const chatIdRef = useRef17(chatId);
   chatIdRef.current = chatId;
-  const createRef = useRef16(create);
+  const createRef = useRef17(create);
   createRef.current = create;
-  const autoTitleRef = useRef16(autoTitle);
+  const autoTitleRef = useRef17(autoTitle);
   autoTitleRef.current = autoTitle;
-  const captureRef = useRef16(onCaptureOriginalRequest);
+  const captureRef = useRef17(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
-  const [drafts] = useState14(createDraftBinding);
-  const creations = useRef16(/* @__PURE__ */ new Map());
-  const resolved = useRef16(/* @__PURE__ */ new Set());
+  const [drafts] = useState16(createDraftBinding);
+  const creations = useRef17(/* @__PURE__ */ new Map());
+  const resolved = useRef17(/* @__PURE__ */ new Set());
   useEffect15(() => {
     if (chatId == null) return;
     for (const token of resolved.current) creations.current.delete(token);
@@ -29229,7 +29483,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
       resolved.current.delete(token);
     }
   }), [drafts]);
-  const ensureChatId = useCallback16((draft) => {
+  const ensureChatId = useCallback17((draft) => {
     const answered2 = draft === void 0 ? void 0 : drafts.outcomeOf(draft);
     if (typeof answered2 === "number") return Promise.resolve(answered2);
     const open = chatIdRef.current;
@@ -29261,7 +29515,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     creations.current.set(token, mine);
     return mine;
   }, [drafts]);
-  const onFirstUserTurn = useCallback16(async (id, firstUserText) => {
+  const onFirstUserTurn = useCallback17(async (id, firstUserText) => {
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
@@ -29439,6 +29693,7 @@ export {
   createBfiWorkerEngine,
   createBrainRestPersistence,
   createBrowserEngineProber,
+  createComposerDraftStore,
   createComposingActivity,
   createDraftBinding,
   createEngineWorker,
@@ -29666,6 +29921,7 @@ export {
   serializeAskUser,
   serveEngineWorker,
   servePageEngines,
+  servedModelLabel,
   serverChatIdOf,
   setLastResolvedModel,
   setMcpToolStatus,
@@ -29728,6 +29984,10 @@ export {
   useChatCreation,
   useChatTurns,
   useComposerDraft,
+  useComposerDraftStore,
+  useDraftIsEmpty,
+  useDraftSelector,
+  useDraftText,
   useMcpExtensions,
   useOptionalBrainContext,
   useQueuedTurns,

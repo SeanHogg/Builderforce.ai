@@ -24,17 +24,26 @@ export type {
 } from './records.js';
 export { commitWriteAndEnqueue, type EnqueueEvent } from './atomicWrite.js';
 export {
+  DEFAULT_COMPACTION_FRAME,
   DEFAULT_JOURNAL_COMPACTION,
-  createJournaledLocalFirstStore,
+  EMPTY_LOCAL_FIRST_SNAPSHOT,
+  JOURNAL_DELTA_MAGIC,
+  JOURNAL_FRAME_MAGIC,
+  crc32,
   decodeJournalFrames,
+  encodeDeltaFrame,
   encodeJournalFrame,
   isLocalFirstSnapshot,
+  readJournalTail,
   scanJournal,
+  scanJournalAsync,
   shouldCompactJournal,
+  snapshotFrames,
+  type CompactionFrameLimits,
   type JournalCompactionPolicy,
-  type JournalIo,
+  type JournalOpenScan,
   type JournalScan,
-  type JournaledLocalFirstStore,
+  type JournalTail,
 } from './journalStore.js';
 export {
   SYNC_LEASE_LOST,

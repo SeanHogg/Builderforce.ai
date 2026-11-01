@@ -1,44 +1,65 @@
 /**
  * The VSIX host's durable local-first store over a directory (G03/G26).
  *
- * Commit boundary for writes this store owns: a transaction is one journal
- * frame (every record and sync event the callback put/appended) fsynced to
- * `local-first-v2.journal` before the promise resolves. `local-first-v1.json`
- * is republished afterwards as a cache. Deleting it does not drop committed
- * rows. A corrupt cache is moved aside and the open continues from the journal.
+ * Commit boundary for writes this store owns: a transaction is one journal frame — a
+ * delta of just the rows (and sync events) the callback put/appended — fsynced to
+ * `local-first-v3.journal` before the promise resolves. A commit costs O(rows it changed);
+ * it never exports, encodes or listens to the whole store. `local-first-v1.json` is a cache
+ * written only by `flush()`: deleting it does not drop committed rows, and a corrupt one
+ * is moved aside.
  *
- * Every commit runs under the cross-process file lock (`localFirstLock.ts`),
- * and first reloads the journal when another window committed since this
- * process last saw it — so a commit never lands on a stale snapshot. The
- * journal is compacted to one frame on the shared `shouldCompactJournal`
- * policy.
+ * Every commit runs under the cross-process file lock (`localFirstLock.ts`) and first
+ * catches up with whatever another window committed since this process last saw the
+ * journal — a positional read of the new tail, applied as deltas (`localFirstJournalIo.ts`).
+ * Only a different file (another window compacted) costs a full reload. The journal's tail
+ * is compacted on the shared `shouldCompactJournal` policy, OFF the commit path: after a
+ * commit resolves, a compaction is queued on the same serial queue and writes the store as
+ * a stream of small frames, giving the thread back between them.
  *
- * No `vscode` import: `bootVsixHost` opens the same store over a plain
- * directory, and `createVsCodeLocalFirstStore` over global storage.
+ * No `vscode` import: `bootVsixHost` opens the same store over a plain directory, and
+ * `createVsCodeLocalFirstStore` over global storage.
  */
 
 import nodeFs from "node:fs";
 import nodePath from "node:path";
 import {
+  EMPTY_LOCAL_FIRST_SNAPSHOT,
   INDEXEDDB_REDACTION_RULE,
   createMemoryLocalFirstStore,
+  encodeDeltaFrame,
   encodeJournalFrame,
   redactSnapshotForUploadOrLog,
+  resetDeltaOf,
   shouldCompactJournal,
+  snapshotFrames,
   type JournalCompactionPolicy,
+  type LocalFirstDelta,
+  type LocalFirstListener,
   type LocalFirstSnapshot,
   type LocalFirstStore,
+  type MemoryLocalFirstStore,
 } from "@builderforce/local-first";
 import { createLocalFirstFileLock, type LocalFirstFileLockOptions } from "./localFirstLock";
-import { createNodeJournalIo, sameStamp, type FileStamp } from "./localFirstJournalIo";
-import { planSnapshotLoad, snapshotHasState } from "./localFirstSnapshotFile";
+import { createNodeJournalIo, yieldToEventLoop, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import {
+  checkSnapshotCache,
+  hasLegacyState,
+  readLegacyJournal,
+  readSnapshotCache,
+  removeOrphanedTemporaries,
+  retireSnapshotCache,
+} from "./localFirstMigration";
+import { snapshotHasState } from "./localFirstSnapshotFile";
 
 const fs = nodeFs.promises;
 
 export const SNAPSHOT_FILE = "local-first-v1.json";
 export const LOCK_FILE = "local-first-v1.lock";
 
-/** Journal-backed store. `local-first-v1.json` is a republished cache, not the commit. */
+/** A commit slower than this is reported through `onSlowCommit`. */
+const SLOW_COMMIT_MS = 250;
+
+/** Journal-backed store. `local-first-v1.json` is a cache written by `flush()`, not the commit. */
 export interface DurableLocalFirstStore extends LocalFirstStore {
   flush(): Promise<void>;
   readonly snapshotFile: string;
@@ -62,8 +83,10 @@ export interface DurableLocalFirstStoreOptions {
   /** Overrides the shared compaction thresholds (tests). */
   compaction?: Partial<JournalCompactionPolicy>;
   lock?: LocalFirstFileLockOptions;
-  /** A cache republish or a compaction failed after the commit was durable. Default `console.warn`. */
+  /** A cache write or a compaction failed after the commit was durable. Default `console.warn`. */
   onBackgroundError?: (error: unknown) => void;
+  /** A commit took longer than 250 ms: how long, and the size of the frame it appended. */
+  onSlowCommit?: (ms: number, frameBytes: number) => void;
 }
 
 export function createDurableLocalFirstStore(
@@ -76,91 +99,139 @@ export function createDurableLocalFirstStore(
   const beforeWrite = options.beforeWrite ?? Promise.resolve();
   const onBackgroundError = options.onBackgroundError
     ?? ((error: unknown) => console.warn("local-first: background write failed", error));
-  const listeners = new Set<() => void>();
-  let memory = createMemoryLocalFirstStore();
-  let durable: LocalFirstSnapshot | undefined;
+  const listeners = new Set<LocalFirstListener>();
+  let quiet = false;
   let opened: Promise<void> | undefined;
   let tail: Promise<unknown> = Promise.resolve();
-  let republished: Promise<void> = Promise.resolve();
   let inTransaction = false;
   let commitGeneration = 0;
-  let peeked: FileStamp | undefined;
+  let dirty = false;
+  let lastFrameBytes = 0;
 
-  const readLegacySnapshot = async (): Promise<LocalFirstSnapshot | undefined> => {
-    let text: string;
+  /** The delta applied to the memory store's own rows — the state a first frame must hold. */
+  const snapshotAfter = (delta: LocalFirstDelta): LocalFirstSnapshot => {
+    const draft = createMemoryLocalFirstStore(memory.view());
+    draft.applyDelta(delta);
+    return draft.view();
+  };
+
+  const memory: MemoryLocalFirstStore = createMemoryLocalFirstStore(undefined, {
+    // The commit boundary: the memory store publishes the commit only after this resolves.
+    onCommit: async (delta) => {
+      // An empty journal opens with a whole-snapshot frame (a base); every later commit is a delta.
+      const frame = io.frames() === 0 ? encodeJournalFrame(snapshotAfter(delta)) : encodeDeltaFrame(delta);
+      lastFrameBytes = frame.byteLength;
+      await io.append(frame);
+    },
+  });
+  memory.subscribe((change) => {
+    if (quiet) return;
+    for (const listener of [...listeners]) listener(change);
+  });
+
+  /** Adopt a loaded journal as the store's state. `silent` for the open, which nobody is waiting on. */
+  const adopt = (loaded: LoadedJournal, silent: boolean): void => {
+    io.adopt(loaded);
+    replaceMemory(loaded.latest ?? EMPTY_LOCAL_FIRST_SNAPSHOT, silent);
+  };
+
+  const replaceMemory = (snapshot: LocalFirstSnapshot, silent: boolean): void => {
+    quiet = silent;
     try {
-      text = await fs.readFile(snapshotFile, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw error;
+      memory.applyDelta(resetDeltaOf(snapshot));
+    } finally {
+      quiet = false;
     }
-    // The snapshot is a derived cache / one-way legacy import, not the record (the
-    // journal is). A corrupt copy is MOVED aside — kept whole, exportable — and the
-    // open continues from the journal. Throwing here would fail every later open too,
-    // locking the person out of their local store over a cache file.
-    const plan = planSnapshotLoad(text, snapshotFile, Date.now());
-    if (plan.action === "preserve") {
-      await fs.rename(snapshotFile, plan.recoveryPath);
-      return undefined;
-    }
-    return plan.snapshot;
   };
 
-  /** Load the journal's committed state into memory. */
-  const load = async (): Promise<void> => {
-    const { latest } = await io.open();
-    durable = latest;
-    memory = createMemoryLocalFirstStore(durable);
+  /**
+   * First open with no v3 journal and an older store to bring over. UNDER THE LOCK: two
+   * windows can open at once, and the loser must find the winner's v3 rather than write its
+   * own. v2 is only read; v3 is written as a stream of frames; the JSON cache of v2's state is
+   * set aside so it is never parsed again.
+   */
+  const importLegacy = async (): Promise<void> => {
+    await fs.mkdir(directory, { recursive: true });
+    await lock.acquire();
+    try {
+      const raced = await io.load(yieldToEventLoop);
+      if (raced.latest) {
+        adopt(raced, true);
+        return;
+      }
+      const fromJournal = await readLegacyJournal(directory, yieldToEventLoop);
+      const source = fromJournal ?? await readSnapshotCache(snapshotFile);
+      if (source && snapshotHasState(source)) {
+        await io.compact(snapshotFrames(source, yieldToEventLoop));
+        replaceMemory(source, true);
+      } else {
+        adopt(raced, true);
+      }
+      if (fromJournal) await retireSnapshotCache(snapshotFile);
+    } finally {
+      await lock.release();
+    }
   };
 
+  const openStore = async (): Promise<void> => {
+    const loaded = await io.load(yieldToEventLoop);
+    if (loaded.latest) {
+      adopt(loaded, true);
+      // The journal is the record, so the cache is not imported — but a small corrupt cache
+      // is still moved aside here. Failing to do so must not fail the open.
+      await checkSnapshotCache(snapshotFile).catch(onBackgroundError);
+    } else if (await hasLegacyState(directory, snapshotFile)) {
+      await importLegacy();
+    } else {
+      adopt(loaded, true);
+    }
+    await removeOrphanedTemporaries(directory);
+  };
+
+  /** Never call this while holding the lock: an import takes it. */
   const ensureOpen = (): Promise<void> => {
-    opened ??= (async () => {
-      const { latest } = await io.open();
-      if (latest) {
-        // The journal is the record, so the cache is not imported — but a corrupt
-        // cache is still moved aside here, not left for an older reader to open.
-        // Failing to move it must not fail the open: the journal already loaded.
-        await readLegacySnapshot().catch(onBackgroundError);
-      }
-      const legacy = latest ?? await readLegacySnapshot();
-      if (!latest && legacy && snapshotHasState(legacy)) {
-        await io.append(encodeJournalFrame(legacy));
-      }
-      durable = legacy && (latest || snapshotHasState(legacy)) ? legacy : undefined;
-      memory = createMemoryLocalFirstStore(durable);
-    })().catch((error: unknown) => {
+    opened ??= openStore().catch((error: unknown) => {
       opened = undefined;
       throw error;
     });
     return opened;
   };
 
-  /**
-   * Under the lock: another window committed since this process last saw the
-   * journal, so reload before committing on top of it.
-   */
-  const refreshForCommit = async (): Promise<void> => {
-    await ensureOpen();
-    if (await io.changedSinceSeen()) await load();
+  const applyTail = (read: Extract<TailRead, { kind: "deltas" }>): void => {
+    for (const delta of read.deltas) memory.applyDelta(delta);
+    io.advance(read);
   };
 
   /**
-   * Lock-free readers see another window's commits too. A read never moves the
-   * journal's tracked prefix (`peek`), never waits on a running commit, and
-   * discards its reload if a commit started or landed meanwhile — the commit's
-   * own refresh is the authoritative one.
+   * Under the lock: another window committed since this process last saw the journal, so
+   * catch up before committing on top of it — its new frames, or a reload if it compacted.
+   */
+  const refreshForCommit = async (): Promise<void> => {
+    const read = await io.readTail();
+    if (read.kind === "deltas") applyTail(read);
+    else if (read.kind === "reload") adopt(await io.load(yieldToEventLoop), false);
+  };
+
+  /**
+   * Lock-free readers see another window's commits too. A read never waits on a running
+   * commit, never truncates, and discards what it read if a commit started or landed (or
+   * another read overtook it) meanwhile — the commit's own refresh is the authoritative one.
    */
   const refreshForRead = async (): Promise<void> => {
     await ensureOpen();
     if (inTransaction) return;
-    const current = await io.currentStamp();
-    if (sameStamp(current, io.seenStamp()) || sameStamp(current, peeked)) return;
     const generation = commitGeneration;
-    const view = await io.peek();
-    if (inTransaction || generation !== commitGeneration) return;
-    peeked = view.stamp;
-    durable = view.latest;
-    memory = createMemoryLocalFirstStore(durable);
+    const epoch = io.epoch();
+    const stale = (): boolean => inTransaction || generation !== commitGeneration || epoch !== io.epoch();
+    const read = await io.readTail();
+    if (read.kind === "unchanged" || stale()) return;
+    if (read.kind === "deltas") {
+      applyTail(read);
+      return;
+    }
+    const loaded = await io.load(yieldToEventLoop);
+    if (stale()) return;
+    adopt(loaded, false);
   };
 
   const serialized = <T,>(work: () => Promise<T>): Promise<T> => {
@@ -169,12 +240,40 @@ export function createDurableLocalFirstStore(
     return run;
   };
 
-  const republish = async (): Promise<void> => {
-    const snapshot = await memory.export();
+  /** Run `work` as the lock holder, with lock-free readers held off. */
+  const exclusive = async <T,>(work: () => Promise<T>): Promise<T> => {
+    await ensureOpen();
+    await fs.mkdir(directory, { recursive: true });
+    await lock.acquire();
+    inTransaction = true;
+    commitGeneration += 1;
+    try {
+      await refreshForCommit();
+      return await work();
+    } finally {
+      inTransaction = false;
+      await lock.release();
+    }
+  };
+
+  /**
+   * Fold the tail into a new base. Queued behind the commit that tripped the policy, never
+   * inside it: the commit has already resolved. Re-checks the policy after catching up,
+   * because another window may have compacted first.
+   */
+  const scheduleCompaction = (): void => {
+    if (!shouldCompactJournal(io.tail(), options.compaction)) return;
+    void serialized(() => exclusive(async () => {
+      if (!shouldCompactJournal(io.tail(), options.compaction)) return;
+      await io.compact(snapshotFrames(memory.view(), yieldToEventLoop));
+    })).catch(onBackgroundError);
+  };
+
+  const writeCache = async (): Promise<void> => {
     const temporary = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`;
     try {
       await fs.mkdir(directory, { recursive: true });
-      await fs.writeFile(temporary, JSON.stringify(snapshot), { encoding: "utf8", flag: "wx" });
+      await fs.writeFile(temporary, JSON.stringify(memory.view()), { encoding: "utf8", flag: "wx" });
       await fs.rename(temporary, snapshotFile);
     } catch (error) {
       await fs.rm(temporary, { force: true });
@@ -190,38 +289,17 @@ export function createDurableLocalFirstStore(
       return memory.read(work);
     },
     transact(work) {
-      return serialized(async () => {
-        await fs.mkdir(directory, { recursive: true });
-        await lock.acquire();
-        inTransaction = true;
-        commitGeneration += 1;
-        try {
-          await refreshForCommit();
-          await beforeWrite;
-          let result: Awaited<ReturnType<typeof work>>;
-          let next: LocalFirstSnapshot;
-          try {
-            result = await memory.transact(work);
-            next = await memory.export();
-            await io.append(encodeJournalFrame(next));
-          } catch (error) {
-            memory = createMemoryLocalFirstStore(durable);
-            throw error;
-          }
-          durable = next;
-          if (shouldCompactJournal({ frames: io.frames(), bytes: await io.size() }, options.compaction)) {
-            // The commit is already durable; a failed compaction leaves a longer journal, not a lost write.
-            await io.replace(encodeJournalFrame(next)).catch(onBackgroundError);
-          }
-          for (const listener of [...listeners]) listener();
-          const pending = republished.then(() => republish()).catch(onBackgroundError);
-          republished = pending;
-          return result;
-        } finally {
-          inTransaction = false;
-          await lock.release();
-        }
-      });
+      return serialized(() => exclusive(async () => {
+        await beforeWrite;
+        const started = Date.now();
+        lastFrameBytes = 0;
+        const result = await memory.transact(work);
+        if (lastFrameBytes > 0) dirty = true;
+        const elapsed = Date.now() - started;
+        if (elapsed > SLOW_COMMIT_MS) options.onSlowCommit?.(elapsed, lastFrameBytes);
+        scheduleCompaction();
+        return result;
+      }));
     },
     async export() {
       await refreshForRead();
@@ -236,8 +314,15 @@ export function createDurableLocalFirstStore(
       return () => listeners.delete(listener);
     },
     async flush() {
-      await tail;
-      await republished;
+      // A compaction queued by the last commit is part of "everything settled".
+      let settled: Promise<unknown>;
+      do {
+        settled = tail;
+        await settled;
+      } while (settled !== tail);
+      if (!dirty) return;
+      dirty = false;
+      await writeCache().catch(onBackgroundError);
     },
   };
   return store;

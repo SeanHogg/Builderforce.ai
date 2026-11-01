@@ -17,7 +17,7 @@
  * second one.
  */
 
-import type { JournalOperation, LocalFirstTransaction, LocalRecord, ServerMapping } from '@builderforce/local-first';
+import { selectPending, type JournalOperation, type LocalFirstTransaction, type LocalRecord, type ServerMapping } from '@builderforce/local-first';
 
 /** The version a sign-in binding records: a server chat exists, nothing was imported. */
 export const BOUND_ONLY_VERSION = 0;
@@ -45,7 +45,7 @@ export function isImported(mapping: ServerMapping | undefined): boolean {
  * version the newer write supersedes (and then conflict with it).
  */
 async function dropPending(tx: LocalFirstTransaction, record: LocalRecord): Promise<void> {
-  const stale = (await tx.pending()).filter((event) => event.clientEntityId === record.id && event.entityType === record.entityType);
+  const stale = await selectPending(tx, (event) => event.clientEntityId === record.id && event.entityType === record.entityType);
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
 

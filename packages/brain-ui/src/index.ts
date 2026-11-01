@@ -239,6 +239,7 @@ export type {
 
 export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
+export { OriginalRequest } from './chatTickets/OriginalRequest';
 export type { ChatTicketsExtension } from './chatTickets/types';
 // The chat↔ticket REST client, ONE implementation. The web app and the VS Code
 // webview each carried a hand-written copy, and the VSIX one had lost the run’s

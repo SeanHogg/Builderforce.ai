@@ -320,5 +320,6 @@ export function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void
   c.byoUnresolved = snapshot.byoUnresolved;
   c.providerCap = snapshot.providerCap;
   c.turn = snapshot.turn ?? null;
+  c.servedBy = snapshot.servedBy ?? null;
   emit(c);
 }

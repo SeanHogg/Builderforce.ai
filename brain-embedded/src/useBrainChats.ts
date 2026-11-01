@@ -112,6 +112,9 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   // first-turn hook can fire twice (StrictMode / rapid re-render) and the record is
   // write-once, so a repeat must not re-issue the PATCH.
   const originalRequestCapturedRef = useRef<Set<number>>(new Set());
+  // The request shown on a chat's row while its write is in flight: a list re-read that lands first (the first turn's
+  // `onActivity`) would otherwise put the blank server value back over it until the write completes.
+  const pendingRequestRef = useRef<Map<number, string>>(new Map());
 
   // Controlled when the caller passes `activeChatId` (even null); otherwise the
   // hook owns the selection. Either way `setActiveChatId` is the single mutation
@@ -149,7 +152,10 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
               ? { projectId: filterProjectId }
               : undefined;
       const list = await persistence.listChats(params);
-      setChats(list);
+      const shown = pendingRequestRef.current;
+      setChats(shown.size === 0
+        ? list
+        : list.map((c) => (shown.has(c.id) && !c.originalRequest?.trim() ? { ...c, originalRequest: shown.get(c.id) } : c)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load chats');
     } finally {
@@ -276,8 +282,10 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
    * once per chat, and a chat that already has a non-blank `originalRequest` is skipped
    * outright, so a remount, a second host, or a chat whose capture already succeeded
    * cannot overwrite the record. Failures are best-effort (the guard is released so the
-   * next first-turn can retry) and the write is optimistic in state but authoritative in
-   * what it stores: the server's value is what lands in the row.
+   * next first-turn can retry) and the write is optimistic in state - the row shows the request
+   * BEFORE the write returns, so the rail's "Original request" appears with the first message - but
+   * authoritative in what it stores: the server's value is what lands in the row, and a refused write
+   * puts the row back as it was.
    */
   const captureOriginalRequest = useCallback(async (id: number, text: string) => {
     if (originalRequestCapturedRef.current.has(id)) return;
@@ -287,15 +295,22 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     // Already captured (another host, a remount, or a seeded chat) — leave it be.
     if (chat?.originalRequest?.trim()) return;
     originalRequestCapturedRef.current.add(id);
+    const before = chat?.originalRequest;
+    pendingRequestRef.current.set(id, request);
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, originalRequest: request } : c)));
     try {
       const updated = await persistence.updateChat(id, { originalRequest: request });
+      pendingRequestRef.current.delete(id);
       setChats((prev) =>
         prev.map((c) => (c.id === id ? { ...c, originalRequest: updated.originalRequest ?? request } : c)),
       );
     } catch {
       // Best-effort — a failed capture leaves the column NULL and is retried on the
-      // next first turn; the chat itself is unaffected either way.
+      // next first turn; the chat itself is unaffected either way. The row goes back to what it
+      // held (only if it still shows OUR request - a newer value from the server is left alone).
+      pendingRequestRef.current.delete(id);
       originalRequestCapturedRef.current.delete(id);
+      setChats((prev) => prev.map((c) => (c.id === id && c.originalRequest === request ? { ...c, originalRequest: before } : c)));
     }
   }, [persistence]);
 

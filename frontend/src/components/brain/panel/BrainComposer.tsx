@@ -4,7 +4,7 @@ import {
   PersonaPicker, RecipientPicker, stringsFrom,
   DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS,
 } from '@seanhogg/builderforce-brain-ui';
-import { lastServedModel, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { lastServedModel, useDraftText, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { ChatInput } from '@/components/ChatInput';
 import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
 import { useSpendPreviewPicksOnSettle } from '@/lib/workspace/previewPick';
@@ -46,8 +46,7 @@ export function BrainComposer() {
   const {
     chats,
     conv,
-    input,
-    setInput,
+    draftStore,
     handleSend,
     handleQueueAfter,
     sendSteers,
@@ -78,6 +77,8 @@ export function BrainComposer() {
     ctxProjectId,
   } = useBrainPanel();
   const tBrain = useTranslations('brain');
+  // The box's text is read HERE only: the panel above does not re-render per key.
+  const input = useDraftText(draftStore);
   // The elements picked in a preview ride the turn's context (`useWorkspaceBrainContext`);
   // the turn that carried them spends them.
   useSpendPreviewPicksOnSettle(conv.sending);
@@ -96,7 +97,7 @@ export function BrainComposer() {
   return (
     <ChatInput
       value={input}
-      onChange={setInput}
+      onChange={draftStore.set}
       onSubmit={handleSend}
       // A message typed mid-run steers the run; this is the explicit way to hold it for after.
       onQueue={handleQueueAfter}

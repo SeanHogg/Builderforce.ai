@@ -27,6 +27,7 @@ export function beginRun(c: RunCell, outcomeKey?: RunKey): void {
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
   c.liveTurn = null;
+  c.servedBy = null;
   c.stoppedTurn = null;
   c.turn = null;
   if (typeof outcomeKey === 'number') c.runId = runOutcomeId(outcomeKey, Date.now());

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
+import { createComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useBrainPanelTurns, type BrainPanelTurn } from './useBrainPanelTurns';
 
 /** The shared turn door, stubbed: what it was configured with, and what was offered through it. */
@@ -18,6 +19,7 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async () => {
   restoreTurn: actual.restoreTurn,
   joinRestorableTurns: actual.joinRestorableTurns,
   useComposerDraft: actual.useComposerDraft,
+  createComposerDraftStore: actual.createComposerDraftStore,
   chatDoorLiveness: (conv: { sending: boolean; runLive: boolean }) => ({ running: conv.sending, steerable: conv.runLive }),
   useChatTurns: (options: Record<string, unknown>) => {
     door.options = options;
@@ -43,12 +45,18 @@ function conversation(pending = [notes]) {
 }
 
 function mount(conv: Conv, input = 'fix the build') {
-  const setInput = vi.fn();
+  // The box is a draft store; `setInput` spies on what the hook writes to it, and a rerender's `input` is the person typing (a write the spy does not see).
+  const store = createComposerDraftStore(input);
+  const typeInto = store.set.bind(store);
+  const setInput = vi.spyOn(store, 'set');
   const chooseRecipient = vi.fn();
   const chats = { activeChatId: 7 } as unknown as Chats;
-  const hook = renderHook((props: { conv: Conv; input?: string }) => useBrainPanelTurns({
-    conv: props.conv, chats, recipient: null, chooseRecipient, input: props.input ?? input, setInput, showChatTab: vi.fn(), acceptsHandover: false,
-  }), { initialProps: { conv } as { conv: Conv; input?: string } });
+  const hook = renderHook((props: { conv: Conv; input?: string }) => {
+    if (props.input !== undefined) typeInto(props.input);
+    return useBrainPanelTurns({
+      conv: props.conv, chats, recipient: null, chooseRecipient, draftStore: store, showChatTab: vi.fn(), acceptsHandover: false,
+    });
+  }, { initialProps: { conv } as { conv: Conv; input?: string } });
   return { hook, setInput, chooseRecipient };
 }
 

@@ -10,7 +10,7 @@ import { pricedId } from '@builderforce/local-inference';
 import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { foldSpendSavings, type SpendSavingsSummary, type UsageSlice } from '@builderforce/spend-contract';
 import { isImported } from './journal';
-import { liveRecords } from './records';
+import { scanLive } from './records';
 import { callCostOrUnknown, isOwnKeySpend } from './callCost';
 import type { RunUsageValue } from './usageLedger';
 
@@ -99,10 +99,11 @@ export async function importedUsageIds(
 /** Every chat's ledger rows, by chat client id — one read for a whole chat list. */
 export async function usageRowsByChat(tx: LocalFirstTransaction, deviceId: string): Promise<Map<string, RunUsageValue[]>> {
   const byChat = new Map<string, RunUsageValue[]>();
-  for (const row of await liveRecords<RunUsageValue>(tx, 'usage', deviceId)) {
+  // Scanned, and only each row's payload is copied (the caller owns what it gets back).
+  await scanLive<RunUsageValue>(tx, 'usage', deviceId, (row) => {
     const list = byChat.get(row.payload.clientChatId) ?? [];
-    list.push(row.payload);
+    list.push(structuredClone(row.payload));
     byChat.set(row.payload.clientChatId, list);
-  }
+  });
   return byChat;
 }

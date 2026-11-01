@@ -3,7 +3,8 @@
  * the search box, the funding filter chips (All · Auto · On this device · BYO · Free ·
  * Paid · Configured) and the list.
  *
- * The on-device chip carries two kinds of row. Models a runtime on this machine already
+ * The on-device chip carries two kinds of row (a hosted runtime reached from this machine - Kimi Code - is not one: it is the person's own
+ * account, listed under BYO with a tooltip that says the model does not run here). Models a runtime on this machine already
  * serves (Ollama, Synapse…) are ordinary rows. Models a PAGE engine can run (WebGPU
  * `bfi`, WebLLM) come from the host's local model store with a state each — download,
  * progress, ready, unsupported — and a downloaded one joins the ordinary rows too, so
@@ -126,6 +127,7 @@ export function ModelPane({ model, labels, identity, inUse, inferenceMode, onPic
         role="option"
         aria-selected={item.key === activeKey}
         className={`bf-pmenu__option${item.key === activeKey ? ' is-active' : ''}`}
+        title={item.title}
         onClick={() => pick(item.selection)}
       >
         <span className="bf-pmenu__optName">{item.label}</span>

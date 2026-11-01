@@ -52,6 +52,7 @@ import {
   UNBOUND_DESTINATION,
   destinationKey,
   newLocalRecord,
+  selectRecords,
   type DestinationBinding,
   type EntityDestination,
   type LocalFirstStore,
@@ -263,7 +264,7 @@ function assertStatus(status: string): void {
 
 /** The live (not tombstoned) records of one type. */
 async function live<T>(tx: LocalFirstTransaction, entityType: "project" | "ticket"): Promise<LocalRecord<T>[]> {
-  return (await tx.list<T>(entityType)).filter((record) => !record.deletedAt);
+  return selectRecords<T>(tx, entityType, (record) => !record.deletedAt);
 }
 
 async function projectFor(tx: LocalFirstTransaction, id: string): Promise<LocalProject> {

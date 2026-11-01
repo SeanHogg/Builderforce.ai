@@ -36,7 +36,7 @@ type Steer = (turn: Turn) => boolean;
 
 /** Renders the hook once and returns what it gives the composer, with the pieces a test pokes at. */
 function mount(flags: { sending: boolean; runLive: boolean }, chatId: number | null = 5, input = '') {
-  const conv = { ...flags, pendingAttachments: [], removeAttachment: vi.fn(), restoreAttachments: vi.fn(), send: vi.fn(async () => true), stop: vi.fn() };
+  const conv = { ...flags, pendingAttachments: [], removeAttachment: vi.fn(), restoreAttachments: vi.fn(), send: vi.fn(async () => true), stop: vi.fn(), announceTurn: vi.fn() };
   const setInput = vi.fn();
   const chooseRecipient = vi.fn();
   let api: ReturnType<typeof useChatSend> | undefined;
@@ -164,5 +164,30 @@ describe('Stop reaches only the draft on screen', () => {
     stop(1);
 
     expect(await settles(d1)).toBe(false);
+  });
+});
+
+describe('a sent message shows at SUBMIT, before the pre-send stage', () => {
+  const ports = () => {
+    const { options, conv } = mount({ sending: false, runLive: false }, 5);
+    return { conv, send: options.send as (turn: Turn, ctx?: { draft?: number }) => Promise<boolean>, stop: options.stop as (draft?: number) => void };
+  };
+
+  it('announces the turn in its chat as the door hands it over - not after the limbic fetch', () => {
+    const { conv, send } = ports();
+
+    void send({ text: 'fix the build', recipient: null });
+
+    expect(conv.announceTurn).toHaveBeenCalledWith('fix the build', { chat: 5 });
+  });
+
+  it('withdraws the announcement when a Stop drops the send while it got ready', async () => {
+    const { conv, send, stop } = ports();
+
+    const pending = send({ text: 'fix the build', recipient: null });
+    stop();
+
+    expect(await pending).toBe(true); // put back in the box and reported kept
+    expect(conv.announceTurn).toHaveBeenLastCalledWith(null, { chat: 5 });
   });
 });

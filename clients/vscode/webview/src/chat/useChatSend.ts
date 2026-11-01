@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type ComposerDraftStore, type DirectedRecipient, type DraftBinding, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend, stopReaches, type SendStage } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -30,13 +30,16 @@ async function requestLimbic(text: string): Promise<string> {
   }
 }
 
-export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
+export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
   conv: UseBrainConversation;
   chatId: number | null;
   /** The draft's binding to its creation (`useVsCodeChats().drafts`): turns typed while the first send creates the chat land in THAT chat. */
   drafts?: DraftBinding;
-  input: string;
-  setInput: Dispatch<SetStateAction<string>>;
+  /** The composer's text (`useComposerDraftStore()`): read at call time, so a keystroke never re-renders this hook's host. */
+  draftStore?: ComposerDraftStore;
+  /** For a host whose text is still React state (instead of `draftStore`): the text and its setter. */
+  input?: string;
+  setInput?: Dispatch<SetStateAction<string>>;
   recipient: DirectedRecipient | null;
   /** Point the composer at a participant again (`useRecipientChoice().choose`) - a restored addressed turn keeps its addressee. */
   chooseRecipient: (to: DirectedRecipient | null) => void;
@@ -58,7 +61,8 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   const chatIdRef = useRef(chatId);
   // eslint-disable-next-line react-hooks/refs
   chatIdRef.current = chatId;
-  const composer = useComposerDraft(input, setInput);
+  const composer = useComposerDraft(draftStore ?? input ?? '', setInput);
+  const { announceTurn } = conv;
   useEffect(() => {
     if (sendNonce === 0) return;
     const queued = pendingSendRef.current;
@@ -68,6 +72,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     // A Stop that landed between staging and this commit drops the send like one during the fetch.
     if (queued.stage.stopped) {
       setPreparing(false);
+      announceTurn?.(null, { chat: queued.stage.chat }); // nothing was sent: the announced bubble goes (the words go back to the box)
       // A send from a draft is put back by the door (its token fails: nothing was created) - one restore with whatever was
       // held behind it; any other is put back here and reported kept.
       if (queued.stage.draft === undefined) giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
@@ -86,7 +91,11 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     setPreparing(false);
     // Whether it was kept goes back to the door (the real answer, not an assumed one): a turn that
     // was not kept is restored by whoever sent it - the queue's flush, or `sendOrQueue` below.
-    void sending.then(queued.done);
+    // A send that was not kept leaves nothing on screen: the announced bubble is withdrawn with it.
+    void sending.then((kept) => {
+      if (!kept) announceTurn?.(null, { chat: queued.stage.chat });
+      queued.done(kept);
+    });
     // Keyed only on the nonce: `conv` is read fresh from this render's closure, which
     // already carries the just-set turnLimbic in its system prompt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,12 +117,15 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     const { text, recipient: to, attachments } = m;
     setPreparing(true);
     const startedIn = chatIdRef.current;
+    // On screen at SUBMIT: the bubble and the waiting row show now, not after the (up to 4 s) pre-send fetch below.
+    announceTurn?.(text, { chat: startedIn });
     const stage: SendStage = { chat: startedIn, draft: ctx?.draft, stopped: false };
     stagesRef.current.add(stage);
     const staged = await stageSend({ startedIn, currentChat: () => chatIdRef.current, stopped: () => stage.stopped, fetchBlock: () => requestLimbic(text) });
     if (!staged.ready) {
       stagesRef.current.delete(stage);
       setPreparing(false);
+      announceTurn?.(null, { chat: startedIn }); // stopped, or another chat is showing: this send is not going
       if (staged.why === 'stopped') {
         // Stopped while it got ready: nothing was sent - the words and the files go back to the box, and the
         // Stop has already dropped the queue, so this is the turn's one restore. (From a draft the door does it: below.)
@@ -130,7 +142,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
       pendingSendRef.current = { text, recipient: to, attachments, done, stage };
       setSendNonce((n) => n + 1);
     });
-  }, [setTurnLimbic, giveBack]);
+  }, [setTurnLimbic, giveBack, announceTurn]);
 
   // THE ONE turn door (shared): steer → queue while a run is in flight → send. Calling
   // `conv.send` directly is what lost answers — it refuses while the chat is running and
@@ -221,21 +233,21 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => offer(submitTurn, text, to, attachments), [offer, submitTurn]);
 
   const submit = useCallback(() => {
-    const text = input.trim();
+    const text = composer.draft().trim();
     if (!text) return;
     composer.setInput('');
     sendOrQueue(text, recipient);
-  }, [input, recipient, sendOrQueue, composer]);
+  }, [recipient, sendOrQueue, composer]);
 
   // The explicit "Queue for after": hold the typed message until the run finishes (sent on its falling edge); with no run
   // going it is simply sent. Through THE door (`turns.queueAfter`), never the raw queue: from a draft it is held for the
   // creation of the chat it is typed in, like every other turn.
   const queueAfter = useCallback(() => {
-    const text = input.trim();
+    const text = composer.draft().trim();
     if (!text) return;
     composer.setInput('');
     offer(queueTurnAfter, text, recipient);
-  }, [queueTurnAfter, input, recipient, offer, composer]);
+  }, [queueTurnAfter, recipient, offer, composer]);
 
   // Answering an ask_user card posts the chosen option(s) as the user's next turn.
   const answerQuestion = useCallback((answer: string) => {

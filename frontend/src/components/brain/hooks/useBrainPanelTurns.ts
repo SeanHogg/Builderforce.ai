@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type DirectedRecipient, type DraftBinding } from '@seanhogg/builderforce-brain-embedded';
+import { useCallback, useMemo, useRef } from 'react';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type ComposerDraftStore, type DirectedRecipient, type DraftBinding } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -27,7 +27,7 @@ const turnText = (turn: BrainPanelTurn) => turn.text;
  * held. Also the panel's two ways in that are not typed — a neighbouring surface handing
  * text over (`useDockedComposer`) — and the exam gate every path into a send answers to.
  */
-export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecipient, input, setInput, showChatTab, acceptsHandover }: {
+export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecipient, draftStore, showChatTab, acceptsHandover }: {
   conv: ReturnType<typeof useBrainConversation>;
   chats: ReturnType<typeof useBrainChats>;
   /** The draft's binding to its creation (`useBrainChatStart().drafts`): turns typed while the first send creates the chat land in THAT chat. */
@@ -36,15 +36,15 @@ export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecip
   recipient: DirectedRecipient | null;
   /** Point the composer at a participant again (`useRecipientChoice().choose`). */
   chooseRecipient: (to: DirectedRecipient | null) => void;
-  input: string;
-  setInput: Dispatch<SetStateAction<string>>;
+  /** The composer's text (`useBrainChatStart().draftStore`): read at call time, so a keystroke never re-renders the panel. */
+  draftStore: ComposerDraftStore;
   showChatTab: () => void;
   /** This panel IS the page's chat (docked, no close) — it takes text a neighbour hands it. */
   acceptsHandover: boolean;
 }) {
   // THE one restore (`restoreTurn`): a turn that could not go returns to the box that is showing - text, files,
   // addressee - whichever way it left. The draft is read at call time.
-  const composer = useComposerDraft(input, setInput);
+  const composer = useComposerDraft(draftStore);
   const giveBack = (turn: BrainPanelTurn) => restoreTurn({ text: turn.text, attachments: turn.attachments, recipient: turn.addressedTo }, {
     draft: composer.draft, setInput: composer.setInput, restoreAttachments: conv.restoreAttachments, chooseRecipient,
   });
@@ -119,7 +119,7 @@ export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecip
    * the whole run therefore never leaves its files sitting in the composer.
    */
   const offerBox = useCallback(async (offer: (turn: BrainPanelTurn) => Promise<boolean>) => {
-    const text = input.trim();
+    const text = composer.draft().trim();
     if (!text || !assistantGate.assistantAllowed) return;
     const attachments = [...convRef.current.pendingAttachments];
     for (const a of attachments) convRef.current.removeAttachment(a.key);
@@ -130,7 +130,7 @@ export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecip
     // session) so the user's message is never silently lost.
     const turn: BrainPanelTurn = { text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) };
     if (!(await offer(turn))) giveBackRef.current(turn);
-  }, [assistantGate.assistantAllowed, input, recipient, composer]);
+  }, [assistantGate.assistantAllowed, recipient, composer]);
 
   const handleSend = useCallback(() => offerBox(submitTurn), [offerBox, submitTurn]);
   /** The explicit alternative to steering: hold what is in the box for after the run. */

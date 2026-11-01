@@ -24,7 +24,7 @@ import {
   type ProjectValue,
   type TicketValue,
 } from './records.js';
-import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { newLocalRecord, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 
 export interface CreateLocalProjectInput {
   name: string;
@@ -127,10 +127,10 @@ export function createLocalWork(store: LocalFirstStore): LocalWork {
       return store.transact(async (tx) => {
         const project = await tx.get<ProjectValue>('project', projectId);
         if (!project) projectNotFound();
-        const pending = await tx.pending();
-        const projectCreate = pending.find(
+        const projectCreate = (await selectPending(
+          tx,
           (event) => event.entityType === 'project' && event.clientEntityId === project.id && event.operation === 'create',
-        );
+        ))[0];
         const payload: TicketValue = {
           projectId: project.id,
           title,

@@ -1465,15 +1465,19 @@ function localModelRows(
   const items = buildModelItems(
     { local: localModelOptions(models), byo: [], free: [], plan: [], paid: [] },
     labels,
-  ).filter((item) => item.category === "local");
-  return [
-    { label: modelCategoryLabel("local", labels), kind: vscode.QuickPickItemKind.Separator },
-    ...items.map((item) => ({
-      label: `$(vm) ${item.label}`,
-      detail: item.detail,
-      selection: item.selection,
-    })),
-  ];
+  ).filter((item) => item.category !== "auto");
+  // The builder files each row by where it RUNS (`runsOnDevice`): an engine on this machine under "On this device", a hosted
+  // runtime reached from here (Kimi Code) under the accounts - so a heading per group, as the main picker does.
+  const rows: ModelPickRow[] = [];
+  let tier: ModelCategory | undefined;
+  for (const item of items) {
+    if (item.category !== tier) {
+      tier = item.category;
+      rows.push({ label: modelCategoryLabel(tier, labels), kind: vscode.QuickPickItemKind.Separator });
+    }
+    rows.push({ label: `$(vm) ${item.label}`, detail: item.detail, selection: item.selection });
+  }
+  return rows;
 }
 
 /**

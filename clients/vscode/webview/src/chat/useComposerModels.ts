@@ -74,5 +74,9 @@ export function useComposerModels(
   // shared rule Rovr's options read too.
   const catalogLoaded = composerCatalogLoaded(modelChoices);
 
-  return { catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel };
+  // One identity until something moved: the composer is memoized on it.
+  return useMemo(
+    () => ({ catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel }),
+    [catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel],
+  );
 }

@@ -20,6 +20,7 @@
 import {
   isTerminalExecutionStatus,
   newLocalRecord,
+  selectRecords,
   UNBOUND_DESTINATION,
   type EntityDestination,
   type ExecutionValue,
@@ -158,7 +159,7 @@ export async function recordRunFinished(
 export async function recoverInterruptedRuns(store: LocalFirstStore, deps: RunLifecycleDeps): Promise<InterruptedRun[]> {
   const at = (deps.now?.() ?? new Date()).toISOString();
   const recovered = await store.transact(async (tx) => {
-    const stale = (await tx.list<ExecutionValue>("execution")).filter((record) =>
+    const stale = await selectRecords<ExecutionValue>(tx, "execution", (record) =>
       record.payload.status === "running" || record.payload.status === "queued" || record.payload.status === "awaiting_input",
     );
     for (const run of stale) {

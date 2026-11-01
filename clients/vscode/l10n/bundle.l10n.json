@@ -1065,5 +1065,7 @@
   "BuilderForce reviews folders inside the open workspace.": "BuilderForce reviews folders inside the open workspace.",
   "This folder is not open in the workspace.": "This folder is not open in the workspace.",
   "Only a fact on the linked project can be deleted.": "Only a fact on the linked project can be deleted.",
-  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project."
+  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.",
+  "Sent to {provider} with your own account from this machine. The model does not run here.": "Sent to {provider} with your own account from this machine. The model does not run here.",
+  "Your account": "Your account"
 }

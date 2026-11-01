@@ -19,11 +19,13 @@ import * as vscode from "vscode";
 import {
   createDeviceStoreCoordinatorLease,
   createHttpSyncTransport,
+  type LocalFirstChange,
 } from "@builderforce/local-first";
 import { bindChatHistoryForSync } from "@seanhogg/builderforce-brain-embedded";
 import { getTenantJwt } from "./bfApi";
 import { chatAccountDestination, invalidateServerChatSpend } from "./chatAccount";
 import { getBaseUrl } from "./gateway";
+import { hostLog } from "./hostLog";
 import { installSyncCoordinator } from "./installSyncCoordinator";
 import { localBrainApplication } from "./localFirstStore";
 import { platformFetch, platformPolicy } from "./platformPolicy";
@@ -34,12 +36,6 @@ const HEARTBEAT_MS = 5 * 60_000;
 const DEBOUNCE_MS = 2_000;
 /** The entity types this slice of sync owns. */
 const CHAT_SLICE: ReadonlySet<string> = new Set(["chat", "message", "usage"]);
-
-function hostLog(line: string): void {
-  void import("./errorReporter")
-    .then(({ logLine }) => logLine(line))
-    .catch((error: unknown) => console.warn(line, error));
-}
 
 export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable {
   const local = localBrainApplication(ctx);
@@ -108,14 +104,22 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
 
   // A write that left nothing to send (a pull's cursor, a receipt) triggers nothing — so
   // the sync's own writes cannot loop it. Unbound rows count only for the chat slice: the
-  // pass moves those, while other offline records wait for their own binding.
-  const onStoreChange = (): void => {
+  // pass moves those, while other offline records wait for their own binding. The commit's
+  // change hint says whether the pending queue moved at all (an unknown change counts as
+  // yes); only then is the queue scanned — without cloning an event.
+  const onStoreChange = (change?: LocalFirstChange): void => {
     if (running || policy.allows("synchronize") !== true) return;
+    if (change && !change.events) return;
     const destination = chatAccountDestination();
     if (!destination) return;
-    void local.store.read(async (tx) =>
-      (await tx.pending(destination)).length > 0
-      || (await tx.pending({ kind: "unbound" })).some((event) => CHAT_SLICE.has(event.entityType)))
+    void local.store.read(async (tx) => {
+      let pending = false;
+      await tx.scanPending(() => { pending = true; }, destination);
+      if (!pending) {
+        await tx.scanPending((event) => { if (CHAT_SLICE.has(event.entityType)) pending = true; }, { kind: "unbound" });
+      }
+      return pending;
+    })
       .then((pending) => { if (pending) schedule(); })
       .catch(() => undefined);
   };

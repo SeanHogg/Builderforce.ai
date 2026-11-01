@@ -36,12 +36,20 @@
  * and its wiring live in sibling hooks (`useChatSystemPrompt`, `useChatMemory`,
  * `useTicketRail`, `useChatAudience`, `useChatSend`, `useCopyDiagnostics`,
  * `useSessionActions`, `useHostIntents`) and the presentational pieces beside them.
+ *
+ * ── WHAT RE-RENDERS WHEN ─────────────────────────────────────────────────────────
+ * The composer's text lives in an external draft store (`useComposerDraftStore`), not in this
+ * component's state: a keystroke re-renders the textarea and its typeahead and nothing above
+ * them. A streamed token does re-render this component (it reads the run snapshot), but every
+ * group handed to the memoized transcript, rail and composer is a stable value, so only the
+ * transcript's live row moves.
  */
 
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   useBrainConversation,
   useBrainConfig,
+  useComposerDraftStore,
   effortProfile,
   useToolConfirmationGate,
   reasoningForRun,
@@ -50,7 +58,7 @@ import {
   type ChatRosterAgent,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
-  AiSurface, BrainTimeline, ChatTicketsPanel, PendingQuestionBanner, SpendPill, SurfaceFooter, ToolConfirmBar,
+  AiSurface, BrainTimeline, PendingQuestionBanner, SurfaceFooter, ToolConfirmBar,
   selectPendingAskUser,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from '../authedFetch';
@@ -75,11 +83,10 @@ import { useVsCodeChats } from './useVsCodeChats';
 import { VsCodeChatHeader } from './VsCodeChatHeader';
 import { VsCodeChatHistory } from './VsCodeChatHistory';
 import { VsCodeChatNotices } from './VsCodeChatNotices';
+import { railHasContent, VsCodeChatRail } from './VsCodeChatRail';
 import { VsCodeComposer } from './VsCodeComposer';
 
 const HISTORY_ID = 'bf-chat-history';
-/** Layout only (no colour): the local chat's rail is its spend pill, right-aligned. */
-const LOCAL_RAIL_STYLE = { display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', padding: '4px 8px' } as const;
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
   const t = useMemo(() => makeT(init.labels), [init.labels]);
@@ -107,7 +114,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     persistence: useMemo(() => autoApprovePersistence(autoApproveSetting), [autoApproveSetting]),
     defaultOn: autoApproveSetting,
   });
-  const [input, setInput] = useState('');
+  // The composer's text: an external store, so a keystroke re-renders the textarea and not this surface.
+  const draftStore = useComposerDraftStore();
   const [focusToken, setFocusToken] = useState(0);
   // Stable reference so a keystroke does not hand <BrainTimeline> a fresh `labels` object
   // and defeat its React.memo (every message's markdown re-parsing per character).
@@ -195,17 +203,17 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const rail = useTicketRail({ init, apiReq, serverChatId, chats, persistence, reloadChats, reloadMessages: conv.reloadMessages });
   const { ticketAdapter, ticketRefresh, linkTicket } = rail;
   // A host intent switches chat the way a row does: History closes onto it.
-  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput, reloadChats, linkTicket, t });
+  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput: draftStore.set, reloadChats, linkTicket, t });
 
   // Multi-party chat: who a message goes to (the BRAIN executes; an invited agent/human is
   // talked to), and the live sub-agents a message can steer.
-  const audience = useChatAudience({ ticketAdapter, chatId, serverChatId, messages: conv.messages, ticketRefresh, input, onRoster: setChatRoster });
+  const audience = useChatAudience({ ticketAdapter, chatId, serverChatId, messages: conv.messages, ticketRefresh, draftStore, onRoster: setChatRoster });
   const { participants, liveChildren, mentionable, recipient, chooseRecipient } = audience;
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
   // (`brainRunHost.ts`), not here: runs outlive this view.
   const { queued, submit, queueAfter, stop, answerQuestion, replayMessage, sendSteers } = useChatSend({
-    conv, chatId, drafts, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
+    conv, chatId, drafts, draftStore, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
   });
 
   // The question this chat is BLOCKED on, restated at the composer — one shared predicate,
@@ -231,7 +239,19 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   });
 
   // A starter seeds the box (the person edits and sends it) and hands it focus.
-  const pickStarter = useCallback((prompt: string) => { setInput(prompt); setFocusToken((n) => n + 1); }, []);
+  const pickStarter = useCallback((prompt: string) => { draftStore.set(prompt); setFocusToken((n) => n + 1); }, [draftStore]);
+
+  // The groups the memoized composer and rail are handed: one identity until what is in them moves, so a streamed token
+  // (which re-renders this component) leaves them alone.
+  const modeControl = useMemo(() => ({ value: chatMode, onChange: selectMode }), [chatMode, selectMode]);
+  const memoryControl = useMemo(() => ({ enabled: memoryEnabled, onChange: setMemoryEnabled }), [memoryEnabled, setMemoryEnabled]);
+  const autoModeControl = useMemo(() => ({ enabled: autoApprove, onChange: setAutoApproveMode }), [autoApprove, setAutoApproveMode]);
+  const onNewChat = useCallback(() => openChat(null), [openChat]);
+  const copyControl = useMemo(
+    () => ({ state: copyState, enabled: canCopy, onCopy: () => void copyTranscript() }),
+    [copyState, canCopy, copyTranscript],
+  );
+  const historyControl = useMemo(() => ({ open: historyOpen, onToggle: toggleHistory, controls: HISTORY_ID }), [historyOpen, toggleHistory]);
 
   return (
     <AiSurface
@@ -240,44 +260,35 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       header={(
         <VsCodeChatHeader
           running={conv.sending}
-          copy={{ state: copyState, enabled: canCopy, onCopy: () => void copyTranscript() }}
-          history={{ open: historyOpen, onToggle: toggleHistory, controls: HISTORY_ID }}
-          onNewChat={() => openChat(null)}
+          copy={copyControl}
+          history={historyControl}
+          onNewChat={onNewChat}
           bundle={init.labels}
           version={init.extensionVersion}
           // Only where the board is not drawn above the chat (the sidebar view).
           onVisualize={init.boardBeside ? () => post('visualization.open') : undefined}
         />
       )}
-      rail={chatId != null && !historyOpen && (serverChatId == null ? (
-        // A chat only on this machine has no platform rail — its spend, folded on the
-        // device from its run usage ledger, still shows (PRD 36).
-        activeChat?.spend && <div style={LOCAL_RAIL_STYLE}>
-          <SpendPill summary={activeChat?.spend} labels={rail.spendLabels} locale={init.locale} />
-        </div>
-      ) : (
-        <ChatTicketsPanel
-          chatId={serverChatId}
-          projectId={init.project?.id ?? null}
-          chatList={rail.ticketChatList}
-          adapter={ticketAdapter}
-          labels={rail.ticketLabels}
-          onChanged={rail.onTicketsChanged}
-          refreshSignal={audience.railRefresh}
-          visibility={chatVisibility}
-          onSetVisibility={chatIsOwner ? async (v) => { await persistence.updateChat(chatId, { visibility: v }); setChatVisibility(v); } : undefined}
-          onOpenTicket={(tk) => post('open.artifact', { kind: tk.kind, ref: tk.ref, projectId: init.project?.id ?? undefined })}
-          // "Changes (N)" beside Link ticket / Agents / People; a clean tree adds nothing.
-          extensions={rail.pendingChangesExtension ? [rail.pendingChangesExtension] : undefined}
-          subagents={audience.subagentRoster}
-          // What this conversation cost and what memory saved — rides the chat row.
-          spend={activeChat?.spend}
+      rail={chatId != null && !historyOpen && railHasContent(serverChatId, activeChat) && (
+        <VsCodeChatRail
+          init={init}
+          persistence={persistence}
+          chatId={chatId}
+          serverChatId={serverChatId}
+          activeChat={activeChat}
+          ticketAdapter={ticketAdapter}
+          ticketLabels={rail.ticketLabels}
           spendLabels={rail.spendLabels}
-          locale={init.locale}
-          // The chat's first prompt, kept verbatim (1245) — rides the chat row like spend.
-          originalRequest={activeChat?.originalRequest}
+          ticketChatList={rail.ticketChatList}
+          onTicketsChanged={rail.onTicketsChanged}
+          pendingChangesExtension={rail.pendingChangesExtension}
+          railRefresh={audience.railRefresh}
+          subagentRoster={audience.subagentRoster}
+          chatVisibility={chatVisibility}
+          chatIsOwner={chatIsOwner}
+          setChatVisibility={setChatVisibility}
         />
-      ))}
+      )}
       empty={historyOpen ? (
         <VsCodeChatHistory
           id={HISTORY_ID}
@@ -289,7 +300,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           rows={rows}
           bundle={init.labels}
         />
-      ) : chatId == null ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
+      ) : chatId == null && !conv.pendingTurn ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
       thread={(
         <BrainTimeline
           messages={conv.messages}
@@ -297,6 +308,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           streamingText={conv.sending ? conv.streamingText : ''}
           isRunning={conv.sending}
           activity={conv.activity}
+          // Sent, not saved yet: the turn shows now - and a draft chat shows the thread, not its empty state.
+          pendingUserText={conv.pendingTurn?.text}
+          // The model doing the work, once its route is known.
+          liveModel={conv.servedBy?.model}
+          liveAccount={conv.servedBy?.account}
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
           labels={tlLabels}
@@ -341,9 +357,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               composerId={composerId}
               init={init}
               apiReq={apiReq}
-              conv={conv}
-              value={input}
-              onChange={setInput}
+              draftStore={draftStore}
+              running={conv.sending}
+              pendingAttachments={conv.pendingAttachments}
+              uploading={conv.uploading}
+              onAttach={conv.attach}
+              onRemoveAttachment={conv.removeAttachment}
+              contextUsage={conv.contextUsage}
               onSubmit={submit}
               onQueue={queueAfter}
               sendSteers={sendSteers}
@@ -365,12 +385,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               personaAgents={personaAgents}
               queue={queued.items}
               onRemoveQueued={queued.remove}
-              mode={{ value: chatMode, onChange: selectMode }}
-              memory={{ enabled: memoryEnabled, onChange: setMemoryEnabled }}
+              mode={modeControl}
+              memory={memoryControl}
               shaping={shaping}
               models={models}
               servedModel={servedModel}
-              autoMode={{ enabled: autoApprove, onChange: setAutoApproveMode }}
+              autoMode={autoModeControl}
               session={session}
               // The empty state shows the same starters as tiles.
               suggest={chatId != null}

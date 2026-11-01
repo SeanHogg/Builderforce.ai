@@ -1065,5 +1065,7 @@
   "BuilderForce reviews folders inside the open workspace.": "BuilderForce prüft Ordner innerhalb des geöffneten Arbeitsbereichs.",
   "This folder is not open in the workspace.": "Dieser Ordner ist im Arbeitsbereich nicht geöffnet.",
   "Only a fact on the linked project can be deleted.": "Nur ein Fakt im verknüpften Projekt kann gelöscht werden.",
-  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce: Das Wissen von {0} geprüften Ordner(n) wurde in das verknüpfte Projekt hochgeladen."
+  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce: Das Wissen von {0} geprüften Ordner(n) wurde in das verknüpfte Projekt hochgeladen.",
+  "Sent to {provider} with your own account from this machine. The model does not run here.": "An {provider} gesendet, mit Ihrem eigenen Konto von diesem Rechner aus. Das Modell läuft nicht hier.",
+  "Your account": "Ihr Konto"
 }

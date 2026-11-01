@@ -82,11 +82,15 @@ export function productForPlan(isPaid: boolean): RoutedProduct {
  *
  * `local/` earns its place here for the same reason as the other two, and one more.
  * The masking rule exists so a routed plan cannot leak an upstream id the viewer never
- * chose; an on-device model is the opposite case — they chose it, installed it, and are
- * paying for the hardware it runs on. Masking it did not merely withhold a name, it
+ * chose; a model a client on THEIR machine calls is the opposite case — they chose it
+ * (installed it, or connected the account). Masking it did not merely withhold a name, it
  * asserted a false one: a free-plan viewer running gpt-oss-20b on their own GPU was
  * told "Builderforce Free", which names OUR gateway for a turn that never touched it.
  * There was then no surface anywhere that said where the answer came from.
+ *
+ * `local/` means "called from this machine", NOT "runs on this device": Kimi Code is a
+ * hosted API reached with the viewer's own account. Where it runs is the runtime
+ * registry's `onDevice` (`runsOnDevice`, read through `servedModelLabel`).
  */
 const USER_CONFIGURED_PREFIXES = ['project_evermind:', 'tenant_model:', 'local/'] as const;
 

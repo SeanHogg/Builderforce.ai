@@ -1065,5 +1065,7 @@
   "BuilderForce reviews folders inside the open workspace.": "BuilderForce revisa carpetas dentro del espacio de trabajo abierto.",
   "This folder is not open in the workspace.": "Esta carpeta no está abierta en el espacio de trabajo.",
   "Only a fact on the linked project can be deleted.": "Solo se puede eliminar un hecho del proyecto vinculado.",
-  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce: el conocimiento de {0} carpeta(s) revisada(s) se subió al proyecto vinculado."
+  "BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.": "BuilderForce: el conocimiento de {0} carpeta(s) revisada(s) se subió al proyecto vinculado.",
+  "Sent to {provider} with your own account from this machine. The model does not run here.": "Enviado a {provider} con tu propia cuenta desde esta máquina. El modelo no se ejecuta aquí.",
+  "Your account": "Tu cuenta"
 }

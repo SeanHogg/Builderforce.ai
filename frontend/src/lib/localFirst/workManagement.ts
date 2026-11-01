@@ -28,6 +28,7 @@
 import {
   UNBOUND_DESTINATION,
   newLocalRecord,
+  selectRecords,
   type EntityDestination,
   type LocalFirstStore,
   type LocalFirstTransaction,
@@ -64,7 +65,7 @@ const eventId = (entityType: 'project' | 'ticket', id: string, version: number):
 
 /** The live (not tombstoned) records of one type. */
 async function live<T>(tx: LocalFirstTransaction, entityType: 'project' | 'ticket'): Promise<LocalRecord<T>[]> {
-  return (await tx.list<T>(entityType)).filter((record) => !record.deletedAt);
+  return selectRecords<T>(tx, entityType, (record) => !record.deletedAt);
 }
 
 async function projectFor(tx: LocalFirstTransaction, id: string): Promise<LocalProject> {

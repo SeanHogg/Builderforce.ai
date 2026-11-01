@@ -127,9 +127,16 @@ export interface LiveActivityProps {
   /** True while the run is executing. A run can be running with no phase yet. */
   isRunning: boolean;
   labels?: Partial<LiveActivityLabels>;
+  /**
+   * The model doing the work, as the reader is allowed to see it - named from the moment the turn's route is known,
+   * and absent before (never a guess). A tool-only turn persists no text, so this row is where the person learns it.
+   */
+  model?: string;
+  /** The raw model id, kept in the name's tooltip so what ran stays checkable. */
+  modelTitle?: string;
 }
 
-function LiveActivityInner({ activity, isRunning, labels: partial }: LiveActivityProps) {
+function LiveActivityInner({ activity, isRunning, labels: partial, model, modelTitle }: LiveActivityProps) {
   const labels = { ...DEFAULT_LIVE_ACTIVITY_LABELS, ...partial };
 
   // A run with no published phase yet — an older run store, a surface that drives the
@@ -190,6 +197,7 @@ function LiveActivityInner({ activity, isRunning, labels: partial }: LiveActivit
           {live.step > 0 && (
             <span className="bf-tl__live-step">{labels.step.replace('{step}', String(live.step))}</span>
           )}
+          {model && <span className="bf-tl__live-model" title={modelTitle ?? model}>{model}</span>}
         </div>
         {!waiting && (
           <span className="bf-tl__live-bar" aria-hidden>

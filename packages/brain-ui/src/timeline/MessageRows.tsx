@@ -29,12 +29,15 @@ function UserRowInner({
   focusClass,
   renderMsg,
   onReplay,
+  pending = false,
 }: {
   node: Extract<TimelineNode, { kind: 'user' }>;
   labels: BrainTimelineLabels;
   focusClass: string;
   renderMsg: RenderMessageText;
   onReplay?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
+  /** Sent, not saved yet: drawn exactly like the saved row it is about to become, with nothing to act on. */
+  pending?: boolean;
 }) {
   // A message addressed to participants (not the BRAIN) shows a "→ Name"
   // badge — several for a group turn — so the transcript makes clear who it
@@ -42,7 +45,7 @@ function UserRowInner({
   const to = parseDirectedRecipients(node.message);
   const author = parseMessageAuthor(node.message);
   return (
-    <li id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--user${focusClass}`}>
+    <li id={pending ? undefined : brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--user${focusClass}`}>
       <span className="bf-tl__gutter">
         <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('user')}</span>
       </span>
@@ -59,9 +62,11 @@ function UserRowInner({
           </div>
         )}
         {node.text && <div className="bf-tl__bubble bf-tl__bubble--user">{renderMsg(node.message, 'user', node.text)}</div>}
-        <div className="bf-tl__actions bf-tl__actions--hover">
-          <MessageActions message={node.message} role="user" text={node.text} labels={labels} onReplay={onReplay} />
-        </div>
+        {!pending && (
+          <div className="bf-tl__actions bf-tl__actions--hover">
+            <MessageActions message={node.message} role="user" text={node.text} labels={labels} onReplay={onReplay} />
+          </div>
+        )}
       </div>
     </li>
   );

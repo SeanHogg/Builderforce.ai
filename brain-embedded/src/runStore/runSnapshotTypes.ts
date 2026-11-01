@@ -73,6 +73,21 @@ export interface BrainRunSnapshot {
    * while `running` stays true until the aborted loop has actually unwound.
    */
   turn: RunTurn | null;
+  /**
+   * Which model is doing this run's work, from the moment the gateway (or the device's own
+   * route) names the model of the turn in flight, kept across the tool steps between turns and
+   * until the run ends. Absent until a turn's route is known - never a guess from the request.
+   * A host that mirrors a run from another process (`applyRemoteRun`) carries it across.
+   */
+  servedBy?: RunServedBy;
+}
+
+/** The model a run's turn was served by, as the stream named it (`StreamHandlers.onModel`). */
+export interface RunServedBy {
+  /** The resolved model id (`local/<runtime>/<model>` when the device's own route served it). */
+  model: string;
+  /** The wire account literal (`x-builderforce-account`), when the route reported one. */
+  account?: string;
 }
 
 /**

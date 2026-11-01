@@ -13,7 +13,7 @@
  * Idempotent: a second pass finds nothing unbound.
  */
 
-import type { EntityDestination, LocalFirstStore, LocalRecord } from '@builderforce/local-first';
+import { selectRecords, type EntityDestination, type LocalFirstStore, type LocalRecord } from '@builderforce/local-first';
 import { queueImport } from './journal';
 import { isOwnRecord, type ChatValue, type MessageValue } from './records';
 import { syncsToPlatform } from './gateLedger';
@@ -22,12 +22,15 @@ import type { RunUsageValue } from './usageLedger';
 /** Move this device's unbound chat rows into `destination`. Returns how many chats moved. */
 export async function bindChatHistoryForSync(store: LocalFirstStore, deviceId: string, destination: EntityDestination): Promise<number> {
   if (destination.kind !== 'bound') return 0;
-  const unbound = <T>(rows: LocalRecord<T>[]) => rows.filter((row) => row.destination.kind === 'unbound' && isOwnRecord(row, deviceId));
+  const unbound = (row: Readonly<LocalRecord>): boolean => row.destination.kind === 'unbound' && isOwnRecord(row, deviceId);
   // Read first: a commit notifies every store subscriber — the sync trigger among them —
-  // so a pass with nothing to move must not write.
+  // so a pass with nothing to move must not write. A scan, not a copy of every row.
   const anything = await store.read(async (tx) => {
-    for (const type of ['chat', 'message', 'usage'] as const) if (unbound(await tx.list(type)).length > 0) return true;
-    return false;
+    let found = false;
+    for (const type of ['chat', 'message', 'usage'] as const) {
+      await tx.scan(type, (row) => { if (unbound(row)) found = true; });
+    }
+    return found;
   });
   if (!anything) return 0;
   return store.transact(async (tx) => {
@@ -36,13 +39,13 @@ export async function bindChatHistoryForSync(store: LocalFirstStore, deviceId: s
       await tx.put(moved);
       return moved;
     };
-    const chats = unbound(await tx.list<ChatValue>('chat'));
+    const chats = await selectRecords<ChatValue>(tx, 'chat', unbound);
     // Chats first, so each message and usage import can wait on its chat's.
     for (const chat of chats) await queueImport(tx, await rebind(chat));
-    for (const message of unbound(await tx.list<MessageValue>('message'))) {
+    for (const message of await selectRecords<MessageValue>(tx, 'message', unbound)) {
       await queueImport(tx, await rebind(message), message.payload.chatClientId);
     }
-    for (const usage of unbound(await tx.list<RunUsageValue>('usage'))) {
+    for (const usage of await selectRecords<RunUsageValue>(tx, 'usage', unbound)) {
       const moved = await rebind(usage);
       if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
     }

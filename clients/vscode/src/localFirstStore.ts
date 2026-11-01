@@ -3,9 +3,10 @@
  * `ExtensionContext`, its device id, and the chat persistence over it.
  *
  * The pieces live along their seams:
- *   - `durableLocalFirstStore.ts` — the journal-backed store (commit, reload, compaction)
+ *   - `durableLocalFirstStore.ts` — the journal-backed store (delta commit, tail catch-up, compaction)
+ *   - `localFirstMigration.ts`    — the one-time import from the v2 journal / JSON cache, orphan cleanup
  *   - `localFirstLock.ts`         — the cross-window file lock, with dead-holder reclaim
- *   - `localFirstJournalIo.ts`    — the journal file over `node:fs`
+ *   - `localFirstJournalIo.ts`    — the v3 journal file over `node:fs`
  *   - `localFirstSnapshotFile.ts` — the snapshot cache's classification
  *   - brain-embedded `createLocalBrainPersistence` — chat and message rows: the SAME
  *     full Brain adapter the web runs on, so every method the webview proxies
@@ -29,18 +30,22 @@ import {
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
 import { chatAccountDestination, chatBindingPort, serverChatSpend } from "./chatAccount";
 import { gatewaySummaryCompletion } from "./chatSummarizer";
+import { hostLog } from "./hostLog";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(
   ctx: Pick<vscode.ExtensionContext, "globalStorageUri">,
   beforeWrite: Promise<void> = Promise.resolve(),
 ): DurableLocalFirstStore {
-  return createDurableLocalFirstStore(ctx.globalStorageUri.fsPath, { beforeWrite });
+  return createDurableLocalFirstStore(ctx.globalStorageUri.fsPath, {
+    beforeWrite,
+    onSlowCommit: (ms, frameBytes) => hostLog(`[local-first] slow commit: ${ms} ms, ${frameBytes} byte frame`),
+  });
 }
 
 interface LocalApplication {
   store: LocalFirstStore;
-  /** G03: the journal-backed store. The JSON snapshot is its cache, not its state. */
+  /** G03: the journal-backed store. The JSON snapshot is its cache (written on flush), not its state. */
   durableStore: DurableLocalFirstStore;
   /** This install's durable device id. */
   deviceId: string;
@@ -64,8 +69,8 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
   const devicePersisted = deviceId === storedDeviceId
     ? Promise.resolve()
     : Promise.resolve(ctx.globalState.update(deviceKey, deviceId)).then(() => undefined);
-  // G03: one journal frame per committed transaction. The promise resolves
-  // only after that frame is fsynced. `local-first-v1.json` is a cache.
+  // G03: one journal frame (a delta of the rows changed) per committed transaction. The
+  // promise resolves only after that frame is fsynced. `local-first-v1.json` is a cache.
   const store = createVsCodeLocalFirstStore(ctx, devicePersisted);
   const identity = createLocalChatIdentity({ store, deviceId, port: chatBindingPort(ctx.secrets) });
   const application: LocalApplication = {

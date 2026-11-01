@@ -51,13 +51,32 @@ export function useChatTranscript(
   // chat id — e.g. after another chat is merged INTO this one server-side.
   const [reloadNonce, setReloadNonce] = useState(0);
   const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
+  // Host pushes (`subscribeMessages`) arrive in bursts — one per step row of a run — and each
+  // used to restart the whole read. A push while a load is running is remembered, not started:
+  // at most ONE load in flight and ONE trailing, so a burst costs one or two reads, never a
+  // queue of them. `loadSeq` names the latest load; a superseded one never clears the flag.
+  const loadSeq = useRef(0);
+  const loading = useRef(false);
+  const trailing = useRef(false);
+  const requestReload = useCallback(() => {
+    if (loading.current) {
+      trailing.current = true;
+      return;
+    }
+    reloadMessages();
+  }, [reloadMessages]);
   // Load messages whenever the active chat changes.
   useEffect(() => {
     let cancelled = false;
+    const seq = (loadSeq.current += 1);
+    // This load reads the latest state, so a push that arrived before it started is covered.
+    trailing.current = false;
     if (chatId == null) {
+      loading.current = false;
       setHeld({ chatId: null, list: [] });
       return;
     }
+    loading.current = true;
     setLoadingMessages(true);
     cb.current.onLoadStart();
     persistence
@@ -73,10 +92,17 @@ export function useChatTranscript(
         if (!cancelled) cb.current.onLoadError(e instanceof Error ? e.message : 'Failed to load messages');
       })
       .finally(() => {
-        if (!cancelled) setLoadingMessages(false);
+        if (cancelled) return;
+        setLoadingMessages(false);
+        if (seq !== loadSeq.current) return;
+        loading.current = false;
+        if (trailing.current) {
+          trailing.current = false;
+          reloadMessages();
+        }
       });
     return () => { cancelled = true; };
-  }, [persistence, chatId, reloadNonce]);
+  }, [persistence, chatId, reloadNonce, reloadMessages]);
 
   // Words a DEAD page load left unsaved are saved once when the chat is opened - never on a reload or a push, and never
   // in front of the read above: the transcript shows at once, in parallel with a bounded replay, and is read again
@@ -94,8 +120,8 @@ export function useChatTranscript(
   // to the host's chat invalidation channel and re-read durable state on each push.
   useEffect(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
-    return persistence.subscribeMessages(chatId, reloadMessages);
-  }, [persistence, chatId, reloadMessages]);
+    return persistence.subscribeMessages(chatId, requestReload);
+  }, [persistence, chatId, requestReload]);
 
   // Mark the OPEN chat read up to its newest message, so the unread badge a
   // background chat shows (an execution milestone / teammate turn that landed while

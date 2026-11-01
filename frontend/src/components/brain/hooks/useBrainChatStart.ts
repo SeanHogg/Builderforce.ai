@@ -1,5 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
+import { useComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import {
   getBrainCapability,
   useArmedNewChat,
@@ -24,7 +25,8 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   const tBrain = useTranslations('brain');
   // The chat hook's methods are individually stable; its result object is not.
   const { setCapability, activeChatId, activeChat, autoTitle, captureOriginalRequest } = chats;
-  const [input, setInput] = useState('');
+  // The composer's text: an external store, so a keystroke re-renders the box and not the panel.
+  const draftStore = useComposerDraftStore();
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
   // The mode a NOT-YET-CREATED chat will be born in, and the ONE creation path that
@@ -74,12 +76,12 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
       await setCapability(activeChatId, id);
     }
     if (id) {
-      setInput((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
+      draftStore.set((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
       // Focus with the caret at the end: the starter is an editable opening line,
       // not a finished message. (Sending the raw seed produced stub replies.)
       setComposerFocusToken((n) => n + 1);
     }
-  }, [activeChatId, setCapability, startNewChat, tBrain]);
+  }, [activeChatId, setCapability, startNewChat, tBrain, draftStore]);
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
 
   // ---- Mode ("am I asking, or delegating?") --------------------------------
@@ -88,19 +90,18 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   // A work option is a STARTING POINT, not a message: seed the composer and drop the
   // caret at the end so the user finishes the brief instead of sending the template.
   const pickWorkOption = useCallback((_id: WorkOptionId, brief: string) => {
-    setInput((prev) => (prev.trim() ? prev : brief));
+    draftStore.set((prev) => (prev.trim() ? prev : brief));
     setComposerFocusToken((n) => n + 1);
-  }, []);
+  }, [draftStore]);
   /** The empty state's "Onboard me": a fresh chat, seeded with the onboarding brief. */
   const onboard = useCallback(() => {
     void startNewChat();
-    setInput(tBrain('onboardMePrompt'));
+    draftStore.set(tBrain('onboardMePrompt'));
     setComposerFocusToken((n) => n + 1);
-  }, [startNewChat, tBrain]);
+  }, [startNewChat, tBrain, draftStore]);
 
   return {
-    input,
-    setInput,
+    draftStore,
     composerFocusToken,
     startNewChat,
     ensureChatId,

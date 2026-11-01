@@ -10,7 +10,7 @@ import type { BrainTraceEvent } from '../brainTriage';
 import { asProvenanceAccount, withProvenanceMetadata } from '../provenance';
 import { STOPPED_TURN_STEP, stoppedTurnMetadata } from '../stoppedTurn';
 import type { RunCell, StoppedTurn } from './runCell';
-import { nowIso, pushTrace, recordAppended } from './runCells';
+import { emit, nowIso, pushTrace, recordAppended } from './runCells';
 import type { BrainRunPersistence } from './runTypes';
 
 /**
@@ -169,6 +169,10 @@ export async function asLiveTurn<T>(c: RunCell, complete: () => Promise<T>): Pro
 export function liveTurnModel(c: RunCell): NonNullable<StreamHandlers['onModel']> {
   return (model, account) => {
     if (c.liveTurn) c.liveTurn = { model, account };
+    // The route is known: the live row names the model now (a thinking model can be silent for a minute),
+    // and keeps naming it through the tool steps until the next turn's stream names its own.
+    c.servedBy = { model, ...(account ? { account } : {}) };
+    emit(c);
   };
 }
 

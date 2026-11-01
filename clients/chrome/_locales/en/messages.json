@@ -811,6 +811,10 @@
     "message": "Runs on this machine via {runtime} — no plan usage, works offline.",
     "description": "Funding line: on-device; keep {runtime}"
   },
+  "optHostedTip": {
+    "message": "Sent to {vendor} with your own account from this machine. The model does not run here.",
+    "description": "Model row tooltip: hosted runtime reached with your own account; keep {vendor}"
+  },
   "optEvermindLabel": {
     "message": "Project Evermind",
     "description": "Model name for a project Evermind pin"

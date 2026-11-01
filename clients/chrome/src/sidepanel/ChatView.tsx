@@ -13,7 +13,7 @@
  * chat through THE shared `useChatCreation`. Which chat is open is chosen from
  * the header's History lever (`RovrChatHistory`).
  */
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo } from 'react';
 import {
   AiSurface,
   BrainTimeline,
@@ -36,7 +36,7 @@ import {
   useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { chatDoorLiveness, deriveChatTitle, joinRestorableTurns, restoreTurn, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, deriveChatTitle, joinRestorableTurns, restoreTurn, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft, useComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -88,12 +88,13 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // The composer below, as the error banner names it to open its `/` menu.
   const composerId = useId();
   const run = useRun(chatId);
-  const [draft, setDraft] = useState('');
+  // The composer's text: an external store, so a keystroke re-renders the box and not this view.
+  const draftStore = useComposerDraftStore();
   useEffect(() => {
     if (!draftSeed) return;
-    setDraft(draftSeed);
+    draftStore.set(draftSeed);
     onDraftSeedTaken?.();
-  }, [draftSeed, onDraftSeedTaken]);
+  }, [draftSeed, onDraftSeedTaken, draftStore]);
   const chat = chats.find((c) => c.id === chatId);
   const chatOptions = useRovrChatOptions(chat, onChatsChanged);
   // The transcript's copy — and the pending question's, from the same `brain.timeline` catalog.
@@ -155,7 +156,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // A turn the door did not keep (the send failed before it was saved - an expired session, or the draft's creation failed)
   // gives its words back to the box, as the web and the editor do: a message is never lost to a failed send. Several at once -
   // the first send and everything held behind it when the creation failed - come back as ONE (`joinRestorableTurns`).
-  const composer = useComposerDraft(draft, setDraft);
+  const composer = useComposerDraft(draftStore);
   const { restoreAttachments } = conv;
   const giveBack = useCallback((text: string) => restoreTurn({ text, recipient: null }, {
     draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient: () => undefined,
@@ -190,11 +191,11 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     void door(text).then((kept) => { if (!kept) giveBack(text); });
   };
   const send = () => {
-    const text = draft.trim();
+    const text = composer.draft().trim();
     if (text) offer(text, turns.submit);
   };
   const queueAfter = () => {
-    const text = draft.trim();
+    const text = composer.draft().trim();
     if (text) offer(text, turns.queueAfter);
   };
   // An answered ask_user card is a turn like a typed one: a failed send gives the answer back to the box.
@@ -234,6 +235,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           streamingText={conv.streamingText}
           isRunning={conv.sending}
           activity={conv.activity}
+          pendingUserText={conv.pendingTurn?.text}
           labels={labels}
           assistantName="Rovr"
           onAnswerQuestion={answer}
@@ -253,7 +255,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           starters={(
             <StarterGroup heading={t('suggestionsLabel')}>
               {ROVR_STARTERS.map((s) => (
-                <StarterTile key={s.id} icon={s.icon} label={t(s.label)} hint={t(s.prompt)} onClick={() => setDraft(t(s.prompt))} />
+                <StarterTile key={s.id} icon={s.icon} label={t(s.label)} hint={t(s.prompt)} onClick={() => draftStore.set(t(s.prompt))} />
               ))}
             </StarterGroup>
           )}
@@ -330,8 +332,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           composer={(
             <RovrComposer
               composerId={composerId}
-              value={draft}
-              onChange={setDraft}
+              draftStore={draftStore}
               onSubmit={send}
               running={conv.sending}
               onStop={turns.stop}

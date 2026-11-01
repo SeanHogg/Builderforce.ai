@@ -1,40 +1,56 @@
 /**
- * The VSIX store's journal file (`local-first-v2.journal`) over `node:fs` (G03).
+ * The VSIX store's journal file (`local-first-v3.journal`) over `node:fs` (G03).
  *
- * One frame (the shared `BFJF1` frame from `@builderforce/local-first`) per
- * committed transaction, fsynced before the commit is acknowledged. What this
+ * One frame per committed transaction — a `BFJF2` delta of the rows the commit changed,
+ * from `@builderforce/local-first` — fsynced before the commit is acknowledged. What this
  * module adds over a naive append, and why:
  *
- *   - THE COMMITTED PREFIX IS TRACKED IN MEMORY. `append` used to re-read the
- *     whole journal on every commit to find a torn tail. The prefix length is
- *     now known from the open (`scanJournal`) and advanced by each append; a
- *     file longer than it has a torn tail, which is truncated away before the
- *     next frame lands.
- *   - OPEN DECODES ONE FRAME. Frames are walked by header and crc; only the
- *     last one is parsed (`scanJournal`).
- *   - ANOTHER WINDOW'S COMMIT IS NOTICED. Every VS Code window shares this file.
- *     `changedSinceSeen` compares the file's size/mtime/inode with what this
- *     process last wrote or read, so the store reloads before it commits on
- *     top of a stale snapshot.
- *   - COMPACTION RUNS. `replace` rewrites the journal as one frame (temp file,
- *     fsync, rename); the store calls it on the ONE shared policy,
- *     `shouldCompactJournal`.
+ *   - THE COMMITTED PREFIX IS TRACKED IN MEMORY. The offset where the committed frames
+ *     end is known from the open and advanced by every append and every applied tail; a
+ *     file longer than it has a torn tail, which is cut before the next frame lands (only
+ *     ever by the lock holder — a lock-free reader never truncates).
+ *   - ANOTHER WINDOW'S COMMIT IS A POSITIONAL TAIL READ. Every VS Code window shares this
+ *     file. `readTail` reads from the tracked offset to EOF and returns the complete delta
+ *     frames there; the store applies them and `advance`s. Only a different FILE (another
+ *     window compacted: new inode/birth time) or a base frame in the tail forces a full
+ *     `load`.
+ *   - OPEN IS ASYNC AND CHUNKED. `load` reads the file and folds it with `scanJournalAsync`,
+ *     giving the thread back between frames; a store of many small frames never blocks the
+ *     host for more than one frame's work.
+ *   - COMPACTION IS A STREAM. `compact` writes a sequence of bounded frames to a temp file,
+ *     fsyncs, renames — never one multi-megabyte buffer.
+ *   - THE TAIL IS COUNTED. `tail()` is the commit frames and bytes since the last base, the
+ *     figure the shared `shouldCompactJournal` policy is measured against.
  *
+ * The file is `local-first-v3.journal`, not v2: v2 holds only `BFJF1` frames, and a window
+ * still on an older VSIX that scanned a v3 file would stop at the first delta and then
+ * TRUNCATE the file to that prefix on its next append. A new name keeps old windows away.
  * No `vscode` import.
  */
 
 import nodeFs from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import nodePath from "node:path";
-import { scanJournal, type JournalIo, type LocalFirstSnapshot } from "@builderforce/local-first";
+import {
+  readJournalTail,
+  scanJournalAsync,
+  type LocalFirstDelta,
+  type LocalFirstSnapshot,
+} from "@builderforce/local-first";
 
 const fs = nodeFs.promises;
 
-export const JOURNAL_FILE = "local-first-v2.journal";
+export const JOURNAL_FILE = "local-first-v3.journal";
+/** Only ever READ (the one-time import) — never written to, so a rollback still finds it whole. */
+export const LEGACY_JOURNAL_FILE = "local-first-v2.journal";
 
-export interface FileStamp {
-  size: number;
-  mtimeMs: number;
+/** Give the thread back to the event loop (I/O callbacks, timers, the webview) before continuing. */
+export const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+/** What identifies THIS file: a compaction replaces it, which changes both fields. */
+export interface FileIdentity {
   ino: number;
+  birthtimeMs: number;
 }
 
 export interface JournalOpen {
@@ -42,93 +58,168 @@ export interface JournalOpen {
   frames: number;
 }
 
-export interface NodeJournalIo extends JournalIo {
+/** A journal read in full; nothing is tracked until it is `adopt`ed. */
+export interface LoadedJournal extends JournalOpen {
+  committedBytes: number;
+  tailFrames: number;
+  tailBytes: number;
+  identity: FileIdentity | undefined;
+}
+
+export type TailRead =
+  | { kind: "unchanged" }
+  /** The file is not the one this process tracks (another window compacted), or holds a base frame. */
+  | { kind: "reload" }
+  | { kind: "deltas"; deltas: readonly LocalFirstDelta[]; consumedBytes: number };
+
+export interface NodeJournalIo {
   readonly journalFile: string;
-  /** Read the committed state and remember where it ends. Call only under the store lock. */
-  open(): Promise<JournalOpen>;
-  /** Read the committed state WITHOUT moving the tracked prefix (lock-free readers). */
-  peek(): Promise<JournalOpen & { stamp: FileStamp | undefined }>;
-  /** The file's stamp right now. */
-  currentStamp(): Promise<FileStamp | undefined>;
-  /** The stamp this process last read (`open`) or wrote. */
-  seenStamp(): FileStamp | undefined;
-  /** True when the file is not the one this process last read or wrote. */
-  changedSinceSeen(): Promise<boolean>;
-  /** Committed frames since the last open or compaction. */
+  /** Read the whole journal without tracking it. Safe without the lock. */
+  load(pause?: () => Promise<void>): Promise<LoadedJournal>;
+  /** Track a loaded journal as this process's view of the file. */
+  adopt(loaded: LoadedJournal): void;
+  /** `load` + `adopt`: the committed state, remembering where it ends. */
+  open(pause?: () => Promise<void>): Promise<JournalOpen>;
+  /** Complete delta frames after the tracked offset. Side-effect free; safe without the lock. */
+  readTail(): Promise<TailRead>;
+  /** Count a `deltas` tail as applied. Call synchronously with applying it. */
+  advance(read: Extract<TailRead, { kind: "deltas" }>): void;
+  /** Append one frame (the lock holder only): cut a torn tail, write, fsync. */
+  append(frame: Uint8Array): Promise<void>;
+  /** Replace the journal with these frames (temp file, fsync, rename). The lock holder only. */
+  compact(frames: AsyncIterable<Uint8Array>): Promise<void>;
+  /** Commit frames and bytes since the last base. */
+  tail(): { frames: number; bytes: number };
+  /** Committed frames in the file. */
   frames(): number;
+  /** Bumps whenever the tracked view changes, so an async reader can tell it was overtaken. */
+  epoch(): number;
 }
 
-function stampOf(stat: nodeFs.Stats): FileStamp {
-  return { size: stat.size, mtimeMs: stat.mtimeMs, ino: stat.ino };
+function identityOf(stat: nodeFs.Stats): FileIdentity {
+  return { ino: stat.ino, birthtimeMs: stat.birthtimeMs };
 }
 
-export function sameStamp(a: FileStamp | undefined, b: FileStamp | undefined): boolean {
+function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
   if (!a || !b) return a === b;
-  return a.size === b.size && a.mtimeMs === b.mtimeMs && a.ino === b.ino;
+  return a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
 }
+
+const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
 
 export function createNodeJournalIo(directory: string): NodeJournalIo {
   const journalFile = nodePath.join(directory, JOURNAL_FILE);
   let committedBytes = 0;
   let frameCount = 0;
-  let seen: FileStamp | undefined;
+  let tailFrames = 0;
+  let tailBytes = 0;
+  let identity: FileIdentity | undefined;
   let opened = false;
+  let version = 0;
 
-  const statOrUndefined = async (): Promise<FileStamp | undefined> => {
+  const statOrUndefined = async (): Promise<nodeFs.Stats | undefined> => {
     try {
-      return stampOf(await fs.stat(journalFile));
+      return await fs.stat(journalFile);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      if (isMissing(error)) return undefined;
       throw error;
     }
   };
 
-  const readBytes = async (): Promise<Uint8Array | undefined> => {
+  const load = async (pause: () => Promise<void> = yieldToEventLoop): Promise<LoadedJournal> => {
+    let handle: FileHandle;
     try {
-      const raw = await fs.readFile(journalFile);
-      return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+      handle = await fs.open(journalFile, "r");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      if (isMissing(error)) {
+        return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, identity: undefined };
+      }
       throw error;
     }
-  };
-
-  const syncFile = async (path: string): Promise<void> => {
-    const handle = await fs.open(path, "r+");
+    let raw: Buffer;
+    let stat: nodeFs.Stats;
     try {
-      await handle.sync();
+      stat = await handle.stat();
+      raw = await handle.readFile();
     } finally {
       await handle.close();
     }
+    if (raw.byteLength === 0) {
+      return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, identity: identityOf(stat) };
+    }
+    const scan = await scanJournalAsync(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), pause);
+    return {
+      latest: scan.latest,
+      frames: scan.frames,
+      committedBytes: scan.committedBytes,
+      tailFrames: scan.tailFrames,
+      tailBytes: scan.tailBytes,
+      identity: identityOf(stat),
+    };
   };
 
-  const open = async (): Promise<JournalOpen> => {
-    const bytes = await readBytes();
-    const scan = bytes && bytes.byteLength > 0 ? scanJournal(bytes) : undefined;
-    committedBytes = scan?.committedBytes ?? 0;
-    frameCount = scan?.frames ?? 0;
-    seen = await statOrUndefined();
+  const adopt = (loaded: LoadedJournal): void => {
+    committedBytes = loaded.committedBytes;
+    frameCount = loaded.frames;
+    tailFrames = loaded.tailFrames;
+    tailBytes = loaded.tailBytes;
+    identity = loaded.identity;
     opened = true;
-    return { latest: scan?.latest, frames: frameCount };
+    version += 1;
+  };
+
+  const open = async (pause?: () => Promise<void>): Promise<JournalOpen> => {
+    const loaded = await load(pause);
+    adopt(loaded);
+    return { latest: loaded.latest, frames: loaded.frames };
+  };
+
+  const readTail = async (): Promise<TailRead> => {
+    if (!opened) return { kind: "reload" };
+    const stat = await statOrUndefined();
+    if (!stat) return identity === undefined && committedBytes === 0 ? { kind: "unchanged" } : { kind: "reload" };
+    if (!sameFile(identityOf(stat), identity)) return { kind: "reload" };
+    if (stat.size < committedBytes) return { kind: "reload" };
+    if (stat.size === committedBytes) return { kind: "unchanged" };
+    const handle = await fs.open(journalFile, "r");
+    let bytes: Buffer;
+    try {
+      // The file may have been replaced between the stat and the open: trust the handle's.
+      const current = await handle.stat();
+      if (!sameFile(identityOf(current), identity) || current.size < committedBytes) return { kind: "reload" };
+      bytes = Buffer.alloc(current.size - committedBytes);
+      let read = 0;
+      while (read < bytes.length) {
+        const { bytesRead } = await handle.read(bytes, read, bytes.length - read, committedBytes + read);
+        if (bytesRead === 0) break;
+        read += bytesRead;
+      }
+      bytes = bytes.subarray(0, read);
+    } finally {
+      await handle.close();
+    }
+    const tail = readJournalTail(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+    if (tail.needsReload) return { kind: "reload" };
+    if (tail.deltas.length === 0) return { kind: "unchanged" };
+    return { kind: "deltas", deltas: tail.deltas, consumedBytes: tail.consumedBytes };
   };
 
   return {
     journalFile,
+    load,
+    adopt,
     open,
-    async peek() {
-      const stamp = await statOrUndefined();
-      const bytes = await readBytes();
-      const scan = bytes && bytes.byteLength > 0 ? scanJournal(bytes) : undefined;
-      return { latest: scan?.latest, frames: scan?.frames ?? 0, stamp };
+    readTail,
+    advance(read) {
+      committedBytes += read.consumedBytes;
+      frameCount += read.deltas.length;
+      tailFrames += read.deltas.length;
+      tailBytes += read.consumedBytes;
+      version += 1;
     },
-    currentStamp: statOrUndefined,
-    seenStamp: () => seen,
-    read: readBytes,
-    async changedSinceSeen() {
-      if (!opened) return true;
-      return !sameStamp(await statOrUndefined(), seen);
-    },
+    tail: () => ({ frames: tailFrames, bytes: tailBytes }),
     frames: () => frameCount,
+    epoch: () => version,
     async append(frame: Uint8Array) {
       if (!opened) await open();
       await fs.mkdir(directory, { recursive: true });
@@ -139,36 +230,58 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       try {
         // A torn tail from a crashed append is not a commit: cut it before the next frame.
         if ((await handle.stat()).size !== committedBytes) await handle.truncate(committedBytes);
-        await handle.write(frame, 0, frame.byteLength, committedBytes);
-        // The frame is durable only after fsync. Callers are not told the write
-        // was saved until this returns.
-        await handle.sync();
-        seen = stampOf(await handle.stat());
+        try {
+          await handle.write(frame, 0, frame.byteLength, committedBytes);
+          // The frame is durable only after fsync. Callers are not told the write
+          // was saved until this returns.
+          await handle.sync();
+        } catch (error) {
+          // A frame that may be complete on disk but was never acknowledged must not be
+          // taken for a commit by another window's tail read.
+          await handle.truncate(committedBytes).catch(() => undefined);
+          throw error;
+        }
+        identity = identityOf(await handle.stat());
       } finally {
         await handle.close();
       }
       committedBytes += frame.byteLength;
       frameCount += 1;
+      tailFrames += 1;
+      tailBytes += frame.byteLength;
+      opened = true;
+      version += 1;
     },
-    async replace(frame: Uint8Array) {
+    async compact(frames) {
       await fs.mkdir(directory, { recursive: true });
       const temporary = `${journalFile}.${process.pid}.${Date.now()}.tmp`;
+      let written = 0;
+      let count = 0;
       try {
-        await fs.writeFile(temporary, frame);
-        await syncFile(temporary);
+        const handle = await fs.open(temporary, "wx");
+        try {
+          for await (const frame of frames) {
+            await handle.write(frame, 0, frame.byteLength, written);
+            written += frame.byteLength;
+            count += 1;
+          }
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
         await fs.rename(temporary, journalFile);
       } catch (error) {
         await fs.rm(temporary, { force: true });
         throw error;
       }
-      committedBytes = frame.byteLength;
-      frameCount = 1;
+      const stat = await statOrUndefined();
+      committedBytes = written;
+      frameCount = count;
+      tailFrames = 0;
+      tailBytes = 0;
+      identity = stat ? identityOf(stat) : undefined;
       opened = true;
-      seen = await statOrUndefined();
-    },
-    async size() {
-      if (!opened) await open();
-      return committedBytes;
+      version += 1;
     },
   };
 }

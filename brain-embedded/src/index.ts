@@ -292,6 +292,8 @@ export { subscribeToChatMessages } from './chatMessageSubscription';
 export { createBrainRestPersistence } from './brainRestPersistence';
 export type { BrainRestInit, BrainRestOptions, BrainRestPersistence, BrainRestRequest } from './brainRestPersistence';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
+export type { PendingTurn } from './usePendingTurns';
+export { servedModelLabel, type ServedModelLabel } from './servedModelLabel';
 
 // Cross-chat run indicators — which chats are executing / awaiting a confirm RIGHT
 // NOW (the module-level agent loop keeps running across chat switches, so a host
@@ -326,7 +328,7 @@ export {
   // same cell — single-flight, Stop, the confirm gate, the live snapshot.
   startEngineRun,
 } from './brainRunStore';
-export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunTurn } from './brainRunStore';
+export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunServedBy, RunTurn } from './brainRunStore';
 export type { AvoidedRunCall, RunOutcomeReport, RunPipelineSettings, RunStageModels } from './runStore/runTypes';
 // PRD 35 E7: what a host's pre-turn BYO health check hands the run.
 export type { ModelPreflightResult } from '@builderforce/agent-run';
@@ -818,7 +820,8 @@ export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface,
 export { chatDoorLiveness, steersByDefault, useChatTurns } from './useChatTurns';
 export { restoreTurn, joinRestorableTurns, type RestorableTurn } from './restoreTurn';
 export { clearPendingWords, setPendingWordsOwner } from './pendingWords';
-export { useComposerDraft } from './useComposerDraft';
+export { useComposerDraft, type ComposerDraft } from './useComposerDraft';
+export { createComposerDraftStore, useComposerDraftStore, useDraftSelector, useDraftText, useDraftIsEmpty, type ComposerDraftStore } from './composerDraftStore';
 export { slotKeyedRows, type KeyedSlot } from './keyedRows';
 export { startsRun } from './userTurnRuns';
 export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';

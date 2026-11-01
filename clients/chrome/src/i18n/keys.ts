@@ -216,6 +216,7 @@ export const MESSAGE_KEYS = [
   'optByoDetail',
   'optConfiguredDetail',
   'optLocalDetail',
+  'optHostedTip',
   'optEvermindLabel',
   'optEvermindDetail',
   'optOptions',

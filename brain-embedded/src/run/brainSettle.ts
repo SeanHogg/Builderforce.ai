@@ -38,7 +38,15 @@ export async function settleBrainRun(run: BrainRunContext, outcome: RunOutcome, 
   if (!text.trim()) return;
   // The run's USD cap stopped it: its reply says why and is saved as it is - no provenance chip, no Evermind learn (`runSpendBudget.ts`).
   if (last.contained !== undefined && text === last.contained) return persistBudgetStop(run, text);
-  const result = last.result ?? ({ text, toolCalls: [] } as unknown as StreamChatResult);
+  // A reply settled with no recorded completion (a question that paused the run, a delivery the agent made itself) is still
+  // attributed to the model that served THIS run's latest turn - never left with no chip at all, and never to an earlier
+  // run's model (`servedBy` is reset as a run begins).
+  const served = c.servedBy;
+  const result = last.result ?? ({
+    text,
+    toolCalls: [],
+    ...(served ? { resolvedModel: served.model, ...(served.account ? { account: served.account } : {}) } : {}),
+  } as unknown as StreamChatResult);
   const assistantMsg = last.settled ?? (await settleReply(run, text, result, last.requested));
   emit(c);
   emitEvermindLearnReconcile(run, assistantMsg, text);

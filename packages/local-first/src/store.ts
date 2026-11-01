@@ -1,298 +1,135 @@
+/**
+ * The in-memory local-first store and the public store surface.
+ *
+ * The contract lives in `storeContract.ts`, the committed state in `storeState.ts`, the
+ * copy-on-write transaction in `storeTransaction.ts`, and what a commit changed in
+ * `localFirstDelta.ts`; this module composes them and re-exports the lot, so
+ * `import … from './store.js'` stays the one path.
+ *
+ * A commit costs O(rows it changed): the transaction writes a draft overlay, the store
+ * hands the resulting delta to the host's `onCommit` (the journal append), and only once
+ * that resolves is the delta applied to the long-lived committed state. A host that
+ * learns of another window's commit calls `applyDelta` instead of rebuilding.
+ */
+
 import {
   UNBOUND_DESTINATION,
-  destinationKey,
   type EntityDestination,
   type JournalEvent,
   type LocalEntityType,
   type LocalRecord,
-  type ServerMapping,
-  type SyncConflict,
-  type SyncReceipt,
 } from './records.js';
+import { isEmptyDelta, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
+import { CommittedState } from './storeState.js';
+import { Transaction } from './storeTransaction.js';
+import type {
+  LocalFirstListener,
+  LocalFirstSnapshot,
+  LocalFirstStore,
+  LocalFirstTransaction,
+} from './storeContract.js';
 
-export interface LocalFirstTransaction {
-  get<T = unknown>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined>;
-  list<T = unknown>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]>;
-  put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
-  /**
-   * Remove one local row. A pull tombstone calls this instead of `put`: writing
-   * the row back would resurrect the entity the server deleted. Returns whether
-   * a row was present. A missing row is not an error — the delete already won.
-   */
-  delete(entityType: LocalEntityType, id: string): Promise<boolean>;
-  /**
-   * Enqueue one journal event. The store MINTS the wire `eventId` (a UUID — the
-   * server's `(tenant, device, event)` key). Callers name the logical write with
-   * `idempotencyKey` (e.g. `ticket:<id>:v1`): a second append with a key that is
-   * still pending returns the first event instead of enqueueing twice, and a
-   * `dependsOn` entry naming a pending key is rewritten to that event's id.
-   */
-  append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>>;
-  pending(destination?: EntityDestination): Promise<JournalEvent[]>;
-  acknowledge(eventIds: readonly string[]): Promise<void>;
-  putMapping(mapping: ServerMapping): Promise<void>;
-  mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
-  putReceipt(receipt: SyncReceipt): Promise<void>;
-  putConflict(conflict: SyncConflict): Promise<void>;
-  conflicts(): Promise<SyncConflict[]>;
-  setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void>;
-  cursor(destination: EntityDestination): Promise<string | undefined>;
-}
-
-/**
- * What `append` takes. `eventId` is optional and kept only when it is already a
- * UUID (a replayed wire event); any other value is a legacy composite id and is
- * treated as the `idempotencyKey`.
- */
-export type AppendJournalEvent<T = unknown> =
-  Omit<JournalEvent<T>, 'localSequence' | 'payloadHash' | 'eventId' | 'idempotencyKey'> & {
-    eventId?: string;
-    idempotencyKey?: string;
-    payloadHash?: string;
-  };
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isJournalEventId(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
-}
-
-export interface LocalFirstSnapshot {
-  records: LocalRecord[];
-  events: JournalEvent[];
-  mappings: ServerMapping[];
-  receipts: SyncReceipt[];
-  conflicts: SyncConflict[];
-  cursors: Record<string, string>;
-  nextSequence: number;
-}
-
-export interface LocalFirstStore {
-  read<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
-  transact<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
-  export(): Promise<LocalFirstSnapshot>;
-  subscribe(listener: () => void): () => void;
-}
-
-interface State extends LocalFirstSnapshot {}
+export * from './storeContract.js';
+export { changeTouches, isEmptyDelta, resetDeltaOf, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
 
 const clone = <T>(value: T): T => structuredClone(value);
-const recordKey = (type: LocalEntityType, id: string): string => `${type}:${id}`;
-const mappingKey = (mapping: Pick<ServerMapping, 'entityType' | 'clientEntityId' | 'destination'>): string =>
-  `${destinationKey(mapping.destination)}:${mapping.entityType}:${mapping.clientEntityId}`;
-
-function hashPayload(payload: unknown): string {
-  const text = JSON.stringify(payload) ?? 'null';
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
-}
 
 /**
- * Rewrite `dependsOn` keys that name a PENDING event onto that event's wire id.
- * Anything else is kept as written: a key for an event appended later in the
- * same transaction (a forward reference) is resolved when the batch is built
- * (`wireDependencies` in `sync.ts`), which also drops a key whose event has
- * already been acknowledged.
+ * Rows of `type` for which `where` holds, cloned — and ONLY those. `list` clones every
+ * row of the type before the caller filters; this scans without cloning and clones the
+ * matches, so reading one chat out of a whole history costs that chat.
  */
-function resolveDependencies(dependsOn: readonly string[], pendingByKey: ReadonlyMap<string, JournalEvent>): string[] {
-  const ids: string[] = [];
-  for (const id of dependsOn) {
-    const resolved = pendingByKey.get(id)?.eventId ?? id;
-    if (!ids.includes(resolved)) ids.push(resolved);
-  }
-  return ids;
+export async function selectRecords<T = unknown>(
+  tx: LocalFirstTransaction,
+  type: LocalEntityType | undefined,
+  where?: (row: Readonly<LocalRecord<T>>) => boolean,
+): Promise<LocalRecord<T>[]> {
+  const matches: LocalRecord<T>[] = [];
+  await tx.scan<T>(type, (row) => {
+    if (!where || where(row)) matches.push(row as LocalRecord<T>);
+  });
+  return clone(matches);
 }
 
-class Transaction implements LocalFirstTransaction {
-  constructor(private readonly state: {
-    records: Map<string, LocalRecord>;
-    events: Map<string, JournalEvent>;
-    mappings: Map<string, ServerMapping>;
-    receipts: Map<string, SyncReceipt>;
-    conflicts: Map<string, SyncConflict>;
-    cursors: Map<string, string>;
-    nextSequence: number;
-  }, private readonly mutable: boolean) {}
-
-  async get<T>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined> {
-    return clone(this.state.records.get(recordKey(entityType, id))) as LocalRecord<T> | undefined;
-  }
-
-  async list<T>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]> {
-    const rows = [...this.state.records.values()].filter((record) => !entityType || record.entityType === entityType);
-    return clone(rows) as LocalRecord<T>[];
-  }
-
-  async put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void> {
-    this.assertMutable();
-    if (!record.id || typeof record.id !== 'string') throw new Error('client_entity_id_must_be_stable_uuid');
-    const key = recordKey(record.entityType, record.id);
-    const current = this.state.records.get(key);
-    if (expectedVersion !== undefined && current?.version !== expectedVersion) {
-      throw Object.assign(new Error('entity_version_conflict'), { code: 'ENTITY_VERSION_CONFLICT' });
-    }
-    this.state.records.set(key, clone(record));
-  }
-
-  async delete(entityType: LocalEntityType, id: string): Promise<boolean> {
-    this.assertMutable();
-    return this.state.records.delete(recordKey(entityType, id));
-  }
-
-  async append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>> {
-    this.assertMutable();
-    const { eventId: given, idempotencyKey: key, ...rest } = event;
-    const wireId = isJournalEventId(given) ? given : undefined;
-    const idempotencyKey = key ?? (given !== undefined && !wireId ? given : undefined);
-    if (wireId && this.state.events.has(wireId)) return clone(this.state.events.get(wireId)) as JournalEvent<T>;
-    const pendingByKey = this.pendingByKey();
-    if (idempotencyKey !== undefined) {
-      const existing = pendingByKey.get(idempotencyKey);
-      if (existing) return clone(existing) as JournalEvent<T>;
-    }
-    const stored: JournalEvent<T> = {
-      ...clone(rest),
-      eventId: wireId ?? crypto.randomUUID(),
-      ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
-      dependsOn: resolveDependencies(event.dependsOn, pendingByKey),
-      localSequence: this.state.nextSequence,
-      payloadHash: event.payloadHash ?? hashPayload(event.payload),
-    };
-    this.state.nextSequence += 1;
-    this.state.events.set(stored.eventId, stored);
-    return clone(stored);
-  }
-
-  /** Pending events by their caller-side idempotency key. */
-  private pendingByKey(): Map<string, JournalEvent> {
-    const byKey = new Map<string, JournalEvent>();
-    for (const pending of this.state.events.values()) {
-      if (pending.idempotencyKey !== undefined) byKey.set(pending.idempotencyKey, pending);
-    }
-    return byKey;
-  }
-
-  async pending(destination?: EntityDestination): Promise<JournalEvent[]> {
-    const key = destination ? destinationKey(destination) : undefined;
-    return clone([...this.state.events.values()]
-      .filter((event) => !key || destinationKey(event.destination) === key)
-      .sort((a, b) => a.localSequence - b.localSequence));
-  }
-
-  async acknowledge(eventIds: readonly string[]): Promise<void> {
-    this.assertMutable();
-    for (const id of eventIds) this.state.events.delete(id);
-  }
-
-  async putMapping(mapping: ServerMapping): Promise<void> {
-    this.assertMutable();
-    this.state.mappings.set(mappingKey(mapping), clone(mapping));
-  }
-
-  async mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined> {
-    return clone(this.state.mappings.get(mappingKey({ entityType, clientEntityId, destination })));
-  }
-
-  async putReceipt(receipt: SyncReceipt): Promise<void> {
-    this.assertMutable();
-    this.state.receipts.set(receipt.eventId, clone(receipt));
-  }
-
-  async putConflict(conflict: SyncConflict): Promise<void> {
-    this.assertMutable();
-    this.state.conflicts.set(conflict.id, clone(conflict));
-  }
-
-  async conflicts(): Promise<SyncConflict[]> {
-    return clone([...this.state.conflicts.values()]);
-  }
-
-  async setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void> {
-    this.assertMutable();
-    const key = destinationKey(destination);
-    if (cursor === undefined) this.state.cursors.delete(key);
-    else this.state.cursors.set(key, cursor);
-  }
-
-  async cursor(destination: EntityDestination): Promise<string | undefined> {
-    return this.state.cursors.get(destinationKey(destination));
-  }
-
-  committed(): State {
-    return snapshot(this.state);
-  }
-
-  private assertMutable(): void {
-    if (!this.mutable) throw new Error('read_only_local_transaction');
-  }
+/** Pending events for which `where` holds, in sequence order, cloned — only the matches. */
+export async function selectPending(
+  tx: LocalFirstTransaction,
+  where?: (event: Readonly<JournalEvent>) => boolean,
+  destination?: EntityDestination,
+): Promise<JournalEvent[]> {
+  const matches: JournalEvent[] = [];
+  await tx.scanPending((event) => {
+    if (!where || where(event)) matches.push(event as JournalEvent);
+  }, destination);
+  matches.sort((a, b) => a.localSequence - b.localSequence);
+  return clone(matches);
 }
 
-function transaction(state: State, mutable: boolean): Transaction {
-  return new Transaction({
-    records: new Map(state.records.map((record) => [recordKey(record.entityType, record.id), record])),
-    events: new Map(state.events.map((event) => [event.eventId, event])),
-    mappings: new Map(state.mappings.map((mapping) => [mappingKey(mapping), mapping])),
-    receipts: new Map(state.receipts.map((receipt) => [receipt.eventId, receipt])),
-    conflicts: new Map(state.conflicts.map((conflict) => [conflict.id, conflict])),
-    cursors: new Map(Object.entries(state.cursors)),
-    nextSequence: state.nextSequence,
-  }, mutable);
+export interface MemoryLocalFirstStoreOptions {
+  /**
+   * Called with the commit's delta BEFORE it is published. A host appends it to its
+   * journal here; if it throws, nothing is published and the transaction fails, so a read
+   * can never observe a commit no restart would see. Not called for a transaction that
+   * wrote nothing. The delta's rows are the store's own — read them, never mutate them.
+   */
+  onCommit?: (delta: LocalFirstDelta) => Promise<void>;
 }
 
-function snapshot(state: {
-  records: Map<string, LocalRecord>;
-  events: Map<string, JournalEvent>;
-  mappings: Map<string, ServerMapping>;
-  receipts: Map<string, SyncReceipt>;
-  conflicts: Map<string, SyncConflict>;
-  cursors: Map<string, string>;
-  nextSequence: number;
-}): State {
-  return {
-    records: [...state.records.values()],
-    events: [...state.events.values()],
-    mappings: [...state.mappings.values()],
-    receipts: [...state.receipts.values()],
-    conflicts: [...state.conflicts.values()],
-    cursors: Object.fromEntries(state.cursors),
-    nextSequence: state.nextSequence,
-  };
+export interface MemoryLocalFirstStore extends LocalFirstStore {
+  /**
+   * Apply a commit made elsewhere (another window's journal frame, or a full reload as a
+   * `reset` delta). Listeners are told the change, or `undefined` for a reset. Throws if a
+   * transaction is in flight: the host applies foreign commits only between its own.
+   */
+  applyDelta(delta: LocalFirstDelta): void;
+  /**
+   * The committed state as arrays WITHOUT cloning the rows: read-only, valid until the next
+   * commit. A compaction streams it to disk; `export()` is the cloning, caller-owned form.
+   */
+  view(): LocalFirstSnapshot;
 }
 
-export function createMemoryLocalFirstStore(initial?: Partial<LocalFirstSnapshot>): LocalFirstStore {
-  let state: State = {
-    records: initial?.records ?? [],
-    events: initial?.events ?? [],
-    mappings: initial?.mappings ?? [],
-    receipts: initial?.receipts ?? [],
-    conflicts: initial?.conflicts ?? [],
-    cursors: initial?.cursors ?? {},
-    nextSequence: initial?.nextSequence ?? 1,
-  };
+export function createMemoryLocalFirstStore(
+  initial?: Partial<LocalFirstSnapshot>,
+  options: MemoryLocalFirstStoreOptions = {},
+): MemoryLocalFirstStore {
+  const state = CommittedState.from(initial);
   let tail: Promise<unknown> = Promise.resolve();
-  const listeners = new Set<() => void>();
+  let transacting = false;
+  const listeners = new Set<LocalFirstListener>();
+  const notify = (change: LocalFirstChange | undefined): void => {
+    for (const listener of [...listeners]) listener(change);
+  };
   return {
-    // No whole-state clone per transaction: `transaction` indexes the committed rows into
-    // fresh maps, every getter returns a clone and every write stores one, so a draft
-    // never touches a committed row. A clone of the whole store per read was O(store)
-    // on every lookup — megabytes per streamed token once a hot path read it.
-    read: (work) => work(transaction(state, false)),
+    // Reads see the committed Maps directly: a transaction is an overlay, so there is no
+    // per-read index to build and no whole-store clone — only the rows a caller asks for
+    // are cloned.
+    read: (work) => work(new Transaction(state, false)),
     transact(work) {
       const run = tail.then(async () => {
-        const tx = transaction(state, true);
-        const result = await work(tx);
-        state = tx.committed();
-        for (const listener of [...listeners]) listener();
-        return result;
+        const draft = new Transaction(state, true);
+        transacting = true;
+        try {
+          const result = await work(draft);
+          const delta = draft.delta();
+          if (!isEmptyDelta(delta)) await options.onCommit?.(delta);
+          const change = state.applyDelta(delta);
+          transacting = false;
+          notify(change);
+          return result;
+        } finally {
+          transacting = false;
+        }
       });
       tail = run.catch(() => undefined);
       return run;
     },
-    export: async () => clone(state),
+    applyDelta(delta) {
+      if (transacting) throw new Error('local_first_apply_during_transaction');
+      notify(state.applyDelta(delta));
+    },
+    view: () => state.view(),
+    export: async () => clone(state.view()),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

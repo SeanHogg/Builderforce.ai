@@ -10,7 +10,7 @@
  * on the sentence that told the user who was being billed.
  */
 
-import { localCatalogModel, localRuntime, parseLocalModelRef } from '@builderforce/local-inference';
+import { localCatalogModel, localRuntime, parseLocalModelRef, runsOnDevice } from '@builderforce/local-inference';
 import {
   DEFAULT_MODEL_IDENTITY,
   productModelName,
@@ -45,8 +45,10 @@ export function routingModeForSelection(selection: ChatModelSelection): 'byo_poo
 export interface ChatModelOptions {
   /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */
   configured?: Array<{ id: string; label: string }>;
-  /** Models served by a runtime on the user's OWN machine (`local/<runtime>/<model>`).
-   *  `runtime` is the display name of what serves it (Ollama, FreeToken). */
+  /** Models a runtime reached FROM the user's own machine serves (`local/<runtime>/<model>`).
+   *  `runtime` is the display name of what serves it (Ollama, FreeToken, Kimi Code). Whether the
+   *  weights run on this device is the runtime registry's `onDevice` (`runsOnDevice`): a hosted runtime
+   *  (Kimi Code) listed here is the user's own ACCOUNT, and is grouped there, not under "On this device". */
   local?: Array<{ id: string; label: string; runtime: string }>;
   /** Models the tenant's own connected provider accounts can serve. */
   byo: Array<{ id: string; vendor: string; cost?: string }>;
@@ -71,6 +73,8 @@ export interface ModelItem {
   detail: string;
   category: ModelCategory;
   selection: ChatModelSelection;
+  /** A tooltip for the row, where one sentence says more than the detail line (an account row reached from this machine). */
+  title?: string;
 }
 
 /**
@@ -105,6 +109,8 @@ export interface ModelChoiceLabels {
   configuredDetail: string;
   /** Funding sentence for an on-device row. `{runtime}` is the serving runtime's name. */
   localDetail: string;
+  /** Tooltip of a hosted runtime's row (Kimi Code): the call is made from this machine with the user's own account, the model does not run here. `{vendor}` is the runtime's name. */
+  hostedTip: string;
   /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
   evermindLabel: string;
   /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
@@ -129,6 +135,7 @@ export const DEFAULT_MODEL_CHOICE_LABELS: ModelChoiceLabels = {
   configuredDetail: 'Saved workspace LLM configuration',
   categoryLocal: 'On this device',
   localDetail: 'Runs on this machine via {runtime} — no plan usage, works offline.',
+  hostedTip: 'Sent to {vendor} with your own account from this machine. The model does not run here.',
   evermindLabel: 'Project Evermind',
   evermindDetail: "Your project's own learned Evermind model.",
 };
@@ -208,15 +215,20 @@ export function buildModelItems(
   ];
   const normalized = (value: string | { id: string; cost?: string }) => (typeof value === 'string' ? { id: value } : value);
   const seen = new Set<string>();
-  const add = (id: string, label: string, detail: string, category: ModelCategory) => {
+  const add = (id: string, label: string, detail: string, category: ModelCategory, title?: string) => {
     if (!id || seen.has(id)) return;
     seen.add(id);
-    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: 'model', model: id } });
+    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: 'model', model: id }, ...(title ? { title } : {}) });
   };
   // Ahead of every funded group: an on-device model spends nothing and runs on
   // hardware the user already owns, which makes it the cheapest route on the list.
+  // Only a row that really runs on this device leads the list. A hosted runtime reached from here (Kimi Code) is the person's
+  // own account with that provider - read off the registry (`runsOnDevice`), never a runtime id - so it is grouped with the
+  // accounts, below.
+  const hosted: Array<NonNullable<ChatModelOptions['local']>[number]> = [];
   for (const model of options.local ?? []) {
-    add(model.id, model.label, labels.localDetail.replace('{runtime}', model.runtime), 'local');
+    if (runsOnDevice(model.id)) add(model.id, model.label, labels.localDetail.replace('{runtime}', model.runtime), 'local');
+    else hosted.push(model);
   }
   for (const value of options.free) {
     const model = normalized(value);
@@ -233,6 +245,9 @@ export function buildModelItems(
   }
   if (options.byo.length && options.byoPool !== false) {
     items.push({ key: 'byo_pool', label: labels.poolLabel, detail: labels.poolDetail, category: 'byo', selection: { mode: 'byo_pool' } });
+  }
+  for (const model of hosted) {
+    add(model.id, model.label, labels.byoDetail.replace('{vendor}', model.runtime), 'byo', labels.hostedTip.replace('{vendor}', model.runtime));
   }
   for (const model of options.byo) {
     add(model.id, model.id, model.cost ?? labels.byoDetail.replace('{vendor}', byoVendorLabel(model.vendor)), 'byo');
@@ -309,11 +324,15 @@ export function modelInUse(
     // yet (the picker's store has not been read since the menu last opened).
     const local = parseLocalModelRef(model);
     if (local) {
+      // Where it runs is the registry's word: a hosted runtime is billed to the person's own account, not run on the device.
+      const runtime = localRuntime(local.provider);
       return item
         ? { name: item.label, detail: item.detail }
         : {
             name: localCatalogModel(model)?.label ?? local.model,
-            detail: labels.localDetail.replace('{runtime}', localRuntime(local.provider).label),
+            detail: runtime.onDevice
+              ? labels.localDetail.replace('{runtime}', runtime.label)
+              : labels.byoDetail.replace('{vendor}', runtime.label),
           };
     }
     // A viewer who cannot pin has nothing to learn from an upstream id; they are on

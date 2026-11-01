@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo } from 'react';
 import {
   DEFAULT_MODEL_IDENTITY,
+  displayModelName,
   parseSubagentOrigin,
+  servedModelLabel,
   type BrainMessage,
   type BrainTraceEvent,
   type ModelIdentityContext,
@@ -9,6 +11,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { buildSettledTimeline, strandedReplyKey, streamingNode } from './timelineModel';
+import { pendingUserNode } from './timelineNodes';
 import { LiveActivity } from './LiveActivity';
 import { ModelMoveStep } from './ModelMoveStep';
 import { DEFAULT_TIMELINE_LABELS, type BrainTimelineLabels } from './timeline/labels';
@@ -38,6 +41,20 @@ export interface BrainTimelineProps {
    * regressing to the static line this replaced.
    */
   activity?: BrainRunActivity | null;
+  /**
+   * The turn the person just sent, until its row is saved (`UseBrainConversation.pendingTurn?.text`): drawn as a
+   * trailing user row exactly like a saved one, with no actions, and gone the instant the saved row lands - so a
+   * message shows at once and is never doubled. A STRING on purpose: the transcript is memoized, and a fresh object
+   * per render would defeat it.
+   */
+  pendingUserText?: string;
+  /**
+   * The model doing the run's work (`UseBrainConversation.servedBy`), named on the live row from the moment its route
+   * is known. Omitted before that - the row never guesses. Strings, for the same reason as `pendingUserText`.
+   */
+  liveModel?: string;
+  /** The account literal the route reported for {@link liveModel} (`own` names the model even where a plan masks upstream ids). */
+  liveAccount?: string;
   loading?: boolean;
   labels?: Partial<BrainTimelineLabels>;
   /** Who is reading — decides whether a reply's provenance chip may name the upstream
@@ -110,6 +127,9 @@ function BrainTimelineInner({
   streamingText,
   isRunning,
   activity,
+  pendingUserText,
+  liveModel,
+  liveAccount,
   loading,
   labels: labelOverrides,
   modelIdentity = DEFAULT_MODEL_IDENTITY,
@@ -177,7 +197,17 @@ function BrainTimelineInner({
     scrollRef,
   );
 
-  const isEmpty = nodes.length === 0 && !loading;
+  const isEmpty = nodes.length === 0 && !loading && !pendingUserText;
+  // The sent-but-unsaved turn, as the user node it is about to become (keyed by its text alone).
+  const pendingNode = useMemo(() => (pendingUserText ? pendingUserNode(pendingUserText) : null), [pendingUserText]);
+  // The live row's model: named like the reply chip names it (a `local/` model by its catalogue name, any other through the
+  // viewer's identity rule), and only once the run's route has named one.
+  const live = useMemo(() => {
+    if (!liveModel) return {};
+    const served = servedModelLabel(liveModel);
+    const name = served.name ?? displayModelName(liveModel, modelIdentity, { account: liveAccount === 'own' ? 'own' : undefined });
+    return { model: name, modelTitle: liveModel };
+  }, [liveModel, liveAccount, modelIdentity]);
   // Once a sub-agent has spoken, the chat's own agent is named as their OWNER, so the
   // transcript reads as Owner and Agent (name), never as one voice. Over the MESSAGES:
   // a trace event or a streamed token cannot change it.
@@ -264,13 +294,16 @@ function BrainTimelineInner({
               );
           }
         })}
+        {pendingNode && (
+          <UserRow key={pendingNode.key} node={pendingNode} labels={labels} focusClass="" renderMsg={renderMsg} pending />
+        )}
         {/* The in-flight step. Shown whenever the run is live — INCLUDING while text
             is streaming, because a streaming turn still has a phase (and the next
             tool call after it is exactly the stretch that used to look like a hang).
             Suppressed only for `writing`, where the arriving text is itself the
             indicator and a second one would just compete with it. */}
         {isRunning && !(streamingText.trim() && activity?.phase === 'writing') && (
-          <LiveActivity activity={activity} isRunning={isRunning} labels={labels.live} />
+          <LiveActivity activity={activity} isRunning={isRunning} labels={labels.live} {...live} />
         )}
       </ol>
       {newer && (

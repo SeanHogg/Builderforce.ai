@@ -7,7 +7,7 @@
  */
 import { useMemo, type ReactNode } from 'react';
 import { BrainComposer, useComposerMenuRequest } from '@seanhogg/builderforce-brain-ui';
-import type { ContextUsage } from '@seanhogg/builderforce-brain-embedded';
+import type { ComposerDraftStore, ContextUsage } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t } from '../i18n/t';
 import { useInferenceModeOption, useServices } from './hooks';
@@ -20,8 +20,8 @@ export interface RovrComposerProps {
   /** This composer's id — the key the chat's error banner opens ITS `/` menu with
    *  ("Pick a model"). */
   composerId: string;
-  value: string;
-  onChange(value: string): void;
+  /** The composer's text (`useComposerDraftStore()`): a keystroke re-renders the box, not the view above it. */
+  draftStore: ComposerDraftStore;
   onSubmit(): void;
   running: boolean;
   onStop(): void;
@@ -40,7 +40,7 @@ export interface RovrComposerProps {
   contextUsage?: ContextUsage | null;
 }
 
-export function RovrComposer({ composerId, value, onChange, onSubmit, running, onStop, onQueue, sendSteers, chatOptions, onOpenSettings, above, showSuggestions, contextUsage }: RovrComposerProps) {
+export function RovrComposer({ composerId, draftStore, onSubmit, running, onStop, onQueue, sendSteers, chatOptions, onOpenSettings, above, showSuggestions, contextUsage }: RovrComposerProps) {
   const { options, memoryGap, request, projectId } = chatOptions;
   const labels = useMemo(() => rovrComposerLabels(memoryGap), [memoryGap]);
   // Where models run — the `/` menu's Run models control and the first-run question.
@@ -72,8 +72,7 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
   return (
     <BrainComposer
       className="rovr-chat__composer"
-      value={value}
-      onChange={onChange}
+      draftStore={draftStore}
       onSubmit={onSubmit}
       running={running}
       onStop={onStop}
@@ -93,7 +92,7 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
         ? {
             suggestions: {
               label: t('suggestionsLabel'),
-              items: ROVR_STARTERS.map((s) => ({ id: s.id, label: t(s.label), onSelect: () => onChange(t(s.prompt)) })),
+              items: ROVR_STARTERS.map((s) => ({ id: s.id, label: t(s.label), onSelect: () => draftStore.set(t(s.prompt)) })),
             },
           }
         : {})}

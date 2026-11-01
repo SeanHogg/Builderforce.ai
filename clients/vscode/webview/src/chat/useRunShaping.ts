@@ -8,7 +8,7 @@
  * default and yields a request identical to having no controls at all.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { isEffort, type Effort } from '@seanhogg/builderforce-brain-embedded';
 import { readStored, writeStored } from '../storage';
 import { EFFORT_KEY, THINKING_KEY } from './chatPreferences';
@@ -28,5 +28,9 @@ export function useRunShaping() {
     writeStored(THINKING_KEY, next ? '1' : '0');
   }, []);
   const [webBrowsing, setWebBrowsing] = useState(false);
-  return { effort, setEffort, thinking, setThinking, webBrowsing, setWebBrowsing };
+  // One identity until a switch moves: the composer is memoized on it.
+  return useMemo(
+    () => ({ effort, setEffort, thinking, setThinking, webBrowsing, setWebBrowsing }),
+    [effort, setEffort, thinking, setThinking, webBrowsing],
+  );
 }

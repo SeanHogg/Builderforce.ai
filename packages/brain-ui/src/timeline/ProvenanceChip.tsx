@@ -1,4 +1,4 @@
-import { displayModelName, type MessageProvenance, type ModelIdentityContext } from '@seanhogg/builderforce-brain-embedded';
+import { displayModelName, servedModelLabel, type MessageProvenance, type ModelIdentityContext } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainTimelineLabels } from './labels';
 
 /**
@@ -27,22 +27,31 @@ export function ProvenanceChip({
   identity: ModelIdentityContext;
 }) {
   const unused = prov.account === 'shared_byo_unused';
-  const badge = prov.account === 'own'
-    ? labels.accountOwn
-    : unused
-      ? labels.accountByoUnused
-      : prov.account === 'shared'
-        ? labels.accountShared
-        : null;
-  const variant = prov.account === 'own'
+  // WHERE it ran, from the ref and the runtime registry (`servedModelLabel`) - never from the `local/` prefix: an engine
+  // on this device says so; a hosted runtime reached from this machine (Kimi Code) is the person's own account.
+  const served = servedModelLabel(prov.model);
+  const account = served.hostedFromHere ? 'own' : prov.account;
+  const badge = served.onDevice
+    ? labels.accountOnDevice
+    : account === 'own'
+      ? labels.accountOwn
+      : unused
+        ? labels.accountByoUnused
+        : account === 'shared'
+          ? labels.accountShared
+          : null;
+  const variant = served.onDevice || account === 'own'
     ? 'bf-tl__prov--own'
     : unused
       ? 'bf-tl__prov--unused'
       : 'bf-tl__prov--shared';
   // Masked viewers get the product name in the tooltip too — a vendor suffix would
-  // give away exactly what the name is there to abstract.
-  const name = displayModelName(prov.model, identity, { account: prov.account });
-  const modelTitle = prov.vendor && name === prov.model ? `${name} · ${prov.vendor}` : name;
+  // give away exactly what the name is there to abstract. A served `local/` model is the viewer's own choice: named
+  // by its catalogue name (else the model's last segment) with the raw id kept in the tooltip.
+  const name = served.name ?? displayModelName(prov.model, identity, { account });
+  const modelTitle = served.name
+    ? prov.model
+    : prov.vendor && name === prov.model ? `${name} · ${prov.vendor}` : name;
   return (
     <div className={`bf-tl__prov ${variant}`}>
       <span className="bf-tl__prov-model" title={modelTitle}>{name}</span>

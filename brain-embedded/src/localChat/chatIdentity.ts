@@ -15,7 +15,7 @@
 
 import type { EntityDestination, LocalFirstStore, LocalFirstTransaction } from '@builderforce/local-first';
 import { BOUND_ONLY_VERSION, queueImport } from './journal';
-import { chatRecordById, liveRecords, type ChatValue } from './records';
+import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
 
 /** What a host supplies so a local chat can be bound. */
 export interface ChatBindingPort {
@@ -71,8 +71,11 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
       await tx.putMapping({ destination, entityType: 'chat', clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
       // A sync pass may have queued the chat's import before this binding existed: re-queue
       // it so it names the server chat (and the server adopts it, not mints a second one).
-      const queued = (await tx.pending()).some((event) => event.entityType === 'chat' && event.clientEntityId === clientId && event.operation === 'import');
-      const record = queued ? (await liveRecords<ChatValue>(tx, 'chat', deviceId)).find((row) => row.id === clientId) : undefined;
+      let queued = false;
+      await tx.scanPending((event) => {
+        if (event.entityType === 'chat' && event.clientEntityId === clientId && event.operation === 'import') queued = true;
+      });
+      const record = queued ? (await liveRecords<ChatValue>(tx, 'chat', deviceId, (row) => row.id === clientId))[0] : undefined;
       if (record) await queueImport(tx, record);
     });
   };
@@ -95,8 +98,11 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
     clientIdFor: async (localId) => (await read(localId))?.chat.id,
     localIdFor: (serverId) => store.read(async (tx) => {
       const destination = port.destination();
-      for (const chat of await liveRecords<ChatValue>(tx, 'chat', deviceId)) {
-        if ((await boundServerId(tx, chat.id, destination)) === serverId) return chat.payload.chat.id;
+      // Just each chat's two ids — a scan, not a copy of every chat row.
+      const chats: Array<{ clientId: string; localId: number }> = [];
+      await scanLive<ChatValue>(tx, 'chat', deviceId, (row) => { chats.push({ clientId: row.id, localId: row.payload.chat.id }); });
+      for (const chat of chats) {
+        if ((await boundServerId(tx, chat.clientId, destination)) === serverId) return chat.localId;
       }
       return undefined;
     }),

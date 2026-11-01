@@ -89,6 +89,17 @@ export type TimelineNode =
  *
  *  This rank breaks ties ACROSS the two sources only (a message against a trace
  *  step). It must never re-rank the trace against ITSELF — see {@link TRACE_RANK}. */
+/**
+ * The user node of a turn that is sent but not saved yet (`BrainTimeline`'s `pendingUserText`): the same node a
+ * persisted user row becomes, so it draws identically. Its message is synthetic - a negative id no saved row can have,
+ * no metadata - and the transcript gives it no actions.
+ */
+export const PENDING_USER_KEY = 'pending-user';
+export function pendingUserNode(text: string): Extract<TimelineNode, { kind: 'user' }> {
+  const message: BrainMessage = { id: -1, role: 'user', content: text, metadata: null, seq: Number.MAX_SAFE_INTEGER, createdAt: '' };
+  return { key: PENDING_USER_KEY, kind: 'user', ts: Number.MAX_SAFE_INTEGER, order: 0, message, text, images: [] };
+}
+
 export const ORDER: Record<TimelineNode['kind'], number> = {
   user: 0,
   recall: 1,
