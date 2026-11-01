@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   runEmbeddedAgentMock: vi.fn(),
   runCliAgentMock: vi.fn(),
   governMock: vi.fn(),
+  /** The chain has no embedded candidate: a failure is the run's. */
+  noFallback: false,
 }));
 
 // The chain is [the CLI primary, then an embedded model]; a failure moves on, as the real fallback does.
@@ -21,7 +23,8 @@ vi.mock("../../agents/model-fallback.js", () => ({
   runWithModelFallback: async ({ provider, model, run }: { provider: string; model: string; run: (p: string, m: string) => Promise<unknown> }) => {
     try {
       return { result: await run(provider, model), provider, model };
-    } catch {
+    } catch (err) {
+      if (state.noFallback) throw err;
       return { result: await run("anthropic", "claude"), provider: "anthropic", model: "claude" };
     }
   },
@@ -31,17 +34,21 @@ vi.mock("../../agents/embedded.js", () => ({
   runEmbeddedAgent: (params: unknown) => state.runEmbeddedAgentMock(params),
 }));
 vi.mock("../../agents/cli-runner.js", () => ({ runCliAgent: (params: unknown) => state.runCliAgentMock(params) }));
-vi.mock("../../agents/cli-runner/governance.js", () => ({ governCliRun: (target: unknown) => state.governMock(target) }));
+vi.mock("../../agents/cli-runner/governance.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../agents/cli-runner/governance.js")>()),
+  governCliRun: (target: unknown) => state.governMock(target),
+}));
 vi.mock("./queue.js", () => ({ enqueueFollowupRun: vi.fn(), scheduleFollowupDrain: vi.fn() }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  state.noFallback = false;
   vi.stubEnv("BUILDERFORCE_AGENTS_TEST_FAST", "1");
   state.runEmbeddedAgentMock.mockResolvedValue({ payloads: [{ text: "ok" }], meta: { agentMeta: { usage: { input: 1, output: 1 } } } });
   state.runCliAgentMock.mockResolvedValue({ payloads: [{ text: "ok" }], meta: { agentMeta: { usage: { input: 1, output: 1 } } } });
 });
 
-async function runTurn() {
+async function runTurn(opts?: Record<string, unknown>) {
   const { runReplyAgent } = await import("./agent-runner.js");
   const typing = createMockTypingController();
   const followupRun = {
@@ -70,8 +77,9 @@ async function runTurn() {
   const stop = onAgentEvent((evt) => {
     if (evt.stream === "lifecycle") lifecycle.push(evt);
   });
+  let reply: unknown;
   try {
-    await runReplyAgent({
+    reply = await runReplyAgent({
       commandBody: "hello",
       followupRun,
       queueKey: "main",
@@ -80,7 +88,7 @@ async function runTurn() {
       shouldFollowup: false,
       isActive: false,
       isStreaming: false,
-      opts: undefined,
+      opts: opts as never,
       typing,
       sessionKey: "main",
       sessionCtx: { Provider: "whatsapp", MessageSid: "msg" } as unknown as TemplateContext,
@@ -95,14 +103,14 @@ async function runTurn() {
   } finally {
     stop();
   }
-  return lifecycle;
+  return { lifecycle, reply };
 }
 
 describe("a governed CLI primary", () => {
   it("falls over to the embedded model with no lifecycle event from the refused attempt", async () => {
     state.governMock.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", provider: "codex-cli" }));
 
-    const lifecycle = await runTurn();
+    const { lifecycle } = await runTurn();
 
     expect(state.governMock).toHaveBeenCalledWith({ provider: "codex-cli", model: "gpt" });
     expect(state.runCliAgentMock).not.toHaveBeenCalled();
@@ -111,10 +119,36 @@ describe("a governed CLI primary", () => {
     expect(lifecycle.filter((e) => e.data.phase === "start")).toEqual([]);
   });
 
+  it("is not announced as the selected model when governance refuses it", async () => {
+    state.governMock.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", provider: "codex-cli" }));
+    const selected: string[] = [];
+
+    await runTurn({ onModelSelected: (m: { provider: string }) => selected.push(m.provider) });
+
+    expect(selected).toEqual(["anthropic"]);
+  });
+
+  it("with no embedded candidate the failure names the gates and is NOT mistaken for a context overflow, whatever the gate is called", async () => {
+    state.noFallback = true;
+    state.governMock.mockRejectedValue(
+      new FailoverError("The codex-cli CLI backend cannot be held to this tenant's governance gates, so it was not used. Gates in force: «prompt-limit (block exec)».", {
+        reason: "unknown",
+        provider: "codex-cli",
+      }),
+    );
+
+    const { reply } = await runTurn();
+
+    const text = JSON.stringify(reply);
+    expect(text).toContain("Agent failed before reply");
+    expect(text).toContain("prompt-limit");
+    expect(text).not.toContain("Context overflow");
+  });
+
   it("control: an ungoverned CLI primary runs and announces its lifecycle as before", async () => {
     state.governMock.mockResolvedValue("");
 
-    const lifecycle = await runTurn();
+    const { lifecycle } = await runTurn();
 
     expect(state.runCliAgentMock).toHaveBeenCalledTimes(1);
     expect(state.runEmbeddedAgentMock).not.toHaveBeenCalled();

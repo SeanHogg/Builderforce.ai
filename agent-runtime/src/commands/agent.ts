@@ -13,6 +13,7 @@ import { getCliSessionId } from "../agents/cli-session.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
+import { governCliRun } from "../agents/cli-runner/governance.js";
 import { runWithModelFallback } from "../agents/model-fallback.js";
 import {
   buildAllowedModelSet,
@@ -545,7 +546,10 @@ export async function agentCommand(
         model,
         agentDir,
         fallbacksOverride: effectiveFallbacksOverride,
-        run: (providerOverride, modelOverride) => {
+        run: async (providerOverride, modelOverride) => {
+          // A CLI model the tenant's governance refuses is not an ATTEMPT: it fails over before the counter moves, so the next candidate
+          // gets the person's own prompt and images, not "Continue where you left off" for a run that never started.
+          if (isCliProvider(providerOverride, cfg)) await governCliRun({ provider: providerOverride, model: modelOverride });
           const isFallbackRetry = fallbackAttemptIndex > 0;
           fallbackAttemptIndex += 1;
           return runAgentAttempt({

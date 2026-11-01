@@ -9,6 +9,7 @@ import { getProcessSupervisor } from "../process/supervisor/index.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "./bootstrap-files.js";
 import { resolveCliBackendConfig } from "./cli-backends.js";
+import { formatCliArgvForLog } from "./cli-runner/argv-log.js";
 import { deliverCliGovernance, governCliRun } from "./cli-runner/governance.js";
 import {
   appendImagePathsToPrompt,
@@ -191,39 +192,7 @@ export async function runCliAgent(params: {
       );
       const logOutputText = isTruthyEnvValue(process.env.BUILDERFORCE_AGENTS_CLAUDE_CLI_LOG_OUTPUT);
       if (logOutputText) {
-        const logArgs: string[] = [];
-        for (let i = 0; i < args.length; i += 1) {
-          const arg = args[i] ?? "";
-          if (arg === backend.systemPromptArg) {
-            const systemPromptValue = args[i + 1] ?? "";
-            logArgs.push(arg, `<systemPrompt:${systemPromptValue.length} chars>`);
-            i += 1;
-            continue;
-          }
-          if (arg === backend.sessionArg) {
-            logArgs.push(arg, args[i + 1] ?? "");
-            i += 1;
-            continue;
-          }
-          if (arg === backend.modelArg) {
-            logArgs.push(arg, args[i + 1] ?? "");
-            i += 1;
-            continue;
-          }
-          if (arg === backend.imageArg) {
-            logArgs.push(arg, "<image>");
-            i += 1;
-            continue;
-          }
-          logArgs.push(arg);
-        }
-        if (argsPrompt) {
-          const promptIndex = logArgs.indexOf(argsPrompt);
-          if (promptIndex >= 0) {
-            logArgs[promptIndex] = `<prompt:${argsPrompt.length} chars>`;
-          }
-        }
-        log.info(`cli argv: ${backend.command} ${logArgs.join(" ")}`);
+        log.info(`cli argv: ${backend.command} ${formatCliArgvForLog(backend, args, argsPrompt)}`);
       }
 
       const env = (() => {

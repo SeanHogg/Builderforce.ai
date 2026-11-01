@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { runCliAgent } from "../../agents/cli-runner.js";
-import { governCliRun } from "../../agents/cli-runner/governance.js";
+import { describeRunError, governCliRun } from "../../agents/cli-runner/governance.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import { isCliProvider } from "../../agents/model-selection.js";
@@ -160,6 +160,10 @@ export async function runAgentTurnWithFallback(params: {
       const fallbackResult = await runWithModelFallback({
         ...resolveModelFallbackOptions(params.followupRun.run),
         run: async (provider, model) => {
+          // Tenant governance decides FIRST, before this model is announced as selected or its lifecycle starts: a CLI model it refuses
+          // moves the run to the next candidate with no "selected", "start" or "error" for it (the web chat shows a lifecycle error as a
+          // failed run on every turn of a governed CLI primary, and nothing about the run failed; it was routed elsewhere).
+          if (isCliProvider(provider, params.followupRun.run.config)) await governCliRun({ provider, model });
           // Notify that model selection is complete (including after fallback).
           // This allows responsePrefix template interpolation with the actual model.
           params.opts?.onModelSelected?.({
@@ -169,10 +173,6 @@ export async function runAgentTurnWithFallback(params: {
           });
 
           if (isCliProvider(provider, params.followupRun.run.config)) {
-            // The tenant's governance decides BEFORE this attempt announces itself: a CLI model it refuses moves the run to the next
-            // candidate without a lifecycle "start" / "error" pair, which the web chat would show as a failed run on every turn of a
-            // governed CLI primary (nothing about the run failed; it was routed elsewhere).
-            await governCliRun({ provider, model });
             const startedAt = Date.now();
             emitAgentEvent({
               runId,
@@ -434,12 +434,13 @@ export async function runAgentTurnWithFallback(params: {
 
       break;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const isContextOverflow = isLikelyContextOverflowError(message);
-      const isCompactionFailure = isCompactionFailureError(message);
-      const isSessionCorruption = /function call turn comes immediately after/i.test(message);
-      const isRoleOrderingError = /incorrect role information|roles must alternate/i.test(message);
-      const isTransientHttp = isTransientHttpError(message);
+      // `classifiable` is the text the error classifiers read: a governance refusal's gate ids are not part of it (a gate named `prompt-limit` is not a context overflow).
+      const { message, classifiable } = describeRunError(err);
+      const isContextOverflow = isLikelyContextOverflowError(classifiable);
+      const isCompactionFailure = isCompactionFailureError(classifiable);
+      const isSessionCorruption = /function call turn comes immediately after/i.test(classifiable);
+      const isRoleOrderingError = /incorrect role information|roles must alternate/i.test(classifiable);
+      const isTransientHttp = isTransientHttpError(classifiable);
 
       if (
         isCompactionFailure &&

@@ -21,7 +21,8 @@ import { resolveCliBackendConfig } from "../cli-backends.js";
 import { isFailoverError } from "../failover-error.js";
 import { runWithModelFallback } from "../model-fallback.js";
 import { buildSystemPrompt, resolveSystemPromptUsage } from "./helpers.js";
-import { deliverCliGovernance, governCliRun } from "./governance.js";
+import { isLikelyContextOverflowError } from "../embedded-helpers.js";
+import { deliverCliGovernance, describeRunError, governCliRun } from "./governance.js";
 
 const block: PolicyGate = { id: "no-shell", tool: "exec", effect: "block", reason: "shell is off" };
 const approval: PolicyGate = { id: "ask-first", tool: "write_file", effect: "require-approval", reason: "needs a person" };
@@ -139,5 +140,31 @@ describe("directive gates on a resumed CLI session", () => {
 
   it("with no directives the prompt is never touched", () => {
     expect(deliverCliGovernance({ governance: "", systemPromptArg: null, prompt: "fix the bug" })).toBe("fix the bug");
+  });
+});
+
+describe("describeRunError", () => {
+  const hostile: PolicyGate = { id: "prompt-limit", tool: "exec", effect: "block" };
+
+  it("a gate id that reads like a provider error is not what the classifiers read", async () => {
+    mocks.resolveGates.mockResolvedValue([hostile]);
+    const err = await governCliRun({ provider: "claude-cli", model: "opus" }).catch((e: unknown) => e);
+    const { message, classifiable } = describeRunError(err);
+
+    // the hazard is real: the raw text reads as a context overflow
+    expect(isLikelyContextOverflowError(message)).toBe(true);
+    // the person and the log still read the gate by name
+    expect(message).toContain("prompt-limit");
+    // the classifiers do not
+    expect(classifiable).not.toContain("prompt-limit");
+    expect(isLikelyContextOverflowError(classifiable)).toBe(false);
+  });
+
+  it("leaves any other error as it is", () => {
+    expect(describeRunError(new Error("context overflow: prompt too large"))).toEqual({
+      message: "context overflow: prompt too large",
+      classifiable: "context overflow: prompt too large",
+    });
+    expect(describeRunError("plain").classifiable).toBe("plain");
   });
 });

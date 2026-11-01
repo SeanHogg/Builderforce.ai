@@ -30,6 +30,20 @@ function describeGate(gate: PolicyGate): string {
   return `${gate.id} (${gate.effect} ${gate.tool ?? "all tools"})`;
 }
 
+/** The gate list in a refusal message sits between these, so the text a classifier reads can leave it out. */
+const GATES_OPEN = "«";
+const GATES_CLOSE = "»";
+
+/**
+ * An error as the caller of a model run needs it: `message` is what the person and the log read; `classifiable` is what the error
+ * classifiers (context overflow, compaction, role ordering, transient HTTP) read. They differ only by the gate ids of a governance
+ * refusal, which are an operator's words and can look like anything (`prompt-limit`), and must never be mistaken for a provider error.
+ */
+export function describeRunError(err: unknown): { message: string; classifiable: string } {
+  const message = err instanceof Error ? err.message : String(err);
+  return { message, classifiable: message.replace(new RegExp(`${GATES_OPEN}[^${GATES_CLOSE}]*${GATES_CLOSE}`, "g"), "gates") };
+}
+
 /**
  * The prompt for this turn, with the governance directives in front of it when the system prompt (which carries them) is NOT sent
  * this turn: a resumed session (`systemPromptWhen: "first"`), a backend that never sends one or has no flag for it. When the
@@ -50,14 +64,15 @@ export async function governCliRun(target: { provider: string; model?: string })
   const gates = await resolveHostPolicyGates();
   const unenforceable = gates.filter(isUnenforceable);
   if (unenforceable.length > 0) {
-    // The run moves to the next model (an embedded one, when the chain has one): that can change who bills the turn.
+    // The CLI model is not used for this run. If the chain has a next model it takes over, which can change who bills the turn; if it has
+    // none the run fails with this refusal. (This cannot know which, so it says neither as fact.)
     logWarn(
       `[cli-governance] ${target.provider}${target.model ? `/${target.model}` : ""} refused by tenant governance gate(s) ` +
-        `${unenforceable.map((g) => g.id).join(", ")}; the run moves to the next model, which can change billing`,
+        `${unenforceable.map((g) => g.id).join(", ")}; it is not used for this run. A next model in the chain, if any, takes over (which can change billing)`,
     );
     throw new FailoverError(
       `The ${target.provider} CLI backend cannot be held to this tenant's governance gates, so it was not used. ` +
-        `Gates in force: ${unenforceable.map(describeGate).join(", ")}.`,
+        `Gates in force: ${GATES_OPEN}${unenforceable.map(describeGate).join(", ")}${GATES_CLOSE}.`,
       {
         // not a provider fault (nothing to cool down or retry): the model is simply not allowed, so the next candidate runs
         reason: "unknown",
