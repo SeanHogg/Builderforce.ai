@@ -13,12 +13,12 @@
  * `@builderforce/learned-routing`); the host owns the transport. Pure.
  */
 
-import { isRateLimitFailure, isTenantBudgetFailure, type RunOutcomeRequest } from '@builderforce/learned-routing';
+import { isRateLimitFailure, isTenantBudgetFailure, type RunOutcomeTelemetry } from '@builderforce/learned-routing';
 import type { BrainTraceEvent } from './brainTriage';
 import { attemptedDelegation } from './delegationRequest';
 import { modelScorecard } from './modelScorecard';
 
-export interface BrainRunOutcome {
+export interface BrainRunOutcome extends RunOutcomeTelemetry {
   /** Idempotency key — one outcome per run. */
   clientRunId: string;
   /** The model that made this run's code changes. */
@@ -44,13 +44,6 @@ export interface BrainRunOutcome {
    *  budget): an AVAILABILITY fact that demotes the model without calling it a bad coder. Present only when true. */
   rateLimited?: true;
 }
-
-/**
- * What a run reports to the door: the coder's grade of a run that changed code (or was asked to and delivered nothing), alone on the
- * Brain's own loop; on the agent engine the same grade MERGED into the run's uniform §8.2 row (`runOutcomeRequestOf`), and the row alone
- * for a run with no grade. One report per run either way - never a grade and a row.
- */
-export type BrainRunReport = BrainRunOutcome | RunOutcomeRequest;
 
 /** The model turns a run completed, counted from ITS trace: the number the Brain has always reported as `steps` (the finishing turn included). */
 export const completedTurns = (trace: readonly BrainTraceEvent[]): BrainTraceEvent[] => trace.filter((e) => e.label === 'llm.complete' && !e.isError);

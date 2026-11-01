@@ -260,6 +260,18 @@ export async function createPanelServices(): Promise<PanelServices> {
     resolveSystemPrompt: () => '',
   };
 
+  // A settled run's record, to the gateway's run-outcome door with the device key. Through the same guarded fetch as every platform call
+  // (a device kept Local only sends nothing); signed out, there is no key and nothing is sent.
+  const postRunOutcome = async (outcome: object): Promise<void> => {
+    const key = await session.key();
+    if (!key) return;
+    await fetchImpl(`${baseUrl}/llm/v1/run-outcome`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify(outcome),
+    });
+  };
+
   const host = createRovrRunHost({
     async catalog(chatId) {
       const tools = createBrowserTools({
@@ -297,15 +309,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     },
     // A settled run's outcome record, to the gateway's run-outcome door with the device key. Through the same guarded fetch as every platform
     // call (a device kept Local only sends nothing); signed out, there is no key and nothing is sent.
-    async reportOutcome(outcome) {
-      const key = await session.key();
-      if (!key) return;
-      await fetchImpl(`${baseUrl}/llm/v1/run-outcome`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-        body: JSON.stringify(outcome),
-      });
-    },
+    reportRunRecord: postRunOutcome,
     onDeclined(chatId, call) {
       const tab = working.current();
       void ledger.record(chatId, {

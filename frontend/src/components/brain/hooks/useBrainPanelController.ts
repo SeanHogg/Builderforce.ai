@@ -198,7 +198,7 @@ export function useBrainPanelController({
   // The run-time parts the web host adds: the PreFetch, the entry point it declares and the report port for the run's outcome record.
   const { prepareRun: prefetchRun } = knowledgePrefetch;
   const prepareRun = useCallback(
-    async () => ({ ...(await prefetchRun()), entryPoint: 'web' as const, reportOutcome: reportWebRunOutcome }),
+    async () => ({ ...(await prefetchRun()), entryPoint: 'web' as const, reportRunRecord: reportWebRunOutcome }),
     [prefetchRun],
   );
   const conv = useBrainConversation({

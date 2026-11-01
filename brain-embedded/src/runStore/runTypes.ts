@@ -8,7 +8,8 @@ import type { BrainToolSpec, ChatCompletionMessage, ContentPart, StreamChatOptio
 import type { ReasoningIntent } from '../effort';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { ChatErrorAction } from '../chatError';
-import type { BrainRunReport } from '../runOutcomeReport';
+import type { BrainRunOutcome } from '../runOutcomeReport';
+import type { RunOutcomeRequest } from '@builderforce/learned-routing';
 import type { RunStopHook } from '../stopHooks';
 import type { RunLineage } from '../runLineage';
 import type { BrainRunActivity } from '../runActivity';
@@ -222,7 +223,14 @@ export interface BrainRunRequest {
    * to `/llm/v1/run-outcome`). Omit and nothing is reported. Best-effort: a rejection is
    * swallowed and never affects the run.
    */
-  reportOutcome?: (outcome: BrainRunReport) => Promise<unknown>;
+  reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
+  /**
+   * Told the uniform §8.2 record (PRD 35) of a run that made no coder grade, once, when an AGENT-engine run ends: the entry point, the counts,
+   * `routingSignal: false` (the door records it and routing never learns from it). The host posts it to the same door. It is its own port so
+   * that {@link reportOutcome} keeps doing exactly what it does on the Brain's loop: the same runs, the same `source`, the same fields. A run
+   * with a grade reports through `reportOutcome` alone, the §8.2 telemetry riding on it as optional fields. One report per run.
+   */
+  reportRunRecord?: (record: RunOutcomeRequest) => Promise<unknown>;
   /**
    * The host's STOP HOOK (`stopHooks.ts`) — asked each time the run is about to end; a
    * returned instruction holds it for another turn (bounded per run). The VS Code host

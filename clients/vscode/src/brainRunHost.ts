@@ -39,7 +39,7 @@ import {
   stopBeforeStart,
   subscribeRun,
   subscribeRunStore,
-  type BrainRunReport,
+  type BrainRunOutcome,
   type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
@@ -297,7 +297,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(p.userTurnMessageId != null ? { userTurnMessageId: p.userTurnMessageId } : {}),
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
-        ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunReport) => ports.reportOutcome!(o) } : {}),
+        ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
+        ...(ports.reportRunRecord ? { reportRunRecord: (record: Parameters<NonNullable<BrainRunHostPorts["reportRunRecord"]>>[0]) => ports.reportRunRecord!(record) } : {}),
         ...(p.child ? { lineage: p.child.lineage } : {}),
         ...runSettings,
         ...chatLedgerRequest(ports, chatId),

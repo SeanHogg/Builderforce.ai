@@ -53,6 +53,8 @@ export interface RovrRunHostPorts {
   prefetch?(): Promise<BrainRunRequest['prefetch']>;
   /** Where a settled run's outcome record goes (the gateway's run-outcome door). Absent: nothing is reported. Best-effort. */
   reportOutcome?: BrainRunRequest['reportOutcome'];
+  /** The agent engine's uniform record of a run that made no coder grade; the same door. */
+  reportRunRecord?: BrainRunRequest['reportRunRecord'];
 }
 
 export interface RovrRunHost {
@@ -90,6 +92,7 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
         // The surface this run came in through: the label its uniform outcome row carries (telemetry only; nothing branches on it).
         entryPoint: 'rovr',
         ...(ports.reportOutcome ? { reportOutcome: ports.reportOutcome } : {}),
+        ...(ports.reportRunRecord ? { reportRunRecord: ports.reportRunRecord } : {}),
         // The device's opt-in to the one agent (`builderforce.runEngine`): selects the engine and nothing else.
         ...storedRunEngineField(),
       };

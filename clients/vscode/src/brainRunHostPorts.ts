@@ -322,6 +322,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     ...deviceLedgerPorts(local.usage, hostLog),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
+    reportRunRecord: (record) => postRunOutcome(record),
     evermind: (projectId, serverChatId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId, serverChatId), workspaceRoot() || undefined),
     // The ONE api `ContextSource` the native participant and the cloud engine read.
     // Continuity-scoped to the conversation's server chat — an unbound chat has no

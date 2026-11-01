@@ -2,7 +2,6 @@ brain-embedded/src/brainRunStore.test.ts
 brain-embedded/src/browserEngine.test.ts
 brain-embedded/src/chatDelivery.test.ts
 brain-embedded/src/config.test.tsx
-brain-embedded/src/crossAdapterConformance.test.ts
 brain-embedded/src/handOffExecution.e2e.test.ts
 brain-embedded/src/hostModelStream.test.ts
 brain-embedded/src/localFirstTransport.test.ts
@@ -34,4 +33,6 @@ brain-embedded/src/useChatTurns.test.tsx
 brain-embedded/src/useChatTurns.waiting.test.tsx
 brain-embedded/src/useContinuation.test.tsx
 clients/chrome/src/host/rovrRunHost.test.ts
+clients/chrome/src/host/rovrRunHost.entryPoint.test.ts
+clients/vscode/src/brainRunHost.entryPoint.test.ts
 clients/vscode/src/nativeBrainRun.setup.test.ts

@@ -4,7 +4,7 @@
  * `prepareRun` laid over a request, started on the agent engine through the real `startRun`, and the record the port is told.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { resetBrainRunStore, startRun, type BrainRunReport, type BrainStreamFn, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';
+import { resetBrainRunStore, startRun, type BrainRunRequest, type BrainStreamFn, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
 import { createRovrBrainPersistence } from '../persistence/rovrBrainPersistence';
 import { createMemoryRecords } from '../store/records';
@@ -16,11 +16,11 @@ describe("Rovr's host labels its runs and reports them", () => {
   it("prepares a run for the 'rovr' entry point, and the door hears one record that says so, recorded and never taught", async () => {
     const records = createMemoryRecords();
     const persistence = createRovrBrainPersistence(records, createLocalFirstPersistence(records, { enqueue: () => undefined }));
-    const reported: BrainRunReport[] = [];
+    const reported: Array<Parameters<NonNullable<BrainRunRequest['reportRunRecord']>>[0]> = [];
     const host = createRovrRunHost({
       catalog: async () => ({ specs: [], run: async () => ({ ok: true }), needsConfirm: () => false }),
       systemPrompt: async () => 'You are Rovr.',
-      reportOutcome: async (outcome) => { reported.push(outcome); },
+      reportRunRecord: async (record) => { reported.push(record); },
     });
     const id = -9100;
     const prepared = await host.prepareRun(id);
