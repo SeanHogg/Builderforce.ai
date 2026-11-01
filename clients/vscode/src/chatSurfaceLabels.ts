@@ -26,6 +26,7 @@ export function chatSurfaceLabels(): Record<string, string> {
     "app.chatSummarize": t("Summarize"),
     "app.chatDelete": t("Delete"),
     "app.chatArchive": t("Archive"),
+    "app.chatStatsAgents": t("{count} agents"),
     "app.emptyTitle": t("What are we working on?"),
     "app.emptyHint": t("Ask about this workspace, or start from one of these."),
     "app.startersHeading": t("Start with"),

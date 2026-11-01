@@ -396,6 +396,7 @@
   "Run prompt": "Ejecutar prompt",
   "Run {name}?": "¿Ejecutar {name}?",
   "Running": "En ejecución",
+  "{count} agents": "{count} agentes",
   "Running {0}…": "Ejecutando {0}…",
   "Running {tool}": "Ejecutando {tool}",
   "Runs on this machine via {runtime} — no plan usage, works offline.": "Se ejecuta en esta máquina mediante {runtime}: no consume el plan y funciona sin conexión.",

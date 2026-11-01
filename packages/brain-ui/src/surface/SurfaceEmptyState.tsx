@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react';
-import { BrainMark } from './BrainMark';
 
 /**
- * <SurfaceEmptyState> — an AI conversation before its first message: a greeting, the
- * host's controls and the starting points. Moved from the web Brain panel
+ * <SurfaceEmptyState> — an AI conversation before its first message: the host's
+ * controls and the starting points. Moved from the web Brain panel
  * (`BrainEmptyState`) so the editor and Rovr open on the same screen.
  *
  * `page` — a centred hero with the composer in the middle (the full Brain page).
  * `docked` — a side column: a compact greeting and the starters scroll ABOVE a composer
  * the host pins in its `SurfaceFooter`, in the same place it stays once the chat has
  * started, so the first message does not make the input jump.
+ *
+ * The greeting carries NO logo of its own: the shared `SurfaceHeader` already wears
+ * the BrainMark, so a mark here would render the brand twice on the blank screen.
+ * The header's mark + this greeting read as one co-lated introduction.
  *
  * There is no "Start new chat" button: this IS a new chat, and sending (or picking a
  * starter) creates it. Mode is chosen in the composer's `/` menu, not a second toggle here.
@@ -34,7 +37,6 @@ export function SurfaceEmptyState({ layout, title, hint, controls, composer, sta
     <div className={`bf-empty bf-empty--${layout}`}>
       {docked ? (
         <div className="bf-empty__greet">
-          <span aria-hidden className="bf-empty__mark"><BrainMark /></span>
           <div className="bf-empty__copy">
             <div className="bf-empty__title">{title}</div>
             <div className="bf-empty__hint">{hint}</div>
@@ -42,7 +44,6 @@ export function SurfaceEmptyState({ layout, title, hint, controls, composer, sta
         </div>
       ) : (
         <>
-          <span aria-hidden className="bf-empty__mark bf-empty__mark--hero"><BrainMark /></span>
           <div className="bf-empty__title">{title}</div>
           <div className="bf-empty__hint">{hint}</div>
         </>

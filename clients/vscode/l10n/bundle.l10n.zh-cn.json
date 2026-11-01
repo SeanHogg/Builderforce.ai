@@ -396,6 +396,7 @@
   "Run prompt": "运行提示词",
   "Run {name}?": "运行 {name}？",
   "Running": "运行中",
+  "{count} agents": "{count} 个代理",
   "Running {0}…": "正在运行 {0}…",
   "Running {tool}": "正在运行 {tool}",
   "Runs on this machine via {runtime} — no plan usage, works offline.": "通过 {runtime} 在本机运行 —— 不消耗套餐额度，可离线使用。",

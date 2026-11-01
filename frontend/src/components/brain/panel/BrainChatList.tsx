@@ -33,6 +33,13 @@ export function BrainChatList() {
   const tBrain = useTranslations('brain');
   const lookup = useLabelLookup(chatHistoryPath);
   const labels = useMemo(() => chatHistoryLabelsFrom(lookup), [lookup]);
+  /** Linked-ticket % done for a row's stats chip — the same `ticketCount > 0 && pct != null`
+   *  guard as the title's `chatSwitcherLabel`, so a chat with no tickets never reads `0%`. */
+  const progressStatsOf = (chat: (typeof filteredChats)[number]): string | null => {
+    const count = chat.ticketCount ?? 0;
+    const pct = chat.ticketProgressPct;
+    return count > 0 && typeof pct === 'number' && Number.isFinite(pct) ? `${Math.round(pct)}%` : null;
+  };
   const projectOptions = useMemo(() => [
     { value: '', label: tBrain('addToProject') },
     { value: '__new__', label: tBrain('createNewProject') },
@@ -46,7 +53,7 @@ export function BrainChatList() {
         return (
           <ChatHistoryRow
             key={chat.id}
-            chat={chat}
+            chat={{ ...chat, stats: progressStatsOf(chat) }}
             active={active}
             labels={labels}
             {...rows.rowProps(chat.id)}

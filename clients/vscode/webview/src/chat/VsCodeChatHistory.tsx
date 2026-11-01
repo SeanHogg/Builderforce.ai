@@ -14,6 +14,7 @@ import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import { ChatHistoryList, ChatHistoryRow, type ChatRowActions } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 import { chatHistoryLabels, makeT } from './chatLabels';
+import { getChatChildrenCount } from './chatChildren';
 import type { ChatRunStatus } from './useVsCodeChats';
 
 /** `$1.20` — always two decimals so the chip's width stays stable across rows. */
@@ -23,14 +24,22 @@ function usd(n: number): string {
 
 /**
  * The per-row cost/progress chip the history shows beside the overflow menu:
- * the linked-ticket % done (when present) and the chat's `$ spent / $ saved`
- * rollup (when the server attached one). Absent pieces are simply omitted so a
- * chat with no usage reads as `% done` only, not a wall of zeros.
+ * the live sub-agents executing (when any), the linked-ticket % done (when
+ * present — the same `ticketCount > 0 && pct != null` guard as the title's
+ * `chatSwitcherLabel`, so a chat with no tickets never reads `0%`), and the
+ * chat's `$ spent / $ saved` rollup (when the server attached one). Absent
+ * pieces are simply omitted so a chat with no usage reads as `% done` only,
+ * not a wall of zeros.
  */
-function runStatsOf(chat: BrainChat): string | null {
+function runStatsOf(chat: BrainChat, t: (key: string, fallback: string) => string): string | null {
   const parts: string[] = [];
+  const agents = getChatChildrenCount(chat.id);
+  if (agents > 0) {
+    parts.push(t('app.chatStatsAgents', '{count} agents').replace('{count}', String(agents)));
+  }
+  const count = chat.ticketCount ?? 0;
   const pct = chat.ticketProgressPct;
-  if (typeof pct === 'number' && Number.isFinite(pct)) parts.push(`${Math.round(pct)}%`);
+  if (count > 0 && typeof pct === 'number' && Number.isFinite(pct)) parts.push(`${Math.round(pct)}%`);
   const spend = chat.spend;
   if (spend) {
     const s = usd(spend.spend.totalUsd);
@@ -82,7 +91,7 @@ export function VsCodeChatHistory({ id, chats, loading, activeId, titleOf, runSt
         return (
           <ChatHistoryRow
             key={chat.id}
-            chat={{ id: chat.id, title: titleOf(chat), ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct, stats: runStatsOf(chat) }}
+            chat={{ id: chat.id, title: titleOf(chat), ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct, stats: runStatsOf(chat, t) }}
             active={chat.id === activeId}
             marker={status ? <RunMarker status={status} label={status === 'running' ? runningLabel : awaitingLabel} /> : undefined}
             {...rows.rowProps(chat.id)}

@@ -396,6 +396,7 @@
   "Run prompt": "Run prompt",
   "Run {name}?": "Run {name}?",
   "Running": "Running",
+  "{count} agents": "{count} agents",
   "Running {0}…": "Running {0}…",
   "Running {tool}": "Running {tool}",
   "Runs on this machine via {runtime} — no plan usage, works offline.": "Runs on this machine via {runtime} — no plan usage, works offline.",

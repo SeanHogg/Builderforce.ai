@@ -41,6 +41,15 @@ export function useChatChildren(chatId: number | null): ChildView[] {
   );
 }
 
+/**
+ * How many sub-agents are live for a chat RIGHT NOW — a synchronous read of the
+ * module-level map, for callers that are not React components (e.g. the history
+ * list composing a row's stats pill on each render).
+ */
+export function getChatChildrenCount(chatId: number): number {
+  return byChat.get(chatId)?.length ?? 0;
+}
+
 /** A chat's live sub-agents as the Agents roster lists them, beside the invited agents. */
 export function useChatSubagentRoster(chatId: number | null): readonly ChatSubagentVM[] {
   const children = useChatChildren(chatId);
