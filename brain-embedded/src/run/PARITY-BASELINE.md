@@ -1,66 +1,84 @@
-# WS4 parity oracle (PRD 35 section 4, WS4)
+# WS4 parity baseline (PRD 35 section 4, WS4)
 
-The 20 test files that drive `startRun` (plus `clients/chrome` rovrRunHost and `clients/vscode` nativeBrainRun.setup)
-run UNCHANGED against both engines. `BRAIN_RUN_ENGINE=agent` selects the agent. What fails on the agent is the list of
-real gaps; this file burns down to zero. No test is skipped, edited or mocked to get there.
+Written from real output, 2026-10-31, after P1 round two, P2 round four and WS7's outcome row. It replaces the hand-kept burn-down list that
+used to live here; that list was stale. Nothing in this file is edited by hand when a number changes: re-run the commands below.
 
-## Old-home baseline (engine `loop`, the default)
+## The three proofs
 
-20 files, 173 tests, all green (run before and after the seam, the shared turn recorder and the live-turn extraction).
-`clients/chrome` rovrRunHost 3/3, `clients/vscode` nativeBrainRun.setup 5/5.
+1. **The oracle.** The test files that drive `startRun` (`parity/oracle.files.txt`, kept complete by `parity/oracle.test.ts`) run UNCHANGED on
+   both engines. `BRAIN_RUN_ENGINE` selects the engine. CI runs both (`release.yml`: `oracle (brain-embedded, loop|agent)`,
+   `oracle (clients/chrome, loop and agent)`, and the VS Code file on the agent in `verify-extension`).
+   `node brain-embedded/src/run/parity/runOracle.mjs <brain-embedded|clients/chrome|clients/vscode> <loop|agent>`.
+2. **The differential suite** (`parity/parity.test.ts`, 75 tests). 74 scripted scenarios, each through the real `startRun` once per engine on the
+   production binding (`driveRun` -> `runPrepared` or `runLoop`), with the model stream, the host's persistence and its tool port as the only
+   fakes. Everything an observer saw is recorded (every wire request, every persisted row, the trace, usage, the cell, the outcome rows, the
+   host's frames, the error shown) and must be equal once ids and timestamps are normalised. Result: **75 of 75 pass.**
+3. **The stored record** (`parity/snapshot.test.ts`, 148 tests; `parity/snapshots/*.json`). The loop's record of each scenario, generated from the loop
+   engine only (`PARITY_SNAPSHOT=write`). Once `runLoop.ts` is deleted this is what the agent is held to (remove `'loop'` from
+   `parity/engines.ts`). Result: **148 of 148 pass** (every scenario on both engines).
 
-Not green on the old home, reported to the planning model: `src/run/webAdapter.test.ts` was committed with two missing
-imports (`getCell`, `beginRun`), so 3 of its 10 tests threw ReferenceError before any of this work. The only edit is two
-`import` lines. It is not one of the 20 oracle files.
+## What the harness does not treat as a difference
 
-## Agent engine (`BRAIN_RUN_ENGINE=agent`): burn-down
+Everything is named in `parity/normalise.ts`; nothing else is excused.
 
-Run per file (`NODE_OPTIONS=--max-old-space-size=8192`, one file at a time; a single batch ran out of heap).
-After terminal `ask_user`, narration, the delivery gates, the agent-owned model policy and the per-turn menu:
-**67 of 90 green in the six files that carried failures, 23 failing.** The other 14 files are fully green
-(runDriver, runOutcomeCost, continueChat, continueClaim, continueStop, hostRunContext, modelPreflightPlan, modelSignals,
-serverChat, startRun.lateBackstop, startRun.settle, useChatTurns.draftStop, useContinuation; earlyDelegation.child has
-not finished on the agent engine, see the last row).
+- run ids (`guestTurnId` uuid, the `clientRunId` clock suffix), wall-clock instants and measured durations;
+- the wire's own defaults, so a request is compared as the gateway body `streamChatCompletion.ts` builds from it (`modelStrict: false` or true
+  with no model, `maxTokens` absent against 4096, `reasoning: off`, an empty tool list, `tool_choice` absent beside tools);
+- the agent's 17 optional section 8.2 telemetry fields on a graded run's outcome row (approved). Every field the loop also sends is compared;
+- `agentOnly.recorded` (the agent's `reportRunRecord`, a record for a run with no grade): not compared with the loop, asserted at most once per run.
 
-| File | pass / fail |
-|---|---|
-| brainRunStore.test.ts | 54 / 11 |
-| handOffExecution.e2e.test.ts | 2 / 4 |
-| readCoverageServed.test.ts | 1 / 2 |
-| runStore/earlyDelegation.test.ts | 3 / 1 |
-| runStore/forcedBriefTail.test.ts | 1 / 1 |
-| runStore/progressGuard.test.ts | 6 / 4 |
+## Oracle table (each file alone, passing tests per engine)
 
-### What is still failing, by the row that closes it
+| File | loop | agent |
+|---|---|---|
+| brain-embedded/src/brainRunStore.test.ts | 65 | 65 |
+| brain-embedded/src/browserEngine.test.ts | 14 | 14 |
+| brain-embedded/src/chatDelivery.test.ts | 14 | 14 |
+| brain-embedded/src/config.test.tsx | 2 | 2 |
+| brain-embedded/src/handOffExecution.e2e.test.ts | 6 | 6 |
+| brain-embedded/src/hostModelStream.test.ts | 30 | 30 |
+| brain-embedded/src/localFirstTransport.test.ts | 19 | 19 |
+| brain-embedded/src/readCoverageServed.test.ts | 3 | 3 |
+| brain-embedded/src/run/conformance.test.ts | 4 | 4 |
+| brain-embedded/src/run/webAdapter.test.ts | 10 | 10 |
+| brain-embedded/src/runDriver.test.ts | 2 | 2 |
+| brain-embedded/src/runOutcomeCost.test.ts | 6 | 6 |
+| brain-embedded/src/runStore/continueChat.test.ts | 17 | 17 |
+| brain-embedded/src/runStore/continueClaim.test.ts | 15 | 15 |
+| brain-embedded/src/runStore/continueStop.test.ts | 9 | 9 |
+| brain-embedded/src/runStore/earlyDelegation.child.test.ts | 3 | 3 |
+| brain-embedded/src/runStore/earlyDelegation.test.ts | 4 | 4 |
+| brain-embedded/src/runStore/engineRun.test.ts | 8 | 8 |
+| brain-embedded/src/runStore/engineRunRow.test.ts | 1 | 1 |
+| brain-embedded/src/runStore/forcedBriefTail.test.ts | 2 | 2 |
+| brain-embedded/src/runStore/hostRunContext.test.ts | 3 | 3 |
+| brain-embedded/src/runStore/modelPreflightPlan.test.ts | 4 | 4 |
+| brain-embedded/src/runStore/modelSignals.test.ts | 7 | 7 |
+| brain-embedded/src/runStore/progressGuard.test.ts | 10 | 10 |
+| brain-embedded/src/runStore/serverChat.test.ts | 3 | 3 |
+| brain-embedded/src/runStore/startRun.lateBackstop.test.ts | 2 | 2 |
+| brain-embedded/src/runStore/startRun.settle.test.ts | 1 | 1 |
+| brain-embedded/src/useBrainConversation.test.tsx | 41 | 41 |
+| brain-embedded/src/useChatTurns.draft.test.tsx | 18 | 18 |
+| brain-embedded/src/useChatTurns.draftStop.test.tsx | 9 | 9 |
+| brain-embedded/src/useChatTurns.stopEpoch.test.tsx | 2 | 2 |
+| brain-embedded/src/useChatTurns.test.tsx | 51 | 51 |
+| brain-embedded/src/useChatTurns.waiting.test.tsx | 12 | 12 |
+| brain-embedded/src/useContinuation.test.tsx | 2 | 2 |
+| clients/chrome/src/host/rovrRunHost.test.ts | 3 | 3 |
+| clients/chrome/src/host/rovrRunHost.entryPoint.test.ts | 1 | 1 |
+| clients/vscode/src/brainRunHost.entryPoint.test.ts | 1 | 1 |
+| clients/vscode/src/nativeBrainRun.setup.test.ts | 5 | 5 |
 
-| Row | Failing tests |
-|---|---|
-| Closed in this pass | terminal `ask_user` x2, narration block, delegation gates x3 ("commands it holds", sub-agent request x2), ship/review gates, hand-off fan-out (the Brain's `hand_off` reports itself to the policy, so the agent no longer pre-empts it) |
-| Forced turns and progress budgets still do not fire: `PlatformTools.turn` is wired (`run/loopTurnMenu.ts`, shared `forcedTurnFor`) but the plan budget never reaches its limit, so there is no `hand_off`-only turn at turn 20 | handOffExecution x3 ("expected -1 to be 20"), forcedBriefTail, handOffExecution "only reads" (`toolChoice` of an absent forced turn) |
-| A3 / WS8p readiness guard: `run.progress.observe` runs in `afterDispatchHook` from the result row; the agent never feeds `RunProgressGuard.noteTurnText`/`observe` in the order the guard reads | progressGuard x4 |
-| Tool-failure breaker and the forced tools-free answer that names the failures | brainRunStore: "no tool-call limit" x3 (run ends at 8 turns instead of 60; the closing answer is not the Brain's) |
-| Coder re-ask wiring | brainRunStore: "re-asks the first code change of the coding model" |
-| Provider failure retry and failover (`ModelTransport.pickFallback`, classify the stream error as a transport failure) | brainRunStore: "Grok starts and then stops" x2, "429" |
-| Window fit for a small cloud model (`ModelTransport.window` over the gateway catalog; the transport's `fit` runs `windowFit.prepare` but the policy's own packing sees no window) | brainRunStore: "packs the transcript for a cloud model" |
-| Read paging, replay and the served-window coverage: the post-step needs the result row with the identity the cell holds; `loopStore` appends a copy | brainRunStore x2 ("pages a big read_file by LINE", "re-serves an exact re-read"), readCoverageServed x2 |
-| Early delegation advisory lost between `dispatchToolPort` and the agent's tool row | earlyDelegation "rides the sixth read" |
-| Stall nudge: "hands the user the commands" | brainRunStore: "re-prompts it instead of accepting it" (the agent's own stall heuristics read `availableToolNames`; the Brain passes `toolSpecs` count) |
-| `earlyDelegation.child` hangs on the agent engine past 8 minutes (no result); on `loop` it passes 3/3. A real gap until explained | earlyDelegation.child |
+Total 409 tests on the loop and 409 on the agent, no failures, no skips.
 
-### The run row (ship gate, section 8.1)
+## Reading a failure
 
-`steps` on the row `run_model_outcomes` reads is `codeRunOutcome`'s count of `llm.complete` trace rows. The agent engine
-records each completed turn through the SAME `recordTurn` (the finishing turn included), so `startRun`'s one
-`codeRunOutcome` report reads the same figure on both engines. `BrainRunRequest.reportRunRow` (the agent's own uniform row)
-is NOT wired by any host, so exactly one row reaches the ledger. `runStore/engineRunRow.test.ts` pins both: one scripted
-two-turn run on each engine, one report each, equal `steps`. Wiring a host to `reportRunRow` while `codeRunOutcome` still
-reports would double-write the ledger; do one or the other.
+`parity.test.ts` prints the differing paths (`$.wire[2].maxTokens: loop=16384 agent=4096`). `PARITY_DUMP=<dir>` writes both full records of every
+scenario. A scenario also names, in `loopShows`, the trace labels the LOOP must show: a scenario that never reaches the behaviour it is named for
+fails there, so equality is never vacuous.
 
-## Done in this pass (commit ebbb5ae19)
+## The run row (ship gate, section 8.1)
 
-Seam and switch in `startRun` (`runStore/runEngine.ts`), `engine` on `BrainRunRequest`, the device reader shared by web and
-Rovr (`runStore/runEnginePreference.ts`), the VS Code setting `builderforce.agent.engine`; one live-turn view
-(`runStore/turnStream.ts`) and one turn recorder (`runStore/turnRecorder.ts`) shared by `completeTurn.ts` and the agent's
-model port (`run/modelTransport.ts` + `run/loopTurn.ts`); `run/brainPlatformTools.ts` (closed `PlatformTools` that calls the
-loop's own `beforeDispatchHook`, `dispatchToolPort` and `afterDispatchHook`), `run/loopSteering.ts`, `run/loopStore.ts`,
-`run/loopSettle.ts` (the adapter tail), `run/runPrepared.ts`.
+`steps` is the Brain's own count of completed model turns on both engines (it is compared, not normalised). A graded run reports once through
+`reportOutcome`; a run with no grade is recorded once through `reportRunRecord` on the agent and not at all on the loop.
