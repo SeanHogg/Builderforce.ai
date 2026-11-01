@@ -42,7 +42,11 @@ vi.mock("../embedded-helpers.js", () => ({
   formatAssistantErrorText: vi.fn(() => ""),
   isAuthAssistantError: vi.fn(() => false),
   isBillingAssistantError: vi.fn(() => false),
-  isCompactionFailureError: vi.fn(() => false),
+  // A shared mock registered after a test file's own wins, so it carries the real distinction a compaction failure is read by.
+  isCompactionFailureError: vi.fn((msg?: string) => {
+    const lower = (msg ?? "").toLowerCase();
+    return lower.includes("request_too_large") && lower.includes("summarization failed");
+  }),
   isLikelyContextOverflowError: vi.fn((msg?: string) => {
     const lower = (msg ?? "").toLowerCase();
     return lower.includes("request_too_large") || lower.includes("context window exceeded");

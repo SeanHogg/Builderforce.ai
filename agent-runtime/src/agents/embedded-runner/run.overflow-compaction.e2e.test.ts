@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../utils.js", () => ({
   resolveUserPath: vi.fn((p: string) => p),
+  resolveConfigDir: vi.fn(() => "/tmp/config"),
 }));
 
 vi.mock("../embedded-helpers.js", async () => {
