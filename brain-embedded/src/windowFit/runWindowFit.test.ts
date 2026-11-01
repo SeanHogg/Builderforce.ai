@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BrainTraceEvent } from '../brainTriage';
+import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { gatewayModelWindows } from '../gatewayModels';
 import { seededRecall as seeded, windowFitTranscript as transcript } from '../test/windowFitTranscript';
 import { createRunWindowFit, type RunWindowFitDeps } from './runWindowFit';
@@ -89,5 +90,49 @@ describe('createRunWindowFit (the run loop gate)', () => {
     const failed = trace.find((e) => e.label === 'llm.handoff_recall_failed');
     expect(failed).toMatchObject({ category: 'message', args: { step: 3 } });
     expect(String(failed?.result)).toContain('evermind 503');
+  });
+
+  describe('reuses its last pack', () => {
+    const small = 'direct/cloudflare/@cf/meta/llama-3.3-70b';
+    const windowSources = { cloud: gatewayModelWindows({ byo: { models: [{ id: small, contextWindow: 4_096 }] } }) };
+    const request = (messages: ChatCompletionMessage[], step: number) => ({ messages, model: small, maxTokens: 512, step });
+    const handoffs = (trace: BrainTraceEvent[]) => trace.filter((e) => e.label === 'llm.handoff');
+
+    it('serves a second request over the same history from the pack, with the same packed rows and no new llm.handoff step', async () => {
+      const trace: BrainTraceEvent[] = [];
+      const gate = createRunWindowFit(deps(trace, { windowSources }));
+      const history = transcript();
+      const first = await gate.prepare(request(history, 1));
+      expect(first.length).toBeLessThan(history.length);
+      expect(handoffs(trace)).toHaveLength(1);
+      // A retried request: a new array over the SAME rows.
+      const again = await gate.prepare(request([...history], 2));
+      expect(handoffs(trace)).toHaveLength(1);
+      expect(again).toHaveLength(first.length);
+      again.forEach((row, i) => expect(row).toBe(first[i]));
+    });
+
+    it('appends the rows added since verbatim after the packed prefix, still without re-packing', async () => {
+      const trace: BrainTraceEvent[] = [];
+      const gate = createRunWindowFit(deps(trace, { windowSources }));
+      const history = transcript();
+      const first = await gate.prepare(request(history, 1));
+      const added: ChatCompletionMessage[] = [{ role: 'assistant', content: 'Reading the chip row.' }, { role: 'user', content: 'Go on.' }];
+      const next = await gate.prepare(request([...history, ...added], 2));
+      expect(handoffs(trace)).toHaveLength(1);
+      expect(next).toHaveLength(first.length + added.length);
+      first.forEach((row, i) => expect(next[i]).toBe(row));
+      added.forEach((row, i) => expect(next[first.length + i]).toBe(row));
+    });
+
+    it('packs afresh once the rows added since no longer fit the window', async () => {
+      const trace: BrainTraceEvent[] = [];
+      const gate = createRunWindowFit(deps(trace, { windowSources }));
+      const history = transcript();
+      await gate.prepare(request(history, 1));
+      const big: ChatCompletionMessage = { role: 'tool', tool_call_id: 'c9', content: 'Y'.repeat(16_000) };
+      await gate.prepare(request([...history, big], 2));
+      expect(handoffs(trace)).toHaveLength(2);
+    });
   });
 });

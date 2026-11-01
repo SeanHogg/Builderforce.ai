@@ -39,11 +39,14 @@ interface Attached {
   /** The copy that carries the block — restored only while it still holds the slot. */
   carrier: ChatCompletionMessage;
   original: ChatCompletionMessage;
-  /** The block's token estimate (the §8.2 row's `contextPackTokens`), taken when it was attached. */
-  tokens: number;
 }
 
 const attached = new WeakMap<RunCell, Attached>();
+/**
+ * The token estimate of the block this run sent (the §8.2 row's `contextPackTokens`), taken ONCE, in `attachTurnContext`, wherever the
+ * block went: on the latest user message, or (no user message to carry it) in the system prompt, where the preamble keeps it.
+ */
+const measured = new WeakMap<RunCell, number>();
 
 /** The block for this turn's parts, or null when every part is empty. */
 export function turnContextBlock(parts: ReadonlyArray<string | null | undefined>): string | null {
@@ -59,6 +62,7 @@ export function turnContextCarrier(c: RunCell): ChatCompletionMessage | undefine
 
 /** Put back the user message the previous run attached its block to. Idempotent. */
 export function restoreTurnContext(c: RunCell): void {
+  measured.delete(c);
   const prior = attached.get(c);
   if (!prior) return;
   if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
@@ -68,10 +72,12 @@ export function restoreTurnContext(c: RunCell): void {
 /**
  * Attach `block` after the history — to the latest user message. Returns false when
  * there is no user message to carry it (the caller then keeps it in the system prompt,
- * today's placement, rather than dropping it).
+ * today's placement, rather than dropping it). The block is measured either way
+ * (`turnContextTokens`): it reaches the model on both paths.
  */
 export function attachTurnContext(c: RunCell, convo: ChatCompletionMessage[], block: string): boolean {
   restoreTurnContext(c);
+  measured.set(c, defaultEstimateTokens(block));
   for (let i = convo.length - 1; i >= 0; i -= 1) {
     const original = convo[i]!;
     if (original.role !== 'user') continue;
@@ -80,7 +86,7 @@ export function attachTurnContext(c: RunCell, convo: ChatCompletionMessage[], bl
       : [...original.content, { type: 'text', text: block }];
     const carrier: ChatCompletionMessage = { ...original, content };
     convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original, tokens: defaultEstimateTokens(block) });
+    attached.set(c, { convo, index: i, carrier, original });
     return true;
   }
   return false;
@@ -88,5 +94,5 @@ export function attachTurnContext(c: RunCell, convo: ChatCompletionMessage[], bl
 
 /** The tokens of the block this run attached to its request (0 when it attached none): what the run's outcome row reports as `contextPackTokens`. */
 export function turnContextTokens(c: RunCell): number {
-  return attached.get(c)?.tokens ?? 0;
+  return measured.get(c) ?? 0;
 }

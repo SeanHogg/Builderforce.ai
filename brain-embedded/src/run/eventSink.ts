@@ -125,7 +125,7 @@ export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReac
 /**
  * The Brain's context pack is empty (`contextSource.ts`): the host's task context reaches the model as the run's turn-context block
  * (`runStore/turnContext.ts`), which the agent never sees. The row's `contextPackTokens` (§8.2) is that block, measured where it was
- * attached, added to whatever the agent measured (nothing, for an empty pack).
+ * attached (on the latest user message, or in the system prompt when no user message carries it), added to whatever the agent measured (nothing, for an empty pack).
  */
 function withHostContext(row: RunOutcomeRow, c: RunCell): RunOutcomeRow {
   const tokens = turnContextTokens(c);

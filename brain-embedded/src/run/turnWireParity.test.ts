@@ -21,8 +21,8 @@ const base = { tools: TOOLS, runTool: host, userTurn: 'look at a.ts' };
 const read = (i = 0) => callTool('read_file', { path: `src/f${i}.ts` }, '', `r${i}`);
 const toolless = (o: Observed): StreamOpts[] => o.asked.filter((r) => r.tools === undefined);
 
-describe('the window fit packs a small-window model once, not every turn', () => {
-  it('reuses its last pack while the history it was made from is unchanged', async () => {
+describe('a small-window model has every request fitted to its window', () => {
+  it('packs each request by eliding the history, and never asks a model to summarise it', async () => {
     const small = 'direct/cloudflare/@cf/meta/llama-3.3-70b';
     const run = await runOn(9400, () => ({
       ...base,
@@ -34,9 +34,11 @@ describe('the window fit packs a small-window model once, not every turn', () =>
       userTurn: 'Now wire the chip row.',
       stream: script([read(0), read(1), read(2), answer('Wired.', { resolvedModel: small })]),
     }));
-    // Pinned at what the Brain's old loop recorded here (the agent equalled it when the comparison was removed, 46f1e630f): one
-    // `llm.handoff` step per request, four (three reads, then the answer), and no summarising request at all (a request that offers no tools): the history is ELIDED to the 4,096-token
-    // window, never sent to the model to be summarised.
+    // Pinned at what the AGENT recorded on this script (these numbers were observed on the agent, not taken from the old loop). A step
+    // `llm.handoff` is written only when a pack is COMPUTED, and a request served from the memoised pack writes none: four requests (three
+    // reads, then the answer) wrote four steps, so each was packed afresh here. That is not the memo's reuse, which is pinned where it can be
+    // seen, at the gate (`windowFit/runWindowFit.test.ts`, 'reuses its last pack'). No request was tool-less (a summarising one): the history is ELIDED to the
+    // 4,096-token window, never sent to the model to be summarised.
     expect(stepsLabelled(run.trace, 'llm.handoff')).toHaveLength(4);
     expect(toolless(run)).toHaveLength(0);
   });
