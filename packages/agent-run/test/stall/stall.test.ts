@@ -181,7 +181,7 @@ describe("the repetition trim (`agent-loop/repetitionLoop.ts`)", () => {
   });
 });
 
-describe("the prose ask-lift (`brain-embedded/finalAnswerHook.ts`)", () => {
+describe("the prose ask-lift (the Brain's former final-answer hook)", () => {
   it("lifts a prose question with options into the canonical ask-user block", () => {
     const lifted = liftProseAskUser(
       "Two ways to go.\n\nWhich approach should I take?\n1. Postgres: managed\n2. SQLite",
