@@ -92,7 +92,7 @@ describe("a small window", () => {
 });
 
 describe("a hand-off onto a smaller model", () => {
-  it("packs the context for it, and the note reaches the session as the compactionSummary row", async () => {
+  it("packs the context for it, and the incoming model is told it took over (the note stays in the run, not the session)", async () => {
     const small = { ...model, id: "m2", name: "m2", contextWindow: 16_384 };
     const narrate = assistant([{ type: "text", text: "Let me search for that now." }]);
     let n = 0;
@@ -110,14 +110,54 @@ describe("a hand-off onto a smaller model", () => {
 
     const produced = await agent.prompt([user("find the handler")]);
 
-    const summary = produced.find((m) => m.role === "compactionSummary") as { summary: string; tokensBefore: number } | undefined;
-    expect(summary?.summary).toContain("Handed off from p/m to p/m2.");
-    // what the context cost before the cut is real, not a placeholder
-    expect(summary!.tokensBefore).toBeGreaterThan(20_000);
+    // the incoming model reads the hand-off note in its own context ...
+    expect(seen.at(-1)!.messages.some((m) => textOf(m).includes("Handed off from p/m to p/m2."))).toBe(true);
+    // ... and it does not leak into what the session keeps: the next prompt must not read "[N earlier messages omitted]" over rows still present
+    expect(produced.some((m) => m.role === "compactionSummary")).toBe(false);
     // the task the run was given (the last prompt) is pinned: it survives the cut whole
     expect(seen.at(-1)!.messages.some((m) => textOf(m).includes("find the handler"))).toBe(true);
     expect(seen.at(-1)!.messages.length).toBeLessThan(33);
     expect(n).toBeGreaterThan(1);
+  });
+});
+
+describe("a long conversation: the session owns the folding", () => {
+  const tight = { ...model, id: "tight", name: "tight", contextWindow: 30_000 };
+  // ~30K tokens of history against a 30K window: past the point where the agent used to fold it (window less a 20K reserve)
+  const history = (): AgentMessage[] => Array.from({ length: 40 }, (_, i) => user(`turn ${i} ${"x".repeat(3_000)}`));
+
+  it("is handed to the model whole, with no summary call", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({ model: tight, systemPrompt: "sys" });
+    agent.replaceMessages(history());
+    agent.streamFn = scripted([assistant([{ type: "text", text: "ok" }])], seen);
+
+    await agent.prompt([user("and now?")]);
+
+    // one provider call (a fold would have made a second one to summarize), carrying every row
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.messages).toHaveLength(41);
+  });
+
+  it("a provider's overflow reaches the session as the errored message it reads, with no retry of its own", async () => {
+    const seen: Context[] = [];
+    const overflow = "prompt is too long: 250000 tokens > 200000 maximum";
+    const agent = new Agent({ model: tight, systemPrompt: "sys" });
+    agent.replaceMessages(history());
+    agent.streamFn = (_m, context) => {
+      seen.push({ ...context, messages: [...context.messages] });
+      const stream = new AssistantMessageEventStream();
+      const failed = { ...assistant([], "error"), errorMessage: overflow };
+      queueMicrotask(() => { stream.push({ type: "error", reason: "error", error: failed }); stream.end(); });
+      return stream;
+    };
+
+    const produced = await agent.prompt([user("and now?")]);
+
+    const last = produced.at(-1) as AssistantMessage;
+    expect(last.stopReason).toBe("error");
+    expect(last.errorMessage).toContain(overflow);
+    expect(seen).toHaveLength(1);
   });
 });
 
