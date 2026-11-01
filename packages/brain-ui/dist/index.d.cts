@@ -1444,6 +1444,8 @@ interface ChatHistoryLabels {
     summarize: string;
     delete: string;
     archive: string;
+    /** Restore an archived chat to the live list (offered on an already-archived row). */
+    unarchive: string;
 }
 declare const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels;
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */
@@ -1467,11 +1469,18 @@ interface ChatHistoryListProps {
     total: number;
     /** The rows (`ChatHistoryRow`s) — the host maps its own chat model onto them. */
     children?: ReactNode;
+    /**
+     * A host-rendered header ABOVE the rows — the search box + archive toggle. The
+     * slot takes a ReactNode (not state) so the LIST stays stateless: the filter/
+     * toggle STATE lives in the surface shell (the list unmounts whenever History
+     * closes, which would drop state held inside the list).
+     */
+    filter?: ReactNode;
     labels?: Partial<ChatHistoryLabels>;
     id?: string;
     className?: string;
 }
-declare function ChatHistoryList({ loading, total, children, labels: overrides, id, className }: ChatHistoryListProps): react.JSX.Element;
+declare function ChatHistoryList({ loading, total, children, filter, labels: overrides, id, className }: ChatHistoryListProps): react.JSX.Element;
 interface ChatHistoryRowProps {
     chat: ChatHistoryChat;
     active: boolean;
@@ -1494,6 +1503,12 @@ interface ChatHistoryRowProps {
     archiving?: boolean;
     /** The chat is already archived, so its row does not offer Archive again. */
     archived?: boolean;
+    /**
+     * Restore an archived chat to the live list — the mirror of `onArchive`, offered on
+     * an already-archived row only. Rows offer it when the host supplies it.
+     */
+    onUnarchive?: (chat: ChatHistoryChat) => void;
+    unarchiving?: boolean;
     onDelete?: (chat: ChatHistoryChat) => void;
     deleting?: boolean;
     /** Host actions after the standard ones (the web's "Add to project"). */
@@ -1502,7 +1517,7 @@ interface ChatHistoryRowProps {
     className?: string;
 }
 /** One chat-history row: title (or its rename input), meta line, and its revealed actions. */
-declare const ChatHistoryRow: react.MemoExoticComponent<({ chat, active, onOpen, meta, marker, actionsOpen, onToggleActions, renaming, renameValue, onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing, onArchive, archiving, archived, onDelete, deleting, extraActions, labels: overrides, className, }: ChatHistoryRowProps) => react.JSX.Element>;
+declare const ChatHistoryRow: react.MemoExoticComponent<({ chat, active, onOpen, meta, marker, actionsOpen, onToggleActions, renaming, renameValue, onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing, onArchive, archiving, archived, onUnarchive, unarchiving, onDelete, deleting, extraActions, labels: overrides, className, }: ChatHistoryRowProps) => react.JSX.Element>;
 
 /** What a row action needs of a chat — the shared history row hands back this much. */
 interface ChatRowRef {
@@ -1524,6 +1539,12 @@ interface UseChatRowActionsOptions {
      * the host supplies it, and never for a chat already archived.
      */
     archive?: (chat: ChatRowRef) => Promise<unknown> | void;
+    /**
+     * Unarchive a chat — bring an archived one back to the live list. Offered on an
+     * ALREADY-archived row only (the mirror of `archive`); rows offer it when the host
+     * supplies it and the chat is archived.
+     */
+    unarchive?: (chat: ChatRowRef) => Promise<unknown> | void;
     /** Is this chat already archived? A row in that state does not offer Archive. */
     isArchived?: (id: number) => boolean;
     /** Rows offer Delete only when the host supplies it. */
@@ -1534,7 +1555,7 @@ interface UseChatRowActionsOptions {
     assign?: (chatId: number, projectId: number | null) => Promise<unknown> | void;
 }
 /** The action props a `ChatHistoryRow` takes, bound to one chat. */
-type ChatRowActionProps = Pick<ChatHistoryRowProps, 'onOpen' | 'actionsOpen' | 'onToggleActions' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange' | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived' | 'onDelete' | 'deleting'>;
+type ChatRowActionProps = Pick<ChatHistoryRowProps, 'onOpen' | 'actionsOpen' | 'onToggleActions' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange' | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived' | 'onUnarchive' | 'unarchiving' | 'onDelete' | 'deleting'>;
 /**
  * THE chat-history row state and its per-row actions (open, reveal actions, rename,
  * summarize, archive, delete, assign) — every host's `ChatHistoryRow`s bind through it
@@ -1562,6 +1583,7 @@ declare function useChatRowActions(options: UseChatRowActionsOptions): {
     setRenameValue: react.Dispatch<react.SetStateAction<string>>;
     summarizingId: number | null;
     archivingId: number | null;
+    unarchivingId: number | null;
     deletingId: number | null;
     busyId: number | null;
     openChat: (id: number) => void;
@@ -1571,6 +1593,7 @@ declare function useChatRowActions(options: UseChatRowActionsOptions): {
     submitRename: (id: number, value: string) => Promise<void>;
     onSummarize: (id: number) => Promise<void>;
     onArchive: (chat: ChatRowRef) => Promise<void>;
+    onUnarchive: (chat: ChatRowRef) => Promise<void>;
     onDelete: (chat: ChatRowRef) => Promise<void>;
     onAssign: (chatId: number, projectId: number | null) => Promise<void>;
     rowProps: (id: number) => ChatRowActionProps;
