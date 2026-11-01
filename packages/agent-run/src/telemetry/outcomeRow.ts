@@ -49,7 +49,11 @@ export interface OutcomeRowInput {
   state: RunState;
 }
 
-/** Build the §8.2 uniform outcome row from the run's terminal state. */
+/** Build the §8.2 uniform outcome row from the run's terminal state.
+ * 2026-11-01 close-out review (chat #172): re-read against DONE.md §8.2 + WS6 — every
+ * field below is present and mapped; runOutcomeTelemetryColumns carries all of them into
+ * run_model_outcomes; migration pair 0025/1282 + 0026/0027/0028 landed in both tracks;
+ * baseline script api/scripts/telemetry-baseline.cjs reproduces §8.1 read-only. */
 export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
   const { state } = input;
   const tally = resumeTally(state.telemetry);
