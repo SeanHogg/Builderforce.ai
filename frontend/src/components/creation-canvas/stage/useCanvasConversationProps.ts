@@ -42,7 +42,7 @@ export function useCanvasConversationProps({ brain, showExecutionDetail, updateB
     // The optimistic bubble and the live model, off the run store's snapshot — the
     // same two fields the inline Brain Object reads off the surface context.
     pendingTurn: brainSurface.pendingRunTurn,
-    servedBy: brainSurface.runServedBy,
+    servedBy: brainSurface.runServedBy ?? undefined,
     runKey: brainSurface.runKey,
     node: brainNode,
     nodes,

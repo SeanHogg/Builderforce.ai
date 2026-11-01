@@ -245,7 +245,11 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
 
   // The client store exposes KnowledgeStore plus the 413-skip counter (not part of the
   // interface — a host reads it for progress/reporting).
-  const store: KnowledgeStore & { readonly skippedTooLarge: number } = {
+  const store: KnowledgeStore & {
+    readonly skippedTooLarge: number;
+    readonly preloadExtracted: (hashes: readonly string[]) => Promise<void>;
+    batched: <T>(work: (flush: () => Promise<void>) => Promise<T>) => Promise<T>;
+  } = {
     scopes,
       facts: async (scope) => (await facts(scope.rootId))?.facts ?? [],
       relations: relationsOf,

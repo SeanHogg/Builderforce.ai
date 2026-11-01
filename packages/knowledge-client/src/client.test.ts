@@ -230,7 +230,7 @@ describe('createKnowledgeClient', () => {
     const client = createKnowledgeClient({ fetch, projectId: 9 });
     await expect(client.store.putExtracted!('h1', [])).resolves.toBeUndefined();
     await expect(client.putExtracted('h2', [])).resolves.toBeUndefined();
-    expect((client.store as { skippedTooLarge: number }).skippedTooLarge).toBe(2);
+    expect((client.store as unknown as { skippedTooLarge: number }).skippedTooLarge).toBe(2);
     expect(seen).toHaveLength(2);
   });
 
@@ -238,7 +238,7 @@ describe('createKnowledgeClient', () => {
     const { fetch } = fakeFetch(() => json({ error: 'hash mismatch', code: 'source_hash_mismatch' }, 400));
     const client = createKnowledgeClient({ fetch, projectId: 9 });
     await expect(client.store.putExtracted!('h1', [])).rejects.toMatchObject({ status: 400, code: 'source_hash_mismatch' });
-    expect((client.store as { skippedTooLarge: number }).skippedTooLarge).toBe(0);
+    expect((client.store as unknown as { skippedTooLarge: number }).skippedTooLarge).toBe(0);
   });
 
   it('store.batched runs the work as-is; writes inside it still chunk with scope on the last chunk', async () => {
@@ -248,7 +248,7 @@ describe('createKnowledgeClient', () => {
     const out = await client.store.batched!(async (flush) => {
       flushable = true;
       await flush(); // identity: a no-op, must not throw
-      await client.store.write({ scope, facts: Array.from({ length: 600 }, (_, i) => fact(i)) });
+      await client.store.write({ scope, facts: Array.from({ length: 600 }, (_, i) => fact(i)), relations: [] });
       return 'done';
     });
     expect(out).toBe('done');
