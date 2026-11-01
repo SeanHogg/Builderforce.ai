@@ -800,6 +800,16 @@ jobs:
           # The same lint `next build` ran (its directories, its errors-only failure).
           - name: lint
             run: pnpm exec next lint
+          # PRD 35 §3.3, the conformance suite: the Brain's adapters (web, Rovr, VS Code) and the
+          # Creation Canvas under the ONE scripted task. Neither package's whole unit suite runs in
+          # CI; these files are the part that holds the RunEvent trace. The other adapters' cases
+          # run where their packages' tests do (cloud and agent-run in `Verify API (vitest)`,
+          # on-prem tickets and channels in `Verify @seanhogg/builderforce-agents (test:fast)`).
+          - name: conformance (brain-embedded + canvas)
+            run: >-
+              bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
+              "pnpm --dir ../brain-embedded exec vitest run src/crossAdapterConformance.test.ts src/run/conformance.test.ts src/run/webAdapter.test.ts"
+              "pnpm exec vitest run src/lib/canvasCrossAdapter.test.ts"
           # Two light gates, run concurrently by run-parallel.sh:
           #
           # brain-ui's own suite. The package is BUILT (exports → dist, its own

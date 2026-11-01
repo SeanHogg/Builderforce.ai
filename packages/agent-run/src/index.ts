@@ -19,6 +19,9 @@ export * from "./contract.js";
 // The optional ports a surface with its own tools and deliverables supplies (canvas).
 export * from "./surface.js";
 
+// The ONE scripted task every entry point's conformance case runs (PRD 35 §3.3), and the trace fold it is compared by.
+export * from "./conformanceTask.js";
+
 // The one agent. `RunAgentInput` is the single entry point.
 export { runAgent, type RunAgentInput } from "./runAgent.js";
 

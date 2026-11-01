@@ -145,4 +145,45 @@ describe('cloud adapter conformance — the real port builders', () => {
   });
 });
 
+import { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TRACE, conformanceTrace, teeEvents } from '@builderforce/agent-run';
+
+// The ONE scripted task every entry point is held to (`@builderforce/agent-run` conformanceTask.ts), through the cloud's real
+// port builders, continuously and one step per tick: the same RunEvent trace as the golden, the same answer.
+describe('cloud adapter conformance — the shared scripted task', () => {
+  const SHARED_TASK: RunTask = { prompt: CONFORMANCE_PROMPT, ticketId: 3, dispatch: { source: 'lane-entry', approvalId: 'appr-0' } };
+  const { signoff: _signoff, ...WITHOUT_SIGNOFF } = POLICY;
+  const SHARED_POLICY: RunPolicy = WITHOUT_SIGNOFF;
+
+  async function driveShared(maxSteps?: number): Promise<{ outcome: RunOutcome; events: RunEvent[] }> {
+    h.turn = 0;
+    h.rows.length = 0;
+    h.script = CONFORMANCE_SCRIPT.map((c) => ({ content: c.content, ...(c.toolCalls ? { toolCalls: [...c.toolCalls] } : {}) }));
+    const store: { saved?: RunState } = {};
+    const events: RunEvent[] = [];
+    const build = (): RunPorts => {
+      const built = ports(store, []);
+      return { ...built, events: teeEvents(built.events, events) };
+    };
+    const step = maxSteps !== undefined ? { maxSteps } : {};
+    let outcome = await runAgent({ task: SHARED_TASK, policy: SHARED_POLICY, ports: build(), ...step });
+    for (let tick = 0; outcome.kind === 'yielded'; tick += 1) {
+      if (tick > 50) throw new Error('never finished');
+      outcome = await runAgent({ task: SHARED_TASK, policy: SHARED_POLICY, ports: build(), resume: store.saved, ...step });
+    }
+    return { outcome, events };
+  }
+
+  it('emits the shared RunEvent trace and the shared answer when run continuously', async () => {
+    const { outcome, events } = await driveShared();
+    expect(conformanceTrace(events)).toEqual(CONFORMANCE_TRACE);
+    expect(outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
+  });
+
+  it('emits the same trace and answer one step per tick', async () => {
+    const { outcome, events } = await driveShared(1);
+    expect(conformanceTrace(events)).toEqual(CONFORMANCE_TRACE);
+    expect(outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
+  });
+});
+
 export type { RunEvent };
