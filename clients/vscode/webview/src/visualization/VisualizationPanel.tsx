@@ -29,7 +29,7 @@
  *
  * ── THE KNOWLEDGE VIEW (PRD 38) ─────────────────────────────────────────────────
  * A third view, beside the canvas and the changes: the workspace's knowledge graph,
- * handed in mounted (`knowledge`) exactly as the canvas is. It is the resting view while
+ * handed in mounted (`knowledge`) exactly as the canvas is, and kept mounted (hidden) off-view so a running review survives a view change. It is the resting view while
  * no run has written anything; the first write still swaps to the changes (AC4), and
  * Open in graph (`knowledgeRequests`) brings it back, pinned like the canvas.
  *
@@ -112,6 +112,8 @@ export interface VisualizationPanelProps {
   knowledge?: ReactNode;
   /** Moves whenever the host asks for the Knowledge view (Open in graph): it is shown and pinned. */
   knowledgeRequests?: number;
+  /** A knowledge review is in flight: auto-swap holds the view so the review is not unseen. */
+  reviewing?: boolean;
 }
 
 /** The views, in the switch's order. */
@@ -146,6 +148,7 @@ export function VisualizationPanel({
   children,
   knowledge,
   knowledgeRequests = 0,
+  reviewing = false,
 }: VisualizationPanelProps) {
   const t = makeT(labels ?? {});
   const [state, dispatch] = useReducer(
@@ -155,6 +158,7 @@ export function VisualizationPanel({
     (initial) => (knowledge === undefined ? { ...initial, view: 'canvas' as const } : initial),
   );
   useEffect(() => { if (knowledgeRequests > 0) dispatch({ type: 'showKnowledge' }); }, [knowledgeRequests]);
+  useEffect(() => { dispatch({ type: 'review.active', active: reviewing }); }, [reviewing]);
 
   // ── The run frames (AC4) ─────────────────────────────────────────────────────
   // When the caller names a chat, only that chat's run drives the swap — every frame
@@ -252,15 +256,17 @@ export function VisualizationPanel({
         </div>
       </header>
 
-      {state.view === 'knowledge' && knowledge !== undefined ? (
-        // Handed in mounted, like the canvas: this file never imports the graph view.
-        knowledge
-      ) : state.view === 'changes' ? (
+      {/* Mounted for as long as it is provided and merely hidden off-view: unmounting it would
+          abort a running review (the review hook stops on unmount). */}
+      {knowledge !== undefined && (
+        <div className="bf-viz__knowledge" hidden={state.view !== 'knowledge'}>{knowledge}</div>
+      )}
+      {state.view === 'changes' ? (
         <ChangeTree graph={visible} labels={labels ?? {}} hasEverWritten={hasChanges(state)} />
-      ) : (
+      ) : state.view === 'canvas' || knowledge === undefined ? (
         // AC3: handed in mounted. This file never imports CreationCanvas.
         <div className="bf-viz__canvas">{children}</div>
-      )}
+      ) : null}
     </section>
   );
 }

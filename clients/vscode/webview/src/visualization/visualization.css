@@ -139,6 +139,12 @@
   overflow: hidden;
 }
 
+/* Kept mounted while off-view (a review must survive a view change); `display: flex` above
+   would otherwise beat the UA `[hidden]` rule. */
+.bf-viz__knowledge[hidden] {
+  display: none;
+}
+
 /* ── The canvas slot (AC3) ───────────────────────────────────────────────────────
    `position: relative` is load-bearing: the canvas surface inside is absolutely
    positioned and would otherwise resolve against the viewport instead of this box. */

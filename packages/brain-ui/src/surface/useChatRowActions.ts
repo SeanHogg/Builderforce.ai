@@ -174,6 +174,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
 
   const hasSummarize = Boolean(options.summarize);
   const hasArchive = Boolean(options.archive);
+  const hasUnarchive = Boolean(options.unarchive);
   const hasRemove = Boolean(options.remove);
   /** Every action prop of one `ChatHistoryRow` — spread it onto the row. */
   const rowProps = (id: number): ChatRowActionProps => {
@@ -194,6 +195,9 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
       onArchive: hasArchive && !archived ? onArchive : undefined,
       archiving: archivingId === id,
       archived,
+      // Unarchive is the mirror: offered on an ALREADY-archived row only.
+      onUnarchive: hasUnarchive && archived ? onUnarchive : undefined,
+      unarchiving: unarchivingId === id,
       onDelete: hasRemove ? onDelete : undefined,
       deleting: deletingId === id,
     };
@@ -206,6 +210,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     setRenameValue,
     summarizingId,
     archivingId,
+    unarchivingId,
     deletingId,
     busyId,
     openChat,
@@ -215,6 +220,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     submitRename,
     onSummarize,
     onArchive,
+    onUnarchive,
     onDelete,
     onAssign,
     rowProps,

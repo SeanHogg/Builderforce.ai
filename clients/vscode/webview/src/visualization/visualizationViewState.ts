@@ -35,6 +35,12 @@
  *     longer yank the view back. That pin is the whole of AC5: without it a run
  *     writing six files would steal the panel out from under the user on file six.
  *
+ * A third thing also holds the view still: a knowledge REVIEW in flight (`reviewing`).
+ * A review is minutes of work the person started on purpose, and the chat's agent may
+ * write files meanwhile; those writes still COUNT but must not pull the panel off the
+ * review. It is a separate flag from `pinned` so it neither sets nor clears the pin, and
+ * the view stays wherever it is when the review ends (no jump back or forth).
+ *
  * Nothing here resets on run end: a finished run's changes are exactly what the user
  * wants to read next, so `run.settled` / `run.failed` only clear liveness.
  */
@@ -61,6 +67,11 @@ export interface VisualizationViewState {
    * toggle keeps working for as long as the run keeps writing (AC5).
    */
   pinned: boolean;
+  /**
+   * A knowledge review is in flight (planning, confirm or running). Holds the view like
+   * `pinned` does but is not a pick: it leaves `pinned` alone and ends without moving the view.
+   */
+  reviewing: boolean;
 }
 
 export type VisualizationAction =
@@ -68,6 +79,8 @@ export type VisualizationAction =
   | { type: 'run.sync'; chatId: number; running: boolean }
   /** `run.tool` — `mutating` for a finished tool call. */
   | { type: 'run.tool'; mutating: boolean }
+  /** A knowledge review started (`true`) or ended, however it ended (`false`). */
+  | { type: 'review.active'; active: boolean }
   /**
    * The run ended, however it ended. `error` is carried for parity with the host's
    * `run.failed` frame; this panel shows a failed run's changes like any other.
@@ -85,6 +98,7 @@ export const INITIAL_VIEW_STATE: VisualizationViewState = {
   runningChats: [],
   mutations: 0,
   pinned: false,
+  reviewing: false,
 };
 
 /** Is any run live? The resting view is the right answer whenever this is false. */
@@ -123,10 +137,13 @@ export function visualizationViewReducer(
     case 'run.tool': {
       if (!action.mutating) return state;
       const mutations = state.mutations + 1;
-      if (state.pinned) return { ...state, mutations };
+      if (state.pinned || state.reviewing) return { ...state, mutations };
       if (state.view === 'changes') return { ...state, mutations };
       return { ...state, mutations, view: 'changes' };
     }
+
+    case 'review.active':
+      return state.reviewing === action.active ? state : { ...state, reviewing: action.active };
 
     // A settled and a failed run are the same event to this panel: the chat is no
     // longer writing. `error` rides along so the caller can forward it verbatim.

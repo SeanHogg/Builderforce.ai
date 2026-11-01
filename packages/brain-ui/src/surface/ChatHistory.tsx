@@ -28,6 +28,8 @@ export interface ChatHistoryLabels {
   summarize: string;
   delete: string;
   archive: string;
+  /** Restore an archived chat to the live list (offered on an already-archived row). */
+  unarchive: string;
 }
 
 export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
@@ -40,6 +42,7 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   summarize: 'Summarize',
   delete: 'Delete',
   archive: 'Archive',
+  unarchive: 'Unarchive',
 };
 
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */
@@ -116,6 +119,12 @@ export interface ChatHistoryRowProps {
   archiving?: boolean;
   /** The chat is already archived, so its row does not offer Archive again. */
   archived?: boolean;
+  /**
+   * Restore an archived chat to the live list — the mirror of `onArchive`, offered on
+   * an already-archived row only. Rows offer it when the host supplies it.
+   */
+  onUnarchive?: (chat: ChatHistoryChat) => void;
+  unarchiving?: boolean;
   onDelete?: (chat: ChatHistoryChat) => void;
   deleting?: boolean;
   /** Host actions after the standard ones (the web's "Add to project"). */
@@ -128,7 +137,7 @@ export interface ChatHistoryRowProps {
 export const ChatHistoryRow = memo(function ChatHistoryRow({
   chat, active, onOpen, meta, marker, actionsOpen = false, onToggleActions, renaming = false, renameValue = '',
   onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing = false,
-  onArchive, archiving = false, archived = false, onDelete, deleting = false, extraActions, labels: overrides, className,
+  onArchive, archiving = false, archived = false, onUnarchive, unarchiving = false, onDelete, deleting = false, extraActions, labels: overrides, className,
 }: ChatHistoryRowProps) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const submitRename = () => onSubmitRename?.(chat.id, renameValue);
@@ -205,6 +214,12 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
           {canArchive && (
             <button type="button" className="bf-chatrow__action" onClick={() => onArchive?.(chat)} disabled={archiving} aria-busy={archiving || undefined}>
               {labels.archive}{archiving && <span aria-hidden>…</span>}
+            </button>
+          )}
+          {/* The mirror of Archive — restore an already-archived chat to the live list. */}
+          {onUnarchive && archived && (
+            <button type="button" className="bf-chatrow__action" onClick={() => onUnarchive(chat)} disabled={unarchiving} aria-busy={unarchiving || undefined}>
+              {labels.unarchive}{unarchiving && <span aria-hidden>…</span>}
             </button>
           )}
           {onDelete && (
