@@ -27,7 +27,7 @@ vi.mock('../../infrastructure/email/EmailService', async (importOriginal) => ({
 import { executeConnectorAction, ConnectorCallError } from '../connectors/connectorRuntime';
 import { sendFromMailbox } from '../mailbox/mailboxService';
 import { EmailDeliveryError, sendRawEmail } from '../../infrastructure/email/EmailService';
-import { isNoResponseStatus, isRetryableProviderStatus } from '../shared/campaignDelivery';
+import { isRetryableProviderStatus } from '../shared/campaignDelivery';
 import {
   isOptOutFailure,
   isPerRecipientCarrierFailure,
@@ -78,7 +78,6 @@ describe('providerStatusScope', () => {
   it('leaves status 0 (no response) to `retryable`: scope only matters for a terminal failure, and 0 is never terminal', () => {
     expect(providerStatusScope(0)).toBe('recipient');
     expect(isRetryableProviderStatus(0)).toBe(true);
-    expect(isNoResponseStatus(0)).toBe(true);
   });
 });
 
@@ -88,7 +87,6 @@ describe('isRetryableProviderStatus', () => {
     for (const status of [200, 400, 401, 403, 404, 422, 499]) expect(isRetryableProviderStatus(status)).toBe(false);
     expect(isRetryableProviderStatus(null)).toBe(false);
     expect(isRetryableProviderStatus(undefined)).toBe(false);
-    expect(isNoResponseStatus(429)).toBe(false);
   });
 });
 
@@ -115,6 +113,9 @@ describe('isPerRecipientCarrierFailure', () => {
     expect(isPerRecipientCarrierFailure('Twilio returned 400: 21610 Attempt to send to unsubscribed recipient')).toBe(true);
     expect(isPerRecipientCarrierFailure('Twilio returned 400: 21211 invalid To')).toBe(true);
     expect(isPerRecipientCarrierFailure('Twilio returned 400: 21614 To is not a mobile number')).toBe(true);
+    // A region the account may not text, and a number that cannot currently receive SMS: both are this recipient's.
+    expect(isPerRecipientCarrierFailure('Twilio returned 400: 21408 Permission to send an SMS has not been enabled for the region')).toBe(true);
+    expect(isPerRecipientCarrierFailure('Twilio returned 400: 21612 The To phone number is not currently reachable via SMS')).toBe(true);
   });
 
   it('is false for a sender-level code or an unlisted one', () => {
@@ -171,13 +172,17 @@ describe('twilio (SMS)', () => {
     // `executeConnectorAction` does not throw on a network failure: it returns `{ ok: false, status: 0 }`.
     respond(0);
     expect(await thrownBy(await senderFor(binding, connection)))
-      .toMatchObject({ retryable: true, scope: 'recipient', noResponse: true });
+      .toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: true });
   });
 
-  it('a real response is not flagged no-response', async () => {
-    for (const status of [400, 429, 503]) {
+  it('a throttled (429) or failing (5xx) provider is flagged unavailable too; a 400 for one number is not', async () => {
+    for (const status of [429, 500, 503]) {
       respond(status);
-      expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ noResponse: false });
+      expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ retryable: true, providerUnavailable: true });
+    }
+    for (const status of [400, 401, 403]) {
+      respond(status);
+      expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ providerUnavailable: false });
     }
   });
 
@@ -227,7 +232,16 @@ describe('sendgrid', () => {
   it('NO RESPONSE (status 0) is retryable and flagged', async () => {
     respond(0);
     expect(await thrownBy(await senderFor(binding, connection)))
-      .toMatchObject({ retryable: true, scope: 'recipient', noResponse: true });
+      .toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: true });
+  });
+
+  it('a 429 or a 5xx is flagged unavailable; a 400 for one address is not', async () => {
+    for (const status of [429, 502]) {
+      respond(status);
+      expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ providerUnavailable: true });
+    }
+    respond(400);
+    expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ providerUnavailable: false });
   });
 
   it('a ConnectorCallError is terminal and the SENDER\'s', async () => {
@@ -261,14 +275,19 @@ describe('mailbox', () => {
     expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: false, scope: 'recipient' });
   });
 
-  it('a provider 429 or 5xx (502, retryable) is retried', async () => {
+  it('a retryable refusal the service did not flag as the provider\'s is retried without stopping the batch', async () => {
     respond(502, true);
-    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'recipient', noResponse: false });
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: false });
   });
 
-  it('a mailbox send that got no answer (flagged by the service) is retryable and flagged no-response', async () => {
-    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 502, error: 'fetch failed', retryable: true, noResponse: true });
-    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'recipient', noResponse: true });
+  it('a mailbox send the service flagged unavailable (no answer, 429, 5xx, rate limit, token outage) carries the flag', async () => {
+    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 502, error: 'fetch failed', retryable: true, providerUnavailable: true });
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: true });
+  });
+
+  it('a token endpoint outage (409, retryable, flagged) is the SENDER\'s and stops the batch', async () => {
+    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 409, error: 'token endpoint down', retryable: true, providerUnavailable: true });
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'sender', providerUnavailable: true });
   });
 });
 
@@ -279,5 +298,22 @@ describe('platform', () => {
     expect(await thrownBy(sender)).toMatchObject({ retryable: true, scope: 'recipient' });
     vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('bad key', 'resend', 401));
     expect(await thrownBy(sender)).toMatchObject({ retryable: true, scope: 'sender' });
+  });
+
+  it('is flagged provider-unavailable ONLY for a real provider status of 0, 429 or 5xx, never a per-recipient bounce', async () => {
+    const sender = await senderFor(base);
+    for (const status of [0, 429, 500, 503]) {
+      vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('provider down', 'resend', status));
+      expect(await thrownBy(sender)).toMatchObject({ providerUnavailable: true });
+    }
+    for (const status of [400, 401, 422]) {
+      vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('mailbox full', 'resend', status));
+      expect(await thrownBy(sender)).toMatchObject({ providerUnavailable: false });
+    }
+    // A throw with no provider status at all says nothing about the provider.
+    vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('no status', 'resend', null));
+    expect(await thrownBy(sender)).toMatchObject({ providerUnavailable: false });
+    vi.mocked(sendRawEmail).mockRejectedValue(new Error('timeout'));
+    expect(await thrownBy(sender)).toMatchObject({ providerUnavailable: false });
   });
 });

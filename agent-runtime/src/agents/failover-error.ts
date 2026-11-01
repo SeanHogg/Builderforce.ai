@@ -5,6 +5,9 @@ const TIMEOUT_HINT_RE =
   /timeout|timed out|deadline exceeded|context deadline exceeded|stop reason:\s*abort|reason:\s*abort|unhandled stop reason:\s*abort/i;
 const ABORT_TIMEOUT_RE = /request was aborted|request aborted/i;
 
+/** The `FailoverError.code` of a tenant governance refusal: the model is not ALLOWED, which is not a provider fault and says nothing about its text. */
+export const GOVERNANCE_REFUSAL_CODE = "governance_refused";
+
 export class FailoverError extends Error {
   readonly reason: FailoverReason;
   readonly provider?: string;

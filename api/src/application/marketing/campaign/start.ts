@@ -20,7 +20,7 @@ import {
   resolveCampaignSender,
   type CampaignChannel,
 } from '../campaignTransports';
-import { suppressionKey } from '../suppression';
+import { campaignMemberKeys, isMemberBlocked } from '../suppression';
 import { suppressedSubset } from './audiences';
 import { CAMPAIGN_COLUMNS, type CampaignView } from './campaigns';
 
@@ -49,6 +49,9 @@ export async function loadTransportBinding(db: Db, tenantId: number, campaignId:
     .select({
       id: marketingCampaigns.id,
       status: marketingCampaigns.status,
+      // Delivered so far: the batch's sender-failure breaker only trips for a campaign that has
+      // delivered nothing at all.
+      sent: marketingCampaigns.sent,
       subject: marketingCampaigns.subject,
       bodyHtml: marketingCampaigns.bodyHtml,
       bodyText: marketingCampaigns.bodyText,
@@ -171,15 +174,9 @@ export async function startCampaign(
   // An SMS reaches the NUMBER, and the register holds numbers (`phone_e164`) as well as
   // addresses, so an SMS member is checked on BOTH keys: an erased person whose email is not
   // listed must not be texted. One query either way.
-  const keysOf = (m: { email: string; phone: string | null }): string[] =>
-    channel === 'sms' ? [m.email, m.phone ?? ''] : [m.email];
+  const keysOf = (m: { email: string; phone: string | null }): string[] => campaignMemberKeys(channel, m);
   const blocked = await suppressedSubset(db, tenantId, reachable.flatMap(keysOf));
-  const isBlocked = (m: { email: string; phone: string | null }): boolean =>
-    keysOf(m).some((contact) => {
-      const key = suppressionKey(contact);
-      return key !== null && blocked.has(key);
-    });
-  const deliverable = reachable.filter((m) => !isBlocked(m));
+  const deliverable = reachable.filter((m) => !isMemberBlocked(blocked, keysOf(m)));
   if (deliverable.length === 0) {
     return { ok: false, status: 400, error: 'Every member of this audience has unsubscribed.' };
   }

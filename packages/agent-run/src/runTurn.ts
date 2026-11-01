@@ -5,10 +5,11 @@
  * gets before it settles.
  */
 
-import { SKILL_TOOLS, SUBAGENT_TOOLS, buildCoreToolRegistry, type ToolRegistry, type ToolSchema } from "@builderforce/agent-tools";
+import type { ToolSchema } from "@builderforce/agent-tools";
 import { malformedCallOutcome, type LoopDispatchResult, type LoopTurnResult, type ParsedToolCall, type TurnContext } from "@builderforce/agent-loop";
 import { reduceRunPolicy } from "@builderforce/run-policy";
 import { ModelTransportError, type ContextPack, type RunPolicy, type ModelCompletion, type ModelRequest, type RunMessage, type RunPorts, type RunState } from "./contract.js";
+import { ownsCall, registryOf } from "./runCatalog.js";
 import { killedResults, nativeResults, type NativeResult } from "./runRows.js";
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
@@ -21,30 +22,6 @@ import { appendRows, currentView, emit, policyContext, type RunAgentInput, type 
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { measureTurnTail } from "./turnTail.js";
 import { withVolatileTail } from "./turnContext.js";
-
-/**
- * The registry the agent dispatches through. Built once: the catalog does not change per run.
- * Delegation and skill authoring are not core task tools, so they are registered on top of the
- * core set: a surface is offered them only by granting `orchestrate` / `skill.author`. Without
- * them a parent could never delegate - and a child, being a clone of its parent, could not either.
- */
-const CORE_REGISTRY = buildCoreToolRegistry();
-for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
-/** The registries of entry points that bring tools of their own (skill authoring, delegation), built once per tool list. */
-const REGISTRIES = new WeakMap<readonly object[], ToolRegistry>();
-
-/** The registry THIS run dispatches through: the core catalog, plus whatever the entry point supplied as data. */
-function registryOf(ports: RunPorts): ToolRegistry {
-  const extra = ports.tools;
-  if (!extra || extra.length === 0) return CORE_REGISTRY;
-  let registry = REGISTRIES.get(extra);
-  if (!registry) {
-    registry = buildCoreToolRegistry();
-    for (const tool of extra) registry.register(tool);
-    REGISTRIES.set(extra, registry);
-  }
-  return registry;
-}
 
 /**
  * What the step decided about its menu before the request is built: the schemas the policy selected, and - when the surface forced the
@@ -70,28 +47,10 @@ export function causeOf(state: object): unknown {
   return causes.get(state);
 }
 
+export { offeredSchemas, ownsCall } from "./runCatalog.js";
+
 /** The hard cap on the forced synthesis turn's answer — the source's bounded extra call. */
 const SYNTHESIS_MAX_TOKENS = 1_000;
-
-/**
- * Does the surface's own tool provider run this call? It runs the names the shared
- * registry does not - all of them, when it declares its catalog closed.
- */
-export function ownsCall(ports: RunPorts, name: string): boolean {
-  const platform = ports.platform;
-  return platform !== undefined && (platform.closed === true || !registryOf(ports).has(name));
-}
-
-/** The schemas the model is offered, before the tools policy narrows them: the registry's, then the surface's own. */
-export function offeredSchemas(ports: RunPorts): ToolSchema[] {
-  const seen = new Set<string>();
-  return [...registryOf(ports).schemasFor(ports.capabilities), ...(ports.extensions?.schemas() ?? []), ...(ports.platform?.schemas({ rungs: {} }) ?? [])].filter((schema) => {
-    const name = schema.function?.name;
-    if (!name || seen.has(name)) return false;
-    seen.add(name);
-    return true;
-  });
-}
 
 /**
  * What served a turn is what the next one asks for - except `default` (the gateway's own
@@ -366,7 +325,8 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     const surfaceCap = own ? platform?.resultCap?.(state.model.model) : undefined;
     const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model));
     // A surface's own tool says for itself whether it failed; a registry tool says so with `ok: false`.
-    // A call that never started (a steer was already waiting) did not fail: it is neither counted nor reset as a failure by its row.
+    // A call that never started (a steer was already waiting) did not fail: its dispatch is not an error, so the breaker does not count it.
+    // Like any dispatch that did not fail, it clears the failure streak (as a kill does): the streak is reset to 0, not held.
     const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false && (capped as { skipped?: unknown }).skipped !== true);
     const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
     if (box.kind) callKinds.set(dispatched, box.kind);

@@ -7,6 +7,7 @@ import {
 } from "./auth-profiles.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import {
+  GOVERNANCE_REFUSAL_CODE,
   coerceToFailoverError,
   describeFailoverError,
   isFailoverError,
@@ -383,7 +384,9 @@ export async function runWithModelFallback<T>(params: {
       // throw, rethrow it immediately rather than trying a different model
       // that may have a smaller context window and fail worse.
       const errMessage = err instanceof Error ? err.message : String(err);
-      if (isLikelyContextOverflowError(errMessage)) {
+      // A governance refusal is decided by its structured code, before any text classifier: its message names gates by their authored
+      // ids (`prompt-limit`), which can read like a context overflow, and a refusal must fall over to the next candidate, never rethrow.
+      if (!(isFailoverError(err) && err.code === GOVERNANCE_REFUSAL_CODE) && isLikelyContextOverflowError(errMessage)) {
         throw err;
       }
       const normalized =

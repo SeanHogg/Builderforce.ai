@@ -289,10 +289,13 @@ export async function runCronIsolatedAgentTurn(params: {
       }
     });
   };
+  // Set once the run reports it FAILED (it ended on its budget or failure breaker, or a governance gate refused its calls) and said why as its reply:
+  // the job is recorded as an error with that account, not as a success, though the account is still delivered.
+  let failedRunNotice: string | undefined;
   const withRunSession = (
     result: Omit<RunCronAgentTurnResult, "sessionId" | "sessionKey">,
   ): RunCronAgentTurnResult => ({
-    ...result,
+    ...(failedRunNotice !== undefined && result.status === "ok" ? { ...result, status: "error" as const, error: failedRunNotice } : result),
     sessionId: runSessionId,
     sessionKey: runSessionKey,
   });
@@ -506,6 +509,9 @@ export async function runCronIsolatedAgentTurn(params: {
   }
 
   const payloads = runResult.payloads ?? [];
+  if (runResult.meta?.runFailed === true) {
+    failedRunNotice = pickLastNonEmptyTextFromPayloads(payloads)?.trim() || "the run failed";
+  }
 
   // Update token+model fields in the session store.
   // Also collect best-effort telemetry for the cron run log.

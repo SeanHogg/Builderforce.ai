@@ -37,7 +37,7 @@ export async function handOff(ctx: PolicyContext): Promise<CompactionResult | vo
   const access = runRowHandoff();
   const contextWindow = ctx.ports.model.window?.(to);
   // A window the model does not declare cannot be packed for, but the incoming model is still told.
-  if (!contextWindow) return { messages: [...system, ...withHandoffNote(ctx.messages.slice(split), from, to, access)], dropped: 0, summarized: false };
+  if (!contextWindow) return { messages: [...system, ...withHandoffNote(ctx.messages.slice(split), from, to, 0, access)], dropped: 0, summarized: false };
   const reserve = replyReserve(ctx);
   // The task the run was given survives the cut, and so does everything the person steered in: a stall's note is the latest directive now,
   // so the packer's own rule would let them go. A note the agent wrote itself (a stall's nudge) is not pinned.
@@ -67,7 +67,7 @@ export async function handOff(ctx: PolicyContext): Promise<CompactionResult | vo
     });
   }
   return {
-    messages: [...system, ...(packed.noted ? packed.messages : withHandoffNote(packed.messages, from, to, access))],
+    messages: [...system, ...(packed.noted ? packed.messages : withHandoffNote(packed.messages, from, to, packed.dropped, access))],
     dropped: packed.dropped,
     reserveTokens: reserve,
     beforeTokens: packed.beforeTokens,

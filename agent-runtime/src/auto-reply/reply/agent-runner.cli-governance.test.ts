@@ -4,7 +4,7 @@
  * is decided before the CLI attempt announces itself, so no "start" / "error" pair is emitted for it either.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FailoverError } from "../../agents/failover-error.js";
+import { FailoverError, GOVERNANCE_REFUSAL_CODE } from "../../agents/failover-error.js";
 import { onAgentEvent, type AgentEventPayload } from "../../infra/agent-events.js";
 import type { TemplateContext } from "../templating.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
@@ -108,7 +108,7 @@ async function runTurn(opts?: Record<string, unknown>) {
 
 describe("a governed CLI primary", () => {
   it("falls over to the embedded model with no lifecycle event from the refused attempt", async () => {
-    state.governMock.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", provider: "codex-cli" }));
+    state.governMock.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", code: GOVERNANCE_REFUSAL_CODE, provider: "codex-cli" }));
 
     const { lifecycle } = await runTurn();
 
@@ -120,7 +120,7 @@ describe("a governed CLI primary", () => {
   });
 
   it("is not announced as the selected model when governance refuses it", async () => {
-    state.governMock.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", provider: "codex-cli" }));
+    state.governMock.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", code: GOVERNANCE_REFUSAL_CODE, provider: "codex-cli" }));
     const selected: string[] = [];
 
     await runTurn({ onModelSelected: (m: { provider: string }) => selected.push(m.provider) });
@@ -131,8 +131,9 @@ describe("a governed CLI primary", () => {
   it("with no embedded candidate the failure names the gates and is NOT mistaken for a context overflow, whatever the gate is called", async () => {
     state.noFallback = true;
     state.governMock.mockRejectedValue(
-      new FailoverError("The codex-cli CLI backend cannot be held to this tenant's governance gates, so it was not used. Gates in force: «prompt-limit (block exec)».", {
+      new FailoverError("The codex-cli CLI backend cannot be held to this tenant's governance gates, so it was not used. Gates in force: prompt-limit (block exec).", {
         reason: "unknown",
+        code: GOVERNANCE_REFUSAL_CODE,
         provider: "codex-cli",
       }),
     );

@@ -21,7 +21,7 @@
 import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-tools";
 import { resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
 import { logWarn } from "../../logger.js";
-import { FailoverError } from "../failover-error.js";
+import { FailoverError, GOVERNANCE_REFUSAL_CODE } from "../failover-error.js";
 
 /** A gate the CLI subprocess cannot be held to. */
 const isUnenforceable = (gate: PolicyGate): boolean => gate.effect === "block" || gate.effect === "require-approval";
@@ -30,18 +30,16 @@ function describeGate(gate: PolicyGate): string {
   return `${gate.id} (${gate.effect} ${gate.tool ?? "all tools"})`;
 }
 
-/** The gate list in a refusal message sits between these, so the text a classifier reads can leave it out. */
-const GATES_OPEN = "«";
-const GATES_CLOSE = "»";
-
 /**
- * An error as the caller of a model run needs it: `message` is what the person and the log read; `classifiable` is what the error
- * classifiers (context overflow, compaction, role ordering, transient HTTP) read. They differ only by the gate ids of a governance
- * refusal, which are an operator's words and can look like anything (`prompt-limit`), and must never be mistaken for a provider error.
+ * True when `err` (or an error it was thrown with as the cause, as model fallback's "all models failed" summary does) is a governance
+ * refusal. Decided by the STRUCTURED code on the error, never by reading its text: a gate id is an operator's word and can look like
+ * anything (`prompt-limit`, `rate-limit-exceeded`), and no text classifier may be asked about it.
  */
-export function describeRunError(err: unknown): { message: string; classifiable: string } {
-  const message = err instanceof Error ? err.message : String(err);
-  return { message, classifiable: message.replace(new RegExp(`${GATES_OPEN}[^${GATES_CLOSE}]*${GATES_CLOSE}`, "g"), "gates") };
+export function isGovernanceRefusal(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth += 1) {
+    if (e instanceof FailoverError && e.code === GOVERNANCE_REFUSAL_CODE) return true;
+  }
+  return false;
 }
 
 /**
@@ -72,10 +70,11 @@ export async function governCliRun(target: { provider: string; model?: string })
     );
     throw new FailoverError(
       `The ${target.provider} CLI backend cannot be held to this tenant's governance gates, so it was not used. ` +
-        `Gates in force: ${GATES_OPEN}${unenforceable.map(describeGate).join(", ")}${GATES_CLOSE}.`,
+        `Gates in force: ${unenforceable.map(describeGate).join(", ")}.`,
       {
         // not a provider fault (nothing to cool down or retry): the model is simply not allowed, so the next candidate runs
         reason: "unknown",
+        code: GOVERNANCE_REFUSAL_CODE,
         provider: target.provider,
         ...(target.model ? { model: target.model } : {}),
       },

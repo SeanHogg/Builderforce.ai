@@ -47,7 +47,7 @@ import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
 import { compactForOverflow, modelServing } from "./run/served-model.js";
-import { blocksAutoContinue } from "./governance-outcome.js";
+import { blocksAutoContinue, runFailedMeta } from "./governance-outcome.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { trackRunOutcome } from "./learned-routing/run-outcome.js";
@@ -1149,6 +1149,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
               durationMs: Date.now() - started,
               agentMeta,
               aborted,
+              ...runFailedMeta(attempt),
               systemPromptReport: attempt.systemPromptReport,
               // Handle client tool calls (OpenResponses hosted tools)
               stopReason: attempt.clientToolCall ? "tool_calls" : undefined,

@@ -16,6 +16,7 @@ import type {
 import type { Message, Model } from "../model/types.js";
 import { agentLoop } from "./agent-loop.js";
 import type { AgentLoopConfig } from "./agent-loop-config.js";
+import type { RunGovernance } from "./run-governance.js";
 import { defaultConvertToLlm } from "./convert-to-llm.js";
 import type { StreamFn } from "./stream.js";
 
@@ -46,8 +47,10 @@ export interface AgentOptions {
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
   /** See {@link AgentLoopConfig.policyGates}. */
   policyGates?: readonly PolicyGate[];
-  /** See {@link AgentLoopConfig.onGovernanceRefusal}. */
-  onGovernanceRefusal?: (gateId: string) => void;
+  /** See {@link AgentLoopConfig.governance}. */
+  governance?: RunGovernance;
+  /** See {@link AgentLoopConfig.workspaceDir}. */
+  workspaceDir?: string;
 }
 
 /**
@@ -76,7 +79,8 @@ export class Agent {
   private pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
   private onModelFallback?: (from: Model, to: Model, notice: string) => void;
   private policyGates?: readonly PolicyGate[];
-  private onGovernanceRefusal?: (gateId: string) => void;
+  private governance?: RunGovernance;
+  private workspaceDir?: string;
 
   constructor(opts: AgentOptions) {
     this._state = {
@@ -93,7 +97,8 @@ export class Agent {
     this.pickFallbackModel = opts.pickFallbackModel;
     this.onModelFallback = opts.onModelFallback;
     this.policyGates = opts.policyGates;
-    this.onGovernanceRefusal = opts.onGovernanceRefusal;
+    this.governance = opts.governance;
+    this.workspaceDir = opts.workspaceDir;
   }
 
   get state(): AgentState {
@@ -178,7 +183,8 @@ export class Agent {
         this.onModelFallback?.(from, to, notice);
       },
       ...(this.policyGates?.length ? { policyGates: this.policyGates } : {}),
-      ...(this.onGovernanceRefusal ? { onGovernanceRefusal: this.onGovernanceRefusal } : {}),
+      ...(this.governance ? { governance: this.governance } : {}),
+      ...(this.workspaceDir ? { workspaceDir: this.workspaceDir } : {}),
       ...(this.knowledge ? { knowledge: this.knowledge } : {}),
       ...(this.prefetch ? { prefetch: this.prefetch } : {}),
     };

@@ -13,6 +13,7 @@ import type { PolicyGate } from "@builderforce/agent-tools";
 import type { ImageContent, Message, Model } from "../model/types.js";
 import { Agent } from "./agent.js";
 import { type CompactionResult, estimateTokens, generateSummary } from "./compaction.js";
+import type { RunGovernance } from "./run-governance.js";
 import { SessionManager, type SessionMessageEntry } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import type { StreamFn } from "./stream.js";
@@ -46,8 +47,8 @@ export interface CreateAgentSessionOptions {
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
   /** Compiled governance gates the session's runs are held to (see {@link AgentLoopConfig.policyGates}). */
   policyGates?: readonly PolicyGate[];
-  /** Told the id of each gate that refuses a call of the session's runs (see {@link AgentLoopConfig.onGovernanceRefusal}). */
-  onGovernanceRefusal?: (gateId: string) => void;
+  /** What the run learns about governance, shared across its attempts (see {@link AgentLoopConfig.governance}). */
+  governance?: RunGovernance;
   /** Default stream fn; the embedded runner overrides `session.agent.streamFn` per route. */
   streamFn?: StreamFn;
   /** Accepted for call-site compatibility with pi's `createAgentSession`, but unused —
@@ -89,7 +90,8 @@ export class AgentSession {
       ...(opts.pickFallbackModel ? { pickFallbackModel: opts.pickFallbackModel } : {}),
       ...(opts.onModelFallback ? { onModelFallback: opts.onModelFallback } : {}),
       ...(opts.policyGates?.length ? { policyGates: opts.policyGates } : {}),
-      ...(opts.onGovernanceRefusal ? { onGovernanceRefusal: opts.onGovernanceRefusal } : {}),
+      ...(opts.governance ? { governance: opts.governance } : {}),
+      ...(opts.cwd ? { workspaceDir: opts.cwd } : {}),
     });
     this.agent.sessionId = this.sessionManager.getSessionId();
     if (opts.streamFn) this.agent.streamFn = opts.streamFn;

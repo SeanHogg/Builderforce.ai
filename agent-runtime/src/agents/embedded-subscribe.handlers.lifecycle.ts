@@ -37,7 +37,8 @@ export function handleAgentEnd(ctx: EmbeddedSubscribeContext) {
 
   if (failedReply) {
     const error = failedReply.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n").trim() || "The run failed.";
-    emitAgentEvent({ runId: ctx.params.runId, stream: "lifecycle", data: { phase: "error", error, endedAt: Date.now() } });
+    // `runFailed` tells the chat the text was already streamed as the run's reply (see `ErrorFinalDetails.replyStreamed`).
+    emitAgentEvent({ runId: ctx.params.runId, stream: "lifecycle", data: { phase: "error", error, endedAt: Date.now(), runFailed: true } });
     void ctx.params.onAgentEvent?.({ stream: "lifecycle", data: { phase: "error", error } });
     finishRunLifecycle(ctx);
     return;

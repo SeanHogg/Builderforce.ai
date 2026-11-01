@@ -46,9 +46,10 @@
  * campaign stops). Treating every terminal failure as the sender's is how one
  * un-textable number stalls an entire audience.
  *
- * Two classifications keep that honest. A provider that never answers (status 0: the connector
- * runtime reports a fetch failure or its timeout as a result, not a throw) is RETRYABLE, never a
- * terminal write-off, and flagged `noResponse` so the batch stops instead of timing out per row.
+ * Two classifications keep that honest. A provider that is not serving us (status 0: the connector
+ * runtime reports a fetch failure or its timeout as a result, not a throw; or a 429 or a 5xx) is
+ * RETRYABLE, never a terminal write-off, and flagged `providerUnavailable` so the batch stops
+ * instead of spending an attempt, or a timeout, on every remaining row.
  * And an HTTP 400 is not always the recipient's: Twilio's own error codes for an unusable From
  * ({@link TWILIO_SENDER_ERROR_CODES}) are the SENDER's, so a dead number cannot end a campaign
  * as `sent` with nothing delivered.
@@ -63,7 +64,7 @@ import { executeConnectorAction, ConnectorCallError } from '../connectors/connec
 import { sendFromMailbox } from '../mailbox/mailboxService';
 import { htmlToPreviewText } from '../mailbox/mailboxProviders';
 import { isE164 } from '../shared/contactAddress';
-import { isNoResponseStatus, isRetryableProviderStatus } from '../shared/campaignDelivery';
+import { isRetryableProviderStatus } from '../shared/campaignDelivery';
 
 export const CAMPAIGN_TRANSPORTS = ['platform', 'mailbox', 'sendgrid', 'twilio'] as const;
 export type CampaignTransport = typeof CAMPAIGN_TRANSPORTS[number];
@@ -154,15 +155,17 @@ export type TransportErrorScope = 'recipient' | 'sender';
 
 export class TransportError extends Error {
   /**
-   * `noResponse`: the provider never answered (a network error, the call's timeout). The batch
-   * stops at the first one — during an outage every remaining send would burn the same timeout —
-   * and requeues what it had claimed.
+   * `providerUnavailable`: the PROVIDER is not serving us, as opposed to this message being
+   * refused: it never answered (a network error, the call's timeout), or answered 429 or 5xx. The
+   * batch stops at the first one, because the next 24 would meet the same throttle or outage and
+   * each would cost an attempt (and, for a silent provider, a full timeout), and requeues what it
+   * had claimed. A per-recipient bounce ("mailbox full") is NOT this: it says nothing about the next.
    */
   constructor(
     message: string,
     readonly retryable: boolean,
     readonly scope: TransportErrorScope,
-    readonly noResponse: boolean = false,
+    readonly providerUnavailable: boolean = false,
   ) {
     super(message);
     this.name = 'TransportError';
@@ -309,8 +312,9 @@ async function resolveSmsSender(
             // but which says nothing about the next recipient (recipient scope).
             //
             // Status 0 is NO RESPONSE: `executeConnectorAction` does not throw on a fetch failure
-            // or its timeout, it returns `{ ok: false, status: 0 }`. That is retryable, and the
-            // error says so (`noResponse`) so the batch can stop instead of timing out 25 times.
+            // or its timeout, it returns `{ ok: false, status: 0 }`. That, a 429 and a 5xx are all the
+            // provider not serving us: retryable, and flagged (`providerUnavailable`) so the batch
+            // stops instead of spending an attempt on every remaining row.
             //
             // A Twilio 400 can still be the SENDER's: its error code, read from the response body,
             // says when the From number itself is unusable ({@link TWILIO_SENDER_ERROR_CODES}).
@@ -319,7 +323,7 @@ async function resolveSmsSender(
               `Twilio returned ${result.status}${detail ? `: ${detail}` : ''}`,
               retryable,
               twilioFailureScope(result.status, result.data),
-              isNoResponseStatus(result.status),
+              retryable,
             );
           }
           return { externalId: twilioMessageSid(result.data) };
@@ -391,9 +395,11 @@ export function isOptOutFailure(message: string): boolean {
  *
  *   21211  invalid `To` number
  *   21217  `To` does not appear to be a valid number
+ *   21408  SMS permission is not enabled for the region of the `To` number
+ *   21612  the `To` number is not currently reachable via SMS
  *   21614  `To` is not a mobile number
  */
-export const TWILIO_RECIPIENT_ERROR_CODES: readonly string[] = ['21211', '21217', '21614'];
+export const TWILIO_RECIPIENT_ERROR_CODES: readonly string[] = ['21211', '21217', '21408', '21612', '21614'];
 
 /**
  * True when a failure is known to be one recipient's: an opt-out, or a Twilio code in
@@ -455,8 +461,17 @@ export async function resolveCampaignSender(
             // thrown before the campaign ever started. Always retried (bounded by
             // the attempt ceiling); a refused platform credential is still labelled
             // as the sender's, so the scope stays honest if this is ever made terminal.
+            //
+            // `providerUnavailable` only for a REAL provider status of 0, 429 or 5xx. Any other
+            // failure here (a bounce for this address, a provider-side validation error, a throw
+            // with no status) is about this message and must not stop the batch.
             const status = error instanceof EmailDeliveryError ? error.status : null;
-            throw new TransportError(error instanceof Error ? error.message : 'Send failed', true, providerStatusScope(status));
+            throw new TransportError(
+              error instanceof Error ? error.message : 'Send failed',
+              true,
+              providerStatusScope(status),
+              isRetryableProviderStatus(status),
+            );
           }
         },
       },
@@ -500,7 +515,7 @@ export async function resolveCampaignSender(
           // reconnecting) for the CONNECTION, and 502 for the one message the provider
           // refused or fumbled, so the status says whose failure it is.
           if (!result.ok) {
-            throw new TransportError(result.error, result.retryable, result.status === 502 ? 'recipient' : 'sender', result.noResponse === true);
+            throw new TransportError(result.error, result.retryable, result.status === 502 ? 'recipient' : 'sender', result.providerUnavailable === true);
           }
           return {};
         },
@@ -569,7 +584,7 @@ export async function resolveCampaignSender(
               `SendGrid returned ${result.status}${result.error ? `: ${result.error}` : ''}`,
               isRetryableProviderStatus(result.status),
               providerStatusScope(result.status),
-              isNoResponseStatus(result.status),
+              isRetryableProviderStatus(result.status),
             );
           }
           return {};

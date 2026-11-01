@@ -11,7 +11,7 @@
  * identity; the note comes back as the host's own summary row.
  */
 
-import { defaultEstimateTokens, handoffLine, isVolatileTail, messageTokens, packHandoff, tokensOf, type HandoffMessage } from "@seanhogg/builderforce-memory/handoff";
+import { defaultEstimateTokens, elisionMarker, handoffLine, isVolatileTail, messageTokens, packHandoff, tokensOf, type HandoffMessage } from "@seanhogg/builderforce-memory/handoff";
 import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens } from "@builderforce/run-policy";
 
 /** How a host's row maps to the packer's, and how the packer's note maps back. */
@@ -102,20 +102,33 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
   return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
 }
 
-/** What the one-line hand-off note costs the incoming request (0 when the model did not change). */
-export function handoffNoteTokens(from: string, to: string): number {
+/** The widest count the note can name: its cost is charged before the cut is known. */
+const WIDEST_DROPPED = 99_999;
+
+/** The note's text: who handed off to whom, and what was dropped (the rows the cut took, or that it took none). Empty when the model did not change. */
+function noteText(from: string, to: string, dropped: number): string {
   const line = handoffLine(from, to);
-  return line ? messageTokens({ role: "user", content: line }, defaultEstimateTokens) : 0;
+  return line ? `${line}\n${dropped > 0 ? elisionMarker(dropped) : "Nothing was dropped."}` : "";
+}
+
+/** What the hand-off note costs the incoming request, at its widest (0 when the model did not change). */
+export function handoffNoteTokens(from: string, to: string): number {
+  const text = noteText(from, to, WIDEST_DROPPED);
+  return text ? messageTokens({ role: "user", content: text }, defaultEstimateTokens) : 0;
 }
 
 /**
  * Tell the incoming model it took over, for a hand-off in which the packer wrote no note of its own: the context fit as it was, or the
- * rows that must stay whole filled the window. ONE short row, before the latest directive and in the role that keeps turns alternating,
- * so the directive stays the last thing the person said and a later hand-off never mistakes the note for it. Rows come back by identity.
+ * rows that must stay whole filled the window. ONE short row that says what was dropped (`dropped` rows, or nothing).
+ *
+ * It sits before the latest directive, so the directive stays the last thing the person said and a later hand-off never mistakes the
+ * note for it (the packer's directive is the LAST real user row, and the note is always ahead of one). Its role keeps the request from
+ * opening with an assistant turn and from stacking assistant turns: the user's at the front of the request or after an assistant turn,
+ * the assistant's after a user or tool row. With no directive at all it closes the request, as the user's. Rows come back by identity.
  */
-export function withHandoffNote<M>(rows: readonly M[], from: string, to: string, access: HandoffAccessor<M>): M[] {
-  const line = handoffLine(from, to);
-  if (!line) return [...rows];
+export function withHandoffNote<M>(rows: readonly M[], from: string, to: string, dropped: number, access: HandoffAccessor<M>): M[] {
+  const text = noteText(from, to, dropped);
+  if (!text) return [...rows];
   const views = rows.map((row) => access.toHandoff(row));
   let at = -1;
   for (let i = views.length - 1; i >= 0; i -= 1) {
@@ -124,6 +137,7 @@ export function withHandoffNote<M>(rows: readonly M[], from: string, to: string,
       break;
     }
   }
-  if (at < 0) return [...rows, access.summary(line, "user")];
-  return [...rows.slice(0, at), access.summary(line, "assistant"), ...rows.slice(at)];
+  if (at < 0) return [...rows, access.summary(text, "user")];
+  const role = at === 0 || views[at - 1]!.role === "assistant" ? "user" : "assistant";
+  return [...rows.slice(0, at), access.summary(text, role), ...rows.slice(at)];
 }

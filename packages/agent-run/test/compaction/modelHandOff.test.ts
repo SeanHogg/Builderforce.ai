@@ -36,7 +36,7 @@ function expectKeptWhole(result: Awaited<ReturnType<typeof handOff>>, rows: read
   expect(result?.dropped).toBe(0);
   const kept = result!.messages;
   expect(rows.every((row) => kept.includes(row))).toBe(true);
-  expect(kept.filter((m) => !rows.includes(m)).map((m) => m.content)).toEqual(["Handed off from p/big to p/small."]);
+  expect(kept.filter((m) => !rows.includes(m)).map((m) => m.content)).toEqual(["Handed off from p/big to p/small.\nNothing was dropped."]);
 }
 
 describe("a hand-off measures the whole row", () => {

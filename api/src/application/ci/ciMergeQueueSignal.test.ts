@@ -33,7 +33,7 @@ describe('signalMergeQueueOnCiResult', () => {
     expect(signalled()).toBe(false);
   });
 
-  it('reads the open PR through the project's manager opt-in, the same join the sweep selects by', async () => {
+  it('reads the open PR through the project\'s manager opt-in, the same join the sweep selects by', async () => {
     const { env } = fakeCronKv();
     const joined: unknown[] = [];
     const db = {

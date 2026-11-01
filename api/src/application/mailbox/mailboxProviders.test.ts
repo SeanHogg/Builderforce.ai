@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyClientSideFilters,
   attachmentTooLargeMessage,
@@ -7,7 +7,10 @@ import {
   clampMailboxLimit,
   getMailboxProvider,
   htmlToPreviewText,
+  isMailboxAuthFailure,
   isMailboxProviderName,
+  isMailboxRateLimited,
+  MailboxProviderError,
   safeAttachmentFilename,
   MAX_ATTACHMENT_BYTES,
   type MailboxMessage,
@@ -241,5 +244,98 @@ describe('MAX_ATTACHMENT_BYTES', () => {
     // Both providers hand the bytes over base64-encoded, so the peak is ~1.4x the
     // file. This is the number the adapters enforce BEFORE reading a body.
     expect(MAX_ATTACHMENT_BYTES).toBe(20 * 1024 * 1024);
+  });
+});
+
+/**
+ * What a 403 means. The HTTP status alone cannot say: Gmail answers 403 for a withdrawn consent AND
+ * for a quota hit, and treating every 401/403 as a revoked grant failed a whole campaign for good,
+ * and marked a working mailbox revoked, on one rate-limit response.
+ */
+describe('the provider failure reason', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const outgoing = { to: 'a@x.com', subject: 'Hi', html: '<p>Hi</p>' };
+
+  /** Stub `fetch` so Gmail's profile lookup succeeds and the send itself answers `status` + `body`. */
+  const gmailSendFails = async (status: number, body: unknown): Promise<MailboxProviderError> => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (
+      String(url).endsWith('/profile')
+        ? new Response(JSON.stringify({ emailAddress: 'me@x.com' }), { status: 200 })
+        : new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })
+    )));
+    return getMailboxProvider('google')!.sendMessage('tok', outgoing).then(
+      () => { throw new Error('expected the send to fail'); },
+      (error: unknown) => error as MailboxProviderError,
+    );
+  };
+
+  const graphSendFails = async (status: number, body: unknown): Promise<MailboxProviderError> => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status })));
+    return getMailboxProvider('microsoft')!.sendMessage('tok', outgoing).then(
+      () => { throw new Error('expected the send to fail'); },
+      (error: unknown) => error as MailboxProviderError,
+    );
+  };
+
+  const gmail403 = (reason: string) => ({ error: { code: 403, message: 'denied', errors: [{ reason, domain: 'usageLimits' }], status: 'PERMISSION_DENIED' } });
+
+  it('reads Gmail\'s machine-readable reason off errors[].reason', async () => {
+    const error = await gmailSendFails(403, gmail403('userRateLimitExceeded'));
+    expect(error).toBeInstanceOf(MailboxProviderError);
+    expect(error.status).toBe(403);
+    expect(error.reason).toBe('userRateLimitExceeded');
+  });
+
+  it('reads Graph\'s reason off error.code', async () => {
+    const error = await graphSendFails(429, { error: { code: 'TooManyRequests', message: 'slow down' } });
+    expect(error.reason).toBe('TooManyRequests');
+  });
+
+  it('falls back to the newer details[].reason and to a status string, and is null when the body says nothing', async () => {
+    const details = await gmailSendFails(403, { error: { code: 403, message: 'x', details: [{ reason: 'RATE_LIMIT_EXCEEDED' }] } });
+    expect(details.reason).toBe('RATE_LIMIT_EXCEEDED');
+    const status = await gmailSendFails(429, { error: { code: 429, message: 'x', status: 'RESOURCE_EXHAUSTED' } });
+    expect(status.reason).toBe('RESOURCE_EXHAUSTED');
+    const none = await gmailSendFails(403, '<html>Forbidden</html>');
+    expect(none.reason).toBeNull();
+  });
+
+  it.each(['rateLimitExceeded', 'userRateLimitExceeded', 'dailyLimitExceeded'])(
+    'Gmail 403 %s is a rate limit: retryable, and never an auth failure',
+    async (reason) => {
+      const error = await gmailSendFails(403, gmail403(reason));
+      expect(isMailboxRateLimited(error)).toBe(true);
+      expect(isMailboxAuthFailure(error)).toBe(false);
+    },
+  );
+
+  it('a 403 for a withdrawn consent, or with no reason at all, IS an auth failure', async () => {
+    for (const body of [gmail403('insufficientPermissions'), gmail403('forbidden'), '<html>Forbidden</html>']) {
+      const error = await gmailSendFails(403, body);
+      expect(isMailboxAuthFailure(error)).toBe(true);
+      expect(isMailboxRateLimited(error)).toBe(false);
+    }
+  });
+
+  it('a 401 is always an auth failure, whatever the body says', async () => {
+    const error = await gmailSendFails(401, gmail403('rateLimitExceeded'));
+    expect(isMailboxAuthFailure(error)).toBe(true);
+  });
+
+  it('a 429 is a rate limit and not an auth failure; a Graph throttling code on a 403 is too', async () => {
+    expect(isMailboxRateLimited(new MailboxProviderError('x', 429))).toBe(true);
+    expect(isMailboxAuthFailure(new MailboxProviderError('x', 429))).toBe(false);
+    const graph = await graphSendFails(403, { error: { code: 'ApplicationThrottled', message: 'x' } });
+    expect(isMailboxRateLimited(graph)).toBe(true);
+    expect(isMailboxAuthFailure(graph)).toBe(false);
+    const denied = await graphSendFails(403, { error: { code: 'ErrorAccessDenied', message: 'x' } });
+    expect(isMailboxAuthFailure(denied)).toBe(true);
+  });
+
+  it('a 500 is neither: the provider failing is not a grant problem', () => {
+    const error = new MailboxProviderError('x', 500);
+    expect(isMailboxAuthFailure(error)).toBe(false);
+    expect(isMailboxRateLimited(error)).toBe(false);
   });
 });

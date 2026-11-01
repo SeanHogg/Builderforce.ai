@@ -29,7 +29,6 @@ import { modelRef } from "../builderforce/agent-loop/stall-recovery.js";
 import type { StreamFn } from "../builderforce/agent-loop/stream.js";
 import type { AgentContext, AgentEvent, AgentMessage } from "../builderforce/model/agent-types.js";
 import { resolveContextWindowTokens } from "../agents/context-window.js";
-import { requestHumanInput } from "../infra/approval-gate.js";
 import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
 import { logWarn } from "../logger.js";
 import { AgentEventBridge } from "./agentEventBridge.js";
@@ -177,7 +176,7 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
           emit: (event: RunEvent) => {
             if (event.kind === "policy.blocked") {
               refusedBy.add(event.gateId);
-              config.onGovernanceRefusal?.(event.gateId);
+              config.governance?.refusedBy(event.gateId);
             }
             bridge.emit(event);
           },
@@ -185,9 +184,9 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
           // names a model `<provider>/<id>` (the policy keys its pins and fallbacks on it), so the ref is turned back into the id here.
           outcome: (row) => reportRunRow(row.model ? { ...row, model: bareModelId(models, row.model) } : row),
         },
-        // A governance gate guards an act: with no approver to reach, the call is refused (the ticket path keeps its standalone default).
+        // A governance gate's approval fails closed on every path (`onPremHuman`): with no approver to reach, the call is refused.
         // The wait is bounded and ends with the run (see CHANNEL_APPROVAL_WAIT_MS).
-        human: onPremHuman(() => capabilities, (request) => requestHumanInput({ ...request, failClosed: true }), {
+        human: onPremHuman(() => capabilities, undefined, {
           approvalTimeoutMs: CHANNEL_APPROVAL_WAIT_MS,
           ...(signal ? { signal } : {}),
         }),
@@ -195,6 +194,8 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
         // The one rung: a reply the output limit cut short continues (twice), then is delivered with a line saying it was cut off.
         delivery: { rungs: channelDeliveryRungs, owns: { synthesis: true } },
         steering: steeringOf(config),
+        // A call refused earlier in the SAME run (an earlier attempt of it) is refused at once, not put to the approver again.
+        ...(config.governance ? { refusals: config.governance } : {}),
         context: contextOf(config, prompts, signal, knowledge),
         platform: channelTools({ tools, bridge, knowledge: config.knowledge ?? knowledge, query: request, window: (ref) => resolveContextWindowTokens(models.resolve(ref)) }),
       };
@@ -209,17 +210,19 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       ];
       const last = rows.at(-1);
       if (last) last.task = true;
-      const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, transcript: rows };
+      // The run's directory is the workspace root a path-scoped governance gate judges an absolute path against.
+      const workspace = config.workspaceDir ? { workspace: { defaultRepo: config.workspaceDir } } : {};
+      const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, transcript: rows, ...workspace };
       const outcome = await runAgent({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
       // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
       // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
       if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
-      // A run that spent its budget or tripped its breaker never reaches a closing reply (the channel owns its synthesis). If it wrote
-      // nothing it would end silently; if a governance gate refused its calls, whatever it wrote before is not an honest account of
-      // why it stopped. Either way, say what stopped it and which gate refused its calls. It is told as the run's REPLY, not as an
-      // errored turn (the runner regex-classifies an errored message's text, so a gate keyed like `forbidden-paths` would put a healthy
-      // profile in cooldown), and marked `runFailed` so the lifecycle still ends as a failure.
-      else if (outcome.kind === "failed" && (!replied || refusedBy.size > 0)) bridge.failedReply(noReplyMessage(outcome.reason, refusedBy, replied));
+      // A run the budget or the failure breaker ended never reaches a closing reply (the channel owns its synthesis), and whatever it wrote
+      // before (narration beside a tool call) is not an account of why it stopped. So it ALWAYS ends on one: what stopped it, and which
+      // gate refused its calls. It is told as the run's REPLY, not as an errored turn (the runner regex-classifies an errored message's
+      // text, so a gate keyed like `forbidden-paths` would put a healthy profile in cooldown), and marked `runFailed` so the lifecycle
+      // still ends as a failure. A run that finished stays a clean reply.
+      else if (outcome.kind === "failed") bridge.failedReply(noReplyMessage(outcome.reason, refusedBy, replied));
     } catch (err) {
       logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

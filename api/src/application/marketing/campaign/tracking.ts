@@ -45,7 +45,9 @@ export async function recordOpen(db: Db, trackToken: string, env?: Env): Promise
   if (!hit) return;
   await db
     .update(marketingCampaigns)
-    .set({ opened: sql`${marketingCampaigns.opened} + 1`, updatedAt: sql`NOW()` })
+    // No `updated_at`: `campaignsInFlight` rotates in-flight campaigns by it, so an engagement
+    // counter that bumped it would hand a well-opened campaign the front of the queue on every open.
+    .set({ opened: sql`${marketingCampaigns.opened} + 1` })
     .where(and(eq(marketingCampaigns.id, hit.campaignId), eq(marketingCampaigns.tenantId, hit.tenantId)));
   // FIRST open only — the guard above already made this branch unique per send, so
   // an `email-open` workflow fires once per recipient rather than once per image
@@ -82,7 +84,8 @@ export async function recordClick(db: Db, trackToken: string, rawUrl: string, en
   if (hit) {
     await db
       .update(marketingCampaigns)
-      .set({ clicked: sql`${marketingCampaigns.clicked} + 1`, updatedAt: sql`NOW()` })
+      // No `updated_at`, for the reason given at the open counter above.
+      .set({ clicked: sql`${marketingCampaigns.clicked} + 1` })
       .where(and(eq(marketingCampaigns.id, hit.campaignId), eq(marketingCampaigns.tenantId, hit.tenantId)));
     // First click only, same reasoning as recordOpen. The redirect below happens
     // regardless — a workflow must never be able to break the link the reader clicked.
@@ -189,7 +192,7 @@ export async function recordSmsDeliveryStatus(
       .set({
         sent: sql`GREATEST(${marketingCampaigns.sent} - 1, 0)`,
         failed: sql`${marketingCampaigns.failed} + 1`,
-        updatedAt: sql`NOW()`,
+        // No `updated_at`, for the reason given at the open counter above.
       })
       .where(and(eq(marketingCampaigns.id, send.campaignId), eq(marketingCampaigns.tenantId, send.tenantId)));
   }

@@ -252,7 +252,18 @@ export interface ToolExtension {
   shape?(name: string, data: unknown): Promise<unknown> | unknown;
 }
 
+/**
+ * What a refused approval-gated call is remembered by, ACROSS the attempts of one run. `RunState.refusedCalls` lives and dies with one attempt's
+ * state; a host that re-attempts a run (a profile rotation, a compaction retry) hands every attempt the same one of these, so the approver is not
+ * asked again for a call it already refused.
+ */
+export interface RunRefusals {
+  recall(key: string): string | undefined;
+  remember(key: string, message: string): void;
+}
+
 export interface RunPorts {
+  refusals?: RunRefusals;          // an approval refused earlier in the SAME run, across attempts (see {@link RunRefusals})
   model: ModelTransport;           // complete(request, signal) → completion
   capabilities: CapabilityProvider;// @builderforce/agent-tools contract (files, shell, git, platform, memory, human)
   store: RunStore;                 // load/save RunState; commitMemory(consolidated)

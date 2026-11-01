@@ -3,6 +3,7 @@ import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
+import { type ErrorFinalDetails, errorFinalPayload } from "./chat-final-payload.js";
 import { loadSessionEntry } from "./session-utils.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -273,7 +274,7 @@ export function createAgentEventHandler({
     seq: number,
     jobState: "done" | "error",
     error?: unknown,
-    details?: { stopReason?: string; errorMessage?: string },
+    details?: ErrorFinalDetails,
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
     const shouldSuppressSilent = isSilentReplyText(text, SILENT_REPLY_TOKEN);
@@ -320,17 +321,13 @@ export function createAgentEventHandler({
       nodeSendToSession(sessionKey, "chat", payload);
       return;
     }
-    const errorMessage = details?.errorMessage ?? (error ? formatForLog(error) : undefined);
-    // A failed run that said why as its reply (`runFailed`) already streamed that text to the chat: the error final carries no second copy.
-    const alreadyShown = errorMessage !== undefined && text.length > 0 && text.includes(errorMessage);
-    const payload = {
-      runId: clientRunId,
+    const payload = errorFinalPayload({
+      clientRunId,
       sessionKey,
       seq,
-      state: "error" as const,
-      stopReason: details?.stopReason,
-      ...(alreadyShown ? {} : { errorMessage }),
-    };
+      errorMessage: details?.errorMessage ?? (error ? formatForLog(error) : undefined),
+      details,
+    });
     broadcast("chat", payload);
     nodeSendToSession(sessionKey, "chat", payload);
   };
@@ -454,6 +451,7 @@ export function createAgentEventHandler({
             {
               stopReason: lifecycleStopReason,
               errorMessage: lifecycleErrorMessage,
+              replyStreamed: evt.data?.runFailed === true,
             },
           );
         } else {
@@ -466,6 +464,7 @@ export function createAgentEventHandler({
             {
               stopReason: lifecycleStopReason,
               errorMessage: lifecycleErrorMessage,
+              replyStreamed: evt.data?.runFailed === true,
             },
           );
         }

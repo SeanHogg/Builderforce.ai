@@ -36,6 +36,8 @@ export type EmbeddedRunMeta = {
   durationMs: number;
   agentMeta?: EmbeddedAgentMeta;
   aborted?: boolean;
+  /** The run FAILED (it ended on its budget or failure breaker, or a governance gate refused its calls) and said why as its reply, which is `payloads`' last text. */
+  runFailed?: boolean;
   systemPromptReport?: SessionSystemPromptReport;
   error?: {
     kind: "context_overflow" | "compaction_failure" | "role_ordering" | "image_size";

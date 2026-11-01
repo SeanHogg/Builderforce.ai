@@ -22,7 +22,7 @@ import { isFailoverError } from "../failover-error.js";
 import { runWithModelFallback } from "../model-fallback.js";
 import { buildSystemPrompt, resolveSystemPromptUsage } from "./helpers.js";
 import { isLikelyContextOverflowError } from "../embedded-helpers.js";
-import { deliverCliGovernance, describeRunError, governCliRun } from "./governance.js";
+import { deliverCliGovernance, governCliRun, isGovernanceRefusal } from "./governance.js";
 
 const block: PolicyGate = { id: "no-shell", tool: "exec", effect: "block", reason: "shell is off" };
 const approval: PolicyGate = { id: "ask-first", tool: "write_file", effect: "require-approval", reason: "needs a person" };
@@ -143,28 +143,40 @@ describe("directive gates on a resumed CLI session", () => {
   });
 });
 
-describe("describeRunError", () => {
+describe("a governance refusal is decided by its structured code, never by its text", () => {
+  // A gate called `prompt-limit`: the refusal's message names it, and that message reads as a context overflow to the text classifier.
   const hostile: PolicyGate = { id: "prompt-limit", tool: "exec", effect: "block" };
 
-  it("a gate id that reads like a provider error is not what the classifiers read", async () => {
+  it("the hazard is real: the refusal's own text reads as a context overflow", async () => {
     mocks.resolveGates.mockResolvedValue([hostile]);
     const err = await governCliRun({ provider: "claude-cli", model: "opus" }).catch((e: unknown) => e);
-    const { message, classifiable } = describeRunError(err);
-
-    // the hazard is real: the raw text reads as a context overflow
-    expect(isLikelyContextOverflowError(message)).toBe(true);
-    // the person and the log still read the gate by name
-    expect(message).toContain("prompt-limit");
-    // the classifiers do not
-    expect(classifiable).not.toContain("prompt-limit");
-    expect(isLikelyContextOverflowError(classifiable)).toBe(false);
+    expect(isLikelyContextOverflowError((err as Error).message)).toBe(true);
   });
 
-  it("leaves any other error as it is", () => {
-    expect(describeRunError(new Error("context overflow: prompt too large"))).toEqual({
-      message: "context overflow: prompt too large",
-      classifiable: "context overflow: prompt too large",
-    });
-    expect(describeRunError("plain").classifiable).toBe("plain");
+  it("carries the structured code, on the error and under a fallback summary", async () => {
+    mocks.resolveGates.mockResolvedValue([hostile]);
+    const err = await governCliRun({ provider: "claude-cli", model: "opus" }).catch((e: unknown) => e);
+
+    expect(isGovernanceRefusal(err)).toBe(true);
+    expect(isGovernanceRefusal(new Error("All models failed (2): …", { cause: err }))).toBe(true);
+    expect(isGovernanceRefusal(new Error("context overflow: prompt too large"))).toBe(false);
+    expect(isGovernanceRefusal("plain")).toBe(false);
+  });
+
+  it("the REAL runWithModelFallback (nothing mocked) still falls over to the embedded candidate", async () => {
+    mocks.resolveGates.mockResolvedValue([hostile]);
+    const out = await runWithModelFallback({ cfg, agentDir, provider: "claude-cli", model: "opus", run: runCandidate });
+
+    expect(out.result).toBe("embedded ran on openai/gpt-5.2");
+    expect(out.attempts[0]).toMatchObject({ provider: "claude-cli", model: "opus" });
+    expect(out.attempts[0]!.error).toContain("prompt-limit");
+  });
+
+  it("and with no embedded candidate fails naming the gate, instead of rethrowing as an overflow", async () => {
+    mocks.resolveGates.mockResolvedValue([hostile]);
+    const err = await runWithModelFallback({ cfg, agentDir, provider: "claude-cli", model: "opus", fallbacksOverride: [], run: runCandidate }).catch((e: unknown) => e);
+
+    expect(isGovernanceRefusal(err)).toBe(true);
+    expect((err as Error).message).toContain("prompt-limit");
   });
 });

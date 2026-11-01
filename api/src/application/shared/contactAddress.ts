@@ -25,17 +25,82 @@
  * agree, or a send can go to an address the check never looked at.
  */
 export function bareAddress(value: string): string {
-  // Strip trailing comments, innermost first, so nested ones `(a (b))` unwind. An angle group
-  // inside a comment goes with it. Bounded: each pass removes at least one character.
+  const text = withoutTrailingComments(value);
+  return angleGroupsOf(text).at(-1) || text.trim();
+}
+
+/** Strip trailing comments, innermost first, so nested ones `(a (b))` unwind. An angle group
+ *  inside a comment goes with it. Bounded: each pass removes at least one character. */
+function withoutTrailingComments(value: string): string {
   let text = value.trim();
   for (let stripped = text.replace(/\s*\([^()]*\)\s*$/, ''); stripped !== text; stripped = text.replace(/\s*\([^()]*\)\s*$/, '')) {
     text = stripped;
   }
-  // A quoted string is display text, never the address: drop it (backslash escapes honoured)
-  // before looking for angle groups, so `Eve <a@x.com> "<victim@y.com>"` cannot resolve to the
-  // decoy. Only the search text loses them; the no-group fallback below returns the value as given.
-  const groups = [...text.replace(/"(?:[^"\\]|\\.)*"/g, '').matchAll(/<([^<>]+)>/g)];
-  return groups.at(-1)?.[1]?.trim() || text.trim();
+  return text;
+}
+
+/** The trimmed text of every `<...>` group in `text`. A quoted string is display text, never the
+ *  address: it is dropped (backslash escapes honoured) before looking for groups, so
+ *  `Eve <a@x.com> "<victim@y.com>"` cannot resolve to the decoy. Only the search text loses them. */
+function angleGroupsOf(text: string): string[] {
+  return [...text.replace(/"(?:[^"\\]|\\.)*"/g, '').matchAll(/<([^<>]+)>/g)].map((group) => group[1]!.trim());
+}
+
+/**
+ * How many angle groups (`<...>`) the mailbox value holds, after the same comment and quoted-string
+ * handling {@link bareAddress} applies. More than one is ambiguous (`<a@x.com> <b@y.com>`): the
+ * parser takes the last, but a mail server is not obliged to, so a check that must not be fooled
+ * (the do-not-contact one) treats it as unparseable rather than trusting that choice.
+ */
+export function angleGroupCount(value: string): number {
+  return angleGroupsOf(withoutTrailingComments(value)).length;
+}
+
+/**
+ * The canonical addr-spec of a bare address, so the same mailbox written differently compares
+ * equal. Four spellings that name one mailbox are folded:
+ *
+ *   - comments anywhere, outside quoted strings: `erased(c)@x.com`, `erased@x.com (c)`, `(c) erased@x.com`;
+ *   - an obsolete source route: `@a.com:erased@x.com`;
+ *   - a quoted local part that is a plain atom: `"erased"@x.com` (a local part that genuinely needs
+ *     its quotes, such as one with a space, is left as written);
+ *   - a trailing dot on the domain: `erased@x.com.`.
+ *
+ * Anything else is returned trimmed and otherwise untouched. It does not validate: callers still
+ * test the result against their own address shape.
+ */
+export function canonicalAddress(bare: string): string {
+  let text = withoutComments(bare).trim();
+  text = text.replace(/^@[^\s@:,]+(?:\s*,\s*@[^\s@:,]+)*\s*:/, '').trim();
+  const quoted = /^"((?:[^"\\]|\\.)*)"@(.+)$/.exec(text);
+  if (quoted) {
+    const local = quoted[1]!.replace(/\\(.)/g, '$1');
+    if (/^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/.test(local)) text = `${local}@${quoted[2]!}`;
+  }
+  const at = text.lastIndexOf('@');
+  return at < 0 ? text : `${text.slice(0, at + 1)}${text.slice(at + 1).replace(/\.+$/, '')}`;
+}
+
+/** `text` with every balanced comment removed; text inside a quoted string is kept as written and an
+ *  unterminated comment swallows the rest. */
+function withoutComments(text: string): string {
+  let out = '';
+  let depth = 0;
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quoted) {
+      out += ch;
+      if (ch === '\\' && i + 1 < text.length) out += text[++i]!;
+      else if (ch === '"') quoted = false;
+    } else if (depth > 0) {
+      if (ch === '\\') i++;
+      else if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+    } else if (ch === '(') depth++;
+    else if (ch === '"') { quoted = true; out += ch; } else out += ch;
+  }
+  return out;
 }
 
 /**
@@ -79,6 +144,21 @@ export function splitAddressList(value: string): string[] {
   }
   parts.push(current);
   return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * Whether `value` contains a control character: any C0 control (NUL to US, which includes CR, LF
+ * and tab), DEL, or a C1 control.
+ *
+ * A mailbox adapter writes `to`, `replyTo` and the subject into a message header, and a CR or LF
+ * there ends the header and starts a new one: a `replyTo` of `x@y.com`, CR, LF, `Bcc: erased@x.com`
+ * adds a recipient that no do-not-contact check ever looked at. Those fields can be
+ * model-controlled (the agent send tool), so the one chokepoint that sends refuses them rather than
+ * trusting each caller to have cleaned them. Pure, like the rest of this module.
+ */
+export function hasControlCharacter(value: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  return /[\u0000-\u001f\u007f-\u009f]/.test(value);
 }
 
 /** A number Twilio will accept: E.164, `+` then 8–15 digits. Checked before a

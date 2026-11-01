@@ -27,14 +27,13 @@ export const CAMPAIGN_DELIVERY_MAX_ATTEMPTS = 3;
  * error to status 0 the same way. A connectivity incident is the textbook transient failure, so
  * it is retryable alongside 429 and 5xx; reading it as terminal wrote off a whole audience.
  * ONE predicate for every transport, so the sites cannot drift apart.
+ *
+ * It is also what marks a transport failure as `providerUnavailable` (the provider is not serving
+ * us, so the batch stops rather than spend an attempt on every remaining row): the set that is
+ * worth retrying and the set that says "stop trying the next ones" are the same set.
  */
 export function isRetryableProviderStatus(status: number | null | undefined): boolean {
   return status === 0 || status === 429 || (typeof status === 'number' && status >= 500);
-}
-
-/** True when the provider never answered (a network error or the call's timeout). */
-export function isNoResponseStatus(status: number | null | undefined): boolean {
-  return status === 0;
 }
 
 /**

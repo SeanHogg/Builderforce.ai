@@ -8,6 +8,7 @@ import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { PrefetchPort } from "@builderforce/prefetch";
 import type { AgentMessage } from "../model/agent-types.js";
 import type { Message, Model } from "../model/types.js";
+import type { RunGovernance } from "./run-governance.js";
 
 export interface AgentLoopConfig {
   model: Model;
@@ -36,8 +37,10 @@ export interface AgentLoopConfig {
    * and persist the swap (see {@link Agent}).
    */
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
-  /** Told the id of each governance gate that refuses a tool call of this run (the structured `policy.blocked` path), so the host learns which gates stopped it. */
-  onGovernanceRefusal?: (gateId: string) => void;
+  /** What this run learns about governance, shared by every attempt of it (see {@link RunGovernance}): which gates refused its calls, and which refused approvals not to ask again. */
+  governance?: RunGovernance;
+  /** The directory the run works in. A path-scoped governance gate judges an absolute path inside it by its workspace-relative form. */
+  workspaceDir?: string;
   /** Converts AgentMessage[] to LLM-compatible Message[] before each LLM call. */
   convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
   /** Optional AgentMessage[] → AgentMessage[] transform applied before conversion. */

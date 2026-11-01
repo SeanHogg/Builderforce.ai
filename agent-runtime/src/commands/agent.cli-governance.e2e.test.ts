@@ -22,7 +22,7 @@ vi.mock("../agents/model-catalog.js", () => ({ loadModelCatalog: vi.fn() }));
 import { runCliAgent } from "../agents/cli-runner.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import { runEmbeddedAgent } from "../agents/embedded.js";
-import { FailoverError } from "../agents/failover-error.js";
+import { FailoverError, GOVERNANCE_REFUSAL_CODE } from "../agents/failover-error.js";
 import * as configModule from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { agentCommand } from "./agent.js";
@@ -65,7 +65,7 @@ async function run(message: string) {
 
 describe("a governed CLI primary under agentCommand", () => {
   it("falls over to the embedded model with the person's own prompt and images", async () => {
-    state.govern.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", provider: "claude-cli" }));
+    state.govern.mockRejectedValue(new FailoverError("refused by gate no-shell", { reason: "unknown", code: GOVERNANCE_REFUSAL_CODE, provider: "claude-cli" }));
 
     await run("fix the login bug");
 
@@ -79,7 +79,7 @@ describe("a governed CLI primary under agentCommand", () => {
 
   it("control: a CLI run that STARTED and failed still retries with the continue prompt and no images", async () => {
     state.govern.mockResolvedValue("");
-    vi.mocked(runCliAgent).mockRejectedValue(new FailoverError("cli crashed", { reason: "unknown", provider: "claude-cli" }));
+    vi.mocked(runCliAgent).mockRejectedValue(new FailoverError("cli crashed", { reason: "unknown", code: GOVERNANCE_REFUSAL_CODE, provider: "claude-cli" }));
 
     await run("fix the login bug");
 

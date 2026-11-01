@@ -570,14 +570,17 @@ export async function handleOpenResponsesHttpRequest(
               .join("\n\n")
           : "No response from BuilderForceAgents.";
 
+      // A run that FAILED and said why as its reply is a failed response carrying that account, not a completed one.
+      const runFailed = meta && typeof meta === "object" && (meta as { runFailed?: boolean }).runFailed === true;
       const response = createResponseResource({
         id: responseId,
         model,
-        status: "completed",
+        status: runFailed ? "failed" : "completed",
         output: [
           createAssistantOutputItem({ id: outputItemId, text: content, status: "completed" }),
         ],
         usage,
+        ...(runFailed ? { error: { code: "run_failed", message: content } } : {}),
       });
 
       sendJson(res, 200, response);

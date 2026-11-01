@@ -63,10 +63,11 @@ describe("every real change of serving model tells the incoming model it took ov
     expect(result!.dropped).toBe(0);
     const added = result!.messages.filter((m) => !rows.includes(m));
     expect(added).toHaveLength(1);
-    expect(added[0]!.content).toBe("Handed off from p/big to p/small.");
+    expect(added[0]!.content).toBe("Handed off from p/big to p/small.\nNothing was dropped.");
     // before the latest directive, which stays the last thing the person said
     expect(result!.messages.at(-1)!.content).toBe("LATEST");
-    expect(added[0]!.role).toBe("assistant");
+    // the row before it is the assistant's, so the note is the user's: no two assistant turns in a row
+    expect(added[0]!.role).toBe("user");
   });
 
   it("a context whose core cannot fit is still told, and is still said not to fit", async () => {
@@ -75,7 +76,9 @@ describe("every real change of serving model tells the incoming model it took ov
 
     const result = await handOff(ctx);
 
-    expect(result!.messages.some((m) => m.content === "Handed off from p/big to p/small.")).toBe(true);
+    // the core could not fit and the one row between the task and the request was cut: the note says so, with the count
+    expect(result!.dropped).toBe(1);
+    expect(result!.messages.some((m) => m.content === "Handed off from p/big to p/small.\n[1 earlier messages omitted]")).toBe(true);
     expect(events.find((e) => e.kind === "model.preflight")).toMatchObject({ status: "degraded" });
   });
 
@@ -92,7 +95,7 @@ describe("every real change of serving model tells the incoming model it took ov
     const second = await handOff(ctx);
 
     expect(second!.dropped).toBe(0);
-    expect(second!.messages.some((m) => m.content === "Handed off from p/small to p/big.")).toBe(true);
+    expect(second!.messages.some((m) => m.content === "Handed off from p/small to p/big.\nNothing was dropped.")).toBe(true);
   });
 
   it("the same model again is nothing to say", async () => {
@@ -107,7 +110,61 @@ describe("every real change of serving model tells the incoming model it took ov
     const result = await handOff(ctx);
 
     expect(result!.dropped).toBe(0);
-    expect(result!.messages.some((m) => m.content === "Handed off from p/big to p/unknown.")).toBe(true);
+    expect(result!.messages.some((m) => m.content === "Handed off from p/big to p/unknown.\nNothing was dropped.")).toBe(true);
+  });
+});
+
+describe("a note that fits in without a cut: role and position", () => {
+  const sys: RunMessage = { role: "system", content: "sys" };
+  const noteIn = (rows: RunMessage[], messages: readonly RunMessage[]) => messages.findIndex((m) => !rows.includes(m) && m.content.startsWith("Handed off"));
+  const call = (id: string): RunMessage => ({ role: "assistant", content: "", toolCalls: [{ id, name: "read", arguments: "{}" }] });
+
+  it("after a user or tool row it is the assistant's, and the directive follows it", async () => {
+    const rows: RunMessage[] = [sys, { role: "user", content: "TASK", task: true }, call("c1"), { role: "tool", toolCallId: "c1", content: "file" }, { role: "user", content: "LATEST" }];
+    const { ctx } = ctxFor(rows);
+
+    const kept = (await handOff(ctx))!.messages;
+    const at = noteIn(rows, kept);
+
+    expect(kept[at]!.role).toBe("assistant");
+    expect(kept[at - 1]!.role).toBe("tool");
+    expect(kept[at + 1]!.content).toBe("LATEST");
+  });
+
+  it("after an assistant row it is the user's, so assistant turns are never stacked", async () => {
+    const rows: RunMessage[] = [sys, { role: "user", content: "TASK", task: true }, { role: "assistant", content: "ok" }, { role: "user", content: "LATEST" }];
+    const { ctx } = ctxFor(rows);
+
+    const kept = (await handOff(ctx))!.messages.filter((m) => m.role !== "system");
+
+    expect(kept.map((m) => m.role)).toEqual(["user", "assistant", "user", "user"]);
+    for (let i = 1; i < kept.length; i += 1) expect(kept[i]!.role === "assistant" && kept[i - 1]!.role === "assistant").toBe(false);
+  });
+
+  it("at the front of the request it is the user's, so the request never opens with an assistant turn", async () => {
+    const rows: RunMessage[] = [sys, { role: "user", content: "TASK", task: true }];
+    const { ctx } = ctxFor(rows);
+
+    const kept = (await handOff(ctx))!.messages.filter((m) => m.role !== "system");
+
+    expect(kept.map((m) => m.role)).toEqual(["user", "user"]);
+    expect(kept[1]!.content).toBe("TASK");
+  });
+
+  it("a later hand-off does not take the note for the directive: the real directive is the one kept whole", async () => {
+    const rows: RunMessage[] = [sys, { role: "user", content: "TASK", task: true }, { role: "assistant", content: "ok" }, { role: "user", content: "REAL DIRECTIVE" }];
+    const { ctx } = ctxFor(rows, "p/mid", "p/big");
+    const first = await handOff(ctx);
+    expect(first!.messages.filter((m) => m.content.startsWith("Handed off"))).toHaveLength(1);
+
+    // the work after the directive outgrows the next, smaller window: the directive falls before the tail and is re-injected
+    const longer = [...first!.messages, ...Array.from({ length: 40 }, (_, n): RunMessage => ({ role: "assistant", content: `work ${n} ${"w".repeat(4_000)}` }))];
+    (ctx as { messages: readonly RunMessage[] }).messages = longer;
+    ctx.state.model = { ...ctx.state.model, model: "p/small" };
+    const second = await handOff(ctx);
+
+    expect(second!.dropped).toBeGreaterThan(0);
+    expect(second!.messages.some((m) => m.content === "REAL DIRECTIVE")).toBe(true);
   });
 });
 
@@ -133,7 +190,8 @@ describe("the note keeps the packer's role", () => {
     const kept = (await handOff(ctx))!.messages.filter((m) => m.role !== "system");
 
     const at = kept.indexOf(noteOf(kept));
-    expect(kept[at + 1]!.role).toBe(kept[at]!.role === "user" ? "assistant" : "user");
+    expect(kept[at + 1]!.role).toBe("assistant");
+    expect(kept[at]!.role).toBe("user");
   });
 });
 

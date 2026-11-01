@@ -16,6 +16,8 @@ export type ChatEvent = {
   state: "delta" | "final" | "aborted" | "error";
   message?: unknown;
   errorMessage?: string;
+  /** The error's text was already streamed as the run's reply (a run that failed and said why): do not print it again as an error. */
+  replyStreamed?: boolean;
 };
 
 export type AgentEvent = {

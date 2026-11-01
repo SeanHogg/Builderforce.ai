@@ -128,6 +128,7 @@ async function refuseApproval(
   error: string,
 ): Promise<{ data: unknown; isError: true }> {
   ctx.state.refusedCalls = { ...(ctx.state.refusedCalls ?? {}), [key]: error };
+  ctx.ports.refusals?.remember(key, error);
   await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
   return { data: { ok: false, gate: decision.gateId, error }, isError: true };
 }
@@ -161,7 +162,7 @@ export async function gateCall(
   const key = policyGateCallKey(decision.gateId, call.name, call.args);
   if ((ctx.state.approvedCalls ?? []).includes(key)) return undefined;
   // Refused earlier in this run (declined, timed out, stopped, no approver): the answer stands, the approver is not asked again.
-  const refusedBefore = ctx.state.refusedCalls?.[key];
+  const refusedBefore = ctx.state.refusedCalls?.[key] ?? ctx.ports.refusals?.recall(key);
   if (refusedBefore) return { data: { ok: false, gate: decision.gateId, error: refusedBefore }, isError: true };
 
   const gate: PolicyGate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };

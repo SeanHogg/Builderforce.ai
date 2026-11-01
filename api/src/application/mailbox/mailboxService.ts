@@ -30,10 +30,13 @@ import {
   unsealOAuthTokens,
 } from '../integrations/oauthTokenVault';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { isNoResponseStatus, isRetryableProviderStatus } from '../shared/campaignDelivery';
+import { isRetryableProviderStatus } from '../shared/campaignDelivery';
+import { hasControlCharacter } from '../shared/contactAddress';
 import {
   clampMailboxLimit,
   getMailboxProvider,
+  isMailboxAuthFailure,
+  isMailboxRateLimited,
   MailboxProviderError,
   MAX_ATTACHMENT_BYTES,
   type MailboxAttachment,
@@ -435,9 +438,10 @@ export async function readMailboxAttachment(
   }
 }
 
-/** Shared failure handling: a 401/403 from the provider AFTER a successful
- *  refresh means consent was withdrawn between the two calls, so the row is
- *  revoked here too rather than looking healthy while failing every read. */
+/** Shared failure handling: an auth failure ({@link isMailboxAuthFailure}) from the provider AFTER a
+ *  successful refresh means consent was withdrawn between the two calls, so the row is revoked here
+ *  too rather than looking healthy while failing every read. A rate-limit 403 is NOT that: it is
+ *  recorded like any other failed read and the mailbox stays connected. */
 async function failedRead(
   db: Db,
   tenantId: number,
@@ -445,8 +449,7 @@ async function failedRead(
   error: unknown,
 ): Promise<{ ok: false; status: 409 | 502; error: string }> {
   const message = error instanceof Error ? error.message : 'Mailbox read failed';
-  const status = error instanceof MailboxProviderError ? error.status : 0;
-  if (status === 401 || status === 403) {
+  if (error instanceof MailboxProviderError && isMailboxAuthFailure(error)) {
     await markRevoked(db, tenantId, connectionId, message);
     return { ok: false, status: 409, error: 'This mailbox needs to be reconnected.' };
   }
@@ -464,7 +467,15 @@ async function failedRead(
 
 export type MailboxSendResult =
   | { ok: true; id: string; accountEmail: string }
-  | { ok: false; status: 404 | 409 | 502; error: string; retryable: boolean; noResponse?: boolean };
+  | { ok: false; status: 404 | 409 | 502; error: string; retryable: boolean; providerUnavailable?: boolean };
+
+/** The message fields an adapter writes into a header, in the order they are checked. */
+const HEADER_FIELDS = ['to', 'replyTo', 'subject'] as const;
+const HEADER_FIELD_LABELS: Record<typeof HEADER_FIELDS[number], string> = {
+  to: 'recipient',
+  replyTo: 'reply-to address',
+  subject: 'subject',
+};
 
 /**
  * Send one message from a connected mailbox.
@@ -473,6 +484,16 @@ export type MailboxSendResult =
  * stop the whole campaign (every subsequent recipient would fail identically),
  * whereas a transient provider error should fail just that recipient and leave
  * the rest of the batch to run.
+ *
+ * `providerUnavailable` is set when the PROVIDER is the problem rather than the message: no answer
+ * at all, a 429, a 5xx, a rate-limit 403, or the token endpoint being down. The batch stops on it
+ * instead of spending an attempt on every remaining row.
+ *
+ * This is the one chokepoint every mailbox send goes through (by hand, agent tool, campaign,
+ * sequence), so it is also where a header-injection attempt is refused: `to`, `replyTo` and the
+ * subject are written into message headers, and a control character in any of them (a CR or LF
+ * adds a header, such as a hidden Bcc) is refused BEFORE the token is refreshed or the provider is
+ * called.
  */
 export async function sendFromMailbox(
   db: Db,
@@ -481,6 +502,15 @@ export async function sendFromMailbox(
   connectionId: number,
   message: OutgoingMessage,
 ): Promise<MailboxSendResult> {
+  const unsafeField = HEADER_FIELDS.find((field) => hasControlCharacter(message[field] ?? ''));
+  if (unsafeField) {
+    return {
+      ok: false,
+      status: 502,
+      error: `The ${HEADER_FIELD_LABELS[unsafeField]} contains a control character (such as a line break), so the message was not sent.`,
+      retryable: false,
+    };
+  }
   const token = await freshMailboxToken(db, env, tenantId, connectionId);
   if (!token.ok) {
     return {
@@ -488,6 +518,8 @@ export async function sendFromMailbox(
       status: token.status === 'unavailable' ? 404 : 409,
       error: token.error,
       retryable: token.status === 'expired',
+      // The token endpoint being down (`expired`) is the provider's outage, not this recipient's.
+      ...(token.status === 'expired' ? { providerUnavailable: true } : {}),
     };
   }
   try {
@@ -498,17 +530,20 @@ export async function sendFromMailbox(
     // Anything that is not a `MailboxProviderError` never got an answer from the provider (a
     // network error, a timeout): status 0, which is retryable like a 429 or a 5xx.
     const status = error instanceof MailboxProviderError ? error.status : 0;
-    if (status === 401 || status === 403) {
+    if (error instanceof MailboxProviderError && isMailboxAuthFailure(error)) {
       await markRevoked(db, tenantId, connectionId, detail);
       return { ok: false, status: 409, error: 'This mailbox needs to be reconnected.', retryable: false };
     }
     reportCaughtError(error, { source: 'application/mailbox/mailboxService.ts', operation: 'sendFromMailbox' });
+    // A throttled or down provider (and a rate-limit 403, which Gmail uses for a quota hit) is
+    // retryable AND stops the batch; any other failure is about this one message.
+    const providerUnavailable = isRetryableProviderStatus(status) || (error instanceof MailboxProviderError && isMailboxRateLimited(error));
     return {
       ok: false,
       status: 502,
       error: detail,
-      retryable: isRetryableProviderStatus(status),
-      ...(isNoResponseStatus(status) ? { noResponse: true } : {}),
+      retryable: providerUnavailable,
+      ...(providerUnavailable ? { providerUnavailable: true } : {}),
     };
   }
 }

@@ -9,6 +9,7 @@ import {
   renderCampaignSms,
   reapStaleClaims,
   resolveTrackingOrigin,
+  recordOpen,
   runCampaignBatch,
   runCampaignSendSweep,
   smsStatusUrl,
@@ -392,7 +393,7 @@ describe('updateCampaign', () => {
 
 describe('runCampaignBatch', () => {
   const env = {} as Env;
-  const sending = { ...draftRow, status: 'sending' };
+  const sending = { ...draftRow, status: 'sending', sent: 0 };
   /** No logo asset configured — `defaultLogoUrl`'s query returns nothing. */
   const noLogo: unknown[] = [];
 
@@ -430,6 +431,7 @@ describe('runCampaignBatch', () => {
         { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: 'Ada', attributes: {} },
         { id: 2, email: 'b@x.com', trackToken: 't2', attempts: 0, name: '', attributes: {} },
       ],
+      [],                  // the per-batch do-not-contact re-check: nobody on a register
       [{ id: 1 }], [{ id: 1 }],   // claim + mark sent (matched a `sending` row), recipient 1
       [{ id: 2 }], [{ id: 2 }],   // claim + mark sent, recipient 2
       [{ remaining: 0 }],
@@ -449,6 +451,7 @@ describe('runCampaignBatch', () => {
     const db = fakeDb([
       [sending], noLogo,
       [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [],
       [{ id: 1 }], [],
       [{ remaining: 0 }], [],
     ]);
@@ -462,6 +465,7 @@ describe('runCampaignBatch', () => {
     const db = fakeDb([
       [sending], noLogo,
       [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [],
       [{ id: 1 }], [],
       [{ remaining: 0, queuedLeft: 0 }], [],
     ]);
@@ -475,6 +479,7 @@ describe('runCampaignBatch', () => {
     const db = fakeDb([
       [sending], noLogo,
       [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [],                  // the do-not-contact re-check: nobody on a register
       [],                  // the conditional claim matched zero rows → someone else has it
       [{ remaining: 1 }],
       [],
@@ -495,6 +500,7 @@ describe('runCampaignBatch', () => {
         { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 2, name: '', attributes: {} },
         { id: 2, email: 'b@x.com', trackToken: 't2', attempts: 0, name: '', attributes: {} },
       ],
+      [],                  // the do-not-contact re-check: nobody on a register
       [{ id: 1 }], [{ id: 1 }],
       [{ id: 2 }], [{ id: 2 }],
       [{ remaining: 0 }],
@@ -512,6 +518,7 @@ describe('runCampaignBatch', () => {
     const db = fakeDb([
       [sending], noLogo,
       [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [],
       [{ id: 1 }], [],
       [{ remaining: 1 }], [],
     ]);
@@ -535,7 +542,7 @@ describe('runCampaignBatch', () => {
     it('signals pending work when a batch sent and recipients are still queued', async () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [{ id: 1 }], [{ remaining: 4, queuedLeft: 4 }], []]);
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 4, queuedLeft: 4 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       expect(result).toMatchObject({ sent: 1, remaining: 4, status: 'sending' });
       expect(puts).toEqual(['cron:work-pending']);
@@ -549,7 +556,7 @@ describe('runCampaignBatch', () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
       // Real SQL always returns both counts: `queuedLeft` is 0 when only `sending` rows remain.
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 0 }], []]);
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 0 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       // `remaining` keeps its meaning for callers: everything not yet settled.
       expect(result).toMatchObject({ sent: 1, remaining: 1, status: 'sending' });
@@ -566,7 +573,7 @@ describe('runCampaignBatch', () => {
       sendMock.mockRejectedValueOnce(new Error('429 slow down'));
       const { env: gated, puts } = kvEnv();
       // Below the attempt ceiling, so the (retryable) failure is requeued rather than written off.
-      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 0 }], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
+      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 0 }], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       expect(result).toMatchObject({ sent: 0, failed: 0 });
       expect(result.status).toBe('sending');
@@ -578,7 +585,7 @@ describe('runCampaignBatch', () => {
       sendMock.mockRejectedValueOnce(new Error('mailbox full'));
       const { env: gated, puts } = kvEnv();
       // At the attempt ceiling, so the failure is terminal rather than requeued.
-      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 2 }], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
+      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 2 }], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       expect(result).toMatchObject({ sent: 0, failed: 1, status: 'sending' });
       expect(puts).toEqual(['cron:work-pending']);
@@ -587,7 +594,7 @@ describe('runCampaignBatch', () => {
     it('does not signal once the queue has drained', async () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 0, queuedLeft: 0 }], []]);
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [], [{ id: 1 }], [], [{ remaining: 0, queuedLeft: 0 }], []]);
       await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       expect(puts).toEqual([]);
     });
@@ -613,6 +620,36 @@ describe('recordClick', () => {
     const db = fakeDb([[]]);
     await expect(recordClick(db as unknown as Db, 'bogus', 'https://shop.example.com/x'))
       .resolves.toBe('https://shop.example.com/x');
+  });
+});
+
+/**
+ * `campaignsInFlight` rotates in-flight campaigns by `marketing_campaigns.updated_at`, so an
+ * engagement counter that bumped it would hand a well-opened campaign the front of the queue on
+ * every open, click and carrier callback, and starve the quiet ones behind it.
+ */
+describe('engagement counters leave the campaign\'s updated_at alone', () => {
+  const campaignWrite = (db: ReturnType<typeof fakeDb>) => {
+    const updates = db.calls.filter((c) => c.kind === 'update');
+    return updates.find((c) => 'opened' in (c.payload as object) || 'clicked' in (c.payload as object) || 'sent' in (c.payload as object));
+  };
+
+  it('an open bumps `opened` and nothing else', async () => {
+    const db = fakeDb([[{ campaignId: 1, tenantId: 7, email: 'a@x.com' }], []]);
+    await recordOpen(db as unknown as Db, 't1');
+    expect(Object.keys(campaignWrite(db)!.payload as object)).toEqual(['opened']);
+  });
+
+  it('a click bumps `clicked` and nothing else', async () => {
+    const db = fakeDb([[{ campaignId: 1, tenantId: 7, email: 'a@x.com' }], []]);
+    await recordClick(db as unknown as Db, 't1', 'https://shop.example.com/x');
+    expect(Object.keys(campaignWrite(db)!.payload as object)).toEqual(['clicked']);
+  });
+
+  it('a carrier-reported failure swaps `sent` for `failed` and nothing else', async () => {
+    const db = fakeDb([[{ id: 9, campaignId: 1, tenantId: 7, email: 'a@x.com', status: 'sent' }], [{ id: 9 }], []]);
+    await recordSmsDeliveryStatus(db as unknown as Db, 'tok', 'undelivered', { errorCode: '30003' });
+    expect(Object.keys(campaignWrite(db)!.payload as object).sort()).toEqual(['failed', 'sent']);
   });
 });
 
@@ -919,8 +956,13 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
       expect(status).toContain('CASE');
       expect(status).toContain("'sent'");
       expect(status).toContain("'failed'");
-      expect(rendered(payload.sent).params).toEqual([0]);
-      expect(rendered(payload.failed).params).toEqual([0]);
+      // A finished campaign's totals are counted from the send ledger, not accumulated from this
+      // batch's deltas (an evicted runner could not leave them short): each is a correlated count of
+      // the rows in that terminal status, bound to the status it counts.
+      expect(rendered(payload.sent).sql).toContain('count(*)');
+      expect(rendered(payload.sent).params).toEqual(['sent']);
+      expect(rendered(payload.failed).sql).toContain('count(*)');
+      expect(rendered(payload.failed).params).toEqual(['failed']);
     };
 
     it('still advances in-flight campaigns when the due-start step throws', async () => {
@@ -961,7 +1003,10 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
         [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],
       ]);
       await runCampaignSendSweep(env, db as unknown as Db);
-      const [stamp] = db.calls.filter((c) => c.kind === 'update');
+      // Campaign 1's reap statement is recorded (and rejects) before its stamp, so the stamp is the
+      // SECOND update, not the first.
+      const [reap, stamp] = db.calls.filter((c) => c.kind === 'update');
+      expect(Object.keys(reap!.payload as object)).toEqual(['status', 'error']);
       expect(Object.keys(stamp!.payload as object)).toEqual(['updatedAt']);
       expect(rendered((stamp!.payload as { updatedAt: unknown }).updatedAt).sql).toContain('NOW()');
       // Campaign 2 still ran to its finishing write, after the stamp.

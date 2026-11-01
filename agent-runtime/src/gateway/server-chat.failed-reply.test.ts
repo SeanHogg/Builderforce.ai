@@ -1,58 +1,38 @@
 /**
  * A run that failed but said why as its reply streams that text to the chat, then ends in the error phase carrying the same text.
- * The chat shows the failure once: the error final does not repeat a message the person has already read. An error with nothing
- * streamed before it still carries its message.
+ * The error `final` ALWAYS carries `errorMessage` (the portal records it on the execution; every client shows it), and says
+ * structurally, with `replyStreamed`, that the text was already streamed, for the clients that keep their stream on screen.
  */
-import { describe, expect, it, vi } from "vitest";
-import { createAgentEventHandler, createChatRunState, createToolEventRecipientRegistry } from "./server-chat.js";
+import { describe, expect, it } from "vitest";
+import { NOTICE, chatEventsFor } from "./chat-events.testkit.js";
 
-const NOTICE = "The run ended without a reply: its tool calls were refused or failed. Governance gate no-shell refused some of its tool calls.";
-
-function harness() {
-  const broadcast = vi.fn();
-  const chatRunState = createChatRunState();
-  const handler = createAgentEventHandler({
-    broadcast,
-    broadcastToConnIds: vi.fn(),
-    nodeSendToSession: vi.fn(),
-    agentRunSeq: new Map<string, number>(),
-    chatRunState,
-    resolveSessionKeyForRun: () => undefined,
-    clearAgentRunContext: vi.fn(),
-    toolEventRecipients: createToolEventRecipientRegistry(),
-  });
-  chatRunState.registry.add("run-1", { sessionKey: "session-1", clientRunId: "client-1" });
-  const chat = () => broadcast.mock.calls.filter(([event]) => event === "chat").map(([, payload]) => payload as { state?: string; errorMessage?: string; message?: { content?: Array<{ text?: string }> } });
-  return { handler, chat };
-}
+const failedReply = [
+  { stream: "assistant", data: { text: NOTICE } },
+  { stream: "lifecycle", data: { phase: "error", error: NOTICE, runFailed: true } },
+];
 
 describe("the chat's view of a run that failed and said why as its reply", () => {
-  it("shows the text once: streamed as the reply, with an error final that does not repeat it", () => {
-    const { handler, chat } = harness();
+  it("streams the text, then ends in an error that STILL carries it, flagged as already streamed", () => {
+    const events = chatEventsFor(failedReply);
 
-    handler({ runId: "run-1", seq: 1, stream: "assistant", ts: Date.now(), data: { text: NOTICE } });
-    handler({ runId: "run-1", seq: 2, stream: "lifecycle", ts: Date.now(), data: { phase: "error", error: NOTICE } });
-
-    const events = chat();
     expect(events.map((e) => e.state)).toEqual(["delta", "error"]);
     expect(events[0]!.message?.content?.[0]?.text).toBe(NOTICE);
-    expect(events[1]!.errorMessage).toBeUndefined();
+    expect(events[1]).toMatchObject({ state: "error", errorMessage: NOTICE, replyStreamed: true });
   });
 
-  it("an error with nothing streamed before it still carries its message", () => {
-    const { handler, chat } = harness();
+  it("an error with nothing streamed before it carries its message and is not flagged", () => {
+    const events = chatEventsFor([{ stream: "lifecycle", data: { phase: "error", error: "provider timeout" } }]);
 
-    handler({ runId: "run-1", seq: 1, stream: "lifecycle", ts: Date.now(), data: { phase: "error", error: "provider timeout" } });
-
-    expect(chat().map((e) => [e.state, e.errorMessage])).toEqual([["error", "provider timeout"]]);
+    expect(events.map((e) => [e.state, e.errorMessage, e.replyStreamed])).toEqual([["error", "provider timeout", undefined]]);
   });
 
-  it("an error whose message is NOT what was streamed keeps it", () => {
-    const { handler, chat } = harness();
+  it("an error whose message is not the reply keeps its message and is not flagged", () => {
+    const events = chatEventsFor([
+      { stream: "assistant", data: { text: "partial answer" } },
+      { stream: "lifecycle", data: { phase: "error", error: "provider timeout" } },
+    ]);
 
-    handler({ runId: "run-1", seq: 1, stream: "assistant", ts: Date.now(), data: { text: "partial answer" } });
-    handler({ runId: "run-1", seq: 2, stream: "lifecycle", ts: Date.now(), data: { phase: "error", error: "provider timeout" } });
-
-    expect(chat().at(-1)).toMatchObject({ state: "error", errorMessage: "provider timeout" });
+    expect(events.at(-1)).toMatchObject({ state: "error", errorMessage: "provider timeout" });
+    expect(events.at(-1)!.replyStreamed).toBeUndefined();
   });
 });

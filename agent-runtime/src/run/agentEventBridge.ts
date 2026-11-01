@@ -53,6 +53,8 @@ export class AgentEventBridge {
   private terminal = false;
   /** The agent ended the run by its own policy (a stall with nothing left to try): the conversation says why, and it is not a failed turn. */
   private settledByPolicy = false;
+  /** The run was already marked failed (an empty `runFailed` reply told), so it is not marked twice. */
+  private failedMarked = false;
   private lastAssistant: AssistantMessage | undefined;
   private turnResults: ToolResultMessage[] = [];
 
@@ -172,55 +174,65 @@ export class AgentEventBridge {
 
   // ── the end ─────────────────────────────────────────────────────────────────
 
-  /**
-   * The run failed with no model turn behind the failure (the provider stream threw, the context transform threw, the run was
-   * stopped between turns): the failure is told as the errored (or aborted) assistant message the runner reads at the end of a
-   * run. A failure that already ended on one, or that the agent ended by its own policy, adds nothing.
-   */
-  fail(reason: string, stopReason: "error" | "aborted"): void {
-    if (this.terminal || this.settledByPolicy) return;
+  /** An assistant message with no usage, from the model the run is on: what the bridge itself says (a failure, a notice), never the model. */
+  private assistant(over: Partial<AssistantMessage>): AssistantMessage {
     const model = this.options.activeModel();
-    const message: AssistantMessage = {
+    return {
       role: "assistant",
       content: [],
       api: model.api,
       provider: model.provider,
       model: model.id,
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-      stopReason,
-      errorMessage: reason,
+      stopReason: "stop",
       timestamp: Date.now(),
+      ...over,
     };
-    this.terminal = true;
+  }
+
+  private tell(message: AssistantMessage): void {
     this.record.push(message);
     this.stream.push({ type: "message_start", message });
     this.stream.push({ type: "message_end", message });
   }
 
   /**
-   * The run ended without a word for the person, and `text` says why. It is told as the run's REPLY (`stopReason: "stop"`, no
-   * `errorMessage`), so nothing that classifies or rewrites an errored turn's text reads it, and marked `runFailed` so the lifecycle
-   * still ends as a failed run for the consumers that watch for one (the parent of a sub-agent, `agent.wait`). A run that already ended
-   * on an errored turn, or by its own policy, adds nothing.
+   * The run failed with no model turn behind the failure (the provider stream threw, the context transform threw, the run was
+   * stopped between turns): the failure is told as the errored (or aborted) assistant message the runner reads at the end of a
+   * run. A failure that already ended on one adds nothing; one the agent ended by its own policy (a stall with nothing left to try,
+   * whose conversation already says why) is only MARKED failed, see {@link markFailed}.
+   */
+  fail(reason: string, stopReason: "error" | "aborted"): void {
+    if (this.terminal) return;
+    if (this.settledByPolicy) return this.markFailed();
+    this.terminal = true;
+    this.tell(this.assistant({ stopReason, errorMessage: reason }));
+  }
+
+  /**
+   * The run ended without a word for the person, or a governance gate refused its calls, and `text` says why. It is told as the run's
+   * REPLY (`stopReason: "stop"`, no `errorMessage`), so nothing that classifies or rewrites an errored turn's text reads it, and marked
+   * `runFailed` so the lifecycle still ends as a failed run for the consumers that watch for one (the parent of a sub-agent, `agent.wait`).
+   * A run that already ended on an errored turn adds nothing; one the agent ended by its own policy is only marked (it already said why).
    */
   failedReply(text: string): void {
-    if (this.terminal || this.settledByPolicy) return;
-    const model = this.options.activeModel();
-    const message: AssistantMessage = {
-      role: "assistant",
-      content: [{ type: "text", text }],
-      api: model.api,
-      provider: model.provider,
-      model: model.id,
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-      stopReason: "stop",
-      runFailed: true,
-      timestamp: Date.now(),
-    };
+    if (this.terminal) return;
+    if (this.settledByPolicy) return this.markFailed();
+    const message = this.assistant({ content: [{ type: "text", text }], runFailed: true });
     this.lastAssistant = message;
-    this.record.push(message);
-    this.stream.push({ type: "message_start", message });
-    this.stream.push({ type: "message_end", message });
+    this.tell(message);
+  }
+
+  /**
+   * A run the agent settled by its own policy says why in its conversation, but its lifecycle would read as a SUCCESS (an ordinary last
+   * reply) while its outcome is a failure. This ends it as failed without a second account of why: an empty reply marked `runFailed`.
+   */
+  private markFailed(): void {
+    if (this.failedMarked) return;
+    this.failedMarked = true;
+    const message = this.assistant({ runFailed: true });
+    this.lastAssistant = message;
+    this.tell(message);
   }
 
   /** The messages of the run, in order. */

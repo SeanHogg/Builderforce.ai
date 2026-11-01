@@ -12,6 +12,11 @@ export interface GovernanceOutcome {
   lastAssistant?: AssistantMessage | undefined;
 }
 
+/** The `runFailed` meta of a run whose last reply is marked as a failed run (a budget or breaker stop): empty otherwise. */
+export function runFailedMeta(attempt: GovernanceOutcome): { runFailed?: true } {
+  return attempt.lastAssistant?.runFailed === true ? { runFailed: true } : {};
+}
+
 /** True when the attempt must not be auto-continued: a gate refused one of its calls, or it ended as a failed run. */
 export function blocksAutoContinue(attempt: GovernanceOutcome): boolean {
   return (attempt.governanceRefusals?.length ?? 0) > 0 || attempt.lastAssistant?.runFailed === true;

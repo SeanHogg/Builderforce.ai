@@ -748,7 +748,8 @@ export function createEventHandlers(context: EventHandlerContext) {
     if (evt.state === "error") {
       clearPendingFinalTimeout(evt.runId);
       const wasActiveRun = state.activeChatRunId === evt.runId;
-      chatLog.addSystem(`run error: ${evt.errorMessage ?? "unknown"}`);
+      // A failed run that said why as its reply already has that text on screen (the stream is kept): the error line does not repeat it.
+      chatLog.addSystem(evt.replyStreamed ? "run failed" : `run error: ${evt.errorMessage ?? "unknown"}`);
       streamAssembler.drop(evt.runId);
       reportRunActivitySummary(evt.runId);
       sessionRuns.delete(evt.runId);
@@ -756,7 +757,7 @@ export function createEventHandlers(context: EventHandlerContext) {
       if (wasActiveRun) {
         setActivityStatus("error");
       }
-      const errorMessage = sanitizeReasonText(evt.errorMessage ?? "");
+      const errorMessage = evt.replyStreamed ? "" : sanitizeReasonText(evt.errorMessage ?? "");
       emitExecutionAction(errorMessage ? `run error: ${errorMessage}` : "run error");
       scheduleSessionInfoRefresh();
       maybeRefreshHistoryForRun(evt.runId);
