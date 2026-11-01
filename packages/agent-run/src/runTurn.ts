@@ -366,7 +366,8 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     const surfaceCap = own ? platform?.resultCap?.(state.model.model) : undefined;
     const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model));
     // A surface's own tool says for itself whether it failed; a registry tool says so with `ok: false`.
-    const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false);
+    // A call that never started (a steer was already waiting) did not fail: it is neither counted nor reset as a failure by its row.
+    const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false && (capped as { skipped?: unknown }).skipped !== true);
     const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
     if (box.kind) callKinds.set(dispatched, box.kind);
     if (box.native) nativeResults.set(dispatched, box.native);

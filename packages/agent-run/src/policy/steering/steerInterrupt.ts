@@ -52,9 +52,9 @@ export function runInterruptWatch(runKey: number): InterruptWatch {
 
 type RunTool = (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
 
-/** What the model reads on the command a steer interrupted. */
+/** What the model reads on a command a steer interrupted: one stopped mid-run, or one that never started because the message was already waiting. */
 export const INTERRUPTED_BY_STEER =
-  "Interrupted by the user's new message: the command was stopped before it finished. Read the message that follows and do what it asks; re-run the command only if it still applies.";
+  "Interrupted by the user's new message: the command did not run to completion (it was stopped, or it had not started when the message arrived). Read the message that follows and do what it asks; re-run the command only if it still applies.";
 
 /** What the model reads on a command the person's Stop killed: the run is over, nothing follows. */
 export const STOPPED_BY_USER = "Stopped by the user: the command was killed before it finished.";
@@ -94,6 +94,14 @@ export function interruptedResult(out: unknown): Record<string, unknown> {
   return { ...base, ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER };
 }
 
+/**
+ * What a command answers with when the person's message was already waiting, so it never started: the interrupted wording, and `skipped`,
+ * the mark of a call that did not run, so its row fails (it did not do its work) without counting as a failed dispatch.
+ */
+export function notStartedResult(): Record<string, unknown> {
+  return { ...interruptedResult(undefined), skipped: true };
+}
+
 /** What a command a Stop killed answers with: what it returned so far, marked aborted and stopped (not interrupted by a message). */
 export function stoppedResult(out: unknown): Record<string, unknown> {
   const base = out && typeof out === "object" && !Array.isArray(out) ? (out as Record<string, unknown>) : out === undefined ? {} : { output: out };
@@ -126,7 +134,7 @@ export async function runToolWithWatch(
 ): Promise<unknown> {
   if (!isInterruptibleCall(name, args) && !surfaceInterruptible?.(name, argsOf(args))) return runTool(name, args);
   // The person's message is already waiting: the command it would interrupt never starts.
-  if (watch.hasInterrupt()) return interruptedResult(undefined);
+  if (watch.hasInterrupt()) return notStartedResult();
   const wait = isWaitCall(name, argsOf(args));
   const step = new AbortController();
   let interrupted = false;

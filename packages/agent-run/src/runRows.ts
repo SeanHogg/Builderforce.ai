@@ -38,7 +38,8 @@ export function toolRow(callId: string, result: LoopDispatchResult, verbatim = f
     ...(native?.parts && !stopped ? { parts: native.parts } : {}),
     ...(native?.meta ? { meta: native.meta } : {}),
     // A call that did not run because the person steered, or that its signal killed, is answered as a failed one: the row says it
-    // did not do its work. (Neither counts toward the run's failure streak: the dispatch result itself is not an error.)
+    // did not do its work. The dispatch result itself is not an error, so neither is counted as a failure - and the kernel clears the
+    // failure streak on it, as on any call that did not fail (a kill resets the streak to 0).
     ...(result.isError || stopped || (result.data as { skipped?: unknown } | null)?.skipped === true ? { isError: true as const } : {}),
   };
 }
