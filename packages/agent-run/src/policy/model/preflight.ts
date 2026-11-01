@@ -17,9 +17,10 @@
  * No `node:*`, no DOM. The hook halves read their port and the run state; the rest is pure.
  */
 
-import { isAgenticTier, isWeakerModel, listPriceOf, resolveModelTier, snapshotPriceBook, type ModelTier, type PriceBook } from "@builderforce/model-catalog";
+import { isWeakerModel, snapshotPriceBook, type PriceBook } from "@builderforce/model-catalog";
 import type { ModelPreflightResult, RunEvent } from "../../contract.js";
 import type { PolicyContext } from "../hooks.js";
+import { downgradeDecision, planModelWarning } from "./downgradeRule.js";
 
 // ── The inference-mode rules (modelRouting.ts policy half) ──────────────────
 
@@ -123,23 +124,6 @@ export type ModelPreflightEvent = Extract<RunEvent, { kind: "model.preflight" }>
 /** The `llm.model_downgrade` run event. */
 export type ModelDowngradeEvent = Extract<RunEvent, { kind: "llm.model_downgrade" }>;
 
-/** A model whose catalog tier is Flash-class (not an agentic tier). */
-export interface PlanModelWarning {
-  model: string;
-  tier: ModelTier;
-}
-
-/**
- * Would the run's PLAN phase land on a Flash-class model? Only answerable for a model the
- * run names; an unpriced model (a local one) is unknown, not weak.
- */
-export function planModelWarning(model: string | undefined, book: PriceBook = snapshotPriceBook()): PlanModelWarning | null {
-  if (!model || model === "default") return null;
-  const price = listPriceOf(book, model);
-  const tier = price ? resolveModelTier({ price }) : undefined;
-  return tier && isAgenticTier(tier) === false ? { model, tier } : null;
-}
-
 /** `provider:reason` entries (the gateway header's spelling) as the reasons map. */
 function reasonsOf(entries: readonly string[]): Record<string, ByoUnresolvedReason> {
   const out: Record<string, ByoUnresolvedReason> = {};
@@ -209,22 +193,26 @@ function recordWeaker(ctx: PolicyContext, served: string): void {
  * `RunState.degradedBy` (what the outcome row's `degraded` reads); an auto-routed turn asked for nothing.
  */
 export function modelDowngrade(ctx: PolicyContext, requested: string | undefined, served: string | undefined, book: PriceBook = snapshotPriceBook()): ModelDowngradeEvent | undefined {
-  if (!served || served === "default") return undefined;
-  if (requested && requested !== "default") {
-    if (served === requested) return undefined;
+  const asked = requested && requested !== "default" ? requested : undefined;
+  const degraded = ctx.state.preflight?.startsWith("degraded:") ? ctx.state.preflight.slice("degraded:".length) : "";
+  // The rule is `downgradeRule.ts`'s, shared with the Brain; this home's inputs are the preflight's verdict and `RunState`.
+  const decision = downgradeDecision({
+    asked,
+    served,
+    byo: degraded && degraded !== "plan_flash" ? degraded : "",
+    planPhase: ctx.state.writtenPaths.length === 0,
+    seen: !!served && (ctx.state.downgrades ?? []).includes(served),
+  });
+  if (!decision || !served) return undefined;
+  if (decision.kind === "failover") {
     // A failover onto a WEAKER model is a fact the outcome row carries (once per served model). It is
     // NOT an announcement of the auto-routed kind, so it never enters `downgrades` (that list dedupes
     // those announcements and must not be suppressed by a pinned failover).
-    if (isWeakerModel(requested, served, book)) recordWeaker(ctx, served);
-    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: requested, model: served, reason: "failover" };
+    if (isWeakerModel(asked!, served, book)) recordWeaker(ctx, served);
+    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: asked!, model: served, reason: "failover" };
   }
-  if ((ctx.state.downgrades ?? []).includes(served)) return undefined;
-  const degraded = ctx.state.preflight?.startsWith("degraded:") ? ctx.state.preflight.slice("degraded:".length) : "";
-  const byo = degraded && degraded !== "plan_flash" ? degraded : "";
-  const flash = !byo && ctx.state.writtenPaths.length === 0 ? planModelWarning(served) : null;
-  if (!byo && !flash) return undefined;
   ctx.state.downgrades = [...(ctx.state.downgrades ?? []), served];
   // Announce only. Nothing was ASKED for here, so there is no requested model to be weaker than: `degradedBy`
   // is recorded solely where a requested model and a served one can be compared (the failover branch above).
-  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: byo ? `byo_unresolved:${byo}` : `plan_tier:${flash!.tier}` };
+  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: decision.kind === "byo" ? `byo_unresolved:${degraded}` : `plan_tier:${decision.tier}` };
 }

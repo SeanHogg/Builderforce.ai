@@ -133,7 +133,10 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     ...(b.start ? { modelStart: { plain: true, ...(seed ? { model: seed } : {}), strict: !!req.modelStrict, ...(b.start.startPhase ? { startPhase: b.start.startPhase } : {}), ...(b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {}) } } : {}),
     inference: 'hybrid',
     verify: 'none',
-    // Governance gates are unbound on the Brain (parity ruling R10): its request carries none and no human channel approves one.
+    // Governance gates are unbound on the Brain BY DECISION (parity ruling R10): its request carries none and no human channel approves one.
+    // Binding them later means gating INSIDE this surface's own preflight (`brainPlatformTools.ts` `preflight`, which rewrites a router call and
+    // answers `hand_off` itself), before its side effects, on the tool a call will actually run. It does not mean gating in the kernel hook:
+    // that runs after the preflight has acted, misses a router call the preflight answers, and would ask a `require-approval` twice.
     approvalGates: [],
     // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`brainDelivery.ts`).
     stallExhausted: 'settle',

@@ -1,5 +1,5 @@
 /**
- * The run loop's window-fit gate — decides, before each model request, whether the
+ * The Brain's per-request window-fit gate — decides, before each model request, whether the
  * working transcript must be re-packed for the window of the model about to serve it,
  * and does so.
  *

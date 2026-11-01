@@ -330,7 +330,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     // gone. The first retry stays free; from the second the model reads the count and the
     // error it already has, and the moves that remain.
     failures: new FailureTally(),
-    // What this run has already WRITTEN (see `repeatedWrite.ts`): the third loop shape —
+    // What this run has already WRITTEN (see `WriteLedger` in `@builderforce/run-guards`): the third circling shape —
     // a successful full-content write sent again byte for byte, because an error from
     // before it was still on screen. Replaying it cannot change the file, so it is answered
     // without running.

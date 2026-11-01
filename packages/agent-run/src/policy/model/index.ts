@@ -304,15 +304,14 @@ export {
   localOnlyServable,
   modelDowngrade,
   modelPreflightEvent,
-  planModelWarning,
   preflightVerdict,
   runModelPreflight,
   type ByoUnresolvedReason,
   type ModelDowngradeEvent,
   type ModelPreflightEvent,
-  type PlanModelWarning,
   type UnresolvedReasons,
 } from "./preflight.js";
+export { downgradeDecision, planModelWarning, type DowngradeInput, type DowngradeKind, type PlanModelWarning } from "./downgradeRule.js";
 import { modelDowngrade, runModelPreflight } from "./preflight.js";
 
 // ── The hook (what runAgent drives) ─────────────────────────────────────────

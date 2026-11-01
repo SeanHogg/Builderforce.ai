@@ -13,16 +13,16 @@
  *  - an AUTO-ROUTED turn in the PLAN phase (no code changed yet) that routing landed on a
  *    Flash-class (non-agentic tier) model with no BYO signal at all — the same weak plan,
  *    for a reason the header does not carry. The tier is the preflight's own rule
- *    ({@link planModelWarning}); an unpriced model is unknown, not weak. Once per served model.
+ *    (`planModelWarning`); an unpriced model is unknown, not weak. Once per served model.
  *
- * Pure. The Brain's TRACE form of the agent's own rule (`policy/model/preflight.ts` `modelDowngrade`): the same three cases, in this trace's
- * wording and deduped against THIS run's trace (the agent dedupes in `RunState`, off the preflight's verdict rather than each turn's
- * header); the agent's event for it is not written on the Brain (`run/runPrepared.ts` `recorded`). The Flash-class rule is the agent's.
+ * Pure. The Brain's TRACE form of the agent's own rule: WHICH of the three cases a turn is, is the agent's one decision
+ * (`downgradeDecision`, `policy/model/downgradeRule.ts`); this home supplies its inputs (each turn's gateway header as the BYO signal, THIS run's
+ * trace as "said already") and the wording. The agent's event for it is not written on the Brain (`run/runPrepared.ts` `recorded`).
  */
 
 import type { PriceBook } from '@builderforce/model-catalog';
 import type { BrainTraceEvent } from '../brainTriage';
-import { planModelWarning } from '@builderforce/agent-run';
+import { downgradeDecision } from '@builderforce/agent-run';
 
 export const MODEL_DOWNGRADE_LABEL = 'llm.model_downgrade';
 
@@ -43,9 +43,22 @@ export interface ModelDowngradeInput {
 
 export function modelDowngradeEvent(input: ModelDowngradeInput): BrainTraceEvent | null {
   const { requested, resolved, step, ts } = input;
-  if (resolved === 'default') return null;
-  if (requested !== 'default') {
-    if (resolved === requested) return null;
+  const unresolved = (input.byoUnresolved ?? '').trim();
+  const decision = downgradeDecision({
+    // The Brain's `requested` is the gateway's `default` when it asked for nothing.
+    asked: requested !== 'default' ? requested : undefined,
+    served: resolved,
+    byo: unresolved,
+    planPhase: input.planPhase === true,
+    seen: input.events.some((e) => {
+      if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
+      const args = e.args as { requestedModel?: unknown; model?: unknown } | undefined;
+      return args?.requestedModel === 'default' && args.model === resolved;
+    }),
+    ...(input.book ? { book: input.book } : {}),
+  });
+  if (!decision) return null;
+  if (decision.kind === 'failover') {
     return {
       ts,
       category: 'message',
@@ -54,22 +67,13 @@ export function modelDowngradeEvent(input: ModelDowngradeInput): BrainTraceEvent
       result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
     };
   }
-  const unresolved = (input.byoUnresolved ?? '').trim();
-  const flash = !unresolved && input.planPhase ? planModelWarning(resolved, input.book) : null;
-  if (!unresolved && !flash) return null;
-  const said = input.events.some((e) => {
-    if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
-    const args = e.args as { requestedModel?: unknown; model?: unknown } | undefined;
-    return args?.requestedModel === 'default' && args.model === resolved;
-  });
-  if (said) return null;
-  if (flash) {
+  if (decision.kind === 'plan_tier') {
     return {
       ts,
       category: 'message',
       label: MODEL_DOWNGRADE_LABEL,
-      args: { requestedModel: 'default', model: resolved, step, planTier: flash.tier },
-      result: `Auto-routing planned this run on ${resolved}, a ${flash.tier}-tier (Flash-class) model — weak at planning a multi-step change; pick a stronger model for planning if the result matters.`,
+      args: { requestedModel: 'default', model: resolved, step, planTier: decision.tier },
+      result: `Auto-routing planned this run on ${resolved}, a ${decision.tier}-tier (Flash-class) model — weak at planning a multi-step change; pick a stronger model for planning if the result matters.`,
     };
   }
   return {

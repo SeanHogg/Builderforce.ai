@@ -6,7 +6,7 @@
  * where the agent feeds it. What stays here is the Brain's own half: the forced turn a due streak earns, which is written in the Brain's
  * vocabulary (`hand_off`, its change tools), over its run context and trace (`noProgressTurn`).
  *
- * The read guards (`beforeDispatch.ts`) answer an exact repeat with a stub, a covered
+ * The read guards (`callPreflight.ts`, over `readCoverage.ts`) answer an exact repeat with a stub, a covered
  * window or a replay — correctly, and as a SUCCESS. The kernel's only breaker counts
  * failures, so every one of those answers reset it: chat #5739's run 5 made 40 exact
  * repeats, 20 covered re-reads and 60 replays in 52 turns and changed nothing, and no

@@ -33,7 +33,7 @@ import type { OutcomeReport } from '../run/eventSink';
  *  are covered separately by {@link isReadOnlyPlatformTool} — together they are the
  *  `isDedupableRead` set. Deliberately narrow — only tools that observe and can't mutate,
  *  so a stubbed repeat never hides a real change (a mutation clears the dedupe set anyway;
- *  see `readDedupe.ts`). The repeat key is the tool plus ALL its canonical args, so a
+ *  see `readCoverage.ts`). The repeat key is the tool plus ALL its canonical args, so a
  *  `local_research` call is a repeat only when it asks the same question of the same
  *  files; a code change forgets it like any tree-wide read (`run-guards` readCoverage). */
 const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map', 'read_compressed', 'local_research']);
@@ -181,7 +181,7 @@ export async function settleReply(run: BrainRunContext, rawText: string, result:
 
 /**
  * Persist a turn's text as a reply of the chat - the durable message with the turn's provenance, the mounted views told - without
- * touching the model transcript. The loop settles a reply with it ({@link settleReply}); the agent persists the reply of a model that
+ * touching the model transcript. The Brain's run end settles a reply with it ({@link settleReply}); the agent persists the reply of a model that
  * stalled out and was handed over (`run/brainDelivery.ts`), whose row its own transcript already holds.
  */
 export async function persistReply(run: BrainRunContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {

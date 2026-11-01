@@ -22,7 +22,7 @@ const STOP_HOOK_RUNG = 'brain.stop_hook';
 export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): DeliveryLedger {
   const { c, req, userRequest, canAskUser } = run;
   const { runTool } = req;
-  // A rung's step is written once the turn it is about has been saved (`sentBack`): the loop saves the sent-back text, then says why.
+  // A rung's step is written once the turn it is about has been saved (`sentBack`): the agent saves the sent-back text, then the ledger says why.
   const held: Array<() => void> = [];
   const note = (label: string, result: string, args: Record<string, unknown> = {}): void => {
     const step = { ts: nowIso(), category: 'message' as const, label, args: { step: last.step, ...args }, result };
