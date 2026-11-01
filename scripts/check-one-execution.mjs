@@ -13,10 +13,12 @@
  * kernel's own package. Inside `packages/agent-run` the rule is tighter still: only
  * `src/runAgent.ts` imports `runAgentLoop` — any other file there is a second driver.
  *
- * REPORT MODE (WS1): it prints the importers, what is new against the baseline and what
- * has left it, and exits 0. WS7 flips it to enforced mode (exit 1 on any importer) once
- * the five loop-bearing files are ported onto `runAgent` and deleted. Pass `--enforce`
- * to preview that verdict.
+ * RATCHET (WS7): it exits 1 on a kernel importer that is not in BASELINE, on any policy
+ * reach-in from outside the package, and on a second kernel driver inside `packages/agent-run`.
+ * BASELINE can only shrink: it holds the one importer that still waits on the WS4 ship gate
+ * (`brain-embedded/src/runStore/runLoop.ts`), and deleting that file empties it. A baseline
+ * file that no longer imports the kernel is reported so it gets dropped from the list.
+ * Pass `--enforce` for the empty-allowlist verdict: every importer, baseline or not, fails.
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -79,9 +81,10 @@ for (const root of ROOTS) {
   }
 }
 
-// The five loop-bearing files PRD 35 §3.3 names, at their real paths — today's kernel
-// importers. Nothing imports a `policy/*` module from outside today, so that baseline is
-// empty. WS7 empties this list and flips the guard to enforced.
+// Today's only kernel importer outside the one agent: the Brain's old run loop, kept until
+// the WS4 ship gate flips the default engine and deletes it. Nothing imports a `policy/*`
+// module from outside, so there is no policy baseline. This list only ever shrinks; the
+// ship-gate commit empties it.
 const BASELINE = [
   'brain-embedded/src/runStore/runLoop.ts',
 ];
@@ -92,9 +95,9 @@ const innerImporters = [...new Set(findings.filter((f) => f.kind === 'inner-loop
 const extra = loopImporters.filter((file) => !BASELINE.includes(file));
 const gone = BASELINE.filter((file) => !loopImporters.includes(file));
 
-console.log(`check:one-execution (${ENFORCE ? 'enforce preview' : 'report mode'})`);
+console.log(`check:one-execution (${ENFORCE ? 'enforce, empty allowlist' : 'ratchet'})`);
 console.log(`  Importers of runAgentLoop outside @builderforce/agent-loop and @builderforce/agent-run (${loopImporters.length}):`);
-for (const file of loopImporters) console.log(`    - ${file}${BASELINE.includes(file) ? '' : '   (NEW — not in the WS1 baseline)'}`);
+for (const file of loopImporters) console.log(`    - ${file}${BASELINE.includes(file) ? '' : '   (NEW — not in BASELINE)'}`);
 if (policyImporters.length > 0) {
   console.log(`  Imports of agent-run policy/* from outside the package (${policyImporters.length}) — never allowed:`);
   for (const f of policyImporters) console.log(`    + ${f.file} → ${f.specifier}`);
@@ -109,10 +112,11 @@ if (gone.length > 0) {
 }
 console.log('  §3.3: the one execution path is runAgent (packages/agent-run/src/runAgent.ts).');
 
-const violations = ENFORCE ? loopImporters.length + policyImporters.length + innerImporters.length : 0;
+const kernelViolations = ENFORCE ? loopImporters.length : extra.length;
+const violations = kernelViolations + policyImporters.length + innerImporters.length;
 if (violations > 0) {
-  console.log(`  ✗ ${violations} import(s) outside the one agent.`);
+  console.log(`  ✗ ${violations} import(s) outside the one agent (${kernelViolations} kernel, ${policyImporters.length} policy reach-in, ${innerImporters.length} second driver in agent-run).`);
   process.exit(1);
 }
-if (!ENFORCE) console.log(`  Report only (${extra.length} new, ${policyImporters.length} policy reach-in, ${innerImporters.length} second driver in agent-run) — WS7 enforces.`);
+console.log(`  ✓ No importer outside the baseline (${loopImporters.length} of ${BASELINE.length} baseline file(s) remain).`);
 process.exit(0);

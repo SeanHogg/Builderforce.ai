@@ -59,12 +59,13 @@ export default [
   // the shared baseline in scripts/silent-catches.baseline.json. api's chain runs
   // the full sweep; frontend's runs only its own tree for fast local feedback.
   ['check:silent-catches', '../../scripts/check-silent-catches.mjs'],
-  // Repo-level (PRD 35 §3.3 / §5.1): report-mode guards for the one-agent-one-kernel
-  // program. check:one-execution lists every import of `runAgentLoop` (and any reach into
-  // agent-run's `policy/*`) outside the one agent, against the five-file baseline;
-  // check:tests-unchanged compares every edited pre-existing test with main, and every
-  // test brought along into packages/agent-run with the source test it names, so §5.1's
-  // import-only rule is visible. Both are report-only until WS7 passes `--enforce`.
+  // Repo-level (PRD 35 §3.3 / §5.1): guards for the one-agent-one-kernel program.
+  // check:one-execution is a RATCHET: it fails on any import of `runAgentLoop` outside the
+  // one agent that is not in its BASELINE (only the Brain's runLoop.ts until the WS4 ship
+  // gate), on any reach into agent-run's `policy/*`, and on a second driver inside
+  // agent-run. check:tests-unchanged compares every edited pre-existing test with main, and
+  // every test brought along into packages/agent-run with the source test it names, so
+  // §5.1's import-only rule is visible; it is report-only (see its header).
   ['check:one-execution', '../../scripts/check-one-execution.mjs'],
   ['check:tests-unchanged', '../../scripts/check-tests-unchanged.mjs'],
   // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the
