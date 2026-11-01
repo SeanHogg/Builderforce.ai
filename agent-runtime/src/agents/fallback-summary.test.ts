@@ -124,7 +124,10 @@ describe("the fallback failure summary", () => {
       ["codex-cli", "gpt", refusal("no-shell")],
     ]);
 
-    expect(isGovernanceRefusal(new Error("turn failed", { cause: err }))).toBe(false);
+    const wrapped = new Error("turn failed", { cause: err });
+    expect(isGovernanceRefusal(wrapped)).toBe(false);
+    // The classifiable text is found down the cause chain the same way, so the wrapper's own words are not what a classifier reads.
+    expect(classifiableFailureText(wrapped, wrapped.message)).toBe("upstream exploded");
   });
 
   it("a plain error is read as it is", () => {

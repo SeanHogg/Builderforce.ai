@@ -7,6 +7,7 @@
  * The single-candidate path (which names the gate id) stays in agent-runner.cli-governance.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BILLING_ERROR_USER_MESSAGE } from "../../agents/embedded-helpers.js";
 import { FailoverError, GOVERNANCE_REFUSAL_CODE } from "../../agents/failover-error.js";
 import type { TemplateContext } from "../templating.js";
 import type { FollowupRun } from "./queue.js";
@@ -155,6 +156,27 @@ describe("a fallback chain with a governance refusal among its attempts", () => 
 
     expect(state.runEmbeddedAgentMock).toHaveBeenCalledTimes(2);
     expect(outcome.kind).toBe("success");
+  });
+
+  it("a gate id that reads like a billing error is not shown as the billing notice when the 502 keeps failing", async () => {
+    state.fallbacks = ["codex-cli/gpt"];
+    state.governMock.mockRejectedValue(refusal("payment required"));
+    state.runEmbeddedAgentMock.mockRejectedValue(embeddedFailure("502 Bad Gateway", 502));
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void) => {
+      fn();
+      return 0;
+    }) as unknown as typeof setTimeout);
+
+    const { outcome } = await runTurn({ provider: "anthropic", model: "claude" });
+
+    // The first cycle's 502 is retried once; the second cycle fails the same way and is shown from the attempt that really ran.
+    expect(state.runEmbeddedAgentMock).toHaveBeenCalledTimes(2);
+    const text = finalText(outcome);
+    expect(text).toContain("Agent failed before reply");
+    // The sanitiser words a raw HTTP failure ("HTTP 502: Bad Gateway."); what matters is that it read the attempt, not the gate id.
+    expect(text).toMatch(/502.*Bad Gateway/);
+    expect(text).not.toContain(BILLING_ERROR_USER_MESSAGE);
+    expect(text).not.toContain("payment required");
   });
 
   it("every attempt refused: still a refusal that names the gates, never a context overflow", async () => {

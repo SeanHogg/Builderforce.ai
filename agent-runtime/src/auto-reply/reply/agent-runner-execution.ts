@@ -9,6 +9,7 @@ import {
   isContextOverflowError,
   sanitizeUserFacingText,
 } from "../../agents/embedded-helpers.js";
+import { classifyAgentFailure, shownFailureMessage } from "./agent-failure-kind.js";
 import { runEmbeddedAgent } from "../../agents/embedded.js";
 import {
   resolveGroupSessionKey,
@@ -33,7 +34,6 @@ import {
   buildEmbeddedRunContexts,
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
-import { classifyAgentFailure } from "./agent-failure-kind.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
@@ -521,9 +521,7 @@ export async function runAgentTurnWithFallback(params: {
       }
 
       defaultRuntime.error(`Embedded agent failed before reply: ${message}`);
-      const safeMessage = isTransientHttp
-        ? sanitizeUserFacingText(message, { errorContext: true })
-        : message;
+      const safeMessage = shownFailureMessage(err, message, isTransientHttp);
       const trimmedMessage = safeMessage.replace(/\.\s*$/, "");
       const fallbackText = isContextOverflow
         ? "⚠️ Context overflow — prompt too large for this model. Try a shorter message or a larger-context model."

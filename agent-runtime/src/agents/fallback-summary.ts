@@ -57,7 +57,13 @@ export function buildFallbackSummaryError<A extends SummarizedAttempt>(params: {
   });
 }
 
-/** The text a classifier may read for `err`: a fallback summary's non-refused attempts, otherwise `message` as it is. */
+/**
+ * The text a classifier (or a sanitiser) may read for `err`: a fallback summary's classifiable text, otherwise `message` as it is. The
+ * summary is found down the cause chain, as `isGovernanceRefusal` walks it, so a wrapped summary is read the same way.
+ */
 export function classifiableFailureText(err: unknown, message: string): string {
-  return err instanceof FallbackSummaryError ? err.classifiableText : message;
+  for (let e: unknown = err, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth += 1) {
+    if (e instanceof FallbackSummaryError) return e.classifiableText;
+  }
+  return message;
 }
