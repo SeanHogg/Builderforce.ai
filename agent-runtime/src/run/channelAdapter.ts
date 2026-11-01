@@ -194,8 +194,11 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
       // A run that spent its budget or tripped its breaker AFTER saying something is delivered as it always was. One that never wrote a
       // word would otherwise end silently (the channel owns its synthesis and the run settled on its last tool result): say what
-      // stopped it, and which governance gate refused its calls when one did.
-      else if (outcome.kind === "failed" && !replied) bridge.fail(noReplyMessage(outcome.reason, refusedBy), "error");
+      // stopped it, and which governance gate refused its calls when one did. It is told as the run's REPLY, not as an errored turn: the
+      // runner regex-classifies an errored message's text (auth, billing, rate limit, context overflow), so a gate whose key reads like
+      // one of those ("forbidden-paths") would put a healthy profile in cooldown and repeat the run, and its friendly-error rewrite
+      // would replace the text. A reply is read by none of that.
+      else if (outcome.kind === "failed" && !replied) bridge.appended({ role: "assistant", content: noReplyMessage(outcome.reason, refusedBy) });
     } catch (err) {
       logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

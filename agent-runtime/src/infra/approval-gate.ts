@@ -132,6 +132,11 @@ export class ApprovalGate {
   async request(opts: HumanInputRequest): Promise<HumanInputResult> {
     const kind: RequestKind = opts.kind ?? "approval";
 
+    // A run that was already stopped asks nobody: nothing is posted for a dead run.
+    if (opts.signal?.aborted) {
+      return { decision: "rejected", responseText: RUN_STOPPED };
+    }
+
     if (!this.isConfigured()) {
       if (opts.failClosed) {
         logWarn("[approval-gate] not configured — refusing (fail closed)");
@@ -159,7 +164,8 @@ export class ApprovalGate {
           metadata: opts.metadata,
           expiresAt,
         }),
-        signal: AbortSignal.timeout(10_000),
+        // The post is bounded AND ends with the run: a Stop while it is in flight abandons it.
+        signal: opts.signal ? AbortSignal.any([AbortSignal.timeout(10_000), opts.signal]) : AbortSignal.timeout(10_000),
       });
       if (!res.ok) {
         if (opts.failClosed) {
@@ -172,6 +178,10 @@ export class ApprovalGate {
       const data = (await res.json()) as { approvalId: string };
       approvalId = data.approvalId;
     } catch (err) {
+      // Stopped while the post was in flight: refused whatever the caller's default, never auto-approved.
+      if (opts.signal?.aborted) {
+        return { decision: "rejected", responseText: RUN_STOPPED };
+      }
       if (opts.failClosed) {
         logWarn(`[approval-gate] request error — refusing (fail closed): ${String(err)}`);
         return { decision: "rejected", responseText: UNREACHABLE };

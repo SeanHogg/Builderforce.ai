@@ -177,9 +177,11 @@ describe("a tripped breaker", () => {
     expect(produced.at(-2)!.role).toBe("toolResult");
     const notice = produced.at(-1) as AssistantMessage;
     expect(notice.role).toBe("assistant");
-    expect(notice.stopReason).toBe("error");
-    expect(notice.errorMessage).toContain("its tool calls failed");
-    expect(notice.errorMessage).not.toContain("governance gate");
+    // told as the run's reply, never as an errored turn the runner would classify and retry
+    expect(notice.stopReason).toBe("stop");
+    expect(notice.errorMessage).toBeUndefined();
+    expect(textOf(notice)).toContain("its tool calls failed");
+    expect(textOf(notice)).not.toContain("governance gate");
     // five model turns, then the one notice
     expect(ended.filter((r) => r === "assistant")).toHaveLength(6);
   });

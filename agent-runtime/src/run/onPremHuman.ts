@@ -52,8 +52,10 @@ export function onPremHuman(
         ...(options.signal ? { signal: options.signal } : {}),
       });
       if (result.decision === "approved") return { kind: "answered", answer: result.responseText ?? "", approved: true };
-      if (result.decision === "timeout") return { kind: "answered", answer: "No approver responded in time.", approved: false };
-      return { kind: "answered", answer: result.responseText ?? "", approved: false };
+      if (result.decision === "timeout") return { kind: "answered", answer: "No approver responded in time.", approved: false, refusal: "timed_out" };
+      // A refusal that arrives after the run's own Stop is the Stop, not a person's no.
+      if (options.signal?.aborted) return { kind: "answered", answer: result.responseText ?? "", approved: false, refusal: "stopped" };
+      return { kind: "answered", answer: result.responseText ?? "", approved: false, refusal: "declined" };
     },
   };
 }

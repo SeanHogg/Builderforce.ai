@@ -59,7 +59,10 @@ describe("a require-approval gate on a channel run", () => {
     expect(ran).toEqual([]);
     const result = produced.find((m) => m.role === "toolResult") as unknown as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("No approver responded in time");
+    // timed out reads as timed out, not as a person's no
+    expect(textOf(result)).toContain("No approver answered");
+    expect(textOf(result)).toContain("ask-first");
+    expect(textOf(result)).not.toContain("declined");
     // the model got to write its reply after the refusal
     expect(produced.at(-1)!.role).toBe("assistant");
   });
@@ -73,11 +76,51 @@ describe("a require-approval gate on a channel run", () => {
     await vi.waitFor(() => expect(approvalRequests).toBe(1));
     const t0 = Date.now();
     agent.abort();
-    await prompting;
+    const produced = await prompting;
 
     // far inside the 60s bound: the stop ended the wait, not the timer
     expect(Date.now() - t0).toBeLessThan(2_000);
     expect(ran).toEqual([]);
+    // and the refusal reads as a stop, not as a person's no
+    const result = produced.find((m) => m.role === "toolResult");
+    if (result) {
+      expect(textOf(result)).toContain("stopped");
+      expect(textOf(result)).not.toContain("declined");
+    }
+  });
+
+  it("a Stop that has already happened posts nothing for the dead run", async () => {
+    linkWithApprovalGate();
+    const stopped = new AbortController();
+    stopped.abort();
+
+    const answer = await approvalGate.request({ actionType: "tool.exec", description: "run it", failClosed: true, signal: stopped.signal });
+
+    expect(answer.decision).toBe("rejected");
+    expect(approvalRequests).toBe(0);
+  });
+
+  it("a Stop while the request is still in flight abandons it: refused, never auto-approved, nothing left waiting", async () => {
+    approvalGate.init({ baseUrl: "https://bf.test", agentNodeId: "7", apiKey: "bfk_k" });
+    // an api that accepts the connection and never answers; the request settles only when its signal fires
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
+      ),
+    );
+    const stop = new AbortController();
+
+    const asking = approvalGate.request({ actionType: "tool.exec", description: "run it", signal: stop.signal });
+    stop.abort();
+    const answer = await asking;
+
+    // a caller that would otherwise auto-approve on a failed request (no failClosed) is still refused
+    expect(answer.decision).toBe("rejected");
+    expect((approvalGate as unknown as { pending: Map<string, unknown> }).pending.size).toBe(0);
   });
 });
 
