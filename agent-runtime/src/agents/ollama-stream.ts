@@ -214,7 +214,8 @@ export function buildAssistantMessage(
   }
 
   const hasToolCalls = toolCalls && toolCalls.length > 0;
-  const stopReason: StopReason = hasToolCalls ? "toolUse" : "stop";
+  // `done_reason: "length"` is the reply hitting the model's output limit: the run's agent reads it as a cut-off reply.
+  const stopReason: StopReason = response.done_reason === "length" ? "length" : hasToolCalls ? "toolUse" : "stop";
 
   const usage: Usage = {
     input: response.prompt_eval_count ?? 0,
@@ -386,7 +387,7 @@ export function createOllamaStreamFn(baseUrl: string): StreamFn {
         });
 
         const reason: Extract<StopReason, "stop" | "length" | "toolUse"> =
-          assistantMessage.stopReason === "toolUse" ? "toolUse" : "stop";
+          assistantMessage.stopReason === "toolUse" || assistantMessage.stopReason === "length" ? assistantMessage.stopReason : "stop";
 
         stream.push({
           type: "done",

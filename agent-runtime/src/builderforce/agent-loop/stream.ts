@@ -84,10 +84,12 @@ function toLlmMessages(context: Context): LlmMessage[] {
  * nothing parsed, and it must not read as a call with none.
  */
 function parseArguments(text: string, cutOff: boolean): { args: Record<string, unknown>; raw?: string } {
-  if (!text) return cutOff ? { args: {}, raw: "{" } : { args: {} };
+  if (!text.trim()) return cutOff ? { args: {}, raw: "{" } : { args: {} };
   try {
     const parsed = JSON.parse(text) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return { args: parsed as Record<string, unknown> };
+    // `null` is a call with no arguments, as it has always been read; an array or a scalar is not an argument bag.
+    if (parsed === null) return { args: {} };
   } catch {
     // not JSON: the text is the model's, kept whole
   }

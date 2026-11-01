@@ -48,6 +48,18 @@ describe("a reply the output limit cut short says so", () => {
     expect(toolCallOf(await turn(call(""), frame({}, "tool_calls")))).toEqual({ type: "toolCall", id: "c1", name: "write_file", arguments: {} });
   });
 
+  it("whitespace is not an argument: a call cut off after only spaces or a newline is open, like one cut off before them", async () => {
+    expect(toolCallOf(await turn(call("  \n"), frame({}, "length"))).rawArguments).toBe("{");
+    // ... and a finished call that sent only whitespace takes no arguments, as before
+    expect(toolCallOf(await turn(call("  "), frame({}, "tool_calls")))).toEqual({ type: "toolCall", id: "c1", name: "write_file", arguments: {} });
+  });
+
+  it("`null` on a finished reply is a call with no arguments, as it has always run; an array or a scalar is declined", async () => {
+    expect(toolCallOf(await turn(call("null"), frame({}, "tool_calls")))).toEqual({ type: "toolCall", id: "c1", name: "write_file", arguments: {} });
+    expect(toolCallOf(await turn(call("[]"), frame({}, "tool_calls"))).rawArguments).toBe("[]");
+    expect(toolCallOf(await turn(call("42"), frame({}, "tool_calls"))).rawArguments).toBe("42");
+  });
+
   it("garbled arguments from a reply that finished are kept raw too: the agent declines the call instead of running it with none", async () => {
     const message = await turn(call("{path: a.ts}"), frame({}, "tool_calls"));
 

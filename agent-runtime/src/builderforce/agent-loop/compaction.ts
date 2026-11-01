@@ -6,6 +6,7 @@
  * checkpoint summary. Prompts are reproduced verbatim from pi 0.54 for output parity.
  */
 
+import { IMAGE_CHAR_ESTIMATE } from "@builderforce/agent-run";
 import { estimateTokensFromChars } from "@builderforce/workload";
 import type { AgentMessage } from "../model/agent-types.js";
 import { nativeComplete } from "../model/native-llm.js";
@@ -49,7 +50,7 @@ export function estimateTokens(message: AgentMessage): number {
       else
         for (const block of content) {
           if (block.type === "text" && block.text) chars += block.text.length;
-          if (block.type === "image") chars += 4800;
+          if (block.type === "image") chars += IMAGE_CHAR_ESTIMATE;
         }
       return estimateTokensFromChars(chars);
     }
