@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.123] — The prompt lives in the header, and typing keeps up
+
+- **"What are we working on?" now sits in the panel header.** The composer moved out of the footer into the header beside the BuilderForce logo and version, so the empty chat no longer shows a separate hero input below the header. The action buttons wrap onto their own row under the prompt.
+- **Typing in the prompt is responsive again.** The recipient placeholder ("Message {name}…") is computed once per recipient instead of on every keystroke, removing the per-keystroke lag that had crept back into the composer.
+
 ## [2026.10.122] — A folder review keeps its place
 
 - **A review stays on screen.** The Visualization panel no longer jumps to Changes while a folder review is planning or running. Agent edits are still counted, and you can switch views yourself.
