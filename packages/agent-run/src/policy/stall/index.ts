@@ -58,6 +58,7 @@ import {
 } from "@builderforce/agent-stall";
 import { liftProseAskUser, trimRepetitionLoop } from "@builderforce/agent-loop";
 import type { StallState } from "../../contract.js";
+import type { DeliveryLedger } from "../../surface.js";
 import { walkLadder, walkLadderAsync } from "./ladder.js";
 import type { PolicyContext, StallDecision, StallHook } from "../hooks.js";
 
@@ -131,6 +132,10 @@ export const stallHook = {
     // rungs ARE the stall judgement (`owns.narration`).
     const delivery = ctx.ports?.delivery;
     if (delivery) {
+      // A surface that judges narration first re-prompts a narrating turn ahead of every rung; the model's whole budget (a failover, or
+      // an explained stop) is spent only once the rungs are clear.
+      const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : undefined;
+      if (first) return first;
       const owed = walkLadder(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
@@ -141,6 +146,8 @@ export const stallHook = {
   async recoverAsync(ctx: PolicyContext): Promise<StallDecision | void> {
     const delivery = ctx.ports?.delivery;
     if (delivery) {
+      const first = narratesFirst(delivery) ? narrationRecover(ctx, "nudge") : undefined;
+      if (first) return first;
       const owed = await walkLadderAsync(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
@@ -182,10 +189,23 @@ export const stallHook = {
   },
 } satisfies StallHook;
 
-/** The generic stall judgement: the narration heuristics, the re-prompt budget, the failover, the explained stop. */
-function narrationRecover(ctx: PolicyContext): StallDecision | undefined {
-const text = typeof ctx.content === "string" ? ctx.content : "";
+/** Whether the surface's stall style judges the model's narration before the delivery rungs (and the ledger leaves narration to the agent). */
+function narratesFirst(delivery: DeliveryLedger): boolean {
+  return delivery.stall?.narrationFirst === true && !delivery.owns?.narration;
+}
+
+/**
+ * The generic stall judgement: the narration heuristics, the re-prompt budget, the failover, the explained stop. `only: "nudge"` acts
+ * on a re-prompt and on nothing else - no failover, no stop, no change to the run's state - so the judgement can be asked twice.
+ */
+function narrationRecover(ctx: PolicyContext, only?: "nudge"): StallDecision | undefined {
+  const text = typeof ctx.content === "string" ? ctx.content : "";
   const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
+  const style = ctx.ports?.delivery?.stall;
+  // The model that served the turn is the one a failover must skip; the run's held model is the fallback.
+  const held = ctx.state.model.model && ctx.state.model.model !== "default" ? ctx.state.model.model : undefined;
+  const served = ctx.served?.model && ctx.served.model !== "default" ? ctx.served.model : undefined;
+  const resolvedModel = served ?? held;
 
   // The whole stall step, in one place (`resolveStallStep`): a turn that called a
   // tool is never a stall; a stalled turn is re-prompted until the budget is spent;
@@ -203,7 +223,7 @@ const text = typeof ctx.content === "string" ? ctx.content : "";
       availableToolNames: toolNames,
       // Whether the user asked for a change decides what handing the work back means.
       requestText: ctx.task.request ?? ctx.task.prompt,
-      ...(ctx.state.model.model && ctx.state.model.model !== "default" ? { resolvedModel: ctx.state.model.model } : {}),
+      ...(resolvedModel ? { resolvedModel } : {}),
     },
     budget.recoveriesUsed,
     // The failover source rides the run policy's proven/tried set; the transport names
@@ -217,6 +237,7 @@ const text = typeof ctx.content === "string" ? ctx.content : "";
       },
   );
 
+  if (only === "nudge" && step.kind !== "nudge") return undefined;
   switch (step.kind) {
     case "none":
       // Not a stall: the turn is the answer. A repetition loop in it is trimmed when it
@@ -229,7 +250,7 @@ const text = typeof ctx.content === "string" ? ctx.content : "";
       if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
       // `step.nudge` already forces ONE structured call (it embeds the tool-choice
       // directive), so the re-prompt cannot be answered with another prose promise.
-      return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null } };
+      return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null, ...(style?.menu ? { advertisedTools: toolNames.length } : {}) } };
     }
     case "failover": {
       budget.recoveriesUsed = step.recoveriesUsed;
@@ -241,7 +262,7 @@ const text = typeof ctx.content === "string" ? ctx.content : "";
       if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
       return {
         action: "escalate",
-        note: `${step.notice}\n\n${step.nudge}`,
+        note: style?.failoverNudgeOnly ? step.nudge : `${step.notice}\n\n${step.nudge}`,
         detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice },
       };
     }
@@ -249,7 +270,11 @@ const text = typeof ctx.content === "string" ? ctx.content : "";
       saveBudget(ctx, budget);
       // Nothing left to try: stop, and carry the exhausted notice so the run's
       // emptiness is explained (`agent-runtime/.../agent-loop/stall-recovery.ts`).
-      return { action: "pause", note: step.notice, detail: { model: ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null } };
+      return {
+        action: "pause",
+        note: step.notice,
+        detail: { model: resolvedModel ?? ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null, ...(style?.menu ? { attempts: budget.recoveriesUsed, advertisedTools: toolNames.length } : {}) },
+      };
     }
   }
 }

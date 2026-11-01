@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CanvasEmailComposer } from './CanvasEmailComposer';
 import type { CreationNodeData } from './types';
+import { ApiRequestError } from '@/lib/apiClient';
 
 const api = vi.hoisted(() => ({ providers: vi.fn(), send: vi.fn(), connect: vi.fn() }));
 
@@ -23,6 +24,9 @@ vi.mock('next-intl', () => ({
     connectProvider: `Connect ${values?.provider ?? ''}`, sent: 'Sent.', sentStatus: 'Sent',
   }[key] || key),
 }));
+
+const confirmMock = vi.hoisted(() => vi.fn(async () => true));
+vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => confirmMock }));
 
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 
@@ -95,6 +99,37 @@ describe('CanvasEmailComposer', () => {
     }));
     // Without `messageId` the object would still read as an unsent draft afterwards.
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'sent-1', connectionId: 7, status: 'Sent' })));
+  });
+
+  /** The server refuses a do-not-contact recipient with 409 until a person confirms. */
+  describe('a recipient on a do-not-contact list', () => {
+    const refusal = () => new ApiRequestError('This recipient is on a do-not-contact list.', 409, 'do_not_contact');
+    const clickSend = async () => {
+      const button = await screen.findByRole('button', { name: 'Send email' });
+      await waitFor(() => expect(button).toBeEnabled());
+      fireEvent.click(button);
+    };
+
+    it('asks, and resends with the confirmation when the person agrees', async () => {
+      confirmMock.mockClear().mockResolvedValue(true);
+      api.send.mockRejectedValueOnce(refusal()).mockResolvedValueOnce({ sent: true, id: 'sent-2', accountEmail: 'me@acme.com' });
+      const onChange = renderComposer(draft());
+      await clickSend();
+      await waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
+      expect(confirmMock).toHaveBeenCalledTimes(1);
+      expect(api.send.mock.calls[1]![1]).toMatchObject({ confirmDoNotContact: true });
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'sent-2' })));
+    });
+
+    it('sends nothing more, and records nothing as sent, when the person declines', async () => {
+      confirmMock.mockClear().mockResolvedValue(false);
+      api.send.mockRejectedValueOnce(refusal());
+      const onChange = renderComposer(draft());
+      await clickSend();
+      await waitFor(() => expect(confirmMock).toHaveBeenCalledTimes(1));
+      expect(api.send).toHaveBeenCalledTimes(1);
+      expect(onChange).not.toHaveBeenCalled();
+    });
   });
 
   it('renders a pinned message as a record, not a draft to send again', async () => {

@@ -15,7 +15,7 @@ import { readProxyChoice } from '../llm/LlmProxyService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { bareAddress } from '../shared/contactAddress';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
-import { suppressedEmails, suppressionKey } from '../marketing/suppression';
+import { isDoNotContact } from '../marketing/suppression';
 import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
 import { getMailboxConnection, readMailbox, sendFromMailbox, setMailboxMessageRead } from './mailboxService';
 import type { MailboxMessage } from './mailboxProviders';
@@ -150,12 +150,6 @@ const HUMAN_REVIEWED_MODES: ReadonlySet<string> = new Set(['draft', 'approval'])
 /** Recorded on the execution when the do-not-contact check vetoes an automatic reply. The
  *  inbox shows an execution's `error` beside its status, so this is what the owner reads. */
 export const AUTOMATIC_REPLY_SUPPRESSED = 'The sender is on a do-not-contact list; no automatic reply was sent.';
-
-/** Whether `from` (a mailbox value, `Jane <a@x.com>` or a bare address) may not be contacted. */
-async function isDoNotContact(db: Db, tenantId: number, from: string): Promise<boolean> {
-  const key = suppressionKey(from);
-  return key !== null && (await suppressedEmails(db, tenantId, [key])).has(key);
-}
 
 async function claimMessage(
   db: Db, rule: typeof mailboxAutomationRules.$inferSelect, message: MailboxMessage,

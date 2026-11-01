@@ -12,6 +12,7 @@ import { RUN_CANCELLED_REASON, type ModelUsage, type RunMessage, type RunState }
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
 import { steerSkip, type InterruptWatch } from "./policy/steering/index.js";
 import { steeringTakers } from "./kernelSteering.js";
+import { noToolCallsHook } from "./kernelNoTools.js";
 import { appendRows, applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
 import { callKinds, ownsCall, type TurnSelection } from "./runTurn.js";
@@ -76,16 +77,6 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
   const contextAt = (step: number, turn: number): PolicyContext => policyContext(input, state, currentView(transcript, offered), step, turn);
   const append = (...rows: RunMessage[]): void => appendRows(input, transcript, ...rows);
-
-  /**
-   * Send a turn back instead of accepting it: what the model said stays in the
-   * transcript as its own row, then the correction — so the next turn reads both, never
-   * two user rows in a row with the model's words lost.
-   */
-  const requeue = (said: string, note: string): void => {
-    if (said.trim()) append({ role: "assistant", content: said, ...run.turnNative });
-    append({ role: "user", content: note });
-  };
 
   /** The verify a finish waits on (`RunPolicy.verify`): a failing verdict refuses it. */
   const verifyBlock = async (pctx: PolicyContext): Promise<string | null> => {
@@ -179,65 +170,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
     },
 
-    onNoToolCalls: async (ctx, turn) => {
-      // A turn with no tool calls is the model's answer — unless the stall policy says it
-      // is narration, or the run may not settle yet.
-      const pctx = contextAt(ctx.step, ctx.stepInCall);
-      pctx.content = turn.content;
-      pctx.served = { ...(run.facts.model ? { model: run.facts.model } : {}), ...(run.facts.interruption ? { interruption: run.facts.interruption } : {}) };
-      // An owner never ends with children still working: their reports would strand.
-      const children = await hooks.finish.liveChildren?.(pctx);
-      if (children) {
-        requeue(turn.content, children);
-        return { action: "continue" };
-      }
-      // A turn the person interrupted is not judged: what they steered in is taken first (below), so a steer is never lost to a stall
-      // that ends the run, and never spends a re-prompt.
-      const stalled = run.watch.hasInterrupt() ? undefined : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
-      if (stalled) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled.action, ...(stalled.note ? { note: stalled.note } : {}), ...(stalled.detail ? { detail: stalled.detail } : {}) });
-      if (stalled && stalled.action === "pause") {
-        const notice = stalled.note ?? "paused";
-        // A surface that lands runs ends it with what it said and why it stopped (a finish, not a failure — whatever it
-        // committed still ships); any other stops it unfinished.
-        if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}\n\n${notice}` : notice };
-        // A surface whose conversation outlives the run records why it produced nothing: the notice joins the transcript.
-        if (policy.stallExhausted === "note") requeue(turn.content, notice);
-        return { action: "stop", ok: false, output: notice, finished: true };
-      }
-      if (stalled && stalled.action === "fail") {
-        return { action: "stop", ok: false, output: stalled.note ?? "failed", finished: true };
-      }
-      if (stalled && stalled.action === "settle") {
-        // The ladder ended the run on an answer of its own (a shortfall, a build never written).
-        const answer = stalled.note ?? "";
-        if (answer.trim()) append({ role: "assistant", content: answer });
-        return { action: "finish", output: answer };
-      }
-      if (stalled) {
-        if (stalled.rows) append(...stalled.rows);
-        else requeue(turn.content, stalled.note ?? "Continue: do the work, do not describe it.");
-        return { action: "continue" };
-      }
-      // A prose answer is a finish too: the sign-off a reviewer owes and the sub-agents
-      // the user asked for hold it exactly as they hold the `finish` tool.
-      const owed = hooks.finish.settleBlock(pctx);
-      if (owed) await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "review_verdict_missing", block: owed, detail: { ...policy.signoff } });
-      const block = owed ?? hooks.subagents.backstop(pctx);
-      if (block) {
-        requeue(turn.content, block);
-        return { action: "continue" };
-      }
-      const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
-      if (output.trim()) append({ role: "assistant", content: output, ...run.turnNative });
-      // A message steered in while this last turn was in flight is never lost (§6.3): the
-      // run takes one more turn for it instead of finishing past it.
-      const late = await takeSteers(ctx);
-      if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
-      if (late === "applied") return { action: "continue" };
-      // What the person queued to be taken once the run would stop: the run continues on it instead of finishing.
-      if (await takeFollowUps(ctx)) return { action: "continue" };
-      return { action: "finish", output };
-    },
+    onNoToolCalls: noToolCallsHook(run, { contextAt, append, takeSteers, takeFollowUps }),
 
     onRepetitionLoop: async (ctx, loop) => {
       await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });

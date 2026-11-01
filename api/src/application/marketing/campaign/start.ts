@@ -193,43 +193,64 @@ export async function startCampaign(
   // statement carries 6 binds per row and Postgres caps a statement at 65,535 (about 10,900
   // recipients); `onConflictDoNothing` stays as the idempotency guard for a row that already
   // exists (a campaign materialised by an earlier version of this code).
-  const updated = await inTransaction(db, async (tx) => {
-    for (let i = 0; i < deliverable.length; i += RECIPIENT_INSERT_CHUNK) {
-      await tx
-        .insert(marketingCampaignSends)
-        .values(deliverable.slice(i, i + RECIPIENT_INSERT_CHUNK).map((member) => ({
-          campaignId,
-          tenantId,
-          email: member.email,
-          // Stamped at materialisation, not read at send time: the ledger has to
-          // describe the number this campaign actually messaged.
-          phone: channel === 'sms' ? member.phone : null,
-          status: 'queued',
-          trackToken: newChallengeToken(),
-        })))
-        // Idempotent: re-starting cannot duplicate a recipient.
-        .onConflictDoNothing();
+  //
+  // The flip is conditional on the campaign STILL being a `draft`: two starts racing (a manual
+  // "send now" and the scheduler) both pass the status check above, so the loser's flip must
+  // match nothing. It then throws {@link StartRaceLost} to roll the transaction back, so the
+  // loser's inserts leave nothing behind either, and the caller answers the same 409 as above.
+  let updated: CampaignView;
+  try {
+    updated = await inTransaction(db, async (tx) => {
+      for (let i = 0; i < deliverable.length; i += RECIPIENT_INSERT_CHUNK) {
+        await tx
+          .insert(marketingCampaignSends)
+          .values(deliverable.slice(i, i + RECIPIENT_INSERT_CHUNK).map((member) => ({
+            campaignId,
+            tenantId,
+            email: member.email,
+            // Stamped at materialisation, not read at send time: the ledger has to
+            // describe the number this campaign actually messaged.
+            phone: channel === 'sms' ? member.phone : null,
+            status: 'queued',
+            trackToken: newChallengeToken(),
+          })))
+          // Idempotent: re-starting cannot duplicate a recipient.
+          .onConflictDoNothing();
+      }
+      const [row] = await tx
+        .update(marketingCampaigns)
+        .set({
+          status: 'sending',
+          scheduleRefusedAt: null,
+          startedAt: sql`NOW()`,
+          recipients: deliverable.length,
+          suppressed,
+          updatedAt: sql`NOW()`,
+        })
+        .where(and(
+          eq(marketingCampaigns.id, campaignId),
+          eq(marketingCampaigns.tenantId, tenantId),
+          eq(marketingCampaigns.status, 'draft'),
+        ))
+        .returning(CAMPAIGN_COLUMNS);
+      if (!row) throw new StartRaceLost();
+      return row;
+    });
+  } catch (error) {
+    if (error instanceof StartRaceLost) {
+      return { ok: false, status: 409, error: 'This campaign is already sending or finished.' };
     }
-    const [row] = await tx
-      .update(marketingCampaigns)
-      .set({
-        status: 'sending',
-        scheduleRefusedAt: null,
-        startedAt: sql`NOW()`,
-        recipients: deliverable.length,
-        suppressed,
-        updatedAt: sql`NOW()`,
-      })
-      .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
-      .returning(CAMPAIGN_COLUMNS);
-    return row;
-  });
+    throw error;
+  }
 
   return {
     ok: true,
-    campaign: updated!,
+    campaign: updated,
     queued: deliverable.length,
     suppressed,
     unreachable: members.length - reachable.length,
   };
 }
+
+/** Thrown inside the start transaction when another start won the race, to roll it back. */
+class StartRaceLost extends Error {}

@@ -318,9 +318,9 @@ export async function synthesizeFinal(
  * model's window (`resultCapFor`, §6.10) — what the model is served is what the read
  * coverage records.
  */
-export async function dispatchCall(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts = { refused: false }): Promise<LoopDispatchResult> {
+export async function dispatchCall(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts = { refused: false }, step: number = state.step): Promise<LoopDispatchResult> {
   const { ports, signal } = input;
-  if (call.malformed) return declineMalformedCall(ports, call, facts);
+  if (call.malformed) return declineMalformedCall(ports, call, facts, step);
   const platform = ports.platform;
   const own = ownsCall(ports, call.name);
   if (platform && own && platform.handsOff?.(call.name) && state.model.phase === "plan") {
@@ -339,7 +339,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
           return ran.data;
         }
         if (platform && own) {
-          const result = await platform.execute(name, args as Record<string, unknown>, { ...(run ? { signal: run } : {}), progress: { rungs: state.stall?.rungs ?? {} }, callId: call.id });
+          const result = await platform.execute(name, args as Record<string, unknown>, { ...(run ? { signal: run } : {}), progress: { rungs: state.stall?.rungs ?? {} }, callId: call.id, step });
           box.failed = result.isError === true;
           if (result.parts || result.meta) box.native = { ...(result.parts ? { parts: result.parts } : {}), ...(result.meta ? { meta: result.meta } : {}) };
           if (result.cached) box.kind = "cached";
@@ -382,12 +382,18 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
 /**
  * The result a call with unusable arguments gets INSTEAD of being run. The wording, and the
  * cut-off-vs-unparseable decision, belong to the kernel that sets the flag; the surface adds
- * only its own retry advice (`PlatformTools.malformed`). The tool never ran, but the kernel
- * counts the declined call as a failed dispatch, as it always has.
+ * only its own retry advice (`PlatformTools.malformed`), or answers the call in its own words
+ * (`answer`). The tool never ran, but the kernel counts the declined call as a failed
+ * dispatch, as it always has.
  */
-function declineMalformedCall(ports: RunPorts, call: ParsedToolCall, facts: TurnFacts): LoopDispatchResult {
+async function declineMalformedCall(ports: RunPorts, call: ParsedToolCall, facts: TurnFacts, step: number): Promise<LoopDispatchResult> {
   const truncated = facts.interruption === "truncated";
   const policy = ports.platform?.malformed;
+  const answered = await policy?.answer?.({ id: call.id, name: call.name, arguments: call.raw.arguments }, { step, truncated });
+  if (answered) {
+    facts.refused = true;
+    return { data: answered.data, ...(answered.isError ? { isError: true } : {}) };
+  }
   const outcome = malformedCallOutcome(call, truncated, truncated ? policy?.retryHint : undefined);
   facts.refused = true;
   policy?.refused?.({ name: call.name, arguments: call.raw.arguments }, truncated, outcome);

@@ -16,24 +16,13 @@ WS4 chat adapters ─┬─► WS7 enforce + delete + done
 WS5 channels ──────┘
 ```
 
-### WS2f leftovers — The container shell
-
-The container shell is built and merged (DONE.md 2026-10-31). Its 43 new tests pass on Linux in CI. These are left:
-
-- **No Opus review.** It was stopped before it reported, at the operator's call. Review `api/container/sandboxJobs.mjs` and both transports, with the first attention on process-group kill and on the Actions runner serving one request at a time.
-- **No live run.** The tests drive the real core and the real tool layer, but no cloud run has used a background job yet. The new image also needs its deploy.
-- **Dead seam.** `RunSandbox.run` takes a `cwd` that nothing calls, because foreground `sandboxShell.run` still writes `cd "./dir" || exit 1` and `sandboxShellDir.test.ts` pins that string. Switching needs an intended test change. Otherwise remove the argument.
-- **Two capability sets.** `SANDBOX_CAPABILITIES` and `prepSurfaceCaps` stay `['shell']` because tests pin them, so `shell.jobs` is added in `durableRunCaps` and `withSandbox`. Prep's identity and prompt set therefore lack it while the run host's set has it. Check that this never gives a wrong prompt. `packages/agent-run/src/policy/tools/caps.ts` also holds an unused `SANDBOX_CAPABILITIES`.
-- **Idle containers.** `AgentContainerDO.sleepAfter` is 20 minutes, so a background job on a container that gets no calls can be reaped. The next poll then answers `unknown`.
-
-### WS4 — VS Code + Rovr / Web chat adapters (highest-traffic, telemetry-gated)
+### WS4 — VS Code + Rovr / Web chat adapters (highest-traffic)
 
 VS Code, web and Rovr all build a `BrainRunRequest` and call `startRun`, so one seam moves all three. The canvas already proves the shape: a host that runs its own tools sits on `runAgent` through closed `PlatformTools` and a `DeliveryLedger`.
 
 - **The seam.** `startRun` drives the run through one engine choice: `runLoop` (today) or `runViaAgent`. `prepareRunLoop` stays and runs for both: it assembles what the canvas assembles for itself (system prompt, transcript, catalog, recall, the deterministic and memory answers). Its output becomes `RunTask.transcript`, `RunPolicy` and the ports.
-- **The opt-in, until the ship gate.** The default stays `runLoop`. A device opts in: the VS Code setting `builderforce.agent.engine`, and `builderforce.runEngine` in `localStorage` (or `?runEngine=agent`, which stores it) on web and Rovr. The choice is read once at the host's request site and carried on `BrainRunRequest`. It selects the engine and nothing else. The ship gate flips the default, and the same workstream deletes `runLoop` and the switch.
+- **The opt-in, until the ship gate.** The default stays `runLoop` until the gate below passes. A device opts in: the VS Code setting `builderforce.agent.engine`, and `builderforce.runEngine` in `localStorage` (or `?runEngine=agent`, which stores it) on web and Rovr. The choice is read once at the host's request site and carried on `BrainRunRequest`. It selects the engine and nothing else. The ship gate flips the default, and the same workstream deletes `runLoop` and the switch.
 - **The parity oracle.** 20 test files drive `startRun`. With `BRAIN_RUN_ENGINE=agent` they run unchanged against the agent, and what fails is the list of real gaps. It starts as a baseline in the hand-off note and burns down to zero. A failure that cannot be closed goes to the planning model by name.
-- **Start from.** The `ws4-ports` branch (bb35bad66): `modelTransport`, `eventSink`, `runStorePort`, `humanChannel`, `contextSource`, `webAdapter`, `runViaAgent`, `vscodeAdapter`, conformance on the real ports. It covers the plain seams only. The rows below are the rest.
 
 | What the Brain's hooks do | Where it lives on the agent |
 |---|---|
@@ -59,7 +48,7 @@ VS Code, web and Rovr all build a `BrainRunRequest` and call `startRun`, so one 
   - Conformance passes.
   - The brain-embedded, VS Code and frontend tests pass unchanged on both engines.
   - The VSIX is packaged and installed.
-  - **Ship gate:** a week of VS Code telemetry on the agent is at or better than §8.1. If it regresses, the device goes back to `runLoop` and the failure goes to the planning model.
+  - **Ship gate (operator, 2026-10-31, replaces the telemetry week):** a review of the agent engine against `runLoop`, behaviour by behaviour, finds no unexplained difference, and the unit tests prove both engines work as before. Then flip the default, delete `runLoop` and the engine switch. After that §8.1 is a live watch with no way back to `runLoop`: a regression is fixed forward.
 
 ### WS5 — On-prem channels
 
@@ -88,7 +77,7 @@ VS Code, web and Rovr all build a `BrainRunRequest` and call `startRun`, so one 
 |---|---|
 | Conformance suite | One scripted task (fake model, in-memory provider) through all four adapters gives the same `RunEvent` trace and `RunOutcome`. The cloud adapter runs it one step per tick and still matches. A board-dispatched variant with `signoff` set is included. |
 | `check:one-execution` | Nothing outside `packages/agent-run` imports `runAgentLoop` or any `policy/*` module. |
-| Adapter size | Each adapter < ~300 lines, only builds ports. Two loop-bearing files remain: `runLoop` (175 lines) and `agent-loop.ts` (383 lines). |
+| Adapter size | Each adapter < ~300 lines, only builds ports. One loop-bearing file remains: `runLoop`, deleted at the ship gate. |
 | Parity | Every pre-existing behaviour test passes **unchanged** (§5.1). `check:tests-unchanged` enforces; the test count does not drop. |
 | Matrix | The design's final matrix holds: one policy module per row, entry points differ only by port. |
 | No lost capability | Every §7 row's old tests pass against its new home before the old home is deleted. |
@@ -107,7 +96,7 @@ VS Code, web and Rovr all build a `BrainRunRequest` and call `startRun`, so one 
    is a telemetry label only.
 4. **No god classes.** Under ~400 lines per module, one reason to change.
 5. **Model roles** are a hard rule, and CLAUDE.md states them. Never a full vitest sweep.
-6. **Commits.** One branch per workstream: `feat/agent-run-ws<N>`. No Co-Authored-By line.
+6. **Commits.** On `main` in the main checkout, no worktrees (operator, 2026-10-31). No Co-Authored-By line.
    Bump the version of every package you change, and never reuse a version. Wait for CI
    before pushing over a running build.
 7. **Docs.** Only the planning model edits ROADMAP.md, DONE.md and this PRD. Put contract or
@@ -163,14 +152,16 @@ Checked by reviewers and CI:
   touched on a `feat/agent-run-ws*` branch against main and fails on any changed line that
   isn't an `import` / `vi.mock` path, and on any new skip marker.
 
-## 8.1 Telemetry baseline (the WS4 ship gate)
+## 8.1 Telemetry baseline (the live watch after WS4)
 
 Failure rate 4.4% (20 of 452). Steps per run ≈ 43 (failed runs ≈ 62). Prompt-cache hit 23%.
-WS4 ships only if a week after cut-over stays at or better than these. Reproduce with
-`scripts/telemetry-baseline.cjs` (WS6). How to attribute rows: VS Code = `tenant_api_key_id`
+After cut-over VS Code should stay at or better than these. Reproduce with
+`api/scripts/telemetry-baseline.cjs` (WS6). How to attribute rows: VS Code = `tenant_api_key_id`
 whose key kind is `vscode` (its `surface` is clamped to `web`); cloud = `surface='cloud'`
 with `execution_id`; @-reply = `use_case='brain_agent_reply'`. Telemetry tables live on
 `NEON_TRANSACTIONAL_DATABASE_URL`. Queries are read-only and never print the connection URL.
+
+**What `steps` means.** The baseline is `AVG(steps)` on `run_model_outcomes`. On the old loop that is every completed model turn (non-error `llm.complete` rows). The kernel's `state.step` counts only turns that acted, and cloud and canvas tests pin that count, so it stays. VS Code, web and Rovr on the agent engine report the old loop's number, with one row per run (`engineRunRow.test.ts`). Compare chat entry points with the baseline only; a cloud or canvas `steps` is not comparable to it.
 
 ## 8.4 Reference scenario (the live check on WS4's VSIX)
 

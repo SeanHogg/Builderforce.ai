@@ -2986,7 +2986,7 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'mailbox.send', mutates: true,
-    description: 'Send ONE email from a connected mailbox — a reply, an introduction, a single follow-up. This is for individual correspondence; to email a LIST, build a campaign (campaign.create then campaign.send) so that suppression, one-click unsubscribe and the per-recipient delivery ledger all apply. The From address is always the connected mailbox and cannot be forged.',
+    description: 'Send ONE email from a connected mailbox — a reply, an introduction, a single follow-up. This is for individual correspondence; to email a LIST, build a campaign (campaign.create then campaign.send) so that suppression, one-click unsubscribe and the per-recipient delivery ledger all apply. The From address is always the connected mailbox and cannot be forged. A recipient on a do-not-contact list is refused and nothing is sent.',
     parameters: obj({ to: S, subject: S, html: S, connectionId: N, accountEmail: S, replyTo: S }, ['to', 'subject', 'html']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('sending from a mailbox needs the platform environment');
@@ -2996,6 +2996,11 @@ const CATALOG: BuiltinTool[] = [
         accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
       }, { forSending: true });
       if (!resolved.ok) throw new Error(resolved.error);
+      // No person is in the loop to be warned, so a do-not-contact recipient (any address in `to`) is refused.
+      const { isDoNotContact } = await import('../marketing/suppression');
+      if (await isDoNotContact(ctx.db, ctx.tenantId, str(a.to))) {
+        throw new Error('That recipient is on a do-not-contact list, so the message was NOT sent. Do not try another route to them.');
+      }
       const result = await sendFromMailbox(ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, {
         to: str(a.to),
         subject: str(a.subject),

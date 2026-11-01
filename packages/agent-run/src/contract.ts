@@ -112,9 +112,12 @@ export interface RunPolicy {
    */
   /**
    * What a stall that has nothing left to try does: `finish` ends the run with what it said and the notice (whatever it
-   * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished. Default `fail`.
+   * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished, `note` records the notice in the
+   * conversation and stops it, `settle` settles the run on what the model said, shaped as any accepted answer is, and leaves
+   * the notice to the `stall.recovered` event (a conversation that shows the model's own reply and the reason beside it).
+   * Default `fail`.
    */
-  stallExhausted?: "finish" | "fail" | "note";
+  stallExhausted?: "finish" | "fail" | "note" | "settle";
   /**
    * The run's conversation outlives it and its session owns the folding (additive; absent => the agent compacts as it always did).
    * Present, the agent runs NO ordinary compaction: it re-packs the context ONLY when a stall fails the run over onto another model,

@@ -66,6 +66,12 @@ export interface MalformedCallPolicy {
   roundDirective(truncated: boolean): string;
   /** A call was declined (for the surface's trace). The tool never ran. */
   refused?(call: { name: string; arguments: string }, truncated: boolean, outcome: unknown): void;
+  /**
+   * The surface's own answer to a call with unusable arguments, asked BEFORE the shared wording is used (additive): a surface whose
+   * `ask_user` or `hand_off` has a corrective of its own, or that records the declined call itself. Nothing back ⇒ the shared wording
+   * and {@link refused} stand; a result back is the call's row, and {@link refused} is not called.
+   */
+  answer?(call: { id: string; name: string; arguments: string }, env: { step: number; truncated: boolean }): Promise<{ data: unknown; isError?: boolean } | void> | { data: unknown; isError?: boolean } | void;
 }
 
 /** The turn's relevance selection over the surface's catalog. */
@@ -76,6 +82,12 @@ export interface PlatformSelection {
   limit: number;
   /** Tools the prompt names — advertised whatever the query scores. */
   required: ReadonlySet<string>;
+  /**
+   * The tools the run has called, in first-called order (additive): kept advertised for the rest of the run. The surface knows what
+   * it ran - a tool reached through its router counts as the tool it reached, a pin outlives a compaction that dropped its call, and
+   * an earlier run's calls pin nothing. Absent ⇒ the pins are read off the transcript's tool calls.
+   */
+  pinned?: Iterable<string>;
 }
 
 /** The surface's own tools, as a capability provider on the same run. */
@@ -109,7 +121,7 @@ export interface PlatformTools {
   /** The relevance selection the tools policy applies to {@link schemas}. */
   selection: PlatformSelection;
   /** Run one call. A refusal is a result the model reads, never a throw. */
-  execute(name: string, args: Record<string, unknown>, env: { signal?: AbortSignal; progress: LadderProgress; callId?: string }): Promise<PlatformToolResult>;
+  execute(name: string, args: Record<string, unknown>, env: { signal?: AbortSignal; progress: LadderProgress; callId?: string; step: number }): Promise<PlatformToolResult>;
   /** Does this call end analysis and begin the work? The first one hands the run to the coder. */
   handsOff?(name: string): boolean;
   /**
@@ -233,6 +245,30 @@ export interface DeliveryLedger {
   handedOff?(from: string | undefined, to: string): void;
   /** The wording of a provider failure's recovery. Absent ⇒ the failure is routed in silence. */
   providerFailure?: ProviderFailureWording;
+  /** How the stall judgement is ordered and worded for this surface (additive; absent ⇒ the generic order and wording every other surface keeps). */
+  stall?: StallStyle;
+  /**
+   * A prose turn did not end the run: the kernel sent it back with a correction, or took one more turn for a steer that arrived while it
+   * was written (additive). The surface keeps what the person already watched stream in as its own durable block (`kept: "block"`), or -
+   * for a model that stalled out and the run moved to another one - as the reply it was (`kept: "reply"`). Asked BEFORE the correction's
+   * rows join the transcript, so what the surface saves lands in the order the person saw it.
+   */
+  sentBack?(turn: { step: number; content: string; kept: "block" | "reply" }): Promise<void> | void;
+}
+
+/** The stall judgement's order and wording, as DATA a surface declares (`DeliveryLedger.stall`). */
+export interface StallStyle {
+  /**
+   * Judge the model's own narration BEFORE the rungs: a narrating turn is re-prompted ahead of any delivery rung, and a model that
+   * spent its whole budget fails over - or stops with its notice - only once every rung is clear. Absent ⇒ the rungs come first.
+   */
+  narrationFirst?: true;
+  /** A rung's directive joins the transcript as a USER row (the model reads it as the person's), not a system one; it then survives into the next run's seed. */
+  nudgeAs?: "user";
+  /** The model that takes over a stalled run reads the first nudge ALONE; the notice of the switch is for the person (the trace). */
+  failoverNudgeOnly?: true;
+  /** The stall is judged against the tools the turn ADVERTISED (its menu), not every tool the surface could run. */
+  menu?: true;
 }
 
 /**

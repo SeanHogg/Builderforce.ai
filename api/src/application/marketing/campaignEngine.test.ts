@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   addAudienceMembers,
+  campaignsInFlight,
   createSender,
   recordClick,
   recordSmsDeliveryStatus,
@@ -25,6 +26,7 @@ import { fakeDb, fakeFetch } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
 
 const ORIGIN = 'https://builderforce.ai/gateway';
 const ctx = { trackingOrigin: ORIGIN, trackToken: 'tok123' };
@@ -347,12 +349,27 @@ describe('startCampaign — materialising a large audience', () => {
   });
 
   it('does the inserts and the flip to `sending` in ONE transaction, the flip last', async () => {
-    const db = fakeDb([[draftRow], manyMembers(4_500), [], [], [], [], [{ ...draftRow, status: 'sending' }]]);
-    const tx = vi.spyOn(db, 'transaction');
+    // `fakeDb`'s own `transaction` hands the body the SAME double, which would let a flip issued on
+    // the outer `db` pass. So the transaction body gets a DISTINCT double with its own call log.
+    const db = fakeDb([[draftRow], manyMembers(4_500), []]);   // binding, members, suppression read
+    const txDb = fakeDb([[], [], [], [{ ...draftRow, status: 'sending' }]]);   // 3 insert chunks, the flip
+    const tx = vi.spyOn(db, 'transaction').mockImplementation((async (fn: (t: unknown) => Promise<unknown>) => fn(txDb)) as never);
     await startCampaign(env, db as unknown as Db, 7, 1);
     expect(tx).toHaveBeenCalledTimes(1);
-    const writes = db.calls.filter((c) => c.kind === 'insert' || c.kind === 'update');
+    // Nothing was written outside the transaction…
+    expect(db.calls.filter((c) => c.kind === 'insert' || c.kind === 'update')).toEqual([]);
+    // …and inside it, the flip came last, after the inserts, and carried the `draft` guard.
+    const writes = txDb.calls.filter((c) => c.kind === 'insert' || c.kind === 'update');
     expect(writes.map((c) => c.kind)).toEqual(['insert', 'insert', 'insert', 'update']);
+    expect(new PgDialect().sqlToQuery(writes.at(-1)!.where as Parameters<PgDialect['sqlToQuery']>[0]).params)
+      .toEqual(expect.arrayContaining(['draft']));
+  });
+
+  it('refuses with 409 and rolls back when another start won the race (the flip matched no draft)', async () => {
+    const db = fakeDb([[draftRow], manyMembers(10), []]);
+    const txDb = fakeDb([[], []]);   // one insert, then a flip that matches nothing
+    vi.spyOn(db, 'transaction').mockImplementation((async (fn: (t: unknown) => Promise<unknown>) => fn(txDb)) as never);
+    await expect(startCampaign(env, db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 409 });
   });
 
   it('a chunk that fails leaves the campaign UNSTARTED: it is never flipped to `sending`', async () => {
@@ -871,6 +888,19 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
       expect(Object.keys(stamp.payload as object)).toEqual(['scheduleRefusedAt']);
     });
 
+    it('does NOT stamp a refusal for an AVAILABILITY failure: it is reported, and no further campaign is started', async () => {
+      const outage = new ServiceUnavailableError('The database is temporarily unavailable', { code: 'database_unavailable' });
+      const db = fakeDb([
+        [{ id: 1, tenantId: 7 }, { id: 2, tenantId: 7 }],   // due
+        outage,                                             // campaign 1: loading the binding hits the outage
+        [{ ...draftRow, id: 2 }],                           // campaign 2 would load fine, and must NOT be tried
+      ]);
+      const result = await startDueCampaigns(env, db as unknown as Db);
+      expect(result).toMatchObject({ started: 0, refused: [], unavailable: 'The database is temporarily unavailable' });
+      expect(db.calls.filter((c) => c.kind === 'update')).toHaveLength(0);   // no schedule_refused_at stamp
+      expect(db.remaining()).toBe(1);                                         // campaign 2 was never loaded
+    });
+
     it('survives the stamp write failing too (the sweep is not taken down by its own bookkeeping)', async () => {
       const db = fakeDb([[{ id: 1, tenantId: 7 }], new Error('boom'), new Error('stamp failed')]);
       await expect(startDueCampaigns(env, db as unknown as Db)).resolves.toMatchObject({ started: 0 });
@@ -880,16 +910,29 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
   describe('runCampaignSendSweep — one failure does not stop the rest', () => {
     const sending = { ...draftRow, status: 'sending' };
 
+    // The finishing UPDATE sets `status` to a SQL CASE expression, not the literal 'sent'.
+    // `rendered` mirrors the helper of the same name in campaign/send.test.ts (duplicated: it is one line).
+    const rendered = (value: unknown) => new PgDialect().sqlToQuery(value as Parameters<PgDialect['sqlToQuery']>[0]);
+    const expectFinishingWrite = (db: ReturnType<typeof fakeDb>) => {
+      const payload = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as Record<string, unknown>;
+      const status = rendered(payload.status).sql;
+      expect(status).toContain('CASE');
+      expect(status).toContain("'sent'");
+      expect(status).toContain("'failed'");
+      expect(rendered(payload.sent).params).toEqual([0]);
+      expect(rendered(payload.failed).params).toEqual([0]);
+    };
+
     it('still advances in-flight campaigns when the due-start step throws', async () => {
       const db = fakeDb([
         new Error('due read failed'),          // startDueCampaigns throws on its first statement
         [{ id: 1, tenantId: 7 }],              // in flight
         [], [sending], [], [],                 // reap (none), binding, logo, no queued rows
-        [{ remaining: 0, queuedLeft: 0 }], [],
+        [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],   // finishing UPDATE ... RETURNING
       ]);
       const result = await runCampaignSendSweep(env, db as unknown as Db);
       expect(result).toMatchObject({ campaigns: 1, started: 0 });
-      expect(db.calls.filter((c) => c.kind === 'update').at(-1)!.payload).toMatchObject({ status: 'sent' });
+      expectFinishingWrite(db);
     });
 
     it('still advances the next campaign when one campaign batch throws', async () => {
@@ -897,13 +940,56 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
         [],                                          // nothing due
         [{ id: 1, tenantId: 7 }, { id: 2, tenantId: 7 }],
         new Error('campaign 1 reap failed'),         // campaign 1 throws before its batch
+        [],                                          // campaign 1: updated_at stamp (rotates it to the back)
         [],                                          // campaign 2: reap (none)
         [{ ...sending, id: 2 }], [], [],             // …binding, logo, no queued rows
-        [{ remaining: 0, queuedLeft: 0 }], [],
+        [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],   // finishing UPDATE ... RETURNING
       ]);
       const result = await runCampaignSendSweep(env, db as unknown as Db);
       expect(result.campaigns).toBe(2);
-      expect(db.calls.filter((c) => c.kind === 'update').at(-1)!.payload).toMatchObject({ status: 'sent' });
+      expectFinishingWrite(db);
+    });
+
+    it('stamps updated_at on a campaign whose batch throws, so it rotates to the back', async () => {
+      const db = fakeDb([
+        [],                                          // nothing due
+        [{ id: 1, tenantId: 7 }, { id: 2, tenantId: 7 }],
+        new Error('campaign 1 reap failed'),         // campaign 1 throws before its batch
+        [],                                          // campaign 1: the stamp
+        [],                                          // campaign 2: reap (none)
+        [{ ...sending, id: 2 }], [], [],             // …binding, logo, no queued rows
+        [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],
+      ]);
+      await runCampaignSendSweep(env, db as unknown as Db);
+      const [stamp] = db.calls.filter((c) => c.kind === 'update');
+      expect(Object.keys(stamp!.payload as object)).toEqual(['updatedAt']);
+      expect(rendered((stamp!.payload as { updatedAt: unknown }).updatedAt).sql).toContain('NOW()');
+      // Campaign 2 still ran to its finishing write, after the stamp.
+      expectFinishingWrite(db);
+    });
+
+    it('survives the stamp failing too (the other campaigns still run)', async () => {
+      const db = fakeDb([
+        [],                                          // nothing due
+        [{ id: 1, tenantId: 7 }, { id: 2, tenantId: 7 }],
+        new Error('campaign 1 reap failed'),
+        new Error('stamp failed'),                   // campaign 1: the stamp itself fails
+        [],                                          // campaign 2: reap (none)
+        [{ ...sending, id: 2 }], [], [],
+        [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],
+      ]);
+      const result = await runCampaignSendSweep(env, db as unknown as Db);
+      expect(result.campaigns).toBe(2);
+      expectFinishingWrite(db);
+    });
+
+    it('reads in-flight campaigns least recently updated first, then oldest-started', async () => {
+      const db = fakeDb([[]]);
+      await campaignsInFlight(db as unknown as Db);
+      const order = db.calls[0]!.orderBy!.map((o) => rendered(o).sql);
+      expect(order).toHaveLength(2);
+      expect(order[0]).toMatch(/"updated_at" asc$/);
+      expect(order[1]).toMatch(/"started_at" asc$/);
     });
   });
 
@@ -974,12 +1060,17 @@ describe('reapStaleClaims — the `sending` rows a dead runner leaves', () => {
       [],                                  // logo
       [],                                  // no queued rows
       [{ remaining: 0, queuedLeft: 0 }],   // the reaped row is gone from the count
-      [],                                  // campaign marked sent
+      [{ status: 'sent' }],                // campaign marked sent (finishing UPDATE ... RETURNING)
     ]);
     const result = await runCampaignSendSweep(env, db as unknown as Db);
     expect(result.campaigns).toBe(1);
-    const completion = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as { status?: string };
-    expect(completion.status).toBe('sent');
+    // The finishing write sets `status` to a CASE expression (a concurrent failure is never overwritten;
+    // a campaign that delivered nothing reads 'failed'), so render it rather than compare a literal.
+    const completion = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as { status?: unknown };
+    const status = new PgDialect().sqlToQuery(completion.status as Parameters<PgDialect['sqlToQuery']>[0]).sql;
+    expect(status).toContain('CASE');
+    expect(status).toContain("'sent'");
+    expect(status).toContain("'failed'");
   });
 });
 

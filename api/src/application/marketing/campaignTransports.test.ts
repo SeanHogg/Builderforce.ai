@@ -95,6 +95,14 @@ describe('isOptOutFailure', () => {
     expect(isOptOutFailure('21610')).toBe(true);
     expect(isOptOutFailure('Twilio returned 429: 20429 Too Many Requests')).toBe(false);
   });
+
+  it('reads the code from the start, so a quoted phone number cannot opt a member out', () => {
+    // The number +12161000000 contains the digits 21610; the code is 21211, a bad To.
+    expect(isOptOutFailure('Twilio returned 400: 21211 The number +12161000000 is invalid')).toBe(false);
+    expect(isOptOutFailure('Twilio returned 400: 21211 The number +14152161000 is invalid')).toBe(false);
+    // The shape twilioErrorDetail builds when Twilio sent a code and no message.
+    expect(isOptOutFailure('Twilio returned 400: error 21610')).toBe(true);
+  });
 });
 
 describe('resolveCampaignSender — platform', () => {

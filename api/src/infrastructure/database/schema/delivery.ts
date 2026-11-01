@@ -2345,7 +2345,12 @@ export const reportSchedules = pgTable('report_schedules', {
   nextRunAt:    timestamp('next_run_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  // The cron gate's "earliest armed send time" probe (cronWorkSignal SCHEDULE_SOURCES) asks for
+  // enabled schedules by next run time, across tenants (mig 1292). `runDueReports` does not use
+  // it: that read also takes rows with a NULL `next_run_at`, which this predicate leaves out.
+  index('idx_report_schedules_due').on(t.nextRunAt).where(sql`is_enabled = true AND next_run_at IS NOT NULL`),
+]);
 
 
 export const securityIncidents = pgTable('security_incidents', {

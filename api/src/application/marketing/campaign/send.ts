@@ -4,14 +4,14 @@
  */
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Env } from '../../../env';
-import type { Db } from '../../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../../infrastructure/database/connection';
 import {
   marketingAudienceMembers,
   marketingCampaignSends,
   marketingCampaigns,
 } from '../../../infrastructure/database/schema';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
-import { isOptOutFailure, resolveCampaignSender, TransportError } from '../campaignTransports';
+import { isPerRecipientCarrierFailure, isOptOutFailure, resolveCampaignSender, TransportError } from '../campaignTransports';
 import { defaultLogoUrl, resolveAssetOrigin } from '../templateLibrary';
 import {
   renderCampaignEmail,
@@ -57,26 +57,62 @@ export const STALE_CLAIM_ERROR =
   'Delivery state unknown: the sender stopped after claiming this message and before recording the outcome, '
   + 'so it may or may not have been delivered. It was not retried, to avoid sending it twice.';
 
+/**
+ * How many recipient-terminal failures in a row, with the SAME normalised message and nothing
+ * delivered in the batch, mean the SENDER is unusable rather than the recipients.
+ *
+ * A provider that answers 400 for every message because the From (a Twilio number, a SendGrid
+ * sender) is bad looks, row by row, exactly like a list of bad numbers. Ten identical failures
+ * in a row with no send is not a coincidence a real list produces often (bad numbers fail with
+ * differing messages once their digits are stripped, are interleaved with deliveries, and a
+ * carrier STOP or any other known per-recipient Twilio code, such as a landline, is excluded
+ * outright: those repeat identically by nature), and it costs a dead sender only ten attempts before the
+ * campaign stops. Small enough that a dead sender is caught inside one batch (25), large enough
+ * that a short run of identical bad numbers at the head of a list does not fail the campaign.
+ */
+export const SENDER_FAILURE_STREAK = 10;
+
+/**
+ * A failure message with the per-recipient parts removed, so the same failure compares equal
+ * across recipients. Email addresses and phone-number-like digit runs (7 or more digits, with
+ * an optional `+` and separators) become placeholders, so a message that quotes the recipient
+ * ("The 'To' number +14155550100 is not a valid phone number") still matches the next one.
+ * Short numbers (an HTTP status, a Twilio error code such as 21211) are kept: they are the
+ * discriminating part. Lower-cased and whitespace-collapsed.
+ */
+export function normalizeFailureMessage(message: string): string {
+  return message
+    .toLowerCase()
+    .replace(/[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g, '<email>')
+    .replace(/\+?\d[\d\s().-]{5,}\d/g, '<number>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
+}
+
 export interface BatchResult {
   sent: number;
   failed: number;
   remaining: number;
   status: string;
+  /** Set when the batch ended before its claimed set was exhausted: the provider did not answer. */
+  stopped?: 'no_response';
 }
 
 /**
- * Fail a campaign whose SENDER is dead, and settle every row it still owns.
+ * Fail a campaign whose SENDER is dead, and settle every row it still owns. Returns how many
+ * rows it failed itself (the `queued` and `sending` rows it settled), so the caller can report
+ * a `failed` that agrees with the ledger.
  *
- * Order matters. Rows are settled BEFORE the campaign is flipped, so a crash between the two
- * leaves a campaign that is still in flight (the next tick repeats this) rather than a
- * `failed` one with rows nobody will touch. `queued` goes first: once no row is `queued`
- * nothing can be newly claimed, so the `sending` settle that follows cannot miss a row. That
- * settle has to run at all, because a failed campaign has left the in-flight set and the
- * stale-claim sweep (`reapStaleClaims`) never visits it again. Those `sending` rows get the
- * same "delivery state unknown" verdict the sweep would have given them, not the sender's
- * error: another runner may have delivered them.
- *
- * `delta` is what the calling batch already did, so its counters land in the same write.
+ * ONE transaction, so a crash leaves either the whole settle or none of it. Inside it the order
+ * still matters for a concurrent runner: `queued` goes first, so once it commits nothing can be
+ * newly claimed and the `sending` settle that follows cannot miss a row. That settle has to run
+ * at all, because a failed campaign has left the in-flight set and the stale-claim sweep
+ * (`reapStaleClaims`) never visits it again. Those `sending` rows get the same "delivery state
+ * unknown" verdict the sweep would have given them, not the sender's error: another runner may
+ * have delivered them. Both settles are counted from `RETURNING`, and added to the campaign's
+ * `failed` along with `delta` (what the calling batch already did, so its counters land in the
+ * same write).
  */
 async function failCampaign(
   db: Db,
@@ -84,34 +120,39 @@ async function failCampaign(
   campaignId: number,
   reason: string,
   delta: { sent: number; failed: number },
-): Promise<void> {
-  await db
-    .update(marketingCampaignSends)
-    .set({ status: 'failed', error: reason.slice(0, 1_000) })
-    .where(and(
-      eq(marketingCampaignSends.campaignId, campaignId),
-      eq(marketingCampaignSends.tenantId, tenantId),
-      eq(marketingCampaignSends.status, 'queued'),
-    ));
-  const abandoned = await db
-    .update(marketingCampaignSends)
-    .set({ status: 'failed', error: STALE_CLAIM_ERROR })
-    .where(and(
-      eq(marketingCampaignSends.campaignId, campaignId),
-      eq(marketingCampaignSends.tenantId, tenantId),
-      eq(marketingCampaignSends.status, 'sending'),
-    ))
-    .returning({ id: marketingCampaignSends.id });
-  await db
-    .update(marketingCampaigns)
-    .set({
-      status: 'failed',
-      sent: sql`${marketingCampaigns.sent} + ${delta.sent}`,
-      failed: sql`${marketingCampaigns.failed} + ${delta.failed + abandoned.length}`,
-      completedAt: sql`NOW()`,
-      updatedAt: sql`NOW()`,
-    })
-    .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
+): Promise<number> {
+  return inTransaction(db, async (tx) => {
+    const unattempted = await tx
+      .update(marketingCampaignSends)
+      .set({ status: 'failed', error: reason.slice(0, 1_000) })
+      .where(and(
+        eq(marketingCampaignSends.campaignId, campaignId),
+        eq(marketingCampaignSends.tenantId, tenantId),
+        eq(marketingCampaignSends.status, 'queued'),
+      ))
+      .returning({ id: marketingCampaignSends.id });
+    const abandoned = await tx
+      .update(marketingCampaignSends)
+      .set({ status: 'failed', error: STALE_CLAIM_ERROR })
+      .where(and(
+        eq(marketingCampaignSends.campaignId, campaignId),
+        eq(marketingCampaignSends.tenantId, tenantId),
+        eq(marketingCampaignSends.status, 'sending'),
+      ))
+      .returning({ id: marketingCampaignSends.id });
+    const settledHere = unattempted.length + abandoned.length;
+    await tx
+      .update(marketingCampaigns)
+      .set({
+        status: 'failed',
+        sent: sql`${marketingCampaigns.sent} + ${delta.sent}`,
+        failed: sql`${marketingCampaigns.failed} + ${delta.failed + settledHere}`,
+        completedAt: sql`NOW()`,
+        updatedAt: sql`NOW()`,
+      })
+      .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
+    return settledHere;
+  });
 }
 
 /**
@@ -145,8 +186,8 @@ export async function runCampaignBatch(
     // sender un-verified, connection deleted). Every remaining recipient would
     // fail identically, so the campaign fails as a whole and says why — rather
     // than grinding through the audience writing the same error N times.
-    await failCampaign(db, tenantId, campaignId, resolved.error, { sent: 0, failed: 0 });
-    return { sent: 0, failed: 0, remaining: 0, status: 'failed' };
+    const failedHere = await failCampaign(db, tenantId, campaignId, resolved.error, { sent: 0, failed: 0 });
+    return { sent: 0, failed: failedHere, remaining: 0, status: 'failed' };
   }
   const sender = resolved.sender;
 
@@ -177,13 +218,22 @@ export async function runCampaignBatch(
       eq(marketingCampaignSends.tenantId, tenantId),
       eq(marketingCampaignSends.status, 'queued'),
     ))
-    .orderBy(asc(marketingCampaignSends.id))
+    // Least-attempted first, then id. The batch stops at the first no-response, so ordering by id
+    // alone retries the same head row every tick through a long outage and writes it off at the
+    // attempt ceiling before the next row gets a single try. This way every recipient gets one
+    // attempt before any gets a second. No attempt is refunded: a timed-out send may have been
+    // delivered, and a refund would allow unlimited duplicates.
+    .orderBy(asc(marketingCampaignSends.attempts), asc(marketingCampaignSends.id))
     .limit(batchSize);
 
   let sent = 0;
   let failed = 0;
   // Set when a terminal SENDER failure (a revoked grant, a wrong key) ends the batch.
   let senderFailure: string | null = null;
+  // Set when the provider did not answer at all: the batch stops there (see below).
+  let noResponse = false;
+  // The run of identical recipient-terminal failures that is the circuit breaker's evidence.
+  let streak: { key: string; count: number } | null = null;
 
   for (const row of queued) {
     // Claim: only the runner whose UPDATE matches gets to send this one. The
@@ -252,6 +302,7 @@ export async function runCampaignBatch(
         ))
         .returning({ id: marketingCampaignSends.id });
       if (settled.length > 0) sent += 1;
+      streak = null;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'send failed';
       // A carrier STOP is a CONSENT withdrawal, not a delivery failure: without
@@ -293,12 +344,39 @@ export async function runCampaignBatch(
         senderFailure = message;
         break;
       }
+      // A provider that did not answer (a network error, the call's timeout) will not answer the
+      // next 24 either, and each would cost its full timeout: stop the batch here. The row just
+      // tried was requeued above (its attempt counts: it WAS tried); the rest were never claimed,
+      // so they stay `queued` with no attempt consumed, and the next batch retries them.
+      if (error instanceof TransportError && error.noResponse) {
+        noResponse = true;
+        break;
+      }
+      // The circuit breaker. A sender fault the provider reports as a per-message 400 (a bad
+      // From) reads as a recipient failure on every row. N identical ones in a row with nothing
+      // delivered in this batch escalate to sender-level. A known per-recipient carrier failure (a
+      // STOP, a landline, an invalid To) is identical across recipients by nature and says nothing
+      // about the sender, so it never counts and resets the streak.
+      const recipientTerminal = !requeue && !(error instanceof TransportError && error.retryable);
+      if (settled.length > 0) {
+        if (recipientTerminal && !(isSms && isPerRecipientCarrierFailure(message))) {
+          const key = normalizeFailureMessage(message);
+          streak = streak && streak.key === key ? { key, count: streak.count + 1 } : { key, count: 1 };
+          if (sent === 0 && streak.count >= SENDER_FAILURE_STREAK) {
+            senderFailure = `${message} (the same failure on ${streak.count} recipients in a row with nothing delivered, `
+              + 'so the sender is treated as unusable)';
+            break;
+          }
+        } else {
+          streak = null;
+        }
+      }
     }
   }
 
   if (senderFailure !== null) {
-    await failCampaign(db, tenantId, campaignId, senderFailure, { sent, failed });
-    return { sent, failed, remaining: 0, status: 'failed' };
+    const failedHere = await failCampaign(db, tenantId, campaignId, senderFailure, { sent, failed });
+    return { sent, failed: failed + failedHere, remaining: 0, status: 'failed' };
   }
 
   // `remaining` counts everything not yet settled (a `sending` row included) and is what decides
@@ -317,15 +395,31 @@ export async function runCampaignBatch(
     ));
 
   const done = Number(remaining) === 0;
-  await db
+  // The flip to a finished status is conditional on the campaign still being `sending`, so a
+  // concurrent batch that failed it (a dead sender) is never overwritten with `sent`; the
+  // counters land either way. A campaign that finishes having delivered nothing, with rows
+  // failed, did not "send": it reads `failed`. Both tests use the pre-update row, which is
+  // what a SET expression sees, so the cumulative totals include this batch's own.
+  const finishedStatus = sql`CASE WHEN ${marketingCampaigns.status} <> 'sending' THEN ${marketingCampaigns.status}
+    WHEN ${marketingCampaigns.sent} + ${sent} = 0 AND ${marketingCampaigns.failed} + ${failed} > 0 THEN 'failed'
+    ELSE 'sent' END`;
+  const [finished] = await db
     .update(marketingCampaigns)
     .set({
       sent: sql`${marketingCampaigns.sent} + ${sent}`,
       failed: sql`${marketingCampaigns.failed} + ${failed}`,
-      ...(done ? { status: 'sent' as const, completedAt: sql`NOW()` } : {}),
+      ...(done
+        ? {
+            status: finishedStatus,
+            completedAt: sql`CASE WHEN ${marketingCampaigns.status} = 'sending' THEN NOW() ELSE ${marketingCampaigns.completedAt} END`,
+          }
+        : {}),
       updatedAt: sql`NOW()`,
     })
-    .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
+    .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
+    .returning({ status: marketingCampaigns.status });
+  // What the campaign now reads. Falls back to this batch's own view only if the row did not come back.
+  const finalStatus = finished?.status ?? (done ? (sent === 0 && failed > 0 ? 'failed' : 'sent') : 'sending');
 
   // Only the first batch runs inline; the rest is finished by the gated cron sweep. The
   // frequent tick skips Postgres entirely unless work was signalled, so without this a
@@ -344,5 +438,11 @@ export async function runCampaignBatch(
   // requeue is capped by the attempt ceiling (`CAMPAIGN_SEND_MAX_ATTEMPTS`, counted at claim).
   if (!done && sent + failed > 0 && Number(queuedLeft ?? 0) > 0) await signalPendingWork(env);
 
-  return { sent, failed, remaining: Number(remaining), status: done ? 'sent' : 'sending' };
+  return {
+    sent,
+    failed,
+    remaining: Number(remaining),
+    status: finalStatus,
+    ...(noResponse ? { stopped: 'no_response' as const } : {}),
+  };
 }

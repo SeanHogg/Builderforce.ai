@@ -37,6 +37,7 @@ import {
   type MailboxProviderInfo,
 } from '@/lib/mailboxApi';
 import { faultText } from '@/lib/apiClient';
+import { useSendMailboxMessage } from '@/hooks/useSendMailboxMessage';
 /** Recipients as the object stores them (a list) and as the user edits them (a line). */
 function recipientList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((entry) => String(entry).trim()).filter(Boolean);
@@ -55,6 +56,7 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
   onChange: (patch: Partial<CreationNodeData>) => void;
 }) {
   const t = useTranslations('creationCanvas.email');
+  const sendMessage = useSendMailboxMessage();
   const [providers, setProviders] = useState<MailboxProviderInfo[]>([]);
   const [connections, setConnections] = useState<MailboxConnection[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -104,11 +106,13 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
     if (!canSend || selectedId == null) return;
     setBusy(true); setNotice(t('sending'));
     try {
-      const result = await mailboxApi.send(selectedId, {
+      const result = await sendMessage(selectedId, {
         to: to.map(replyAddress).join(', '),
         subject: subject.trim(),
         html: htmlFromText(body),
       });
+      // `null`: the person was warned a recipient is on a do-not-contact list and declined.
+      if (result === null) { setNotice(''); return; }
       // The object becomes the RECORD of what was sent. Without `messageId` it would
       // still read as an unsent draft after a successful send.
       onChange({

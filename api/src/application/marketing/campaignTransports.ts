@@ -45,6 +45,13 @@
  * the RECIPIENT's (the batch carries on), a revoked credential is the SENDER's (the
  * campaign stops). Treating every terminal failure as the sender's is how one
  * un-textable number stalls an entire audience.
+ *
+ * Two classifications keep that honest. A provider that never answers (status 0: the connector
+ * runtime reports a fetch failure or its timeout as a result, not a throw) is RETRYABLE, never a
+ * terminal write-off, and flagged `noResponse` so the batch stops instead of timing out per row.
+ * And an HTTP 400 is not always the recipient's: Twilio's own error codes for an unusable From
+ * ({@link TWILIO_SENDER_ERROR_CODES}) are the SENDER's, so a dead number cannot end a campaign
+ * as `sent` with nothing delivered.
  */
 
 import { and, eq } from 'drizzle-orm';
@@ -56,6 +63,7 @@ import { executeConnectorAction, ConnectorCallError } from '../connectors/connec
 import { sendFromMailbox } from '../mailbox/mailboxService';
 import { htmlToPreviewText } from '../mailbox/mailboxProviders';
 import { isE164 } from '../shared/contactAddress';
+import { isNoResponseStatus, isRetryableProviderStatus } from '../shared/campaignDelivery';
 
 export const CAMPAIGN_TRANSPORTS = ['platform', 'mailbox', 'sendgrid', 'twilio'] as const;
 export type CampaignTransport = typeof CAMPAIGN_TRANSPORTS[number];
@@ -145,10 +153,46 @@ export interface TransportReceipt {
 export type TransportErrorScope = 'recipient' | 'sender';
 
 export class TransportError extends Error {
-  constructor(message: string, readonly retryable: boolean, readonly scope: TransportErrorScope) {
+  /**
+   * `noResponse`: the provider never answered (a network error, the call's timeout). The batch
+   * stops at the first one — during an outage every remaining send would burn the same timeout —
+   * and requeues what it had claimed.
+   */
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly scope: TransportErrorScope,
+    readonly noResponse: boolean = false,
+  ) {
     super(message);
     this.name = 'TransportError';
   }
+}
+
+/**
+ * Twilio error codes that mean the FROM is unusable, so every message from it fails the same way
+ * even though Twilio answers HTTP 400 (which {@link providerStatusScope} reads as one recipient's).
+ * Data, so a code is added here and nowhere else.
+ *
+ *   21212  invalid `From` number
+ *   21603  no `From` (or messaging service) supplied
+ *   21606  `From` is not a valid, SMS-capable number on this account
+ *   21659  `From` is not a Twilio number
+ */
+export const TWILIO_SENDER_ERROR_CODES: readonly string[] = ['21212', '21603', '21606', '21659'];
+
+/** The provider's own `code` off a Twilio error body (`{ code, message, more_info }`), as a string. */
+export function twilioErrorCode(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const code = (data as { code?: unknown }).code;
+  return typeof code === 'number' || typeof code === 'string' ? String(code) : null;
+}
+
+/** Whose failure a Twilio HTTP failure is: the sender code list first, then the status. */
+export function twilioFailureScope(status: number | null | undefined, data: unknown): TransportErrorScope {
+  const code = twilioErrorCode(data);
+  if (code !== null && TWILIO_SENDER_ERROR_CODES.includes(code)) return 'sender';
+  return providerStatusScope(status);
 }
 
 /**
@@ -263,11 +307,19 @@ async function resolveSmsSender(
             // way (sender scope), and a 400 is this message — a number Twilio will
             // not accept, or one that has texted STOP — which retrying cannot fix
             // but which says nothing about the next recipient (recipient scope).
-            const retryable = result.status === 429 || result.status >= 500;
+            //
+            // Status 0 is NO RESPONSE: `executeConnectorAction` does not throw on a fetch failure
+            // or its timeout, it returns `{ ok: false, status: 0 }`. That is retryable, and the
+            // error says so (`noResponse`) so the batch can stop instead of timing out 25 times.
+            //
+            // A Twilio 400 can still be the SENDER's: its error code, read from the response body,
+            // says when the From number itself is unusable ({@link TWILIO_SENDER_ERROR_CODES}).
+            const retryable = isRetryableProviderStatus(result.status);
             throw new TransportError(
               `Twilio returned ${result.status}${detail ? `: ${detail}` : ''}`,
               retryable,
-              providerStatusScope(result.status),
+              twilioFailureScope(result.status, result.data),
+              isNoResponseStatus(result.status),
             );
           }
           return { externalId: twilioMessageSid(result.data) };
@@ -277,7 +329,8 @@ async function resolveSmsSender(
           // connector, missing credential, blocked URL) — never worth a retry, and
           // identical for every recipient, so it is the SENDER's failure.
           if (error instanceof ConnectorCallError) throw new TransportError(error.message, false, 'sender');
-          // Unclassified (a network error, a timeout): retried, so the scope is moot.
+          // Unclassified throw (the runtime reports network failures as status 0 and does not throw
+          // them, so this is rare): retried, so the scope is moot.
           throw new TransportError(error instanceof Error ? error.message : 'Twilio send failed', true, 'recipient');
         }
       },
@@ -290,8 +343,8 @@ async function resolveSmsSender(
  *  STOP", which is the only version anybody can act on. */
 function twilioErrorDetail(data: unknown): string | undefined {
   if (!data || typeof data !== 'object') return undefined;
-  const body = data as { code?: unknown; message?: unknown };
-  const code = typeof body.code === 'number' || typeof body.code === 'string' ? String(body.code) : null;
+  const body = data as { message?: unknown };
+  const code = twilioErrorCode(data);
   const message = typeof body.message === 'string' ? body.message : null;
   if (code && message) return `${code} ${message}`;
   return message ?? (code ? `error ${code}` : undefined);
@@ -315,9 +368,42 @@ function twilioMessageSid(data: unknown): string | undefined {
  */
 export const TWILIO_OPT_OUT_CODE = '21610';
 
-/** True when a failure means "they opted out", whatever shape it arrived in. */
+/**
+ * The Twilio error code a failure value STARTS with, or null. Three shapes reach this: a bare code
+ * (a delivery callback's `ErrorCode`), `Twilio returned <status>: <code> <text>`, and
+ * `Twilio returned <status>: error <code>` (what {@link twilioErrorDetail} builds with no message).
+ * The code is read from the start, never searched for: the text quotes the recipient's phone
+ * number, whose digits can contain a code.
+ */
+export function twilioFailureCode(message: string): string | null {
+  return /^(?:Twilio returned \d+: (?:error )?)?(\d+)\b/.exec(message.trim())?.[1] ?? null;
+}
+
+/** True when a failure means "they opted out": its Twilio code is {@link TWILIO_OPT_OUT_CODE}. */
 export function isOptOutFailure(message: string): boolean {
-  return message.includes(TWILIO_OPT_OUT_CODE);
+  return twilioFailureCode(message) === TWILIO_OPT_OUT_CODE;
+}
+
+/**
+ * Twilio error codes that are one RECIPIENT's fault, so a run of them says nothing about the
+ * sender: ten landline numbers in a row fail identically and must not trip the circuit breaker.
+ * Data, so a code is added here and nowhere else.
+ *
+ *   21211  invalid `To` number
+ *   21217  `To` does not appear to be a valid number
+ *   21614  `To` is not a mobile number
+ */
+export const TWILIO_RECIPIENT_ERROR_CODES: readonly string[] = ['21211', '21217', '21614'];
+
+/**
+ * True when a failure is known to be one recipient's: an opt-out, or a Twilio code in
+ * {@link TWILIO_RECIPIENT_ERROR_CODES}. The code comes from {@link twilioFailureCode}, which reads
+ * the START of the message only.
+ */
+export function isPerRecipientCarrierFailure(message: string): boolean {
+  if (isOptOutFailure(message)) return true;
+  const code = twilioFailureCode(message);
+  return code !== null && TWILIO_RECIPIENT_ERROR_CODES.includes(code);
 }
 
 /**
@@ -413,7 +499,9 @@ export async function resolveCampaignSender(
           // `sendFromMailbox` answers 404 (mailbox gone) and 409 (grant revoked or needs
           // reconnecting) for the CONNECTION, and 502 for the one message the provider
           // refused or fumbled, so the status says whose failure it is.
-          if (!result.ok) throw new TransportError(result.error, result.retryable, result.status === 502 ? 'recipient' : 'sender');
+          if (!result.ok) {
+            throw new TransportError(result.error, result.retryable, result.status === 502 ? 'recipient' : 'sender', result.noResponse === true);
+          }
           return {};
         },
       },
@@ -476,11 +564,12 @@ export async function resolveCampaignSender(
             // 429 and 5xx are SendGrid asking us to slow down; a 401/403 means
             // the API key is wrong and every remaining recipient would fail too
             // (sender scope). Other 4xx (a 400 for one address) are this message.
-            const retryable = result.status === 429 || result.status >= 500;
+            // Status 0 (no response: a network error or timeout) is retryable too — see Twilio above.
             throw new TransportError(
               `SendGrid returned ${result.status}${result.error ? `: ${result.error}` : ''}`,
-              retryable,
+              isRetryableProviderStatus(result.status),
               providerStatusScope(result.status),
+              isNoResponseStatus(result.status),
             );
           }
           return {};

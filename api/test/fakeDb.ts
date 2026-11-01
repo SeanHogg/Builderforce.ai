@@ -27,6 +27,8 @@ export interface FakeDbCall {
   payload?: unknown;
   /** The argument passed to `.where()` — a Drizzle SQL object. */
   where?: unknown;
+  /** The arguments passed to `.orderBy()` — Drizzle `asc()` / `desc()` SQL objects, in order. */
+  orderBy?: unknown[];
 }
 
 export interface FakeDb {
@@ -71,6 +73,7 @@ export function fakeDb(results: Array<unknown[] | Error> = []): FakeDb {
         call.chain.push(method);
         if (method === 'values' || method === 'set') call.payload = args[0];
         if (method === 'where') call.where = args[0];
+        if (method === 'orderBy') call.orderBy = args;
         return chain;
       };
     }

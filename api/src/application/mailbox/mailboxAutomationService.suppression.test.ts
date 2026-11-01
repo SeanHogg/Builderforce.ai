@@ -5,12 +5,13 @@ import type { Env } from '../../env';
 
 /**
  * The `automatic` response mode sends with nobody reviewing the reply, so the
- * do-not-contact check is its only gate. Everything around the sweep is replaced; the
- * key function (`suppressionKey`) stays real so the check and the test key a sender alike.
+ * do-not-contact check is its only gate. Everything around the sweep is replaced, the check
+ * included: how it keys and queries an address is pinned in `marketing/suppression.test.ts`,
+ * so here it is only asked.
  */
 vi.mock('../marketing/suppression', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../marketing/suppression')>()),
-  suppressedEmails: vi.fn(async () => new Set<string>()),
+  isDoNotContact: vi.fn(async () => false),
 }));
 vi.mock('./mailboxService', () => ({
   getMailboxConnection: vi.fn(async () => ({ status: 'connected', allowSending: true })),
@@ -33,7 +34,7 @@ vi.mock('../../infrastructure/cache/readThroughCache', () => ({
 }));
 
 import { AUTOMATIC_REPLY_SUPPRESSED, runMailboxAutomationSweep } from './mailboxAutomationService';
-import { suppressedEmails } from '../marketing/suppression';
+import { isDoNotContact } from '../marketing/suppression';
 import { readMailbox, sendFromMailbox } from './mailboxService';
 import { completeForTenant } from '../llm/tenantProxy';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -50,7 +51,7 @@ const dbFor = (mode: string, tail: unknown[][] = []) =>
   fakeDb([[rule(mode)], [], [{ id: 9 }], ...tail]);
 
 beforeEach(() => {
-  vi.mocked(suppressedEmails).mockReset().mockResolvedValue(new Set());
+  vi.mocked(isDoNotContact).mockReset().mockResolvedValue(false);
   vi.mocked(sendFromMailbox).mockClear();
   vi.mocked(completeForTenant).mockClear();
   vi.mocked(reportCaughtError).mockClear();
@@ -59,13 +60,13 @@ beforeEach(() => {
 
 describe('runMailboxAutomationSweep — automatic replies honour the do-not-contact list', () => {
   it('sends nothing to a suppressed sender, drafts nothing, and records why on the execution', async () => {
-    vi.mocked(suppressedEmails).mockResolvedValue(new Set(['erased@x.com']));
+    vi.mocked(isDoNotContact).mockResolvedValue(true);
     const db = dbFor('automatic');
 
     const summary = await runMailboxAutomationSweep({} as Env, db as unknown as Db);
 
-    // Checked on the PARSED, lower-cased address — not the display-name form.
-    expect(vi.mocked(suppressedEmails).mock.calls[0]![2]).toEqual(['erased@x.com']);
+    // Asked about the sender as the mailbox wrote it; the check parses it (see suppression.test.ts).
+    expect(vi.mocked(isDoNotContact).mock.calls[0]![2]).toBe(inbound.from);
     expect(sendFromMailbox).not.toHaveBeenCalled();
     expect(completeForTenant).not.toHaveBeenCalled();
     const write = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as { status: string; error: string };
@@ -81,7 +82,7 @@ describe('runMailboxAutomationSweep — automatic replies honour the do-not-cont
   });
 
   it('fails closed: a failing check sends nothing and records the failure', async () => {
-    vi.mocked(suppressedEmails).mockRejectedValue(new Error('db down'));
+    vi.mocked(isDoNotContact).mockRejectedValue(new Error('db down'));
     const db = dbFor('automatic');
     const summary = await runMailboxAutomationSweep({} as Env, db as unknown as Db);
     expect(sendFromMailbox).not.toHaveBeenCalled();
@@ -90,10 +91,10 @@ describe('runMailboxAutomationSweep — automatic replies honour the do-not-cont
   });
 
   it('fails closed on a mode it does not know: it sends, so it is gated like `automatic`', async () => {
-    vi.mocked(suppressedEmails).mockResolvedValue(new Set(['erased@x.com']));
+    vi.mocked(isDoNotContact).mockResolvedValue(true);
     const db = dbFor('autopilot');
     const summary = await runMailboxAutomationSweep({} as Env, db as unknown as Db);
-    expect(suppressedEmails).toHaveBeenCalledTimes(1);
+    expect(isDoNotContact).toHaveBeenCalledTimes(1);
     expect(sendFromMailbox).not.toHaveBeenCalled();
     expect(completeForTenant).not.toHaveBeenCalled();
     const write = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as { status: string; error: string };
@@ -102,10 +103,10 @@ describe('runMailboxAutomationSweep — automatic replies honour the do-not-cont
   });
 
   it('does not ask for the human-reviewed modes: a draft is still drafted for a suppressed sender', async () => {
-    vi.mocked(suppressedEmails).mockResolvedValue(new Set(['erased@x.com']));
+    vi.mocked(isDoNotContact).mockResolvedValue(true);
     const db = dbFor('draft');
     const summary = await runMailboxAutomationSweep({} as Env, db as unknown as Db);
-    expect(suppressedEmails).not.toHaveBeenCalled();
+    expect(isDoNotContact).not.toHaveBeenCalled();
     expect(summary).toMatchObject({ drafted: 1 });
     expect(sendFromMailbox).not.toHaveBeenCalled();
   });

@@ -110,6 +110,9 @@ export interface MailboxAutomationExecution {
 
 const MAILBOX = '/api/mailbox';
 
+/** The `code` of the 409 `send` answers when the recipient is on a do-not-contact list. */
+export const DO_NOT_CONTACT_CODE = 'do_not_contact';
+
 /** Serialize a filter into the query string the server's ONE parser reads.
  *  Empty values are dropped so an absent filter and a blank one mean the same
  *  thing on both sides. */
@@ -231,7 +234,9 @@ export const mailboxApi = {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread }),
     }),
 
-  send: (connectionId: number, message: { to: string; subject: string; html: string; replyTo?: string }): Promise<{ sent: true; id: string; accountEmail: string }> =>
+  /** `confirmDoNotContact`: the person was told the recipient is on a do-not-contact list and chose to send
+   *  anyway. Without it the server answers 409 {@link DO_NOT_CONTACT_CODE} and sends nothing. */
+  send: (connectionId: number, message: { to: string; subject: string; html: string; replyTo?: string; confirmDoNotContact?: boolean }): Promise<{ sent: true; id: string; accountEmail: string }> =>
     apiRequest(`${MAILBOX}/connections/${connectionId}/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(message),
     }),

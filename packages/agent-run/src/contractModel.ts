@@ -18,6 +18,11 @@ export interface RunMessage {
   /** This row carries the TASK the run was given: compaction pins it, whatever else the transcript holds before it (a prior conversation). Absent ⇒ the first user row. */
   task?: true;
   /**
+   * The PERSON wrote this row (a message they steered in, a follow-up they queued): a model hand-off keeps it whole, as it keeps the task.
+   * A note the agent wrote itself (a stall's nudge) does not carry it.
+   */
+  person?: true;
+  /**
    * The row's non-text content (a picture the person attached), beside `content`, which stays the row's TEXT. The transport
    * puts the parts on the wire; token counting reads `content` alone, as it always has, so a picture costs what the
    * existing estimates say it does.

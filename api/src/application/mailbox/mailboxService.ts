@@ -30,6 +30,7 @@ import {
   unsealOAuthTokens,
 } from '../integrations/oauthTokenVault';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { isNoResponseStatus, isRetryableProviderStatus } from '../shared/campaignDelivery';
 import {
   clampMailboxLimit,
   getMailboxProvider,
@@ -463,7 +464,7 @@ async function failedRead(
 
 export type MailboxSendResult =
   | { ok: true; id: string; accountEmail: string }
-  | { ok: false; status: 404 | 409 | 502; error: string; retryable: boolean };
+  | { ok: false; status: 404 | 409 | 502; error: string; retryable: boolean; noResponse?: boolean };
 
 /**
  * Send one message from a connected mailbox.
@@ -494,14 +495,21 @@ export async function sendFromMailbox(
     return { ok: true, id: sent.id, accountEmail: token.accountEmail };
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Mailbox send failed';
+    // Anything that is not a `MailboxProviderError` never got an answer from the provider (a
+    // network error, a timeout): status 0, which is retryable like a 429 or a 5xx.
     const status = error instanceof MailboxProviderError ? error.status : 0;
     if (status === 401 || status === 403) {
       await markRevoked(db, tenantId, connectionId, detail);
       return { ok: false, status: 409, error: 'This mailbox needs to be reconnected.', retryable: false };
     }
     reportCaughtError(error, { source: 'application/mailbox/mailboxService.ts', operation: 'sendFromMailbox' });
-    // 429 and 5xx are the provider asking us to come back later.
-    return { ok: false, status: 502, error: detail, retryable: status === 429 || status >= 500 };
+    return {
+      ok: false,
+      status: 502,
+      error: detail,
+      retryable: isRetryableProviderStatus(status),
+      ...(isNoResponseStatus(status) ? { noResponse: true } : {}),
+    };
   }
 }
 

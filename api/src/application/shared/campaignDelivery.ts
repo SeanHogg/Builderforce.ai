@@ -20,6 +20,24 @@
 export const CAMPAIGN_DELIVERY_MAX_ATTEMPTS = 3;
 
 /**
+ * Whether an HTTP status from a delivery provider means "come back later".
+ *
+ * `0` is NO RESPONSE: `executeConnectorAction` reports a fetch failure or its timeout as
+ * `{ ok: false, status: 0 }` rather than throwing, and the mailbox service maps a non-provider
+ * error to status 0 the same way. A connectivity incident is the textbook transient failure, so
+ * it is retryable alongside 429 and 5xx; reading it as terminal wrote off a whole audience.
+ * ONE predicate for every transport, so the sites cannot drift apart.
+ */
+export function isRetryableProviderStatus(status: number | null | undefined): boolean {
+  return status === 0 || status === 429 || (typeof status === 'number' && status >= 500);
+}
+
+/** True when the provider never answered (a network error or the call's timeout). */
+export function isNoResponseStatus(status: number | null | undefined): boolean {
+  return status === 0;
+}
+
+/**
  * Where a failed delivery goes next.
  *
  * `attemptsMade` INCLUDES the attempt that just failed — callers used to differ

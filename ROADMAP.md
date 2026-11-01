@@ -76,8 +76,8 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **ONE execution core ([PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md)).** Two loops still call the kernel directly (`node scripts/check-one-execution.mjs` names them): brain-embedded `runStore/runLoop.ts` (nearly all traffic) and agent-runtime `builderforce/agent-loop/agent-loop.ts` (on-prem channels). Next: bring `ws4-ports` up to main, move the Brain's hooks into `runAgent`, delete `runLoop.ts`, move the channel loop, then WS7. Done when a conformance suite gives one event trace through all four adapters and `check:one-execution` bans kernel imports outside the core.
-- **PRD 35 WS2f leftovers.** Opus review, unused `cwd` on `RunSandbox.run`, `shell.jobs` missing from prep's capability set, `sleepAfter` reaping an idle job.
+- **ONE execution core ([PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md)).** One loop still calls the kernel directly: brain-embedded `runStore/runLoop.ts`, which carries nearly all traffic and stays the default engine. On-prem channels moved onto `runAgent` (`agent-loop.ts` has no loop). The agent engine sits behind an opt-in (`builderforce.agent.engine`, `?runEngine=agent`). In flight (operator, 2026-10-31, no telemetry week): review the agent engine against `runLoop`, prove both with unit tests, then flip the default, delete `runLoop.ts` and the engine switch, and run `check:one-execution` with an empty allowlist.
+- **A channel run that exhausts on plain tool failures ends with no reply.** Gate refusals now reach `bridge.fail` (`channelAdapter.ts`), but a run that trips the breaker on ordinary failures stays silent, as the old loop did; `channelHardening.test.ts` "a tripped breaker" pins it. In flight in WS5 round five: every exhausted run with no reply now fails visibly, and that test's edit is planning-approved.
 - **Tests that cannot run unchanged yet.** Three pairs remain (`runEndMemory`, `finish`, `learnedFacts`), plus twin `brain-embedded/src/runSteering.ts`, which waits for the chat adapter. `compaction/pack` expects a 1,024 floor against the source's 20,000. See `packages/agent-run/docs/retention-ledger.md`, itself stale. Unblocks `check:tests-unchanged` in enforce mode at WS7.
 - **Knowledge review of `agentic` fails.** The linked client makes 3 requests per file on the plan-rpm bucket (~50,000 for this tree) and one 429 or 413 ends the review. Next: move to builderforce-memory 2026.10.36, use `batched` + `preloadExtracted`, add bulk routes and 429 retry, ship a VSIX ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)).
 - **Cloud run isolation (G1, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)).** `enableInternet = true` (`AgentContainerDO.ts:45`) with no egress allowlist or red-team. S5, S6, W2 and B2 are closed; re-audit the rest of the 50.
@@ -352,17 +352,23 @@ Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderfor
 
 ### Infrastructure and cost `[platform]`
 
-- **🔴 $0 platform (plan 2026-10-03).** Worker observability is off (`wrangler.toml:375`). Enable it, gate cron, re-default cloud surface, move QA and CPU routes, take L2 off KV, then downgrade. *Blocker: consoles, CPU measurements, acceptance of 2–4 concurrent agents.*
+- **🔴 $0 platform (plan 2026-10-03).** Observability is on and cron is gated. Re-default cloud surface, move QA and CPU routes, take L2 off KV, then downgrade. *Blocker: consoles, CPU measurements, acceptance of 2–4 concurrent agents.*
 - **🟠 `builderforce-core` on Neon Launch.** Enable autosuspend + 0.25 CU, then downgrade; delete `builderforce-primary`. *Blocker: Neon console.* Drop core's stale site tables.
-- **Production hardening:** no SIEM export or fleet failover.
-- **No row retention on canvas history** (`creation_session_events`, `_snapshots`, `brain_chat_messages`). *Blocker: decision on history kept.*
-- **🟡 Unused indexes from the 2026-10-17 review held** (https://claude.ai/artifact/Kzm2Pp136DUx3E5oCUWgEe). *Blocker: operator approval.*
-- **🟡 Legacy leftovers:** `isSuppressed` is test-only; `agents` table still declared at `schema/agents.ts:327`.
-- **🟡 Two stores:** campaign state machines; canvas comments vs kernel annotations.
+- **Production hardening:** no SIEM export or fleet failover. Design: `docs/specs/39-prd-platform-closeout.md` §4a, §4b. *Blocker: operator decisions in PRD 39.*
+- **No row retention on canvas history** (`creation_session_events`, `brain_chat_messages`). Snapshots are plan-capped and command bodies are redacted at 14 days; rows are kept indefinitely. *Blocker: decision on history kept.*
+- **🟡 Legacy leftover:** `agents` table still declared at `schema/agents.ts:327`. Design: PRD 39 §3. *Blocker: operator decisions in PRD 39.*
+- **🟡 Two stores:** canvas comments vs kernel annotations. Design: PRD 39 §2. *Blocker: operator decisions in PRD 39.*
+- **Do-not-contact gaps outside campaigns.** The unattended `mailbox.send` MCP tool and hand sends do not check suppression.
+- **A campaign that throws on every tick holds an in-flight slot** (`marketing/campaign/sweeps.ts`).
+- **Migration 1291's comment is inaccurate.** "Reaped on the same terms" is wrong: NULL claims are reaped at once.
+- **A long provider outage slowly writes off campaign rows.** A no-response failure stops the batch, but the row tried spends an attempt, so each campaign loses about one row per three retries (`marketing/campaign/send.ts`). The attempt ceiling should not be spent by an outage.
+- **`isOptOutFailure` matches on substring** (`campaignTransports.ts`). A failure quoting a phone number that contains `21610` would unsubscribe that member.
+- **`report_schedules` has no `next_run_at` index,** which the cron schedule sources read.
+- **Raising the cron floor above 30 min needs a sweep audit.** A 2 h floor would have throttled campaigns; audit every sweep that relies on the floor first.
+- **Neon's quota text over WebSocket is unobserved.** `neonAvailability.ts` matches the published wording. *Blocker: a capture from a quota-exhausted branch.*
 - **Cloudflare serves a managed challenge to every datacenter caller.** `POST api.builderforce.ai/mcp` is challenged, so `release.yml` skips the MCP registry publish. Apply `scripts/cloudflare-bot-exception.mjs`. *Blocker: a zone token with Zone Settings:Edit + WAF:Edit.*
 - **Strategy content in public git history.** Purge built. *Blocker: a quiet 30-minute window, then GitHub Support for `refs/pull/*`.*
 - **Provider credit:** disconnect Moonshot on tenant 1; Together, FluxAPI, HF out. *Blocker: operator.*
 - **`http://www` redirect** targets `http://`. *Blocker: a zone-edit credential.*
-- **`inTransaction` doesn't map 402** on the pool path.
-- **API Worker ~21 MB.** Split `/llm` + `/v1`.
+- **API Worker ~21 MB.** Split `/llm` + `/v1`. Design: PRD 39 §1. *Blocker: operator decisions in PRD 39.*
 - **Brand residuals:** rotate `clk_` keys.

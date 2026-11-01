@@ -5,7 +5,8 @@
 --                                           evicted between the claim and the write-back otherwise leaves the row `sending`
 --                                           forever, the campaign can never reach zero rows outstanding, and it is advanced
 --                                           (and the cron gate re-signalled) on every tick. A row claimed before this
---                                           migration has NULL here and is reaped on the same terms.
+--                                           migration has NULL here, and reapStaleClaims reaps a NULL at once rather than
+--                                           after the bound.
 --   marketing_campaigns.schedule_refused_at When the scheduled-start sweep last REFUSED this campaign (a lapsed sender, an
 --                                           emptied audience). A refused draft keeps its past `scheduled_at` by design, so it
 --                                           stays due; the sweep orders never-refused campaigns first, so five permanently

@@ -61,6 +61,7 @@ import {
   handleGraphPush,
   stopMailboxWatch,
 } from '../../application/mailbox/mailboxWatch';
+import { isDoNotContact } from '../../application/marketing/suppression';
 import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { parseOptionalBody, z } from './requestBody';
 
@@ -83,6 +84,8 @@ const MailboxSendBody = z.object({
   subject: z.string().nullish(),
   html: z.string().nullish(),
   replyTo: z.string().nullish(),
+  /** Set by a person who was told the recipient is on a do-not-contact list and chose to send anyway. */
+  confirmDoNotContact: z.boolean().optional(),
 });
 
 /**
@@ -383,13 +386,20 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /connections/:id/send — individual correspondence from the webmail
   // composer. Campaign sends remain on /api/growth and retain their suppression
-  // and unsubscribe ledger.
+  // and unsubscribe ledger. A person may knowingly contact someone on a do-not-contact
+  // list, but is told first: 409 `do_not_contact` until the body carries `confirmDoNotContact`.
   r.post('/connections/:id/send', manager, async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
     const body = await parseOptionalBody(c, MailboxSendBody);
     if (!body.to?.trim() || !body.subject?.trim() || !body.html?.trim()) {
       return c.json({ error: 'to, subject, and html are required.' }, 400);
+    }
+    if (body.confirmDoNotContact !== true && await isDoNotContact(db, c.get('tenantId') as number, body.to)) {
+      return c.json({
+        error: 'This recipient is on a do-not-contact list (they unsubscribed, bounced or asked not to be contacted). Send anyway only if you are sure you should.',
+        code: 'do_not_contact',
+      }, 409);
     }
     const result = await sendFromMailbox(db, c.env as Env, c.get('tenantId') as number, id, {
       to: body.to.trim(), subject: body.subject.trim(), html: body.html, replyTo: body.replyTo?.trim() || undefined,

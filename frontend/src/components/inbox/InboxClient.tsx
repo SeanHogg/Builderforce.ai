@@ -21,6 +21,7 @@ import styles from './InboxClient.module.css';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { useSendMailboxMessage } from '@/hooks/useSendMailboxMessage';
 type Folder = 'all' | 'unread' | 'attachments';
 const EMPTY_RULE: MailboxAutomationRuleInput = {
   name: '', enabled: true, fromContains: '', subjectContains: '', agentRef: null,
@@ -38,6 +39,7 @@ export function InboxClient() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const { busy, error, notice, run, fail, clear } = usePanelTask();
+  const sendMessage = useSendMailboxMessage();
   const [reply, setReply] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rules, setRules] = useState<MailboxAutomationRule[]>([]);
@@ -121,13 +123,14 @@ export function InboxClient() {
   const sendReply = async () => {
     if (!selected || connectionId == null || !reply.trim()) return;
     const sent = await run(async () => {
-      await mailboxApi.send(connectionId, {
+      const receipt = await sendMessage(connectionId, {
         to: replyAddress(selected.from),
         subject: /^re:/i.test(selected.subject) ? selected.subject : `Re: ${selected.subject}`,
         html: htmlFromText(reply),
       });
-      return true;
-    }, { success: t('sent'), failure: t('sendFailed') });
+      // `null`: the person was warned the sender is on a do-not-contact list and declined.
+      return receipt !== null;
+    }, { success: (delivered) => delivered ? t('sent') : undefined, failure: t('sendFailed') });
     if (sent) setReply('');
   };
 

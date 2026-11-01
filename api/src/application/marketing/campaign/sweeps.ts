@@ -7,18 +7,26 @@ import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import { marketingCampaignSends, marketingCampaigns } from '../../../infrastructure/database/schema';
 import { dueStatuses, statusesIn } from '../../shared/campaignLifecycle';
+import { ServiceUnavailableError } from '../../../domain/shared/errors';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { resolveTrackingOrigin } from './render';
 import { runCampaignBatch, STALE_CLAIM_AFTER_MS, STALE_CLAIM_ERROR } from './send';
 import { startCampaign } from './start';
 
-/** Campaigns still mid-send, for the cron sweep to advance. Bounded. */
+/**
+ * Campaigns still mid-send, for the cron sweep to advance. Bounded.
+ *
+ * Least recently touched first (`updated_at`, then `started_at`), a round-robin: every batch
+ * writes `updated_at`, and the sweep stamps it on a campaign whose batch throws, so a campaign
+ * that fails on every tick moves to the back instead of holding its slot. Ordered by start time
+ * alone, `limit` such campaigns would starve every other one for as long as they stayed broken.
+ */
 export async function campaignsInFlight(db: Db, limit = 10): Promise<Array<{ id: number; tenantId: number }>> {
   return db
     .select({ id: marketingCampaigns.id, tenantId: marketingCampaigns.tenantId })
     .from(marketingCampaigns)
     .where(inArray(marketingCampaigns.status, statusesIn('email', 'in_flight')))
-    .orderBy(asc(marketingCampaigns.startedAt))
+    .orderBy(asc(marketingCampaigns.updatedAt), asc(marketingCampaigns.startedAt))
     .limit(limit);
 }
 
@@ -63,8 +71,9 @@ export async function reapStaleClaims(db: Db, tenantId: number, campaignId: numb
  *
  * A send larger than one batch cannot complete inside the request that started
  * it — a Worker invocation is bounded — so this is what actually finishes a
- * campaign. Oldest-started first, so a large send cannot be starved by newer
- * ones, and the whole sweep is capped so one tenant cannot consume the tick.
+ * campaign. Least recently advanced first ({@link campaignsInFlight}), so neither a large send
+ * nor a campaign that keeps throwing can starve the others, and the whole sweep is capped so
+ * one tenant cannot consume the tick.
  */
 export async function runCampaignSendSweep(
   env: Env,
@@ -100,6 +109,21 @@ export async function runCampaignSendSweep(
         source: 'application/marketing/campaign/sweeps.ts',
         operation: `runCampaignSendSweep:${campaign.id}`,
       });
+      // Move it to the back of the queue. A normal batch writes `updated_at` itself; one that
+      // THROWS never reaches that write, so without this stamp the campaign would keep its slot
+      // on every tick. Its own try/catch, like the `schedule_refused_at` stamp below: a failed
+      // stamp costs the rotation on this tick only and must not stop the remaining campaigns.
+      try {
+        await db
+          .update(marketingCampaigns)
+          .set({ updatedAt: sql`NOW()` })
+          .where(and(eq(marketingCampaigns.id, campaign.id), eq(marketingCampaigns.tenantId, campaign.tenantId)));
+      } catch (stampError) {
+        reportCaughtError(stampError, {
+          source: 'application/marketing/campaign/sweeps.ts',
+          operation: `runCampaignSendSweep:stamp:${campaign.id}`,
+        });
+      }
     }
   }
   return { campaigns: inFlight.length, sent, failed, started };
@@ -116,6 +140,9 @@ export interface DueSweepResult {
    *  swallowed: "it was scheduled and never went" with no explanation anywhere is
    *  the failure this whole path exists to avoid. */
   refused: Array<{ campaignId: number; tenantId: number; error: string }>;
+  /** Set when the database (or another dependency) was unavailable and the tick stopped starting
+   *  campaigns. Not a refusal: no campaign was stamped, so all of them stay due for the next tick. */
+  unavailable?: string;
 }
 
 /**
@@ -141,7 +168,11 @@ export interface DueSweepResult {
  * them. Refused campaigns still retry — after the ones that have not been refused, the
  * least recently refused first. Editing or starting a campaign clears the stamp.
  * A start that throws counts as a refusal (reported, stamped, listed in `refused`): one draft
- * that cannot start must not stop the others or the in-flight batches.
+ * that cannot start must not stop the others or the in-flight batches. The exception is an
+ * AVAILABILITY failure (`ServiceUnavailableError`, which `inTransaction` and the Neon client raise
+ * for a quota refusal): that is the platform's outage, not the draft's fault, so it is not
+ * stamped as a refusal (which would rotate every due draft to the back of the queue and hide the
+ * outage as "refused" rows). The tick reports it in `unavailable` and stops starting campaigns.
  * Bounded per tick so one tenant's backlog cannot consume the sweep.
  */
 export async function startDueCampaigns(env: Env, db: Db, limit = 5): Promise<DueSweepResult> {
@@ -178,6 +209,13 @@ export async function startDueCampaigns(env: Env, db: Db, limit = 5): Promise<Du
       }
       error = result.error;
     } catch (thrown) {
+      if (thrown instanceof ServiceUnavailableError) {
+        reportCaughtError(thrown, {
+          source: 'application/marketing/campaign/sweeps.ts',
+          operation: `startDueCampaigns:unavailable:${campaign.id}`,
+        });
+        return { started, refused, unavailable: thrown.message };
+      }
       cause = thrown;
       error = `Start failed: ${thrown instanceof Error ? thrown.message : 'unexpected error'}`.slice(0, 1_000);
     }

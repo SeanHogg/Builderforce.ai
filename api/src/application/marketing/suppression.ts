@@ -1,5 +1,5 @@
 /**
- * THE do-not-contact check. It is honoured by the three paths listed below and by NO
+ * THE do-not-contact check. It is honoured by the paths listed below and by NO
  * other: a send path that is not listed here does not ask.
  *
  * Two ledgers say "do not contact" and both must be honoured:
@@ -25,18 +25,23 @@
  *     `automatic`) — those send with nobody reviewing them, so the sender is checked before
  *     the reply is drafted. Rules in `draft` or `approval` mode put a human before the send
  *     and are not checked.
+ *   - The agent-driven mailbox send tool (`mailbox.send` in `application/llm/builtinMcpService.ts`)
+ *     — an agent has no person in the loop, so a do-not-contact recipient is refused outright
+ *     ({@link isDoNotContact}). EVERY address in `to` is checked (`splitAddressList`).
+ *   - A person sending one message by hand (`POST /connections/:id/send` in
+ *     `presentation/routes/mailboxRoutes.ts`) — WARNED AND CONFIRMED: a person may knowingly
+ *     contact someone (a reply to a customer who unsubscribed from marketing), but must be told
+ *     first. The route answers 409 `do_not_contact` until the request carries
+ *     `confirmDoNotContact: true`; the inbox and canvas composers ask, then resend.
  *
  * WHO DOES NOT
- *   - A person sending one message by hand: `POST /connections/:id/send` in
- *     `presentation/routes/mailboxRoutes.ts`.
- *   - The agent-driven mailbox send tool in `application/llm/builtinMcpService.ts`.
  *   - A reply a person sends from an automation draft, or approves (`sendMailboxAutomationExecution`
  *     reached from the draft button or the approvals queue).
  */
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { resultRows } from '../kernel/metricRollup';
-import { bareAddress, isE164 } from '../shared/contactAddress';
+import { bareAddress, isE164, splitAddressList } from '../shared/contactAddress';
 
 /** Well under Postgres' 65,535 bind-parameter cap, with room for the domain list. */
 const CHUNK = 5_000;
@@ -52,6 +57,15 @@ export function suppressionKey(contact: string): string | null {
   const bare = bareAddress(contact).toLowerCase();
   if (/^[^\s@]+@[^\s@]+$/.test(bare)) return bare;
   return isE164(bare) ? bare : null;
+}
+
+/**
+ * Whether ANY address in `to` may not be contacted. `to` is a mailbox value or a list of them
+ * (`splitAddressList`): the Gmail adapter sends a comma list to everyone on it, so one entry
+ * on a ledger makes the whole send a do-not-contact one. One statement however long the list.
+ */
+export async function isDoNotContact(db: Db, tenantId: number, to: string): Promise<boolean> {
+  return (await suppressedEmails(db, tenantId, splitAddressList(to))).size > 0;
 }
 
 /**

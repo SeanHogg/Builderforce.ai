@@ -33,8 +33,8 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
     }
     const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
     const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
-    // A picture the person attached rides the row it becomes (rows and messages line up one to one).
-    append(...rows.map((row, i) => (rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { ...row, parts: steered[i]!.parts } : row)));
+    // A picture the person attached rides the row it becomes (rows and messages line up one to one). Every row is the person's own words.
+    append(...rows.map((row, i): RunMessage => ({ ...row, ...(rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { parts: steered[i]!.parts } : {}), person: true })));
     for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
     return "applied";
   };
@@ -65,7 +65,7 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
   const takeFollowUps = async (ctx: { step: number }): Promise<boolean> => {
     const followUps = ((await ports.steering?.followUp?.()) ?? []).map(steerInput);
     if (followUps.length === 0) return false;
-    append(...followUps.map((f): RunMessage => ({ role: "user", content: f.text, ...(f.parts?.length ? { parts: f.parts } : {}) })));
+    append(...followUps.map((f): RunMessage => ({ role: "user", content: f.text, person: true, ...(f.parts?.length ? { parts: f.parts } : {}) })));
     for (let i = 0; i < followUps.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
     return true;
   };

@@ -146,7 +146,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
       },
       ports: {
         complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
-        dispatch: (call) => dispatchCall(input, state, call, run.watch, run.facts),
+        dispatch: (call, ctx) => dispatchCall(input, state, call, run.watch, run.facts, ctx.step),
         ...(isReadOnly ? { isReadOnly } : {}),
       },
       hooks: kernelHooks(run),

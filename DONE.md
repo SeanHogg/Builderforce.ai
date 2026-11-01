@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-10-31 — Infrastructure and cost: quota mapping, index drops, one campaign lifecycle, do-not-contact
+
+- **`inTransaction` maps 402 on the pool path.** The pool path goes through `asDatabaseUnavailable`, `neonAvailability.ts` recognises the WebSocket quota wording, and a failed `pool.end()` cannot mask the outcome. The unobserved WebSocket text stays on the roadmap.
+- **Unused indexes dropped.** Migrations 1287–1290 and transactional 0030 drop the held indexes from the 2026-10-17 review, plus `marketplace_skill_likes`, and add `idx_social_campaigns_due`. They run on the next deploy.
+- **`isSuppressed` deleted.** `suppressedEmails` is its live twin, and sequences now check it per cadence for every due step. A hit stops the sequence with no card.
+- **One campaign state machine.** `shared/campaignLifecycle.ts` owns phases for email and social; `canTransition` and the `sql.raw` in `socialCampaignSweep.ts` are gone.
+- **Campaign gate.** Campaign tables are cron schedule sources in `cronWorkSignal.ts`, with stuck rows excluded from the stamp so a stale `sending` row cannot pin the gate.
+- **Worker observability on** (`wrangler.toml`).
+- **Campaign delivery failures classified by whose fault they are.** A provider that does not answer is retryable and stops the batch; Twilio's From codes and a run of ten identical failures with nothing delivered fail the campaign as a sender fault, while known per-recipient codes never count. A campaign that delivered nothing reads `failed`. Start and finish flips are status-guarded, and an availability outage is not stamped as a refusal.
+- **`bareAddress` resolves the real address** past trailing comments and quoted decoys, so `Jane <a@x.com> (Sales)` and `Eve <a@x.com> "<victim@y.com>"` both reach the do-not-contact check as `a@x.com`.
+
 ## ✅ RESOLVED 2026-10-31 — Roadmap validated against the code: closed entries moved here, Feature Register retired
 
 Every ROADMAP entry was checked against the code, CI and config. These entries were already finished or no longer true. No code changed in this pass. Evidence is a read of the code and CI results at `85417312e`, with no tests run and no production behaviour observed.
@@ -81,7 +92,7 @@ Every ROADMAP entry was checked against the code, CI and config. These entries w
   - `sandboxJobsOver` in `runSandbox.ts` is the one reply mapping for both transports. Polls go in 20-second slices, because the Actions runner serves one request at a time.
   - `command_status` and `command_stop` reach cloud runs through `shell.jobs`, with no tool-layer change.
   - **Proof:** 43 new tests pass on Linux in CI (run 41229083836): `containerSandboxJobs` 11, `sandboxJobs` 22, `sandboxJobsToolLayer` 8, `runSurfaceCapsJobs` 2. The API type-check and all four vitest shards pass, and existing test files are unchanged.
-  - **Not done:** the Opus review was stopped before it reported, at the operator's call, and no live run has used a job. Those and three smaller leftovers are in PRD 35.
+  - **Leftovers closed the same day.** Two Opus reviews ran on `sandboxJobs.mjs` and both transports, and their findings were fixed. `runShell` now kills the whole tree and settles on `exit`; kills reach only tracked groups, including exited and evicted jobs. `/sandbox/job/active` plus `onActivityExpired` keeps a container alive while a job runs, capped at 60 minutes, so an idle reap no longer loses a job. `/concluded` arms the alarm on a parked run, the Actions runner re-mints OIDC, and aborted mailbox requests leave the queue. The unused `RunSandbox.run` `cwd` is retired, and the dead `SANDBOX_CAPABILITIES` twin is deleted. The split between the prep and run capability sets was checked: grants are unioned, never gate a call, and the prompt reads only `skill.author`, so it changes no prompt. First live use is read from telemetry after deploy.
 - **The `bfApi.ts` split (PRD 35 WS8 leftover).** 1,804 lines became a 115-line re-export barrel and 17 domain modules under `clients/vscode/src/bfApi/`, each under 400 lines. Callers and `vi.mock` paths did not change.
   - `clearJwt` and `setSelectedWorkspace` now fire `onSessionChange` instead of reaching into other modules' caches, which avoids an import cycle.
   - The one test edit is a path in `authPanelSync.test.ts` (`bfApi.ts` → `bfApi/session.ts`), because that test reads the source file.
