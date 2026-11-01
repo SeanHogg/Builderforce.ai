@@ -2474,8 +2474,9 @@
 }
 .bf-suggest__chip:hover, .bf-suggest__chip:focus-visible { border-color: var(--bf-accent); color: var(--bf-accent); outline: none; }
 @media (max-width: 640px) {
-  .bf-suggest { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .bf-suggest::-webkit-scrollbar { display: none; }
+  /* Chips WRAP on a phone rather than clip: a clipped chip row reads as broken,
+     and a hidden scrollbar gives no hint more chips exist. */
+  .bf-suggest { flex-wrap: wrap; }
 }
 @media (pointer: coarse) { .bf-suggest__chip { min-height: 44px; } }
 

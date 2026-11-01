@@ -38,7 +38,10 @@ export function StudioHome() {
   }), [router]);
 
   return (
-    <section style={{ width: 'min(760px, 100%)', margin: '0 auto', padding: 'clamp(32px, 10vh, 120px) 16px 48px', boxSizing: 'border-box', display: 'grid', alignContent: 'start', gap: 28, color: 'var(--text-primary)' }}>
+    // Mobile: the header is ~56px and the bottom nav 56px+, so a ~660px-tall phone
+    // cannot afford 10vh (≈66px) of air above the heading — the composer fell off
+    // the first viewport. clamp keeps desktop (tall vh → capped 120px) untouched.
+    <section style={{ width: 'min(760px, 100%)', margin: '0 auto', padding: 'clamp(20px, 5vh, 120px) 16px 40px', boxSizing: 'border-box', display: 'grid', alignContent: 'start', gap: 'clamp(20px, 3vh, 28px)', color: 'var(--text-primary)' }}>
       <div style={{ textAlign: 'center', display: 'grid', gap: 10 }}>
         <h1 className="ui-text-hero" style={{ margin: 0 }}>{t('title')}</h1>
         <p className="ui-text-lede" style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('subtitle')}</p>
