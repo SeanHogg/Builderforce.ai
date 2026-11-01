@@ -193,7 +193,11 @@ export interface OpenIncidentResult {
 export class IncidentService {
   private readonly tasks: TaskService;
 
-  constructor(private readonly db: Db) {
+  /**
+   * `env` is optional: with it, a workflow fired by an incident event passes the event-trigger listener gate
+   * and a run it queues signals the cron gate. Callers on a request or sweep path that hold the Worker env pass it.
+   */
+  constructor(private readonly db: Db, private readonly env?: Env) {
     this.tasks = new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db));
   }
 
@@ -302,6 +306,7 @@ export class IncidentService {
     try {
       await fireEventTriggers(this.db, {
         tenantId,
+        env: this.env,
         eventType: 'incident-created',
         payload: { incidentId, title, severity, source, affectedSystem: affectedSystem ?? null, projectId },
         sourceIncidentId: incidentId,
@@ -415,9 +420,9 @@ export class IncidentService {
       const payload = { incidentId, status: patch.status, severity: inc.severity, affectedSystem: inc.affectedSystem, source: inc.source };
       const match = { severity: inc.severity, affectedSystem: inc.affectedSystem };
       try {
-        await fireEventTriggers(this.db, { tenantId, eventType: 'incident-status-change', payload, sourceIncidentId: incidentId, match: { ...match, status: patch.status } });
+        await fireEventTriggers(this.db, { tenantId, env: this.env, eventType: 'incident-status-change', payload, sourceIncidentId: incidentId, match: { ...match, status: patch.status } });
         if (patch.status === 'resolved') {
-          await fireEventTriggers(this.db, { tenantId, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
+          await fireEventTriggers(this.db, { tenantId, env: this.env, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
         }
       } catch (error) { /* event-trigger dispatch is best-effort */ 
         reportCaughtError(error, { source: "application/incident/IncidentService.ts", operation: "updateIncident" });

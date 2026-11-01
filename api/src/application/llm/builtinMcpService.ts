@@ -1366,7 +1366,7 @@ const CATALOG: BuiltinTool[] = [
       severity: { type: 'string', enum: ['sev1', 'sev2', 'sev3', 'sev4'] },
       source: S, affectedSystem: S, externalRef: S, externalUrl: S, openWarRoom: B,
     }, ['title']),
-    run: (ctx, a) => new IncidentService(ctx.db).openIncident(ctx.tenantId, {
+    run: (ctx, a) => new IncidentService(ctx.db, ctx.env).openIncident(ctx.tenantId, {
       title: str(a.title),
       description: a.description != null ? str(a.description) : null,
       severity: a.severity != null ? (str(a.severity) as IncidentSeverity) : undefined,
@@ -1394,7 +1394,7 @@ const CATALOG: BuiltinTool[] = [
       impact: S, rootCause: S,
     }, ['incidentId']),
     run: async (ctx, a) => {
-      await new IncidentService(ctx.db).updateIncident(ctx.tenantId, str(a.incidentId), {
+      await new IncidentService(ctx.db, ctx.env).updateIncident(ctx.tenantId, str(a.incidentId), {
         severity: a.severity != null ? (str(a.severity) as IncidentSeverity) : undefined,
         status: a.status != null ? (str(a.status) as IncidentStatus) : undefined,
         impact: a.impact != null ? str(a.impact) : undefined,

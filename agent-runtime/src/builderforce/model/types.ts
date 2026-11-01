@@ -109,6 +109,8 @@ export interface UserMessage {
   role: "user";
   content: string | (TextContent | ImageContent)[];
   timestamp: number;
+  /** The PERSON wrote it (a prompt, a steer, a follow-up) and not the agent (a stall nudge): a model hand-off keeps it whole, and the mark survives the session. */
+  person?: true;
 }
 
 export interface AssistantMessage {

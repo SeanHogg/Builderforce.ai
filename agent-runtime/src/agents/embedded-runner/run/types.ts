@@ -57,6 +57,8 @@ export type EmbeddedRunAttemptResult = {
   /** The local backings this attempt built its tools with — handed to overflow compaction
    *  so the compaction session sees the SAME tool list (absent when tools were disabled). */
   localBackings?: OnPremLocalBackings;
+  /** The model the attempt ENDED on when a stall failed it over off the one it started on (absent otherwise): an overflow is folded and retried for it. */
+  servedModel?: Model<Api>;
   /** Client tool call detected (OpenResponses hosted tools). */
   clientToolCall?: { name: string; params: Record<string, unknown> };
 };

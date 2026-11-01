@@ -5,10 +5,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { fakeCronKv } from '../runtime/__fixtures__/fakeCronKv';
+import { projectManagerConfigs } from '../../infrastructure/database/schema';
 import { signalMergeQueueOnCiResult } from './ciMergeQueueSignal';
 
+/** The read joins the project's manager opt-in, so `openPrs` is the rows that survive that join. */
 const dbWith = (openPrs: Array<{ id: number }>) => ({
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => openPrs }) }) }),
+  select: () => ({ from: () => ({ innerJoin: () => ({ where: () => ({ limit: async () => openPrs }) }) }) }),
 }) as never;
 
 describe('signalMergeQueueOnCiResult', () => {
@@ -29,6 +31,16 @@ describe('signalMergeQueueOnCiResult', () => {
     const { env, signalled } = fakeCronKv();
     expect(await signalMergeQueueOnCiResult(env, dbWith([]), { taskId: 7, tenantId: 3, buildStatus: 'success' })).toBe(false);
     expect(signalled()).toBe(false);
+  });
+
+  it('reads the open PR through the project's manager opt-in, the same join the sweep selects by', async () => {
+    const { env } = fakeCronKv();
+    const joined: unknown[] = [];
+    const db = {
+      select: () => ({ from: () => ({ innerJoin: (table: unknown) => { joined.push(table); return { where: () => ({ limit: async () => [{ id: 1 }] }) }; } }) }),
+    } as never;
+    await signalMergeQueueOnCiResult(env, db, { taskId: 7, tenantId: 3, buildStatus: 'success' });
+    expect(joined).toEqual([projectManagerConfigs]);
   });
 
   it('does NOT signal for an event that does not correlate to a ticket branch', async () => {

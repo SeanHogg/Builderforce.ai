@@ -116,7 +116,7 @@ export const MAX_FLOOR_INTERVAL_MS = 90 * 60 * 1000;
  * to lose work. A garbage value falls back to the default rather than throwing —
  * a mistyped var must never be able to break the cron path.
  */
-export function floorIntervalMs(env: Env): number {
+export function floorIntervalMs(env: Pick<Env, 'CRON_FLOOR_INTERVAL_MS'>): number {
   const raw = Number(env.CRON_FLOOR_INTERVAL_MS);
   if (!Number.isFinite(raw) || raw <= 0) return FLOOR_INTERVAL_MS;
   return Math.min(Math.max(Math.floor(raw), MIN_FLOOR_INTERVAL_MS), MAX_FLOOR_INTERVAL_MS);
@@ -163,9 +163,9 @@ export function notStuckWindowMs(intervalMs: number): number {
   return Math.max(0, intervalMs - FREQUENT_TICK_MS);
 }
 
-/** The one binding the signal needs — lets callers that hold a narrower env than the Worker's
+/** The bindings the signal needs: KV, and the floor override that sets its default horizon. Lets callers that hold a narrower env than the Worker's
  *  full {@link Env} (the inbound-email handler, the scheduler) signal without a cast. */
-export type CronSignalEnv = Pick<Env, 'AUTH_CACHE_KV'>;
+export type CronSignalEnv = Pick<Env, 'AUTH_CACHE_KV' | 'CRON_FLOOR_INTERVAL_MS'>;
 
 function kv(env: CronSignalEnv): KVNamespace | undefined {
   return env.AUTH_CACHE_KV;
@@ -244,18 +244,17 @@ export async function signalPendingWork(env: CronSignalEnv): Promise<void> {
 }
 
 /**
- * How near a timer must be before a sweep that is waiting on it keeps the gate open: the next
- * tick or two. A signal is one-shot (it buys exactly one tick), so a sweep re-signals at the end
- * of its pass for as long as it still has timed work. A timer further out than this is left to
- * the floor sweep, which re-evaluates it and starts signalling once it is close — otherwise a
- * retry 80 minutes away would hold Neon awake for 80 minutes of ticks that have nothing to do.
- */
-export const SIGNAL_HORIZON_MS = 2 * FREQUENT_TICK_MS;
-
-/**
  * Re-signal while timed work remains, but only while its next moment is close. `dueAtMs` is the
  * earliest epoch-ms at which the sweep will have something to do (a past value means "due now");
  * `null` means nothing is waiting, which is silent. Returns whether it signalled.
+ *
+ * "Close" defaults to one FLOOR interval ({@link floorIntervalMs}). A signal is one-shot (it buys
+ * exactly one tick), and the floor sweep is what re-evaluates timed work on an idle platform, so a
+ * timer the floor would reach before it fires is left to the floor, while a timer that would come
+ * due before the NEXT floor is signalled now. A shorter horizon (two ticks, the old default)
+ * strands a 15 or 20 minute timer: too far to signal, yet due well before the 30-minute floor
+ * comes round. A timer further out than a floor is not signalled, otherwise a retry 80 minutes
+ * away would hold Neon awake for 80 minutes of ticks that have nothing to do.
  *
  * The bound every caller must be able to state is WHY `dueAtMs` stops being non-null: a timer
  * that elapses and is acted on, a row that is retired, a window that closes. Never pass a time
@@ -265,7 +264,7 @@ export async function signalPendingWorkIfDueWithin(
   env: CronSignalEnv,
   dueAtMs: number | null,
   nowMs: number = Date.now(),
-  horizonMs: number = SIGNAL_HORIZON_MS,
+  horizonMs: number = floorIntervalMs(env),
 ): Promise<boolean> {
   if (dueAtMs == null || !Number.isFinite(dueAtMs) || dueAtMs - nowMs > horizonMs) return false;
   await signalPendingWork(env);

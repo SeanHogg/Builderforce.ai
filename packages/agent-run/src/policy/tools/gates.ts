@@ -21,7 +21,7 @@
  * and Node.
  */
 
-import { evaluatePolicyGate, policyGateCallKey, toolCallPaths, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
+import { evaluatePolicyGate, normalizeToolName, policyGateCallKey, toolCallPaths, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
 import type { ApprovalRefusal } from "../../contract.js";
 import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { emit } from "../../runContext.js";
@@ -67,6 +67,7 @@ export function evaluatePolicyGateSeam(
   gates: readonly PolicyGate[] | undefined,
   toolName: string,
   args?: Record<string, unknown>,
+  workspaceRoot?: string,
 ): PolicyDecision {
   const paths = toolCallPaths(args);
   const pathArg = paths.length ? paths : undefined;
@@ -80,7 +81,7 @@ export function evaluatePolicyGateSeam(
   });
   let approval: PolicyRefusal | undefined;
   for (const name of candidateToolNames(toolName, args)) {
-    const d = evaluatePolicyGate(applicable, name, pathArg);
+    const d = evaluatePolicyGate(applicable, name, pathArg, workspaceRoot);
     if (d.action === "block") return d;
     if (d.action === "require-approval") approval = d;
   }
@@ -96,8 +97,8 @@ export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolNam
   const blocking = gatesFor(gates, toolName).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
   if (blocking.length === 0) return false;
   if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
-  const blocked = new Set(blocking.map((g) => (g.tool ?? "").toLowerCase()));
-  return candidateToolNames(toolName).some((n) => blocked.has(n.toLowerCase()));
+  const blocked = new Set(blocking.map((g) => normalizeToolName(g.tool ?? "")));
+  return candidateToolNames(toolName).some((n) => blocked.has(normalizeToolName(n)));
 }
 
 // ── The in-run gate (RunPolicy.approvalGates) — ported from the cloud loop's beforeDispatch ──
@@ -148,7 +149,7 @@ export async function gateCall(
 ): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> {
   const gates = ctx.policy.approvalGates;
   if (!gates || gates.length === 0) return undefined;
-  const decision = evaluatePolicyGateSeam(gates, call.name, call.args);
+  const decision = evaluatePolicyGateSeam(gates, call.name, call.args, ctx.task.workspace?.defaultRepo);
   if (decision.action === "block") {
     await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
     return {

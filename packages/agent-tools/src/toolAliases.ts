@@ -39,6 +39,11 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   delete: 'delete_file',
 };
 
+/** The ONE normal form of a tool name for matching: a governance gate judges `Bash`, `BASH` and ` bash ` as the same tool. */
+export function normalizeToolName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
 /**
  * Resolve a model-emitted tool name to the catalog name, or return it unchanged.
  * Case-insensitive on the alias key; the catalog name is returned as registered.

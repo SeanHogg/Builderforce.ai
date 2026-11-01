@@ -66,3 +66,41 @@ describe("synonyms", () => {
     expect(refuses([{ id: "g", tool: "read_file", effect: "block" }], "grep")).toBe(false);
   });
 });
+
+describe("process remove", () => {
+  it("is a write to a running exec session: an exec gate covers it", () => {
+    expect(refuses(EXEC, "process", { action: "remove", sessionId: "s" })).toBe(true);
+  });
+});
+
+describe("write and edit gates", () => {
+  const gate = (tool: string): PolicyGate[] => [{ id: "g", tool, effect: "block" }];
+
+  it("a write gate covers edit and apply_patch", () => {
+    for (const tool of ["write", "write_file", "Write"]) for (const called of ["edit", "edit_file", "Edit", "apply_patch"]) expect(refuses(gate(tool), called)).toBe(true);
+  });
+
+  it("an edit gate covers edit and apply_patch, but not a plain write or a delete", () => {
+    for (const tool of ["edit", "edit_file", "Edit"]) {
+      expect(refuses(gate(tool), "edit_file")).toBe(true);
+      expect(refuses(gate(tool), "apply_patch")).toBe(true);
+      expect(refuses(gate(tool), "write_file")).toBe(false);
+      expect(refuses(gate(tool), "delete_file")).toBe(false);
+    }
+  });
+});
+
+describe("tool names are matched case-insensitively, withheld or called", () => {
+  it("a gate authored in any case judges a call in any case", () => {
+    expect(refuses([{ id: "g", tool: "Run_Command", effect: "block" }], "RUN_COMMAND")).toBe(true);
+    expect(refuses([{ id: "g", tool: "exec", effect: "block" }], " BASH ")).toBe(true);
+    expect(isToolWithheld([{ id: "g", tool: "EXEC", effect: "block" }], "Run_Command")).toBe(true);
+  });
+
+  it("an alias resolves to the tool that will run", () => {
+    expect(refuses(EXEC, "shell")).toBe(true);
+    expect(refuses(EXEC, "run_terminal_cmd")).toBe(true);
+    expect(refuses([{ id: "g", tool: "write_file", effect: "block" }], "create_file")).toBe(true);
+    expect(refuses([{ id: "g", tool: "search_code", effect: "block" }], "codebase_search")).toBe(true);
+  });
+});

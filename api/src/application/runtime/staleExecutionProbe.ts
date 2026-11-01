@@ -36,6 +36,8 @@ export interface StaleCutoffs {
   paused: string;
   /** `ticket_runs.updated_at` cutoff for the park-age sibling sweep. */
   parkAge: string;
+  /** Oldest run START the `liveRuns` arm still counts (see {@link LIVE_RUN_MAX_AGE_MS}). */
+  liveRunsStartedAfter: string;
 }
 
 export interface StalePredicates {
@@ -49,7 +51,15 @@ export interface StalePredicates {
   paused: SQL;
   /** Tickets parked on a run_workflow past the park-age cap. */
   parkAge: SQL;
+  /**
+   * A run still in flight AND young enough that its deadline can still be the reason to wake. This
+   * is NOT a stale category (see {@link StaleWorkProbe}); it is the gate-keeping arm.
+   */
+  liveRuns: SQL;
 }
+
+/** The stale categories: every predicate except the gate-keeping `liveRuns` arm. */
+type StaleCategory = Exclude<keyof StalePredicates, 'liveRuns'>;
 
 export function stalePredicates(c: StaleCutoffs): StalePredicates {
   return {
@@ -58,10 +68,11 @@ export function stalePredicates(c: StaleCutoffs): StalePredicates {
     queued: and(inArray(executions.status, ['pending', 'submitted']), sql`${executions.createdAt} < ${c.queued}`) as SQL,
     paused: and(eq(executions.status, 'paused'), sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${c.paused}`) as SQL,
     parkAge: and(eq(ticketRuns.lifecycle, 'awaiting_workflow'), isNotNull(ticketRuns.awaitingWorkflowId), sql`${ticketRuns.updatedAt} < ${c.parkAge}`) as SQL,
+    liveRuns: and(inArray(executions.status, [...LIVE_RUN_STATUSES]), sql`coalesce(${executions.startedAt}, ${executions.createdAt}) > ${c.liveRunsStartedAfter}`) as SQL,
   };
 }
 
-export type StaleProbe = Record<keyof StalePredicates, boolean>;
+export type StaleProbe = Record<StaleCategory, boolean>;
 
 /**
  * The probe's whole answer: the stale categories, plus whether any run is still in flight.
@@ -78,8 +89,22 @@ export interface StaleWorkProbe extends StaleProbe {
   liveRuns: boolean;
 }
 
-/** Statuses of an execution still in flight and so still subject to a reaper deadline. */
-const LIVE_RUN_STATUSES = ['pending', 'submitted', 'running'] as const;
+/** Statuses of an execution still in flight and so still subject to a reaper deadline. `paused` is
+ *  deliberately absent (see {@link StaleWorkProbe}). */
+export const LIVE_RUN_STATUSES = ['pending', 'submitted', 'running'] as const;
+
+/**
+ * Oldest a run may be, measured from its START, and still hold the cron gate open.
+ *
+ * The reaper normally fails a run long before this (30 minutes for a host run, 90 seconds to a few
+ * minutes of silence for a cloud run), so a run younger than the bound is simply one whose deadline
+ * the next tick has to enforce. But a hung run whose heartbeat keeps refreshing `updated_at` never
+ * goes silent, so no deadline ever fires and, without an age bound, the arm would stay true for
+ * ever and pin the gate (and Neon) awake on every tick. Twelve hours is far past the longest run
+ * the platform supports, so nothing legitimate is ever cut off from the gate; past it the floor
+ * sweep still reaps whatever is genuinely stale.
+ */
+export const LIVE_RUN_MAX_AGE_MS = 12 * 60 * 60_000;
 
 const ALL_STALE: StaleProbe = { hostRunning: true, cloudRunning: true, queued: true, paused: true, parkAge: true };
 
@@ -104,7 +129,7 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleW
       ${ex(executions, p.queued)} as queued,
       ${ex(executions, p.paused)} as paused,
       ${ex(ticketRuns, p.parkAge)} as park_age,
-      ${ex(executions, inArray(executions.status, [...LIVE_RUN_STATUSES]) as SQL)} as live_runs`);
+      ${ex(executions, p.liveRuns)} as live_runs`);
     const row = (result.rows[0] ?? {}) as Record<string, unknown>;
     return {
       hostRunning: truthy(row.host_running),

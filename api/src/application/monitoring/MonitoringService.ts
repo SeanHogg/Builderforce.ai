@@ -411,7 +411,7 @@ export class MonitoringService {
       }
     }
 
-    const incidents = new IncidentService(this.db);
+    const incidents = new IncidentService(this.db, env);
     const incidentRef = await findTenantIncidentManagerRef(this.db, tenantId);
     const opened = await incidents.openIncident(tenantId, {
       title: `Monitor: ${monitor.label}`,

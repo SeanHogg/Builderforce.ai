@@ -46,7 +46,7 @@ import { normalizeProviderId } from "../model-selection.js";
 import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
-import { compactEmbeddedSessionDirect } from "./compact.js";
+import { compactForOverflow, modelServing } from "./run/served-model.js";
 import { blocksAutoContinue } from "./governance-outcome.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
@@ -516,6 +516,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
       let toolResultTruncationAttempted = false;
       let autoContinueNudges = 0;
       let currentPrompt = params.prompt;
+      let attemptModel = model;
       const usageAccumulator = createUsageAccumulator();
       let lastRunPromptUsage: ReturnType<typeof normalizeUsage> | undefined;
       let autoCompactionCount = 0;
@@ -556,7 +557,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             ...(policyGates.length ? { policyGates } : {}),
             provider,
             modelId,
-            model,
+            model: attemptModel,
             authStorage,
             modelRegistry,
             agentId: workspaceResolution.agentId,
@@ -642,6 +643,9 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             : null;
 
           if (contextOverflowError) {
+            // A run that failed over inside the attempt overflowed on the FALLBACK: fold and retry for the model that was serving.
+            const serving = modelServing(attempt, { provider, modelId, model: attemptModel, contextWindowTokens: ctxInfo.tokens });
+            ({ provider, modelId, model: attemptModel } = serving);
             const overflowDiagId = createCompactionDiagId();
             const errorText = contextOverflowError.text;
             const msgCount = attempt.messagesSnapshot?.length ?? 0;
@@ -685,30 +689,14 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
               log.warn(
                 `context overflow detected (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`,
               );
-              const compactResult = await compactEmbeddedSessionDirect({
-                sessionId: params.sessionId,
-                sessionKey: params.sessionKey,
-                messageChannel: params.messageChannel,
-                messageProvider: params.messageProvider,
-                agentAccountId: params.agentAccountId,
-                authProfileId: lastProfileId,
-                sessionFile: params.sessionFile,
+              const compactResult = await compactForOverflow({
+                params,
                 workspaceDir: resolvedWorkspace,
                 agentDir,
-                config: params.config,
-                skillsSnapshot: params.skillsSnapshot,
-                senderIsOwner: params.senderIsOwner,
-                provider,
-                model: modelId,
-                runId: params.runId,
+                authProfileId: lastProfileId,
+                serving,
                 thinkLevel,
-                reasoningLevel: params.reasoningLevel,
-                bashElevated: params.bashElevated,
-                extraSystemPrompt: params.extraSystemPrompt,
-                ownerNumbers: params.ownerNumbers,
-                trigger: "overflow",
-                // The attempt's own local backings, so compaction rebuilds the same tools.
-                ...(attempt.localBackings ? { localBackings: attempt.localBackings } : {}),
+                localBackings: attempt.localBackings,
                 diagId: overflowDiagId,
                 attempt: overflowCompactionAttempts,
                 maxAttempts: MAX_OVERFLOW_COMPACTION_ATTEMPTS,
@@ -726,7 +714,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             // This handles the case where a single tool result exceeds the
             // context window and compaction cannot reduce it further.
             if (!toolResultTruncationAttempted) {
-              const contextWindowTokens = ctxInfo.tokens;
+              const contextWindowTokens = serving.contextWindowTokens;
               const hasOversized = attempt.messagesSnapshot
                 ? sessionLikelyHasOversizedToolResults({
                     messages: attempt.messagesSnapshot,

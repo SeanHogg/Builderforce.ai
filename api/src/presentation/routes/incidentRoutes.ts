@@ -294,7 +294,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const b = await parseOptionalBody(c, OpenIncidentBody);
     if (!b.title?.trim()) return c.json({ error: 'title is required' }, 400);
-    const svc = new IncidentService(db);
+    const svc = new IncidentService(db, c.env as Env);
     const res = await svc.openIncident(tenantId, {
       title: b.title, description: b.description ?? null, severity: b.severity ?? undefined, source: b.source ?? 'manual',
       affectedSystem: b.affectedSystem ?? null, projectId: b.projectId ?? null, escalationPolicyId: b.escalationPolicyId ?? null,
@@ -338,7 +338,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const b = await parseOptionalBody(c, UpdateIncidentBody);
-    await new IncidentService(db).updateIncident(tenantId, c.req.param('id'), { ...b, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}` });
+    await new IncidentService(db, c.env as Env).updateIncident(tenantId, c.req.param('id'), { ...b, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}` });
     await invalidate(c, tenantId);
     return c.json({ ok: true });
   });

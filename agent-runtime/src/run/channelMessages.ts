@@ -83,7 +83,7 @@ export function toRunRow(message: AgentMessage): RunMessage {
   switch (message.role) {
     case "user": {
       const images = typeof message.content === "string" ? [] : message.content.filter((b): b is ImageContent => b.type === "image").map(imagePart);
-      return { role: "user", content: textOf(message.content), ...(images.length > 0 ? { parts: images } : {}), meta: { timestamp: message.timestamp } };
+      return { role: "user", content: textOf(message.content), ...(images.length > 0 ? { parts: images } : {}), ...(message.person ? { person: true as const } : {}), meta: { timestamp: message.timestamp } };
     }
     case "assistant": {
       const { content, role: _role, ...fields } = message;
@@ -143,7 +143,7 @@ export function toAgentMessage(row: RunMessage, ctx: RowContext): AgentMessage |
     case "user": {
       const images = (row.parts ?? []).map(imageBlock).filter((b): b is ImageContent => b !== undefined);
       const content: UserMessage["content"] = images.length > 0 ? [{ type: "text", text: row.content }, ...images] : row.content;
-      return { role: "user", content, timestamp };
+      return { role: "user", content, timestamp, ...(row.person ? { person: true as const } : {}) };
     }
     case "assistant": {
       const blocks: (TextContent | ThinkingContent | ToolCall)[] = [];

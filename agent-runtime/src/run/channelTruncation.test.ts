@@ -12,9 +12,8 @@ import type { StreamFn } from "../builderforce/agent-loop/stream.js";
 import type { AgentMessage, AgentTool } from "../builderforce/model/agent-types.js";
 import type { AssistantMessage, Context, SimpleStreamOptions } from "../builderforce/model/types.js";
 import { toRunRow } from "./channelMessages.js";
-import type { AgentLoopConfig } from "../builderforce/agent-loop/agent-loop-config.js";
-import { AgentEventBridge } from "./agentEventBridge.js";
-import { ChannelModels, channelModelTransport, replyBound } from "./channelModel.js";
+import { replyBound } from "./channelModel.js";
+import { MAX_REPLY_CONTINUATIONS, REPLY_CUT_OFF_NOTE } from "./channelTruncatedReply.js";
 
 const model = {
   id: "m",
@@ -95,21 +94,48 @@ describe("a reply cut off by the output limit", () => {
 });
 
 describe("a text reply cut off by the output limit", () => {
-  const transport = (reply: AssistantMessage) => {
-    const config = { model, convertToLlm: defaultConvertToLlm } as unknown as AgentLoopConfig;
-    const bridge = new AgentEventBridge({ activeModel: () => model, onSwap: () => undefined });
-    return channelModelTransport({ models: new ChannelModels(model), streamFn: scripted([reply]), config, tools: [], bridge });
-  };
-  const ask = { messages: [{ role: "user" as const, content: "where is the handler?" }] };
+  const cut = (text: string) => assistant([{ type: "text", text }], "length");
+  const whole = (text: string) => assistant([{ type: "text", text }]);
+  const texts = (messages: AgentMessage[]) => messages.filter((m) => m.role === "assistant").map(textOf);
 
-  it("reaches the agent as truncated", async () => {
-    const completion = await transport(assistant([{ type: "text", text: "The handler is in" }], "length")).complete(ask);
-    expect(completion).toMatchObject({ content: "The handler is in", interrupted: "truncated" });
+  it("is given the rest of its turn: the model is asked again, and the person receives every part", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({ model, systemPrompt: "sys" });
+    agent.streamFn = scripted([cut("The handler is in"), cut(" agent-loop.ts, in the"), whole(" stream function.")], seen);
+
+    const produced = await agent.prompt([user("where is the handler?")]);
+
+    expect(seen).toHaveLength(3);
+    // each continuation is asked with the part already written, then the instruction to go on
+    expect(seen[1]!.messages.map(textOf).join("\n")).toContain("The handler is in");
+    expect(textOf(seen[1]!.messages.at(-1))).toContain("cut off by the output limit");
+    expect(texts(produced)).toEqual(["The handler is in", " agent-loop.ts, in the", " stream function."]);
+    expect(texts(produced).join("")).not.toContain(REPLY_CUT_OFF_NOTE);
   });
 
-  it("a reply that finished is not", async () => {
-    const completion = await transport(assistant([{ type: "text", text: "In agent-loop.ts." }])).complete(ask);
-    expect(completion.interrupted).toBeUndefined();
+  it("is delivered with a line saying so once its continuations are spent", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({ model, systemPrompt: "sys" });
+    agent.streamFn = scripted([cut("part one"), cut("part two"), cut("part three")], seen);
+
+    const produced = await agent.prompt([user("write the whole essay")]);
+
+    // the first ask and ONE continuation per allowed turn - no more
+    expect(seen).toHaveLength(1 + MAX_REPLY_CONTINUATIONS);
+    const last = texts(produced).at(-1)!;
+    expect(last).toContain("part three");
+    expect(last.trimEnd().endsWith(REPLY_CUT_OFF_NOTE)).toBe(true);
+  });
+
+  it("a reply that finished is delivered as it is, with no second ask", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({ model, systemPrompt: "sys" });
+    agent.streamFn = scripted([whole("In agent-loop.ts.")], seen);
+
+    const produced = await agent.prompt([user("where?")]);
+
+    expect(seen).toHaveLength(1);
+    expect(texts(produced)).toEqual(["In agent-loop.ts."]);
   });
 });
 

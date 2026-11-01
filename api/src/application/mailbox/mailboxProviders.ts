@@ -440,9 +440,16 @@ export function applyClientSideFilters(messages: MailboxMessage[], query: Mailbo
   });
 }
 
-/** The OAuth/Graph/Gmail error envelope, when the body is one. */
+/** The OAuth/Graph/Gmail error envelope, when the body is one. Gmail carries the machine-readable reason
+ *  in `error.errors[].reason` (and `error.details[].reason`), Graph in `error.code`, OAuth in `error`. */
 interface ProviderErrorEnvelope {
-  error?: { message?: string } | string;
+  error?: {
+    message?: string;
+    code?: string | number;
+    status?: string;
+    errors?: Array<{ reason?: unknown }>;
+    details?: Array<{ reason?: unknown }>;
+  } | string;
   error_description?: string;
 }
 
@@ -457,6 +464,29 @@ function parseErrorEnvelope(body: string): ProviderErrorEnvelope | null {
   }
 }
 
+/**
+ * The provider's machine-readable reason for a failure, or `null` when the body carries none.
+ *
+ * The HTTP status alone cannot say what a 403 means: Gmail answers 403 for a revoked scope
+ * (`insufficientPermissions`) AND for a quota hit (`rateLimitExceeded`, `userRateLimitExceeded`,
+ * `dailyLimitExceeded`). Read in the order a provider is most specific: Gmail's `errors[].reason`,
+ * then its `details[].reason`, then Graph's `error.code`, then a status string, then OAuth's bare
+ * `error`.
+ */
+function providerReason(parsed: ProviderErrorEnvelope | null): string | null {
+  const error = parsed?.error;
+  if (!error) return null;
+  if (typeof error === 'string') return error || null;
+  const candidates: unknown[] = [
+    ...(error.errors ?? []).map((entry) => entry?.reason),
+    ...(error.details ?? []).map((entry) => entry?.reason),
+    error.code,
+    error.status,
+  ];
+  const found = candidates.find((candidate) => typeof candidate === 'string' && candidate !== '');
+  return typeof found === 'string' ? found : null;
+}
+
 /** Throw a readable error from a failed provider call rather than a bare status. */
 async function providerError(label: string, res: Response): Promise<never> {
   const body = await res.text().catch(() => '');
@@ -465,16 +495,49 @@ async function providerError(label: string, res: Response): Promise<never> {
   const detail = (parsed
     ? (typeof parsed.error === 'object' ? parsed.error?.message : parsed.error) ?? parsed.error_description
     : undefined) ?? truncated;
-  throw new MailboxProviderError(`${label} failed (${res.status}): ${detail}`, res.status);
+  throw new MailboxProviderError(`${label} failed (${res.status}): ${detail}`, res.status, providerReason(parsed));
 }
 
-/** Distinguishes "the provider said no" from a bug on our side. `status` 401/403
- *  is what the service layer reads to decide a grant is revoked vs. transient. */
+/**
+ * Distinguishes "the provider said no" from a bug on our side. `status` is the HTTP status and
+ * `reason` the provider's own machine-readable reason (see {@link providerReason}); the service layer
+ * reads BOTH, through {@link isMailboxAuthFailure} and {@link isMailboxRateLimited}, to decide
+ * whether a grant is revoked, the provider is throttling, or the call simply failed.
+ */
 export class MailboxProviderError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly reason: string | null = null) {
     super(message);
     this.name = 'MailboxProviderError';
   }
+}
+
+/**
+ * Provider reasons that mean "slow down", compared with case, underscores and spaces removed so
+ * Gmail's `rateLimitExceeded`, the newer `RATE_LIMIT_EXCEEDED` and Graph's `TooManyRequests` all
+ * match. Gmail sends these on a 403, which the status alone cannot tell from a withdrawn consent.
+ */
+const RATE_LIMIT_REASONS: ReadonlySet<string> = new Set([
+  'ratelimitexceeded', 'userratelimitexceeded', 'dailylimitexceeded', 'quotaexceeded', 'resourceexhausted',
+  'toomanyrequests', 'activitylimitreached', 'applicationthrottled', 'mailboxconcurrency', 'throttled',
+]);
+
+const normalizeReason = (reason: string): string => reason.toLowerCase().replace(/[\s_-]/g, '');
+
+/** The provider is throttling or out of quota: a 429, or a 403 whose reason is a quota one. */
+export function isMailboxRateLimited(error: MailboxProviderError): boolean {
+  if (error.status === 429) return true;
+  return error.status === 403 && error.reason !== null && RATE_LIMIT_REASONS.has(normalizeReason(error.reason));
+}
+
+/**
+ * ONE predicate for "the provider refused our credentials", i.e. the grant is revoked or lacks
+ * consent and the mailbox must be reconnected. A 401 is always that. A 403 is that UNLESS the
+ * provider says it is a rate limit, which is retryable and must never revoke a working mailbox:
+ * a single quota hit used to fail the whole campaign and mark the mailbox revoked.
+ */
+export function isMailboxAuthFailure(error: MailboxProviderError): boolean {
+  if (error.status === 401) return true;
+  return error.status === 403 && !isMailboxRateLimited(error);
 }
 
 // ---------------------------------------------------------------------------

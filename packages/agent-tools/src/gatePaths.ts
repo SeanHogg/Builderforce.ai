@@ -67,20 +67,15 @@ export function toolCallPaths(args: Record<string, unknown> | undefined): string
   return out;
 }
 
-/**
- * The spellings of `path` a gate's patterns are matched against. A relative path is resolved (`\` to `/`, `./` dropped, `..`
- * folded); a path that still climbs out (`../x`) or is absolute is matched by every TAIL of its segments too, because this seam
- * cannot know the workspace root: `/home/u/proj/secrets/key.txt` must meet `secrets/**`. That over-matches rather than under-matches,
- * which is the side a governance gate fails on.
- */
-export function gatePathCandidates(path: string): string[] {
+/** A path as slash-separated segments with `.` dropped and `..` folded, and whether it is rooted (absolute, a drive, or `~`) or climbs out. */
+function segmentsOf(path: string): { segments: string[]; rooted: boolean; climbs: boolean } {
   const raw = path.trim().replace(/\\/g, "/");
-  if (!raw) return [];
-  const absolute = raw.startsWith("/") || /^[A-Za-z]:\//.test(raw);
+  // `~` is rooted: the applier expands it to the home directory, so `~/secrets/x` is an absolute path we cannot place.
+  const rooted = raw.startsWith("/") || raw.startsWith("~") || /^[A-Za-z]:\//.test(raw);
   const segments: string[] = [];
   let climbs = false;
   for (const seg of raw.replace(/^[A-Za-z]:/, "").split("/")) {
-    if (!seg || seg === ".") continue;
+    if (!seg || seg === "." || seg === "~") continue;
     if (seg === "..") {
       if (segments.length > 0 && segments[segments.length - 1] !== "..") segments.pop();
       else {
@@ -91,8 +86,27 @@ export function gatePathCandidates(path: string): string[] {
     }
     segments.push(seg);
   }
+  return { segments, rooted, climbs };
+}
+
+/**
+ * The spellings of `path` a gate's patterns are matched against. A relative path is resolved (`\` to `/`, `./` dropped, `..` folded).
+ * A ROOTED path (absolute, a drive, `~`) inside the known workspace `root` is made relative to it, so `/home/dev/src/proj/docs/a.md`
+ * is `docs/a.md` and does not meet `src/**` just because the checkout lives under a `src` directory. One outside the root, or any
+ * rooted path when the root is unknown, or a relative path that climbs out, is matched by every TAIL of its segments: that over-matches
+ * rather than under-matches, which is the side a governance gate fails on.
+ */
+export function gatePathCandidates(path: string, workspaceRoot?: string): string[] {
+  if (!path.trim()) return [];
+  const { segments, rooted, climbs } = segmentsOf(path);
   const resolved = segments.join("/");
-  if (!absolute && !climbs) return [resolved];
+  if (!rooted && !climbs) return [resolved];
+  if (rooted && workspaceRoot?.trim()) {
+    const root = segmentsOf(workspaceRoot);
+    const same = (a: string, b: string) => a === b || a.toLowerCase() === b.toLowerCase();
+    const inside = root.rooted && !root.climbs && root.segments.length > 0 && root.segments.every((seg, i) => segments[i] !== undefined && same(seg, segments[i] as string));
+    if (inside) return [segments.slice(root.segments.length).join("/")];
+  }
   const named = segments.filter((s) => s !== "..");
   const tails = named.map((_, i) => named.slice(i).join("/"));
   return [...new Set([resolved, ...tails])].filter(Boolean);

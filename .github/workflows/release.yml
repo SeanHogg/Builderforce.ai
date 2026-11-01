@@ -847,15 +847,18 @@ jobs:
           - name: lint
             run: pnpm exec next lint
           # PRD 35 §3.3, the conformance suite: the Brain's adapters (web, Rovr, VS Code) and the
-          # Creation Canvas under the ONE scripted task. Neither package's whole unit suite runs in
-          # CI; these files are the part that holds the RunEvent trace. The other adapters' cases
-          # run where their packages' tests do (cloud and agent-run in `Verify API (vitest)`,
-          # on-prem tickets and channels in `Verify @seanhogg/builderforce-agents (test:fast)`).
+          # Creation Canvas under the ONE scripted task, plus the Rovr host's entry-point label.
+          # Neither package's whole unit suite runs in CI; these files hold the RunEvent trace.
+          # Cloud and the @-reply run in `Verify API (vitest)`, on-prem tickets and channels in
+          # `Verify @seanhogg/builderforce-agents (test:fast)`, the VS Code host's label in
+          # `Verify VS Code extension (test)`, and the shared task itself (agent-run's own
+          # `test/`, which the API vitest never reached) in `Verify kernel package`.
           - name: conformance (brain-embedded + canvas)
             run: >-
               bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
               "pnpm --dir ../brain-embedded exec vitest run src/crossAdapterConformance.test.ts src/run/conformance.test.ts src/run/webAdapter.test.ts"
               "pnpm exec vitest run src/lib/canvasCrossAdapter.test.ts"
+              "pnpm --dir ../clients/chrome install --frozen-lockfile && pnpm --dir ../clients/chrome exec vitest run src/host/rovrRunHost.entryPoint.test.ts"
           # PRD 35 WS4 D3, the parity oracle on BOTH engines. The test files that drive `startRun`
           # (brain-embedded/src/run/parity/oracle.files.txt, guarded by oracle.test.ts) run UNCHANGED
           # with BRAIN_RUN_ENGINE=loop and again with =agent, so one green run proves both until the

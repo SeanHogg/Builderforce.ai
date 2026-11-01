@@ -9,7 +9,7 @@ import {
 } from "../../../builderforce/agent-loop/index.js";
 import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { AgentTool } from "../../../builderforce/model/agent-types.js";
-import type { ImageContent } from "../../../builderforce/model/types.js";
+import type { Api, ImageContent, Model } from "../../../builderforce/model/types.js";
 import { globalPersonaRegistry } from "../../../builderforce/personas.js";
 import { raiseThinkLevel } from "../../../builderforce/psychometrics.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
@@ -664,6 +664,8 @@ export async function runEmbeddedAttempt(
     let removeToolResultContextGuard: (() => void) | undefined;
     // The gates that refused one of this attempt's tool calls (relayed by the session); the run loop reads them.
     const governanceRefusals = new Set<string>();
+    // The model a stall failed this attempt over onto, when it did (the run loop folds and retries an overflow for it).
+    let servedModel: Model<Api> | undefined;
     try {
       await repairSessionFileIfNeeded({
         sessionFile: params.sessionFile,
@@ -767,6 +769,7 @@ export async function runEmbeddedAttempt(
         },
         onModelFallback: (from, to, notice) => {
           log.warn(`[model-failover] ${notice}`);
+          servedModel = to as Model<Api>;
           emitAgentEvent({
             runId: params.runId,
             stream: "lifecycle",
@@ -1517,6 +1520,7 @@ export async function runEmbeddedAttempt(
         attemptUsage: getUsageTotals(),
         compactionCount: getCompactionCount(),
         ...(localBackings ? { localBackings } : {}),
+        ...(servedModel ? { servedModel } : {}),
         // Client tool call detected (OpenResponses hosted tools)
         clientToolCall: clientToolCallDetected ?? undefined,
       };

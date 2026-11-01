@@ -35,7 +35,7 @@
  */
 
 import type { Db } from '../../infrastructure/database/connection';
-import { emitWebhookEvent, type WebhookEvent } from '../seams/webhookService';
+import { emitWebhookEvent, type EmitDeps, type WebhookEvent } from '../seams/webhookService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What every install event carries. Additive only — a vendor parses by key. */
@@ -73,6 +73,7 @@ export async function emitInstallEvent(
     event: Extract<WebhookEvent, `extension.${string}`>;
     payload: InstallEventPayload;
   },
+  deps: EmitDeps = {},
 ): Promise<void> {
   const { payload } = input;
   const occurrence = `${payload.installId}.${payload.versionId}.${payload.planCode ?? 'free'}.${payload.subscriptionState}`;
@@ -83,7 +84,7 @@ export async function emitInstallEvent(
       eventType: input.event,
       eventId: occurrence,
       data: payload,
-    });
+    }, deps);
   } catch (error) {
     // The emitter is already best-effort per endpoint; this catches the case where
     // reading the subscription list itself fails, which must not turn a completed

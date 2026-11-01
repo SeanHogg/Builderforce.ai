@@ -245,7 +245,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   // spec 05 §4.3). Segment-gated + best-effort: a no-op for single-mode tenants
   // (no segment) or when nothing subscribed; never blocks the metrics path.
   if (nowDone && !wasDone) {
-    await releaseWorkItemWebhook(db, { tenantId, taskId }).catch((error) => {
+    await releaseWorkItemWebhook(db, { tenantId, taskId }, { env }).catch((error) => {
       reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
     });
     // FAST Validator review: the moment work is Done, kick an acceptance review (if the

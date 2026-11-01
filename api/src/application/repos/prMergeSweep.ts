@@ -57,6 +57,7 @@ import { MAX_REMEDY_ATTEMPTS } from '../manager/stallTriage';
 import { createPassBudget, MIN_DISPATCH_WINDOW_MS, type PassBudget } from '../manager/passBudget';
 import { resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from './mergeRecordedPr';
+import { mergeQueueOptInOn } from './mergeQueueOptIn';
 import { pollPrCiStatus, pollPrLineStats, isNetDestructiveDiff } from './pollPrCiStatus';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { runBoundedPool } from '../runtime/boundedPool';
@@ -192,14 +193,8 @@ export async function loadPrQueueProjects(db: Db, limit: number): Promise<QueueP
       oldestOpenPrAt: sql<Date>`min(${pullRequests.createdAt})`.as('oldest_open_pr_at'),
     })
     .from(pullRequests)
-    .innerJoin(projectManagerConfigs, and(
-      eq(projectManagerConfigs.projectId, pullRequests.projectId),
-      // Correlated on the tenant as well as the project: `project_manager_configs` is
-      // tenant-owned, and a join on `project_id` alone is the shape that leaks rows
-      // across tenants the moment ids collide.
-      eq(projectManagerConfigs.tenantId, pullRequests.tenantId),
-      eq(projectManagerConfigs.enabled, true),
-    ))
+    // The opt-in, shared with the CI-verdict signal that wakes this sweep (mergeQueueOptIn.ts).
+    .innerJoin(projectManagerConfigs, mergeQueueOptInOn())
     .where(and(
       eq(pullRequests.status, 'open'),
       isNotNull(pullRequests.projectId),

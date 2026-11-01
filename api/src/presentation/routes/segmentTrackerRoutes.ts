@@ -109,7 +109,7 @@ function maybeEmit(
   const { tenantId, segmentId } = scope(c);
   const eventId = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : crypto.randomUUID();
   waitUntil(
-    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch((error) => { /* best-effort */ 
+    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }, { env: c.env }).catch((error) => { /* best-effort */ 
       reportCaughtError(error, { source: "presentation/routes/segmentTrackerRoutes.ts", operation: "maybeEmit" });
     }),
   );

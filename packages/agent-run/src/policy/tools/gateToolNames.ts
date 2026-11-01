@@ -13,6 +13,8 @@
  *     the catalog for that (its other actions are not execution); only a call matching the rule evaluates as the family.
  */
 
+import { normalizeToolName, resolveToolAlias } from "@builderforce/agent-tools";
+
 export const TOOL_NAME_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   write: ["write_file", "Write"],
   write_file: ["write", "Write"],
@@ -20,9 +22,10 @@ export const TOOL_NAME_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   delete_file: ["write_file", "write", "Write"],
   // A patch is a write and an edit at once: a gate authored on either covers it.
   apply_patch: ["write_file", "write", "Write", "edit_file", "edit", "Edit"],
-  edit: ["edit_file", "Edit"],
-  edit_file: ["edit", "Edit"],
-  Edit: ["edit", "edit_file"],
+  // A write gate covers an edit (an edit rewrites a file); an edit gate does not cover a plain write.
+  edit: ["edit_file", "Edit", "write", "write_file", "Write"],
+  edit_file: ["edit", "Edit", "write", "write_file", "Write"],
+  Edit: ["edit", "edit_file", "write", "write_file", "Write"],
   exec: ["run_command", "Bash", "bash"],
   Bash: ["run_command", "exec", "bash"],
   bash: ["run_command", "exec", "Bash"],
@@ -52,7 +55,7 @@ interface ActionRule {
 
 export const ACTION_RULES: readonly ActionRule[] = [
   // `process` drives a running exec session: writing to it, submitting to it or killing it acts on a command (listing, polling and reading its log do not).
-  ...["write", "send-keys", "submit", "paste", "kill"].map((action): ActionRule => ({ tool: "process", when: { action }, as: "exec" })),
+  ...["write", "send-keys", "submit", "paste", "kill", "remove"].map((action): ActionRule => ({ tool: "process", when: { action }, as: "exec" })),
   { tool: "nodes", when: { action: "run" }, as: "exec" },
   { tool: "nodes", when: { action: "invoke", invokeCommand: { startsWith: "system." } }, as: "exec" },
 ];
@@ -64,9 +67,19 @@ function ruleMatches(rule: ActionRule, args: Record<string, unknown> | undefined
   });
 }
 
-/** The names a call of `toolName` (with `args`) is evaluated as: itself, its synonyms, and the family an action rule puts it in. */
+/** The synonym table by normal-form name, so `BASH`, `Bash` and `bash` all find their family. */
+const SYNONYMS_BY_NAME: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.entries(TOOL_NAME_SYNONYMS).map(([name, same]) => [normalizeToolName(name), same]),
+);
+
+/**
+ * The names a call of `toolName` (with `args`) is evaluated as: what it is SPELLED, what the registry will actually RUN (it resolves
+ * hallucinated aliases such as `shell` or `str_replace` case-insensitively before it looks the tool up, so the gate judges the tool that runs, not the
+ * word the model wrote), the family an action rule puts it in, and the synonyms of each.
+ */
 export function candidateToolNames(toolName: string, args?: Record<string, unknown>): string[] {
-  const families = ACTION_RULES.filter((r) => r.tool === toolName && ruleMatches(r, args)).map((r) => r.as);
-  const names = [toolName, ...(TOOL_NAME_SYNONYMS[toolName] ?? []), ...families.flatMap((f) => [f, ...(TOOL_NAME_SYNONYMS[f] ?? [])])];
+  const called = normalizeToolName(toolName);
+  const families = ACTION_RULES.filter((r) => r.tool === called && ruleMatches(r, args)).map((r) => r.as);
+  const names = [toolName.trim(), resolveToolAlias(toolName), ...families].flatMap((n) => [n, ...(SYNONYMS_BY_NAME.get(normalizeToolName(n)) ?? [])]);
   return [...new Set(names.filter(Boolean))];
 }

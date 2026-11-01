@@ -11,7 +11,6 @@ import {
   signalPendingWork,
   signalPendingWorkIfDueWithin,
   cronGateIsBound,
-  SIGNAL_HORIZON_MS,
 } from './cronWorkSignal';
 import type { Env } from '../../env';
 
@@ -134,7 +133,7 @@ describe('signalPendingWorkIfDueWithin', () => {
 
   it('signals when the next timed moment is inside the horizon, or already past', async () => {
     const { kv, store } = fakeKv();
-    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + SIGNAL_HORIZON_MS, NOW)).resolves.toBe(true);
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + FLOOR_INTERVAL_MS, NOW)).resolves.toBe(true);
     expect(store.has('cron:work-pending')).toBe(true);
     store.clear();
     await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW - 60_000, NOW)).resolves.toBe(true);
@@ -144,9 +143,21 @@ describe('signalPendingWorkIfDueWithin', () => {
   it('stays silent when nothing is waiting, or the timer is beyond the horizon', async () => {
     const { kv, store } = fakeKv();
     await expect(signalPendingWorkIfDueWithin(envWith(kv), null, NOW)).resolves.toBe(false);
-    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + SIGNAL_HORIZON_MS + 1, NOW)).resolves.toBe(false);
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + FLOOR_INTERVAL_MS + 1, NOW)).resolves.toBe(false);
     await expect(signalPendingWorkIfDueWithin(envWith(kv), Number.NaN, NOW)).resolves.toBe(false);
     expect(store.has('cron:work-pending')).toBe(false);
+  });
+
+  it('defaults the horizon to the floor interval, so a 20 minute timer is signalled', async () => {
+    const { kv } = fakeKv();
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + 20 * 60_000, NOW)).resolves.toBe(true);
+  });
+
+  it('follows the CRON_FLOOR_INTERVAL_MS override', async () => {
+    const { kv } = fakeKv();
+    const env = envWith(kv, { CRON_FLOOR_INTERVAL_MS: String(10 * 60_000) });
+    await expect(signalPendingWorkIfDueWithin(env, NOW + 20 * 60_000, NOW)).resolves.toBe(false);
+    await expect(signalPendingWorkIfDueWithin(env, NOW + 10 * 60_000, NOW)).resolves.toBe(true);
   });
 
   it('honours a wider horizon', async () => {

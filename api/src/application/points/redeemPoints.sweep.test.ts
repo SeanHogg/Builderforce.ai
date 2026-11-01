@@ -12,14 +12,24 @@ import { runPendingRedemptionSweep } from './redeemPoints';
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
 
-/** sweep read = where().orderBy().limit(); per-row re-read = where().limit(1). */
-function dbWith(sweepRows: Array<Record<string, unknown>>, pendingRow: Record<string, unknown> | null) {
+/**
+ * sweep read = where().orderBy().limit(); per-row re-read = where().limit(1), once per swept row;
+ * the young-pending probe = where().limit(1) after the last re-read (so it is the call that follows
+ * `sweepRows.length` re-reads).
+ */
+function dbWith(sweepRows: Array<Record<string, unknown>>, pendingRow: Record<string, unknown> | null, youngPending = false) {
+  let limitCalls = 0;
   return {
     select: () => ({
       from: () => ({
         where: () => ({
           orderBy: () => ({ limit: async () => sweepRows }),
-          limit: async () => (pendingRow ? [pendingRow] : []),
+          limit: async () => {
+            const call = limitCalls;
+            limitCalls += 1;
+            if (call < sweepRows.length) return pendingRow ? [pendingRow] : [];
+            return youngPending ? [{ id: 99 }] : [];
+          },
         }),
       }),
     }),
@@ -43,6 +53,13 @@ describe('runPendingRedemptionSweep — cron gate', () => {
     const r = await runPendingRedemptionSweep(db, env);
     expect(r.fulfilled).toBe(1);
     expect(signalled()).toBe(false);
+  });
+
+  it('signals while a pending redemption is still younger than the retry threshold', async () => {
+    const { env, signalled } = fakeCronKv();
+    const r = await runPendingRedemptionSweep(dbWith([], null, true), env);
+    expect(r).toEqual({ scanned: 0, fulfilled: 0 });
+    expect(signalled()).toBe(true);
   });
 
   it('does NOT signal when no redemption is pending', async () => {

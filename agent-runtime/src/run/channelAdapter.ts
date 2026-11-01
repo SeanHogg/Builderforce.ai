@@ -35,6 +35,7 @@ import { logWarn } from "../logger.js";
 import { AgentEventBridge } from "./agentEventBridge.js";
 import { textOf, toRunRow } from "./channelMessages.js";
 import { ChannelModels, channelModelTransport } from "./channelModel.js";
+import { channelDeliveryRungs } from "./channelTruncatedReply.js";
 import { channelTools } from "./channelTools.js";
 import { onPremHuman } from "./onPremHuman.js";
 import { reportRunRow } from "./outcomeReporter.js";
@@ -191,7 +192,8 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
           ...(signal ? { signal } : {}),
         }),
         // The channel's runs close with what the model said: no forced no-tools turn after a tripped breaker (the runner never had one).
-        delivery: { rungs: () => [], owns: { synthesis: true } },
+        // The one rung: a reply the output limit cut short continues (twice), then is delivered with a line saying it was cut off.
+        delivery: { rungs: channelDeliveryRungs, owns: { synthesis: true } },
         steering: steeringOf(config),
         context: contextOf(config, prompts, signal, knowledge),
         platform: channelTools({ tools, bridge, knowledge: config.knowledge ?? knowledge, query: request, window: (ref) => resolveContextWindowTokens(models.resolve(ref)) }),
@@ -203,7 +205,7 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       const rows = [
         ...(system ? [{ role: "system" as const, content: system }] : []),
         ...context.messages.map(toRunRow),
-        ...prompts.map(toRunRow),
+        ...prompts.map((prompt) => ({ ...toRunRow(prompt), person: true as const })),
       ];
       const last = rows.at(-1);
       if (last) last.task = true;

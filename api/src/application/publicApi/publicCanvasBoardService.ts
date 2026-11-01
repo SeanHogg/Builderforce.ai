@@ -243,7 +243,7 @@ export async function commitPublicBoardGraph(
       eventType: event.type,
       eventId: `${board.id}.${revision}.${event.objectId}`,
       data: { boardId: board.id, revision, ...event.data },
-    }),
+    }, { env }),
   ]).then(() => undefined));
 
   return revision;

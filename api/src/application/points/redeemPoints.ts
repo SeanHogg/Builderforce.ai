@@ -25,7 +25,7 @@
  * would be a text search.
  */
 
-import { and, asc, eq, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { pointRedemptions } from '../../infrastructure/database/schema';
@@ -201,6 +201,18 @@ export async function runPendingRedemptionSweep(db: Db, env: Env, now = new Date
     } else if (now.getTime() - new Date(row.createdAt).getTime() < PENDING_SIGNAL_WINDOW_MS) {
       retryingSoon = true;
     }
+  }
+  // A pending row YOUNGER than the retry threshold is not in `rows` yet, but it will be within
+  // PENDING_RETRY_AFTER_MS. Without a signal it would wait for the floor sweep (up to 30 minutes)
+  // after its ten minutes, rather than being picked up by the first tick that can retry it.
+  // Always inside PENDING_SIGNAL_WINDOW_MS by construction (it is younger than the threshold), and
+  // it stops being pending-and-young the moment the threshold passes. One indexed row is enough.
+  if (!retryingSoon) {
+    const [youngPending] = await db.select({ id: pointRedemptions.id })
+      .from(pointRedemptions)
+      .where(acrossTenants(pointRedemptions, 'scheduled_sweep', and(eq(pointRedemptions.status, 'pending'), gte(pointRedemptions.createdAt, cutoff))))
+      .limit(1);
+    retryingSoon = youngPending !== undefined;
   }
   // A redemption that did not fulfil this pass is retried next tick — but only if the gate is open.
   // Bounded by PENDING_SIGNAL_WINDOW_MS; older stragglers fall back to the floor sweep.

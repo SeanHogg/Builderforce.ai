@@ -21,6 +21,7 @@
  */
 
 import { gatePathCandidates } from "./gatePaths.js";
+import { normalizeToolName } from "./toolAliases.js";
 import { matchGlob } from "./glob.js";
 import { inScope } from "./workstreamScope.js";
 
@@ -176,11 +177,11 @@ function pathHitsPattern(path: string, pattern: string): boolean {
   return matchGlob(path, pattern) || inScope(path, [pattern]);
 }
 
-function gateMatchesPath(g: PolicyGate, callPath?: string | readonly string[]): boolean {
+function gateMatchesPath(g: PolicyGate, callPath?: string | readonly string[], workspaceRoot?: string): boolean {
   const patterns = g.paths;
   if (!patterns || patterns.length === 0) return true;
   // Every spelling of each path (`./x`, `a/../x`, backslashes, an absolute path by its tails): a scope is not stepped around by writing the path differently.
-  const callPaths = (Array.isArray(callPath) ? callPath : callPath ? [callPath] : []).flatMap(gatePathCandidates).filter(Boolean);
+  const callPaths = (Array.isArray(callPath) ? callPath : callPath ? [callPath] : []).flatMap((p) => gatePathCandidates(p, workspaceRoot)).filter(Boolean);
   // Path-scoped but the seam did not pass a path: do not match. Existing call
   // sites that only pass toolName keep today's tool-only behaviour.
   if (callPaths.length === 0) return false;
@@ -299,15 +300,18 @@ export type PolicyDecision =
  * tools; gates with `paths` additionally require the call path to hit a configured
  * glob or directory prefix. Pass `path` from {@link toolCallPaths} when the seam
  * has args — omitting it leaves path-scoped gates unmatched (existing call sites
- * keep tool-only behaviour).
+ * keep tool-only behaviour). Tool names match case-insensitively. `workspaceRoot`, when
+ * the seam knows it, lets an absolute path inside it be judged by its workspace-relative form.
  */
 export function evaluatePolicyGate(
   gates: readonly PolicyGate[] | undefined,
   toolName: string,
   path?: string | readonly string[],
+  workspaceRoot?: string,
 ): PolicyDecision {
+  const called = normalizeToolName(toolName);
   const matches = (gates ?? []).filter(
-    (g) => (!g.tool || g.tool === "*" || g.tool === toolName) && gateMatchesPath(g, path),
+    (g) => (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) && gateMatchesPath(g, path, workspaceRoot),
   );
   const blocked = matches.find((g) => g.effect === "block");
   if (blocked) return { action: "block", gateId: blocked.id, reason: blocked.reason ?? "blocked by policy" };

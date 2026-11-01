@@ -424,7 +424,7 @@ async function activateInstall(
       planCode: plan.code,
       subscriptionState: 'active',
     },
-  });
+  }, { env });
 
   return row.id;
 }
@@ -487,5 +487,5 @@ export async function cancelPlan(
       planCode: install.planCode,
       subscriptionState: 'cancelled',
     },
-  });
+  }, { env });
 }

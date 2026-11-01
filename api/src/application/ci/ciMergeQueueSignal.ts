@@ -8,17 +8,20 @@
  * other half — the build result that decides what happens to the head.
  *
  * Scoped to a PR that is actually WAITING in a queue: the event must correlate to a ticket's branch,
- * be a verdict rather than a "pending" progress ping, and that ticket must still have an open pull
- * request. A CI event for a repo with no such PR (the common case on a busy repo) signals nothing and
- * costs one indexed read at most — and none when no cron gate is bound.
+ * be a verdict rather than a "pending" progress ping, that ticket must still have an open pull
+ * request, and its project must have opted into the manager's merge queue (the same enabled
+ * `project_manager_configs` row the sweep selects projects by, joined in the SAME read). A CI event
+ * for a repo with no such PR (the common case on a busy repo) signals nothing and costs one indexed
+ * read at most — and none when no cron gate is bound.
  *
  * Provider-independent: `handleCiEventOutcome` calls it for GitHub, GitLab and Bitbucket alike.
  */
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { pullRequests } from '../../infrastructure/database/schema';
+import { projectManagerConfigs, pullRequests } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { mergeQueueOptInOn } from '../repos/mergeQueueOptIn';
 import { cronGateIsBound, signalPendingWork, type CronSignalEnv } from '../runtime/cronWorkSignal';
 import type { IngestResult } from './ingestRepoCiEvent';
 
@@ -36,6 +39,7 @@ export async function signalMergeQueueOnCiResult(
     const [open] = await db
       .select({ id: pullRequests.id })
       .from(pullRequests)
+      .innerJoin(projectManagerConfigs, mergeQueueOptInOn())
       .where(scopedToTenant(pullRequests, res.tenantId, and(eq(pullRequests.taskId, res.taskId), eq(pullRequests.status, 'open'))))
       .limit(1);
     if (!open) return false;

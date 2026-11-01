@@ -69,3 +69,48 @@ describe("path spellings", () => {
     expect(blocked("apply_patch", patch("*** Add File: C:\\work\\secrets\\new.txt\n+x"))).toBe(true);
   });
 });
+
+describe("~ paths", () => {
+  it("are rooted like absolute ones (the applier expands ~ to the home directory): matched by their tail", () => {
+    expect(blocked("write_file", { path: "~/projects/secrets/key.txt" })).toBe(true);
+    expect(blocked("write_file", { path: String.raw`~\work\secrets\key.txt` })).toBe(true);
+    expect(blocked("apply_patch", patch("*** Add File: ~/secrets/new.txt\n+x"))).toBe(true);
+  });
+
+  it("do not over-reach onto a home path that never touches the scope", () => {
+    expect(blocked("write_file", { path: "~/notes/todo.md" })).toBe(false);
+  });
+});
+
+describe("the workspace root", () => {
+  const SRC_GATE: PolicyGate[] = [{ id: "no-src", tool: "write_file", effect: "block", paths: ["src/**"] }];
+  const ROOT = "/home/dev/src/proj";
+  const refusesWrite = (path: string, root?: string) => evaluatePolicyGateSeam(SRC_GATE, "write_file", { path }, root).action === "block";
+
+  it("an absolute path inside it is judged by its workspace-relative form: a checkout under a `src` directory does not make every write a src write", () => {
+    expect(refusesWrite(`${ROOT}/docs/a.md`, ROOT)).toBe(false);
+    expect(refusesWrite(`${ROOT}/src/a.ts`, ROOT)).toBe(true);
+    expect(refusesWrite(`${ROOT}/../proj/docs/a.md`, ROOT)).toBe(false);
+  });
+
+  it("a Windows root and path are read the same way", () => {
+    const root = String.raw`C:\Users\dev\src\proj`;
+    expect(refusesWrite(String.raw`C:\Users\dev\src\proj\docs\a.md`, root)).toBe(false);
+    expect(refusesWrite(String.raw`C:\Users\dev\src\proj\src\a.ts`, root)).toBe(true);
+    expect(refusesWrite(String.raw`c:\users\dev\src\proj\src\a.ts`, root)).toBe(true);
+  });
+
+  it("an absolute path OUTSIDE it falls back to tails (fail closed)", () => {
+    expect(refusesWrite("/home/dev/other/src/x.ts", ROOT)).toBe(true);
+    expect(refusesWrite("/etc/hosts", ROOT)).toBe(false);
+  });
+
+  it("with the root unknown every absolute path falls back to tails", () => {
+    expect(refusesWrite(`${ROOT}/docs/a.md`)).toBe(true);
+  });
+
+  it("a relative path is unaffected by the root", () => {
+    expect(refusesWrite("docs/a.md", ROOT)).toBe(false);
+    expect(refusesWrite("src/a.ts", ROOT)).toBe(true);
+  });
+});

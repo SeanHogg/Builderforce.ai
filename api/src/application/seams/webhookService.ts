@@ -30,7 +30,7 @@ import type { Env } from '../../env';
 import { webhookSubscriptions, webhookDeliveries } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hmacHex } from '../../infrastructure/crypto/hmac';
-import { cronGateIsBound, signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
+import { cronGateIsBound, signalPendingWork, signalPendingWorkIfDueWithin, type CronSignalEnv } from '../runtime/cronWorkSignal';
 
 /**
  * Events an integrator may subscribe to.
@@ -189,6 +189,13 @@ export interface EmitDeps {
   fetchImpl?: typeof fetch;
   /** Injectable clock (seconds); defaults to Date.now()/1000. */
   nowSec?: () => number;
+  /**
+   * The Worker env, when the caller has one. A delivery that fails here is rescheduled five
+   * minutes out ({@link webhookRetryDelaySec}); with this set, the emit signals the cron gate so
+   * that first retry is picked up on time instead of waiting for the floor sweep. Optional:
+   * without it the floor sweep still retries, just later.
+   */
+  env?: CronSignalEnv;
 }
 
 /**
@@ -264,6 +271,7 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
     .returning({ id: webhookDeliveries.id, subscriptionId: webhookDeliveries.subscriptionId });
   const subById = new Map(targets.map((sub) => [sub.id, sub]));
   const deliveredByStatus = new Map<number, string[]>();
+  let anyFailed = false;
 
   await Promise.all(
     created.map(async (delivery) => {
@@ -285,9 +293,11 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
           deliveredByStatus.set(res.status, [...(deliveredByStatus.get(res.status) ?? []), delivery.id]);
         } else {
           // Non-2xx — schedule a retry (or dead-letter once exhausted).
+          anyFailed = true;
           await recordDeliveryFailure(db, delivery.id, 1, timestamp, `HTTP ${res.status}`, res.status);
         }
       } catch (err) {
+        anyFailed = true;
         await recordDeliveryFailure(db, delivery.id, 1, timestamp, err)
           .catch((error) => { /* never let bookkeeping throw into the emit path */
             reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "emitWebhookEvent" });
@@ -304,6 +314,11 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
     .catch((error) => {
       reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "emitWebhookEvent", context: { logMessage: '[webhook] bulk delivered stamp failed' } });
     })));
+
+  // The first retry is due in five minutes, inside the gate's horizon, so a failed delivery keeps
+  // the gate open for the tick that will retry it. Bounded the same way the sweep's own re-signal
+  // is: the row reaches `next_retry_at = NULL` within WEBHOOK_MAX_ATTEMPTS attempts.
+  if (anyFailed && deps.env) await signalPendingWork(deps.env);
 
   return targets.length;
 }

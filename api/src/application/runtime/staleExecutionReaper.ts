@@ -36,7 +36,7 @@ import { recordReapedOutcomes } from './cloudOutcomeRow';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
-import { anyStale, probeStaleWork, REAP_BATCH_LIMIT, stalePredicates } from './staleExecutionProbe';
+import { anyStale, LIVE_RUN_MAX_AGE_MS, probeStaleWork, REAP_BATCH_LIMIT, stalePredicates } from './staleExecutionProbe';
 import { signalPendingWork } from './cronWorkSignal';
 import { revokeRunPrincipalsForExecutions } from '../agentIdentity/agentRunIdentity';
 import { executionsWithPendingSteers } from './lateSteerStore';
@@ -111,6 +111,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     queued: new Date(nowMs - QUEUED_DEADLINE_MS).toISOString(),
     paused: new Date(nowMs - PAUSED_DEADLINE_MS).toISOString(),
     parkAge: new Date(nowMs - resolveParkAgeTimeoutMs(env)).toISOString(),
+    liveRunsStartedAfter: new Date(nowMs - LIVE_RUN_MAX_AGE_MS).toISOString(),
   });
 
   // Idle gate: one EXISTS probe decides which sweeps below have any work, so a quiet
@@ -119,7 +120,9 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // A run still in flight has a deadline this sweep must be around to enforce. A signal buys ONE
   // tick, so re-arm the next one for as long as such a run exists — before the idle return below,
   // which a platform with only healthy in-flight runs takes. Bounded by the deadlines themselves:
-  // the reaper fails anything that outlives them, so the run (and with it the signal) ends.
+  // the reaper fails anything that outlives them, so the run (and with it the signal) ends. A run
+  // that outlives them anyway (a live heartbeat keeps it from ever going silent) stops counting at
+  // LIVE_RUN_MAX_AGE_MS from its start, so it cannot hold the gate open indefinitely.
   if (probe.liveRuns) await signalPendingWork(env);
   const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } };
   if (!anyStale(probe)) return empty;

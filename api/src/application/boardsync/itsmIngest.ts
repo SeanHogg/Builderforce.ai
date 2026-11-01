@@ -34,7 +34,7 @@ const str2 = (v: unknown): string | null => (typeof v === 'string' && v ? v : nu
 async function forkIncidentsFromTickets(db: Db, env: Env, conn: ItsmConnection, tickets: NormalizedTicket[]): Promise<void> {
   const incidentRef = await findTenantIncidentManagerRef(db, conn.tenantId);
   if (!incidentRef) return;
-  const incidents = new IncidentService(db);
+  const incidents = new IncidentService(db, env);
   const escalation = new EscalationService(db);
   for (const ticket of tickets) {
     const f = ticket.fields ?? {};
