@@ -7,7 +7,7 @@ import { reduceRunPolicy } from "@builderforce/run-policy";
 import { describe, expect, it } from "vitest";
 import type { RunEvent, RunMessage, RunPorts } from "../../src/index.js";
 import { handOff } from "../../src/policy/compaction/modelHandOff.js";
-import { compactionOptions } from "../../src/policy/compaction/index.js";
+import { compactionHook } from "../../src/policy/compaction/index.js";
 import { replyReserve } from "../../src/policy/compaction/reserve.js";
 import { modelHook } from "../../src/policy/model/index.js";
 import { policyCtx } from "../support/policyContext.js";
@@ -33,10 +33,10 @@ const shot = (n: number): string => `data:image/png;base64,${"A".repeat(n)}`;
 
 describe("a hand-off measures the whole row", () => {
   it("a screenshot-heavy transcript does not look like it fits because its text does", async () => {
-    // six rows of ~50K tokens of picture each, a few words of text: 300K tokens against a 128K window
+    // 80 screenshots at one fixed estimate each (2,000 tokens) is 160K tokens against a 128K window, with a few words of text apiece
     const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
-    for (let i = 0; i < 6; i += 1) {
-      rows.push({ role: "assistant", content: `screenshot ${i}`, parts: [{ type: "image", url: shot(200_000) }] });
+    for (let i = 0; i < 80; i += 1) {
+      rows.push({ role: "assistant", content: `screenshot ${i}`, parts: [{ type: "image", url: shot(2_000) }] });
       rows.push({ role: "user", content: "next" });
     }
     const { ctx } = ctxFor(128_000, rows);
@@ -45,10 +45,32 @@ describe("a hand-off measures the whole row", () => {
 
     expect(result).toBeTruthy();
     expect(result!.dropped).toBeGreaterThan(0);
-    expect(result!.beforeTokens!).toBeGreaterThan(250_000);
+    expect(result!.beforeTokens!).toBeGreaterThan(150_000);
     expect(result!.afterTokens!).toBeLessThanOrEqual(128_000 - result!.reserveTokens!);
     // the task survives the cut whole
     expect(result!.messages.some((m) => m.content === "TASK")).toBe(true);
+  });
+
+  it("a picture costs one fixed estimate, never its base64 length: a photo cannot evict the history", async () => {
+    // a 5 MB photo among a handful of rows: ~1.3M tokens if its bytes were counted, 2,000 at the estimate
+    const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
+    for (let i = 0; i < 6; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i}` });
+    rows.push({ role: "assistant", content: "photo", parts: [{ type: "image", url: shot(5_000_000) }] });
+    rows.push({ role: "user", content: "what is in it?" });
+    const { ctx } = ctxFor(128_000, rows);
+
+    expect(await handOff(ctx)).toBeUndefined();
+  });
+
+  it("a row's text is counted once, though a channel row carries it in its parts too", async () => {
+    // real shape: text in `content` AND in a text part. 30 rows of 20K chars (5K tokens) is 150K once, 300K twice; the window is 200K.
+    const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
+    for (let i = 0; i < 30; i += 1) {
+      const text = `row ${i} ${"x".repeat(20_000)}`;
+      rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: text, parts: [{ type: "text", text }] });
+    }
+    const { ctx } = ctxFor(200_000, rows);
+    expect(await handOff(ctx)).toBeUndefined();
   });
 
   it("a thinking-heavy transcript is measured too", async () => {
@@ -112,28 +134,29 @@ describe("a context that cannot fit is said", () => {
 });
 
 describe("one reply reserve per run", () => {
-  // a run that has begun the work (handed from plan to code) asks as the code role: its reply cap is 8,192
   const askOf = async (window: number, over: Parameters<typeof ctxFor>[2] = {}) => {
     const { ctx } = ctxFor(window, [], { tools: ["read"], ...over });
-    ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "hand_off" });
     return { ctx, reserve: replyReserve(ctx), asks: (await modelHook.resolve(ctx))?.maxTokens };
   };
 
-  it("holds back on-prem's floor within a quarter of the serving window, and asks the role cap unless the window forces less", async () => {
-    expect(await askOf(200_000).then((r) => [r.reserve, r.asks])).toEqual([20_000, 8_192]);
-    expect(await askOf(64_000).then((r) => [r.reserve, r.asks])).toEqual([16_000, 8_192]);
+  it("holds back on-prem's floor within a quarter of the serving window, and asks for nothing unless the window forces it", async () => {
+    expect(await askOf(200_000).then((r) => [r.reserve, r.asks])).toEqual([20_000, undefined]);
+    expect(await askOf(64_000).then((r) => [r.reserve, r.asks])).toEqual([16_000, 16_000]);
     expect(await askOf(16_384).then((r) => [r.reserve, r.asks])).toEqual([4_096, 4_096]);
   });
 
-  it("compaction and the hand-off hold back the very number replyReserve names", async () => {
+  it("the hand-off holds back the very number replyReserve names", async () => {
     for (const window of [200_000, 64_000, 16_384]) {
-      const { ctx, reserve } = await askOf(window);
-      expect(compactionOptions(ctx).reserveOutputTokens).toBe(reserve);
+      const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
+      for (let i = 0; i < 140; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(8_000)}` });
+      const { ctx } = ctxFor(window, rows);
+      expect((await handOff(ctx))?.reserveTokens).toBe(replyReserve(ctx));
     }
   });
 
-  it("a big window asks for the role cap it always asked for: the same as a run that does not hand off", async () => {
-    expect((await askOf(1_000_000)).asks).toBe((await askOf(1_000_000, { handoff: false })).asks);
+  it("a run that hands off asks for no cap of its own where a run that does not asks for its role's", async () => {
+    expect((await askOf(1_000_000)).asks).toBeUndefined();
+    expect((await askOf(1_000_000, { handoff: false })).asks).toBeGreaterThan(0);
   });
 
   it("a run that does not hand off keeps the reserve its policy states, or the host-neutral floor", () => {
@@ -142,12 +165,67 @@ describe("one reply reserve per run", () => {
     ctx.policy.budgets.reserveTokens = 4_000;
     expect(replyReserve(ctx)).toBe(4_000);
   });
+});
 
-  it("what a hand-off reports as held back is that same reserve", async () => {
+describe("a run that hands off between models runs no ordinary compaction", () => {
+  const long = (): RunMessage[] => {
     const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
-    for (let i = 0; i < 24; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(4_000)}` });
-    const { ctx } = ctxFor(16_384, rows);
+    // ~45K tokens against a 32K window: an ordinary compaction would fold it (and ask the model for a summary)
+    for (let i = 0; i < 45; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(4_000)}` });
+    return rows;
+  };
+
+  it("an over-window transcript is left to the session while the serving model is the same: no fold, no summary call", async () => {
+    const { ctx } = ctxFor(32_000, long());
+    ctx.state.preparedFor = "p/small";
+    let summaries = 0;
+    ctx.ports.model.summarize = async () => { summaries += 1; return { content: "SUMMARY" }; };
+    ctx.ports.model.complete = async () => { summaries += 1; return { content: "SUMMARY" }; };
+
+    expect(await compactionHook.compact(ctx)).toBeUndefined();
+    expect(summaries).toBe(0);
+  });
+
+  it("the same transcript, in a run that does not hand off, IS folded", async () => {
+    const { ctx } = ctxFor(32_000, long(), { handoff: false });
+    expect(await compactionHook.compact(ctx)).toBeTruthy();
+  });
+
+  it("a change of serving model still re-packs for the incoming window, with no summary call", async () => {
+    const { ctx } = ctxFor(32_000, long());
+    let summaries = 0;
+    ctx.ports.model.summarize = async () => { summaries += 1; return { content: "SUMMARY" }; };
+    const result = await compactionHook.compact(ctx);
+    expect(result?.dropped).toBeGreaterThan(0);
+    expect(summaries).toBe(0);
+  });
+});
+
+describe("a surface's custom row is never the latest directive", () => {
+  it("the real user request survives the cut whole; a bash-output row read as `user` does not displace it", async () => {
+    const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
+    for (let i = 0; i < 40; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(4_000)}` });
+    rows.push({ role: "user", content: "THE LATEST REAL REQUEST" });
+    rows.push({ role: "assistant", content: "on it" });
+    rows.push({ role: "user", content: `bash output ${"b".repeat(60_000)}`, custom: true });
+    const { ctx } = ctxFor(32_000, rows);
+
     const result = await handOff(ctx);
-    expect(result?.reserveTokens).toBe(replyReserve(ctx));
+
+    expect(result?.messages.some((m) => m.content === "THE LATEST REAL REQUEST")).toBe(true);
+  });
+
+  it("a custom row is not the task when the transcript marks none", async () => {
+    const rows: RunMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "bash output", custom: true },
+      { role: "user", content: "THE REQUEST" },
+    ];
+    for (let i = 0; i < 40; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(4_000)}` });
+    const { ctx } = ctxFor(32_000, rows);
+
+    const result = await handOff(ctx);
+
+    expect(result?.messages.some((m) => m.content === "THE REQUEST")).toBe(true);
   });
 });
