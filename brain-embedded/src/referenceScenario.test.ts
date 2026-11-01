@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { asksForSubagents } from '@builderforce/agent-run';
 import { runScenario } from './run/parity/harness';
-import { call, calls, completion, decide, reply } from './run/parity/script';
+import { call, completion, decide } from './run/parity/script';
 import type { Scenario } from './run/parity/types';
 
 const PRD_PATH = 'docs/specs/35-prd-one-agent-one-kernel.md';
@@ -37,7 +37,8 @@ function scenario(state: { doc: string }): Scenario {
         read_file: (args) => {
           const { offset = 1, limit = WINDOW } = args as Partial<Served>;
           const rows = state.doc.split('\n');
-          return { ok: true, path: PRD_PATH, content: rows.slice(offset - 1, offset - 1 + limit).join('\n'), offset, totalLines: rows.length };
+          // `truncated` is part of the read_file contract: a window that is not the end of the file says more remains.
+          return { ok: true, path: PRD_PATH, content: rows.slice(offset - 1, offset - 1 + limit).join('\n'), offset, totalLines: rows.length, truncated: offset - 1 + limit < rows.length };
         },
         spawn_agents: () => ({ ok: true }),
         edit_file: (args) => {
@@ -49,15 +50,14 @@ function scenario(state: { doc: string }): Scenario {
       });
       let read = 0;
       let spawned = 0;
-      let edited = false;
       host.script([]);
       host.react(decide((input) => {
         const turn = input.call;
         const recent = input.opts.messages.slice(-3).map((m) => String(m.content)).join('\n');
         if (spawned) {
-          // The turn after the spawn edits; the one after that answers. (Counted by state, not by call number: the Brain may re-ask a turn.)
-          if (!edited) {
-            edited = true;
+          // After the spawn the model edits until the document is edited, then answers. (By the document, not by the call number: the
+          // Brain hands a run's first change from the analysis model to the coder and re-asks the turn, so the edit may be asked twice.)
+          if (!state.doc.includes('(reviewed)')) {
             return completion({ toolCalls: [call('edit_file', { old_string: '## Section 1', new_string: '## Section 1 (reviewed)' }, `e${turn}`)], finishReason: 'tool_calls' });
           }
           return completion({ text: 'The PRD is reviewed and updated.' });
@@ -68,10 +68,10 @@ function scenario(state: { doc: string }): Scenario {
         }
         read += 1;
         // The third read re-reads lines the model has already been served.
-        const args: Served = read === 3 ? { offset: 10, limit: 30 } : { offset: 1 + (read - 1) * WINDOW, limit: WINDOW };
+        const args = { path: PRD_PATH, ...(read === 3 ? { offset: 10, limit: 30 } : { offset: 1 + (read - 1) * WINDOW, limit: WINDOW }) };
         return completion({ toolCalls: [call('read_file', args, `r${turn}`)], finishReason: 'tool_calls' });
       }));
-      await host.start({ userTurn: PROMPT, entryPoint: 'vscode', readsCovered: true });
+      await host.start({ userTurn: PROMPT, entryPoint: 'vscode', });
     },
   };
 }
@@ -89,8 +89,7 @@ describe('the section 8.4 reference scenario through the Brain on the agent engi
     expect(spawnTurn).toBeGreaterThan(0);
     expect(spawnTurn).toBeLessThanOrEqual(5);
     expect(record.wire.filter((w) => !w.summary).length).toBeLessThanOrEqual(15);
-    expect(JSON.stringify(record.persisted.filter((m) => m.role === 'tool').slice(-4).map((m) => String(m.content).slice(0, 300)))).toBe('DBG');
-    expect(names).toContain('edit_file');
+        expect(names).toContain('edit_file');
     expect(state.doc).toContain('## Section 1 (reviewed)');
   });
 
@@ -114,7 +113,5 @@ describe('the section 8.4 reference scenario through the Brain on the agent engi
     expect(reads.length).toBeGreaterThanOrEqual(4);
     // The re-read of lines 10-39 was answered from coverage, so the check above ran on a real stub.
     expect(stubs).toBeGreaterThan(0);
-    void calls;
-    void reply;
   });
 });

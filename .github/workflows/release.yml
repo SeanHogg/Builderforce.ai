@@ -856,7 +856,7 @@ jobs:
           - name: conformance (brain-embedded + canvas)
             run: >-
               bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
-              "pnpm --dir ../brain-embedded exec vitest run src/crossAdapterConformance.test.ts src/run/conformance.test.ts src/run/webAdapter.test.ts"
+              "pnpm --dir ../brain-embedded exec vitest run src/crossAdapterConformance.test.ts src/referenceScenario.test.ts src/run/conformance.test.ts src/run/webAdapter.test.ts src/run/parity"
               "pnpm exec vitest run src/lib/canvasCrossAdapter.test.ts"
               "pnpm --dir ../clients/chrome install --frozen-lockfile && pnpm --dir ../clients/chrome exec vitest run src/host/rovrRunHost.entryPoint.test.ts"
           # PRD 35 WS4 D3, the parity oracle on BOTH engines. The test files that drive `startRun`
