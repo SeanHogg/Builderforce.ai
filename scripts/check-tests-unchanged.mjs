@@ -8,9 +8,14 @@
  *
  * The work is on main, so there is no branch to diff. Three things are checked:
  *
- *   1. EDITED: a pre-existing test file changed by a PROGRAM commit in `BASE..HEAD` (subject names PRD 35 / a WS / agent-run) or by an
- *      uncommitted edit. BASE defaults to `origin/main` (what has not been pushed), or `HEAD` where that is not readable. The body is
- *      compared with BASE's after imports and `vi.mock` paths are normalised away. A deleted test is always a failure.
+ *   1. EDITED: a pre-existing file of the program's ORACLE that differs between BASE and the working tree (commits since BASE and
+ *      uncommitted edits alike). The oracle is scoped by PATH, never by commit subject, so a change committed as "Fixes" is seen:
+ *      every file in `brain-embedded/src/run/parity/oracle.files.txt` (as at BASE or now, so dropping a line frees nothing), the
+ *      packages/agent-run tests, the kernel's own tests, the agent-runtime run tests, the conformance tests, the Brain parity directory
+ *      and the list itself (see `GUARDED`). The base is the merge base of BASE and HEAD. Parity snapshots must match exactly.
+ *      A test outside that set is ordinary feature work and is not examined. BASE defaults to `origin/main` (what has not been pushed), or `HEAD` where that is not readable; CI sets `AGENT_RUN_BASE` to the push's own `before` commit, because
+ *      on a pushed main `origin/main` IS `HEAD`. The body is compared with BASE's after imports and `vi.mock` paths are normalised
+ *      away. A deleted file (or one moved away) is always a failure unless approved.
  *   2. BROUGHT ALONG: a test under `packages/agent-run/test/` that names its source test in its header (a backticked `*.test.ts` path)
  *      is compared with that source AS IT WAS BEFORE THE PROGRAM (`PROGRAM_BASE`), not as it stands now, so a source that was later
  *      trimmed cannot hide a dropped case. Its case count may not fall.
@@ -30,8 +35,25 @@ import { APPROVED, PROGRAM_BASE } from './tests-unchanged.approved.mjs';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const BROUGHT_ALONG_DIR = 'packages/agent-run/test';
-/** A commit that belongs to this program: it names PRD 35, a workstream or the agent. */
-const PROGRAM_COMMIT = /PRD 35|\bWS\d|agent-run|one agent/i;
+/** The Brain's run-store oracle: one list for every package (`runOracle.mjs <pkg>` filters it by prefix). */
+const ORACLE_LIST = 'brain-embedded/src/run/parity/oracle.files.txt';
+/**
+ * The rest of the program's oracle, by path. Anything matching is held to §5.1 whoever committed it and whatever the subject says.
+ * Every file under the agent-run test tree counts (fixtures and helpers too, not only `*.test.ts`), as does the whole Brain parity
+ * directory (its snapshots, scenarios and normaliser decide what the snapshots prove) and the Brain's run harnesses. The oracle list
+ * itself is guarded by `oracleEdited` (a dropped line would free its test).
+ */
+const GUARDED = [
+  /^packages\/agent-run\/test\//,
+  /^packages\/agent-loop\/.*\.test\.[cm]?[jt]sx?$/,
+  /^agent-runtime\/src\/run\/[^/]+\.test\.[cm]?[jt]sx?$/,
+  /^agent-runtime\/src\/conformance\//,
+  /^api\/src\/application\/runtime\/cloudAdapter\.(?:conformance|sharedTask)\.test\.ts$/,
+  /^brain-embedded\/src\/run\/parity\//,
+  /^brain-embedded\/src\/test\/(?:brainRunHarness|continueHarness|draftHost|engineKit)\.tsx?$/,
+];
+/** Stored records, not code: any difference at all (an inserted key, a changed value) fails unless approved. */
+const EXACT = /^brain-embedded\/src\/run\/parity\/snapshots\//;
 /** Skip markers the repository holds today (all outside this program's tests). It may only fall. */
 const SKIP_MARKER_BASELINE = 21;
 
@@ -50,7 +72,8 @@ function readable(ref) {
   }
 }
 
-const BASE = process.env.AGENT_RUN_BASE ?? (readable('origin/main') ? 'origin/main' : 'HEAD');
+// `||`, not `??`: CI passes an empty string on a manual run, which must fall back like an unset variable.
+const BASE = process.env.AGENT_RUN_BASE || (readable('origin/main') ? 'origin/main' : 'HEAD');
 
 /** The file's content at `ref`, or null when it was not there. */
 function at(ref, file) {
@@ -134,40 +157,46 @@ if (!baseReadable) console.log(`  Base '${BASE}' is not readable here (shallow c
 if (!programBaseReadable) console.log(`  Program base '${PROGRAM_BASE}' is not readable here (shallow clone?) - brought-along comparison skipped.`);
 
 // 1. EDITED ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-function changedTests(filter, range) {
-  const out = new Set();
-  const names = git(['diff', '--name-only', `--diff-filter=${filter}`, ...range]).split('\n');
-  for (const name of names) if (name.trim() && TEST_FILE.test(name.trim())) out.add(name.trim());
-  return out;
+/**
+ * The commit `BASE` and `HEAD` diverged from. A local HEAD behind a freshly fetched `origin/main` would otherwise read upstream's
+ * changes as reverse edits of the oracle. Falls back to `BASE` itself where there is none.
+ */
+function diffBase() {
+  try {
+    return git(['merge-base', BASE, 'HEAD']).trim() || BASE;
+  } catch {
+    return BASE;
+  }
 }
 
-/** Test files touched (not added) by program commits in BASE..HEAD, plus uncommitted ones. */
-function programEdited() {
-  const files = new Set();
-  const subjects = git(['log', '--format=%H%x09%s', `${BASE}..HEAD`]).split('\n').filter(Boolean);
-  for (const line of subjects) {
-    const [hash, ...rest] = line.split('\t');
-    if (!PROGRAM_COMMIT.test(rest.join('\t'))) continue;
-    for (const name of git(['show', '--name-only', '--diff-filter=MRD', '--format=', hash]).split('\n')) {
-      if (name.trim() && TEST_FILE.test(name.trim())) files.add(name.trim());
-    }
-  }
-  for (const name of changedTests('MRD', [])) files.add(name);
-  return files;
+/** Oracle-list entries (repo-relative paths) as the list reads at `ref`, or in the working tree when `ref` is null. */
+function oracleListed(ref) {
+  const text = ref === null ? (existsSync(resolve(repoRoot, ORACLE_LIST)) ? readFileSync(resolve(repoRoot, ORACLE_LIST), 'utf8') : null) : at(ref, ORACLE_LIST);
+  return (text ?? '').split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+}
+
+/** Files of the program's oracle that differ from BASE: modified or deleted, since BASE or uncommitted. Not by commit subject. */
+function oracleEdited(base) {
+  const listed = new Set([...oracleListed(base), ...oracleListed(null)]);
+  const guarded = (name) => name === ORACLE_LIST || listed.has(name) || GUARDED.some((pattern) => pattern.test(name));
+  // --no-renames: a moved oracle file is a deletion of the original (and an added file), never a quiet rename. T: a file turned symlink.
+  const names = git(['diff', '--name-only', '--no-renames', '--diff-filter=MDT', base]).split('\n');
+  return new Set(names.map((name) => name.trim()).filter((name) => name && guarded(name)));
 }
 
 if (baseReadable) {
+  const base = diffBase();
   let edited = [];
+  let diffed = true;
   try {
-    edited = [...programEdited()].sort();
+    edited = [...oracleEdited(base)].sort();
   } catch {
-    console.log(`  No merge base with '${BASE}' - edited-test comparison skipped.`);
+    diffed = false;
+    console.log(`  Cannot diff against '${BASE}' - edited-test comparison skipped.`);
   }
-  let compared = 0;
   for (const file of edited) {
-    const original = at(BASE, file);
-    if (original === null) continue; // added since BASE: a new test is not an edit of an oracle
-    compared += 1;
+    const original = at(base, file);
+    if (original === null) continue; // a diff-listed file existed at the base, so this is an unreadable object: nothing to compare with
     if (!existsSync(resolve(repoRoot, file))) {
       const approval = approvedByFile.get(file);
       if (approval) {
@@ -179,9 +208,22 @@ if (baseReadable) {
       }
       continue;
     }
-    verdict(file, file, original, readFileSync(resolve(repoRoot, file), 'utf8'));
+    const current = readFileSync(resolve(repoRoot, file), 'utf8');
+    if (EXACT.test(file)) {
+      if (current === original) continue;
+      const approval = approvedByFile.get(file);
+      if (approval) {
+        approvedCount += 1;
+        console.log(`  approved ${file} (${approval.approvedBy}): ${approval.reason}`);
+      } else {
+        failures += 1;
+        console.log(`  FAIL ${file}: a stored record changed`);
+      }
+      continue;
+    }
+    verdict(file, file, original, current);
   }
-  if (compared === 0) console.log(`  No pre-existing test file was changed by a program commit since ${BASE}.`);
+  if (diffed) console.log(`  ${edited.length} oracle file(s) differ from ${base === BASE ? BASE : `${BASE} (merge base ${base.slice(0, 9)})`}.`);
 }
 
 // 2. BROUGHT ALONG ───────────────────────────────────────────────────────────────────────────────────────────────────

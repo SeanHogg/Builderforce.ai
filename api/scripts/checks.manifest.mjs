@@ -62,8 +62,8 @@ export default [
   // Repo-level (PRD 35 §3.3 / §5.1): guards for the one-agent-one-kernel program.
   // check:one-execution runs ENFORCED, with an empty allowlist: it fails on any import of
   // `runAgentLoop` outside the one agent, on any reach into agent-run's `policy/*`, and on a
-  // second driver inside agent-run. check:tests-unchanged ENFORCES §5.1: a pre-existing test changed by a program
-  // commit, and every test brought along into packages/agent-run (against its source as it was
+  // second driver inside agent-run. check:tests-unchanged ENFORCES §5.1: a pre-existing oracle file (chosen by path, never
+  // by commit subject) changed since the base, and every test brought along into packages/agent-run (against its source as it was
   // before the program), may differ only by imports unless scripts/tests-unchanged.approved.mjs
   // lists the change; a new skip marker or a lower case count fails. The `guards` CI leg
   // unshallows the clone first, because the originals are read from git history.

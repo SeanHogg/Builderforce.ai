@@ -637,7 +637,12 @@ jobs:
       # check:tests-unchanged reads test files as they were before the PRD 35 program (git show), which a depth-1 clone cannot.
       - name: Full history for the test-oracle guard
         if: matrix.name == 'guards'
-        run: git fetch --unshallow --quiet || true
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          git fetch --unshallow --quiet || true
+          # The push's own base (AGENT_RUN_BASE on the guards step) is not an ancestor after a force-push: fetch it by id.
+          if [ -n "$BEFORE" ] && [ "${BEFORE#0000000}" = "$BEFORE" ]; then git fetch --quiet origin "$BEFORE" || true; fi
 
       - uses: pnpm/action-setup@v6
         with:
@@ -661,6 +666,10 @@ jobs:
           # forks inherit it too. api's graph (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …)
           # is what outgrew Node's default ~4 GiB heap.
           NODE_OPTIONS: --max-old-space-size=6144
+          # check:tests-unchanged compares the oracle tests with this commit. Its default (origin/main) IS the pushed HEAD in CI, which
+          # would examine nothing; the push's own `before` makes it evaluate exactly what this push changed. Empty on a manual run, where
+          # the guard falls back to its default.
+          AGENT_RUN_BASE: ${{ github.event.before }}
         run: |
           pnpm install --frozen-lockfile
           # packages/agent-tools is compiled from source (tsconfig paths), and its imports of npm

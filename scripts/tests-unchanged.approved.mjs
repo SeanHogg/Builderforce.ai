@@ -294,4 +294,21 @@ export const APPROVED = [
     reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. There is one engine, so every test that drives a run is in the list.",
     approvedBy: APPROVED_BY,
   },
+  // ── support files of the Brain's loop-vs-agent comparison, reduced to the agent when the loop was deleted ──
+  ...[
+    ['brain-embedded/src/run/parity/diff.ts', 'The record diff is labelled snapshot/agent, not loop/agent; atMostOneReportPerRun no longer takes an engine.'],
+    ['brain-embedded/src/run/parity/engines.ts', 'Deleted (the list of engines to run a scenario on).'],
+    ['brain-embedded/src/run/parity/harness.ts', 'runScenario and its recorder no longer take or record an engine.'],
+    ['brain-embedded/src/run/parity/oracle.files.txt', 'engineRunRow.test.ts leaves the list (deleted, its own approval); the tests that were exempt as choosing their own engine, and the new oracle files, join it.'],
+    ['brain-embedded/src/run/parity/runOracle.mjs', 'The <loop|agent> argument and BRAIN_RUN_ENGINE are gone: one engine.'],
+    ['brain-embedded/src/run/parity/snapshots.ts', 'writeSnapshot is deleted: a snapshot can only be read, because the loop that generated them no longer exists.'],
+    ['brain-embedded/src/run/parity/types.ts', 'RunRecord and Observed no longer carry an engine id.'],
+    ['brain-embedded/src/test/brainRunHarness.ts', 'binding() builds the ports the Brain gives the agent (event sink, run store, steering) and runBound drives them; the reportOutcome hook it replaced was the loop-only seam.'],
+    ['brain-embedded/src/test/engineKit.ts', 'runOn no longer takes an engine and bothEngines is gone; Scenario no longer omits an engine field.'],
+  ].map(([file, changed]) => ({
+    file,
+    changed,
+    reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. This file only existed to run or compare the two engines; it now serves the agent and the stored snapshots, and no scenario, input or expected value in it changed.",
+    approvedBy: APPROVED_BY,
+  })),
 ];
