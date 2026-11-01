@@ -48,6 +48,48 @@ describe("askUserBlock — the producer half", () => {
     const args = { question: "Which?", options: ["a", "b"] };
     expect(parseAskUser(askUserBlock(args)!)).toEqual(coerceAskUserPayload(args));
   });
+
+  it("round-trips a recommended option through the fence", () => {
+    const block = askUserBlock({
+      question: "How to proceed?",
+      options: [
+        { label: "Do it now", recommended: true },
+        { label: "Skip it" },
+      ],
+    });
+    expect(block).not.toBeNull();
+    expect(parseAskUser(block!)).toEqual({
+      question: "How to proceed?",
+      options: [{ label: "Do it now", recommended: true }, { label: "Skip it" }],
+      multiSelect: false,
+    });
+  });
+
+  it("leaves recommended undefined when the option carries no flag", () => {
+    const block = askUserBlock({ question: "Which?", options: [{ label: "a" }, { label: "b" }] });
+    const parsed = parseAskUser(block!);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.options.every((o) => o.recommended === undefined)).toBe(true);
+    const coerced = coerceAskUserPayload({ question: "Which?", options: [{ label: "a" }, { label: "b" }] });
+    expect(coerced).not.toBeNull();
+    expect(coerced!.options[0]?.recommended).toBeUndefined();
+  });
+
+  it("preserves a recommended option through coerceAskUserPayload", () => {
+    const payload = coerceAskUserPayload({
+      question: "How to proceed?",
+      options: [
+        { label: "Keep and use", description: "Reuse the existing answers", recommended: true },
+        { label: "Auto approve", recommended: false },
+        "Skip",
+      ],
+    });
+    expect(payload?.options).toEqual([
+      { label: "Keep and use", description: "Reuse the existing answers", recommended: true },
+      { label: "Auto approve" },
+      { label: "Skip" },
+    ]);
+  });
 });
 
 describe("liftProseAskUser — a question asked in prose still becomes the card", () => {

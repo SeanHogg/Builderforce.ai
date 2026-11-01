@@ -127,6 +127,10 @@ export type {
 export interface AskUserOption {
   label: string;
   description?: string;
+  /** Mark the option the model would advise / the default pick — hosts in
+   *  auto-answer mode pick the first recommended option when the user isn't
+   *  asked. Optional; ignored by readers that don't support it. */
+  recommended?: boolean;
 }
 
 export interface AskUserPayload {
@@ -162,7 +166,7 @@ export const ASK_USER_TOOL_SPEC: AskUserToolSpec = {
   function: {
     name: ASK_USER_TOOL,
     description:
-      "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
     parameters: {
       type: "object",
       properties: {
@@ -175,6 +179,7 @@ export const ASK_USER_TOOL_SPEC: AskUserToolSpec = {
             properties: {
               label: { type: "string", description: "Short choice text (1–5 words)." },
               description: { type: "string", description: "Optional one-line explanation of this choice." },
+              recommended: { type: "boolean", description: "Optional: true on the option you would advise as the default pick." },
             },
             required: ["label"],
           },
@@ -210,7 +215,8 @@ export function coerceAskUserPayload(raw: unknown): AskUserPayload | null {
         const rec = it as Record<string, unknown>;
         const label = typeof rec.label === "string" ? rec.label.trim() : "";
         const description = typeof rec.description === "string" ? rec.description.trim() : undefined;
-        return label ? { label, ...(description ? { description } : {}) } : null;
+        const recommended = rec.recommended === true ? true : undefined;
+        return label ? { label, ...(description ? { description } : {}), ...(recommended ? { recommended } : {}) } : null;
       }
       return null;
     })
