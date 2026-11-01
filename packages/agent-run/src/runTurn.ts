@@ -9,12 +9,12 @@ import { SKILL_TOOLS, SUBAGENT_TOOLS, buildCoreToolRegistry, type ToolRegistry, 
 import { malformedCallOutcome, type LoopDispatchResult, type LoopTurnResult, type ParsedToolCall, type TurnContext } from "@builderforce/agent-loop";
 import { reduceRunPolicy } from "@builderforce/run-policy";
 import { ModelTransportError, type ContextPack, type RunPolicy, type ModelCompletion, type ModelRequest, type RunMessage, type RunPorts, type RunState } from "./contract.js";
-import { nativeResults, type NativeResult } from "./runRows.js";
+import { killedResults, nativeResults, type NativeResult } from "./runRows.js";
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { routeAround, turnSucceeded, type TurnAsk } from "./policy/model/handoff.js";
 import { reaskAsCoder } from "./policy/model/reask.js";
-import { interruptedResult, runToolWithWatch, type InterruptWatch } from "./policy/steering/index.js";
+import { interruptedResult, runToolWithWatch, stoppedResult, type InterruptWatch } from "./policy/steering/index.js";
 import { toolsTokensOf } from "./policy/compaction/compact.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
@@ -327,7 +327,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     state.model = reduceRunPolicy(state.model, { type: "hand_off" });
   }
   try {
-    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult } = {};
+    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; killed?: boolean; kind?: "cached" | "neutral"; native?: NativeResult } = {};
     const data = await runToolWithWatch(
       async (name, args, stepSignal) => {
         const run = stepSignal ?? signal;
@@ -344,7 +344,12 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
           if (result.parts || result.meta) box.native = { ...(result.parts ? { parts: result.parts } : {}), ...(result.meta ? { meta: result.meta } : {}) };
           if (result.cached) box.kind = "cached";
           else if (result.neutral) box.kind = "neutral";
-          return result.aborted ? interruptedResult(result.data) : result.data;
+          // A command its signal killed answers in the policy's words: a steered message interrupted it, or the person's Stop did.
+          if (result.aborted) {
+            box.killed = true;
+            return signal?.aborted ? stoppedResult(result.data) : interruptedResult(result.data);
+          }
+          return result.data;
         }
         const result = await registryOf(ports).dispatch(name, args as Record<string, unknown>, { caps: ports.capabilities, ...(run ? { signal: run } : {}) });
         box.control = result.control;
@@ -364,6 +369,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
     if (box.kind) callKinds.set(dispatched, box.kind);
     if (box.native) nativeResults.set(dispatched, box.native);
+    if (box.killed) killedResults.add(dispatched);
     return dispatched;
   } catch (err) {
     // A resumable interruption (a platform eviction) is not the tool's failure to hand the model: it ends this tick and the host re-arms.

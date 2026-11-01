@@ -13,6 +13,7 @@ vi.mock('../marketing/suppression', async (importOriginal) => ({
 
 import { runSequenceSweep } from './sequenceRunner';
 import { sendFromMailbox } from '../mailbox/mailboxService';
+import { publishSocialPost } from '../social/socialService';
 import { suppressedEmails } from '../marketing/suppression';
 import { recordActivity } from '../activity/activityLog';
 import type { Env } from '../../env';
@@ -128,7 +129,7 @@ describe('runSequenceSweep — do-not-contact', () => {
     enrolments: [{ contactRef: 'Gone@x.test', name: 'Gone', enrolledAtISO: enrolledAt, stepsSent: 0 }],
   });
 
-  it.each(['call', 'sms', 'task'])('stops a suppressed person on a %s step too, and creates no follow-up card', async (channel) => {
+  it.each(['call', 'sms', 'task', 'social'])('stops a suppressed person on a %s step too, and creates no follow-up card', async (channel) => {
     vi.mocked(sendFromMailbox).mockReset();
     vi.mocked(suppressedEmails).mockReset().mockResolvedValue(new Set(['gone@x.test']));
     const { db, inserts, updates } = fakeDb([stepOf(channel)], [{ id: 5 }]);
@@ -139,6 +140,8 @@ describe('runSequenceSweep — do-not-contact', () => {
     expect(suppressedEmails).toHaveBeenCalledTimes(1);
     expect(inserts).toEqual([]);
     expect(sendFromMailbox).not.toHaveBeenCalled();
+    // A social step never reaches the publisher for a suppressed person either.
+    expect(publishSocialPost).not.toHaveBeenCalled();
     const saved = updates.find((u) => 'content' in u)!.content as { enrolments: Array<Record<string, unknown>> };
     expect(saved.enrolments[0]!.stoppedAtISO).toBe(NOW.toISOString());
   });

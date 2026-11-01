@@ -72,15 +72,16 @@ export const steeringHook: SteeringHook = {
 export {
   INTERRUPTED_BY_STEER,
   SKIPPED_BY_STEER,
+  STOPPED_BY_USER,
   WAIT_INTERRUPTED_BY_STEER,
   interruptedResult,
-  isInterruptedResult,
   isInterruptibleCall,
   runInterruptWatch,
   runToolInterruptibly,
   runToolWithWatch,
   skipOnSteer,
   steerSkip,
+  stoppedResult,
   type InterruptWatch,
   type SteerMessage,
 } from "./steerInterrupt.js";

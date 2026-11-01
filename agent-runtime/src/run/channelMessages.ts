@@ -109,7 +109,7 @@ export function toRunRow(message: AgentMessage): RunMessage {
     default:
       // bash executions, branch / compaction summaries and custom messages: the model reads them through `convertToLlm`, so they
       // ride whole and come back as they were.
-      return { role: "user", content: textOf((message as { content?: unknown }).content) || (message as { summary?: string }).summary || "", meta: { agentMessage: message } };
+      return { role: "user", content: textOf((message as { content?: unknown }).content) || (message as { summary?: string }).summary || "", custom: true, meta: { agentMessage: message } };
   }
 }
 

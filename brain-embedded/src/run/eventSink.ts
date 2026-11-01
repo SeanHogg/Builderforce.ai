@@ -14,6 +14,7 @@ import type { EventSink, RunEvent, RunOutcomeRow } from '@builderforce/agent-run
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from '../runStore/runCell';
 import { emit, nowIso, pushTrace } from '../runStore/runCells';
+import { noteBudgetContained } from '../runStore/runEndOutcome';
 import { stallTraceStep } from './stallTrace';
 
 /** The trace step for an event, or null when the event has no step of its own. Pure. */
@@ -44,6 +45,24 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
         args: { step: event.step, messages: 1 },
         result: 'The person sent direction while the run was working; it reached the next model call.',
       };
+    case 'budget.warning':
+      return { ts, category: 'message', label: 'run.budget_warning', args: { spentMillicents: event.spentMc, capMillicents: event.capMc }, result: event.text };
+    case 'budget.contained':
+      return {
+        ts,
+        category: 'message',
+        label: 'run.budget_contained',
+        args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
+        result: event.text,
+      };
+    case 'budget.unpriced':
+      return {
+        ts,
+        category: 'message',
+        label: 'run.budget_unpriced',
+        args: { model: event.model ?? null },
+        result: 'A call had no known price, so the run cap counts only the spend that is priced.',
+      };
     case 'stall.recovered':
       return stallTraceStep(event, ts);
     default:
@@ -71,6 +90,8 @@ export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReac
   return {
     emit(event: RunEvent): void {
       if (on.recorded?.has(event.kind)) return;
+      // The run's end is reported as contained (`runEndOutcome.ts`), as the Brain's loop notes it.
+      if (event.kind === 'budget.contained') noteBudgetContained(c);
       if (event.kind === 'model.coder_reask' && on.coderReask) return on.coderReask(event);
       if (event.kind === 'context.compacted' && on.compacted) return on.compacted(event);
       const step = traceStepFor(event, nowIso());

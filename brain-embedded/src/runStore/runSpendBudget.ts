@@ -26,8 +26,8 @@ import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { MILLICENTS_PER_USD, runBudgetBreach, runBudgetWarnDue, type RunBudgetCaps } from '@builderforce/spend-contract';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import type { PriceBook } from '@builderforce/model-catalog';
-import { callCostOrUnknown } from '../localChat/callCost';
-import { servedModel, usageRouteOf } from '../localChat/usageLedger';
+import { turnPriceMc } from '../localChat/turnCost';
+import { servedModel } from '../localChat/usageLedger';
 import type { RunCell } from './runCell';
 import { cells, emit, nowIso, pushTrace, recordAppended } from './runCells';
 import { noteBudgetContained } from './runEndOutcome';
@@ -98,16 +98,22 @@ export function runSpendTree(run: Pick<RunLoopContext, 'c' | 'req'>, capMc: numb
   return tree;
 }
 
-/** `book` prices the calls — the bundled snapshot unless a test lends one. */
-export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHooks {
+/** The tree `run` joins and the cap it is held to, or null when it is uncapped (its cell then carries no tree, so its children never join a stale one). */
+export function joinRunSpend(run: Pick<RunLoopContext, 'c' | 'req'>): { tree: RunSpendTree; capMc: number } | null {
   const ownCapMc = runBudgetCapMillicents(run.req.maxRunBudgetUsd);
   if (ownCapMc == null) {
-    // An uncapped run's cell carries no tree, so its children never join a stale one.
     spendTrees.delete(run.c);
-    return {};
+    return null;
   }
   const tree = runSpendTree(run, ownCapMc);
-  const capMc = Math.min(ownCapMc, tree.capMc);
+  return { tree, capMc: Math.min(ownCapMc, tree.capMc) };
+}
+
+/** `book` prices the calls — the bundled snapshot unless a test lends one. */
+export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHooks {
+  const joined = joinRunSpend(run);
+  if (!joined) return {};
+  const { tree, capMc } = joined;
   const caps: RunBudgetCaps = { maxSpendMillicents: capMc };
   // Each run of the tree is told once — each is a model that must converge.
   let warned = false;
@@ -166,24 +172,9 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
     afterTurn(_ctx, turn) {
       const meta = turn.meta as TurnMeta | undefined;
       if (!meta) return;
-      const usage = meta.result.usage;
-      const route = usageRouteOf(meta.result, meta.requested);
-      const model = servedModel(meta.result, meta.requested);
-      // A turn that reported no usage cannot be priced: off the device it is an UNPRICED call (as the run tally
-      // reads it), never free; a call the device answered costs nothing whatever it reported.
-      if (!usage) {
-        if (route !== 'local') noteUnpriced(model);
-        return;
-      }
-      // The ONE device cost rule, by where the call ran (a local-first serve costs nothing), pricing the SAME
-      // served model its route came from. A call with no known price is counted as unpriced, not as free.
-      const cost = callCostOrUnknown(model, {
-        prompt: usage.prompt ?? 0,
-        completion: usage.completion ?? 0,
-        cacheRead: usage.cacheRead ?? 0,
-        cacheCreation: usage.cacheCreation ?? 0,
-      }, book, route);
-      if (cost === undefined) noteUnpriced(model);
+      // The ONE turn price (`localChat/turnCost.ts`): a call with no known price is counted as unpriced, not as free.
+      const cost = turnPriceMc(meta.result, meta.requested, book);
+      if (cost === undefined) noteUnpriced(servedModel(meta.result, meta.requested));
       else tree.spentMc += cost;
     },
   };

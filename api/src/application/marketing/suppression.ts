@@ -14,8 +14,9 @@
  *
  * WHO HONOURS IT
  *   - Campaigns (email and SMS, which the newsletter send uses) — recipient lists are built
- *     in one place, `campaign/start.ts`, and {@link suppressedEmails} runs there. An SMS
- *     campaign is checked on each member's EMAIL, the audience's key.
+ *     in one place, `campaign/start.ts`, and {@link suppressedEmails} runs there. An email
+ *     campaign is checked on each member's EMAIL, the audience's key; an SMS campaign on BOTH
+ *     the email and the E.164 number, and a member blocked on either is not texted.
  *   - The sales sequence runner (`sales/sequenceRunner.ts`) — a sequence send does not go
  *     through campaign materialisation, so the runner asks {@link suppressedEmails} itself,
  *     once per cadence, for every due step whose contact is an address or an E.164 number,

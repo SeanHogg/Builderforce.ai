@@ -12,6 +12,7 @@ import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { loopFoldReaction } from './loopFold';
 import { loopRunStore } from './loopStore';
+import { loopSpendMeter } from './loopSpend';
 import { loopSteeringSource } from './loopSteering';
 import { settleBrainRun } from './loopSettle';
 import { brainEventSink } from './eventSink';
@@ -24,6 +25,7 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
   const { c, req, runKey } = run;
   const { observer, last } = loopTurnObserver(run);
   const platform = brainPlatformTools(run);
+  const spend = loopSpendMeter(run);
   const binding: BrainRunBinding = {
     entryPoint: req.entryPoint ?? 'web',
     cell: c,
@@ -49,6 +51,7 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
       terminalTurn: () => { const reply = last.terminal; last.terminal = undefined; return reply; },
     },
     steering: loopSteeringSource(run, () => last.step),
+    ...(spend ? { spend } : {}),
     store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended }),
     ...(req.reportRunRow ? { reportOutcome: req.reportRunRow } : {}),
   };

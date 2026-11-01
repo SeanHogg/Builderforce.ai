@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  *   f<i>  the earliest armed row that is NOT stuck — what the gate is given
  *
  * `armProbes` feeds the m column. The f column is derived from it the way the SQL derives it
- * (a row due no longer ago than one floor interval), unless a test overrides it with
+ * (a row due no longer ago than one floor interval less one frequent tick), unless a test overrides it with
  * `armFresh` to put a stuck row and a later row in the same table.
  */
 const probeResults: Array<Date | null> = [];
@@ -34,8 +34,8 @@ vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
       SCHEDULE_PROBE_COLUMNS.forEach((_, i) => {
         const plain = row[`m${i}`] ?? null;
         const override = freshOverrides[i];
-        // Not stuck = due no longer ago than one floor interval (or not due yet).
-        row[`f${i}`] = override !== undefined ? override : plain && NOW - plain.getTime() <= FLOOR_INTERVAL_MS ? plain : null;
+        // Not stuck = due no longer ago than one floor interval less one frequent tick (or not due yet).
+        row[`f${i}`] = override !== undefined ? override : plain && NOW - plain.getTime() <= FLOOR_INTERVAL_MS - FREQUENT_TICK_MS ? plain : null;
       });
       return { rows: [row] };
     },
@@ -49,7 +49,7 @@ vi.mock('../observability/caughtErrorReporter', () => ({
   },
 }));
 
-const { publishNextDue, readScheduleStall, FLOOR_INTERVAL_MS } = await import('./cronWorkSignal');
+const { publishNextDue, readScheduleStall, notStuckWindowMs, FLOOR_INTERVAL_MS, FREQUENT_TICK_MS } = await import('./cronWorkSignal');
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { Env } from '../../env';
 
@@ -188,8 +188,39 @@ describe('publishNextDue', () => {
         expect(text).toContain(`AS f${i}`);
       }
       expect(text.match(/>= NOW\(\) - /g)).toHaveLength(6);
-      // The window is the floor interval, in seconds — the classifier's own bound.
-      expect(params.filter((p) => p === FLOOR_INTERVAL_MS / 1000)).toHaveLength(6);
+      // The window is the floor interval LESS ONE FREQUENT TICK, in seconds: the classifier's
+      // bound with a tick of margin, so a published row is still `due` at the next observation.
+      expect(params.filter((p) => p === (FLOOR_INTERVAL_MS - FREQUENT_TICK_MS) / 1000)).toHaveLength(6);
+    });
+
+    /**
+     * A row aged just under the floor is not `stuck` yet, so it is armed and due. Published as the
+     * stamp it would read `stuck` on the very next tick (five minutes on) and shadow every later due
+     * time for a whole window. It is left out of the stamp (the gate falls back to the floor for it)
+     * and not reported as a stall, because by the classifier it is still merely due.
+     */
+    it('does not publish a row aged just under the floor as the stamp (it would read stuck next tick)', async () => {
+      const { kv, store } = fakeKv();
+      const almostStuck = at(NOW - FLOOR_INTERVAL_MS + 60_000);
+      armProbes(null, null, null, null, almostStuck, null);
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(result.earliestMs).toBeNull();
+      expect(store.get('cron:next-due')).toBe('none');
+      expect(result.perTable).toEqual([{ table: 'marketing_campaigns', nextDueMs: almostStuck.getTime() }]);
+      expect(result.stall).toBeNull();
+    });
+
+    it('still publishes a row due a few minutes ago, and a later row is not shadowed by an edge row', async () => {
+      const { kv, store } = fakeKv();
+      armProbes(at(NOW - 10 * 60_000), null, null, null, at(NOW - FLOOR_INTERVAL_MS + 60_000), null);
+      await publishNextDue(envWith(kv), NOW);
+      expect(store.get('cron:next-due')).toBe(String(NOW - 10 * 60_000));
+    });
+
+    it('leaves one frequent tick out of the window, and never goes negative at the minimum floor', () => {
+      expect(notStuckWindowMs(FLOOR_INTERVAL_MS)).toBe(FLOOR_INTERVAL_MS - FREQUENT_TICK_MS);
+      expect(notStuckWindowMs(FREQUENT_TICK_MS)).toBe(0);
+      expect(notStuckWindowMs(1_000)).toBe(0);
     });
   });
 

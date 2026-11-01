@@ -12,7 +12,7 @@ Each program below states the end state, what is deleted, the rollout, how we pr
 | 2 | Canvas comments into `annotations` | Medium | Medium: comment ids and data move | Approve the id and pin mapping |
 | 3 | Retire the `agents` table | Medium | Low | Drop before or after the published Sunset |
 | 4a | SIEM export | Medium | Low: new feature | Confirm the audit event set |
-| 4b | Fleet failover | Medium | Medium: can repeat side effects | Approve the allowlist re-dispatch rule |
+| 4b | Fleet failover | Medium | Medium: can repeat side effects | Approve the write-ahead rule |
 
 ---
 
@@ -62,7 +62,7 @@ Deleted from `index.ts` in push 2: the `/llm`, `/llm/v1/videos` and `/v1/*` moun
 
 **Sequence.**
 
-1. **Measure first.** Build the proposed gateway entry with an esbuild metafile. If the graph is still more than half the API bundle, stop and report which imports hold it there.
+1. **Measure first.** Assess `createSeamRoutes(db)` and decide whether the seam routes move. Then build the proposed gateway entry with an esbuild metafile. If the graph is still more than half the API bundle, stop and report which imports hold it there.
 2. **Push 1.** Cut the cycle through the port. Deploy the Worker on its `workers.dev` hostname with no production routes. The API keeps serving everything.
 3. **Prove it live.** Run real completions, streaming, a builtin tool call, a BYO key and a video job against the `workers.dev` host. Unit tests do not count as validation here.
 4. **Push 2.** Add the routes and remove the mounts from `index.ts`. Rollback is removing the routes.
@@ -99,9 +99,11 @@ Deleted from `index.ts` in push 2: the `/llm`, `/llm/v1/videos` and `/v1/*` moun
 
 **Sequence (expand/contract).**
 
-1. **Push 1 (expand).** Add the columns and a fold ledger. Backfill idempotently. Move reads and writes to `canvasComments.ts`. Keep the old table declared `@deprecated`.
-2. **Deploy window.** The old Worker still writes to the old table, and the ledger records what was copied.
-3. **Push 2 (contract).** Re-run the backfill, reconcile against the ledger, drop the table.
+Migrations run before the Worker deploys, so a backfill in push 1 would expose private comments through the old, ungated Worker. The gate therefore ships first and the rows move later.
+
+1. **Push 1 (gate and expand).** Ship the annotation gate. Add the columns and a fold ledger, with no rows copied. Keep comments on the old table.
+2. **Push 2 (move).** With the gated Worker live, backfill idempotently and move reads and writes to `canvasComments.ts`. Keep the old table declared `@deprecated`. During this deploy window the old Worker still writes to the old table, and the ledger records what was copied.
+3. **Push 3 (contract).** Re-run the backfill, reconcile against the ledger, drop the table.
 
 **Done when.** Row counts reconcile per session. Threads, mentions, resolve and object filtering all pass the unchanged tests. `creationSessionRoutes.ts` loses every comment query. The activity feed still shows `comment.created` and `comment.resolved`.
 
@@ -144,7 +146,7 @@ Deleted from `index.ts` in push 2: the `/llm`, `/llm/v1/videos` and `/v1/*` moun
 **End state.** Extend the existing exporter. No new destination table and no second destination model.
 
 - Add `signals` to `otel_exporters`: `traces`, `audit`, or both. It defaults to `traces`, so nothing changes for existing rows.
-- Add an export sweep that sends audit events as OTLP logs to the collector's logs path. Add a `logsUrl` beside `tracesUrl` (`otelSpans.ts:102-107`). It must swap a `/v1/traces` suffix for `/v1/logs` rather than use a signal-suffixed base as given, or logs would be posted to the traces endpoint, and a plain `${endpoint}/v1/logs` would build `/v1/traces/v1/logs`.
+- Add an export sweep that sends audit events as OTLP logs to the collector's logs path. Add a `logsUrl` beside `tracesUrl` (`otelSpans.ts:102-107`). It must swap any signal suffix (`/v1/traces` or `/v1/metrics`) for `/v1/logs` rather than use a signal-suffixed base as given, or logs would be posted to the wrong endpoint, and a plain `${endpoint}/v1/logs` would build `/v1/traces/v1/logs`.
 - Delivery is at-least-once, with each event's id as the dedup key. Add a per-exporter, per-source cursor; this needs a new column or a small cursor table.
 - Reuse the exporter's encrypted headers and health columns.
 - Extend the existing settings panel, localized in all five catalogs and working in both themes and at narrow widths.
@@ -176,9 +178,10 @@ A completeness marker would not fix this. A per-batch marker cannot reveal a bat
 So the rule inverts and becomes write-ahead:
 
 - Declare an allowlist of tools that are safe to re-run.
-- Before any tool off that list runs, the host must hold a server acknowledgement of its intent for that execution, carrying a per-run sequence number. No acknowledgement means the tool does not run.
+- A host advertises write-ahead support at run start. Older hosts send no intents, so "no intent" proves nothing for them: their runs fail at the deadline exactly as they do today.
+- Before any tool runs, allowlisted or not, the host takes the next per-run sequence number. Only a non-allowlisted tool waits for a server acknowledgement of its intent. No acknowledgement within the timeout means the tool does not run and the run fails.
 - `executionId` becomes required on those intents.
-- A run may re-dispatch only if the server holds no intent for a non-allowlisted tool and the sequence has no gap. Anything else fails and asks a human, with the reason recorded.
+- A run may re-dispatch only if its host advertised support, the server holds no intent for a non-allowlisted tool, and the sequence numbers it has seen have no gap. Anything else fails and asks a human, with the reason recorded.
 
 **Cost.** Every non-allowlisted tool call gains one server round trip before it runs. The allowlist keeps reads off that path.
 

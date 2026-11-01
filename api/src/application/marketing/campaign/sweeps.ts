@@ -72,21 +72,37 @@ export async function runCampaignSendSweep(
   opts: { maxCampaigns?: number; maxDue?: number } = {},
 ): Promise<{ campaigns: number; sent: number; failed: number; started: number }> {
   // Due-first, so a campaign scheduled for now begins on the SAME tick it became
-  // due rather than waiting a second one.
-  const started = await startDueCampaigns(env, db, opts.maxDue);
+  // due rather than waiting a second one. The two halves are independent: starting what is
+  // due must never stop the campaigns already mid-send from advancing (a draft that cannot
+  // start sorts first on every tick), so a throw from the start step is reported, not thrown.
+  let started = 0;
+  try {
+    started = (await startDueCampaigns(env, db, opts.maxDue)).started;
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/marketing/campaign/sweeps.ts', operation: 'runCampaignSendSweep:startDue' });
+  }
   const inFlight = await campaignsInFlight(db, opts.maxCampaigns ?? 5);
   const trackingOrigin = resolveTrackingOrigin(env);
   let sent = 0;
   let failed = 0;
   for (const campaign of inFlight) {
-    // Before the batch, so a campaign whose only outstanding rows are dead claims completes
-    // on this tick instead of the next.
-    await reapStaleClaims(db, campaign.tenantId, campaign.id);
-    const batch = await runCampaignBatch(env, db, campaign.tenantId, campaign.id, { trackingOrigin });
-    sent += batch.sent;
-    failed += batch.failed;
+    // One campaign's throw (its sender, its rows, a database blip) is that campaign's problem:
+    // the others on this tick still get their batch.
+    try {
+      // Before the batch, so a campaign whose only outstanding rows are dead claims completes
+      // on this tick instead of the next.
+      await reapStaleClaims(db, campaign.tenantId, campaign.id);
+      const batch = await runCampaignBatch(env, db, campaign.tenantId, campaign.id, { trackingOrigin });
+      sent += batch.sent;
+      failed += batch.failed;
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'application/marketing/campaign/sweeps.ts',
+        operation: `runCampaignSendSweep:${campaign.id}`,
+      });
+    }
   }
-  return { campaigns: inFlight.length, sent, failed, started: started.started };
+  return { campaigns: inFlight.length, sent, failed, started };
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +140,8 @@ export interface DueSweepResult {
  * of them would fill the per-tick limit and every other scheduled send would wait behind
  * them. Refused campaigns still retry — after the ones that have not been refused, the
  * least recently refused first. Editing or starting a campaign clears the stamp.
+ * A start that throws counts as a refusal (reported, stamped, listed in `refused`): one draft
+ * that cannot start must not stop the others or the in-flight batches.
  * Bounded per tick so one tenant's backlog cannot consume the sweep.
  */
 export async function startDueCampaigns(env: Env, db: Db, limit = 5): Promise<DueSweepResult> {
@@ -146,17 +164,38 @@ export async function startDueCampaigns(env: Env, db: Db, limit = 5): Promise<Du
   let started = 0;
   const refused: DueSweepResult['refused'] = [];
   for (const campaign of due) {
-    const result = await startCampaign(env, db, campaign.tenantId, campaign.id);
-    if (result.ok) {
-      started += 1;
-      continue;
+    // A start that THROWS (a database error part-way, a transport lookup that blew up) is a
+    // refusal like any other. Uncaught it was never stamped, so the same draft sorted first
+    // on every tick and threw again before any later campaign, or any in-flight batch, ran:
+    // one bad draft stopped campaign sending for every tenant.
+    let error = '';
+    let cause: unknown;
+    try {
+      const result = await startCampaign(env, db, campaign.tenantId, campaign.id);
+      if (result.ok) {
+        started += 1;
+        continue;
+      }
+      error = result.error;
+    } catch (thrown) {
+      cause = thrown;
+      error = `Start failed: ${thrown instanceof Error ? thrown.message : 'unexpected error'}`.slice(0, 1_000);
     }
-    refused.push({ campaignId: campaign.id, tenantId: campaign.tenantId, error: result.error });
-    await db
-      .update(marketingCampaigns)
-      .set({ scheduleRefusedAt: sql`NOW()` })
-      .where(and(eq(marketingCampaigns.id, campaign.id), eq(marketingCampaigns.tenantId, campaign.tenantId)));
-    reportCaughtError(new Error(result.error), {
+    refused.push({ campaignId: campaign.id, tenantId: campaign.tenantId, error });
+    try {
+      await db
+        .update(marketingCampaigns)
+        .set({ scheduleRefusedAt: sql`NOW()` })
+        .where(and(eq(marketingCampaigns.id, campaign.id), eq(marketingCampaigns.tenantId, campaign.tenantId)));
+    } catch (stampError) {
+      // The stamp is what rotates a refused draft to the back; failing to write it costs the
+      // rotation on this tick only, and must not take the remaining campaigns down with it.
+      reportCaughtError(stampError, {
+        source: 'application/marketing/campaign/sweeps.ts',
+        operation: `startDueCampaigns:stamp:${campaign.id}`,
+      });
+    }
+    reportCaughtError(cause ?? new Error(error), {
       source: 'application/marketing/campaign/sweeps.ts',
       operation: `startDueCampaigns:${campaign.id}`,
     });

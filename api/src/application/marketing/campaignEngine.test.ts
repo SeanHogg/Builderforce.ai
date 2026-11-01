@@ -324,6 +324,47 @@ describe('startCampaign — the gates that protect real people', () => {
   });
 });
 
+describe('startCampaign — materialising a large audience', () => {
+  const env = {} as Env;
+  const manyMembers = (n: number) => Array.from({ length: n }, (_, i) => ({ email: `m${i}@x.com`, phone: null, phoneStatus: 'subscribed' }));
+
+  it('chunks the recipient INSERT well under the 65,535 bind cap (6 binds a row)', async () => {
+    // 11,000 rows in one statement is 66,000 binds: over the cap. The suppression read is chunked
+    // at 5,000 keys, so it takes three statements; then the inserts; then the flip.
+    const db = fakeDb([[draftRow], manyMembers(11_000), [], [], [], [], [], [], [], [], [], [{ ...draftRow, status: 'sending' }]]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(result).toMatchObject({ ok: true, queued: 11_000 });
+    const inserts = db.calls.filter((c) => c.kind === 'insert');
+    expect(inserts.length).toBeGreaterThan(1);
+    for (const insert of inserts) {
+      expect((insert.payload as unknown[]).length * 6).toBeLessThan(65_535 / 2);
+      expect(insert.chain).toContain('onConflictDoNothing');
+    }
+    // Every recipient exactly once across the chunks.
+    const emails = inserts.flatMap((i) => (i.payload as Array<{ email: string }>).map((r) => r.email));
+    expect(emails).toHaveLength(11_000);
+    expect(new Set(emails).size).toBe(11_000);
+  });
+
+  it('does the inserts and the flip to `sending` in ONE transaction, the flip last', async () => {
+    const db = fakeDb([[draftRow], manyMembers(4_500), [], [], [], [], [{ ...draftRow, status: 'sending' }]]);
+    const tx = vi.spyOn(db, 'transaction');
+    await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(tx).toHaveBeenCalledTimes(1);
+    const writes = db.calls.filter((c) => c.kind === 'insert' || c.kind === 'update');
+    expect(writes.map((c) => c.kind)).toEqual(['insert', 'insert', 'insert', 'update']);
+  });
+
+  it('a chunk that fails leaves the campaign UNSTARTED: it is never flipped to `sending`', async () => {
+    // [binding], members, suppression, chunk 1 ok, chunk 2 rejects. In production the whole
+    // transaction rolls back, so no row is left over for a re-run to send to someone who has
+    // since unsubscribed; here, the flip (the last statement) must at least never be issued.
+    const db = fakeDb([[draftRow], manyMembers(4_500), [], [], new Error('connection reset')]);
+    await expect(startCampaign(env, db as unknown as Db, 7, 1)).rejects.toThrow('connection reset');
+    expect(db.calls.some((c) => c.kind === 'update')).toBe(false);
+  });
+});
+
 describe('updateCampaign', () => {
   it('refuses to edit anything that is not a draft', async () => {
     const db = fakeDb([[]]);   // the status='draft' predicate matched nothing
@@ -372,8 +413,8 @@ describe('runCampaignBatch', () => {
         { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: 'Ada', attributes: {} },
         { id: 2, email: 'b@x.com', trackToken: 't2', attempts: 0, name: '', attributes: {} },
       ],
-      [{ id: 1 }], [],   // claim + mark sent, recipient 1
-      [{ id: 2 }], [],   // claim + mark sent, recipient 2
+      [{ id: 1 }], [{ id: 1 }],   // claim + mark sent (matched a `sending` row), recipient 1
+      [{ id: 2 }], [{ id: 2 }],   // claim + mark sent, recipient 2
       [{ remaining: 0 }],
       [],
     ]);
@@ -437,8 +478,8 @@ describe('runCampaignBatch', () => {
         { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 2, name: '', attributes: {} },
         { id: 2, email: 'b@x.com', trackToken: 't2', attempts: 0, name: '', attributes: {} },
       ],
-      [{ id: 1 }], [],
-      [{ id: 2 }], [],
+      [{ id: 1 }], [{ id: 1 }],
+      [{ id: 2 }], [{ id: 2 }],
       [{ remaining: 0 }],
       [],
     ]);
@@ -477,7 +518,7 @@ describe('runCampaignBatch', () => {
     it('signals pending work when a batch sent and recipients are still queued', async () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 4, queuedLeft: 4 }], []]);
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [{ id: 1 }], [{ remaining: 4, queuedLeft: 4 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       expect(result).toMatchObject({ sent: 1, remaining: 4, status: 'sending' });
       expect(puts).toEqual(['cron:work-pending']);
@@ -490,23 +531,40 @@ describe('runCampaignBatch', () => {
     it('does NOT signal when what remains is only claimed (`sending`) rows nobody will advance', async () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 1 }], []]);
+      // Real SQL always returns both counts: `queuedLeft` is 0 when only `sending` rows remain.
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 0 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       // `remaining` keeps its meaning for callers: everything not yet settled.
       expect(result).toMatchObject({ sent: 1, remaining: 1, status: 'sending' });
       expect(puts).toEqual([]);
     });
 
-    it('does NOT signal when the batch sent nothing, even with recipients queued (a revoked credential)', async () => {
+    /**
+     * A batch that only REQUEUED settled nothing for good: a provider answering 429 to everything
+     * has no reason to do better next batch, so it waits for the floor cadence and Neon suspends.
+     * (The sender-level and recipient-level failures are covered in `campaign/send.test.ts`.)
+     */
+    it('does NOT signal when the batch only requeued, even with recipients queued', async () => {
       sendMock.mockClear();
-      sendMock.mockRejectedValueOnce(new Error('invalid_grant'));
+      sendMock.mockRejectedValueOnce(new Error('429 slow down'));
       const { env: gated, puts } = kvEnv();
-      // At the attempt ceiling, so the failure is terminal rather than requeued.
-      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 2 }], [{ id: 1 }], [], [{ remaining: 9, queuedLeft: 9 }], []]);
+      // Below the attempt ceiling, so the (retryable) failure is requeued rather than written off.
+      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 0 }], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
-      expect(result.sent).toBe(0);
+      expect(result).toMatchObject({ sent: 0, failed: 0 });
       expect(result.status).toBe('sending');
       expect(puts).toEqual([]);
+    });
+
+    it('DOES signal when the first row failed for good: that row is settled and the next may be fine', async () => {
+      sendMock.mockClear();
+      sendMock.mockRejectedValueOnce(new Error('mailbox full'));
+      const { env: gated, puts } = kvEnv();
+      // At the attempt ceiling, so the failure is terminal rather than requeued.
+      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 2 }], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
+      const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+      expect(result).toMatchObject({ sent: 0, failed: 1, status: 'sending' });
+      expect(puts).toEqual(['cron:work-pending']);
     });
 
     it('does not signal once the queue has drained', async () => {
@@ -653,6 +711,71 @@ describe('startCampaign — SMS', () => {
     expect((result as { error: string }).error).toContain('unsubscribed');
   });
 
+  describe('phone suppression — an SMS reaches the NUMBER', () => {
+    const memberA = { email: 'a@x.com', phone: '+14155550001', phoneStatus: 'subscribed' };
+    const memberB = { email: 'b@x.com', phone: '+14155550002', phoneStatus: 'subscribed' };
+    const started = { ...smsDraftRow, status: 'sending' };
+
+    it('does not text a number on the register when the member email is NOT listed', async () => {
+      const db = fakeDb([
+        [smsDraftRow], twilioConnectionRow, [memberA, memberB],
+        [{ k: 'e', v: '+14155550001' }],   // only the PHONE is on the register
+        [], [started],
+      ]);
+      const result = await startCampaign(env, db as unknown as Db, 7, 1);
+      expect(result).toMatchObject({ ok: true, queued: 1, suppressed: 1, unreachable: 0 });
+      const rows = db.calls.find((c) => c.kind === 'insert')!.payload as Array<{ email: string }>;
+      expect(rows.map((r) => r.email)).toEqual(['b@x.com']);
+      // Both keys of every member went out in ONE register query, never one per key.
+      expect(db.calls.filter((c) => c.kind === 'execute')).toHaveLength(1);
+    });
+
+    it('counts a person blocked on BOTH their email and their number once', async () => {
+      const db = fakeDb([
+        [smsDraftRow], twilioConnectionRow, [memberA, memberB],
+        [{ k: 'e', v: 'a@x.com' }, { k: 'e', v: '+14155550001' }],
+        [], [started],
+      ]);
+      const result = await startCampaign(env, db as unknown as Db, 7, 1);
+      expect(result).toMatchObject({ ok: true, queued: 1, suppressed: 1 });
+      const update = db.calls.find((c) => c.kind === 'update')!.payload as { suppressed: number; recipients: number };
+      expect(update).toMatchObject({ suppressed: 1, recipients: 1 });
+    });
+
+    it('still blocks on the email alone (the audience key)', async () => {
+      const db = fakeDb([
+        [smsDraftRow], twilioConnectionRow, [memberA, memberB],
+        [{ k: 'e', v: 'b@x.com' }],
+        [], [started],
+      ]);
+      const result = await startCampaign(env, db as unknown as Db, 7, 1);
+      expect(result).toMatchObject({ ok: true, queued: 1, suppressed: 1 });
+      const rows = db.calls.find((c) => c.kind === 'insert')!.payload as Array<{ email: string }>;
+      expect(rows.map((r) => r.email)).toEqual(['a@x.com']);
+    });
+
+    it('refuses when every reachable member is blocked by number only', async () => {
+      const db = fakeDb([
+        [smsDraftRow], twilioConnectionRow, [memberA],
+        [{ k: 'e', v: '+14155550001' }],
+      ]);
+      const result = await startCampaign(env, db as unknown as Db, 7, 1);
+      expect(result).toMatchObject({ ok: false, status: 400 });
+      expect(db.calls.some((c) => c.kind === 'insert')).toBe(false);
+    });
+
+    it('leaves an EMAIL campaign alone: a number on the register does not block an address', async () => {
+      const db = fakeDb([
+        [draftRow], [memberA, memberB],
+        [{ k: 'e', v: '+14155550001' }],   // a phone entry; an email campaign never asks for it
+        [], [{ ...draftRow, status: 'sending' }],
+      ]);
+      const result = await startCampaign(env, db as unknown as Db, 7, 1);
+      expect(result).toMatchObject({ ok: true, queued: 2, suppressed: 0 });
+      expect(JSON.stringify(db.calls.filter((c) => c.kind === 'execute'))).not.toContain('+14155550001');
+    });
+  });
+
   it('reports 0 unreachable for an EMAIL campaign — the address IS the audience key', async () => {
     const db = fakeDb([
       [draftRow],
@@ -727,6 +850,61 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
     expect(writes).toHaveLength(1);
     // Starting CLEARS the stamp rather than setting it.
     expect((writes[0]!.payload as { scheduleRefusedAt: unknown }).scheduleRefusedAt).toBeNull();
+  });
+
+  describe('a start that THROWS is a refusal', () => {
+    it('is reported, listed, stamped, and does not stop the next campaign from starting', async () => {
+      const db = fakeDb([
+        [{ id: 1, tenantId: 7 }, { id: 2, tenantId: 7 }],   // due
+        new Error('connection reset'),                      // campaign 1: loading the binding throws
+        [],                                                 // …its schedule_refused_at stamp
+        [{ ...draftRow, id: 2 }],                           // campaign 2 loads fine
+        [{ email: 'a@x.com', phone: null, phoneStatus: 'subscribed' }], [], [],
+        [{ ...draftRow, id: 2, status: 'sending', recipients: 1 }],
+      ]);
+      const result = await startDueCampaigns(env, db as unknown as Db);
+      expect(result.started).toBe(1);
+      expect(result.refused).toHaveLength(1);
+      expect(result.refused[0]).toMatchObject({ campaignId: 1, tenantId: 7 });
+      expect(result.refused[0]!.error).toContain('connection reset');
+      const stamp = db.calls.filter((c) => c.kind === 'update')[0]!;
+      expect(Object.keys(stamp.payload as object)).toEqual(['scheduleRefusedAt']);
+    });
+
+    it('survives the stamp write failing too (the sweep is not taken down by its own bookkeeping)', async () => {
+      const db = fakeDb([[{ id: 1, tenantId: 7 }], new Error('boom'), new Error('stamp failed')]);
+      await expect(startDueCampaigns(env, db as unknown as Db)).resolves.toMatchObject({ started: 0 });
+    });
+  });
+
+  describe('runCampaignSendSweep — one failure does not stop the rest', () => {
+    const sending = { ...draftRow, status: 'sending' };
+
+    it('still advances in-flight campaigns when the due-start step throws', async () => {
+      const db = fakeDb([
+        new Error('due read failed'),          // startDueCampaigns throws on its first statement
+        [{ id: 1, tenantId: 7 }],              // in flight
+        [], [sending], [], [],                 // reap (none), binding, logo, no queued rows
+        [{ remaining: 0, queuedLeft: 0 }], [],
+      ]);
+      const result = await runCampaignSendSweep(env, db as unknown as Db);
+      expect(result).toMatchObject({ campaigns: 1, started: 0 });
+      expect(db.calls.filter((c) => c.kind === 'update').at(-1)!.payload).toMatchObject({ status: 'sent' });
+    });
+
+    it('still advances the next campaign when one campaign batch throws', async () => {
+      const db = fakeDb([
+        [],                                          // nothing due
+        [{ id: 1, tenantId: 7 }, { id: 2, tenantId: 7 }],
+        new Error('campaign 1 reap failed'),         // campaign 1 throws before its batch
+        [],                                          // campaign 2: reap (none)
+        [{ ...sending, id: 2 }], [], [],             // …binding, logo, no queued rows
+        [{ remaining: 0, queuedLeft: 0 }], [],
+      ]);
+      const result = await runCampaignSendSweep(env, db as unknown as Db);
+      expect(result.campaigns).toBe(2);
+      expect(db.calls.filter((c) => c.kind === 'update').at(-1)!.payload).toMatchObject({ status: 'sent' });
+    });
   });
 
   /**

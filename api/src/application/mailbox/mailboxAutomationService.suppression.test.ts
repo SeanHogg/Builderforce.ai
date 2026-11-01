@@ -89,6 +89,18 @@ describe('runMailboxAutomationSweep — automatic replies honour the do-not-cont
     expect(reportCaughtError).toHaveBeenCalled();
   });
 
+  it('fails closed on a mode it does not know: it sends, so it is gated like `automatic`', async () => {
+    vi.mocked(suppressedEmails).mockResolvedValue(new Set(['erased@x.com']));
+    const db = dbFor('autopilot');
+    const summary = await runMailboxAutomationSweep({} as Env, db as unknown as Db);
+    expect(suppressedEmails).toHaveBeenCalledTimes(1);
+    expect(sendFromMailbox).not.toHaveBeenCalled();
+    expect(completeForTenant).not.toHaveBeenCalled();
+    const write = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as { status: string; error: string };
+    expect(write).toMatchObject({ status: 'rejected', error: AUTOMATIC_REPLY_SUPPRESSED });
+    expect(summary).toMatchObject({ matched: 1, sent: 0, failed: 0 });
+  });
+
   it('does not ask for the human-reviewed modes: a draft is still drafted for a suppressed sender', async () => {
     vi.mocked(suppressedEmails).mockResolvedValue(new Set(['erased@x.com']));
     const db = dbFor('draft');

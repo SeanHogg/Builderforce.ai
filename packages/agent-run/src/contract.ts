@@ -116,12 +116,13 @@ export interface RunPolicy {
    */
   stallExhausted?: "finish" | "fail" | "note";
   /**
-   * Re-pack the run's context for the incoming model's window when a stall fails it over onto another model, and tell the model
-   * it took over (additive; absent => no hand-off packing, and the compaction is what it always was). Present, the run can land on
-   * ANY window, so its reply reserve follows the model now serving: on-prem's floor within a quarter of that window, and the
-   * request's `maxTokens` is the role cap, clamped to it only when the window forces it (`replyReserve`, policy/compaction/reserve).
+   * The run's conversation outlives it and its session owns the folding (additive; absent => the agent compacts as it always did).
+   * Present, the agent runs NO ordinary compaction: it re-packs the context ONLY when a stall fails the run over onto another model,
+   * for the incoming model's window, and tells that model it took over. The run can land on ANY window, so its reply reserve follows
+   * the model now serving - on-prem's floor within a quarter of that window - and the request names no `maxTokens` unless the window
+   * forces one (`replyReserve` / `replyAsk`, policy/compaction/reserve). A provider's overflow is the session's to handle.
    */
-  modelHandoff?: Record<string, never>;
+  modelHandoff?: true;
   modelStart?: {
     strict?: boolean; delegatedRole?: string; phaseModels?: RunPolicyOptions["phaseModels"];
     /** The run-start model when it is a soft seed rather than `pinnedModel`. */

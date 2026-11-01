@@ -39,7 +39,11 @@ export interface LadderProgress {
 export interface PlatformToolResult {
   data: unknown;
   isError?: boolean;
-  /** The tool was stopped through its signal (a steered message aborted it): the answer is the steering policy's interrupted one, not a failure. */
+  /**
+   * The tool was KILLED through its signal (a steered message or the person's Stop aborted it, and it rejected): the answer is the
+   * steering policy's - interrupted by a message, or stopped - and its row fails, but the call does not count toward the failure streak.
+   * A tool that came back keeps its own result and never sets this.
+   */
   aborted?: true;
   /** The result's native blocks (text, pictures), kept on the tool row beside `data`, which the model reads as text when it is a string. */
   parts?: RunPart[];

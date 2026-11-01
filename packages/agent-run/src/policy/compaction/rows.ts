@@ -13,8 +13,9 @@ import type { PackMessage } from "./pack.js";
 
 /** Map a RunMessage row to the packer's OpenAI shape. Its `content` is the row's TEXT: a row's parts ride along but are not counted. */
 export function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage & { task?: true; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] } = { role: m.role, content: m.content };
+  const row: PackMessage & { task?: true; custom?: true; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] } = { role: m.role, content: m.content };
   if (m.task) row.task = true;
+  if (m.custom) row.custom = true;
   if (m.parts && m.parts.length > 0) row.parts = m.parts;
   if (m.meta) row.meta = m.meta;
   if (m.toolCalls && m.toolCalls.length > 0) {
@@ -30,7 +31,7 @@ export function toPackRow(m: RunMessage): PackMessage {
 
 /** Map a packed OpenAI row back to the RunMessage row shape. */
 export function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage & { task?: unknown; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] };
+  const src = m as PackMessage & { task?: unknown; custom?: unknown; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] };
   const toolCalls = Array.isArray(src.tool_calls)
     ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
         id: tc.id ?? "",
@@ -45,32 +46,40 @@ export function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
   if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
   if (src.task === true) out.task = true;
+  if (src.custom === true) out.custom = true;
   if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
   if (src.meta) out.meta = src.meta;
   return out;
 }
 
 /**
- * The hand-off packer's view of a row: the text AND every block the row carries beyond it (a signed thinking block, a picture's
- * data URL), as the blocks the model is sent. A tool call's block is left out - the view's `tool_calls` already counts it.
+ * What one picture costs the context, in characters of the packer's estimate: one fixed figure, never the length of its base64 (a
+ * photo is worth a few thousand tokens to a model, not its byte count). The runner's own context guard and pruner use the same figure.
+ */
+export const IMAGE_CHAR_ESTIMATE = 8_000;
+
+const IMAGE_STAND_IN = "#".repeat(IMAGE_CHAR_ESTIMATE);
+
+/**
+ * The hand-off packer's view of a row, for MEASURING it: the text, plus the blocks the row carries beyond its text - a thinking block
+ * (counted whole) and a picture (counted at {@link IMAGE_CHAR_ESTIMATE}). A text part is left out - `content` already is that text,
+ * and a channel row carries it in both - and so is a tool call's block, which the view's `tool_calls` already counts. A surface's
+ * custom row is context, not the person's words: it reads as the assistant's, so it can never be the latest directive.
  */
 export function toHandoffView(m: RunMessage): PackMessage {
   const view = toPackRow(m);
-  const blocks = (m.parts ?? []).filter((p) => p.type !== "toolCall");
-  if (blocks.length === 0) return view;
-  return { ...view, content: [...(m.content ? [{ type: "text", text: m.content }] : []), ...blocks] };
+  const role = m.custom ? "assistant" : view.role;
+  const blocks = (m.parts ?? [])
+    .filter((p) => p.type === "thinking" || p.type === "image")
+    .map((p) => (p.type === "image" ? { type: "image", estimate: IMAGE_STAND_IN } : p));
+  if (blocks.length === 0) return role === view.role ? view : { ...view, role };
+  return { ...view, role, content: [...(m.content ? [{ type: "text", text: m.content }] : []), ...blocks] };
 }
 
 /**
  * The run's rows as the hand-off packer reads them. The note the packer writes for the dropped middle comes back as a plain
- * user row (the role keeps turns alternating) and is also told to `onNote`, with what the whole context cost before the cut.
+ * user row (the role keeps turns alternating): it stays in the run's own transcript, where the incoming model reads it.
  */
-export function runRowHandoff(onNote?: (text: string, tokensBefore: number) => void): HandoffAccessor<RunMessage> {
-  return {
-    toHandoff: toHandoffView,
-    summary: (text, tokensBefore) => {
-      onNote?.(text, tokensBefore);
-      return { role: "user", content: text };
-    },
-  };
+export function runRowHandoff(): HandoffAccessor<RunMessage> {
+  return { toHandoff: toHandoffView, summary: (text) => ({ role: "user", content: text }) };
 }

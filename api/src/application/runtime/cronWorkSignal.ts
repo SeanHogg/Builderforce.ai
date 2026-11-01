@@ -83,6 +83,10 @@ const SCHEDULE_STALL_KEY = 'cron:schedule-stall';
  */
 export const FLOOR_INTERVAL_MS = 30 * 60 * 1000;
 
+/** The frequent cron's period (the five-minute cron in wrangler.toml): the gap between two ticks that
+ *  can observe the same stamp. {@link notStuckWindowMs} leaves one of these out of the window. */
+export const FREQUENT_TICK_MS = 5 * 60 * 1000;
+
 /** Bounds on the `CRON_FLOOR_INTERVAL_MS` override — see {@link floorIntervalMs}. */
 export const MIN_FLOOR_INTERVAL_MS = 5 * 60 * 1000;
 export const MAX_FLOOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -133,6 +137,19 @@ const NEXT_DUE_TTL_SECONDS = 24 * 60 * 60;
  * TTL only bounds a report whose publisher stopped running entirely.
  */
 const SCHEDULE_STALL_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * How far back a due row may be and still be PUBLISHED as the gate's stamp: the floor interval
+ * less one frequent tick. A row published at the very edge of `classifyDueTime`'s `due` window
+ * would be `stuck` by the next tick, five minutes later, and shadow every later due time for a
+ * whole window; leaving one tick out guarantees a published row is still `due` on the next
+ * observation. Rows older than this are not lost: the `m<i>` probe still reports them and the
+ * floor sweep still runs them. Never negative (at the 5-minute minimum floor only future rows
+ * are published).
+ */
+export function notStuckWindowMs(intervalMs: number): number {
+  return Math.max(0, intervalMs - FREQUENT_TICK_MS);
+}
 
 function kv(env: Env): KVNamespace | undefined {
   return env.AUTH_CACHE_KV;
@@ -220,6 +237,12 @@ export interface CronGateDecision {
    * time) but the underlying row is not being cleared by any sweep. Reported here so
    * the state is visible on the decision itself, not only in the stall report the
    * publisher writes.
+   *
+   * It rarely reads `stuck` any more: the published stamp deliberately leaves out rows
+   * that old (see {@link publishNextDue}), so the gate sees `stuck` only when a stamp that
+   * WAS fresh when published goes unevaluated for a whole floor interval (the cron itself
+   * not firing). The jam proper is reported by the stall report, which reads the unfiltered
+   * per-table minimum.
    */
   dueState: ScheduleDueState;
 }
@@ -396,8 +419,10 @@ const SCHEDULE_SOURCES = [
  *
  * Call this at the END of an active tick, never on an idle one: the point of the gate
  * is that an idle tick makes zero DB round-trips, and this query would defeat that. On
- * an active tick the endpoint is already awake and the sweeps have just re-armed their
- * `next_run_at` values, so this reads the freshest possible answer for free.
+ * an active tick the endpoint is already awake, so the query is cheap. It runs CONCURRENTLY
+ * with that tick's sweeps (the caller fires it via `waitUntil` alongside them, not after
+ * them), so it can read a `next_run_at` a sweep is about to re-arm: the stamp is at worst one
+ * tick stale, which the next active tick corrects.
  *
  * One statement carrying two scalar `MIN()` subqueries per schedule table (see below), one row back. Best-effort throughout: a failure leaves the previous stamp (or none) in
  * place and the floor sweep still backstops every schedule, so this can never strand
@@ -427,13 +452,15 @@ export async function publishNextDue(env: Env, nowMs: number): Promise<NextDuePu
   if (!store) return empty;
   try {
     const db = buildDatabase(env);
-    const intervalSeconds = floorIntervalMs(env) / 1000;
+    const notStuckSeconds = notStuckWindowMs(floorIntervalMs(env)) / 1000;
     // ONE statement carrying two cheap index probes per schedule table:
     //   • `m<i>` = MIN(next_run_at) over every armed row, stuck ones included. Kept separate
     //     per table because the stall check needs to name WHICH table is jammed.
     //   • `f<i>` = the same MIN over armed rows that are NOT stuck, i.e. due no longer ago than
-    //     one floor interval (`>=` is the complement of classifyDueTime's `stuck`, whose
-    //     window is the same floor interval). THIS is what the gate is given.
+    //     one floor interval LESS ONE FREQUENT TICK (see notStuckWindowMs). The tick of margin
+    //     matters: a row published at the very edge of classifyDueTime's window reads `stuck`
+    //     on the next tick, five minutes later, and shadows later rows for a whole window.
+    //     THIS is what the gate is given.
     // The gate looks at one stamp. A refused scheduled campaign keeps its past `scheduled_at`
     // by design, so it reads `stuck` for as long as nobody fixes it — and if the stamp were the
     // plain MIN, that one row would shadow every later due time on the platform and leave the
@@ -447,7 +474,7 @@ export async function publishNextDue(env: Env, nowMs: number): Promise<NextDuePu
       sql`(
         SELECT MIN(${source.nextRunAt}) FROM ${source.table}
         WHERE ${source.armed} AND ${source.nextRunAt} IS NOT NULL
-          AND ${source.nextRunAt} >= NOW() - (${intervalSeconds}::float8 * INTERVAL '1 second')
+          AND ${source.nextRunAt} >= NOW() - (${notStuckSeconds}::float8 * INTERVAL '1 second')
       ) AS ${sql.raw(`f${i}`)}`,
     ]);
     const result = await db.execute(sql`SELECT ${sql.join(probes, sql`, `)}`);

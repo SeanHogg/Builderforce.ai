@@ -6,9 +6,9 @@
  * middle, never splits a call from its results, pins the directive, and writes the ONE "Handed off from X to Y." note.
  *
  * The packer speaks the OpenAI message shape; this module is generic over the host's row via a small {@link HandoffAccessor}
- * (the agent's own `RunMessage` here, the embedded runner's `AgentMessage` in its binder), so ONE copy of the budget rules
- * serves both: the window, the reply reserve from `maxTokens`, the tool schemas' cost, and the long-context price boundary
- * (cost lever C9, decided by the caller). Rows come back by identity; the note comes back as the host's own summary row.
+ * (`runRowHandoff` in `./rows` is the run's own `RunMessage`), so the budget rules live in ONE place: the window, the reply reserve
+ * (`maxTokens`), the tool schemas' cost, and the long-context price boundary (cost lever C9, decided by the caller). Rows come back by
+ * identity; the note comes back as the host's own summary row.
  */
 
 import { defaultEstimateTokens, packHandoff, tokensOf, type HandoffMessage } from "@seanhogg/builderforce-memory/handoff";

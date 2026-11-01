@@ -29,7 +29,21 @@
 import { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffTokenBudget } from '@builderforce/run-policy';
 import { priceTierBoundary } from '@builderforce/model-catalog';
 import { isCostLeverOn } from '@builderforce/cost-levers';
+import type { CostLeverId } from '../../contract.js';
 import { defaultEstimateTokens, packHandoff, tokensOf, type PackMessage } from './pack.js';
+
+/** Cost lever C9 - cap the budget at the model's long-context price-tier boundary. */
+export const C9_TIER_LEVER: CostLeverId = 'c9_price_tier_budget';
+
+/**
+ * The row that IS the task: the one the surface marked (`RunMessage.task` - a surface that opens with a prior conversation marks the
+ * CURRENT request, not an old message), else the FIRST real user row. A surface's custom row (a bash execution, a summary) is never it.
+ * The compaction pins it, and so does the model hand-off.
+ */
+export function taskRowIndex(rows: ReadonlyArray<{ role?: unknown; task?: unknown; custom?: unknown }>): number {
+  const marked = rows.findIndex((m) => m.task === true);
+  return marked >= 0 ? marked : rows.findIndex((m) => m.role === 'user' && m.custom !== true);
+}
 
 /** One transcript row, in the OpenAI-style shape the packer speaks. */
 type Msg = Record<string, unknown>;
@@ -262,8 +276,7 @@ export async function compactMessages(
   // surface that opens with a prior conversation marks the CURRENT request, not an old
   // message), else the FIRST user message; after a stall nudge or steer it is no longer
   // the latest directive the packer protects, so it is pinned explicitly.
-  const marked = opts.pinTaskBrief ? source.findIndex((m) => m.task === true) : -1;
-  const briefIdx = !opts.pinTaskBrief ? -1 : marked >= 0 ? marked : source.findIndex((m) => m.role === 'user');
+  const briefIdx = opts.pinTaskBrief ? taskRowIndex(source) : -1;
   const brief = briefIdx >= 0 ? source[briefIdx] : undefined;
 
   const pack = await packHandoff({

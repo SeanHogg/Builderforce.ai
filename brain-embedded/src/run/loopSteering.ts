@@ -5,6 +5,7 @@
  */
 
 import { runSteeringSource, type SteerInput, type SteeringSource } from '@builderforce/agent-run';
+import { imagePartsOf } from './runMessages';
 import { hasRunInterrupt, steerModelContent } from '../runSteering';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { takeRunSteering } from '../runStore/steerInterrupt';
@@ -20,7 +21,12 @@ export function loopSteeringSource(run: RunLoopContext, turn: () => number): Ste
       for (const steer of takeRunSteering(c, runKey, turn())) {
         await persistSteer(c, chatId, req.persistence, steer, runKey);
         const content = steerModelContent(steer);
-        out.push({ text: typeof content === 'string' ? content : content.map((p) => ('text' in p && typeof p.text === 'string' ? p.text : '')).join(''), ...(interrupt ? { interrupt: true } : {}) });
+        const parts = imagePartsOf(content);
+        out.push({
+          text: typeof content === 'string' ? content : content.map((p) => ('text' in p && typeof p.text === 'string' ? p.text : '')).join(''),
+          ...(parts.length > 0 ? { parts } : {}),
+          ...(interrupt ? { interrupt: true } : {}),
+        });
       }
       return out;
     },

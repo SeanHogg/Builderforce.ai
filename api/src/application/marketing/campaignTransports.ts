@@ -40,13 +40,18 @@
  * to come back, so only that recipient should fail and the sweep should pick it
  * up. Collapsing the two is how a campaign either burns its whole audience into
  * `failed` rows or retries a hopeless send forever.
+ *
+ * A terminal failure still has two owners, and `scope` says which: a bad number is
+ * the RECIPIENT's (the batch carries on), a revoked credential is the SENDER's (the
+ * campaign stops). Treating every terminal failure as the sender's is how one
+ * un-textable number stalls an entire audience.
  */
 
 import { and, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { connectorConnections } from '../../infrastructure/database/schema';
-import { sendRawEmail } from '../../infrastructure/email/EmailService';
+import { EmailDeliveryError, sendRawEmail } from '../../infrastructure/email/EmailService';
 import { executeConnectorAction, ConnectorCallError } from '../connectors/connectorRuntime';
 import { sendFromMailbox } from '../mailbox/mailboxService';
 import { htmlToPreviewText } from '../mailbox/mailboxProviders';
@@ -125,11 +130,35 @@ export interface TransportReceipt {
   externalId?: string;
 }
 
+/**
+ * WHOSE failure a {@link TransportError} is — the question `retryable` cannot answer.
+ *
+ *   recipient  this message only: a number Twilio refuses, an address the provider rejects, a
+ *              recipient with no number. The next recipient is unaffected, so the batch goes on.
+ *   sender     the pipe itself: a revoked grant, a wrong API key, a deleted or disabled
+ *              connection. Every remaining recipient fails identically, so the campaign stops.
+ *
+ * `scope` is only ever CONSULTED for a terminal (non-retryable) failure: a retryable one is
+ * requeued and bounded by the attempt ceiling whichever side it is on. It is required, not
+ * defaulted, so a new throw site has to decide.
+ */
+export type TransportErrorScope = 'recipient' | 'sender';
+
 export class TransportError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
+  constructor(message: string, readonly retryable: boolean, readonly scope: TransportErrorScope) {
     super(message);
     this.name = 'TransportError';
   }
+}
+
+/**
+ * Scope of an HTTP failure from a provider the tenant holds credentials for (Twilio, SendGrid,
+ * the platform email provider). 401/403 is a credential the provider refuses, 402 an account it
+ * will not bill, 404 an account or endpoint that is not there: all of them fail every recipient
+ * the same way. Anything else (a 400 for one address, a 429, a 5xx) is about this message.
+ */
+export function providerStatusScope(status: number | null | undefined): TransportErrorScope {
+  return status === 401 || status === 402 || status === 403 || status === 404 ? 'sender' : 'recipient';
 }
 
 export interface CampaignSender {
@@ -231,21 +260,25 @@ async function resolveSmsSender(
             const detail = twilioErrorDetail(result.data) ?? result.error;
             // 429 and 5xx are Twilio asking us to slow down. A 401/403 means the
             // credentials are wrong and every remaining recipient fails the same
-            // way, and a 400 is this message — a number Twilio will not accept,
-            // or one that has texted STOP — which retrying cannot fix.
+            // way (sender scope), and a 400 is this message — a number Twilio will
+            // not accept, or one that has texted STOP — which retrying cannot fix
+            // but which says nothing about the next recipient (recipient scope).
             const retryable = result.status === 429 || result.status >= 500;
             throw new TransportError(
               `Twilio returned ${result.status}${detail ? `: ${detail}` : ''}`,
               retryable,
+              providerStatusScope(result.status),
             );
           }
           return { externalId: twilioMessageSid(result.data) };
         } catch (error) {
           if (error instanceof TransportError) throw error;
           // A ConnectorCallError is misconfiguration by construction (unknown
-          // connector, missing credential, blocked URL) — never worth a retry.
-          if (error instanceof ConnectorCallError) throw new TransportError(error.message, false);
-          throw new TransportError(error instanceof Error ? error.message : 'Twilio send failed', true);
+          // connector, missing credential, blocked URL) — never worth a retry, and
+          // identical for every recipient, so it is the SENDER's failure.
+          if (error instanceof ConnectorCallError) throw new TransportError(error.message, false, 'sender');
+          // Unclassified (a network error, a timeout): retried, so the scope is moot.
+          throw new TransportError(error instanceof Error ? error.message : 'Twilio send failed', true, 'recipient');
         }
       },
     },
@@ -333,8 +366,11 @@ export async function resolveCampaignSender(
           } catch (error) {
             // The platform provider's own failures are transient far more often
             // than not (quota, upstream 5xx), and a misconfiguration would have
-            // thrown before the campaign ever started.
-            throw new TransportError(error instanceof Error ? error.message : 'Send failed', true);
+            // thrown before the campaign ever started. Always retried (bounded by
+            // the attempt ceiling); a refused platform credential is still labelled
+            // as the sender's, so the scope stays honest if this is ever made terminal.
+            const status = error instanceof EmailDeliveryError ? error.status : null;
+            throw new TransportError(error instanceof Error ? error.message : 'Send failed', true, providerStatusScope(status));
           }
         },
       },
@@ -374,7 +410,10 @@ export async function resolveCampaignSender(
             fromName,
             listUnsubscribeUrl: message.unsubscribeUrl,
           });
-          if (!result.ok) throw new TransportError(result.error, result.retryable);
+          // `sendFromMailbox` answers 404 (mailbox gone) and 409 (grant revoked or needs
+          // reconnecting) for the CONNECTION, and 502 for the one message the provider
+          // refused or fumbled, so the status says whose failure it is.
+          if (!result.ok) throw new TransportError(result.error, result.retryable, result.status === 502 ? 'recipient' : 'sender');
           return {};
         },
       },
@@ -435,20 +474,23 @@ export async function resolveCampaignSender(
           });
           if (!result.ok) {
             // 429 and 5xx are SendGrid asking us to slow down; a 401/403 means
-            // the API key is wrong and every remaining recipient would fail too.
+            // the API key is wrong and every remaining recipient would fail too
+            // (sender scope). Other 4xx (a 400 for one address) are this message.
             const retryable = result.status === 429 || result.status >= 500;
             throw new TransportError(
               `SendGrid returned ${result.status}${result.error ? `: ${result.error}` : ''}`,
               retryable,
+              providerStatusScope(result.status),
             );
           }
           return {};
         } catch (error) {
           if (error instanceof TransportError) throw error;
           // A ConnectorCallError is misconfiguration by construction (unknown
-          // connector, missing credential, blocked URL) — never worth a retry.
-          if (error instanceof ConnectorCallError) throw new TransportError(error.message, false);
-          throw new TransportError(error instanceof Error ? error.message : 'SendGrid send failed', true);
+          // connector, missing credential, blocked URL) — never worth a retry, and
+          // identical for every recipient, so it is the SENDER's failure.
+          if (error instanceof ConnectorCallError) throw new TransportError(error.message, false, 'sender');
+          throw new TransportError(error instanceof Error ? error.message : 'SendGrid send failed', true, 'recipient');
         }
       },
     },

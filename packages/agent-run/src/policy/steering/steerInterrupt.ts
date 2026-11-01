@@ -56,6 +56,9 @@ type RunTool = (name: string, args: unknown, signal?: AbortSignal) => Promise<un
 export const INTERRUPTED_BY_STEER =
   "Interrupted by the user's new message: the command was stopped before it finished. Read the message that follows and do what it asks; re-run the command only if it still applies.";
 
+/** What the model reads on a command the person's Stop killed: the run is over, nothing follows. */
+export const STOPPED_BY_USER = "Stopped by the user: the command was killed before it finished.";
+
 /** What the model reads on a wait a steer cut short — the job itself runs on. */
 export const WAIT_INTERRUPTED_BY_STEER =
   "Wait interrupted by the user's new message: the background job is STILL RUNNING. Read the message that follows and do what it asks; check the job later with command_status, or stop it with command_stop.";
@@ -91,9 +94,10 @@ export function interruptedResult(out: unknown): Record<string, unknown> {
   return { ...base, ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER };
 }
 
-/** Is this result a command a steer STOPPED (not a wait it cut short, whose job runs on)? Its row says it failed; the run's failure streak does not count it. */
-export function isInterruptedResult(data: unknown): boolean {
-  return !!data && typeof data === "object" && (data as Record<string, unknown>).aborted === true && (data as Record<string, unknown>).interrupted === true;
+/** What a command a Stop killed answers with: what it returned so far, marked aborted and stopped (not interrupted by a message). */
+export function stoppedResult(out: unknown): Record<string, unknown> {
+  const base = out && typeof out === "object" && !Array.isArray(out) ? (out as Record<string, unknown>) : out === undefined ? {} : { output: out };
+  return { ...base, ok: false, aborted: true, stopped: true, error: STOPPED_BY_USER };
 }
 
 /** A wait the steer cut short: its status so far, said to be a wait that ended — not the job. */
@@ -137,9 +141,10 @@ export async function runToolWithWatch(
     const out = await runTool(name, args, step.signal);
     if (!interrupted) return out;
     // A wait ends with the job still running: the status so far, marked as interrupted.
-    if (wait) return cameBackAborted(out) ? interruptedResult(out) : waitInterruptedResult(out);
-    // Interrupted only if the command really was stopped; one that finished first stands.
-    return cameBackAborted(out) ? interruptedResult(out) : out;
+    const restated = (): Record<string, unknown> => ((out as Record<string, unknown>).stopped === true ? (out as Record<string, unknown>) : interruptedResult(out));
+    if (wait) return cameBackAborted(out) ? restated() : waitInterruptedResult(out);
+    // Interrupted only if the command really was stopped; one that finished first stands. A Stop that beat the steer keeps its own words.
+    return cameBackAborted(out) ? restated() : out;
   } finally {
     off();
     runSignal?.removeEventListener("abort", onStop);

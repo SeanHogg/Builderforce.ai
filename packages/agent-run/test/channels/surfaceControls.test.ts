@@ -137,7 +137,7 @@ describe("a hand-off to a model with a smaller window", () => {
       { pickFallback: (tried) => (tried.includes("p/m2") ? undefined : "p/m2"), window: (model) => (model === "p/m2" ? 8_000 : 1_000_000) },
     );
 
-    const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: {} }, ports: run.ports });
+    const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: true }, ports: run.ports });
 
     expect(outcome.kind).toBe("finished");
     const last = run.requests.at(-1)!;
@@ -160,7 +160,7 @@ describe("a hand-off with the task LAST", () => {
       { pickFallback: (tried) => (tried.includes("p/m2") ? undefined : "p/m2"), window: (model) => (model === "p/m2" ? 8_000 : 1_000_000) },
     );
 
-    const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: {} }, ports: run.ports });
+    const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: true }, ports: run.ports });
 
     expect(outcome.kind).toBe("finished");
     const last = run.requests.at(-1)!;
@@ -186,7 +186,7 @@ describe("the turn AFTER a hand-off onto a small window", () => {
       { platform: catalog(["read"], {}) },
       { pickFallback: (tried) => (tried.includes("p/m2") ? undefined : "p/m2"), window: (model) => (model === "p/m2" ? SMALL : startWindow), summarize: async () => ({ content: "SUMMARY of the middle" }) },
     );
-    const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: {} }, ports: run.ports });
+    const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: true }, ports: run.ports });
     return { outcome, requests: run.requests };
   }
 

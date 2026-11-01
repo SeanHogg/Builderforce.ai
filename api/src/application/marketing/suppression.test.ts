@@ -62,4 +62,8 @@ describe('suppressionKey', () => {
     expect(suppressionKey('@handle')).toBeNull();
     expect(suppressionKey('')).toBeNull();
   });
+
+  it('keys a spoofed display name on the REAL address, not the decoy inside the quotes', () => {
+    expect(suppressionKey('"<victim@x.com>" <Attacker@y.com>')).toBe('attacker@y.com');
+  });
 });

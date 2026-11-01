@@ -22,6 +22,7 @@ import type { AgentEvent, AgentMessage } from "../builderforce/model/agent-types
 import { createAgentStream } from "../builderforce/agent-loop/assistant-stream.js";
 import type { EventStream } from "../builderforce/agent-loop/event-stream.js";
 import type { AssistantMessage, AssistantMessageEvent, Model, ToolResultMessage } from "../builderforce/model/types.js";
+import { logWarn } from "../logger.js";
 import { toAgentMessage } from "./channelMessages.js";
 
 /** A model swap the stall policy made: who gave up, who took over, and the notice that says why. */
@@ -129,12 +130,9 @@ export class AgentEventBridge {
       case "run.finished":
         this.closeTurn();
         break;
-      case "context.compacted":
-        // Only a model HAND-OFF leaves a summary row, as the old loop did. Its note carries no `covered` (that is the durable fold's:
-        // the rows an ordinary fold stands for), and an ordinary fold's note is not kept: no history is lost, so nothing is persisted.
-        if (event.note && event.covered === undefined) {
-          this.record.push({ role: "compactionSummary", summary: event.note, tokensBefore: event.beforeTokens ?? 0, timestamp: Date.now() });
-        }
+      case "model.preflight":
+        // A context that could not be made to fit the incoming model is a warning a person must be able to read.
+        if (event.status === "degraded") for (const notice of event.notices) logWarn(`[on-prem] ${notice}`);
         break;
       case "stall.recovered":
         if (event.action === "escalate") this.swapped(event.detail);

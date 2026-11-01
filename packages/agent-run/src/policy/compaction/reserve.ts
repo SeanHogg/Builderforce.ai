@@ -14,7 +14,7 @@
  * and Node.
  */
 
-import { DEFAULT_HANDOFF_RESERVE_TOKENS, cappedMaxTokens, handoffReserveTokens, nextTurn } from "@builderforce/run-policy";
+import { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffReserveTokens } from "@builderforce/run-policy";
 import type { PolicyContext } from "../hooks.js";
 
 /** Tokens held back for the reply when a request names no `max_tokens` — the shared hand-off default. */
@@ -88,31 +88,26 @@ export function servingModel(ctx: PolicyContext): string {
   return ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
 }
 
-/** The reply ceiling the turn about to be asked is given: its role's cap (`cappedMaxTokens`), else the shared hand-off default. */
-function turnCeiling(ctx: PolicyContext): number {
-  return compactReserveTokens(cappedMaxTokens(nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 }).role, undefined));
-}
-
 /**
- * THE reply reserve of the turn about to be asked - the one number compaction and the model hand-off hold back, and the bound on the
- * request's own `maxTokens` ({@link replyAsk}).
+ * THE reply reserve of the turn about to be asked - the one number the model hand-off holds back, and the bound on the request's own
+ * `maxTokens` ({@link replyAsk}).
  *
  * A run that never hands off between models holds back what its policy states, else the host-neutral floor (`compactionReserve`).
- * A run that does (`RunPolicy.modelHandoff`) can land on ANY window, so the reserve follows the model now serving: on-prem's floor
- * (or the turn's role cap, when that is larger) but never more than a quarter of that window. A 200K window holds back 20K, a 64K
- * window 16K, a 16K window 4K.
+ * A run that does (`RunPolicy.modelHandoff`) can land on ANY window, so the reserve follows the model now serving: on-prem's floor,
+ * but never more than a quarter of that window. A 200K window holds back 20K, a 64K window 16K, a 16K window 4K.
  */
 export function replyReserve(ctx: PolicyContext): number {
   if (!ctx.policy.modelHandoff) return ctx.policy.budgets.reserveTokens ?? compactionReserve(undefined);
-  const wanted = Math.max(turnCeiling(ctx), DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR);
   const window = ctx.ports.model.window?.(servingModel(ctx));
-  return window && window > 0 ? Math.max(1, Math.min(wanted, Math.floor(window / 4))) : wanted;
+  const floor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  return window && window > 0 ? Math.max(1, Math.min(floor, Math.floor(window / 4))) : floor;
 }
 
 /**
- * What a hand-off run's request asks as its `maxTokens`: the turn's role cap, clamped to the reserve only when the window forces it,
- * so the input that fits plus the reply asked for always fit the window.
+ * What a hand-off run's request asks as its `maxTokens`: nothing (the provider's own limit, as the channel loop always sent) unless
+ * the window forces a bound - then the reserve, so the input that fits plus the reply asked for always fit the window.
  */
-export function replyAsk(ctx: PolicyContext): number {
-  return Math.min(turnCeiling(ctx), replyReserve(ctx));
+export function replyAsk(ctx: PolicyContext): number | undefined {
+  const reserve = replyReserve(ctx);
+  return reserve < DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR ? reserve : undefined;
 }

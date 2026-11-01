@@ -43,8 +43,11 @@ export const CAMPAIGN_SEND_MAX_ATTEMPTS = CAMPAIGN_DELIVERY_MAX_ATTEMPTS;
  * call, so it should leave that state within one batch: at most `SEND_BATCH_SIZE` (25)
  * sequential sends, each bounded by a transport's own HTTP timeout of well under a minute —
  * a few minutes in the worst case, and a Worker invocation is cut off long before an hour.
- * One hour is far above that, so no live runner's claim is ever reaped, and still short
- * enough that a campaign whose runner was evicted finishes the same day.
+ * One hour is far above that, so a live runner's claim is not reaped in practice, and still
+ * short enough that a campaign whose runner was evicted finishes the same day. Not a
+ * guarantee: a row with no `claimed_at` (claimed before 1291 added the column, e.g. by a runner
+ * still on the old code during the deploy window) is reaped at once. That is why the write-backs
+ * below are conditional on the row still being `sending` — a reaped row is never overwritten.
  */
 export const STALE_CLAIM_AFTER_MS = 60 * 60 * 1000;
 
@@ -59,6 +62,56 @@ export interface BatchResult {
   failed: number;
   remaining: number;
   status: string;
+}
+
+/**
+ * Fail a campaign whose SENDER is dead, and settle every row it still owns.
+ *
+ * Order matters. Rows are settled BEFORE the campaign is flipped, so a crash between the two
+ * leaves a campaign that is still in flight (the next tick repeats this) rather than a
+ * `failed` one with rows nobody will touch. `queued` goes first: once no row is `queued`
+ * nothing can be newly claimed, so the `sending` settle that follows cannot miss a row. That
+ * settle has to run at all, because a failed campaign has left the in-flight set and the
+ * stale-claim sweep (`reapStaleClaims`) never visits it again. Those `sending` rows get the
+ * same "delivery state unknown" verdict the sweep would have given them, not the sender's
+ * error: another runner may have delivered them.
+ *
+ * `delta` is what the calling batch already did, so its counters land in the same write.
+ */
+async function failCampaign(
+  db: Db,
+  tenantId: number,
+  campaignId: number,
+  reason: string,
+  delta: { sent: number; failed: number },
+): Promise<void> {
+  await db
+    .update(marketingCampaignSends)
+    .set({ status: 'failed', error: reason.slice(0, 1_000) })
+    .where(and(
+      eq(marketingCampaignSends.campaignId, campaignId),
+      eq(marketingCampaignSends.tenantId, tenantId),
+      eq(marketingCampaignSends.status, 'queued'),
+    ));
+  const abandoned = await db
+    .update(marketingCampaignSends)
+    .set({ status: 'failed', error: STALE_CLAIM_ERROR })
+    .where(and(
+      eq(marketingCampaignSends.campaignId, campaignId),
+      eq(marketingCampaignSends.tenantId, tenantId),
+      eq(marketingCampaignSends.status, 'sending'),
+    ))
+    .returning({ id: marketingCampaignSends.id });
+  await db
+    .update(marketingCampaigns)
+    .set({
+      status: 'failed',
+      sent: sql`${marketingCampaigns.sent} + ${delta.sent}`,
+      failed: sql`${marketingCampaigns.failed} + ${delta.failed + abandoned.length}`,
+      completedAt: sql`NOW()`,
+      updatedAt: sql`NOW()`,
+    })
+    .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
 }
 
 /**
@@ -92,18 +145,7 @@ export async function runCampaignBatch(
     // sender un-verified, connection deleted). Every remaining recipient would
     // fail identically, so the campaign fails as a whole and says why — rather
     // than grinding through the audience writing the same error N times.
-    await db
-      .update(marketingCampaigns)
-      .set({ status: 'failed', completedAt: sql`NOW()`, updatedAt: sql`NOW()` })
-      .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
-    await db
-      .update(marketingCampaignSends)
-      .set({ status: 'failed', error: resolved.error.slice(0, 1_000) })
-      .where(and(
-        eq(marketingCampaignSends.campaignId, campaignId),
-        eq(marketingCampaignSends.tenantId, tenantId),
-        eq(marketingCampaignSends.status, 'queued'),
-      ));
+    await failCampaign(db, tenantId, campaignId, resolved.error, { sent: 0, failed: 0 });
     return { sent: 0, failed: 0, remaining: 0, status: 'failed' };
   }
   const sender = resolved.sender;
@@ -140,6 +182,8 @@ export async function runCampaignBatch(
 
   let sent = 0;
   let failed = 0;
+  // Set when a terminal SENDER failure (a revoked grant, a wrong key) ends the batch.
+  let senderFailure: string | null = null;
 
   for (const row of queued) {
     // Claim: only the runner whose UPDATE matches gets to send this one. The
@@ -177,7 +221,7 @@ export async function runCampaignBatch(
       // Materialisation only queues members with a usable number, so an empty
       // one here means the row was written before this campaign became an SMS.
       // Terminal by construction: no retry can invent a phone number.
-      if (!to) throw new TransportError('No mobile number for this recipient.', false);
+      if (!to) throw new TransportError('No mobile number for this recipient.', false, 'recipient');
       const receipt = await sender.send({
         to,
         subject: campaign.subject,
@@ -189,7 +233,11 @@ export async function runCampaignBatch(
         // one row — so no second identifier has to be minted for the callback.
         ...(isSms ? { statusCallbackUrl: smsStatusUrl(ctx) } : {}),
       });
-      await db
+      // Conditional on the row still being `sending`: if the sweep reaped it while this runner
+      // was in the transport call, the reaper has already counted it failed, and overwriting it
+      // here would count it twice. A message that did go out for a reaped row is the "delivery
+      // state unknown" the reaper's verdict already says.
+      const settled = await db
         .update(marketingCampaignSends)
         .set({
           status: 'sent',
@@ -197,8 +245,13 @@ export async function runCampaignBatch(
           error: null,
           ...(receipt.externalId ? { externalMessageId: receipt.externalId } : {}),
         })
-        .where(and(eq(marketingCampaignSends.id, row.id), eq(marketingCampaignSends.tenantId, tenantId)));
-      sent += 1;
+        .where(and(
+          eq(marketingCampaignSends.id, row.id),
+          eq(marketingCampaignSends.tenantId, tenantId),
+          eq(marketingCampaignSends.status, 'sending'),
+        ))
+        .returning({ id: marketingCampaignSends.id });
+      if (settled.length > 0) sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'send failed';
       // A carrier STOP is a CONSENT withdrawal, not a delivery failure: without
@@ -220,16 +273,32 @@ export async function runCampaignBatch(
       // attempt ceiling is what stops the opposite failure, an unsendable
       // recipient requeued forever so the campaign never completes.
       const requeue = failedDeliveryStatus(row.attempts + 1, error instanceof TransportError && error.retryable) === 'queued';
-      await db
+      const settled = await db
         .update(marketingCampaignSends)
         .set({ status: requeue ? 'queued' : 'failed', error: message.slice(0, 1_000) })
-        .where(and(eq(marketingCampaignSends.id, row.id), eq(marketingCampaignSends.tenantId, tenantId)));
-      if (!requeue) failed += 1;
+        .where(and(
+          eq(marketingCampaignSends.id, row.id),
+          eq(marketingCampaignSends.tenantId, tenantId),
+          eq(marketingCampaignSends.status, 'sending'),
+        ))
+        .returning({ id: marketingCampaignSends.id });
+      if (!requeue && settled.length > 0) failed += 1;
       reportCaughtError(error, { source: 'application/marketing/campaign/send.ts', operation: 'runCampaignBatch' });
-      // A terminal transport failure means every remaining recipient fails the
-      // same way; stop the batch rather than working through the audience.
-      if (error instanceof TransportError && !error.retryable) break;
+      // WHOSE failure decides what happens next. A terminal failure of the SENDER (a revoked
+      // grant, a wrong API key) fails every remaining recipient the same way: stop, and fail the
+      // campaign instead of retrying a dead pipe. A terminal failure of the RECIPIENT (a number
+      // the carrier refuses, a STOP) says nothing about the next one: that row is already
+      // `failed`, so the batch carries on.
+      if (error instanceof TransportError && !error.retryable && error.scope === 'sender') {
+        senderFailure = message;
+        break;
+      }
     }
+  }
+
+  if (senderFailure !== null) {
+    await failCampaign(db, tenantId, campaignId, senderFailure, { sent, failed });
+    return { sent, failed, remaining: 0, status: 'failed' };
   }
 
   // `remaining` counts everything not yet settled (a `sending` row included) and is what decides
@@ -262,12 +331,18 @@ export async function runCampaignBatch(
   // frequent tick skips Postgres entirely unless work was signalled, so without this a
   // send larger than one batch would advance one batch per FLOOR tick.
   //
-  // Signalled only when this batch made progress AND a later one has something to claim.
-  // Both halves keep the gate from pinning open: a `sending` row nobody will advance (an
-  // evicted Worker) must not re-signal every tick forever, and a batch that sent nothing
-  // — a revoked credential failing every recipient — has no reason to expect the next
-  // batch to do better, so it falls back to the floor cadence and lets Neon suspend.
-  if (!done && sent > 0 && Number(queuedLeft ?? 0) > 0) await signalPendingWork(env);
+  // Signalled only when this batch SETTLED something (sent, or failed for good) AND a later
+  // one has something to claim. Both halves keep the gate from pinning open: a `sending` row
+  // nobody will advance (an evicted Worker) must not re-signal every tick forever, and a batch
+  // that only requeued (a provider answering 429 or 5xx to everything) has no reason to expect
+  // the next batch to do better, so it falls back to the floor cadence and lets Neon suspend.
+  // A recipient-level failure DOES count as progress: that row is done and the next one may be
+  // fine, which is what keeps a bad number in the first row from stalling the campaign.
+  //
+  // Bounded: every signalling batch settles at least one row for good (`sent` and `failed` never
+  // go back to `queued`), so the signals one campaign raises cannot exceed its audience, and a
+  // requeue is capped by the attempt ceiling (`CAMPAIGN_SEND_MAX_ATTEMPTS`, counted at claim).
+  if (!done && sent + failed > 0 && Number(queuedLeft ?? 0) > 0) await signalPendingWork(env);
 
   return { sent, failed, remaining: Number(remaining), status: done ? 'sent' : 'sending' };
 }

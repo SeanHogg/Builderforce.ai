@@ -337,8 +337,8 @@ export const modelHook: ModelHook = {
   resolve(ctx) {
     // The model slice already IS the run-policy state; drive it, never redefine it.
     const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
-    // A run that hands off between models asks for the role cap, clamped to the reserve compaction holds back (so only a small window
-    // clamps it), and the input that fits plus this reply always fit. Any other run asks for the role cap.
+    // A run that hands off between models asks for no cap of its own (its role is not a reason to bound a channel's reply) unless its
+    // window forces one (`replyAsk`). Any other run asks for the role cap.
     const maxTokens = ctx.policy.modelHandoff ? replyAsk(ctx) : cappedMaxTokens(routing.role, undefined);
     return {
       role: routing.role,

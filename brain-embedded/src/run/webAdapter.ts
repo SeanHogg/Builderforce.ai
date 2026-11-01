@@ -26,6 +26,7 @@ import {
   type SteeringSource,
   type RunPolicy,
   type RunPorts,
+  type SpendMeter,
   type RunTask,
 } from '@builderforce/agent-run';
 import type { RunPolicyOptions } from '@builderforce/run-policy';
@@ -88,6 +89,8 @@ export interface BrainRunBinding {
   steering?: SteeringSource;
   /** Where the run's state lives, when the surface keeps its own log (`loopStore.ts`). */
   store?: RunStore;
+  /** The run tree's spend, when the surface shares one total across a run and its sub-agents (`loopSpend.ts`). */
+  spend?: SpendMeter;
 }
 
 /** The ports of one Brain run — built from the request, deciding nothing. */
@@ -114,6 +117,7 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
     ...(b.platform ? { platform: b.platform } : {}),
     ...(b.delivery ? { delivery: b.delivery } : {}),
     ...(b.attach ? { attach: b.attach } : {}),
+    ...(b.spend ? { spend: b.spend } : {}),
     ...(b.extensions ? { extensions: b.extensions } : {}),
     events: b.events ?? brainEventSink(cell, b.reportOutcome),
     human: brainHumanChannel(runKey),

@@ -144,6 +144,9 @@ async function generateAgentReply(
   return content;
 }
 
+/** The response modes that put a person between the draft and the send. Every other mode sends. */
+const HUMAN_REVIEWED_MODES: ReadonlySet<string> = new Set(['draft', 'approval']);
+
 /** Recorded on the execution when the do-not-contact check vetoes an automatic reply. The
  *  inbox shows an execution's `error` beside its status, so this is what the owner reads. */
 export const AUTOMATIC_REPLY_SUPPRESSED = 'The sender is on a do-not-contact list; no automatic reply was sent.';
@@ -234,11 +237,13 @@ export async function runMailboxAutomationSweep(
         if (!execution) { dispatchBudget.release(rule.tenantId); continue; }
         summary.matched += 1;
         try {
-          // An `automatic` rule sends with nobody reviewing the reply, so the do-not-contact
-          // check is its only gate. Asked BEFORE the reply is drafted: no model spend on a
-          // reply that must not go out, and a failed check (thrown, caught below) sends nothing.
-          // `draft` and `approval` put a human in front of the send and are not checked.
-          if (rule.responseMode === 'automatic' && await isDoNotContact(db, rule.tenantId, message.from)) {
+          // Anything that is not a known human-reviewed mode sends with nobody reviewing the
+          // reply (the send below is the fall-through), so the do-not-contact check is its only
+          // gate. Fail closed: only `draft` and `approval` skip it, never "whatever is not
+          // `automatic`", or a mode the check forgot would send unchecked. Asked BEFORE the reply
+          // is drafted: no model spend on a reply that must not go out, and a failed check
+          // (thrown, caught below) sends nothing.
+          if (!HUMAN_REVIEWED_MODES.has(rule.responseMode) && await isDoNotContact(db, rule.tenantId, message.from)) {
             await updateExecution(db, rule.tenantId, execution.id, { status: 'rejected', error: AUTOMATIC_REPLY_SUPPRESSED });
             continue;
           }

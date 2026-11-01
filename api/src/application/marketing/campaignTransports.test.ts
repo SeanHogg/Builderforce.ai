@@ -263,8 +263,13 @@ describe('TransportError', () => {
   it('carries the retryable flag the send engine branches on', () => {
     // The engine requeues a retryable failure and writes off a terminal one;
     // without this flag it could only do one or the other.
-    expect(new TransportError('429', true).retryable).toBe(true);
-    expect(new TransportError('bad key', false).retryable).toBe(false);
+    expect(new TransportError('429', true, 'recipient').retryable).toBe(true);
+    expect(new TransportError('bad key', false, 'sender').retryable).toBe(false);
+  });
+
+  it('carries WHOSE failure it is, which the send engine branches on for a terminal one', () => {
+    expect(new TransportError('bad number', false, 'recipient').scope).toBe('recipient');
+    expect(new TransportError('bad key', false, 'sender').scope).toBe('sender');
   });
 });
 

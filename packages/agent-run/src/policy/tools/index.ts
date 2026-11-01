@@ -77,8 +77,10 @@ function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): Tool
 
     // A surface whose own tools are the whole catalog advertises exactly those, ranked by
     // the same selector; the shared registry's core set is a repository's catalog, not a board's.
+    // A closed catalog is the surface's own list, not `offered`, so the governance withholding applies to it here too:
+    // a gate-blocked tool is never advertised, pinned or not.
     const own = selectPlatformCatalog(ctx, pinned);
-    if (own) return [...own];
+    if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
 
     // The ONE catalog strategy: role core set + tool_search + find_symbol, with the
     // pinned, required and prompt-named tools kept. The lexical selector then trims an

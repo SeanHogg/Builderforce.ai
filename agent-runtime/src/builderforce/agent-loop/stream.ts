@@ -131,7 +131,13 @@ export function createGatewayStreamFn(client: NativeLlmClientOptions): StreamFn 
       try {
         const result = await nativeStream(
           { ...client, apiKey: options?.apiKey || client.apiKey, defaultModel: model.id },
-          { model: model.id, messages: toLlmMessages(context), tools: toLlmTools(context) },
+          {
+            model: model.id,
+            messages: toLlmMessages(context),
+            tools: toLlmTools(context),
+            // The turn's reply bound, when the agent set one (the gateway reads `max_tokens`); absent, the provider's own limit stands.
+            ...(typeof options?.maxTokens === "number" ? { extra: { max_tokens: options.maxTokens } } : {}),
+          },
           (ev) => {
             if (ev.type === "text-delta") {
               if (textIndex < 0) {

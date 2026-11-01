@@ -75,11 +75,11 @@ export function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
     role: "code",
     // Cost lever C9 (compaction under a long-context price tier) is read the on-device way: a partial rollout buckets by install.
     levers: onDeviceCostLeverOn("c9_price_tier_budget") ? ["c9_price_tier_budget"] : [],
-    // The history is cut at the model's WINDOW, not the cloud's cost cap.
-    budgets: { tokens: resolveContextWindowTokens(config.model) },
-    // A stall that fails the run over onto a model with a smaller window re-packs the context for it, and the model is told it took over.
-    // The reply reserve follows whichever model is serving (the agent's, from the turn's own reply ceiling), so a failover onto a small window keeps its history.
-    modelHandoff: {},
+    // The session owns the folding of a long conversation (a provider's overflow reaches it): the agent only re-packs the context when a
+    // stall fails the run over onto another model, for that model's window, and the model is told it took over. Its reply reserve
+    // follows whichever model is serving, so a failover onto a small window keeps its history.
+    budgets: {},
+    modelHandoff: true,
     pinnedModel: modelRef(config.model),
     inference: "hybrid",
     verify: "none",

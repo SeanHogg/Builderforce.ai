@@ -2,20 +2,21 @@
  * policy/compaction/modelHandOff - the run moved onto another model (a stall failover): the context it inherits is packed for
  * THE INCOMING model's window, and the incoming model is told it took over (`./handoff`).
  *
- * The reply reserve is the run's ONE reserve (`replyReserve`): the same number the ordinary compaction holds back and the model
- * policy bounds the request's `maxTokens` by, so the packed context and the reply it asks for always fit the window.
+ * For a run whose policy names `modelHandoff` this is the ONLY compaction the agent does: its session owns ordinary folding, and a
+ * provider's overflow reaches the session. The note the packer writes stays in the run's own transcript, where the incoming model reads it.
+ *
+ * The reply reserve is the run's ONE reserve (`replyReserve`): the same number the request's `maxTokens` is bounded by (`replyAsk`),
+ * so the packed context and the reply it asks for always fit the window.
  */
 
 import { priceTierBoundary } from "@builderforce/model-catalog";
-import type { CostLeverId, RunMessage } from "../../contract.js";
+import type { RunMessage } from "../../contract.js";
 import { emit } from "../../runContext.js";
 import type { CompactionResult, PolicyContext } from "../hooks.js";
+import { C9_TIER_LEVER, taskRowIndex } from "./compact.js";
 import { packForModelHandoff } from "./handoff.js";
-import { replyReserve } from "./reserve.js";
+import { replyReserve, servingModel } from "./reserve.js";
 import { runRowHandoff } from "./rows.js";
-
-/** Cost lever C9 - cap the budget at the model's long-context price-tier boundary. */
-const C9_TIER_LEVER: CostLeverId = "c9_price_tier_budget";
 
 /**
  * Pack the context for the model that now serves the run. Nothing when the run does not hand off between models, the model did not
@@ -24,9 +25,9 @@ const C9_TIER_LEVER: CostLeverId = "c9_price_tier_budget";
  */
 export async function handOff(ctx: PolicyContext): Promise<CompactionResult | void> {
   if (!ctx.policy.modelHandoff) return undefined;
-  const to = ctx.state.model?.model ?? ctx.policy.pinnedModel;
+  const to = servingModel(ctx);
   const from = ctx.state.preparedFor;
-  ctx.state.preparedFor = to;
+  ctx.state.preparedFor = to || undefined;
   if (!from || !to || from === to) return undefined;
   const contextWindow = ctx.ports.model.window?.(to);
   if (!contextWindow) return undefined;
@@ -35,8 +36,7 @@ export async function handOff(ctx: PolicyContext): Promise<CompactionResult | vo
   const system = ctx.messages.slice(0, split);
   const reserve = replyReserve(ctx);
   // The task the run was given survives the cut: a stall's note is the latest directive now, so the packer's own rule would let it go.
-  const task = ctx.messages.find((m) => m.task === true) ?? ctx.messages.find((m) => m.role === "user");
-  let note = "";
+  const task = ctx.messages[taskRowIndex(ctx.messages)];
   const packed = await packForModelHandoff<RunMessage>(
     {
       messages: ctx.messages.slice(split),
@@ -49,9 +49,7 @@ export async function handOff(ctx: PolicyContext): Promise<CompactionResult | vo
       ...(task ? { pinned: (row) => row === task } : {}),
       ...(ctx.policy.levers.includes(C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}),
     },
-    runRowHandoff((text) => {
-      note = text;
-    }),
+    runRowHandoff(),
   );
   if (!packed.fits) {
     await emit(ctx.ports.events, {
@@ -69,6 +67,5 @@ export async function handOff(ctx: PolicyContext): Promise<CompactionResult | vo
     beforeTokens: packed.beforeTokens,
     afterTokens: packed.afterTokens,
     summarized: false,
-    ...(note ? { note } : {}),
   };
 }

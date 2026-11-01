@@ -28,6 +28,11 @@ export interface RunMessage {
    * timestamp). Opaque to the agent: it carries them from the completion or tool result to the row and never reads them.
    */
   meta?: Readonly<Record<string, unknown>>;
+  /**
+   * This row is the surface's own context, not the person's words (a bash execution, a branch or compaction summary, an extension's
+   * message): the role says `user` because that is how the model reads it, but it is never the task or the latest directive.
+   */
+  custom?: true;
   /** This tool row is a FAILED call's answer (a refusal, a thrown tool, a skipped call). */
   isError?: true;
 }

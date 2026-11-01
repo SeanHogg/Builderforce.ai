@@ -46,6 +46,7 @@
 import type { CostLeverId, RunMessage } from "../../contract.js";
 import type { CompactionHook, CompactionResult, PolicyContext } from "../hooks.js";
 import {
+  C9_TIER_LEVER,
   CLOUD_COMPACT_DEFAULTS,
   OBSERVATION_MASK_TURNS,
   compactMessages,
@@ -61,8 +62,6 @@ import { toPackRow, toRunRow } from "./rows.js";
 
 /** Cost lever C2 — mask stale tool-result observations before packing. */
 const C2_MASK_LEVER: CostLeverId = "c2_observation_masking";
-/** Cost lever C9 — cap the budget at the model's long-context price-tier boundary. */
-const C9_TIER_LEVER: CostLeverId = "c9_price_tier_budget";
 /** How many recalled entries the dropped-middle note may draw on. */
 const RECALL_LIMIT = 8;
 
@@ -140,8 +139,7 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
   const model = servingModel(ctx);
   const window = ctx.ports.model.window?.(model);
   const recall = opts.recall ?? capabilityRecall(ctx);
-  // The run's ONE reply reserve (`replyReserve`): the host-neutral floor unless the surface bounded its replies lower, or - for a run
-  // that hands off between models - the turn's own reply ceiling within a quarter of the serving window. The run's token BUDGET is
+  // The reply reserve (`replyReserve`): the host-neutral floor unless the surface bounded its replies lower. The run's token BUDGET is
   // a cost ceiling, not a reply size.
   const reserve = replyReserve(ctx);
   return {
@@ -181,14 +179,14 @@ function foldOf(before: readonly PackMessage[], after: readonly PackMessage[]): 
  * The compaction hook, as WS2a lands it. Compacts the run's transcript when it
  * outgrows the budget, never dropping the system prompt or the current task, and
  * returns the compacted rows with what it dropped and the reserve it held back.
- * Returns nothing when the transcript already fits. A run that moved onto another
- * model is packed for it first (`./modelHandOff`).
+ * Returns nothing when the transcript already fits. A run whose policy names
+ * `modelHandoff` does NOT compact: its session owns the folding, and the agent only
+ * re-packs the context when the serving model changes (`./modelHandOff`).
  */
 export function createCompactionHook(hookOptions: CompactionHookOptions = {}): CompactionHook {
   return {
     async compact(ctx: PolicyContext): Promise<CompactionResult | void> {
-      const handed = await handOff(ctx);
-      if (handed) return handed;
+      if (ctx.policy.modelHandoff) return handOff(ctx);
       const options = compactionOptions(ctx, hookOptions);
       const rows = (ctx.messages as readonly Row[]).map(toPackRow);
       const result = await compactMessages(rows as unknown as Array<Record<string, unknown>>, options, options.summarize);

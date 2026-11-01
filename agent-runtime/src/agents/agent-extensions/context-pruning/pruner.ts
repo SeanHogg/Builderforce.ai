@@ -4,10 +4,10 @@ import type { ExtensionContext } from "../types.js";
 import type { EffectiveContextPruningSettings } from "./settings.js";
 import { makeToolPrunablePredicate } from "./tools.js";
 import { CHARS_PER_TOKEN } from "@builderforce/workload";
+import { IMAGE_CHAR_ESTIMATE } from "@builderforce/agent-run";
 
-// We currently skip pruning tool results that contain images. Still, we count them (approx.) so
+// We currently skip pruning tool results that contain images. Still, we count them (approx., at the agent's one per-image figure) so
 // we start trimming prunable tool results earlier when image-heavy context is consuming the window.
-const IMAGE_CHAR_ESTIMATE = 8_000;
 
 function asText(text: string): TextContent {
   return { type: "text", text };

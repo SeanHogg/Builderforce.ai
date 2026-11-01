@@ -20,7 +20,7 @@ function ctxFor(window: number, messages: RunMessage[], over: { levers?: "c9_pri
     events: { emit: (e) => void events.push(e) },
   };
   const ctx = policyCtx({
-    policy: { ...(over.handoff === false ? {} : { modelHandoff: {} }), pinnedModel: over.pinnedModel ?? "p/small", levers: over.levers ?? [] },
+    policy: { ...(over.handoff === false ? {} : { modelHandoff: true }), pinnedModel: over.pinnedModel ?? "p/small", levers: over.levers ?? [] },
     messages,
     ports,
     ...(over.tools ? { tools: over.tools } : {}),

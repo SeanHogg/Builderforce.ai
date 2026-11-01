@@ -5,7 +5,7 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../../env';
-import type { Db } from '../../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../../infrastructure/database/connection';
 import {
   marketingAudienceMembers,
   marketingCampaignSends,
@@ -20,8 +20,12 @@ import {
   resolveCampaignSender,
   type CampaignChannel,
 } from '../campaignTransports';
+import { suppressionKey } from '../suppression';
 import { suppressedSubset } from './audiences';
 import { CAMPAIGN_COLUMNS, type CampaignView } from './campaigns';
+
+/** Rows per recipient INSERT: 6 binds each, so 2,000 is 12,000 of Postgres' 65,535 per statement. */
+const RECIPIENT_INSERT_CHUNK = 2_000;
 
 export type StartResult =
   | {
@@ -163,45 +167,69 @@ export async function startCampaign(
   // channels. A carrier STOP is narrower and only sets `phone_status` — it is a
   // withdrawal of SMS consent specifically, and treating it as an email opt-out
   // would silently unsubscribe somebody from a newsletter they still want.
-  const blocked = await suppressedSubset(db, tenantId, reachable.map((m) => m.email));
-  const deliverable = reachable.filter((m) => !blocked.has(m.email));
+  //
+  // An SMS reaches the NUMBER, and the register holds numbers (`phone_e164`) as well as
+  // addresses, so an SMS member is checked on BOTH keys: an erased person whose email is not
+  // listed must not be texted. One query either way.
+  const keysOf = (m: { email: string; phone: string | null }): string[] =>
+    channel === 'sms' ? [m.email, m.phone ?? ''] : [m.email];
+  const blocked = await suppressedSubset(db, tenantId, reachable.flatMap(keysOf));
+  const isBlocked = (m: { email: string; phone: string | null }): boolean =>
+    keysOf(m).some((contact) => {
+      const key = suppressionKey(contact);
+      return key !== null && blocked.has(key);
+    });
+  const deliverable = reachable.filter((m) => !isBlocked(m));
   if (deliverable.length === 0) {
     return { ok: false, status: 400, error: 'Every member of this audience has unsubscribed.' };
   }
+  // A person blocked on both keys is ONE person, so this is a count of members, not of keys.
+  const suppressed = reachable.length - deliverable.length;
 
-  await db
-    .insert(marketingCampaignSends)
-    .values(deliverable.map((member) => ({
-      campaignId,
-      tenantId,
-      email: member.email,
-      // Stamped at materialisation, not read at send time: the ledger has to
-      // describe the number this campaign actually messaged.
-      phone: channel === 'sms' ? member.phone : null,
-      status: 'queued',
-      trackToken: newChallengeToken(),
-    })))
-    // Idempotent: re-starting cannot duplicate a recipient.
-    .onConflictDoNothing();
-
-  const [updated] = await db
-    .update(marketingCampaigns)
-    .set({
-      status: 'sending',
-      scheduleRefusedAt: null,
-      startedAt: sql`NOW()`,
-      recipients: deliverable.length,
-      suppressed: blocked.size,
-      updatedAt: sql`NOW()`,
-    })
-    .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
-    .returning(CAMPAIGN_COLUMNS);
+  // ONE transaction: every recipient row and the flip to `sending` commit together or not at
+  // all, so a start that fails part-way leaves nothing behind. The alternative (separate
+  // statements, a campaign left `draft` with some rows `queued`) would let a re-run START with
+  // stale rows for people who have since unsubscribed. The insert is chunked because a single
+  // statement carries 6 binds per row and Postgres caps a statement at 65,535 (about 10,900
+  // recipients); `onConflictDoNothing` stays as the idempotency guard for a row that already
+  // exists (a campaign materialised by an earlier version of this code).
+  const updated = await inTransaction(db, async (tx) => {
+    for (let i = 0; i < deliverable.length; i += RECIPIENT_INSERT_CHUNK) {
+      await tx
+        .insert(marketingCampaignSends)
+        .values(deliverable.slice(i, i + RECIPIENT_INSERT_CHUNK).map((member) => ({
+          campaignId,
+          tenantId,
+          email: member.email,
+          // Stamped at materialisation, not read at send time: the ledger has to
+          // describe the number this campaign actually messaged.
+          phone: channel === 'sms' ? member.phone : null,
+          status: 'queued',
+          trackToken: newChallengeToken(),
+        })))
+        // Idempotent: re-starting cannot duplicate a recipient.
+        .onConflictDoNothing();
+    }
+    const [row] = await tx
+      .update(marketingCampaigns)
+      .set({
+        status: 'sending',
+        scheduleRefusedAt: null,
+        startedAt: sql`NOW()`,
+        recipients: deliverable.length,
+        suppressed,
+        updatedAt: sql`NOW()`,
+      })
+      .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
+      .returning(CAMPAIGN_COLUMNS);
+    return row;
+  });
 
   return {
     ok: true,
     campaign: updated!,
     queued: deliverable.length,
-    suppressed: blocked.size,
+    suppressed,
     unreachable: members.length - reachable.length,
   };
 }

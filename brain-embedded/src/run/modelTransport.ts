@@ -19,6 +19,8 @@ import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTranspor
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
 import { turnInterruption } from '../finishReason';
 import { providerFailureEvent } from '../providerFailure';
+import { withImages } from './runMessages';
+import { turnPriceMc } from '../localChat/turnCost';
 import type { BrainStreamFn } from '../runStore/runTypes';
 import { contextWindowOf, type RunWindowSources } from '../windowFit/modelWindow';
 
@@ -77,23 +79,27 @@ export function toStreamMessage(message: RunMessage): ChatCompletionMessage {
       tool_calls: message.toolCalls.map((call) => ({ id: call.id, type: 'function' as const, function: { name: call.name, arguments: call.arguments } })),
     };
   }
-  return { role: message.role, content: message.content };
+  return { role: message.role, content: message.role === 'user' ? withImages(message.content, message.parts) : message.content };
 }
 
 /** The stream's result in the agent's completion shape. */
-export function toCompletion(result: StreamChatResult): ModelCompletion {
+export function toCompletion(result: StreamChatResult, requested?: string): ModelCompletion {
   const interruption = turnInterruption(result.finishReason);
+  const usage = result.usage;
+  const pricedMc = turnPriceMc(result, requested);
   return {
     content: result.text,
     // The call's arguments stay the RAW JSON string — the kernel parses them, and a
     // malformed one is the kernel's to report.
     toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
-    ...(result.usage
+    ...(usage || pricedMc !== undefined
       ? {
           usage: {
-            ...(result.usage.prompt !== undefined ? { inputTokens: result.usage.prompt } : {}),
-            ...(result.usage.completion !== undefined ? { outputTokens: result.usage.completion } : {}),
-            ...(result.usage.cacheRead !== undefined ? { cacheReadTokens: result.usage.cacheRead } : {}),
+            // What the turn is worth on the device (the run's USD cap reads it); absent when it has no known price.
+            ...(pricedMc !== undefined ? { pricedMc } : {}),
+            ...(usage?.prompt !== undefined ? { inputTokens: usage.prompt } : {}),
+            ...(usage?.completion !== undefined ? { outputTokens: usage.completion } : {}),
+            ...(usage?.cacheRead !== undefined ? { cacheReadTokens: usage.cacheRead } : {}),
           },
         }
       : {}),
@@ -145,7 +151,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
         throw classified(session ? session.failed(e) : e);
       }
       await session?.completed(result);
-      return toCompletion(result);
+      return toCompletion(result, request.model);
     },
     window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),
     ...(preflight ? { preflight: () => preflight() } : {}),
