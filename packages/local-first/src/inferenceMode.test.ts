@@ -61,9 +61,18 @@ describe('inference mode', () => {
     const local = resolveInferencePolicy({
       mode: 'local-only',
       signedIn: true,
-      overrides: { gatewayInference: true, connectedFeatures: true, synchronize: true, directProviders: true, gitRemotes: true },
+      overrides: {
+        gatewayInference: true, connectedFeatures: true, synchronize: true, directProviders: true,
+        externalMcp: true, modelDownloads: true, gitRemotes: true,
+      },
     }).snapshot;
-    expect(local).toMatchObject({ gatewayInference: false, connectedFeatures: false, synchronize: false, directProviders: false, gitRemotes: true });
+    // Local only holds off every egress capability, whatever an override says …
+    expect(local).toMatchObject({
+      gatewayInference: false, connectedFeatures: false, synchronize: false, directProviders: false,
+      externalMcp: false, modelDownloads: false, gitRemotes: false,
+    });
+    // … but never blocks sign-in itself (the scoped authenticate grant is the way onto Hybrid).
+    expect(local.authenticate).toBe(false);
   });
 
   it('an invalid stored mode reads as unchosen', () => {

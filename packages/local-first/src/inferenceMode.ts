@@ -58,8 +58,15 @@ export function policyForInferenceMode(mode: InferenceMode): Partial<PlatformPol
   }
 }
 
-/** The capabilities `local-only` holds off whatever an advanced override says. */
-const LOCAL_ONLY_LOCKED: readonly (keyof PlatformPolicySnapshot)[] = ['gatewayInference', 'connectedFeatures', 'synchronize', 'directProviders'];
+/** The capabilities `local-only` holds off whatever an advanced override says. `authenticate`
+ * is deliberately NOT here: sign-in is the host's explicit, scoped grant and the way onto
+ * Hybrid. Every other egress — platform inference/features/sync, direct providers, external
+ * MCP, model downloads and git remotes — stays off in `local-only` whatever an override says,
+ * so a signed-out person who toggled an advanced override still sends nothing. */
+const LOCAL_ONLY_LOCKED: readonly (keyof PlatformPolicySnapshot)[] = [
+  'gatewayInference', 'connectedFeatures', 'synchronize', 'directProviders',
+  'externalMcp', 'modelDownloads', 'gitRemotes',
+];
 
 export interface ResolvedInferencePolicy {
   /** The mode in force — the chosen one, else the derived default. */
