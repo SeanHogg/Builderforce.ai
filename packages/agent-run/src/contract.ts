@@ -169,9 +169,12 @@ export interface EventSink {
   outcome?(row: RunOutcomeRow): Promise<void> | void;
 }
 
+/** Why an approval was not granted: a person said no, nobody answered in time, or the run was stopped while it waited. Absent means declined. */
+export type ApprovalRefusal = 'declined' | 'timed_out' | 'stopped';
+
 /** What a human said, or that the run is waiting for one. */
 export type HumanAnswer =
-  | { kind: 'answered'; answer: string; approved?: boolean }  // approved: the STRUCTURED decision of an approval (never read from the answer text)
+  | { kind: 'answered'; answer: string; approved?: boolean; refusal?: ApprovalRefusal }  // approved: the STRUCTURED decision of an approval (never read from the answer text); refusal: why it was not granted
   | { kind: 'paused'; approvalId?: string };  // approvalId: the record the surface parked the run on, when it created one
 
 /** How people are reached: the tool-confirm gate, the approval bar, the relay ask. */

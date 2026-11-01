@@ -78,7 +78,8 @@ function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): Tool
     // A surface whose own tools are the whole catalog advertises exactly those, ranked by
     // the same selector; the shared registry's core set is a repository's catalog, not a board's.
     // A closed catalog is the surface's own list, not `offered`, so the governance withholding applies to it here too:
-    // a gate-blocked tool is never advertised, pinned or not.
+    // a gate-blocked tool is never advertised, pinned or not. (A closed surface that binds no `approvalGates`, such as the
+    // Brain's canvas, has nothing to withhold; the channel runner binds the tenant's.)
     const own = selectPlatformCatalog(ctx, pinned);
     if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
 

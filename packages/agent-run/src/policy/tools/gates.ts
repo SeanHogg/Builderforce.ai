@@ -22,6 +22,7 @@
  */
 
 import { evaluatePolicyGate, policyGateCallKey, toolCallPaths, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
+import type { ApprovalRefusal } from "../../contract.js";
 import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { emit } from "../../runContext.js";
 
@@ -60,6 +61,15 @@ const TOOL_NAME_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   search_code: ["Grep"],
 };
 
+/**
+ * Tools whose ACTION decides what they are: `nodes` with `action: "run"` runs a command on a node, so a gate on the exec family
+ * covers it at dispatch. DATA, read by {@link candidateToolNames}; the whole tool is NOT withheld from the catalog (its other
+ * actions are not execution), so only a call with the named action evaluates as the family.
+ */
+const ACTION_TOOL_FAMILIES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  nodes: { run: "exec" },
+};
+
 /** How a run ends or asks. A gate that names no tool never gets between a run and these. */
 const CONTROL_TOOLS: ReadonlySet<string> = new Set(["finish", "ask_human", "ask_user"]);
 
@@ -80,10 +90,13 @@ export function policyRefusalMessage(d: PolicyRefusal): string {
   );
 }
 
-function candidateToolNames(toolName: string): string[] {
+function candidateToolNames(toolName: string, args?: Record<string, unknown>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const n of [toolName, ...(TOOL_NAME_SYNONYMS[toolName] ?? [])]) {
+  const action = typeof args?.action === "string" ? args.action.trim().toLowerCase() : "";
+  const family = ACTION_TOOL_FAMILIES[toolName]?.[action];
+  const names = [toolName, ...(TOOL_NAME_SYNONYMS[toolName] ?? []), ...(family ? [family, ...(TOOL_NAME_SYNONYMS[family] ?? [])] : [])];
+  for (const n of names) {
     if (!n || seen.has(n)) continue;
     seen.add(n);
     out.push(n);
@@ -111,7 +124,7 @@ export function evaluatePolicyGateSeam(
   const paths = toolCallPaths(args);
   const pathArg = paths.length ? paths : undefined;
   let approval: PolicyRefusal | undefined;
-  for (const name of candidateToolNames(toolName)) {
+  for (const name of candidateToolNames(toolName, args)) {
     const d = evaluatePolicyGate(applicable, name, pathArg);
     if (d.action === "block") return d;
     if (d.action === "require-approval") approval = d;
@@ -135,6 +148,13 @@ export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolNam
 // ── The in-run gate (RunPolicy.approvalGates) — ported from the cloud loop's beforeDispatch ──
 
 // The identity of ONE `require-approval` decision (`policyGateCallKey`) is shared by every surface: `@builderforce/agent-tools`.
+
+/** What the model reads when an approval was not granted: declined, timed out and stopped each say what happened. */
+function approvalRefusalMessage(refusal: ApprovalRefusal, tool: string, gateId: string, answer: string): string {
+  if (refusal === "timed_out") return `No approver answered "${tool}" in time (governance gate ${gateId}), so it was not run.`;
+  if (refusal === "stopped") return `The run was stopped before "${tool}" was approved (governance gate ${gateId}), so it was not run.`;
+  return `The approver declined "${tool}" (governance gate ${gateId}).${answer ? ` ${answer}` : ""}`;
+}
 
 /**
  * Judge one call against `RunPolicy.approvalGates`. A `block` refuses it (the model reads
@@ -176,7 +196,11 @@ export async function gateCall(
     ? await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...(parkedOn ? { approvalId: parkedOn } : {}) })
     : await human.ask(question);
   // A channel that cannot say anything at all is no approver: the policy refuses the call (the model reads why).
-  if (!answer) return { data: { ok: false, error: policyRefusalMessage(decision) }, isError: true };
+  if (!answer) {
+    const error = policyRefusalMessage(decision);
+    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
+    return { data: { ok: false, gate: decision.gateId, error }, isError: true };
+  }
   // The decision is the approval's STRUCTURED outcome, never matched out of the answer's words.
   if (answer.kind === "answered") {
     if (parkedOn) {
@@ -187,7 +211,11 @@ export async function gateCall(
       ctx.state.approvedCalls = [...(ctx.state.approvedCalls ?? []), key];
       return undefined;
     }
-    return { data: { ok: false, error: `The approver declined "${call.name}" (governance gate ${decision.gateId}).${answer.answer ? ` ${answer.answer}` : ""}` }, isError: true };
+    const refusal = answer.refusal ?? "declined";
+    const error = approvalRefusalMessage(refusal, call.name, decision.gateId, answer.answer);
+    // A refusal is a gate stopping a call whoever said no, so it is told like a block (the surface names the gate when a run ends on it).
+    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
+    return { data: { ok: false, gate: decision.gateId, error }, isError: true };
   }
   // Parked. With an approval record, the call is NOT approved: the retried identical call reads that record's
   // status. With none (a plain question), the person's answer arrives with the resume, and the retried call proceeds.

@@ -169,9 +169,18 @@ export function coercePolicyGates(raw: unknown): PolicyGate[] {
   return out;
 }
 
+/** The file headers of a `*** Begin Patch` document (`apply_patch`'s only argument): what a patch adds, updates, deletes or moves to. */
+const PATCH_FILE_HEADER = /^\*\*\* (?:Add File|Update File|Delete File|Move to):[ \t]*(.+?)[ \t]*$/gm;
+
+function patchPaths(input: unknown): string[] {
+  if (typeof input !== "string" || !input.includes("*** Begin Patch")) return [];
+  return [...input.matchAll(PATCH_FILE_HEADER)].map((m) => m[1] as string);
+}
+
 /**
  * Paths a tool call is acting on, extracted from the common arg shapes (`path`,
- * `filePath`, `oldPath`, `newPath`, `paths[]`). The hook call sites pass into
+ * `filePath`, `oldPath`, `newPath`, `paths[]`, and the file headers of an
+ * `apply_patch` `input`). The hook call sites pass into
  * {@link evaluatePolicyGate} so a path-scoped gate can match without each engine
  * re-implementing extraction.
  */
@@ -190,6 +199,7 @@ export function toolCallPaths(args: Record<string, unknown> | undefined): string
   if (Array.isArray(args.paths)) {
     for (const p of args.paths) add(p);
   }
+  for (const p of patchPaths(args.input)) add(p);
   return out;
 }
 

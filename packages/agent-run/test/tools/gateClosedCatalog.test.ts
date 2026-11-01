@@ -1,5 +1,5 @@
 /**
- * A surface whose own tools are the WHOLE catalog (`PlatformTools.closed`: the channel runner, the Creation Canvas) advertises its
+ * A surface whose own tools are the WHOLE catalog (`PlatformTools.closed`: the on-prem channel runner binds approvalGates; the Creation Canvas is closed too but binds none) advertises its
  * own list, not the registry's. An unscoped `block` gate withholds a tool from that list too, and a call to it is still refused:
  * the withholding used to filter only the registry's tools, so a closed surface kept advertising the tool a tenant had blocked.
  */
