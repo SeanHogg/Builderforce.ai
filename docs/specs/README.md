@@ -23,13 +23,17 @@ sequence is a PRD that shipped. Index last rewritten 2026-10-25.
 | 30 | [Prompt-driven marketing campaign](./30-prd-guided-marketing-campaign.md) | Partly built | Reach › Marketing and campaigns |
 | 31 | [Build, run and ship a real app on Builderforce](./31-prd-customer-app-platform.md) | Partly built (W1 started) | Make › Previews, repos and hosting |
 | 33 | [Insights: session replay, heatmaps, live visitors](./33-prd-session-replay.md) | Live in code; production provisioning open | Measure › `[growth]` |
-| 35 | [One agent, one kernel](./35-prd-one-agent-one-kernel.md) | Partly built (in progress) | Make › Cloud and IDE agent runs (ONE execution core) |
+| 35 | [One agent, one kernel](./35-prd-one-agent-one-kernel.md) | Complete, 2026-11-01 (DONE.md) | Make › Cloud and IDE agent runs (ONE execution core) |
 | 37 | [Coordinated Role Participation & Execution Verification](./37-prd-coordinated-role-participation.md) | Mostly built | Make › Autonomous delivery |
+| 38 | [Knowledge graph & extraction](./38-prd-knowledge-graph.md) | Mostly built; open items in ROADMAP | Make › Knowledge review |
+| 39 | [Platform close-out](./39-prd-platform-closeout.md) | Partly built | OTHER › Infrastructure |
 
 Also here:
 
 - [`data-model/`](./data-model/) — the consolidation coverage map read by the `check:burnrate-parity`
   and model-coverage guards.
+- [`tasks/`](./tasks/) — per-ticket PRDs (`task-<id>.md`) committed by the platform
+  (`api/src/application/repos/commitPrdToRepo.ts`).
 
 Design docs live in [`../design/`](../design/): the PRD 35 design
 ([`one-agent-one-kernel.html`](../design/one-agent-one-kernel.html)), the local-first review

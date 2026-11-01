@@ -159,5 +159,4 @@ Before integrating progress events:
 ## Additional Resources
 
 - [Event Payload Schema](../api/event-payload.schema.json) – Full JSON Schema with examples
-- [Progress Documentation Checklist](./progress-docs-checklist.md) – Verify consistency across all docs
 - [Chat Ticket API Reference](../../../api/src/application/brain/ChatTicketService.ts) – Server-side implementation

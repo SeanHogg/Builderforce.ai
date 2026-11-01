@@ -150,22 +150,22 @@ An **Impromptu stand-up** is a frame template, not a separate meeting product. S
 
 ## Reuse plan
 
+*Verified 2026-11-01. The original table referenced `components/workflow-builder/*` and
+`components/canvas/CanvasBoard.tsx`, which no longer exist; the workflow surface now lives in
+`app/workflows/builder/`, `app/agents/workflow-builder/` and `domains/workflow/`.*
+
 The first implementation should compose existing code rather than replace it:
 
 | Existing component/module | Reuse in Creation Canvas |
 | --- | --- |
-| `components/workflow-builder/WorkflowBuilder.tsx` | Extract XYFlow viewport, drag/drop, connections, controls, minimap, save/run behaviors |
-| `components/workflow-builder/BuilderNode.tsx` | Base for executable workflow objects and compact nodes inside a workflow frame |
-| `components/workflow-builder/nodeKinds.ts` | Initial Logic, LLM, training, and integration palette registry |
-| `components/brain/BrainPanel.tsx` | Chat object content and session conversation behavior |
+| `app/workflows/builder/` route + `domains/workflow/` board model (`boardFlow.ts`, `compileBoardFlow.ts`) | Executable graph rendering and save/run behaviors; the node registry moved to `domains/workflow/domain/stepCatalog.ts` |
+| `domains/workflow/domain/stepKinds/*` (composition, connect, evermind, flowControl, output, textParser, tools) | Initial Logic, LLM, training, and integration palette registry |
+| `domains/workflow/presentation/StepConfigForm.tsx` | Starting point for the contextual right inspector |
+| `domains/workflow/presentation/EvermindBuildPanel.tsx` | LLM build inspector shown when an LLM/train object is selected |
+| `components/brain/BrainPanel.tsx` and `components/brain/panel/` | Chat object content and session conversation behavior |
 | `components/ChatInput.tsx` | Global bottom composer; add canvas-selection scope |
 | `components/ChatMessageBubble.tsx` and `ChatMessageActions.tsx` | Messages, copy, and artifact actions inside Chat objects |
-| `components/canvas/CanvasBoard.tsx` | Freeform block behavior to merge into the XYFlow viewport, especially resize and non-executable blocks |
-| `components/canvas/canvasModel.ts` | Seed object geometry and portable content concepts; supersede with a typed session graph |
-| `components/workflow-builder/NodeConfigPanel.tsx` | Starting point for the contextual right inspector |
-| `components/workflow-builder/EvermindBuildPanel.tsx` | LLM build inspector shown when an LLM/train object is selected |
-
-Use XYFlow as the single spatial engine. Nesting the current `CanvasBoard` inside it would create competing pan, zoom, selection, and keyboard models. Port its useful block behaviors into new XYFlow object types instead.
+| `components/canvas/CanvasStage.tsx` and `CreationSessionClient.tsx` | The current creation-session canvas host: pan/zoom/viewport model, selection, and block geometry |
 
 ## Suggested data shape
 

@@ -20,7 +20,7 @@ export type CommitPrdResult =
 /** Keep concurrent ticket briefs independent instead of making every agent rewrite
  * the repository-wide PRD.md (the source of hundreds of artificial conflicts). */
 export function taskPrdRepoPath(taskId: number): string {
-  return `specs/tasks/task-${taskId}.md`;
+  return `docs/specs/tasks/task-${taskId}.md`;
 }
 
 export async function commitPrdAsPendingChange(
