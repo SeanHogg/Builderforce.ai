@@ -54,8 +54,6 @@ export interface RunRoutingSettings {
   routing?: unknown;
   routeThreshold?: unknown;
   maxRunBudgetUsd?: unknown;
-  /** `builderforce.agent.engine`: which engine drives the run (PRD 35 WS4). */
-  agentEngine?: unknown;
 }
 
 /** What a top-level run (or a sub-agent) is started with. */
@@ -63,8 +61,6 @@ export interface EditorRunSettings {
   phaseModels?: RunStageModels;
   pipeline?: RunPipelineSettings;
   maxRunBudgetUsd?: number;
-  /** The engine this device opted into; absent ⇒ the Brain's default. Selects the engine and nothing else. */
-  engine?: "loop" | "agent";
   /** The sub-agent stage model — read by `modelForChildRun`. */
   subagentModel?: string;
 }
@@ -90,7 +86,6 @@ export function editorRunSettingsFrom(stages: StageModels, raw: RunRoutingSettin
       ...(stages.quick ? { quickModel: stages.quick } : {}),
     },
     ...(budget !== undefined ? { maxRunBudgetUsd: budget } : {}),
-    ...(raw.agentEngine === "agent" || raw.agentEngine === "loop" ? { engine: raw.agentEngine } : {}),
     ...(stages.subagent ? { subagentModel: stages.subagent } : {}),
   };
 }
@@ -98,17 +93,16 @@ export function editorRunSettingsFrom(stages: StageModels, raw: RunRoutingSettin
 /** The fields of {@link EditorRunSettings} a run request carries. A sub-agent keeps its
  *  owner's routing out (it is never routed) and takes its model from `modelForChildRun`,
  *  so only the cap reaches it — and the cap is the TREE's, not a fresh one: the child
- *  accrues into its owner's total (brain-embedded `runSpendBudget.ts`, keyed by the
+ *  accrues into its owner's total (brain-embedded `runStore/runSpendBudget.ts`, keyed by the
  *  lineage), so an owner and all its sub-agents together stay under one cap. */
 export function runRequestFields(
   settings: EditorRunSettings | undefined,
   opts: { child: boolean },
-): Pick<EditorRunSettings, "phaseModels" | "pipeline" | "maxRunBudgetUsd" | "engine"> {
+): Pick<EditorRunSettings, "phaseModels" | "pipeline" | "maxRunBudgetUsd"> {
   if (!settings) return {};
   return {
     ...(!opts.child && settings.phaseModels ? { phaseModels: settings.phaseModels } : {}),
     ...(!opts.child && settings.pipeline ? { pipeline: settings.pipeline } : {}),
     ...(settings.maxRunBudgetUsd ? { maxRunBudgetUsd: settings.maxRunBudgetUsd } : {}),
-    ...(settings.engine ? { engine: settings.engine } : {}),
   };
 }
