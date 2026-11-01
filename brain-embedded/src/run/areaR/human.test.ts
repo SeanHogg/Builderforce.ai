@@ -5,9 +5,8 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { runAgent, teeEvents, type PolicyGate, type RunEvent } from '@builderforce/agent-run';
+import { runAgent, teeEvents, type PolicyGate, type RunEvent, resetRunSteering } from '@builderforce/agent-run';
 import { resetBrainRunStore, resolveRunConfirm } from '../../runStore/runControl';
-import { resetRunSteering } from '../../runSteering';
 import { binding, result, scripted } from '../../test/brainRunHarness';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts } from '../webAdapter';
 

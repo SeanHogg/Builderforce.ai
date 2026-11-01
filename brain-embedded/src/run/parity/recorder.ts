@@ -2,7 +2,7 @@
  * What the parity harness observes of a run, gathered the way each of the Brain's real observers would:
  * the model transport (every request), the host's persistence (every row), the host's tool port, the
  * cell's subscribers (what a mounted view repaints on) and the ledger callbacks. One `Recorder` per
- * engine run; `toRecord` turns it into the comparable {@link RunRecord}.
+ * run; `toRecord` turns it into the comparable {@link RunRecord}.
  */
 
 import type { BrainMessage } from '../../types';

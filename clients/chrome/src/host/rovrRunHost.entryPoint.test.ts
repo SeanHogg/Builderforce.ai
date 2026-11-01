@@ -28,7 +28,7 @@ describe("Rovr's host labels its runs and reports them", () => {
 
     const stream: BrainStreamFn = async () => ({ text: 'Hi.', toolCalls: [], finishReason: 'stop', resolvedModel: 'fake-model' }) as StreamChatResult;
     await persistence.sendMessages(id, [{ role: 'user', content: 'hello' }]);
-    await startRun(id, { resolvedSystemPrompt: '', stream, persistence, userTurn: 'hello', ...prepared, engine: 'agent' });
+    await startRun(id, { resolvedSystemPrompt: '', stream, persistence, userTurn: 'hello', ...prepared });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(reported).toHaveLength(1);

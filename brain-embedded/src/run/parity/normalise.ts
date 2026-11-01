@@ -1,14 +1,14 @@
 /**
- * The ONLY place the parity harness excuses a difference between two engines' records. Every rule below
+ * The ONLY place the parity harness excuses a difference between a run's record and the one stored for its scenario (`snapshots/`). Every rule below
  * is named with the reason it is not a behavioural difference. Adding a rule widens what the suite
- * cannot see: a rule that hides something an engine decides is a defect in this file, not a feature.
+ * cannot see: a rule that hides something the agent decides is a defect in this file, not a feature.
  *
  *  1. Run ids. `metadata.guestTurnId` is `crypto.randomUUID()` per run (`runPreamble.ts`), so two runs
  *     of one scenario can never share it. Each distinct id becomes `<id:N>` by order of first
  *     appearance, so a run that reuses one id where the other minted two is still seen.
- *  2. Wall-clock instants, by key: `ts`, `createdAt`, `startedAt`, `at`. Both engines stamp `new Date()`.
+ *  2. Wall-clock instants, by key: `ts`, `createdAt`, `startedAt`, `at`. Every run stamps `new Date()`.
  *  3. Measured durations, by key: `durationMs`, `ttftMs`, `elapsedMs`. They are timings of the machine,
- *     not decisions. Kept as `<ms>` so a step that has one on one engine and none on the other is seen.
+ *     not decisions. Kept as `<ms>` so a step that has one in one record and none in the other is seen.
  *  4. ISO-8601 instants inside text (a system prompt's clock line, a step's wording): same as rule 2.
  *
  *  5. Epoch-ms run clocks. `clientRunId` is `ide:<run key>:<Date.now() at start>` (`runOutcomeReport.ts`); the
@@ -20,12 +20,12 @@
  *     (`auto`), an empty `metadata`. A DIFFERENT value (16384 against 4096) is not touched.
  *
  *  7. The agent's uniform telemetry (`withoutUniformTelemetry`, approved by the coordinator, PRD 35 section 8.2). On a graded run the
- *     agent's outcome row carries 17 optional fields the loop's row has no place for: entryPoint, toolCalls, toolErrors, tokens,
+ *     agent's outcome row carries 17 optional fields the stored (old loop) row has no place for: entryPoint, toolCalls, toolErrors, tokens,
  *     cacheReadTokens, compactions, stallRecoveries, escalations, coveredReadStubs, shellFileReads, repoErrors, contextPackTokens,
  *     unkeptReadyClaims, verify, firstSpawnTurn, modelPreflight, progressTrips. They are the agent's own telemetry and exist only on
- *     the agent, so they are dropped from `outcome.reported[]`. Every field the loop also sends (steps, model, source, merged,
+ *     the agent, so they are dropped from `outcome.reported[]`. Every field the stored row also carries (steps, model, source, merged,
  *     terminalStatus, clientRunId, ...) is compared as it is: a wrong `steps` stays a failure.
- *  8. `agentOnly.recorded` (the agent's `reportRunRecord`, for a run with no grade) is not compared with the loop, which has no such
+ *  8. `agentOnly.recorded` (the agent's `reportRunRecord`, for a run with no grade) is not compared with the stored record, which has no such
  *     report; the suites assert instead that no run reports twice (`atMostOneReportPerRun`).
  *
  * Nothing else is normalised: not message order, not step numbers, not counts, not wording.

@@ -1,14 +1,14 @@
 /**
- * The differential parity harness (PRD 35 WS4, area D): the shapes it shares.
+ * The parity harness (PRD 35 WS4, area D): the shapes it shares.
  *
  * One SCENARIO is a scripted conversation with the Brain - a fake model, fake host tools, the actions a person takes
- * mid-run (Stop, steer, confirm). It runs through the real `startRun` once per engine, on the production binding
- * (`driveRun` -> `runPrepared` for the agent, `runLoop` for the loop), and the harness records what every observer
- * saw. The record of one engine must equal the record of the other once ids and timestamps are normalised
+ * mid-run (Stop, steer, confirm). It runs through the real `startRun`, on the production binding (`prepareRunLoop` ->
+ * `runPrepared`), and the harness records what every observer saw. That record must equal the one stored for the scenario
+ * (`snapshots/`, generated from the Brain's old loop before it was deleted) once ids and timestamps are normalised
  * (`normalise.ts`, the only place a difference is ever excused, each one named).
  */
 
-import type { BrainRunRequest, RunEngineId } from '../../runStore/runTypes';
+import type { BrainRunRequest } from '../../runStore/runTypes';
 import type { StreamChatOptions, StreamChatResult, StreamHandlers } from '../../streamChatCompletion';
 import type { StartOutcome } from '../../runStore/refusedStart';
 
@@ -29,9 +29,8 @@ export type ScriptedTurn = (input: TurnInput) => StreamChatResult | Promise<Stre
 /** A host tool: what `runTool` answers for one tool name. */
 export type HostTool = (args: unknown, signal?: AbortSignal) => unknown | Promise<unknown>;
 
-/** What a scenario drives. One instance per engine run. */
+/** What a scenario drives. One instance per run. */
 export interface ScenarioHost {
-  readonly engine: RunEngineId;
   /** The run key every start uses unless it names another. */
   readonly key: number;
   /** The model's answer to any call the script has run out of (it decides from the request). */
@@ -67,7 +66,7 @@ export interface Scenario {
   /** The ruling rows (T1..T14, R1..R11, or a named area) this scenario proves. */
   rows: readonly string[];
   title: string;
-  /** Trace labels the LOOP's record must contain: proof the scenario reached the behaviour it is named for. */
+  /** Trace labels the STORED record (the old loop's) must contain: proof the scenario reaches the behaviour it is named for. */
   loopShows?: readonly string[];
   run(host: ScenarioHost): Promise<void>;
 }
@@ -82,7 +81,7 @@ export interface HostFrame {
   activity: string | null;
 }
 
-/** The record one engine leaves for one scenario. */
+/** The record a run leaves for one scenario. */
 export interface RunRecord {
   /** Every model request, in order. */
   wire: WireCall[];
@@ -111,8 +110,8 @@ export interface RunRecord {
   outcome: { reported: unknown[]; ended: unknown[]; avoided: unknown[] };
   /** The error a run threw (never, startRun settles it) or surfaced, per key. */
   error: Record<string, { message: string; action: unknown }>;
-  /** Reports the loop never makes: the agent's `reportRunRecord` for a run with no grade. Compared on its own (one report per run), never against the loop. */
+  /** Reports the stored loop record has no place for: the agent's `reportRunRecord` for a run with no grade. Asserted on its own (one report per run), never against the stored record. */
   agentOnly?: { recorded: unknown[] };
-  /** The scenario itself failed to complete (a wait that never came true): a difference, never a skip. */
+  /** The scenario itself failed to complete (a wait that never came true): a failure, never a skip. */
   scenarioError?: string;
 }

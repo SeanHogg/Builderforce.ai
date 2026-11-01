@@ -1,16 +1,15 @@
 /**
- * The timeline steps the Brain run loop records when `@builderforce/run-policy` moves
- * the run — a role hand-off, a model failover, a turn retried around a broken model.
+ * The timeline steps the Brain run records when `@builderforce/run-policy` moves
+ * the run — a role hand-off, a turn retried around a broken model.
  *
  * The policy decides; this module only SAYS what it decided, in the labels and wording
  * the triage and diagnostics readers already key on (`llm.role_handoff`,
- * `loop.model_failover`, `llm.stream_interrupted`, `llm.transport_error`, and the
+ * `llm.stream_interrupted`, `llm.transport_error`, and the
  * `llm.complete` error a failed completion records). Kept out of
  * `brainRunStore.ts` so the loop reads as "report the event, act on the outcome" rather
  * than carrying the prose of every outcome inline. Pure: the caller stamps `ts`.
  */
 
-import { modelFailoverNotice, type StallShapeArg } from '@builderforce/agent-stall';
 import type { RunPolicyOutcome } from '@builderforce/run-policy';
 import type { BrainTraceEvent } from './brainTriage';
 
@@ -33,23 +32,6 @@ export function handOffTrace(ts: string, step: number, tasks: number, via: strin
     label: 'llm.role_handoff',
     args: { step, tasks, via },
     result: `Planning handed off ${tasks} task${tasks === 1 ? '' : 's'} to the coding model.`,
-  };
-}
-
-/** A spent model swapped for another after burning its whole stall budget. */
-export function modelFailoverTrace(
-  ts: string,
-  step: number,
-  from: string,
-  outcome: Extract<RunPolicyOutcome, { kind: 'failed_over' }>,
-  shape: StallShapeArg,
-): BrainTraceEvent {
-  return {
-    ts,
-    category: 'message',
-    label: 'loop.model_failover',
-    args: { step, from, to: outcome.to, attempt: outcome.attempt, of: outcome.of },
-    result: modelFailoverNotice(from, outcome.to, shape),
   };
 }
 

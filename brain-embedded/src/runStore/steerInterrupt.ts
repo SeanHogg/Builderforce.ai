@@ -9,7 +9,7 @@
  *      { interrupt: true })`); its result tells the model it was interrupted. An
  *      interrupted wait leaves the background job running; only the wait ends. A call
  *      that would START after the message arrived is not started at all;
- *   2. the turn's remaining calls are skipped (`skipOnSteer`), as on-prem does;
+ *   2. the turn's remaining calls are skipped (the agent's `skipOnSteer`), as on-prem does;
  *   3. the message is drained in front of the next model call and recorded as one
  *      `steer.applied` step (`takeRunSteering`).
  * Every other tool is called exactly as before — the host lends it the run's own signal.
@@ -26,14 +26,13 @@ import {
   WAIT_INTERRUPTED_BY_STEER,
   isInterruptibleCall,
   runToolInterruptibly,
-  skipOnSteer,
 } from '@builderforce/agent-run';
 import { markPendingWordsRead } from '../pendingWords';
 import { drainRunSteering, type RunSteerMessage } from '../runSteering';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 
-export { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly, skipOnSteer };
+export { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly };
 
 /**
  * Drain the run's waiting direction for this turn and record it as `steer.applied`. The model reads these words

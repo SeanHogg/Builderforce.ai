@@ -1,8 +1,7 @@
 /**
- * What a settled Brain run reports to the door (PRD 35 §8.2): ONE report per run, carrying the entry point the host declared, and the
- * grade callback (`reportOutcome`) doing exactly what it does on the Brain's loop. On the agent engine a run with no coder grade has its
- * uniform record reported through its OWN port (`reportRunRecord`: recorded, never taught to routing); a graded run reports through
- * `reportOutcome` alone, the agent's telemetry riding on it as optional fields. Started through the real `startRun`.
+ * What a settled Brain run reports to the door (PRD 35 §8.2): ONE report per run, carrying the entry point the host declared. A run with
+ * no coder grade has its uniform record reported through its OWN port (`reportRunRecord`: recorded, never taught to routing); a graded
+ * run reports through `reportOutcome` alone, the agent's telemetry riding on it as optional fields. Started through the real `startRun`.
  */
 import { describe, expect, it } from 'vitest';
 import { runScenario } from './../run/parity/harness';
@@ -27,10 +26,10 @@ const chat = (entryPoint: RunEntryPoint, records: Record[]): Scenario => ({
 
 describe('the report a settled Brain run makes', () => {
   for (const [entryPoint, source] of [['vscode', 'ide'], ['web', 'external'], ['rovr', 'external']] as const) {
-    it(`${entryPoint}: on the agent engine the run's record goes through its own port, once, recorded and never taught`, async () => {
+    it(`${entryPoint}: the run's record goes through its own port, once, recorded and never taught`, async () => {
       const records: Record[] = [];
-      const record = await runScenario(chat(entryPoint, records), 'agent');
-      // The grade callback is exactly the loop's: a run with no grade does not reach it.
+      const record = await runScenario(chat(entryPoint, records));
+      // A run with no grade does not reach the grade callback.
       expect(record.outcome.reported).toEqual([]);
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
@@ -57,7 +56,7 @@ describe('the report a settled Brain run makes', () => {
 
     it('a 402 refusal: one record, the requested model, failed, never taught to routing', async () => {
       const records: Record[] = [];
-      const record = await runScenario(refused('xai-oauth/grok-4.5', records), 'agent');
+      const record = await runScenario(refused('xai-oauth/grok-4.5', records));
       expect(record.outcome.reported).toEqual([]);
       expect(record.outcome.ended).toHaveLength(1);
       expect(records).toHaveLength(1);
@@ -66,7 +65,7 @@ describe('the report a settled Brain run makes', () => {
 
     it('a 402 refusal with no model named: one record, under the word for "the gateway chooses"', async () => {
       const records: Record[] = [];
-      await runScenario(refused(undefined, records), 'agent');
+      await runScenario(refused(undefined, records));
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({ model: 'default', terminalStatus: 'failed', routingSignal: false });
     });
@@ -86,7 +85,7 @@ describe('the report a settled Brain run makes', () => {
           await run;
         },
       };
-      const record = await runScenario(stopped, 'agent');
+      const record = await runScenario(stopped);
       expect(record.outcome.reported).toEqual([]);
       expect(record.outcome.ended).toHaveLength(1);
       expect(records).toHaveLength(1);
@@ -94,14 +93,7 @@ describe('the report a settled Brain run makes', () => {
     });
   });
 
-  it('on the loop engine a run with no coder grade reports nothing, as before', async () => {
-    const records: Record[] = [];
-    const record = await runScenario(chat('vscode', records), 'loop');
-    expect(record.outcome.reported).toEqual([]);
-    expect(records).toEqual([]);
-  });
-
-  it('a graded run reports through the grade callback alone, once, with the loop source and fields and the agent telemetry as extras', async () => {
+  it('a graded run reports through the grade callback alone, once, with source ide and the agent telemetry as optional fields', async () => {
     const records: Record[] = [];
     // The parity record is NORMALISED (rule 7 drops the agent's 17 telemetry fields from `outcome.reported`), so the raw report is read here.
     const raw: Record[] = [];
@@ -115,18 +107,13 @@ describe('the report a settled Brain run makes', () => {
         await host.start({ userTurn: 'Please fix the bug in the handler.', entryPoint: 'web', reportOutcome: async (o) => { raw.push(o as Record); }, reportRunRecord: async (r) => { records.push(r as Record); } });
       },
     };
-    const loop = await runScenario(emptyHanded, 'loop');
-    const agent = await runScenario(emptyHanded, 'agent');
-    // The host's own callback is told ONCE per engine run (the loop's, then the agent's), and the grade is the loop's.
-    expect(raw).toHaveLength(2);
-    const [loopGrade, agentGrade] = raw;
-    expect(agentGrade).toMatchObject({ ...loopGrade, clientRunId: expect.any(String) });
-    expect(agentGrade!.source).toBe('ide');
-    // Only the agent's grade carries its §8.2 telemetry, as optional fields: the entry point the host declared among them.
-    expect(loopGrade).not.toHaveProperty('entryPoint');
-    expect(agentGrade).toMatchObject({ entryPoint: 'web', toolCalls: expect.any(Number) });
-    // The normalised parity record sees the two as equal.
-    expect(agent.outcome.reported).toEqual(loop.outcome.reported);
+    await runScenario(emptyHanded);
+    // The host's own callback is told ONCE per run.
+    expect(raw).toHaveLength(1);
+    const [grade] = raw;
+    expect(grade!.source).toBe('ide');
+    // The grade carries the agent's §8.2 telemetry, as optional fields: the entry point the host declared among them.
+    expect(grade).toMatchObject({ entryPoint: 'web', toolCalls: expect.any(Number), clientRunId: expect.any(String) });
     // One report per run: the record port is not also told.
     expect(records).toEqual([]);
   });
@@ -152,7 +139,7 @@ describe('the report a settled Brain run makes', () => {
         await host.start({ seed, seedIds, userTurn: 'And what about the manifest?', userTurnMessageId, reportRunRecord: async (r) => { records.push(r as Record); } });
       },
     };
-    const record = await runScenario(longChat, 'agent');
+    const record = await runScenario(longChat);
     expect(record.scenarioError).toBeUndefined();
     expect(Object.values(record.trace).flat().filter((e) => (e as { label?: string }).label === 'context.compacted').length).toBeGreaterThanOrEqual(1);
     expect(records[0]).toMatchObject({ compactions: 1 });

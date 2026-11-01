@@ -2,7 +2,7 @@
  * The agent's say over a Brain turn's menu (`PlatformTools.turn`, PRD 35 §4 WS4 "the forced menu"): the plan budget's hand-off
  * turn, the change budget, a run circling its read cache and A3's escalation or pause decide a turn that offers a narrower
  * set of tools with a call required and a brief on the request's volatile tail. The decisions are the Brain's own
- * (`runStore/turnMenu.ts`, `progressBudget.ts`, `progressGuard.ts`) - this only asks them and answers in the agent's shape.
+ * (`runStore/progressBudget.ts`, `cacheServedStreak.ts`, `progressGuard.ts`) - this only asks them and answers in the agent's shape.
  */
 
 import { offersHandOff } from '@builderforce/run-policy';
@@ -14,9 +14,18 @@ import { DEFAULT_TOOL_LIMIT } from '../selectTools';
 import { routerToolSpecs } from '../toolRouter';
 import { nowIso, pushTrace } from '../runStore/runCells';
 import { userTextOf } from '../runStore/convoText';
-import { planBudgetTurn } from '../runStore/progressBudget';
+import { changeBudgetTurn, planBudgetTurn, type ForcedTurn } from '../runStore/progressBudget';
+import { noProgressTurn } from '../runStore/cacheServedStreak';
+import { progressGuardTurn } from '../runStore/progressGuard';
 import type { RunLoopContext } from '../runStore/runLoopContext';
-import { forcedTurnFor } from '../runStore/turnMenu';
+
+/**
+ * The turn a progress rule decides, or null: the plan budget's hand-off turn (decided BEFORE selection, so a forced turn that did
+ * not hand off already selects as code), else the change budget, else a run circling its read cache, else A3's escalation or pause.
+ */
+function forcedTurnFor(run: RunLoopContext, step: number, selected: BrainToolSpec[], handOffTurn: ForcedTurn | null): ForcedTurn | null {
+  return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+}
 
 export async function loopTurnMenu(run: RunLoopContext, env: TurnEnv, catalogSize: number): Promise<TurnMenu | void> {
   // Analysis that has spent its budget ends HERE, BEFORE selection: the hand-off turn offers `hand_off` alone with a call required.
@@ -30,7 +39,7 @@ export async function loopTurnMenu(run: RunLoopContext, env: TurnEnv, catalogSiz
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
   if (forced) return { tools: forced.tools as unknown as ToolSchema[], toolChoice: forced.toolChoice, tail };
   // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE. A catalog at or under
-  // the limit is never trimmed (`selectToolsForTurn`): `hand_off` leaving the menu is not a trim.
+  // the limit is never trimmed (the agent's `selectToolsForTurn`): `hand_off` leaving the menu is not a trim.
   if (catalogSize > DEFAULT_TOOL_LIMIT) {
     pushTrace(run.c, {
       ts: nowIso(),

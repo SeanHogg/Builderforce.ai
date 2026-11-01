@@ -80,7 +80,7 @@ describe('the section 8.4 reference scenario through the Brain on the agent engi
   it('requests delegation from the prompt, spawns by turn 5, finishes within 15 parent turns, and really edits the PRD', async () => {
     expect(asksForSubagents(PROMPT)).toBe(true);
     const state = { doc: LINES.join('\n') };
-    const record = await runScenario(scenario(state), 'agent');
+    const record = await runScenario(scenario(state));
 
     expect(record.scenarioError).toBeUndefined();
     const names = record.host.toolCalls.map((t) => t.name);
@@ -95,7 +95,7 @@ describe('the section 8.4 reference scenario through the Brain on the agent engi
 
   it('answers a re-read of served lines from coverage and never a window it was not served', async () => {
     const state = { doc: LINES.join('\n') };
-    const record = await runScenario(scenario(state), 'agent');
+    const record = await runScenario(scenario(state));
     const trace = Object.values(record.trace).flat() as Array<{ category?: string; label?: string; args?: Served; result?: { covered?: boolean } }>;
     const reads = trace.filter((e) => e.category === 'tool' && e.label === 'read_file');
     const served: Array<[number, number]> = [];

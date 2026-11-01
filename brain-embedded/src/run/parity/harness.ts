@@ -1,17 +1,15 @@
 /**
- * Run one scenario through the REAL `startRun` on one engine and return what every observer saw.
+ * Run one scenario through the REAL `startRun` and return what every observer saw.
  *
- * Production binding: `startRun` -> `driveRun` -> `prepareRunLoop` -> `runPrepared` (agent) or `runLoop`
- * (loop). The engine is chosen the way a host chooses it, on `BrainRunRequest.engine`, never by touching
- * an internal. The fake is the model stream, the host's persistence and its tool port - the three
- * things a host supplies - and nothing between them.
+ * Production binding: `startRun` -> `prepareRunLoop` -> `runPrepared`, never touching an internal. The fake is the
+ * model stream, the host's persistence and its tool port - the three things a host supplies - and nothing between them.
  */
 
 import { transcriptSeedOf } from '../../transcriptSeed';
 import { startRun } from '../../runStore/startRun';
 import { resetBrainRunStore } from '../../runStore/runControl';
-import { resetRunSteering } from '../../runSteering';
-import type { BrainRunRequest, BrainStreamFn, RunEngineId } from '../../runStore/runTypes';
+import { resetRunSteering } from '@builderforce/agent-run';
+import type { BrainRunRequest, BrainStreamFn } from '../../runStore/runTypes';
 import type { BrainToolSpec, StreamChatResult } from '../../streamChatCompletion';
 import { isSummaryCall, completion } from './script';
 import { Recorder, copyWire } from './recorder';
@@ -46,7 +44,7 @@ class Host implements ScenarioHost {
   private impl: Record<string, HostTool> | undefined;
   private confirmNames = new Set<string>();
 
-  constructor(readonly engine: RunEngineId, readonly rec: Recorder, readonly key: number = DEFAULT_KEY) {}
+  constructor(readonly rec: Recorder, readonly key: number = DEFAULT_KEY) {}
 
   private fallback: ScriptedTurn | undefined;
 
@@ -82,7 +80,7 @@ class Host implements ScenarioHost {
 
   private readonly stream: BrainStreamFn = async (opts, handlers) => {
     this.calls += 1;
-    // A scenario whose engine never ends (a model that keeps calling tools, a loop that never closes) must fail, not hang the suite.
+    // A scenario whose run never ends (a model that keeps calling tools, a loop that never closes) must fail, not hang the suite.
     if (this.calls > MAX_MODEL_CALLS) throw new Error(`parity: more than ${MAX_MODEL_CALLS} model calls - the run does not end`);
     const input: TurnInput = { opts, handlers, call: this.calls };
     const summarising = isSummaryCall(opts);
@@ -107,7 +105,6 @@ class Host implements ScenarioHost {
       persistence: this.rec.persistence,
       onActivity: this.rec.onActivity,
       userTurn: 'Say hello, then finish.',
-      engine: this.engine,
       reportOutcome: async (o) => { this.rec.reported.push(o); },
       recordRunOutcome: (e) => { this.rec.ended.push(e); },
       recordAvoidedCall: (a) => { this.rec.avoided.push(a); },
@@ -163,12 +160,12 @@ class Host implements ScenarioHost {
   }
 }
 
-/** Run `scenario` on `engine` and return its normalised record. */
-export async function runScenario(scenario: Scenario, engine: RunEngineId): Promise<RunRecord> {
+/** Run `scenario` and return its normalised record. */
+export async function runScenario(scenario: Scenario): Promise<RunRecord> {
   resetBrainRunStore();
   resetRunSteering();
   const rec = new Recorder();
-  const host = new Host(engine, rec);
+  const host = new Host(rec);
   try {
     await scenario.run(host);
     await host.settle();

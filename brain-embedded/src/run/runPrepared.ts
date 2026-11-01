@@ -68,7 +68,6 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
     steering: loopSteeringSource(run, people),
     ...(spend ? { spend } : {}),
     store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take }),
-    ...(req.reportRunRow ? { reportOutcome: req.reportRunRow } : {}),
   };
   const transcript = [{ role: 'system' as const, content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
   // The TASK is the person's request: compaction pins it, whatever conversation comes before it.

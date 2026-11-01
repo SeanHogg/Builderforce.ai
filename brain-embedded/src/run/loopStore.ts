@@ -15,7 +15,6 @@ import { toStreamMessage } from './modelTransport';
 
 export interface LoopStoreOptions {
   toolRowAppended: (row: ChatCompletionMessage) => void;
-  commitMemory?: (consolidated: unknown) => Promise<void> | void;
   /** Is this user row the person's own steered words (`loopSteering.ts`)? Only theirs is one of the chat's asks (`chatAsks.ts`). */
   personSteer?: (text: string) => boolean;
 }
@@ -34,6 +33,5 @@ export function loopRunStore(c: RunCell, opts: LoopStoreOptions): RunStore {
       c.transcript.push(wire);
       if (row.role === 'tool') opts.toolRowAppended(wire);
     },
-    ...(opts.commitMemory ? { commitMemory: opts.commitMemory } : {}),
   };
 }

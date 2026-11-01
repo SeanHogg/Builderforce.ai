@@ -1,7 +1,7 @@
 /**
  * What a turn that CALLS tools settles before any call dispatches: a terminal `ask_user` ends the run as its reply, and
- * otherwise the turn's visible narration is committed as its own permanent block. Shared by the Brain's loop
- * (`toolCallHooks.ts`) and the agent's model port (`run/loopTurn.ts`) so a question is decided one way on both.
+ * otherwise the turn's visible narration is committed as its own permanent block. Called from the agent's model port
+ * (`run/loopTurn.ts`).
  */
 
 import { ASK_USER_TOOL, askUserBlock } from '@builderforce/agent-loop';
@@ -11,7 +11,7 @@ import { emit, nowIso, pushTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
 import type { RunLoopContext } from './runLoopContext';
 
-/** A turn's call, as both engines see it. */
+/** A turn's call, its arguments parsed. */
 export interface TurnCall {
   name: string;
   args: Record<string, unknown>;

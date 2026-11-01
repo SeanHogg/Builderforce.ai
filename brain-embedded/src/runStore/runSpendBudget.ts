@@ -1,75 +1,18 @@
 /**
- * The run's USD cap (`BrainRunRequest.maxRunBudgetUsd`, the editor's
- * `builderforce.maxRunBudgetUsd`) — two loop hooks over ONE running total.
+ * The run's USD cap (`BrainRunRequest.maxRunBudgetUsd`, the editor's `builderforce.maxRunBudgetUsd`): the run TREE's one running total.
  *
- *   - `afterTurn` adds what the turn's call cost, priced on the device
- *     (`localChat/callCost.ts`).
- *   - `beforeTurn` holds the run to the cap with the SAME rule the cloud cost loop uses
- *     (`@builderforce/spend-contract` `runBudget.ts`): at 80% the model is told once to
- *     converge; at the cap the run stops with a contained outcome — a reply that says
- *     what it spent and why it stopped, never an error.
+ * The agent holds a run to the cap (`@builderforce/agent-run` `policy/budget/usd.ts`: the wording, the 80% warning, the contained stop);
+ * this is the Brain's part - which total a run accrues into, and how the stop it settles with is saved.
  *
- * The total is the run TREE's, not the run's: a sub-agent (`BrainRunRequest.lineage`)
- * accrues into its owner's total, so an owner and every child it spawns — however deep —
- * are held to ONE cap together. A child never starts a fresh budget of its own, and the
- * owner's figure includes what its children spent.
- *
- * The 80% warning is a `<run-state>` volatile block (`@seanhogg/builderforce-memory/handoff`),
- * never an untagged user turn: the packer must not mistake it for the person's request.
- *
- * No cap (absent, 0, or not a positive number) ⇒ no hooks at all, so an uncapped run is
- * exactly the loop it always was.
+ * The total is the run TREE's, not the run's: a sub-agent (`BrainRunRequest.lineage`) accrues into its owner's total, so an owner and
+ * every child it spawns - however deep - are held to ONE cap together. A child never starts a fresh budget of its own, and the owner's
+ * figure includes what its children spent. No cap (absent, 0, or not a positive number) means no tree at all.
  */
 
-import type { LoopHooks, StopDecision } from '@builderforce/agent-loop';
-import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
-import { MILLICENTS_PER_USD, runBudgetBreach, runBudgetWarnDue, type RunBudgetCaps } from '@builderforce/spend-contract';
-import type { ChatCompletionMessage } from '../streamChatCompletion';
-import type { PriceBook } from '@builderforce/model-catalog';
-import { turnPriceMc } from '../localChat/turnCost';
-import { servedModel } from '../localChat/usageLedger';
+import { runBudgetCapMillicents } from '@builderforce/agent-run';
 import type { RunCell } from './runCell';
-import { cells, emit, nowIso, pushTrace, recordAppended } from './runCells';
-import { noteBudgetContained } from './runEndOutcome';
-import type { RunLoopContext, TurnMeta } from './runLoopContext';
-
-type SpendHooks = Pick<LoopHooks<ChatCompletionMessage>, 'beforeTurn' | 'afterTurn'>;
-
-const usd = (millicents: number): string => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
-
-/** The cap in millicents, or null when the run is uncapped. */
-export function runBudgetCapMillicents(maxRunBudgetUsd: number | undefined): number | null {
-  return typeof maxRunBudgetUsd === 'number' && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0
-    ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD)
-    : null;
-}
-
-/** The tree's unpriced-call count, the only part of it the wording reads. */
-type UnpricedCalls = Pick<RunSpendTree, 'unpricedCalls'>;
-
-/** What a tree with unpriced calls adds to every spend sentence — null when every call was priced. The cap counts
- *  only priced spend, so such a tree is under-counted: its figure is a FLOOR ("at least"), never read as exact. */
-function noPriceNote(tree?: UnpricedCalls): string | null {
-  const n = tree?.unpricedCalls ?? 0;
-  return n > 0 ? `${n} ${n === 1 ? 'call' : 'calls'} had no known price` : null;
-}
-
-/** What the model reads once the run has used 80% of its budget. */
-export function budgetWarning(spentMc: number, capMc: number, tree?: UnpricedCalls): string {
-  const note = noPriceNote(tree);
-  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
-  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget — over 80%. Stop exploring and converge: `
-    + 'finish the essential change now, then answer with what you did and exactly what is left.';
-}
-
-/** The reply a run stopped at its cap settles with. */
-export function budgetContainedReply(spentMc: number, capMc: number, tree?: UnpricedCalls): string {
-  const note = noPriceNote(tree);
-  const spent = note ? `at least ${usd(spentMc)} spent — ${note}` : `${usd(spentMc)} spent`;
-  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). `
-    + 'Nothing was rolled back — the changes made so far are in place. Ask to continue to resume from here, '
-    + 'or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).';
-}
+import { cells, emit, recordAppended } from './runCells';
+import type { RunLoopContext } from './runLoopContext';
 
 /** One run TREE's spend — the owner and every sub-agent under it share one. */
 export interface RunSpendTree {
@@ -83,13 +26,13 @@ export interface RunSpendTree {
 
 /**
  * Each run's tree, by its cell (weakly — an evicted cell takes its entry with it; a run
- * still going holds its tree in its hooks). A child finds its owner's cell by
+ * still going holds its tree in its meter, `run/loopSpend.ts`). A child finds its owner's cell by
  * `lineage.ownerKey` and joins that tree; a top-level run always starts a fresh one.
  */
 const spendTrees = new WeakMap<RunCell, RunSpendTree>();
 
 /** The tree `run` accrues into: its owner's when it is a sub-agent of a capped run. */
-export function runSpendTree(run: Pick<RunLoopContext, 'c' | 'req'>, capMc: number): RunSpendTree {
+function runSpendTree(run: Pick<RunLoopContext, 'c' | 'req'>, capMc: number): RunSpendTree {
   const ownerKey = run.req.lineage?.ownerKey;
   const ownerCell = ownerKey !== undefined ? cells.get(ownerKey) : undefined;
   const owned = ownerCell && ownerCell !== run.c ? spendTrees.get(ownerCell) : undefined;
@@ -111,7 +54,7 @@ export function joinRunSpend(run: Pick<RunLoopContext, 'c' | 'req'>): { tree: Ru
 
 /**
  * The reply a run ends with when its cap stopped it, saved as the chat's last message and shown: a plain assistant message. It is NOT a
- * settled answer - it carries no provenance chip and the Evermind does not learn from it. Shared by both engines.
+ * settled answer - it carries no provenance chip and the Evermind does not learn from it.
  */
 export async function persistBudgetStop(run: Pick<RunLoopContext, 'c' | 'chatId' | 'req'>, text: string): Promise<void> {
   const { c, chatId, req } = run;
@@ -120,71 +63,4 @@ export async function persistBudgetStop(run: Pick<RunLoopContext, 'c' | 'chatId'
   if (msg) recordAppended(c, msg);
   emit(c);
   req.onActivity?.(chatId);
-}
-
-/** `book` prices the calls — the bundled snapshot unless a test lends one. */
-export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHooks {
-  const joined = joinRunSpend(run);
-  if (!joined) return {};
-  const { tree, capMc } = joined;
-  const caps: RunBudgetCaps = { maxSpendMillicents: capMc };
-  // Each run of the tree is told once — each is a model that must converge.
-  let warned = false;
-  let unpricedNoted = false;
-
-  /** A call the cap cannot price: counted on the tree, and said once in this run's trace. */
-  const noteUnpriced = (model: string | undefined): void => {
-    tree.unpricedCalls += 1;
-    if (unpricedNoted) return;
-    unpricedNoted = true;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'run.budget_unpriced',
-      args: { model: model ?? null },
-      result: 'A call had no known price, so the run cap counts only the spend that is priced.',
-    });
-  };
-
-  const contain = async (): Promise<StopDecision> => {
-    const { c, convo } = run;
-    const spentMc = tree.spentMc;
-    const text = budgetContainedReply(spentMc, capMc, tree);
-    noteBudgetContained(c);
-    pushTrace(c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'run.budget_contained',
-      args: { spentMillicents: spentMc, capMillicents: capMc, unpricedCalls: tree.unpricedCalls },
-      result: text,
-    });
-    convo.push({ role: 'assistant', content: text });
-    await persistBudgetStop(run, text);
-    return { action: 'stop', ok: true, finished: true, output: text };
-  };
-
-  return {
-    async beforeTurn() {
-      const spentMc = tree.spentMc;
-      const usage = { spendMillicents: spentMc };
-      if (runBudgetBreach(caps, usage)) return contain();
-      if (!warned && runBudgetWarnDue(caps, usage)) {
-        warned = true;
-        const warning = budgetWarning(spentMc, capMc, tree);
-        // Tagged `<run-state>`: the packer keeps it out of "the latest user directive" and
-        // the cache breakpoint lands before it, as for the turn's own volatile tail.
-        run.convo.push(volatileTail([warning])!);
-        pushTrace(run.c, { ts: nowIso(), category: 'message', label: 'run.budget_warning', args: { spentMillicents: spentMc, capMillicents: capMc }, result: warning });
-      }
-      return undefined;
-    },
-    afterTurn(_ctx, turn) {
-      const meta = turn.meta as TurnMeta | undefined;
-      if (!meta) return;
-      // The ONE turn price (`localChat/turnCost.ts`): a call with no known price is counted as unpriced, not as free.
-      const cost = turnPriceMc(meta.result, meta.requested, book);
-      if (cost === undefined) noteUnpriced(servedModel(meta.result, meta.requested));
-      else tree.spentMc += cost;
-    },
-  };
 }

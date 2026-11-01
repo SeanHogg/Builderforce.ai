@@ -303,8 +303,6 @@ export type { GlobalRunState } from './brainRunStore';
 // VS Code chat participant) drives a run with `runBrainLoop`/`startRun` and observes
 // it via `subscribeRun` + `getRunSnapshot`/`getRunTrace`, the same store the React
 // `useBrainConversation` hook reads, without pulling in React.
-export { storedRunEngine, storedRunEngineField } from './runStore/runEnginePreference';
-export type { RunEngineId } from './runStore/runTypes';
 export {
   startRun,
   runBrainLoop,
@@ -344,13 +342,8 @@ export { parseSubagentOrigin, savedChatOf, SUBAGENT_OF_META_KEY } from './runLin
 export type { RunLineage, SubagentOrigin } from './runLineage';
 export { queueRunSteering, requeueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
 export type { RunSteerMessage } from './runSteering';
-// PRD 35 WS4: the Brain's surfaces adapted to the ONE agent - the ports over the run store
-// and the policy data. An adapter (here, or the editor's `run/vscodeAdapter.ts`) builds ports
-// and nothing else; the contract types come with them so a host names one import.
-export { buildBrainRunPorts, brainRunPolicy, brainRunTask } from './run/webAdapter';
-export type { BrainEntryPoint, BrainRunBinding } from './run/webAdapter';
-export { runViaAgent } from './run/runViaAgent';
-export type { ContextPack, RunPolicy, RunPorts, RunTask } from '@builderforce/agent-run';
+// The agent's contract type a host's context pack is built to (`clients/vscode/src/contextPack`).
+export type { ContextPack } from '@builderforce/agent-run';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from '@builderforce/run-policy';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.
@@ -787,7 +780,7 @@ export {
 } from './gatewayModels';
 export type { GatewayJsonRequest, GatewayModelOptions, GatewayModelSurface } from './gatewayModels';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
-export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
+export { DEFAULT_TOOL_LIMIT } from './selectTools';
 // The tool ROUTER — three fixed tools that keep the whole catalog reachable even when
 // per-turn selection trims it, so a tool below the cut is a lookup away, not missing.
 export {

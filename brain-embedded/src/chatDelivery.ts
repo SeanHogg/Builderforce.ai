@@ -1,5 +1,6 @@
 import { getRunDriver } from './runDriver';
-import { newSteerKey, queueRunSteering } from './runSteering';
+import { queueRunSteering } from './runSteering';
+import { newSteerKey } from '@builderforce/agent-run';
 import type { HandedTurn } from './runStore/continueChat';
 import { onStoreReset } from './runStore/runCells';
 import { isLive, onRunStopped, subscribeRun } from './runStore/runControl';

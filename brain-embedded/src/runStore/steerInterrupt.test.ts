@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { drainRunSteering, hasRunInterrupt, queueRunSteering, resetRunSteering } from '../runSteering';
-import { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly, skipOnSteer } from './steerInterrupt';
+import { drainRunSteering, queueRunSteering } from '../runSteering';
+import { hasRunInterrupt, resetRunSteering, skipOnSteer } from '@builderforce/agent-run';
+import { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly } from './steerInterrupt';
 
 /** A tool that runs until its signal aborts, then reports it was stopped. */
 function longTool() {

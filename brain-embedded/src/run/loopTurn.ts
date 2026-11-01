@@ -15,6 +15,7 @@
 
 import type { BrainMessage } from '../types';
 import type { ModelRequest } from '@builderforce/agent-run';
+import { parseToolArgs } from '@builderforce/agent-loop';
 import { nextTurn } from '@builderforce/run-policy';
 import type { BrainToolSpec, CompletionMetadata, StreamChatResult } from '../streamChatCompletion';
 import { StreamInterruptedError } from '../streamChatCompletion';
@@ -67,16 +68,6 @@ export interface LastTurn {
   contained?: string;
   /** The reply a stall with nothing left to try already saved, before it said why (`brainDelivery.ts`): the run settles on it. */
   settled?: BrainMessage;
-}
-
-/** A call's arguments as the agent parses them: a string that is not a JSON object is a malformed call. */
-function parsedCall(name: string, raw: string): TurnCall {
-  try {
-    const args = JSON.parse(raw || '{}') as unknown;
-    return typeof args === 'object' && args !== null && !Array.isArray(args) ? { name, args: args as Record<string, unknown>, malformed: false } : { name, args: {}, malformed: true };
-  } catch {
-    return { name, args: {}, malformed: true };
-  }
 }
 
 /** One kernel step across its attempts. */
@@ -188,8 +179,6 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
 async function keep(run: RunLoopContext, last: LastTurn, a: Answered): Promise<void> {
   const { result } = a;
   run.windowFit.served(result.resolvedModel ?? run.policy.model);
-  // The stall-recovery budget covers a STREAK of narration-only turns; a turn that called a tool proves the model is acting.
-  if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
   const resolved = result.resolvedModel ?? run.policy.model ?? 'default';
   const requested = run.policy.model ?? 'default';
   await recordTurn(run, {
@@ -202,7 +191,7 @@ async function keep(run: RunLoopContext, last: LastTurn, a: Answered): Promise<v
   if (result.toolCalls.length === 0 || !run.req.runTool) return;
   // What the turn SAID it would do, judged against what its calls do (`progressGuard.ts`).
   run.progress.noteTurnText(result.text);
-  const calls = result.toolCalls.map((tc) => parsedCall(tc.name, tc.args));
+  const calls: TurnCall[] = result.toolCalls.map((tc) => ({ name: tc.name, ...parseToolArgs(tc.args) }));
   // A question ends the run as its reply; any other turn's narration is kept as its own block (`turnToolCalls.ts`).
   last.terminal = terminalAskReply(run, result, calls, a.step);
   if (last.terminal === undefined) await commitTurnNarration(run, result, requested);

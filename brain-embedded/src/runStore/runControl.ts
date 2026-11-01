@@ -25,7 +25,8 @@ import { stoppedTurnOf } from './turnPersistence';
 function driverFor(key: RunKey) {
   return typeof key === 'number' ? getRunDriver() : null;
 }
-import type { BrainRunPersistence, BrainRunSnapshot, GlobalRunState, RunKey } from './runTypes';
+import type { BrainRunPersistence, RunKey } from './runTypes';
+import type { BrainRunSnapshot, GlobalRunState } from './runSnapshotTypes';
 
 /**
  * Drop all run state. For tests/teardown only — there's no per-chat eviction in

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { drainRunSteering, queueRunSteering, resetRunSteering, steerModelContent } from './runSteering';
+import { drainRunSteering, queueRunSteering, steerModelContent } from './runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 
 /** Direction for a LIVE run, by run key — an owner redirecting its sub-agent, a child
  *  reporting to its owner, the person steering a queued message in. */

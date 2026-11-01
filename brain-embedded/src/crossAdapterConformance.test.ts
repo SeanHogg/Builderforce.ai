@@ -4,7 +4,7 @@
  * `conformanceTask.ts`).
  *
  * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `driveRun` -> `prepareRunLoop` -> `runPrepared`,
- * on `engine: 'agent'`, started the way a host starts it (the parity harness, `run/parity/harness.ts`; the fake is the model stream,
+ * started the way a host starts it (the parity harness, `run/parity/harness.ts`; the fake is the model stream,
  * the persistence and the host's tool port, the three things a host supplies). The trace is read by wrapping the one `runAgent` call.
  */
 
@@ -58,7 +58,7 @@ describe('the Brain under the shared scripted task, through startRun on the agen
     it(`${entryPoint}: the shared RunEvent trace, the shared answer and a finished outcome row labelled for the surface`, async () => {
       seen.events.length = 0;
       seen.rows.length = 0;
-      const record = await runScenario(scenario(entryPoint), 'agent');
+      const record = await runScenario(scenario(entryPoint));
 
       expect(record.scenarioError).toBeUndefined();
       expect(conformanceTrace(seen.events)).toEqual(CONFORMANCE_TRACE);

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { queueRunSteering, drainRunSteering, resetRunSteering } from '../runSteering';
+import { queueRunSteering, drainRunSteering } from '../runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 import type { ChatInputAttachment } from '../types';
 import { continueOnSettle, MAX_CONTINUATIONS, releaseContinuation, type AttachmentPorts, type ContinueBinding } from './continueChat';
 import { resetBrainRunStore, isLive, isRunning, stopRun } from './runControl';

@@ -9,7 +9,7 @@
  * the surface's live view, and translates the result back. It decides nothing about WHICH
  * model or WHAT to offer — those are the agent's (`policy/model`, `policy/tools`). WHEN a failed
  * request is retried is the run's model policy too; the transport only asks it, through the turn
- * session, and retries INSIDE the turn (the Brain's loop never spent a step on a retry).
+ * session, and retries INSIDE the turn (a retry never spends a step).
  * The turn's `max_tokens` is the surface's Effort (`TurnSession.maxTokens`), not the policy's role cap.
  *
  * Also answers the two questions the agent asks of a transport:
@@ -23,7 +23,6 @@ import { isVolatileContent, volatileTail } from '@seanhogg/builderforce-memory/h
 import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
 import { turnInterruption } from '../finishReason';
-import { providerFailureEvent } from '../providerFailure';
 import { withImages } from './runMessages';
 import { turnPriceMc } from '../localChat/turnCost';
 import type { BrainStreamFn } from '../runStore/runTypes';
@@ -82,12 +81,10 @@ export interface TurnObserver {
 }
 
 export interface BrainModelTransportDeps {
-  /** The surface's live view and record of each turn. Absent ⇒ the stream runs bare. */
+  /** The surface's live view and record of each turn (`loopTurn.ts`). */
   turn?: TurnObserver;
   /** The surface's streaming completion — gateway, local-first and XML lifting behind it. */
   stream: BrainStreamFn;
-  /** Where a turn's streamed deltas, serving model and connect retries go (the live view). */
-  handlers?: () => StreamHandlers;
   /** Per-call routing the request fixed for the whole run. */
   call?: BrainCallDefaults;
   /** What the host knows about model windows — its gateway catalog and live local runtimes. */
@@ -125,8 +122,8 @@ const wired = new WeakMap<RunMessage, { content: string; parts: RunMessage['part
 
 /**
  * A row's wire shape, the SAME object every request while the row is unchanged. The window fit's memo of its last pack
- * (`windowFit/packMemo.ts`) recognises the history a pack was made from by object identity, as it does on the Brain's loop (whose
- * transcript IS its wire rows); rows rebuilt per request would re-pack and re-summarise a small-window model every turn.
+ * (`windowFit/packMemo.ts`) recognises the history a pack was made from by object identity (the Brain's own transcript IS its
+ * wire rows); rows rebuilt per request would re-pack and re-summarise a small-window model every turn.
  */
 export function wireRowOf(message: RunMessage): ChatCompletionMessage {
   const hit = wired.get(message);
@@ -164,19 +161,9 @@ export function toCompletion(result: StreamChatResult, requested?: string): Mode
   };
 }
 
-/**
- * The transport knows its own errors: a failure the model policy routes around (a model that broke mid-answer, a reset, a 429)
- * leaves carrying the policy's event, so the agent re-asks the turn on another model instead of ending the run
- * (`providerFailure.ts` is the ONE classifier, the Brain's loop asks it too). Any other error leaves as it is.
- */
-function classified(error: unknown): unknown {
-  const failure = providerFailureEvent(error);
-  return failure && error instanceof Error ? Object.assign(error, { failure }) : error;
-}
-
 /** Build the Brain's `ModelTransport` over its streaming function. */
 export function brainModelTransport(deps: BrainModelTransportDeps): ModelTransport {
-  const { stream, handlers, call, windows, preflight } = deps;
+  const { stream, call, windows, preflight } = deps;
   return {
     async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion> {
       // A Stop that landed while the turn was being prepared (a fold) ends it before anything is opened.
@@ -202,7 +189,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
             ...(maxTokens !== undefined ? { maxTokens } : {}),
             ...(signal ? { signal } : {}),
           },
-          session?.handlers ?? handlers?.(),
+          session?.handlers,
         );
         return session?.around ? session.around(ask) : ask();
       };
@@ -213,10 +200,10 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
       } catch (e) {
         // A Stop rejects the stream: that is the run's, not a failed turn.
         if (signal?.aborted) throw e;
-        // Without a session the failure is the agent's to route (`providerFailureEvent` classifies it for the model policy).
-        if (!session) throw classified(e);
-        // With one, the run's model policy decides HERE whether the failure is routed around: ONE retry inside this turn, the way the
-        // Brain's loop makes it, so the agent never sees the failure and spends no step (and no forced turn) on it.
+        // Without a session there is nothing to record the failure on or route it around: it leaves as it is.
+        if (!session) throw e;
+        // With one, the run's model policy decides HERE whether the failure is routed around: ONE retry inside this turn, so the
+        // agent never sees the failure and spends no step (and no forced turn) on it.
         const retry = await session.recover?.(e);
         if (!retry) throw session.failed(e);
         asked = { ...request, model: retry.model, strict: retry.strict, role: retry.role, excludeModels: retry.excludeModels };

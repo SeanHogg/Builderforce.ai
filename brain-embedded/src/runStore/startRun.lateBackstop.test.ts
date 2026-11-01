@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { StreamChatResult } from '../streamChatCompletion';
-import { drainRunSteering, resetRunSteering } from '../runSteering';
+import { drainRunSteering } from '../runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 import { continuationLimits } from './deadline';
 import { isLive, isRunning, resetBrainRunStore, stopRun } from './runControl';
 import { getCell } from './runCells';

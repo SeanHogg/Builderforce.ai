@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setPendingWordsOwner } from '../pendingWords';
-import { drainRunSteering, queueRunSteering, resetRunSteering } from '../runSteering';
+import { drainRunSteering, queueRunSteering } from '../runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 import { continueLeftovers, continueOnSettle, type ContinueBinding } from './continueChat';
 import { claimRun } from './runClaim';
 import { getCell } from './runCells';

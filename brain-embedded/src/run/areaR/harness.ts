@@ -1,14 +1,14 @@
 /**
- * What the area R tests read of a run (PRD 35 WS4 parity rulings, "tools and how a run ends"). There is ONE two-engine runner:
- * the differential harness (`../parity/harness.ts`), which drives the real `startRun` once per engine on the production binding.
- * This file only scripts a conversation on it and projects its record down to what an area R row is about - the wire's menu and
- * messages, the rows the host persisted, the trace steps, the chat's error line - so a test holds the agent to the loop on that
- * projection alone, where the parity suite holds the whole record equal.
+ * What the area R tests read of a run (PRD 35 WS4 parity rulings, "tools and how a run ends"). There is ONE runner: the parity
+ * harness (`../parity/harness.ts`), which drives the real `startRun` on the production binding. This file only scripts a
+ * conversation on it and projects its record down to what an area R row is about - the wire's menu and messages, the rows the host
+ * persisted, the trace steps, the chat's error line - so a test reads the agent on that projection alone, where the snapshot suite
+ * holds the whole record equal to the old loop's.
  */
 
 import { isMidTurnMetadata } from '@builderforce/agent-loop';
 import { isVolatileContent } from '@seanhogg/builderforce-memory/handoff';
-import type { BrainRunRequest, RunEngineId } from '../../runStore/runTypes';
+import type { BrainRunRequest } from '../../runStore/runTypes';
 import type { StreamChatOptions, StreamChatResult } from '../../streamChatCompletion';
 import { runScenario } from '../parity/harness';
 import type { RunRecord, Scenario as ParityScenario } from '../parity/types';
@@ -63,7 +63,7 @@ export interface Scenario {
   /** Kept for the reader: the parity host owns the run key. */
   key: number;
   script(): Turn[];
-  request?(engine: RunEngineId): Partial<BrainRunRequest>;
+  request?(): Partial<BrainRunRequest>;
   /** The host's tools by name (`runTool`; a function of the run key when a tool acts on the run); a name not here answers `{ ok: true }`. */
   tools?: Record<string, (args: unknown) => unknown> | ((key: number) => Record<string, (args: unknown) => unknown>);
   /** A second run in the same chat, started when the first has settled (the model script goes on where it stopped). */
@@ -72,7 +72,7 @@ export interface Scenario {
 
 const textOf = (content: unknown): string => (typeof content === 'string' ? content : JSON.stringify(content));
 
-/** The parity record of one engine, as the projection the area R tests read. */
+/** The parity record of a run, as the projection the area R tests read. */
 function project(rec: RunRecord, key: number): Omit<Capture, 'firstRunCalls'> {
   const cell = rec.host.cell[String(key)] as { transcript?: Array<{ role: string; content: unknown }> } | undefined;
   return {
@@ -98,8 +98,8 @@ function project(rec: RunRecord, key: number): Omit<Capture, 'firstRunCalls'> {
   };
 }
 
-/** Run the scenario on one engine, through the parity harness. */
-export async function runOn(engine: RunEngineId, s: Scenario): Promise<Capture> {
+/** Run the scenario through the parity harness. */
+export async function runOn(s: Scenario): Promise<Capture> {
   let calledByFirstRun: number | undefined;
   let key = 0;
   const parity: ParityScenario = {
@@ -113,22 +113,15 @@ export async function runOn(engine: RunEngineId, s: Scenario): Promise<Capture> 
       // Any tool name answers; the catalog the model is shown is the request's own.
       const impl = typeof s.tools === 'function' ? s.tools(h.key) : s.tools;
       h.tools(new Proxy({} as Record<string, (args: unknown) => unknown>, { get: (_t, name) => impl?.[String(name)] ?? (() => ({ ok: true })) }));
-      await h.start({ userTurn: 'find the request handler', ...s.request?.(engine) });
+      await h.start({ userTurn: 'find the request handler', ...s.request?.() });
       if (s.follow) {
         calledByFirstRun = n;
-        await h.start({ userTurn: s.follow.userTurn, ...s.request?.(engine) });
+        await h.start({ userTurn: s.follow.userTurn, ...s.request?.() });
       }
     },
   };
-  const rec = await runScenario(parity, engine);
+  const rec = await runScenario(parity);
   return { ...project(rec, key || 7001), ...(calledByFirstRun !== undefined ? { firstRunCalls: calledByFirstRun } : {}) };
-}
-
-/** The same scenario through the loop, then through the agent. */
-export async function bothEngines(s: Scenario): Promise<{ loop: Capture; agent: Capture }> {
-  const loop = await runOn('loop', s);
-  const agent = await runOn('agent', s);
-  return { loop, agent };
 }
 
 /** The trace steps carrying `label`, as `[args, result]`. */

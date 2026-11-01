@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PolicyGate } from '@builderforce/agent-run';
+import { resetRunSteering, type PolicyGate } from '@builderforce/agent-run';
 import { resolveRunConfirm, resetBrainRunStore, stopRun } from '../runStore/runControl';
 import { getCell } from '../runStore/runCells';
 import { beginRun } from '../runStore/beginRun';
-import { binding, result, scripted } from '../test/brainRunHarness';
-import { queueRunSteering, resetRunSteering } from '../runSteering';
+import { binding, result, runBound, scripted } from '../test/brainRunHarness';
+import { queueRunSteering } from '../runSteering';
 import { brainEventSink, traceStepFor } from './eventSink';
 import { brainHumanChannel } from './humanChannel';
 import { brainModelTransport, toCompletion, toStreamMessage } from './modelTransport';
-import { cellRunStore } from './runStorePort';
-import { runViaAgent } from './runViaAgent';
 
 beforeEach(() => {
   resetBrainRunStore();
@@ -21,7 +19,7 @@ describe('the Brain runs through the one agent', () => {
     for (const [i, entryPoint] of (['web', 'rovr', 'vscode'] as const).entries()) {
       const { stream } = scripted([() => result({ text: 'Hello! Done.' })]);
       const b = binding(8100 + i, stream, entryPoint);
-      const outcome = await runViaAgent(b.binding);
+      const outcome = await runBound(b.binding);
       expect(outcome.kind).toBe('finished');
       expect(b.cell.transcript.at(-1)).toMatchObject({ role: 'assistant' });
       expect(b.rows).toHaveLength(1);
@@ -32,7 +30,7 @@ describe('the Brain runs through the one agent', () => {
   it('says on the trace, before the first turn, which connected account cannot serve the run', async () => {
     const { stream } = scripted([() => result({ text: 'Done.' })]);
     const b = binding(8110, stream, 'web', { modelPreflight: async () => ({ byoUnresolved: ['anthropic:expired'], fallback: 'free-model' }) });
-    await runViaAgent(b.binding);
+    await runBound(b.binding);
     const step = b.cell.trace.find((e) => e.label === 'model.preflight');
     expect(step).toBeDefined();
     expect(String(step?.result)).toContain('anthropic');
@@ -47,7 +45,7 @@ describe('the Brain runs through the one agent', () => {
       }),
     ]);
     const b = binding(8120, stream);
-    const run = runViaAgent(b.binding);
+    const run = runBound(b.binding);
     await started.promise;
     stopRun(8120);
     await expect(run).resolves.toMatchObject({ kind: 'failed', reason: 'cancelled' });
@@ -62,7 +60,7 @@ describe('the Brain runs through the one agent', () => {
       () => result({ text: 'Done.' }),
     ]);
     const b = binding(8130, stream);
-    await runViaAgent(b.binding);
+    await runBound(b.binding);
     expect(b.cell.trace.some((e) => e.label === 'steer.applied')).toBe(true);
     expect(asked[1]?.messages.map((m) => m.content)).toContain('write the update now');
   });
@@ -99,19 +97,6 @@ describe('the Brain\'s ports', () => {
   it('maps rows and results without losing a tool call', () => {
     expect(toStreamMessage({ role: 'user', content: 'u' })).toEqual({ role: 'user', content: 'u' });
     expect(toCompletion(result({ text: 't' }))).toEqual({ content: 't', toolCalls: [], usage: { inputTokens: 10, outputTokens: 4 }, model: 'fake-model' });
-  });
-
-  it('the run store appends only what the run added, and never replaces the rows the cell holds', () => {
-    const c = getCell(8140);
-    const first = { role: 'user' as const, content: 'earlier' };
-    c.transcript.push(first);
-    const store = cellRunStore(c, { seeded: 1 });
-    const state = { messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'earlier' }, { role: 'assistant', content: 'now' }] } as never;
-    store.save(state);
-    store.save(state);
-    expect(c.transcript).toHaveLength(2);
-    expect(c.transcript[0]).toBe(first);
-    expect(c.transcript[1]).toMatchObject({ role: 'assistant', content: 'now' });
   });
 
   it('the human channel raises the confirm gate on the cell and a Stop declines it', async () => {

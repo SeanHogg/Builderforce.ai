@@ -57,7 +57,8 @@ export {
 export { startRun } from './runStore/startRun';
 export { startEngineRun } from './runStore/engineRun';
 export type { BrainRunEngine, RunEngineControl } from './runStore/engineRun';
-export type { BrainStreamFn, BrainRunPersistence, BrainRunRequest, BrainRunSnapshot, GlobalRunState, RunKey, RunTurn } from './runStore/runTypes';
+export type { BrainStreamFn, BrainRunPersistence, BrainRunRequest, RunKey } from './runStore/runTypes';
+export type { BrainRunSnapshot, GlobalRunState, RunTurn } from './runStore/runSnapshotTypes';
 
 /**
  * Framework-free entry point for the Brain agent loop — a documented alias of

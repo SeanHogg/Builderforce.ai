@@ -367,8 +367,6 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // single retry on the first stall left the user holding the SECOND promise. The
     // stall budget (`agent-stall`) bounds these recoveries on its own — a run has no
     // iteration ceiling to fall back on.
-    forceToolChoice: undefined,
-    announcementRecoveries: 0,
     // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
     // One, not a budget: the second time the model stops short it has read the contract
     // twice, and its answer — including "I cannot ship this because…" — is the answer.

@@ -7,14 +7,12 @@
  * the outcome row carries (`'web'` / `'rovr'` / `'vscode'`); nothing reads it to decide what
  * the run does.
  *
- * Every port is the Brain's existing machinery, wrapped (`./modelTransport.ts`,
- * `./eventSink.ts`, `./runStorePort.ts`, `./humanChannel.ts`, `./contextSource.ts`), and the
- * steering port is the run-keyed composer queue the agent owns
- * (`@builderforce/agent-run` `runSteeringSource`) — the same inbox `queueRunSteering` posts to.
+ * Every port is the Brain's existing machinery, wrapped (`./modelTransport.ts`, `./humanChannel.ts`, `./contextSource.ts`), or one the
+ * caller builds over the run's cell and hands in: the event sink (`./eventSink.ts`), the run store (`./loopStore.ts`) and the steering
+ * source (`./loopSteering.ts`, over the run-keyed composer queue the agent owns).
  */
 
 import {
-  runSteeringSource,
   type CapabilityProvider,
   type DeliveryLedger,
   type EventSink,
@@ -33,12 +31,10 @@ import type { RunPolicyOptions } from '@builderforce/run-policy';
 import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
 import type { RunCell } from '../runStore/runCell';
 import type { BrainRunRequest } from '../runStore/runTypes';
-import { brainContextSource, type GatherContextPack } from './contextSource';
-import { brainEventSink, type OutcomeReport } from './eventSink';
+import { brainContextSource } from './contextSource';
 import { brainHumanChannel } from './humanChannel';
 import { brainModelRules } from './brainModelRules';
 import { brainModelTransport, type BrainCallDefaults } from './modelTransport';
-import { cellRunStore } from './runStorePort';
 import type { TurnObserver } from './modelTransport';
 
 /** The telemetry label of the surface the run came in through. */
@@ -58,18 +54,6 @@ export interface BrainRunBinding {
   capabilities: CapabilityProvider;
   /** The user's own words for this run. */
   request: string;
-  /** How many of the cell's transcript rows open the run (the store appends after them). */
-  seeded?: number;
-  /** The host's richer structured context pack, when it gathers more than the served files. */
-  gatherContext?: GatherContextPack;
-  /** The streamed deltas / serving model / connect retries go here — the live view. */
-  handlers?: Parameters<typeof brainModelTransport>[0]['handlers'];
-  /** Per-call routing the request fixed for the whole run. */
-  call?: BrainCallDefaults;
-  /** The host's run-end memory commit (codemap facts, the session note). */
-  commitMemory?: (consolidated: unknown) => Promise<void> | void;
-  /** Where the uniform outcome row goes. */
-  reportOutcome?: OutcomeReport;
   /** Governance gates compiled for this run — the human channel's approvals. */
   approvalGates?: readonly PolicyGate[];
   /** The surface's live view and record of each turn (`loopTurn.ts`). */
@@ -78,35 +62,33 @@ export interface BrainRunBinding {
   extensions?: ToolExtension;
   /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
   start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
-  /** Where the run's events go, when the surface reacts to some beyond rendering them (`loopTurn.ts`). */
-  events?: EventSink;
+  /** Where the run's events go (`eventSink.ts`; the surface reacts to some beyond rendering them, `loopTurn.ts`). */
+  events: EventSink;
   /** Told the live run once, before turn 1: the surface reads the model policy from it. */
   attach?: (view: RunView) => void;
   /** What the task still owes when a turn ends in prose (`brainDelivery.ts`). */
   delivery?: DeliveryLedger;
   /** The surface's own tools, when it runs them itself (`brainPlatformTools.ts`). */
   platform?: PlatformTools;
-  /** Where the run's steered direction comes from, when the surface records it as it is read (`loopSteering.ts`). */
-  steering?: SteeringSource;
-  /** Where the run's state lives, when the surface keeps its own log (`loopStore.ts`). */
-  store?: RunStore;
+  /** Where the run's steered direction comes from, recorded as it is read (`loopSteering.ts`). */
+  steering: SteeringSource;
+  /** Where the run's state lives: the surface's own log (`loopStore.ts`). */
+  store: RunStore;
   /** The run tree's spend, when the surface shares one total across a run and its sub-agents (`loopSpend.ts`). */
   spend?: SpendMeter;
 }
 
 /** The ports of one Brain run — built from the request, deciding nothing. */
 export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
-  const { req, cell, runKey } = b;
+  const { req, runKey } = b;
   return {
     model: brainModelRules(brainModelTransport({
       stream: req.stream,
       ...(b.turn ? { turn: b.turn } : {}),
-      ...(b.handlers ? { handlers: b.handlers } : {}),
       call: {
         ...(req.routingMode ? { routingMode: req.routingMode } : {}),
         ...(req.modelStrict != null ? { modelStrict: req.modelStrict } : {}),
         ...(req.reasoning ? { reasoning: req.reasoning } : {}),
-        ...b.call,
       },
       // What the host knows about model windows. A surface with its own compaction (`modules.compaction`, `loopFold.ts`) and its own turn
       // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
@@ -114,48 +96,47 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
       ...(req.modelPreflight ? { preflight: req.modelPreflight } : {}),
     }), req),
     capabilities: b.capabilities,
-    store: b.store ?? cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),
+    store: b.store,
     ...(b.platform ? { platform: b.platform } : {}),
     ...(b.delivery ? { delivery: b.delivery } : {}),
     ...(b.attach ? { attach: b.attach } : {}),
     ...(b.spend ? { spend: b.spend } : {}),
     ...(b.extensions ? { extensions: b.extensions } : {}),
-    events: b.events ?? brainEventSink(cell, b.reportOutcome),
+    events: b.events,
     human: brainHumanChannel(runKey),
-    steering: b.steering ?? runSteeringSource(runKey),
-    context: brainContextSource(b.gatherContext),
+    steering: b.steering,
+    context: brainContextSource(),
   };
 }
 
 /** The task of one Brain run. */
-export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>, defaultRepo?: string): RunTask {
+export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>): RunTask {
   const { req } = b;
   return {
     prompt: b.request,
     ...(req.serverChatId != null ? { chatId: req.serverChatId } : {}),
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
     dispatch: req.lineage ? { source: 'subagent', parentRunId: String(req.lineage.ownerKey) } : { source: 'chat' },
-    ...(defaultRepo ? { workspace: { defaultRepo } } : {}),
   };
 }
 
 /**
  * The policy DATA of one Brain run. Every field is read off the request or the device —
- * the same facts the Brain's own loop reads — and none selects behaviour by surface.
+ * the same facts the Brain's preamble reads — and none selects behaviour by surface.
  */
 export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'approvalGates' | 'start'>): RunPolicy {
   const { req } = b;
   const seed = b.start?.pinnedModel ?? req.model;
   return {
     entryPoint: b.entryPoint,
-    // Both modes offer the full catalog (`runPreamble.ts`, `turnMenu.ts`): the mode changes the directive the model reads, never the menu.
+    // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
     toolScope: req.lineage ? 'subagent' : 'chat-work',
     role: 'general',
     // No guard lever is switched on in the agent's own policy: A3's detector (and its device lever) is the Brain's
     // `RunProgressGuard`, which the platform tools run, so the run has ONE detector (`brainPlatformTools.ts`).
     levers: [],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
-    // is its only limit (`runStore/runLoop.ts`).
+    // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
     codeChangeTools: [...CODE_CHANGE_TOOLS],
     ...(req.model && req.modelStrict ? { pinnedModel: req.model } : {}),
@@ -167,7 +148,7 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     inference: 'hybrid',
     verify: 'none',
     approvalGates: [...(b.approvalGates ?? [])],
-    // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`finalAnswerHook.ts`).
+    // A model that spent its whole stall budget still describing calls ends the run on what it said,, the reason beside it (`brainDelivery.ts`).
     stallExhausted: 'settle',
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
     // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.

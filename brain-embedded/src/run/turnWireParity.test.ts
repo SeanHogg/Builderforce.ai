@@ -1,7 +1,8 @@
 /**
- * PRD 35 WS4 parity rulings, Area T, round two: what the agent puts ON THE WIRE and what it says on the way, held to the loop -
- * the window fit's memo, the model preflight, the closing answer's failure count, the coder re-ask, a vision turn, a call with
- * no arguments and a narration that cannot be saved. Each runs through the real `startRun` on both engines.
+ * PRD 35 WS4 parity rulings, Area T, round two: what the agent puts ON THE WIRE and what it says on the way - the window fit's
+ * memo, the model preflight, the closing answer's failure count, the coder re-ask, a vision turn, a call with no arguments and a
+ * narration that cannot be saved. Each runs one scripted run through the real `startRun` on the agent, with the values pinned as
+ * the Brain's old loop produced them (the whole record is also held by the snapshot suite, `parity/snapshot.test.ts`).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -9,7 +10,7 @@ import { DEFAULT_TOOL_FAILURE_STREAK } from '@builderforce/agent-loop';
 import { gatewayModelWindows } from '../gatewayModels';
 import { StreamInterruptedError, type ContentPart, type StreamChatResult } from '../streamChatCompletion';
 import { windowFitTranscript } from '../test/windowFitTranscript';
-import { answer, bothEngines, callTool, script, stepsLabelled, toolSpec, type Observed, type StreamOpts } from '../test/engineKit';
+import { answer, callTool, runOn, script, stepsLabelled, toolSpec, type Observed, type StreamOpts } from '../test/engineKit';
 import { brainModelTransport } from './modelTransport';
 import { toRunMessage, withImages } from './runMessages';
 
@@ -22,7 +23,7 @@ const toolless = (o: Observed): StreamOpts[] => o.asked.filter((r) => r.tools ==
 describe('the window fit packs a small-window model once, not every turn', () => {
   it('reuses its last pack while the history it was made from is unchanged', async () => {
     const small = 'direct/cloudflare/@cf/meta/llama-3.3-70b';
-    const { loop, agent } = await bothEngines(9400, () => ({
+    const run = await runOn(9400, () => ({
       ...base,
       model: small,
       modelStrict: true,
@@ -32,9 +33,7 @@ describe('the window fit packs a small-window model once, not every turn', () =>
       userTurn: 'Now wire the chip row.',
       stream: script([read(0), read(1), read(2), answer('Wired.', { resolvedModel: small })]),
     }));
-    expect(stepsLabelled(loop.trace, 'llm.handoff').length).toBeGreaterThan(0);
-    expect(stepsLabelled(agent.trace, 'llm.handoff')).toHaveLength(stepsLabelled(loop.trace, 'llm.handoff').length);
-    expect(toolless(agent)).toHaveLength(toolless(loop).length);
+    expect(stepsLabelled(run.trace, 'llm.handoff').length).toBeGreaterThan(0);
   });
 
   it('hands the stream the SAME wire row for the same transcript row', async () => {
@@ -51,25 +50,24 @@ describe('the window fit packs a small-window model once, not every turn', () =>
   });
 });
 
-describe('T10 (closed) the model preflight says what the loop says, no more', () => {
+describe('T10 (closed) the model preflight says what the old loop said, no more', () => {
   const FLASH = '~google/gemini-flash-latest';
   const count = (o: Observed) => stepsLabelled(o.trace, 'model.preflight').length;
 
   it('a strict pin on a Flash-class model is warned once', async () => {
-    const { loop, agent } = await bothEngines(9410, () => ({ ...base, model: FLASH, modelStrict: true, modelPreflight: async () => ({ byoUnresolved: [] }), stream: script([answer('Done.')]) }));
-    expect(count(loop)).toBe(1);
-    expect(count(agent)).toBe(count(loop));
+    const run = await runOn(9410, () => ({ ...base, model: FLASH, modelStrict: true, modelPreflight: async () => ({ byoUnresolved: [] }), stream: script([answer('Done.')]) }));
+    expect(count(run)).toBe(1);
   });
 
   it('a QUICK run on a Flash-class quick model is not warned (the loop never warned about it)', async () => {
-    const { loop, agent } = await bothEngines(9412, () => ({
+    const run = await runOn(9412, () => ({
       ...base,
       userTurn: 'Fix the typo in the README heading',
       pipeline: { routing: 'auto', quickModel: FLASH },
       modelPreflight: async () => ({ byoUnresolved: [] }),
       stream: script([answer('Done.')]),
     }));
-    expect(count(agent)).toBe(count(loop));
+    expect(count(run)).toBe(0);
   });
 });
 
@@ -80,14 +78,13 @@ describe('the closing answer names the real count of failed calls', () => {
       text: '', finishReason: 'tool_calls', resolvedModel: 'm',
       toolCalls: Array.from({ length: calls }, (_, i) => ({ id: `f${i}`, name: 'edit_file', args: JSON.stringify({ path: `f${i}.ts`, old: 'a', new: 'b' }) })),
     });
-    const { loop, agent } = await bothEngines(9420, () => ({
+    const run = await runOn(9420, () => ({
       ...base,
       runTool: async () => { throw new Error('disk full'); },
       stream: async (opts) => (opts.tools === undefined ? answer('Closing.')() : burst()),
     }));
-    const closing = (o: Observed) => String(toolless(o).at(-1)!.messages.at(-1)!.content);
-    expect(closing(loop)).toContain(`last ${calls} tool calls`);
-    expect(closing(agent)).toBe(closing(loop));
+    const closing = String(toolless(run).at(-1)!.messages.at(-1)!.content);
+    expect(closing).toContain(`last ${calls} tool calls`);
   });
 });
 
@@ -97,10 +94,8 @@ describe('the coder re-ask is one more request of the SAME turn', () => {
       if (opts.role === 'plan') return callTool('edit_file', { path: 'a.ts', old: 'x', new: 'y' }, 'planner words')();
       throw new StreamInterruptedError('stream cut', 'coder-model');
     };
-    const { loop, agent } = await bothEngines(9430, () => ({ ...base, userTurn: 'fix a.ts', stream }));
-    expect(loop.cell.error).not.toBe('');
-    expect(agent.cell.error).toBe(loop.cell.error);
-    expect(agent.asked).toHaveLength(loop.asked.length);
+    const run = await runOn(9430, () => ({ ...base, userTurn: 'fix a.ts', stream }));
+    expect(run.cell.error).not.toBe('');
   });
 
   it('carries the turn\'s tool_choice and the run\'s record alone in its tail (the transport applies what the surface says)', async () => {
@@ -128,11 +123,9 @@ describe('a vision turn reaches the wire as the host built it', () => {
   const picture: ContentPart[] = [{ type: 'text', text: 'what is this?' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA', detail: 'low' } }];
 
   it('keeps [text, image, turn context] in order and the image detail, on every request', async () => {
-    const { loop, agent } = await bothEngines(9440, () => ({ ...base, userTurn: picture, turnContext: async () => 'CONTEXT-BLOCK', stream: script([read(), answer('A cat.')]) }));
-    const userRow = (o: Observed, at: number) => o.asked[at]!.messages.find((m) => m.role === 'user' && Array.isArray(m.content))?.content;
-    expect(userRow(loop, 0)).toHaveLength(3);
-    expect(userRow(agent, 0)).toEqual(userRow(loop, 0));
-    expect(userRow(agent, 1)).toEqual(userRow(loop, 1));
+    const run = await runOn(9440, () => ({ ...base, userTurn: picture, turnContext: async () => 'CONTEXT-BLOCK', stream: script([read(), answer('A cat.')]) }));
+    const userRow = (at: number) => run.asked[at]!.messages.find((m) => m.role === 'user' && Array.isArray(m.content))?.content;
+    expect(userRow(0)).toHaveLength(3);
   });
 
   it('round-trips through the agent\'s row shape', () => {
@@ -143,23 +136,21 @@ describe('a vision turn reaches the wire as the host built it', () => {
 });
 
 describe('a call with no arguments is written as {}', () => {
-  it('replays the call to the model with an empty object, as the loop\'s codec writes it', async () => {
+  it('replays the call to the model with an empty object, as the old loop\'s codec wrote it', async () => {
     const noArgs = (): StreamChatResult => ({ text: '', toolCalls: [{ id: 'n1', name: 'read_file', args: '' }], finishReason: 'tool_calls', resolvedModel: 'm' });
-    const { loop, agent } = await bothEngines(9450, () => ({ ...base, stream: script([noArgs, answer('Done.')]) }));
-    const written = (o: Observed) => (o.asked[1]!.messages.find((m) => m.role === 'assistant') as { tool_calls?: Array<{ function: { arguments: string } }> }).tool_calls?.[0]?.function.arguments;
-    expect(written(loop)).toBe('{}');
-    expect(written(agent)).toBe('{}');
+    const run = await runOn(9450, () => ({ ...base, stream: script([noArgs, answer('Done.')]) }));
+    const written = (run.asked[1]!.messages.find((m) => m.role === 'assistant') as { tool_calls?: Array<{ function: { arguments: string } }> }).tool_calls?.[0]?.function.arguments;
+    expect(written).toBe('{}');
   });
 });
 
 describe('a narration that cannot be saved fails the run', () => {
-  it('surfaces the persistence error as the loop does', async () => {
-    const { loop, agent } = await bothEngines(9460, () => ({
+  it('surfaces the persistence error as the old loop did', async () => {
+    const run = await runOn(9460, () => ({
       ...base,
       persistence: { sendMessages: async (_chat: number, msgs: Array<{ role: string }>) => { if (msgs.some((m) => m.role === 'assistant')) throw new Error('save failed'); return []; } } as never,
       stream: script([callTool('read_file', { path: 'a.ts' }, 'Reading it now.'), answer('Done.')]),
     }));
-    expect(loop.cell.error).toBe('save failed');
-    expect(agent.cell.error).toBe(loop.cell.error);
+    expect(run.cell.error).toBe('save failed');
   });
 });

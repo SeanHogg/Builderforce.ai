@@ -11,7 +11,8 @@ import type { ChatErrorAction } from '../chatError';
 import type { BrainRunActivity } from '../runActivity';
 import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
-import type { BrainRunRequest, BrainRunSnapshot, RunTurn } from './runTypes';
+import type { BrainRunRequest } from './runTypes';
+import type { BrainRunSnapshot, RunTurn } from './runSnapshotTypes';
 import type { PendingGateOutcome } from './prefetchGate';
 import type { RunClaim } from './runClaim';
 

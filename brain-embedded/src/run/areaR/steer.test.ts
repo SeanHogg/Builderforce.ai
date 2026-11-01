@@ -2,13 +2,14 @@
  * Area R, what a run does with direction that arrives while it works (PRD 35 WS4 parity rulings R2, R11, and the review rounds): a
  * steer or a child's report that arrives with the last prose turn is taken FIRST, before any judgement of the turn; the stall is
  * judged on the model's own words; the Brain's runner watches the steers itself; a Stop pressed during a hand-off waits for it.
- * Each scenario runs through the real `startRun` on the loop and on the agent; the agent is held to the loop.
+ * Each scenario runs the scripted run through the real `startRun` on the agent, with values pinned as the old loop produced them
+ * (the whole record is also held by the snapshot suite, `parity/snapshot.test.ts`).
  */
 
 import { describe, expect, it } from 'vitest';
 import { queueRunSteering } from '../../runSteering';
 import { stopRun } from '../../runStore/runControl';
-import { assistantRows, bothEngines, calls, say, spec, type Capture, type Scenario, type Turn } from './harness';
+import { calls, runOn, say, spec, type Capture, type Scenario, type Turn } from './harness';
 
 const TOOLS = [spec('read_file'), spec('edit_file'), spec('command_status')];
 const STALL = "I'll search the codebase for the handler.";
@@ -33,36 +34,26 @@ describe('a steer that arrives with the last prose turn is taken first', () => {
       ],
       request: () => ({ tools: TOOLS, model: 'pin-1', modelStrict: true, onStop: async () => null }),
     };
-    const { loop, agent } = await bothEngines(s);
-    expect(after(agent, 2)).toEqual(after(loop, 2));
-    expect(after(loop, 2).slice(-1)[0]).toEqual({ role: 'user', content: REPORT });
-    expect(loopSteps(agent)).toEqual(loopSteps(loop));
-    expect(assistantRows(agent)).toEqual(assistantRows(loop));
+    const run = await runOn(s);
+    expect(after(run, 2).slice(-1)[0]).toEqual({ role: 'user', content: REPORT });
   });
 
   it('a stalled final turn gets no nudge row before the report', async () => {
     const s: Scenario = { key: 9502, script: () => [saysWith(STALL, REPORT), say('Found it in src/server.ts.')], request: () => ({ tools: TOOLS }) };
-    const { loop, agent } = await bothEngines(s);
-    expect(after(loop, 1).map((m) => m.content).join('\n')).not.toContain('zero tool calls');
-    expect(after(agent, 1)).toEqual(after(loop, 1));
-    expect(loopSteps(agent)).toEqual(loopSteps(loop));
+    const run = await runOn(s);
+    expect(after(run, 1).map((m) => m.content).join('\n')).not.toContain('zero tool calls');
   });
 
   it('a model whose stall budget is spent still has the report read, not stranded behind the notice', async () => {
     const s: Scenario = { key: 9503, script: () => [say(STALL), say(STALL), say(STALL), saysWith(STALL, REPORT), say('Found it in src/server.ts.')], request: () => ({ tools: TOOLS }) };
-    const { loop, agent } = await bothEngines(s);
-    expect(loop.error).toBe('');
-    expect(agent.error).toBe(loop.error);
-    expect(after(agent, 4)).toEqual(after(loop, 4));
-    expect(assistantRows(agent)).toEqual(assistantRows(loop));
+    const run = await runOn(s);
+    expect(run.error).toBe('');
   });
 
   it('several steers join into one row', async () => {
     const s: Scenario = { key: 9504, script: () => [saysWith('All done.', 'first thing', 'second thing'), say('Both done.')], request: () => ({ tools: TOOLS }) };
-    const { loop, agent } = await bothEngines(s);
-    expect(after(loop, 1).slice(-1)[0]).toEqual({ role: 'user', content: 'first thing\n\nsecond thing' });
-    expect(after(agent, 1)).toEqual(after(loop, 1));
-    expect(agent.transcript).toEqual(loop.transcript);
+    const run = await runOn(s);
+    expect(after(run, 1).slice(-1)[0]).toEqual({ role: 'user', content: 'first thing\n\nsecond thing' });
   });
 });
 
@@ -73,10 +64,10 @@ describe('the stall is judged on the model own words', () => {
       script: () => [say(`<think>${STALL}</think>Here you go.`), say('Found it in src/server.ts.')],
       request: () => ({ tools: TOOLS }),
     };
-    const { loop, agent } = await bothEngines(s);
-    expect(agent.wire.length).toBe(loop.wire.length);
-    expect(loopSteps(agent)).toEqual(loopSteps(loop));
-    expect(assistantRows(agent)).toEqual(assistantRows(loop));
+    const run = await runOn(s);
+    // The announcing reasoning is judged: the turn is re-prompted, so the model is called twice.
+    expect(run.wire).toHaveLength(2);
+    expect(loopSteps(run)).toContain('loop.recover_announced_tool_call');
   });
 });
 
@@ -94,11 +85,13 @@ describe('the Brain runner watches the steers, once', () => {
         },
       }),
     };
-    const { loop, agent } = await bothEngines(s);
+    const run = await runOn(s);
     const rows = (cap: Capture) => cap.wire[1]!.messages.filter((m) => m.role === 'tool').map((m) => m.content);
-    expect(agent.toolCalls).toEqual(loop.toolCalls);
-    expect(rows(agent)).toEqual(rows(loop));
-    expect(agent.trace.filter((e) => e.label === 'command_status')).toEqual(loop.trace.filter((e) => e.label === 'command_status'));
+    expect(run.toolCalls).toEqual([{ name: 'command_status', args: { waitMs: 5000 } }]);
+    expect(rows(run)).toHaveLength(1);
+    const status = run.trace.filter((e) => e.label === 'command_status');
+    expect(status).toHaveLength(1);
+    expect(status[0]!.isError).toBe(true);
   });
 });
 
@@ -128,9 +121,7 @@ describe('a Stop pressed during a hand-off waits for it', () => {
         };
       },
     };
-    const { loop, agent } = await bothEngines(s);
-    expect(loop.toolCalls.filter((c) => c.name === 'builtin_tasks_create')).toHaveLength(2);
-    expect(agent.toolCalls).toEqual(loop.toolCalls);
-    expect(agent.trace.map((e) => e.label)).toEqual(loop.trace.map((e) => e.label));
+    const run = await runOn(s);
+    expect(run.toolCalls.filter((c) => c.name === 'builtin_tasks_create')).toHaveLength(2);
   });
 });

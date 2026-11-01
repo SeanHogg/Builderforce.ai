@@ -3,13 +3,15 @@
  *
  * The queue itself — keyed by RUN KEY, with its interrupt flag and listeners — lives ONCE, in
  * `@builderforce/agent-run` (`policy/steering/runSteering.ts`): the agent's steering policy
- * and every surface that drains the queue read the same inboxes. What stays here is the
- * Brain's own: the attachment type its composer produces, and the rendering of a steered
- * message into the vision parts a model request carries (`steerModelContent`).
+ * and every surface that drains the queue read the same inboxes, and a caller that only needs the queue's
+ * own operations (`resetRunSteering`, `hasRunInterrupt`, `newSteerKey`) takes them from there. What stays here
+ * is the Brain's own: the attachment type its composer produces, the device's journal of words the run will
+ * save (`queueRunSteering` writes it, so a reload before they are saved still finds them), and the rendering
+ * of a steered message into the vision parts a model request carries (`steerModelContent`).
  *
  * Direction for a run that is ALREADY running — redirecting it without stopping it — is
  * how an owner corrects a sub-agent mid-task and how a child's report reaches a parent that
- * is still working. The loop drains the queue before every model turn and, when the model
+ * is still working. The run drains the queue before every model turn and, when the model
  * was about to end, re-opens the run for what arrived (`brainRunStore.ts`). A message
  * queued for a run that is not running waits for its next turn — the host decides whether
  * to start one.
@@ -17,12 +19,8 @@
 
 import {
   drainRunSteering as drainQueue,
-  hasRunInterrupt,
-  newSteerKey,
-  onRunInterrupt,
   queueRunSteering as queueMessage,
   requeueRunSteering as requeueMessages,
-  resetRunSteering,
   type RunSteerMessage as QueuedSteerMessage,
 } from '@builderforce/agent-run';
 import { rememberPendingWords } from './pendingWords';
@@ -67,8 +65,6 @@ export function requeueRunSteering(runKey: number, steers: readonly RunSteerMess
   requeueMessages(runKey, steers);
 }
 
-export { newSteerKey };
-
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */
 export function drainRunSteering(runKey: number): RunSteerMessage[] {
   return drainQueue(runKey) as RunSteerMessage[];
@@ -88,5 +84,3 @@ export function steerModelContent(msg: RunSteerMessage): string | ContentPart[] 
     ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } })),
   ];
 }
-
-export { hasRunInterrupt, onRunInterrupt, resetRunSteering };

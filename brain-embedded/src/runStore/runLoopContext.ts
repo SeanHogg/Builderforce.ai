@@ -7,7 +7,7 @@
  */
 
 import { reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from '@builderforce/run-policy';
-import { replayTextOf, type LoopTurn } from '@builderforce/agent-loop';
+import { replayTextOf } from '@builderforce/agent-loop';
 import type { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { BrainMessage } from '../types';
 import type { BrainToolSpec, ChatCompletionMessage, CompletionMetadata, StreamChatResult } from '../streamChatCompletion';
@@ -46,10 +46,6 @@ const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'fin
  *  AND wiped the cache, so repeated `builtin_*_list`/`_assignees` calls re-ran every turn. */
 export const isDedupableRead = (name: string): boolean =>
   DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
-
-/** Per-turn facts BOTH the tool path and the final-answer path read, carried on the turn. */
-export interface TurnMeta { result: StreamChatResult; resolved: string; requested: string; advertised: number; advertisedNames: Set<string> }
-export const metaOf = (turn: LoopTurn): TurnMeta => turn.meta as TurnMeta;
 
 export interface RunLoopContext {
   /** The chat's key in the host's persistence — where the run's turns are written. */
@@ -110,10 +106,6 @@ export interface RunLoopContext {
   policy: RunPolicyState;
   /** The agent's live run, when it drives this one (`run/runPrepared.ts`): the policy is ITS state, and events go to it. */
   view?: RunView;
-  /** A one-shot forced tool choice from stall recovery, consumed by the next turn. */
-  forceToolChoice: 'required' | undefined;
-  /** The current streak of narration-only turns the stall recovery has re-prompted. */
-  announcementRecoveries: number;
   /** One re-prompt each per run (see the final-answer gates). */
   shipRecoveryUsed: boolean;
   reviewRecoveryUsed: boolean;

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { chatDoorLiveness, useChatTurns, type ChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
-import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
+import { drainRunSteering } from './runSteering';
+import { hasRunInterrupt, resetRunSteering } from '@builderforce/agent-run';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
 import { resetBrainRunStore } from './runStore/runControl';
 

@@ -1,6 +1,6 @@
 /**
  * Starting a run — the single-flight claim on a chat's cell, the per-run reset, the
- * loop, and what a run does once it unwinds: keep what a Stop cut off, settle its ticket
+ * agent run, and what a run does once it unwinds: keep what a Stop cut off, settle its ticket
  * backstops, report its coder's outcome, and hand its last step rows to the server.
  */
 
@@ -24,8 +24,9 @@ import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, settleView, updateLinkedTickets } from './runBackstops';
 import { resolveServerChatId } from './serverChat';
-import { driveRun, runEngineOf } from './runEngine';
-import { reportRunEnd, unrecorded } from './runEndOutcome';
+import { prepareRunLoop } from './runPreamble';
+import { runPrepared } from '../run/runPrepared';
+import { noteRunId, reportRunEnd, unrecorded } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { holdClaim, releaseClaim, type RunClaim } from './runClaim';
@@ -45,9 +46,9 @@ import type { RunCell } from './runCell';
 const delegatingCells = new WeakSet<RunCell>();
 
 /**
- * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
+ * Start (or no-op join) the agent run for a chat. Single-flight per chat: if a
  * run is already in flight the call returns immediately, so a second mounted
- * Brain instance can never spawn a duplicate loop. The claim is synchronous
+ * Brain instance can never spawn a duplicate run. The claim is synchronous
  * (set before any await), so two callers in the same tick can't both pass it. A start
  * made under a `RunClaim` consumes it (`beginRun`). A start that is REFUSED (a run is going, or a
  * continuation holds the chat) hands its turn to that run's inbox and resolves `'joined'` - the
@@ -85,14 +86,13 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   const runPersistence = lineage
     ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg))
     : steps.persistence;
-  // On the agent engine the run ends in ONE uniform row (§8.2). It is held here, not sent: the report below merges the coder's grade into it
+  // The run ends in ONE uniform row (§8.2). It is held here, not sent: the report below merges the coder's grade into it
   // so the door hears one outcome per run, carrying the entry point (`req.entryPoint`) the host declared.
   let agentRow: RunOutcomeRow | undefined;
-  const holdsRow = runEngineOf(request) === 'agent';
   const req: BrainRunRequest = {
     ...request,
     persistence: runPersistence,
-    ...(holdsRow ? { reportRunRow: (row: RunOutcomeRow) => { agentRow = row; return request.reportRunRow?.(row); } } : {}),
+    reportRunRow: (row: RunOutcomeRow) => { agentRow = row; return request.reportRunRow?.(row); },
   };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
@@ -106,7 +106,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   // here (inside the single-flight claim) so a racing send + auto-reply can't
   // both append the user turn to the transcript.
   if (req.seed && c.transcript.length === 0) {
-    // The persisted history holds the person's own turns only — the loop's nudges are never stored.
+    // The persisted history holds the person's own turns only — the run's nudges are never stored.
     c.transcript = req.seed.map(markPersonTurn);
     c.priorResearch = req.priorResearch ?? null;
   }
@@ -115,10 +115,16 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
 
   c.runUsage = emptyRunUsage();
   try {
-    await driveRun(chatId, c, req, runKey);
+    const prepared = await prepareRunLoop(chatId, c, req, runKey);
+    // Memory answered: the run is over before a model was asked.
+    if (prepared) {
+      // The id this run's calls carry - what its end is reported under (`runEndOutcome.ts`).
+      noteRunId(c, prepared.metadata.guestTurnId);
+      await runPrepared(prepared);
+    }
   } catch (e) {
     // A user-initiated Stop aborts the stream mid-flight; that's a clean exit,
-    // not an error to surface. (runLoop already returns on an aborted signal, so
+    // not an error to surface. (The run already settles quietly on an aborted signal, so
     // this guards the rare throw that races the abort.)
     if (!c.abort?.signal.aborted) {
       c.error = e instanceof Error ? e.message : 'Reply failed';
@@ -224,7 +230,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
         failed: c.error !== '', error: c.error, shipped, trace, projectId: req.projectId,
         askedForChange: !wakeTurn && asksForChange(requestText),
       });
-      // ONE report per run. A graded run reports through `reportOutcome` exactly as the loop does (same runs, same `source`, same fields), the
+      // ONE report per run. A graded run reports through `reportOutcome` as it always has (same runs, same `source`, same fields), the
       // agent's §8.2 telemetry riding on it as optional fields. A run with no grade reports nothing there; its uniform record goes through its
       // own port, recorded but never taught to routing.
       if (outcome) {

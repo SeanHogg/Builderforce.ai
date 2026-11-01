@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
-import { drainRunSteering, resetRunSteering } from './runSteering';
+import { drainRunSteering } from './runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 
 const stopRun = vi.hoisted(() => vi.fn());
 vi.mock('./brainRunStore', () => ({ stopRun }));

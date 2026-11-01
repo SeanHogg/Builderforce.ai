@@ -10,7 +10,8 @@ import {
   replayPendingWords,
   setPendingWordsOwner,
 } from './pendingWords';
-import { drainRunSteering, queueRunSteering, resetRunSteering } from './runSteering';
+import { drainRunSteering, queueRunSteering } from './runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 import { cells, getCell } from './runStore/runCells';
 
 /**

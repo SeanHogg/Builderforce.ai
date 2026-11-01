@@ -4,9 +4,9 @@
  * `persistSteer` the Brain's loop runs. The interrupt side (a step in flight) is the run-keyed queue the agent owns.
  */
 
-import { runSteeringSource, type SteerInput, type SteeringSource } from '@builderforce/agent-run';
+import { runSteeringSource, type SteerInput, type SteeringSource, hasRunInterrupt } from '@builderforce/agent-run';
 import { imagePartsOf } from './runMessages';
-import { hasRunInterrupt, steerModelContent } from '../runSteering';
+import { steerModelContent } from '../runSteering';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { takeRunSteering } from '../runStore/steerInterrupt';
 import { persistSteer } from '../runStore/steerPersistence';

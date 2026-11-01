@@ -1,23 +1,21 @@
 /**
- * Run ONE scripted Brain run through the real `startRun` on a named engine, and read back everything an observer of it could
- * see: the stream's every request, the messages the run saved, the trace, the cell. A parity test runs the same script on the
- * `loop` engine and on the `agent` engine and holds the second to the first. Test support only.
+ * Run ONE scripted Brain run through the real `startRun`, and read back everything an observer of it could see: the stream's
+ * every request, the messages the run saved, the trace, the cell. Test support only.
  */
 
 import { getRunTrace, resetBrainRunStore, startRun } from '../brainRunStore';
 import type { BrainStreamFn } from '../brainRunStore';
 import type { BrainTraceEvent } from '../brainTriage';
-import { resetRunSteering } from '../runSteering';
+import { resetRunSteering } from '@builderforce/agent-run';
 import { getCell } from '../runStore/runCells';
 import type { RunCell } from '../runStore/runCell';
-import type { BrainRunRequest, RunEngineId } from '../runStore/runTypes';
+import type { BrainRunRequest } from '../runStore/runTypes';
 import type { StreamChatResult } from '../streamChatCompletion';
 
 export type StreamOpts = Parameters<BrainStreamFn>[0];
 export type Saved = { role: string; content: string; metadata?: string | null };
 
 export interface Observed {
-  engine: RunEngineId;
   /** Every request the run made to the stream, in order (the summarizer's included). */
   asked: StreamOpts[];
   /** Every message the run saved (steps included). */
@@ -26,10 +24,10 @@ export interface Observed {
   cell: RunCell;
 }
 
-/** What a scenario hands the run: the host's request, minus what the kit owns. It is built fresh per engine, for the run key it will use. */
-export type Scenario = (key: number) => Omit<BrainRunRequest, 'persistence' | 'engine' | 'resolvedSystemPrompt'> & { persistence?: BrainRunRequest['persistence']; resolvedSystemPrompt?: string };
+/** What a scenario hands the run: the host's request, minus what the kit owns. It is built fresh, for the run key it will use. */
+export type Scenario = (key: number) => Omit<BrainRunRequest, 'persistence' | 'resolvedSystemPrompt'> & { persistence?: BrainRunRequest['persistence']; resolvedSystemPrompt?: string };
 
-export async function runOn(engine: RunEngineId, key: number, scenario: Scenario): Promise<Observed> {
+export async function runOn(key: number, scenario: Scenario): Promise<Observed> {
   resetBrainRunStore();
   resetRunSteering();
   const asked: StreamOpts[] = [];
@@ -46,15 +44,8 @@ export async function runOn(engine: RunEngineId, key: number, scenario: Scenario
     asked.push(opts);
     return req.stream(opts, handlers);
   };
-  await startRun(key, { resolvedSystemPrompt: 'sys', ...req, persistence, stream, engine });
-  return { engine, asked, saved, trace: getRunTrace(key), cell: getCell(key) };
-}
-
-/** The same scenario on both engines (a fresh script each), the loop first. */
-export async function bothEngines(key: number, scenario: Scenario): Promise<{ loop: Observed; agent: Observed }> {
-  const loop = await runOn('loop', key, scenario);
-  const agent = await runOn('agent', key + 1, scenario);
-  return { loop, agent };
+  await startRun(key, { resolvedSystemPrompt: 'sys', ...req, persistence, stream });
+  return { asked, saved, trace: getRunTrace(key), cell: getCell(key) };
 }
 
 /** A scripted model: replays `turns` in order and fails loudly when the run asks for more. */

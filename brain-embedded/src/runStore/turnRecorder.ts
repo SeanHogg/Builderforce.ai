@@ -21,7 +21,7 @@ import { accrueByoUnresolved, accrueProviderCap, nowIso, nowMs, pushTrace, runTr
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
 import type { LiveTurn } from './turnStream';
-import type { RunLoopContext, TurnMeta } from './runLoopContext';
+import type { RunLoopContext } from './runLoopContext';
 
 /** One completed turn, as the engine that asked for it saw it. */
 export interface RecordedTurn {
@@ -42,8 +42,8 @@ export interface RecordedTurn {
   advertisedNames: ReadonlySet<string>;
 }
 
-/** Record turn `t` on the run's cell, trace and usage, and return the facts the final-answer path reads. */
-export async function recordTurn(run: RunLoopContext, t: RecordedTurn): Promise<TurnMeta> {
+/** Record turn `t` on the run's cell, trace and usage. */
+export async function recordTurn(run: RunLoopContext, t: RecordedTurn): Promise<void> {
   const { c, chatId, allTools } = run;
   const { result, iter, llmStart, role, resolved, requested, advertised } = t;
   const advertisedNames = t.advertisedNames as Set<string>;
@@ -168,6 +168,4 @@ export async function recordTurn(run: RunLoopContext, t: RecordedTurn): Promise<
     pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.message', args: { step: iter }, result: result.text });
   }
   run.lastTurnInterruption = turnInterruption(result.finishReason);
-  const meta: TurnMeta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
-  return meta;
 }

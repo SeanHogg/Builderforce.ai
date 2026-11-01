@@ -1,27 +1,12 @@
 /**
- * Per-turn tool selection.
+ * The Brain's tool RANKER. The per-turn selection itself (the cap, the prompt-named tools, the pinned tools appended beyond it) is the
+ * agent's one selector (`@builderforce/agent-run` `policy/tools`); what this module owns is how a tool scores against the turn's text:
+ * the shared `rankLexically` from `@builderforce/agent-tools` (the same ranker the Worker's `tool_search` uses), fed this module's
+ * product synonyms as extra weighted fields. The agent takes `relevantTools` as its ranker (`run/brainPlatformTools.ts`).
  *
- * The Brain's catalog has grown to ~300 tools (205 first-party `builtin_*` entries
- * plus tenant MCP servers and navigation). Sending ALL of them on every turn is
- * the failure mode this module exists to fix:
- *
- *   - Most providers degrade sharply past ~128 tool definitions, and small
- *     free-pool models routinely respond to an oversized catalog by emitting NO
- *     tool calls at all — observed live: a chart request answered with "I do not
- *     have the task status data", zero tool calls, three times running, with 308
- *     tools advertised.
- *   - Every definition carries a JSON schema, so the catalog alone can dominate
- *     the prompt budget before the conversation is even considered.
- *
- * The selection is LEXICAL and deterministic — no embeddings, no extra round trip,
- * no network — and the scoring is the shared `rankLexically` from
- * `@builderforce/agent-tools` (the same ranker the Worker's `tool_search` uses), fed
- * this module's product synonyms as extra weighted fields. It scores each tool against the live turn's text and keeps the best
- * `limit`, then adds anything the run has already touched (beyond the limit) so a
- * multi-step task never loses a tool mid-flight.
- *
- * Safety posture: when in doubt, INCLUDE. A catalog at or under the limit is
- * returned untouched, so small deployments behave exactly as before.
+ * Why a catalog is trimmed at all: the Brain's catalog has grown to ~300 tools, and most providers degrade sharply past ~128 tool
+ * definitions - small free-pool models answer an oversized catalog with NO tool calls (a chart request answered "I do not have the task
+ * status data", zero calls, three times running, with 308 tools advertised) - and every definition carries a JSON schema.
  */
 
 import { LEXICAL_WEIGHTS, lexicalStems, rankLexically, type LexicalField } from '@builderforce/agent-tools';
@@ -34,13 +19,6 @@ import { expandWithSynonyms } from './toolVocabulary';
  * several domains at once.
  */
 export const DEFAULT_TOOL_LIMIT = 64;
-
-/**
- * How far past the cap the run's already-used (pinned) tools may lengthen the list. A
- * pin is appended rather than evicting a fixed tool (the cached prefix holds), but a run
- * that reaches tool after tool through the router must not grow the list without bound.
- */
-export const PINNED_OVERFLOW = 16;
 
 /** Score for a tool NAME stem the user typed verbatim. */
 const NAME_HIT = LEXICAL_WEIGHTS.name;
@@ -88,116 +66,8 @@ function toolFields(tool: BrainToolSpec): LexicalField[] {
 
 /**
  * The tools of `tools` that match `query`, best first (the shared lexical ranker over this module's fields). The relevance order of the
- * selection below, and the one the agent's tools policy takes from the Brain as its ranker (`run/brainPlatformTools.ts`).
+ * agent's tool selection (`run/brainPlatformTools.ts`).
  */
 export function relevantTools<T extends BrainToolSpec>(tools: readonly T[], query: string): T[] {
   return rankLexically(tools, query, toolFields, tools.length);
-}
-
-export interface SelectToolsOptions {
-  /** The turn's text — typically the latest user message. */
-  query: string;
-  /** Max tools to advertise. Defaults to {@link DEFAULT_TOOL_LIMIT}. */
-  limit?: number;
-  /**
-   * Tool names already called in this run. Always kept regardless of score, so a
-   * multi-step task cannot lose a tool it is mid-way through using.
-   */
-  pinned?: Iterable<string>;
-  /**
-   * Tool names the SYSTEM PROMPT instructs the model to call. Kept ahead of
-   * everything else, because advertising less than the prompt promises is a
-   * contradiction the model can only resolve by narrating a call it cannot make.
-   */
-  required?: Iterable<string>;
-}
-
-export interface ToolSelection {
-  tools: BrainToolSpec[];
-  /** True when the catalog was trimmed (i.e. selection actually applied). */
-  trimmed: boolean;
-  /** Size of the catalog before selection — recorded in the run trace. */
-  available: number;
-}
-
-/**
- * Choose the tools to advertise for one turn.
- *
- * Order of inclusion: prompt-required tools, then by descending relevance, then — if
- * the limit is still unmet — catalog order, so a vague query ("help me") still gets a
- * usable, stable set rather than an arbitrary one. Pinned tools (already called this
- * run) are added on top, beyond the limit, so a pin never evicts a fixed tool.
- */
-export function selectToolsForTurn(
-  tools: BrainToolSpec[] | undefined,
-  options: SelectToolsOptions,
-): ToolSelection {
-  const available = tools?.length ?? 0;
-  const limit = options.limit ?? DEFAULT_TOOL_LIMIT;
-
-  // Nothing to do — behave exactly as before for small catalogs.
-  if (!tools || available <= limit) {
-    return { tools: tools ?? [], trimmed: false, available };
-  }
-
-  const required = new Set(options.required ?? []);
-  const pinned = new Set(options.pinned ?? []);
-  const chosen: BrainToolSpec[] = [];
-  const taken = new Set<string>();
-
-  const take = (tool: BrainToolSpec): void => {
-    const name = tool.function?.name;
-    if (!name || taken.has(name)) return;
-    taken.add(name);
-    chosen.push(tool);
-  };
-
-  // 0. Tools the system prompt NAMES. These outrank everything: a prompt that says
-  //    "call builtin_chats_list_tickets" while the tool is absent leaves the model no
-  //    honest move, and it narrates the call instead of making it.
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    if (required.has(tool.function?.name ?? '')) take(tool);
-  }
-
-  // 1. Relevance to the turn — the ONE shared lexical ranker. Ties keep catalog order.
-  for (const tool of relevantTools(tools, options.query)) {
-    if (chosen.length >= limit) break;
-    take(tool);
-  }
-
-  // 2. Backfill in catalog order so a vague query still gets a full, stable set.
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    take(tool);
-  }
-
-  // Emit in CATALOG order, whichever pass chose each tool. The passes above decide
-  // the SET; they must not decide the ORDER, because the order is what the vendor's
-  // prompt cache hashes. Tools precede the system prompt in Anthropic's cached prefix,
-  // so any reordering — a tool the run just called moving ahead of its neighbours —
-  // invalidated the cached tools block AND the system prompt behind it on the very next
-  // turn. Same set ⇒ same bytes ⇒ a cache read.
-  const position = new Map(tools.map((t, i) => [t, i] as const));
-  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
-
-  // 3. Tools this run already used — never dropped mid-task, and APPENDED beyond the
-  //    cap, in the order the run first called them, rather than taken inside it. The
-  //    set above depends only on the catalog, the request and the prompt, which hold for
-  //    the whole of a run's phase, so it is the same every turn; a newly pinned tool only
-  //    ever lengthens the list at its END. When a pin counted toward the cap, every tool
-  //    the run reached through the router evicted a fixed tool from the set, and the
-  //    advertised list — the front of the vendor's cached prefix — changed mid-run.
-  //    Appending has a hard ceiling ({@link PINNED_OVERFLOW} past the cap): a run that
-  //    reached dozens of tools through the router stops ADDING there, and never evicts
-  //    one already advertised — the list only ever grows, then holds.
-  const ceiling = limit + PINNED_OVERFLOW;
-  const byName = new Map(tools.map((t) => [t.function?.name ?? '', t] as const));
-  for (const name of pinned) {
-    if (chosen.length >= ceiling) break;
-    const tool = byName.get(name);
-    if (tool) take(tool);
-  }
-
-  return { tools: chosen, trimmed: true, available };
 }

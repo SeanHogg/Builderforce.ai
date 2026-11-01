@@ -1,18 +1,15 @@
 /**
  * The run store's public contracts — what a host hands a run ({@link BrainRunRequest})
- * and what it observes ({@link BrainRunSnapshot}, {@link GlobalRunState}). Types only.
+ * (what it observes is in `runSnapshotTypes.ts`). Types only.
  */
 
 import type { BrainMessage } from '../types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart, StreamChatOptions, StreamHandlers, StreamChatResult } from '../streamChatCompletion';
 import type { ReasoningIntent } from '../effort';
-import type { BrainTraceEvent } from '../brainTriage';
-import type { ChatErrorAction } from '../chatError';
 import type { BrainRunOutcome } from '../runOutcomeReport';
 import type { RunOutcomeRequest } from '@builderforce/learned-routing';
 import type { RunStopHook } from '../stopHooks';
 import type { RunLineage } from '../runLineage';
-import type { BrainRunActivity } from '../runActivity';
 import type { ChatMode, ChatRosterAgent } from '../chatMode';
 import type { EvermindRunHooks } from '../evermindMemory';
 import type { RunWindowSources } from '../windowFit/modelWindow';
@@ -31,9 +28,6 @@ import type { RunOutcomeRow } from '@builderforce/agent-run';
  * for a chat.
  */
 export type RunKey = number | string;
-
-/** The engines a run can be driven by (`runEngine.ts`). */
-export type RunEngineId = 'loop' | 'agent';
 
 /** The surfaces a run comes in through - a telemetry label. */
 export type RunEntryPoint = 'vscode' | 'web' | 'rovr';
@@ -225,7 +219,7 @@ export interface BrainRunRequest {
    */
   reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
   /**
-   * Told the uniform §8.2 record (PRD 35) of a run that made no coder grade, once, when an AGENT-engine run ends: the entry point, the counts,
+   * Told the uniform §8.2 record (PRD 35) of a run that made no coder grade, once, when a run ends: the entry point, the counts,
    * `routingSignal: false` (the door records it and routing never learns from it). The host posts it to the same door. It is its own port so
    * that {@link reportOutcome} keeps doing exactly what it does on the Brain's loop: the same runs, the same `source`, the same fields. A run
    * with a grade reports through `reportOutcome` alone, the §8.2 telemetry riding on it as optional fields. One report per run.
@@ -278,18 +272,12 @@ export interface BrainRunRequest {
    */
   maxRunBudgetUsd?: number;
   /**
-   * Which engine drives this run (PRD 35 WS4): the Brain's own loop, or THE one agent
-   * (`@builderforce/agent-run`). Absent ⇒ the device's `BRAIN_RUN_ENGINE`, else `loop`. It selects the
-   * engine and nothing else; the switch goes away when the default flips.
-   */
-  engine?: RunEngineId;
-  /**
    * The surface the run came in through - the label its uniform outcome row carries. Telemetry only:
    * nothing branches on it.
    */
   entryPoint?: RunEntryPoint;
   /**
-   * Told the run's uniform outcome row (PRD 35 §8.2) once, when an agent-engine run ends. The host
+   * Told the run's uniform outcome row (PRD 35 §8.2) once, when a run ends. The host
    * posts it to the one write-back door; the run does no network I/O of its own. Best-effort.
    */
   reportRunRow?: (row: RunOutcomeRow) => Promise<unknown> | void;
@@ -339,93 +327,4 @@ export interface RunPipelineSettings {
   threshold?: number;
   /** The model a quick run codes on. Absent ⇒ the code model, else the gateway's order. */
   quickModel?: string;
-}
-
-/** Live, observable snapshot of a chat's run (what the hook renders). */
-export interface BrainRunSnapshot {
-  running: boolean;
-  streamingText: string;
-  error: string;
-  /**
-   * What the user can DO about {@link error}, when the failure was actionable —
-   * an expired session (reconnect), a plan that doesn't cover the request
-   * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
-   * from the thrown error's structured gateway fields via {@link chatErrorAction},
-   * so a mounted view renders the right button without re-parsing error prose.
-   * Null when nothing but dismissing applies.
-   */
-  errorAction: ChatErrorAction | null;
-  pendingConfirm: { name: string; args: unknown } | null;
-  /** Bumped whenever a new assistant message is persisted. */
-  messagesEpoch: number;
-  /**
-   * Every assistant message this run has persisted, in order (narration turns +
-   * the final answer). Delivered as a list — not a single "last" value — so a
-   * mounted view merges them all by id even when React coalesces the rapid
-   * mid-run emits into one render and never sees the intermediate snapshots.
-   */
-  appended: BrainMessage[];
-  hasTrace: boolean;
-  /**
-   * The live execution trace (LLM turns + tool calls + errors), in order. The
-   * same array `getRunTrace` returns — exposed on the snapshot so a mounted view
-   * (e.g. the timeline transcript) can render each step AS IT HAPPENS. Each
-   * `pushTrace` publishes a NEW array (copy-on-write), so a consumer may key a
-   * memo or effect on it. Bounded by {@link MAX_TRACE_EVENTS}.
-   */
-  trace: BrainTraceEvent[];
-  /**
-   * What the run is doing RIGHT NOW — the in-flight step, published as it is
-   * ENTERED rather than when it settles. The `trace` records a step only once it
-   * has completed, which is the wrong moment for a progress indicator: a search
-   * that takes a minute emits nothing at all until it is over, so a working agent
-   * and a hung one look identical. Null while idle. See `runActivity.ts`.
-   */
-  activity: BrainRunActivity | null;
-  /**
-   * Providers the tenant CONNECTED but the gateway could NOT resolve on any turn of
-   * this run (from `x-builderforce-byo-unresolved`) — e.g. a connected Claude
-   * subscription whose token expired, so the run silently used the shared pool
-   * instead of the tenant's own Opus. A mounted view shows a passive "reconnect your
-   * account" banner off this, so the degrade is visible WITHOUT copying triage. Empty
-   * when everything resolved (or nothing is connected).
-   */
-  byoUnresolved: string[];
-  /**
-   * BYO providers whose key hit a usage/capacity cap on any turn of this run
-   * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
-   * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
-   * "manage your API keys" banner so the user knows to top up or switch providers.
-   * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
-   */
-  providerCap: string[];
-  /**
-   * The engine-hosted turn being narrated ({@link RunTurn}) — null for chat runs, while
-   * idle, and from the instant Stop is pressed: a surface stops saying "working" at once
-   * while `running` stays true until the aborted loop has actually unwound.
-   */
-  turn: RunTurn | null;
-}
-
-/**
- * An engine-hosted turn as its surfaces narrate it. Held on the CELL rather than by the
- * component that started it, so a remounted surface still has the elapsed clock and
- * Stop still records against the turn.
- */
-export interface RunTurn {
-  /** The id the host correlates the turn by (`RunEngineControl.correlate`), once known. */
-  id: string | null;
-  /** Wall-clock start (ms). */
-  startedAt: number;
-}
-
-/**
- * A snapshot of which CHATS (numeric run keys) are live right now, split by whether they are actively
- * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
- * actionable one: the loop cannot proceed until the user answers). The two lists
- * are disjoint (an awaiting chat is omitted from `running`).
- */
-export interface GlobalRunState {
-  running: number[];
-  awaiting: number[];
 }

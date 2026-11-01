@@ -1,15 +1,19 @@
 /**
  * A scripted Brain run for the adapter tests: a stream that replays completions in the
  * stream's own result shape, and the binding of one run - a claimed cell, a request over the
- * stream, the capabilities of a surface that can do nothing - that `buildBrainRunPorts` /
- * `runViaAgent` take. Test support only.
+ * stream, the capabilities of a surface that can do nothing, and the event sink, run store and
+ * steering source the Brain builds over the cell - that `buildBrainRunPorts` takes. `runBound`
+ * drives a binding to its outcome. Test support only.
  */
 
+import { runAgent, runSteeringSource, type RunOutcome } from '@builderforce/agent-run';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { beginRun } from '../runStore/beginRun';
 import { getCell } from '../runStore/runCells';
 import type { BrainRunRequest } from '../runStore/runTypes';
-import type { BrainEntryPoint, BrainRunBinding } from '../run/webAdapter';
+import { brainEventSink } from '../run/eventSink';
+import { loopRunStore } from '../run/loopStore';
+import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainEntryPoint, type BrainRunBinding } from '../run/webAdapter';
 
 /** A scripted completion in the stream's own result shape. */
 export function result(over: Partial<StreamChatResult> = {}): StreamChatResult {
@@ -37,6 +41,22 @@ export function binding(runKey: number, stream: BrainRunRequest['stream'], entry
   beginRun(cell, runKey);
   const req: BrainRunRequest = { resolvedSystemPrompt: 'sys', stream, persistence, ...extra };
   const rows: unknown[] = [];
-  const bound: BrainRunBinding = { entryPoint, cell, runKey, req, request: 'Say hello, then finish.', capabilities: { capabilities: new Set<never>() }, reportOutcome: (row) => void rows.push(row) };
+  const bound: BrainRunBinding = {
+    entryPoint,
+    cell,
+    runKey,
+    req,
+    request: 'Say hello, then finish.',
+    capabilities: { capabilities: new Set<never>() },
+    events: brainEventSink(cell, (row) => void rows.push(row)),
+    store: loopRunStore(cell, { toolRowAppended: () => undefined }),
+    steering: runSteeringSource(runKey),
+  };
   return { cell, rows, binding: bound };
+}
+
+/** Drive a binding to its outcome through the agent, over the Brain's ports. */
+export function runBound(b: BrainRunBinding): Promise<RunOutcome> {
+  const signal = b.cell.abort?.signal;
+  return runAgent({ task: brainRunTask(b), policy: brainRunPolicy(b), ports: buildBrainRunPorts(b), ...(signal ? { signal } : {}) });
 }

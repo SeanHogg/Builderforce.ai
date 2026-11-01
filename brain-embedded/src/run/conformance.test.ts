@@ -11,9 +11,9 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { runAgent, type RunEvent, type RunOutcome, type RunOutcomeRow } from '@builderforce/agent-run';
+import { runAgent, type RunEvent, type RunOutcome, type RunOutcomeRow, resetRunSteering } from '@builderforce/agent-run';
 import { resetBrainRunStore, stopRun } from '../runStore/runControl';
-import { queueRunSteering, resetRunSteering } from '../runSteering';
+import { queueRunSteering } from '../runSteering';
 import { binding, result, scripted } from '../test/brainRunHarness';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainEntryPoint } from './webAdapter';
 

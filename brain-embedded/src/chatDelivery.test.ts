@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deliverToChat, forgetChatDelivery, handToChat, releaseChat, removeWaiting, subscribeWaiting, takeBackWaiting, waitingFor } from './chatDelivery';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
-import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
+import { drainRunSteering } from './runSteering';
+import { hasRunInterrupt, resetRunSteering } from '@builderforce/agent-run';
 import { resetBrainRunStore, stopRun } from './runStore/runControl';
 import { mirrorRun } from './test/mirrorRun';
 

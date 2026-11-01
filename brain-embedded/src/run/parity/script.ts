@@ -1,6 +1,6 @@
 /**
  * The scripted model, in the stream's own result shape. A scenario lists the turns the model takes; the
- * harness replays them identically for both engines. Nothing here knows an engine: a turn is what the
+ * harness replays them identically on every run. Nothing here knows the run: a turn is what the
  * gateway would have returned, and a throw is what the transport would have thrown.
  */
 
