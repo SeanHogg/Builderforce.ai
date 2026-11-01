@@ -1,15 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { runCliAgent } from "../../agents/cli-runner.js";
-import { governCliRun, isGovernanceRefusal } from "../../agents/cli-runner/governance.js";
+import { governCliRun } from "../../agents/cli-runner/governance.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import { isCliProvider } from "../../agents/model-selection.js";
 import {
-  isCompactionFailureError,
   isContextOverflowError,
-  isLikelyContextOverflowError,
-  isTransientHttpError,
   sanitizeUserFacingText,
 } from "../../agents/embedded-helpers.js";
 import { runEmbeddedAgent } from "../../agents/embedded.js";
@@ -36,6 +33,7 @@ import {
   buildEmbeddedRunContexts,
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
+import { classifyAgentFailure } from "./agent-failure-kind.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
@@ -435,14 +433,7 @@ export async function runAgentTurnWithFallback(params: {
       break;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      // A governance refusal is decided by its structured code, before any text classifier reads it: it names gates by their authored ids
-      // (a gate called `prompt-limit` is not a context overflow).
-      const classify = (test: (text: string) => boolean): boolean => !isGovernanceRefusal(err) && test(message);
-      const isContextOverflow = classify(isLikelyContextOverflowError);
-      const isCompactionFailure = classify(isCompactionFailureError);
-      const isSessionCorruption = classify((text) => /function call turn comes immediately after/i.test(text));
-      const isRoleOrderingError = classify((text) => /incorrect role information|roles must alternate/i.test(text));
-      const isTransientHttp = classify(isTransientHttpError);
+      const { isContextOverflow, isCompactionFailure, isSessionCorruption, isRoleOrderingError, isTransientHttp } = classifyAgentFailure(err, message);
 
       if (
         isCompactionFailure &&

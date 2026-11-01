@@ -13,6 +13,7 @@ import {
   isFailoverError,
   isTimeoutError,
 } from "./failover-error.js";
+import { buildFallbackSummaryError } from "./fallback-summary.js";
 import {
   buildConfiguredAllowlistKeys,
   buildModelAliasIndex,
@@ -114,14 +115,14 @@ function throwFallbackFailureSummary(params: {
   if (params.attempts.length <= 1 && params.lastError) {
     throw params.lastError;
   }
-  const summary =
-    params.attempts.length > 0 ? params.attempts.map(params.formatAttempt).join(" | ") : "unknown";
-  throw new Error(
-    `All ${params.label} failed (${params.attempts.length || params.candidates.length}): ${summary}`,
-    {
-      cause: params.lastError instanceof Error ? params.lastError : undefined,
-    },
-  );
+  // Carries the text a classifier may read (governance refusals left out); see fallback-summary.ts.
+  throw buildFallbackSummaryError({
+    attempts: params.attempts,
+    candidateCount: params.candidates.length,
+    label: params.label,
+    formatAttempt: params.formatAttempt,
+    cause: params.lastError,
+  });
 }
 
 function resolveImageFallbackCandidates(params: {

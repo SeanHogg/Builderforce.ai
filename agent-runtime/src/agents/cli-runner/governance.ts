@@ -22,6 +22,7 @@ import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-too
 import { resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
 import { logWarn } from "../../logger.js";
 import { FailoverError, GOVERNANCE_REFUSAL_CODE } from "../failover-error.js";
+import { FallbackSummaryError } from "../fallback-summary.js";
 
 /** A gate the CLI subprocess cannot be held to. */
 const isUnenforceable = (gate: PolicyGate): boolean => gate.effect === "block" || gate.effect === "require-approval";
@@ -31,12 +32,17 @@ function describeGate(gate: PolicyGate): string {
 }
 
 /**
- * True when `err` (or an error it was thrown with as the cause, as model fallback's "all models failed" summary does) is a governance
- * refusal. Decided by the STRUCTURED code on the error, never by reading its text: a gate id is an operator's word and can look like
- * anything (`prompt-limit`, `rate-limit-exceeded`), and no text classifier may be asked about it.
+ * True when `err` (or an error it was thrown with as the cause) is a governance refusal. Decided by the STRUCTURED code on the error,
+ * never by reading its text: a gate id is an operator's word and can look like anything (`prompt-limit`, `rate-limit-exceeded`), and no
+ * text classifier may be asked about it.
+ *
+ * Model fallback's "all models failed" summary is the exception to the cause walk: its `cause` is only the LAST attempt, so it counts as
+ * a refusal only when EVERY attempt was refused. A refused CLI primary followed by a failed embedded fallback (or the reverse) is an
+ * ordinary failure of the attempt that ran, and is classified from that attempt's text (`classifiableFailureText`).
  */
 export function isGovernanceRefusal(err: unknown): boolean {
   for (let e: unknown = err, depth = 0; e instanceof Error && depth < 5; e = e.cause, depth += 1) {
+    if (e instanceof FallbackSummaryError) return e.allRefused;
     if (e instanceof FailoverError && e.code === GOVERNANCE_REFUSAL_CODE) return true;
   }
   return false;
