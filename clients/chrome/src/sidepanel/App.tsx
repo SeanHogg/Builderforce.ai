@@ -176,7 +176,7 @@ function Shell() {
     chat: () => (
       <>
         {showingHistory && (
-          <RovrChatHistory id={HISTORY_ID} chats={live} loading={!chatsLoaded} chatId={chatId} rows={rows} />
+          <RovrChatHistory id={HISTORY_ID} chats={live} loading={!chatsLoaded} chatId={chatId} rows={rows} serverChats={serverChats} />
         )}
         {/* Kept mounted under the history, so the draft and held turns survive a look. */}
         <div className="rovr-chat-host" hidden={showingHistory}>
