@@ -4,7 +4,7 @@ import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import type { BrainMessage, BrainTraceEvent, ChatErrorAction } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, BrainTraceEvent, ChatErrorAction, PendingTurn, RunServedBy } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { BrainErrorBanner } from '@/components/brain/BrainErrorBanner';
@@ -40,6 +40,15 @@ export interface BrainSurfaceBodyProps {
   messages: BrainMessage[];
   trace: BrainTraceEvent[];
   running: boolean;
+  /**
+   * The turn the person just SENT — the optimistic bubble drawn until the turn's own
+   * row lands in the transcript. Read off the run cell's `pendingTurn`, the same
+   * state `usePendingTurns` serves the conversation surfaces. Absent when nothing
+   * is pending.
+   */
+  pendingTurn?: PendingTurn | null;
+  /** The model the in-flight turn was routed to — the live row names it, never a guess. */
+  servedBy?: RunServedBy;
   /** Epoch ms the in-flight turn began — narrates a collaborator's run, which has no entry in this browser's run store. */
   runStartedAt?: number | null;
   /** The session's run (`canvasRunKey`) — its pending tool approval shows in the footer. */
@@ -103,7 +112,7 @@ export interface BrainSurfaceProps extends BrainSurfaceBodyProps {
 
 export function BrainSurface({
   header, composer, footnote, className, footerClassName, label, dataAttrs,
-  showExecutionDetail, messages, trace, running, runStartedAt = null, runKey,
+  showExecutionDetail, messages, trace, running, pendingTurn = null, servedBy, runStartedAt = null, runKey,
   node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage, onAnswerQuestion,
   onRateMessage, ratings,
   guestSignup = null,
@@ -177,6 +186,9 @@ export function BrainSurface({
             streamingText=""
             isRunning={running}
             activity={activity}
+            pendingUserText={pendingTurn?.text}
+            liveModel={servedBy?.model}
+            liveAccount={servedBy?.account}
             assistantName={t('brain')}
             labels={timelineLabels}
             modelIdentity={modelIdentity}

@@ -117,6 +117,8 @@ export function emit(c: RunCell): void {
     turn: c.turn,
     // Only when a turn's route is known: a snapshot of a run that has not named a model has no such key.
     ...(c.servedBy ? { servedBy: c.servedBy } : {}),
+    // Only while a sent turn's row has not landed yet (a run's start closes it).
+    ...(c.pendingTurn ? { pendingTurn: c.pendingTurn } : {}),
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every

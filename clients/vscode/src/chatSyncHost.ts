@@ -17,6 +17,7 @@
 
 import * as vscode from "vscode";
 import {
+  SCAN_STOP,
   createDeviceStoreCoordinatorLease,
   createHttpSyncTransport,
   type LocalFirstChange,
@@ -114,9 +115,9 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     if (!destination) return;
     void local.store.read(async (tx) => {
       let pending = false;
-      await tx.scanPending(() => { pending = true; }, destination);
+      await tx.scanPending(() => { pending = true; return SCAN_STOP; }, destination);
       if (!pending) {
-        await tx.scanPending((event) => { if (CHAT_SLICE.has(event.entityType)) pending = true; }, { kind: "unbound" });
+        await tx.scanPending((event) => { if (CHAT_SLICE.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
       }
       return pending;
     })

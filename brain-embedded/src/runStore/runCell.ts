@@ -13,6 +13,7 @@ import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
 import type { BrainRunRequest } from './runTypes';
 import type { BrainRunSnapshot, RunServedBy, RunTurn } from './runSnapshotTypes';
+import type { PendingTurn } from '../usePendingTurns';
 import type { PendingGateOutcome } from './prefetchGate';
 import type { RunClaim } from './runClaim';
 
@@ -161,6 +162,14 @@ export interface RunCell {
    * the live row names and what a reply settled without a recorded result is attributed to.
    */
   servedBy: RunServedBy | null;
+  /**
+   * The turn the person just SENT on this run — the optimistic bubble a surface draws
+   * until the turn's own row lands in the transcript. Set through
+   * {@link setPendingRunTurn} (a host with no conversation hook); closed by
+   * {@link beginRun} (the run starts only after the row was appended) and on any
+   * failure path that gives the turn back. Null while nothing is pending.
+   */
+  pendingTurn: PendingTurn | null;
   /** The request this chat last ran with: what a turn handed to it later runs with (`continueChat.ts`). */
   lastRequest: BrainRunRequest | null;
   /**
@@ -234,6 +243,7 @@ export function makeCell(): RunCell {
     pendingGate: null,
     liveTurn: null,
     servedBy: null,
+    pendingTurn: null,
     lastRequest: null,
     stopEpoch: 0,
     claim: null,

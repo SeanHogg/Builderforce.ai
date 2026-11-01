@@ -18,7 +18,10 @@
  *     giving the thread back between frames; a store of many small frames never blocks the
  *     host for more than one frame's work.
  *   - COMPACTION IS A STREAM. `compact` writes a sequence of bounded frames to a temp file,
- *     fsyncs, renames — never one multi-megabyte buffer.
+ *     fsyncs, renames — never one multi-megabyte buffer. `publishCompacted` is the second
+ *     half of the two-phase compaction: a pre-written temp is caught up, re-fsynced and
+ *     renamed, so the cross-window lock is held for the catch-up + rename only, never for
+ *     streaming the whole rewrite.
  *   - THE TAIL IS COUNTED. `tail()` is the commit frames and bytes since the last base, the
  *     figure the shared `shouldCompactJournal` policy is measured against.
  *
@@ -94,10 +97,29 @@ export interface NodeJournalIo {
   append(frame: Uint8Array): Promise<void>;
   /** Replace the journal with these frames (temp file, fsync, rename). The lock holder only. */
   compact(frames: AsyncIterable<Uint8Array>): Promise<void>;
+  /**
+   * Two-phase compaction's publish step (the lock holder only). `tempPath` is a temp file a
+   * lock-free phase already streamed and FSYNCED; `appendTail` copies the frames appended to
+   * the journal after it was snapshotted onto its end, returning how many frames it added.
+   * The temp is re-fsynced and atomically renamed over the journal, so the rename lands the
+   * new base and the caught-up tail in one step. A failure removes the temp and leaves the
+   * journal untouched.
+   */
+  publishCompacted(
+    tempPath: string,
+    tempFrames: number,
+    appendTail: (handle: FileHandle, position: number) => Promise<number>,
+  ): Promise<number>;
+  /** Remove a temp file a cancelled compaction left behind. */
+  discardCompacted(tempPath: string): Promise<void>;
   /** Commit frames and bytes since the last base. */
   tail(): { frames: number; bytes: number };
   /** Committed frames in the file. */
   frames(): number;
+  /** The offset where the committed frames end — a compaction's temp must catch up from here. */
+  committedBytes(): number;
+  /** The journal's file identity (a compaction replaces it, changing both fields). */
+  identity(): FileIdentity | undefined;
   /** Bumps whenever the tracked view changes, so an async reader can tell it was overtaken. */
   epoch(): number;
 }
@@ -112,7 +134,7 @@ function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boo
 }
 
 /** A write the file system cut short is a failed write: publishing it would leave a damaged frame or base. */
-async function writeWhole(handle: FileHandle, frame: Uint8Array, position: number): Promise<void> {
+export async function writeWhole(handle: FileHandle, frame: Uint8Array, position: number): Promise<void> {
   const { bytesWritten } = await handle.write(frame, 0, frame.byteLength, position);
   if (bytesWritten !== frame.byteLength) {
     throw new Error(`local_first_short_write: wrote ${bytesWritten} of ${frame.byteLength} bytes`);
@@ -237,6 +259,8 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
     },
     tail: () => ({ frames: tailFrames, bytes: tailBytes }),
     frames: () => frameCount,
+    committedBytes: () => committedBytes,
+    identity: () => identity,
     epoch: () => version,
     async append(frame: Uint8Array) {
       if (!opened) await open();
@@ -300,6 +324,44 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       identity = stat ? identityOf(stat) : undefined;
       opened = true;
       version += 1;
+    },
+    /**
+     * Two-phase compaction's publish step, under the lock. `tempPath` is a temp file a
+     * lock-free phase already streamed and FSYNCED (the temp names are unique per streamer,
+     * so two windows never share one). `appendTail` copies the frames appended to the
+     * journal after the temp was snapshotted onto its end (from `position`) and returns how
+     * many frames it added; the whole caught-up tail lands with the rename, atomically. The
+     * temp is re-fsynced after the catch-up before the atomic rename; a failure removes the
+     * temp and leaves the journal untouched.
+     */
+    async publishCompacted(tempPath, tempFrames, appendTail) {
+      let handle: FileHandle | undefined;
+      try {
+        handle = await fs.open(tempPath, "r+");
+        const caughtFrames = await appendTail(handle, committedBytes);
+        // Crash-safety: the caught-up tail is durable only after this fsync; the rename
+        // below must never publish frames that can vanish on a crash.
+        await handle.sync();
+        await handle.close();
+        handle = undefined;
+        await fs.rename(tempPath, journalFile);
+        const stat = await statOrUndefined();
+        committedBytes = (await fs.stat(journalFile)).size;
+        frameCount = tempFrames + caughtFrames;
+        tailFrames = 0;
+        tailBytes = 0;
+        identity = stat ? identityOf(stat) : undefined;
+        opened = true;
+        version += 1;
+        return caughtFrames;
+      } catch (error) {
+        if (handle) await handle.close().catch(() => undefined);
+        await fs.rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
+    },
+    async discardCompacted(tempPath) {
+      await fs.rm(tempPath, { force: true }).catch(() => undefined);
     },
   };
 }

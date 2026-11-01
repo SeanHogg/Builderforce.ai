@@ -106,6 +106,8 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
         trace={surface.trace}
         running={surface.running}
         runStartedAt={surface.runStartedAt}
+        pendingTurn={surface.pendingRunTurn}
+        servedBy={surface.runServedBy}
         runKey={surface.runKey}
         node={surface.nodes.find((candidate) => candidate.id === nodeId) ?? null}
         nodes={surface.nodes}

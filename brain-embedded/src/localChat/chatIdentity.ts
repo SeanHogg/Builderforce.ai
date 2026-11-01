@@ -14,6 +14,7 @@
  */
 
 import type { EntityDestination, LocalFirstStore, LocalFirstTransaction } from '@builderforce/local-first';
+import { SCAN_STOP } from '@builderforce/local-first';
 import { BOUND_ONLY_VERSION, queueImport } from './journal';
 import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
 
@@ -73,7 +74,7 @@ export function createLocalChatIdentity(options: { store: LocalFirstStore; devic
       // it so it names the server chat (and the server adopts it, not mints a second one).
       let queued = false;
       await tx.scanPending((event) => {
-        if (event.entityType === 'chat' && event.clientEntityId === clientId && event.operation === 'import') queued = true;
+        if (event.entityType === 'chat' && event.clientEntityId === clientId && event.operation === 'import') { queued = true; return SCAN_STOP; }
       });
       const record = queued ? (await liveRecords<ChatValue>(tx, 'chat', deviceId, (row) => row.id === clientId))[0] : undefined;
       if (record) await queueImport(tx, record);

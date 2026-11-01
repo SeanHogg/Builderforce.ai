@@ -316,6 +316,7 @@ export {
   getRunSnapshot,
   getRunTrace,
   clearRunError,
+  setPendingRunTurn,
   resolveRunConfirm,
   // A run's Stop, read by tools that wait (`wait_agents`) — and a message persisted
   // OUTSIDE the loop (a direction to a sub-agent) spliced into a chat's live view.

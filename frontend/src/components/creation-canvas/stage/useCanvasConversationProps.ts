@@ -39,6 +39,10 @@ export function useCanvasConversationProps({ brain, showExecutionDetail, updateB
     trace,
     running: brainRunning,
     runStartedAt: brainRunShownStartedAt,
+    // The optimistic bubble and the live model, off the run store's snapshot — the
+    // same two fields the inline Brain Object reads off the surface context.
+    pendingTurn: brainSurface.pendingRunTurn,
+    servedBy: brainSurface.runServedBy,
     runKey: brainSurface.runKey,
     node: brainNode,
     nodes,
@@ -51,5 +55,5 @@ export function useCanvasConversationProps({ brain, showExecutionDetail, updateB
     ratings: brainSurface.ratings,
     guestSignup: guestSignupPrompt,
     refusal,
-  }), [refusal, brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, brainSurface.runKey, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
+  }), [refusal, brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.pendingRunTurn, brainSurface.ratings, brainSurface.runKey, brainSurface.runServedBy, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
 }

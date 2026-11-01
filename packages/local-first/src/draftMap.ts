@@ -84,6 +84,17 @@ export class DraftMap<V> {
     }
   }
 
+  /**
+   * Whether `key` lands in the draft's TAIL iteration (`values`): it was set fresh
+   * (a new key, or a committed key deleted and set again — relocated). The committed
+   * base does not yield it, so a typed scan over the base must skip it and visit it
+   * here, exactly where `values` would, to preserve `list` order.
+   */
+  isTailKey(key: string): boolean {
+    const change = this.changes.get(key);
+    return !!change && !change.deleted && (change.relocated || !this.base.has(key));
+  }
+
   /** Values written, with their keys, in the order they land. */
   *upserts(): IterableIterator<[string, V]> {
     for (const [key, change] of this.changes) {

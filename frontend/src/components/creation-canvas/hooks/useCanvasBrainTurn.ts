@@ -8,7 +8,7 @@ import { creationSessionsApi, type CreationSessionSummary, type CreationTimeline
 import { newNode } from '../canvasNodeHelpers';
 import type { CreationFlowNode } from '../CreationNode';
 import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
-import { isRunning, startEngineRun, type BrainAction } from '@seanhogg/builderforce-brain-embedded';
+import { isRunning, setPendingRunTurn, startEngineRun, type BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import type { ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
 import type { useTranslations } from 'next-intl';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
@@ -96,10 +96,11 @@ export interface UseCanvasBrainTurnDeps {
 export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modeGate, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelRefusal, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
   const runTurn = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
+    const runKey = canvasRunKey(sessionId);
     // The run store is the truth about whether a turn is in flight (`thinking` trails it
     // by a render): a second start would be refused by the store anyway, but only after
     // this turn had already written its request into the transcript.
-    if (!requestText || isRunning(canvasRunKey(sessionId))) return;
+    if (!requestText || isRunning(runKey)) return;
     // A tenant board with no tenant token cannot run a turn: the request would leave
     // without an Authorization header and come back 401 "Missing or malformed
     // Authorization header" — which is exactly what one signed-in user's diagnostics
@@ -132,7 +133,13 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
     // single-flight, outliving whichever placement started it, stopped by `stopRun`, and
     // asking for approvals through the gate the surface's ToolConfirmBar answers. The
     // body below runs synchronously up to its first await, inside the store's claim.
-    void startEngineRun(canvasRunKey(sessionId), async (run) => {
+    //
+    // The optimistic bubble opens NOW — the instant the turn is accepted — and the run's
+    // start (`beginRun`, which the store runs inside its claim) closes it the moment the
+    // turn's own row is appended below. Every path that accepted the turn reaches here,
+    // so there is nothing earlier to unwind.
+    setPendingRunTurn(runKey, { text: requestText });
+    void startEngineRun(runKey, async (run) => {
       setNotice(t('noticeBrainEvaluating'));
       // A new turn answers the last refusal's banner, whichever way it was sent.
       setModelRefusal(null);

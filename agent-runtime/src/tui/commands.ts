@@ -1,7 +1,18 @@
-import type { SlashCommand } from "@mariozechner/pi-tui";
 import { listChatCommands, listChatCommandsForConfig } from "../auto-reply/commands-registry.js";
 import { formatThinkingLevels, listThinkingLevelLabels } from "../auto-reply/thinking.js";
 import type { BuilderForceAgentsConfig } from "../config/types.js";
+
+/**
+ * A slash command surfaced in the TUI. Defined locally (the pi-tui dependency
+ * is gone) so command metadata stays testable and renderer-agnostic.
+ */
+export type SlashCommand = {
+  name: string;
+  description: string;
+  getArgumentCompletions?: (
+    prefix: string,
+  ) => Array<{ value: string; label?: string; description?: string }>;
+};
 
 const VERBOSE_LEVELS = ["on", "off"];
 const REASONING_LEVELS = ["on", "off"];

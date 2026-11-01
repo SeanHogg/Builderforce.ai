@@ -43,7 +43,7 @@ import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalF
 import { LocalFirstStoreCorruptError, quarantineJournal } from "./localFirstCorruption";
 import { chooseRebuildSource, describeRebuild } from "./localFirstRebuild";
 import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
-import { createNodeJournalIo, yieldToEventLoop, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import { createNodeJournalIo, writeWhole, yieldToEventLoop, type FileIdentity, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
   checkSnapshotCache,
   hasLegacyState,
@@ -321,22 +321,19 @@ export function createDurableLocalFirstStore(
 
   /** The snapshot rows a compaction is streaming, plus the identity/token of what was folded. */
   interface CompactionSource {
-    /** The exact snapshot passed to `snapshotFrames`. */
+    /** The exact snapshot passed to `snapshotFrames` — the rows folded into the new base. */
     snapshot: LocalFirstSnapshot;
-    /** `io.frames()` at snapshot time — frames already in the file when streaming began. */
-    baseFrameCount: number;
-    /** `io.epoch()` at snapshot time — distinguishes a compaction from an append. */
-    baseEpoch: number;
-    /** The journal's file identity at snapshot time; `undefined` before the first open. */
+    /** `io.committedBytes()` at snapshot time — the tail appended after it must be caught up. */
+    baseCommittedBytes: number;
+    /** The journal's file identity at snapshot time; `undefined` before the first frame exists. */
     baseIdentity: FileIdentity | undefined;
   }
 
   /** Prepare compaction WITHOUT the lock: capture the in-memory snapshot and the file state at that instant. */
   const prepareCompaction = (): CompactionSource => ({
     snapshot: memory.view(),
-    baseFrameCount: io.frames(),
-    baseEpoch: io.epoch(),
-    baseIdentity: currentIdentity,
+    baseCommittedBytes: io.committedBytes(),
+    baseIdentity: io.identity(),
   });
 
   /**
@@ -344,16 +341,18 @@ export function createDurableLocalFirstStore(
    * once; unique temp names never collide). `snapshotFrames` only READS `source.snapshot`
    * and yields between frames, so commits may interleave and append to the journal.
    */
-  const streamCompactionTemp = async (source: CompactionSource): Promise<string> => {
+  const streamCompactionTemp = async (snapshot: LocalFirstSnapshot): Promise<{ path: string; frames: number }> => {
     await fs.mkdir(directory, { recursive: true });
-    const temporary = `${journalFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    const path = `${journalFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     let written = 0;
+    let frames = 0;
     try {
-      const handle = await fs.open(temporary, "wx");
+      const handle = await fs.open(path, "wx");
       try {
-        for await (const frame of snapshotFrames(source.snapshot, yieldToEventLoop)) {
+        for await (const frame of snapshotFrames(snapshot, yieldToEventLoop)) {
           await writeWhole(handle, frame, written);
           written += frame.byteLength;
+          frames += 1;
         }
         // Crash-safety: the data must be durable before the rename can ever publish it.
         await handle.sync();
@@ -361,10 +360,10 @@ export function createDurableLocalFirstStore(
         await handle.close();
       }
     } catch (error) {
-      await fs.rm(temporary, { force: true });
+      await fs.rm(path, { force: true });
       throw error;
     }
-    return temporary;
+    return { path, frames };
   };
 
   /**
@@ -401,7 +400,6 @@ export function createDurableLocalFirstStore(
   };
 
   const writeCache = async (): Promise<void> => {
-    const temporary = `${snapshotFile}.${process.pid}.${Date.now()}.tmp`;
     try {
       await fs.mkdir(directory, { recursive: true });
       await fs.writeFile(temporary, JSON.stringify(memory.view()), { encoding: "utf8", flag: "wx" });

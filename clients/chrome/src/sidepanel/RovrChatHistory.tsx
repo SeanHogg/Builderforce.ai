@@ -13,6 +13,7 @@ import {
   type ChatHistoryLabels,
   type ChatRowActions,
 } from '@seanhogg/builderforce-brain-ui';
+import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import type { MessageKey } from '../i18n/t';
 import { rovrLookup } from './labels/rovrLookup';
 import type { LocalChat } from '../store/records';
@@ -41,22 +42,53 @@ export interface RovrChatHistoryProps {
   loading: boolean;
   chatId: number | null;
   rows: ChatRowActions;
+  /**
+   * Synced server chats by serverId — the platform rollup (`ticketCount`,
+   * `ticketProgressPct`) the device record does not carry. A chat with no
+   * entry (unsynced, offline, signed out) renders title-only, as before.
+   */
+  serverChats?: ReadonlyMap<number, BrainChat>;
 }
 
-export function RovrChatHistory({ id, chats, loading, chatId, rows }: RovrChatHistoryProps) {
+/**
+ * The row's stats pill — the same rule the VSIX history and the web BrainChatList
+ * share: `% done` only when the chat has at least one linked ticket and a finite
+ * pct, so a no-ticket chat never reads a misleading `0%`.
+ */
+function progressStatsOf(serverChat: BrainChat | undefined): string {
+  if (!serverChat) return '';
+  const ticketCount = serverChat.ticketCount ?? 0;
+  const pct = serverChat.ticketProgressPct;
+  if (ticketCount <= 0 || pct == null || !Number.isFinite(pct)) return '';
+  return `${Math.round(pct)}%`;
+}
+
+export function RovrChatHistory({ id, chats, loading, chatId, rows, serverChats }: RovrChatHistoryProps) {
   const labels = useMemo(rovrChatHistoryLabels, []);
 
   return (
     <ChatHistoryList id={id} className="rovr-history" loading={loading} total={chats.length} labels={labels}>
-      {chats.map((c) => (
-        <ChatHistoryRow
-          key={c.id}
-          chat={{ id: c.id, title: c.title }}
-          active={c.id === chatId}
-          {...rows.rowProps(c.id)}
-          labels={labels}
-        />
-      ))}
+      {chats.map((c) => {
+        const serverChat = c.serverId != null ? serverChats?.get(c.serverId) : undefined;
+        const stats = progressStatsOf(serverChat);
+        return (
+          <ChatHistoryRow
+            key={c.id}
+            chat={{
+              id: c.id,
+              title: c.title,
+              // The title's `67% · ` prefix rides the shared chatSwitcherLabel once
+              // the rollup is present — same read as the web and the editor.
+              ticketCount: serverChat?.ticketCount,
+              ticketProgressPct: serverChat?.ticketProgressPct,
+              stats: stats || undefined,
+            }}
+            active={c.id === chatId}
+            {...rows.rowProps(c.id)}
+            labels={labels}
+          />
+        );
+      })}
     </ChatHistoryList>
   );
 }

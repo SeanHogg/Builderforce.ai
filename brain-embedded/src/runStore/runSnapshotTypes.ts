@@ -8,6 +8,7 @@ import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { ChatErrorAction } from '../chatError';
 import type { BrainRunActivity } from '../runActivity';
+import type { PendingTurn } from '../usePendingTurns';
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
 export interface BrainRunSnapshot {
@@ -80,6 +81,15 @@ export interface BrainRunSnapshot {
    * A host that mirrors a run from another process (`applyRemoteRun`) carries it across.
    */
   servedBy?: RunServedBy;
+  /**
+   * The turn the person just SENT on this run, kept until its row lands in the
+   * transcript — the optimistic bubble every chat surface draws (`usePendingTurns`
+   * is the React-side owner; a host with no conversation hook, like the creation
+   * canvas, opens/closes it through {@link setPendingRunTurn}). A run starting
+   * (`beginRun`) closes it: the turn's own row has been appended by then. Absent
+   * when nothing is pending.
+   */
+  pendingTurn?: PendingTurn;
 }
 
 /** The model a run's turn was served by, as the stream named it (`StreamHandlers.onModel`). */

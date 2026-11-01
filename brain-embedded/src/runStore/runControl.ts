@@ -27,6 +27,7 @@ function driverFor(key: RunKey) {
 }
 import type { BrainRunPersistence, RunKey } from './runTypes';
 import type { BrainRunSnapshot, GlobalRunState } from './runSnapshotTypes';
+import type { PendingTurn } from '../usePendingTurns';
 
 /**
  * Drop all run state. For tests/teardown only — there's no per-chat eviction in
@@ -240,6 +241,26 @@ export function clearRunError(chatId: RunKey | null): void {
   if (!c || !c.error) return;
   c.error = '';
   c.errorAction = null;
+  emit(c);
+}
+
+/**
+ * Open or close the optimistic pending-turn bubble on a run cell — the store-side
+ * companion of {@link usePendingTurns}, for a host that drives runs itself (like
+ * the creation canvas) and so never mounts the conversation hook. The caller opens
+ * it with the text just sent and closes it (null) the moment the turn's own row is
+ * in the transcript. No-op when there's no cell.
+ *
+ * A run's START already closes the bubble on the cell (`beginRun`), so this is only
+ * needed for failure paths where the run never claims the turn — a refused request,
+ * a hold that never releases — and every surface's error path should call it there
+ * or the bubble stays up after the turn was given back.
+ */
+export function setPendingRunTurn(chatId: RunKey | null, turn: PendingTurn | null): void {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c) return;
+  c.pendingTurn = turn;
   emit(c);
 }
 

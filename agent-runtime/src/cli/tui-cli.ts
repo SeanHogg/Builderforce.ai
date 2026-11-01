@@ -2,7 +2,6 @@ import type { Command } from "commander";
 import { defaultRuntime } from "../runtime.js";
 import { formatDocsLink } from "../terminal/links.js";
 import { theme } from "../terminal/theme.js";
-import { runTui } from "../tui/tui.js";
 import { parseTimeoutMs } from "./parse-timeout.js";
 
 export function registerTuiCli(program: Command) {
@@ -60,10 +59,10 @@ export function registerTuiCli(program: Command) {
         }
         const historyLimit = Number.parseInt(String(opts.historyLimit ?? "200"), 10);
 
-        // Opt-in: the pi-free `ink` TUI wired through the `@builderforce/tui` render seam
-        // (PRD 11 §5.1 Stage 4). Reachable today; becomes the default once it reaches
-        // feature parity with the legacy pi-tui `runTui` and `@mariozechner/pi-tui` is dropped.
-        if (process.env.BUILDERFORCE_AGENTS_INK_TUI === "1") {
+        // The pi-free `ink` TUI wired through the `@builderforce/tui` render seam
+        // (PRD 11 §5.1 Stage 4). It is the only TUI now that `@mariozechner/pi-tui`
+        // has been removed; the legacy pi-tui `runTui` was deleted in the migration.
+        {
           const { runInkSession } = await import("../tui/ink-session.js");
           await runInkSession({
             sessionKey: (opts.session as string | undefined)?.trim() || "main",

@@ -13,7 +13,7 @@
  * Idempotent: a second pass finds nothing unbound.
  */
 
-import { selectRecords, type EntityDestination, type LocalFirstStore, type LocalRecord } from '@builderforce/local-first';
+import { SCAN_STOP, selectRecords, type EntityDestination, type LocalFirstStore, type LocalRecord } from '@builderforce/local-first';
 import { queueImport } from './journal';
 import { isOwnRecord, type ChatValue, type MessageValue } from './records';
 import { syncsToPlatform } from './gateLedger';
@@ -28,7 +28,8 @@ export async function bindChatHistoryForSync(store: LocalFirstStore, deviceId: s
   const anything = await store.read(async (tx) => {
     let found = false;
     for (const type of ['chat', 'message', 'usage'] as const) {
-      await tx.scan(type, (row) => { if (unbound(row)) found = true; });
+      if (found) break;
+      await tx.scan(type, (row) => { if (unbound(row)) { found = true; return SCAN_STOP; } });
     }
     return found;
   });

@@ -29,9 +29,14 @@ export interface LocalFirstTransaction {
    * counts or takes a maximum should scan, then clone just what it keeps
    * (`selectRecords`). The rows are the store's own: NEVER mutate or retain one past the
    * callback. The visit is synchronous, so nothing can change under it. `entityType`
-   * undefined visits every row. Rows come in `list` order.
+   * undefined visits every row; a named type reads ONLY that type's rows (a per-type
+   * index), never the other types'. Rows come in `list` order.
+   *
+   * Return the `SCAN_STOP` sentinel from the callback to EXIT EARLY: the scan ends at
+   * that row — a caller that only needs a first match (a pending event, any unbound
+   * row) stops walking instead of visiting the rest.
    */
-  scan<T = unknown>(entityType: LocalEntityType | undefined, visit: (row: Readonly<LocalRecord<T>>) => void): Promise<void>;
+  scan<T = unknown>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void>;
   put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
   /**
    * Remove one local row. A pull tombstone calls this instead of `put`: writing
@@ -50,9 +55,10 @@ export interface LocalFirstTransaction {
   pending(destination?: EntityDestination): Promise<JournalEvent[]>;
   /**
    * `pending` without the clone, in no particular order: the store's own events, never
-   * mutate or retain one. `selectPending` is the cloning, sequence-ordered form.
+   * mutate or retain one. `selectPending` is the cloning, sequence-ordered form. Return
+   * `SCAN_STOP` from the callback to stop at the first match instead of walking the rest.
    */
-  scanPending(visit: (event: Readonly<JournalEvent>) => void, destination?: EntityDestination): Promise<void>;
+  scanPending(visit: ScanPendingVisit, destination?: EntityDestination): Promise<void>;
   acknowledge(eventIds: readonly string[]): Promise<void>;
   putMapping(mapping: ServerMapping): Promise<void>;
   mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
@@ -80,6 +86,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function isJournalEventId(value: unknown): value is string {
   return typeof value === 'string' && UUID.test(value);
 }
+
+/**
+ * The early-exit sentinel a scan visitor returns to STOP the scan at that row.
+ * Returning anything else (including undefined) continues to the next row.
+ */
+export const SCAN_STOP: unique symbol = Symbol.for('builderforce.local-first.scan-stop');
+
+/** What a `scan` / `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
+export type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | typeof SCAN_STOP;
+/** What a `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
+export type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | typeof SCAN_STOP;
 
 export interface LocalFirstSnapshot {
   records: LocalRecord[];

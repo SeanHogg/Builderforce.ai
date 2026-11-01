@@ -28,6 +28,9 @@ export function beginRun(c: RunCell, outcomeKey?: RunKey): void {
   c.codeModel = null;
   c.liveTurn = null;
   c.servedBy = null;
+  // The run starts only after the turn's own row was appended to the transcript —
+  // the optimistic bubble it carried is spent.
+  c.pendingTurn = null;
   c.stoppedTurn = null;
   c.turn = null;
   if (typeof outcomeKey === 'number') c.runId = runOutcomeId(outcomeKey, Date.now());

@@ -11,6 +11,7 @@ import { BrainProvider } from '@seanhogg/builderforce-brain-embedded';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
 import { t, type MessageKey } from '../i18n/t';
 import { liveChats, type LocalChat } from '../store/records';
+import { type BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import { ActionsView } from './ActionsView';
 import { ChatView } from './ChatView';
 import { RovrChatHistory } from './RovrChatHistory';
@@ -58,6 +59,8 @@ export function App() {
 
 function Shell() {
   const services = useServices();
+  const online = useOnline();
+  const signedIn = useSignedIn();
   const [view, setView] = useState<View>('chat');
   const [chatId, setChatId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -68,6 +71,21 @@ function Shell() {
   // row stays in the panel and Archive would look like it did nothing. The flag stays
   // on the record, so the chat is never re-offered and its transcript survives.
   const live = useMemo(() => liveChats(chats), [chats]);
+
+  // The synced server chats, keyed by serverId — the platform rollup (`ticketCount`,
+  // `ticketProgressPct`) the device record does not carry. One list fetch gives every
+  // bound chat's progress for the history rows (the shared row reads the rollup off the
+  // `chat` prop). Refetch whenever the local list changes (a chat just synced/bound).
+  // Offline or signed out the fetch is skipped and rows render title-only, as before.
+  const [serverChats] = useLoaded<ReadonlyMap<number, BrainChat>>(
+    async () => {
+      if (!online || !signedIn) return new Map();
+      const list = await services.api.request<BrainChat[]>('/api/brain/chats').catch(() => [] as BrainChat[]);
+      return new Map(list.map((c) => [c.id, c]));
+    },
+    new Map(),
+    [online, signedIn, live],
+  );
 
   // Open on the most recent chat — once, when the panel first has its list. After that
   // `null` is a deliberate state: the new, not-yet-created chat the header's New chat

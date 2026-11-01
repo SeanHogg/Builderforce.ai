@@ -13,7 +13,7 @@
 
 import { createContext, useContext } from 'react';
 import type { Edge } from '@xyflow/react';
-import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, BrainTraceEvent, PendingTurn, RunServedBy } from '@seanhogg/builderforce-brain-embedded';
 import type { GuestSignupPrompt } from '@/components/GuestSignupCta';
 import type { CreationFlowNode } from './CreationNode';
 import type { BrainDockMode } from './brainDockPreferences';
@@ -47,6 +47,10 @@ export interface BrainSurfaceContextValue {
   running: boolean;
   /** Epoch ms the in-flight turn began, so every surface narrates the same phase. */
   runStartedAt: number | null;
+  /** The run store's view of the run's serving route — the live model indicator. */
+  runServedBy: RunServedBy | null;
+  /** The optimistic bubble the run carries until its transcript row lands. */
+  pendingRunTurn: PendingTurn | null;
   /** The session's run key (`canvasRunKey`) — Stop and tool approvals answer it. */
   runKey: string;
   messages: BrainMessage[];

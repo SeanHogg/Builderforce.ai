@@ -168,7 +168,8 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    * ToolConfirmBar) — reveal it, as a guest wall is revealed, or a board with Brain closed
    * (or presenting) sits on a turn nobody can see is asking. Present mode yields to it.
    */
-  const awaitingApproval = useRunSnapshot(canvasRunKey(sessionId)).pendingConfirm != null;
+  const runSnapshot = useRunSnapshot(canvasRunKey(sessionId));
+  const awaitingApproval = runSnapshot.pendingConfirm != null;
   useEffect(() => { if (awaitingApproval) openBrainDock(); }, [awaitingApproval, openBrainDock]);
   const brainSurfaceOpen = (!presentMode || awaitingApproval) && brainDock.open;
   /**
@@ -268,6 +269,11 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     showExecutionDetail: brainDock.showExecutionDetail,
     running: brainRunning,
     runStartedAt: brainRunShownStartedAt,
+    // The run store's own reading — the optimistic bubble (`setPendingRunTurn` in
+    // `useCanvasBrainTurn`) and the model the in-flight turn was served by, the same
+    // snapshot fields the conversation surfaces serve through `usePendingTurns`.
+    runServedBy: runSnapshot.servedBy ?? null,
+    pendingRunTurn: runSnapshot.pendingTurn ?? null,
     runKey: canvasRunKey(sessionId),
     messages: brainMessages,
     trace: brainTrace,
@@ -286,6 +292,6 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
-  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, brainRefusal, replayBrainMessage, answerBrainQuestion, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
+  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, brainRefusal, replayBrainMessage, answerBrainQuestion, runSnapshot.pendingTurn, runSnapshot.servedBy, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
   return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies, brainRefusal, brainContextUsage };
 }

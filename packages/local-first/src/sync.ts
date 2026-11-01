@@ -9,7 +9,7 @@ import {
 } from './records.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
-import { isJournalEventId, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { isJournalEventId, SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -112,7 +112,7 @@ async function mergePulled(
   const local = await tx.get(remote.entityType, remote.id);
   let hasPending = false;
   await tx.scanPending((event) => {
-    if (event.clientEntityId === remote.id) hasPending = true;
+    if (event.clientEntityId === remote.id) { hasPending = true; return SCAN_STOP; }
   }, destination);
   if (local && hasPending) {
     const conflict: SyncConflict = {

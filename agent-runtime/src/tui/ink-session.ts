@@ -6,9 +6,9 @@
  * the input editor's submits back to `chat.send`.
  *
  * This is the FIRST end-to-end consumer of the render port (PRD 11 §5.1 Stage 4): it does
- * not yet reach feature parity with the legacy pi-tui `tui.ts` (slash-command autocomplete,
- * bash mode, session switching, verbose stats), but it is a complete, runnable ink chat
- * loop — the foundation the remaining `src/tui` surfaces migrate onto. The wiring core
+ * session switching, verbose stats), but it is a complete, runnable ink chat loop. The
+ * legacy pi-tui `tui.ts` and its pi-tui components were removed when the
+ * `@mariozechner/pi-tui` dependency was dropped; this session is the live TUI. The wiring core
  * ({@link wireInkSession}) takes its renderer + client by INJECTION so it is unit-tested
  * headlessly (no TTY).
  */

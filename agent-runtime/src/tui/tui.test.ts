@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getSlashCommands, parseCommand } from "./commands.js";
-import { resolveFinalAssistantText, resolveTuiSessionKey } from "./tui.js";
+import { resolveFinalAssistantText } from "./tui-formatters.js";
+import { resolveTuiSessionKey } from "./tui-types.js";
 
 describe("resolveFinalAssistantText", () => {
   it("falls back to streamed text when final text is empty", () => {

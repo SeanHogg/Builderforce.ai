@@ -65,12 +65,35 @@ export class CommittedState {
   readonly conflicts = new Map<string, SyncConflict>();
   readonly cursors = new Map<string, string>();
   readonly pendingKeys = new PendingKeyIndex();
+  /**
+   * The per-type scan index: record ids by entity type, in committed insertion order.
+   * A `scan(type)` reads ONLY these ids instead of walking every type's rows — reading
+   * one chat's messages out of a whole history costs that type's rows, not the store's.
+   * A row's position follows the records Map exactly: an update keeps its place, a
+   * delete-and-re-add lands at the end (the Set loses the id on delete, re-gains it last).
+   */
+  readonly recordTypes = new Map<string, Set<string>>();
   nextSequence = 1;
+
+  /** Add a row's id to the per-type index. Idempotent: an update keeps its position. */
+  private indexRecord(entityType: string, id: string): void {
+    let ids = this.recordTypes.get(entityType);
+    if (!ids) this.recordTypes.set(entityType, (ids = new Set()));
+    ids.add(id);
+  }
+
+  /** The committed ids of `entityType` in committed order — what a typed scan walks. */
+  typeIds(entityType: LocalEntityType): ReadonlySet<string> | undefined {
+    return this.recordTypes.get(entityType);
+  }
 
   /** Index a snapshot. The rows are adopted, not cloned: nothing mutates a committed row. */
   static from(initial?: Partial<LocalFirstSnapshot>): CommittedState {
     const state = new CommittedState();
-    for (const record of initial?.records ?? []) state.records.set(recordKey(record.entityType, record.id), record);
+    for (const record of initial?.records ?? []) {
+      state.records.set(recordKey(record.entityType, record.id), record);
+      state.indexRecord(record.entityType, record.id);
+    }
     for (const event of initial?.events ?? []) state.events.set(event.eventId, event);
     for (const mapping of initial?.mappings ?? []) state.mappings.set(mappingKey(mapping), mapping);
     for (const receipt of initial?.receipts ?? []) state.receipts.set(receipt.eventId, receipt);
@@ -91,6 +114,7 @@ export class CommittedState {
     if (delta.reset) this.clear();
     for (const gone of delta.deletedRecords ?? []) {
       this.records.delete(recordKey(gone.entityType, gone.id));
+      this.recordTypes.get(gone.entityType)?.delete(gone.id);
       change.record(gone.entityType, gone.id);
     }
     for (const id of delta.acknowledgedEvents ?? []) {
@@ -106,6 +130,7 @@ export class CommittedState {
     }
     for (const record of delta.records ?? []) {
       this.records.set(recordKey(record.entityType, record.id), record);
+      this.indexRecord(record.entityType, record.id);
       change.record(record.entityType, record.id);
     }
     for (const event of delta.events ?? []) {
@@ -150,6 +175,7 @@ export class CommittedState {
 
   private clear(): void {
     this.records.clear();
+    this.recordTypes.clear();
     this.events.clear();
     this.mappings.clear();
     this.receipts.clear();
