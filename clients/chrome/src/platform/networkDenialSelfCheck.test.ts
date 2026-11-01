@@ -65,8 +65,6 @@ describe('gap #6378 packaged network-denial self-check', () => {
     expect(report.skipped).toBe(false);
     expect(report.verified).toBe(true);
     expect(report.failures).toEqual([]);
-    // The refused push added a BLOCKED account record and zero ATTEMPTED ones —
-    // the socket never opened. The non-platform probe does not touch the account.
     expect(report.attemptedDelta).toBe(0);
     expect(report.blockedDelta).toBe(1);
   });
