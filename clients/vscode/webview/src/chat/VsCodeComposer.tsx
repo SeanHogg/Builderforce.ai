@@ -191,9 +191,13 @@ function VsCodeComposerInner(props: VsCodeComposerProps) {
     label: t('app.suggestions', 'Suggested next steps'),
     items: editorStarters(t).map((s) => ({ id: s.id, label: s.label, onSelect: () => onPickStarter(s.prompt) })),
   } : undefined), [suggest, t, onPickStarter]);
-  const placeholder = recipient
-    ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
-    : undefined;
+  // Memoized on the recipient: a re-render that did not change WHO the box is for
+  // (a streamed token, a rail refresh) reuses the string instead of re-running the
+  // replace — the per-keystroke placeholder work that made typing lag.
+  const placeholder = useMemo(
+    () => (recipient ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name) : undefined),
+    [recipient, t],
+  );
   const account = useMemo(
     () => ({ request: apiReq, projectId, locale: init.locale, onUpgrade: openUpgrade, connections }),
     [apiReq, projectId, init.locale, connections],

@@ -2427,6 +2427,9 @@
  * ------------------------------------------------------------------------- */
 .bf-shead {
   flex-shrink: 0;
+  /* Wrap so a host-drawn composer in the context slot (#6430) takes its own full-width
+     row, sending the trailing action buttons onto a line below it. */
+  flex-wrap: wrap;
   display: flex; align-items: center; gap: 4px;
   min-height: 48px; padding: 6px 8px 6px 14px;
   border-bottom: 1px solid var(--bf-border);
@@ -2442,6 +2445,9 @@
 }
 .bf-shead__title { white-space: nowrap; }
 .bf-shead__context { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+/* The composer drawn in the header's context slot (#6430) takes its own full-width row:
+   the flex-wrap sends the trailing buttons below it instead of squeezing them beside. */
+.bf-shead__context > .bf-cmp { flex: 1 1 100%; min-width: 0; }
 .bf-shead__presence { display: flex; align-items: center; flex-shrink: 0; padding-right: 4px; }
 .bf-shead__btn {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;

@@ -15,8 +15,9 @@ export interface SurfaceFooterProps {
   question?: ReactNode;
   /** Live sub-agents and similar strips that belong with the run, above the box. */
   above?: ReactNode;
-  /** The composer (`BrainComposer` through the host's adapter). */
-  composer: ReactNode;
+  /** The composer (`BrainComposer` through the host's adapter). A host that draws the
+   *  composer elsewhere (the VS Code header's context slot, #6430) omits this. */
+  composer?: ReactNode;
   /** A transient one-liner under the box (uploading…). */
   status?: ReactNode;
   /** A quiet note under everything (the AI disclosure). */

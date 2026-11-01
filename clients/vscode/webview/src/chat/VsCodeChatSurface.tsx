@@ -271,6 +271,52 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           version={init.extensionVersion}
           // Only where the board is not drawn above the chat (the sidebar view).
           onVisualize={init.boardBeside ? () => post('visualization.open') : undefined}
+          // The composer lives in the header's context slot (#6430): the prompt sits beside
+          // the BF logo/version, not a separate hero input below the header.
+          context={(
+            <VsCodeComposer
+              composerId={composerId}
+              init={init}
+              apiReq={apiReq}
+              draftStore={draftStore}
+              running={conv.sending}
+              pendingAttachments={conv.pendingAttachments}
+              uploading={conv.uploading}
+              onAttach={conv.attach}
+              onRemoveAttachment={conv.removeAttachment}
+              contextUsage={conv.contextUsage}
+              onSubmit={submit}
+              onQueue={queueAfter}
+              sendSteers={sendSteers}
+              onStop={stop}
+              onPickStarter={pickStarter}
+              focusToken={focusToken}
+              chatId={chatId}
+              projectId={associatedProjectId}
+              ensureChatId={ensureChatId}
+              chatTickets={rail.typeaheadTickets}
+              linkTicket={linkTicket}
+              participants={participants}
+              mentionable={mentionable}
+              hasLiveChildren={liveChildren.length > 0}
+              recipient={recipient}
+              chooseRecipient={chooseRecipient}
+              persona={persona}
+              onPersona={setPersona}
+              personaAgents={personaAgents}
+              queue={queued.items}
+              onRemoveQueued={queued.remove}
+              mode={modeControl}
+              memory={memoryControl}
+              shaping={shaping}
+              models={models}
+              servedModel={servedModel}
+              autoMode={autoModeControl}
+              session={session}
+              // The empty state shows the same starters as tiles.
+              suggest={chatId != null}
+            />
+          )}
         />
       )}
       rail={chatId != null && !historyOpen && railHasContent(serverChatId, activeChat) && (
@@ -359,50 +405,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               labels={askLabels}
               onAnswer={answerQuestion}
               onReveal={revealQuestion}
-            />
-          )}
-          composer={(
-            <VsCodeComposer
-              composerId={composerId}
-              init={init}
-              apiReq={apiReq}
-              draftStore={draftStore}
-              running={conv.sending}
-              pendingAttachments={conv.pendingAttachments}
-              uploading={conv.uploading}
-              onAttach={conv.attach}
-              onRemoveAttachment={conv.removeAttachment}
-              contextUsage={conv.contextUsage}
-              onSubmit={submit}
-              onQueue={queueAfter}
-              sendSteers={sendSteers}
-              onStop={stop}
-              onPickStarter={pickStarter}
-              focusToken={focusToken}
-              chatId={chatId}
-              projectId={associatedProjectId}
-              ensureChatId={ensureChatId}
-              chatTickets={rail.typeaheadTickets}
-              linkTicket={linkTicket}
-              participants={participants}
-              mentionable={mentionable}
-              hasLiveChildren={liveChildren.length > 0}
-              recipient={recipient}
-              chooseRecipient={chooseRecipient}
-              persona={persona}
-              onPersona={setPersona}
-              personaAgents={personaAgents}
-              queue={queued.items}
-              onRemoveQueued={queued.remove}
-              mode={modeControl}
-              memory={memoryControl}
-              shaping={shaping}
-              models={models}
-              servedModel={servedModel}
-              autoMode={autoModeControl}
-              session={session}
-              // The empty state shows the same starters as tiles.
-              suggest={chatId != null}
             />
           )}
         />
