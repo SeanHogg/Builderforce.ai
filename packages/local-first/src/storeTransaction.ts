@@ -12,7 +12,7 @@ import { destinationKey, type EntityDestination, type JournalEvent, type LocalEn
 import type { LocalFirstDelta } from './localFirstDelta.js';
 import { DraftMap } from './draftMap.js';
 import { CommittedState, PendingKeyIndex, mappingKey, recordKey } from './storeState.js';
-import { isJournalEventId, type AppendJournalEvent, type LocalFirstTransaction } from './storeContract.js';
+import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type ScanPendingVisit, type ScanVisit } from './storeContract.js';
 import { clone } from './clone.js';
 
 function hashPayload(payload: unknown): string {
@@ -52,15 +52,34 @@ export class Transaction implements LocalFirstTransaction {
 
   async list<T>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]> {
     const rows: LocalRecord[] = [];
-    for (const record of this.records.values()) {
-      if (!entityType || record.entityType === entityType) rows.push(record);
-    }
+    await this.scan(entityType, (row) => { rows.push(row); });
     return clone(rows) as LocalRecord<T>[];
   }
 
-  async scan<T>(entityType: LocalEntityType | undefined, visit: (row: Readonly<LocalRecord<T>>) => void): Promise<void> {
-    for (const record of this.records.values()) {
-      if (!entityType || record.entityType === entityType) visit(record as LocalRecord<T>);
+  async scan<T>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void> {
+    if (entityType === undefined) {
+      for (const record of this.records.values()) {
+        if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
+      }
+      return;
+    }
+    // Indexed path: read ONLY this type's rows (the per-type index names them in
+    // committed order), never the other types'. Committed rows keep their order; rows
+    // the draft DELETED or RELOCATED (delete + set again, so the base no longer yields
+    // them) are skipped here and visited below, exactly where `values` would put them —
+    // so a typed scan yields in `list` order, same as the old walk-everything loop.
+    // The tail below reads ONLY the draft's tail upserts (isTailKey): iterating
+    // `values()` here would re-yield the base rows the indexed pass already visited.
+    const ids = this.base.typeIds(entityType);
+    if (ids) {
+      for (const id of ids) {
+        if (this.records.isTailKey(recordKey(entityType, id))) continue;
+        const record = this.records.get(recordKey(entityType, id));
+        if (record && visit(record as LocalRecord<T>) === SCAN_STOP) return;
+      }
+    }
+    for (const [key, record] of this.records.upserts()) {
+      if (this.records.isTailKey(key) && record.entityType === entityType && visit(record as LocalRecord<T>) === SCAN_STOP) return;
     }
   }
 
@@ -133,10 +152,12 @@ export class Transaction implements LocalFirstTransaction {
     return clone(rows);
   }
 
-  async scanPending(visit: (event: Readonly<JournalEvent>) => void, destination?: EntityDestination): Promise<void> {
+  async scanPending(visit: ScanPendingVisit, destination?: EntityDestination): Promise<void> {
     const key = destination ? destinationKey(destination) : undefined;
     for (const event of this.events.values()) {
-      if (!key || destinationKey(event.destination) === key) visit(event);
+      if (!key || destinationKey(event.destination) === key) {
+        if (visit(event) === SCAN_STOP) return;
+      }
     }
   }
 

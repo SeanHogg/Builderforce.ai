@@ -4,6 +4,7 @@ import {
   changeTouches,
   createMemoryLocalFirstStore,
   newLocalRecord,
+  SCAN_STOP,
   selectPending,
   selectRecords,
   type AppendJournalEvent,
@@ -83,6 +84,57 @@ describe('copy-on-write transactions', () => {
     const [picked] = await store.read((tx) => selectRecords(tx, 'ticket', (row) => row.id === 'b'));
     expect(picked).toEqual(seen[1]);
     expect(picked).not.toBe(seen[1]);
+  });
+
+  it('typed scan over an EMPTY type touches no rows (the per-type index skips it)', async () => {
+    // Two committed types; scanning the one with zero records must not visit anything —
+    // the per-type index names none, and the draft tail holds no rows of that type.
+    const store = createMemoryLocalFirstStore({ records: [record('a'), record('b')] });
+    let visited = 0;
+    await store.read((tx) => tx.scan('chat', () => { visited += 1; }));
+    expect(visited).toBe(0);
+    // Sanity: the populated type still scans its rows.
+    await store.read((tx) => tx.scan('ticket', () => { visited += 1; }));
+    expect(visited).toBe(2);
+  });
+
+  it('SCAN_STOP ends a typed scan at the first match instead of walking the rest', async () => {
+    const store = createMemoryLocalFirstStore({ records: [record('a'), record('b'), record('c'), record('d')] });
+    const seen: string[] = [];
+    await store.read((tx) => tx.scan('ticket', (row) => {
+      seen.push(row.id);
+      if (row.id === 'b') return SCAN_STOP;
+    }));
+    // Stopped at 'b': never visited 'c' or 'd'.
+    expect(seen).toEqual(['a', 'b']);
+  });
+
+  it('typed scan keeps list order across a delete + re-add (relocated tail), visiting each row once', async () => {
+    const store = createMemoryLocalFirstStore({ records: [record('a'), record('b'), record('c')] });
+    await store.transact(async (tx) => {
+      await tx.delete('ticket', 'b');
+      await tx.put(record('b', 'again'));
+      await tx.put(record('d'));
+    });
+    const seen: string[] = [];
+    await store.read((tx) => tx.scan('ticket', (row) => { seen.push(row.id); }));
+    // Same order `list` produces; no row visited twice.
+    expect(seen).toEqual(['a', 'c', 'b', 'd']);
+  });
+
+  it('SCAN_STOP ends scanPending at the first match', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      await tx.append(event('one'));
+      await tx.append(event('two'));
+      await tx.append(event('three'));
+    });
+    const seen: (string | undefined)[] = [];
+    await store.read((tx) => tx.scanPending((row) => {
+      seen.push(row.idempotencyKey);
+      if (row.idempotencyKey === 'two') return SCAN_STOP;
+    }));
+    expect(seen).toEqual(['one', 'two']);
   });
 
   it('selects pending events by sequence, for one destination', async () => {
