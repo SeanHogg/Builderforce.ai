@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-01 — False "Continue with guidance / Stop the run" pauses (VS Code 2026.10.121 · brain-embedded 2026.10.75 · run-guards 2026.10.5)
+
+All 78 pauses recorded in one operator's chat history were `no_progress`; none came from an undone edit or a repeated failure.
+
+- **Cause.** `NoProgressTracker` counted only a new path, a test write or a changed check, so edits to known source files and mutating commands were idle and a working run tripped after 4 turns. `ProgressDetector.trips` never fell, so three unrelated trips in a long run ended in a pause.
+- **Progress is ground or churn.** Ground is the old rule. Churn is a successful change with a fingerprint not seen before, and read-only shell earns none. `CHURN_TURNS` (12) bounds consecutive churn, and a trip does not clear it, so drift still reaches the pause.
+- **Ladder.** `LADDER_RESET_TURNS` (8) ground turns with no signal clear `trips`; churn cannot. `tripsBySignal` survives the reset in snapshots.
+
 ## ✅ RESOLVED 2026-11-01 — Brain panel controller extracted: `components/brain/hooks` + `captureDiagnostics` now live in `frontend/src/lib/brain` (frontend)
 
 The one Brain panel's controller — `useBrainPanelController` and its twenty focused hooks (chats, conversation turns, participants, models, seeds, capture, banners, …) plus the `captureDiagnosticsBlock` report helper — was embedded under `frontend/src/components/brain`. They now live in `frontend/src/lib/brain/hooks/` (and `lib/brain/captureDiagnostics.ts`), mirroring how the rest of the brain logic (capabilities, seeds, platform actions) is structured; `components/brain` is chrome only. `BrainPanel.tsx` is the seam: it composes the controller hook and hands it to the presentational sections through `BrainPanelContext`. No behaviour change; the three moved render-based hook test files carry the `@vitest-environment jsdom` docblock the vitest config requires for `src/lib`. Type-check (`tsc --noEmit`) and the moved + render-count suites pass.

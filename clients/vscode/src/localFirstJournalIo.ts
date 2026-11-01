@@ -81,6 +81,19 @@ export type TailRead =
   | { kind: "reload" }
   | { kind: "deltas"; deltas: readonly LocalFirstDelta[]; consumedBytes: number };
 
+/** What a compaction's catch-up copied onto the temp: whole frames and the bytes they span. */
+export interface CopiedTail {
+  frames: number;
+  bytes: number;
+}
+
+/**
+ * Copies the COMMITTED journal tail onto the temp. `tempEnd` is where the temp currently ends
+ * (the WRITE offset into the temp); `journalEnd` is where the journal's committed frames end
+ * (the end of the SOURCE range). The SOURCE start is the caller's closure, not an argument.
+ */
+export type CatchUp = (temp: FileHandle, tempEnd: number, journalEnd: number) => Promise<CopiedTail>;
+
 export interface NodeJournalIo {
   readonly journalFile: string;
   /** Read the whole journal without tracking it. Safe without the lock. */
@@ -99,17 +112,13 @@ export interface NodeJournalIo {
   compact(frames: AsyncIterable<Uint8Array>): Promise<void>;
   /**
    * Two-phase compaction's publish step (the lock holder only). `tempPath` is a temp file a
-   * lock-free phase already streamed and FSYNCED; `appendTail` copies the frames appended to
-   * the journal after it was snapshotted onto its end, returning how many frames it added.
+   * lock-free phase already streamed and FSYNCED. `catchUp` copies the committed frames
+   * appended to the journal after it was snapshotted onto the temp's end (see `CatchUp`).
    * The temp is re-fsynced and atomically renamed over the journal, so the rename lands the
-   * new base and the caught-up tail in one step. A failure removes the temp and leaves the
-   * journal untouched.
+   * new base and the caught-up tail in one step. Resolves with the caught-up frame count. A
+   * failure removes the temp and leaves the journal untouched.
    */
-  publishCompacted(
-    tempPath: string,
-    tempFrames: number,
-    appendTail: (handle: FileHandle, position: number) => Promise<number>,
-  ): Promise<number>;
+  publishCompacted(tempPath: string, tempFrames: number, catchUp: CatchUp): Promise<number>;
   /** Remove a temp file a cancelled compaction left behind. */
   discardCompacted(tempPath: string): Promise<void>;
   /** Commit frames and bytes since the last base. */
@@ -128,7 +137,7 @@ function identityOf(stat: nodeFs.Stats): FileIdentity {
   return { ino: stat.ino, birthtimeMs: stat.birthtimeMs };
 }
 
-function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
+export function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
   if (!a || !b) return a === b;
   return a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
 }
@@ -325,20 +334,11 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       opened = true;
       version += 1;
     },
-    /**
-     * Two-phase compaction's publish step, under the lock. `tempPath` is a temp file a
-     * lock-free phase already streamed and FSYNCED (the temp names are unique per streamer,
-     * so two windows never share one). `appendTail` copies the frames appended to the
-     * journal after the temp was snapshotted onto its end (from `position`) and returns how
-     * many frames it added; the whole caught-up tail lands with the rename, atomically. The
-     * temp is re-fsynced after the catch-up before the atomic rename; a failure removes the
-     * temp and leaves the journal untouched.
-     */
-    async publishCompacted(tempPath, tempFrames, appendTail) {
+    async publishCompacted(tempPath, tempFrames, catchUp) {
       let handle: FileHandle | undefined;
       try {
         handle = await fs.open(tempPath, "r+");
-        const caughtFrames = await appendTail(handle, committedBytes);
+        const copied = await catchUp(handle, (await handle.stat()).size, committedBytes);
         // Crash-safety: the caught-up tail is durable only after this fsync; the rename
         // below must never publish frames that can vanish on a crash.
         await handle.sync();
@@ -346,14 +346,15 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         handle = undefined;
         await fs.rename(tempPath, journalFile);
         const stat = await statOrUndefined();
-        committedBytes = (await fs.stat(journalFile)).size;
-        frameCount = tempFrames + caughtFrames;
-        tailFrames = 0;
-        tailBytes = 0;
+        committedBytes = stat?.size ?? 0;
+        frameCount = tempFrames + copied.frames;
+        // The caught-up frames follow the new base, so they are the new tail (as a reopen counts them).
+        tailFrames = copied.frames;
+        tailBytes = copied.bytes;
         identity = stat ? identityOf(stat) : undefined;
         opened = true;
         version += 1;
-        return caughtFrames;
+        return copied.frames;
       } catch (error) {
         if (handle) await handle.close().catch(() => undefined);
         await fs.rm(tempPath, { force: true }).catch(() => undefined);

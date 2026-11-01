@@ -43,7 +43,8 @@ import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalF
 import { LocalFirstStoreCorruptError, quarantineJournal } from "./localFirstCorruption";
 import { chooseRebuildSource, describeRebuild } from "./localFirstRebuild";
 import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
-import { createNodeJournalIo, writeWhole, yieldToEventLoop, type FileIdentity, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import { copyCommittedTail, streamCompactionTemp } from "./localFirstCompaction";
+import { createNodeJournalIo, sameFile, yieldToEventLoop, type FileIdentity, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
   checkSnapshotCache,
   hasLegacyState,
@@ -337,36 +338,6 @@ export function createDurableLocalFirstStore(
   });
 
   /**
-   * Stream the compacted temp file WITHOUT the lock (any number of windows may stream at
-   * once; unique temp names never collide). `snapshotFrames` only READS `source.snapshot`
-   * and yields between frames, so commits may interleave and append to the journal.
-   */
-  const streamCompactionTemp = async (snapshot: LocalFirstSnapshot): Promise<{ path: string; frames: number }> => {
-    await fs.mkdir(directory, { recursive: true });
-    const path = `${journalFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
-    let written = 0;
-    let frames = 0;
-    try {
-      const handle = await fs.open(path, "wx");
-      try {
-        for await (const frame of snapshotFrames(snapshot, yieldToEventLoop)) {
-          await writeWhole(handle, frame, written);
-          written += frame.byteLength;
-          frames += 1;
-        }
-        // Crash-safety: the data must be durable before the rename can ever publish it.
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-    } catch (error) {
-      await fs.rm(path, { force: true });
-      throw error;
-    }
-    return { path, frames };
-  };
-
-  /**
    * Fold the tail into a new base. Two phases so the cross-window lock is held for the
    * rename only, never for the whole rewrite:
    *
@@ -386,20 +357,28 @@ export function createDurableLocalFirstStore(
     if (!shouldCompactJournal(io.tail(), options.compaction)) return;
     void serialized(() => (async () => {
       const source = prepareCompaction();
-      const temporary = await streamCompactionTemp(source);
+      const temporary = await streamCompactionTemp(io.journalFile, source.snapshot);
       try {
         await exclusive(async () => {
-          if (!shouldCompactJournal(io.tail(), options.compaction)) return;
-          await io.compact(temporary, io.frames() - source.baseFrameCount, source.baseEpoch);
+          // `exclusive` has already caught memory up with every frame other windows committed.
+          // Another window compacting changes the file's identity; the temp then folds the
+          // same rows under an older generation, so it is dropped and the open/merge path rules.
+          if (!sameFile(io.identity(), source.baseIdentity) || !shouldCompactJournal(io.tail(), options.compaction)) {
+            await io.discardCompacted(temporary.path);
+            return;
+          }
+          await io.publishCompacted(temporary.path, temporary.frames, (temp, tempEnd, journalEnd) =>
+            copyCommittedTail(io.journalFile, source.baseCommittedBytes, journalEnd, temp, tempEnd));
         });
       } catch (error) {
-        await fs.rm(temporary, { force: true }).catch(() => undefined);
+        await fs.rm(temporary.path, { force: true }).catch(() => undefined);
         throw error;
       }
     })()).catch(onBackgroundError);
   };
 
   const writeCache = async (): Promise<void> => {
+    const temporary = `${snapshotFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     try {
       await fs.mkdir(directory, { recursive: true });
       await fs.writeFile(temporary, JSON.stringify(memory.view()), { encoding: "utf8", flag: "wx" });

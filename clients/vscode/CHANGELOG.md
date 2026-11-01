@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.121] — Fewer false "has this run stalled?" questions
+
+- **A run that is working keeps working.** Real edits to files it has already opened now count as progress, so it no longer stops to ask you how to proceed.
+- **Earlier warnings fade once a run is moving again.** Unrelated hiccups across a long run no longer add up to a question.
+- **Stuck runs are still caught.** A run repeating itself, or making small changes that lead nowhere, still stops and asks.
+
 ## [2026.10.120] — Stop pressed right after Send now actually stops the run
 
 - **Stop no longer gets dropped in the setup window.** Pressing Stop in the moments after you send — before the run's loop has marked itself busy — now still reaches the run and cancels it, instead of being silently ignored. What you type while it stops is still held and sent after.
