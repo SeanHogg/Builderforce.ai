@@ -29,6 +29,7 @@ import { isRouterTool } from '../toolRouter';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
 import { isDedupableRead, type BrainRunContext } from './brainRunContext';
+import { isMutatingPlatformTool } from '../chatWorkLinking';
 import { budgeted, forcedProgressTurn, type ForcedTurn } from './progressBudget';
 import { deviceLeverOn } from './deviceLevers';
 
@@ -47,7 +48,9 @@ export class RunProgressGuard {
   private steer: string | undefined;
 
   constructor(on = deviceLeverOn('a3_progress_detector')) {
-    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation }) : null;
+    this.detector = on
+      ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation, isPlatformProgress: isMutatingPlatformTool })
+      : null;
   }
 
   /** What the turn said before its calls. */

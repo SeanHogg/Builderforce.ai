@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LADDER_RESET_TURNS, ProgressDetector } from "./progressDetector.js";
-import { CHURN_TURNS, NO_PROGRESS_TURNS, NoProgressTracker } from "./noProgress.js";
+import { CHURN_TURNS, NO_PROGRESS_TURNS, REGROUND_TURNS, NoProgressTracker } from "./noProgress.js";
 
 const READS = new Set(["read_file", "search_code"]);
 const ports = { isReadOnly: (tool: string) => READS.has(tool) };
@@ -144,7 +144,63 @@ describe("snapshot round trip", () => {
   });
 });
 
-describe("churn is bounded", () => {
+describe("re-ground: spaced revisits across a wide survey are re-engagement, not circling", () => {
+  it("credits a revisit to a known path after REGROUND_TURNS idle turns", () => {
+    const t = new NoProgressTracker();
+    // Touch the file so it is 'seen', then let REGROUND_TURNS turns pass.
+    t.observe("read_file", { path: "a.ts" }, { ok: true, wrote: false });
+    t.endTurn();
+    for (let i = 0; i < REGROUND_TURNS; i++) {
+      t.observe("run_command", { command: `noop ${i}` }, { ok: true, wrote: true });
+      expect(t.endTurn()).toBe(0); // churn, so not idle
+    }
+    // Revisit after the window: re-ground, so the turn is progress (idle resets).
+    t.observe("read_file", { path: "a.ts" }, { ok: true, wrote: false });
+    expect(t.endTurn()).toBe(0);
+  });
+
+  it("a tight revisit of one file is still caught by circling (VisitTally), not re-ground", () => {
+    const d = new ProgressDetector({}, ports);
+    d.observe("read_file", { path: "a.ts" }, okData);
+    d.endTurn();
+    // Read the SAME file every turn in a tight window: circling_read trips before no_progress.
+    let kinds: Array<string | undefined> = [];
+    for (let i = 0; i < 6; i++) {
+      d.observe("read_file", { path: "a.ts" }, okData);
+      kinds.push(d.endTurn()?.signal.kind);
+    }
+    expect(kinds.some((k) => k === "circling_read")).toBe(true);
+    expect(kinds.filter(Boolean).slice(0, 1)).toEqual(["circling_read"]);
+  });
+});
+
+describe("platform progress: a turn that moved the board is not idle", () => {
+  const platformPorts = { isPlatformProgress: (tool: string) => tool.startsWith("builtin_") };
+
+  it("credits a mutating platform call (ticket update) as progress", () => {
+    const d = new ProgressDetector({}, { ...ports, ...platformPorts });
+    d.observe("read_file", { path: "a.ts" }, okData);
+    d.endTurn();
+    for (let i = 0; i < NO_PROGRESS_TURNS * 2; i++) {
+      d.observe("builtin_tasks_update", { id: 6421, status: "done" }, okData);
+      expect(d.endTurn()).toBeNull();
+    }
+  });
+
+  it("still trips when the platform tool is read-only (a list)", () => {
+    const d = new ProgressDetector({}, { ...ports, ...platformPorts });
+    d.observe("read_file", { path: "a.ts" }, okData);
+    d.endTurn();
+    for (let i = 0; i < NO_PROGRESS_TURNS - 1; i++) {
+      d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
+      expect(d.endTurn()).toBeNull();
+    }
+    d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
+    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+  });
+});
+
+
   function run(d: ProgressDetector, turn: (i: number) => void, turns: number): Array<string | undefined> {
     const kinds: Array<string | undefined> = [];
     for (let i = 0; i < turns; i++) {

@@ -138,6 +138,15 @@ export function isReadOnlyPlatformTool(name: string): boolean {
   return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
 }
 
+/** Mutating PLATFORM tools — ones whose call changes board/project state (a ticket created,
+ *  updated or dispatched; a message sent; a contribution delivered) rather than reading it.
+ *  Read-only classification is by suffix ({@link isReadOnlyPlatformTool}); the mutating set
+ *  is the explicit complement the progress detector needs, so a turn that only moved the
+ *  platform is credited as work, not read as idle. */
+export function isMutatingPlatformTool(name: string): boolean {
+  return name.startsWith('builtin_') && !isReadOnlyPlatformTool(name);
+}
+
 /**
  * Task-tier statuses that mean "not started yet" — mirrors the board's not-started
  * lanes (TaskStatus BACKLOG | TODO | READY). A linked ticket in one of these that a

@@ -153,7 +153,7 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
         // Second check: is code on the base branch?
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        const canComplete = canCompleteTicket(isOnBaseBranch, false); // userDeclinedShipping defaults to false
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged }); // userDeclinedShipping defaults to false; no gitBranch evidence available on the ticket — rely on this run's own writes
         if (!canComplete) {
           const said = notOnBaseBranchAdvisory();
           pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, isOnBaseBranch }, result: said });
