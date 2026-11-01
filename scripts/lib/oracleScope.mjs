@@ -20,6 +20,9 @@ export const GUARDED = [
   /^api\/src\/application\/runtime\/cloudAdapter\.(?:conformance|sharedTask)\.test\.ts$/,
   /^brain-embedded\/src\/run\/parity\//,
   /^brain-embedded\/src\/test\/(?:brainRunHarness|continueHarness|draftHost|engineKit)\.tsx?$/,
+  // The Area R scenarios' harness and the tool-selection suite (with its testkit) that moved onto the agent's selection.
+  /^brain-embedded\/src\/run\/areaR\/harness\.tsx?$/,
+  /^brain-embedded\/src\/selectTools(?:\.pins\.test|\.test|\.testkit)\.tsx?$/,
 ];
 
 /** Stored records, not code: any difference at all (an inserted key, a changed value) fails unless approved. */

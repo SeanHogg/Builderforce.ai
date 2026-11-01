@@ -22,8 +22,10 @@
  *   3. SKIP MARKERS: no test file in the repository may hold more `.skip`/`.only`/`.todo`/`it.fails` markers than the baseline.
  *
  * A file that differs is a failure unless it is import-only or approved (an approval may name how many cases the file may lose).
- * Exit 1 on any failure. A repository where BASE cannot be read (a shallow clone) reports that and passes: a guard never fails a
- * build on its own plumbing.
+ * Exit 1 on any failure. Where BASE cannot be read (a shallow clone), or the diff against it fails, a LOCAL run reports that and passes. In CI
+ * (`CI` set) the same condition FAILS, as does a run without `AGENT_RUN_BASE`: an unreadable base must not pass for a clean range.
+ *   4. BOUND APPROVALS: an approval that carries a `blob` (the git blob hash of the file as it was approved) fails once the file's content
+ *      differs, so a permanent exemption cannot be ridden by a later edit; re-approve it with the new `git hash-object`.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -38,6 +40,9 @@ const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const BROUGHT_ALONG_DIR = 'packages/agent-run/test';
 /** Skip markers the repository holds today (all outside this program's tests). It may only fall. */
 const SKIP_MARKER_BASELINE = 21;
+
+/** True under CI (GitHub Actions sets `CI=true`). */
+const IN_CI = Boolean(process.env.CI) && !['false', '0'].includes(String(process.env.CI).toLowerCase());
 
 const approvedByFile = new Map(APPROVED.map((entry) => [entry.file, entry]));
 
@@ -107,6 +112,16 @@ function lineDiff(before, after) {
 let failures = 0;
 let approvedCount = 0;
 
+/** Something the comparison needs is missing. Locally: say so and skip. In CI: FAIL, so a broken base cannot pass for a clean range. */
+function plumbing(message) {
+  if (IN_CI) {
+    failures += 1;
+    console.log(`  FAIL ${message}`);
+  } else {
+    console.log(`  ${message} - comparison skipped.`);
+  }
+}
+
 /** Compare one test with its oracle and print the verdict. A difference is a failure unless the file is approved within its allowance. */
 function verdict(label, file, oracleText, currentText) {
   const { added, removed } = lineDiff(oracleLines(oracleText), oracleLines(currentText));
@@ -135,8 +150,9 @@ console.log(`check:tests-unchanged (enforced, base=${BASE}, program base=${PROGR
 
 const baseReadable = readable(BASE);
 const programBaseReadable = readable(PROGRAM_BASE);
-if (!baseReadable) console.log(`  Base '${BASE}' is not readable here (shallow clone?) - edited-test comparison skipped.`);
-if (!programBaseReadable) console.log(`  Program base '${PROGRAM_BASE}' is not readable here (shallow clone?) - brought-along comparison skipped.`);
+if (IN_CI && !process.env.AGENT_RUN_BASE) plumbing('CI ran the guard without AGENT_RUN_BASE (the oracle-base step in release.yml resolved no base), so the range would be empty');
+if (!baseReadable) plumbing(`Base '${BASE}' is not readable here (shallow clone?)`);
+if (!programBaseReadable) plumbing(`Program base '${PROGRAM_BASE}' is not readable here (shallow clone?)`);
 
 // 1. EDITED ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 /**
@@ -173,11 +189,14 @@ if (baseReadable) {
     edited = [...oracleEdited(base)].sort();
   } catch {
     diffed = false;
-    console.log(`  Cannot diff against '${BASE}' - edited-test comparison skipped.`);
+    plumbing(`Cannot diff against '${BASE}'`);
   }
   for (const file of edited) {
     const original = at(base, file);
-    if (original === null) continue; // a diff-listed file existed at the base, so this is an unreadable object: nothing to compare with
+    if (original === null) {
+      plumbing(`${file} differs from ${base.slice(0, 9)} but its original cannot be read`);
+      continue;
+    }
     if (!existsSync(resolve(repoRoot, file))) {
       const approval = approvedByFile.get(file);
       if (approval) {
@@ -245,6 +264,24 @@ if (programBaseReadable) {
   } else {
     console.log(`  ok skip markers: ${markers} (baseline ${SKIP_MARKER_BASELINE})`);
   }
+}
+
+// 4. BOUND APPROVALS ─────────────────────────────────────────────────────────────────────────────────────────────────
+{
+  let bound = 0;
+  let mismatched = 0;
+  for (const entry of APPROVED) {
+    if (!entry.blob) continue;
+    bound += 1;
+    const path = resolve(repoRoot, entry.file);
+    const current = existsSync(path) ? git(['hash-object', '--', entry.file]).trim() : null;
+    if (current !== entry.blob) {
+      failures += 1;
+      mismatched += 1;
+      console.log(`  FAIL ${entry.file}: approved at blob ${entry.blob.slice(0, 9)}, now ${current ? current.slice(0, 9) : 'missing'}. The file changed after its approval: review the change and re-approve it in scripts/tests-unchanged.approved.mjs (git hash-object ${entry.file}).`);
+    }
+  }
+  if (mismatched === 0) console.log(`  ok bound approvals: ${bound} approval(s) match their approved content`);
 }
 
 console.log(`  §5.1: only import / vi.mock path changes, or an approved entry in scripts/tests-unchanged.approved.mjs (${approvedCount} approved change(s) matched).`);

@@ -653,7 +653,7 @@ jobs:
           LAST=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha' 2>/dev/null || true)
           if usable "$LAST"; then BASE="$LAST"; echo "Guard base: last successful Release run $BASE"
           elif usable "$BEFORE"; then BASE="$BEFORE"; echo "Guard base: this push's before $BASE (no readable last successful run)"
-          else BASE=""; echo "Guard base: none readable, the guard uses its default"; fi
+          else BASE=""; echo "Guard base: none readable; the guard will FAIL (CI is set)"; fi
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
@@ -680,7 +680,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
           # check:tests-unchanged compares the oracle tests with this commit. Its default (origin/main) IS the pushed HEAD in CI, which
           # would examine nothing; the base chosen by the oracle-base step (last successful Release run) makes it evaluate everything
-          # shipped since the last green release. Empty on the other legs and when no base is readable: the guard falls back to its default.
+          # shipped since the last green release. Empty on the other legs; on this leg an empty value (no base readable) makes the guard FAIL, because CI is set.
           AGENT_RUN_BASE: ${{ steps.oracle-base.outputs.base }}
         run: |
           pnpm install --frozen-lockfile

@@ -39,6 +39,14 @@ test('the kernel, run and conformance tests are guarded', () => {
   assert.equal(isGuarded('brain-embedded/src/test/engineKit.ts', listed), true);
 });
 
+test('the Area R harness and the tool-selection suite are guarded; the selection source itself is not', () => {
+  assert.equal(isGuarded('brain-embedded/src/run/areaR/harness.ts', listed), true);
+  assert.equal(isGuarded('brain-embedded/src/selectTools.test.ts', listed), true);
+  assert.equal(isGuarded('brain-embedded/src/selectTools.pins.test.ts', listed), true);
+  assert.equal(isGuarded('brain-embedded/src/selectTools.testkit.ts', listed), true);
+  assert.equal(isGuarded('brain-embedded/src/selectTools.ts', listed), false);
+});
+
 test('an ordinary test outside the set is free: ordinary feature work is not blocked', () => {
   assert.equal(isGuarded('api/src/application/marketing/campaignEngine.test.ts', listed), false);
   assert.equal(isGuarded('frontend/src/app/page.test.tsx', listed), false);
