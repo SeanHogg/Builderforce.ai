@@ -329,6 +329,50 @@ export interface KimiOAuthResolution {
  * held, the grant is rotated now; any other value means a rotation already happened, so the
  * current token is the answer.
  */
+export async function resolveMiniMaxOAuthResolution(env: Env, tenantId: number, fresh = false, rejected?: string): Promise<{ token: string | null; reason?: ByoUnresolvedReason; expires?: number }> {
+  const row = await loadProviderRow(env, tenantId, 'minimax', fresh);
+  if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
+  let tokens: MinimaxOAuthTokens;
+  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as MinimaxOAuthTokens; }
+  catch { return { token: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
+  const refused = rejected !== undefined && rejected === tokens.access;
+  if (!refused && Date.now() < tokens.expires - OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
+  if (!fresh) return resolveMiniMaxOAuthResolution(env, tenantId, true, rejected);
+  try {
+    const refreshed = await refreshMinimaxToken(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'minimax', refreshed, null);
+    return { token: refreshed.access, expires: refreshed.expires };
+  } catch (e) {
+    if (isRevokedRefresh(e)) return { token: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
+    return { token: null, reason: 'expired' };
+  }
+}
+
+export async function resolveMoonshotOAuthResolution(env: Env, tenantId: number, fresh = false, rejected?: string): Promise<{ token: string | null; reason?: ByoUnresolvedReason; expires?: number }> {
+  const row = await loadProviderRow(env, tenantId, 'moonshot', fresh);
+  if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
+  let tokens: MoonshotOAuthTokens;
+  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as MoonshotOAuthTokens; }
+  catch { return { token: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
+  const refused = rejected !== undefined && rejected === tokens.access;
+  if (!refused && Date.now() < tokens.expires - OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
+  if (!fresh) return resolveMoonshotOAuthResolution(env, tenantId, true, rejected);
+  try {
+    const refreshed = await refreshMoonshotToken(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'moonshot', refreshed, null);
+    return { token: refreshed.access, expires: refreshed.expires };
+  } catch (e) {
+    if (isRevokedRefresh(e)) return { token: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
+    return { token: null, reason: 'expired' };
+  }
+}
+
 export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fresh = false, rejected?: string): Promise<KimiOAuthResolution> {
   const row = await loadProviderRow(env, tenantId, 'kimi', fresh);
   if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
@@ -597,11 +641,14 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, openaiRes, xaiRes, kimiRes, vendorKeys, configured, openRouterConnections, modelSelections] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, kimiRes, minimaxRes, moonshotRes, anthropicRes2, vendorKeys, configured, openRouterConnections, modelSelections] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
     resolveKimiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as KimiOAuthResolution),
+    resolveMiniMaxOAuthResolution(env, tenantId).catch(() => ({ token: null }) as { token: string | null; reason?: ByoUnresolvedReason; expires?: number }),
+    resolveMoonshotOAuthResolution(env, tenantId).catch(() => ({ token: null }) as { token: string | null; reason?: ByoUnresolvedReason; expires?: number }),
+    resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId),
     listOpenRouterConnections(env, tenantId).catch(() => [] as OpenRouterConnection[]),
@@ -616,6 +663,9 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   // two connection styles identically. `resolveTenantVendorKeys` only reads api-key rows,
   // so there is nothing to overwrite: a tenant has one or the other, never both.
   if (kimiRes.token) vendorKeys.kimi = kimiRes.token;
+  // MiniMax and Moonshot OAuth tokens are delivered as vendor keys for consistency.
+  if (minimaxRes.token) vendorKeys.minimax = minimaxRes.token;
+  if (moonshotRes.token) vendorKeys.moonshot = moonshotRes.token;
   // Decrypt the connections' OWN OpenRouter keys only when the (cached) metadata says at least
   // one exists — a tenant with no keyed connection never pays for that read, and neither does
   // one with no connections at all.

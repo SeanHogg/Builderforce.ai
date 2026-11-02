@@ -10,6 +10,7 @@ const {
   deriveProviderKeyHealth,
   providerRequiresLocalEgress,
   resolveProviderKeyHealth,
+  withOtherWorkspaceVerdict,
 } = await import('./providerKeyHealth');
 type ProviderAuthAlert = import('./providerAuthAlerts').ProviderAuthAlert;
 type TenantLlmCredentials = import('./tenantProviderKeyService').TenantLlmCredentials;
@@ -47,6 +48,22 @@ describe('deriveProviderKeyHealth', () => {
 
   it('is not_connected before anything else when no credential row exists', () => {
     expect(deriveProviderKeyHealth({ ...base, configured: false, requiresLocalEgress: true })).toBe('not_connected');
+  });
+});
+
+describe('withOtherWorkspaceVerdict', () => {
+  it('names a tenant mismatch when the provider is not connected here but is in another workspace', () => {
+    expect(withOtherWorkspaceVerdict('not_connected', true)).toBe('other-workspace');
+  });
+
+  it('leaves a plain not_connected alone when it is connected nowhere else', () => {
+    expect(withOtherWorkspaceVerdict('not_connected', false)).toBe('not_connected');
+  });
+
+  it('never overrides a verdict about a credential that exists in THIS workspace', () => {
+    for (const status of ['ready', 'revoked', 'expired', 'capacity', 'needs_attention', 'local_egress_required', 'unavailable'] as const) {
+      expect(withOtherWorkspaceVerdict(status, true)).toBe(status);
+    }
   });
 });
 

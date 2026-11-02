@@ -241,6 +241,9 @@ export async function handleSharedHostMessage(
     case "downloadLocalModel":
       void vscode.commands.executeCommand(DOWNLOAD_LOCAL_MODEL_COMMAND);
       return true;
+    case "connectProvider":
+      void vscode.commands.executeCommand("builderforce.manageByoConnections");
+      return true;
     case "api.failure":
       logLine(apiFailureLine(msg as ApiFailureMessage));
       return true;

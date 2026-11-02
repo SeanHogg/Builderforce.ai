@@ -52,6 +52,9 @@ export const SHARED_HOST_MESSAGES = [
   'setInferenceMode',
   /** Open the model picker's on-device list (the `no_local_model` banner's remedy). */
   'downloadLocalModel',
+  /** Open "Manage Model Provider Connections" (BYO keys) — the signed-out banner's
+   *  "Connect a provider" remedy. Fire-and-forget. */
+  'connectProvider',
   /** Run a PreFetch answer chip's command (`command`, `args`; e.g. Open in graph) — one of
    *  the extension's own commands only. Fire-and-forget. */
   'prefetch.chip',

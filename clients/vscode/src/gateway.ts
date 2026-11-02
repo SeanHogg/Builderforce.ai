@@ -133,6 +133,9 @@ export function getLocalModelsConfig(): LocalModelsConfig {
   // A machine with neither contributes no endpoint and no rows.
   const kimi = kimiSource();
   const synapse = resolveSynapseEndpoint(cfg.get<string>("localModels.synapseUrl") ?? "");
+  // Connected BYO provider endpoints — each provider that has a connected account
+  // with a baseUrl gets its own entry so the probe and picker can offer its models.
+  const byoEndpoints = connectedBYOEndpoints();
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
     // Default ON once local inference is enabled: "local first, failover to cloud" is
@@ -148,9 +151,22 @@ export function getLocalModelsConfig(): LocalModelsConfig {
       // sits inside a config object that gets passed around and logged.
       ...(kimi ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
       ...(synapse ? { synapse } : {}),
+      ...byoEndpoints,
     },
     ...(kimi ? { kimiCodeModels: kimi.models } : {}),
   };
+}
+
+/** Build endpoint entries from every connected BYO provider's credential snapshot. */
+function connectedBYOEndpoints(): Record<string, { baseUrl: string }> {
+  const accounts = connectedAccounts({}, async () => ({}));
+  const out: Record<string, { baseUrl: string }> = {};
+  for (const provider of accounts.providers) {
+    const snapshot = localCredentialSnapshot(provider);
+    if (!snapshot || !snapshot.baseUrl) continue;
+    out[provider] = { baseUrl: snapshot.baseUrl };
+  }
+  return out;
 }
 
 /** Where this machine's Kimi endpoint and models come from right now, or null. */

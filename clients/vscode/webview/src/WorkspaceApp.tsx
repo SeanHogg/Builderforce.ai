@@ -35,6 +35,7 @@ import { CanvasBoundary } from './CanvasBoundary';
 import { HostScopeProviders } from './canvas/HostScopeProviders';
 import { CanvasScreenProviders, canvasMessages } from './canvas/CanvasScreenProviders';
 import { makeT } from './chat/chatLabels';
+import { rootGate } from './signedOutGate';
 import { VsCodeChatSurface } from './chat/VsCodeChatSurface';
 import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
@@ -101,18 +102,12 @@ export function WorkspaceApp() {
   // Only `!signedIn` is the sign-in wall. `signedIn && !hasToken` is a transient
   // (Connecting… + refreshToken above), NOT another prompt to sign in — conflating
   // them was the Evermind "Sign in" / status "signed in" mismatch.
-  if (!init.signedIn && !init.localRoute) {
-    return (
-      <div className="bf-center">
-        <p>{t('app.signInPrompt', 'Sign in to BuilderForce to start.')}</p>
-        <button className="bf-btn bf-btn--primary" onClick={() => post('signin')}>
-          {t('app.signIn', 'Sign in')}
-        </button>
-      </div>
-    );
-  }
-  if (init.signedIn && !hasToken && !init.localRoute) {
-    if (!tokenFailed) return <div className="bf-center">{t('app.connecting', 'Connecting…')}</div>;
+  // SIGNED OUT IS NOT A WALL (offline-first): the chat renders and runs on whatever local /
+  // BYO route exists; with none, `VsCodeChatNotices` shows an inline banner offering
+  // Sign in / Connect a provider / Use a local model. See `signedOutGate.ts`.
+  const gate = rootGate({ signedIn: init.signedIn, hasToken, localRoute: !!init.localRoute, tokenFailed });
+  if (gate !== 'ready') {
+    if (gate === 'connecting') return <div className="bf-center">{t('app.connecting', 'Connecting…')}</div>;
     return (
       <div className="bf-center">
         <p>{t('app.connectFailed', "Couldn't reach BuilderForce. Check your connection and try again.")}</p>

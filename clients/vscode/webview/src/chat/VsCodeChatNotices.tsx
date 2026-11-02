@@ -25,6 +25,7 @@ import { invalidatePlanSnapshot } from '../planSnapshot';
 import { post, refreshToken, type InitData, type LabelBundle } from '../vscodeBridge';
 import { chatErrorLabels, makeT } from './chatLabels';
 import { modelRemedies } from './inferenceModeOption';
+import { SignedOutBanner } from './SignedOutBanner';
 
 export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundle, init, composerId }: {
   conv: UseBrainConversation;
@@ -48,6 +49,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
 
   return (
     <>
+      {init && <SignedOutBanner init={init} />}
       {byo.show && (
         <ChatErrorBanner
           className="bf-notice"

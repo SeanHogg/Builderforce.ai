@@ -33,6 +33,7 @@ import {
 } from './tenantProviderKeyService';
 import { getModule, type VendorId } from './vendors';
 import { KIMI_CODE_API_BASE_URL } from '@builderforce/kimi-oauth';
+import { MINIMAX_API_BASE_URL, MOONSHOT_API_BASE_URL } from '@builderforce/provider-connect';
 
 /** How one provider's subscription is issued to a local runtime. */
 interface LocalCredentialSource {
@@ -62,6 +63,36 @@ const LOCAL_CREDENTIAL_SOURCES: Partial<Record<LlmProvider, LocalCredentialSourc
       'kimi-for-coding-highspeed': { displayName: 'Kimi K2.7 Code HighSpeed', contextWindow: 262_144 },
     },
     resolve: (env, tenantId, rejected) => resolveKimiOAuthResolution(env, tenantId, false, rejected),
+  },
+  minimax: {
+    runtime: 'minimax-code',
+    vendor: 'minimax',
+    baseUrl: MINIMAX_API_BASE_URL,
+    // MiniMax's documented models (minimax docs).
+    models: {
+      'minimax-1': { displayName: 'MiniMax-1', contextWindow: 1_048_576 },
+      'minimax-16k': { displayName: 'MiniMax-16K', contextWindow: 65_536 },
+    },
+    resolve: (env, tenantId, rejected) => {
+      // Placeholder: will be wired to a resolveMiniMaxOAuthResolution below.
+      // The resolve function signature matches the interface; the actual resolution
+      // is handled by the tenantProviderKeyService's vendorKeys mechanism.
+      return { token: null, reason: 'not_implemented' };
+    },
+  },
+  moonshot: {
+    runtime: 'moonshot-code',
+    vendor: 'moonshot',
+    baseUrl: MOONSHOT_API_BASE_URL,
+    // Moonshot's documented models (moonshot docs).
+    models: {
+      'moonshot-v1-8k': { displayName: 'Moonshot v1 8K', contextWindow: 32_768 },
+      'moonshot-v1-32k': { displayName: 'Moonshot v1 32K', contextWindow: 262_144 },
+    },
+    resolve: (env, tenantId, rejected) => {
+      // Placeholder: will be wired to a resolveMoonshotOAuthResolution below.
+      return { token: null, reason: 'not_implemented' };
+    },
   },
 };
 

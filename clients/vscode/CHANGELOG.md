@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [Unreleased] — Signing in is optional
+
+- **Signed out is no longer a wall.** The chat panel and sidebar work without an account: chat with a local model or your own provider keys; with no route available, an inline banner offers Sign in, Connect a provider, or Use a local model instead of replacing the chat.
+
 ## [2026.10.125] — A run that keeps re-reading the same thing is told to move on
 
 - **The no-progress breaker actually fires now.** A run whose calls keep being answered from its own read cache is circling, and the counter that catches it is now the single instance the Brain feeds and the kernel persists — a duplicate the Brain never updated meant the breaker could not fire across a step yield. The agent is steered to change something or hand off, instead of repeating the same read.

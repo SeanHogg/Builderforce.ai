@@ -15,6 +15,9 @@ export function authLabels(): Record<string, string> {
   return {
     "app.signInPrompt": t("Sign in to BuilderForce to start."),
     "app.signIn": t("Sign in"),
+    "app.signedOutBanner": t("You're not signed in. You can still chat with a local model or your own provider keys."),
+    "app.connectProvider": t("Connect a provider"),
+    "app.useLocalModel": t("Use a local model"),
     "app.connecting": t("Connecting…"),
     "app.connectFailed": t("Couldn't reach BuilderForce. Check your connection and try again."),
     "app.retry": t("Retry"),

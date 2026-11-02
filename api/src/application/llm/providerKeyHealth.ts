@@ -89,6 +89,20 @@ export function deriveProviderKeyHealth(facts: ProviderKeyHealthFacts): Provider
   return 'ready';
 }
 
+/**
+ * The status the READ answers once it knows whether the same person connected this
+ * provider in ANOTHER workspace. Only a provider that is `not_connected` here is
+ * re-labelled — it names the real cause (a tenant mismatch) rather than "not connected".
+ * Any other verdict (revoked, ready, …) is about a credential that exists in THIS
+ * workspace and is left alone.
+ */
+export function withOtherWorkspaceVerdict(
+  status: ProviderKeyHealthStatus,
+  connectedElsewhere: boolean,
+): ProviderKeyHealthStatus {
+  return status === 'not_connected' && connectedElsewhere ? 'other-workspace' : status;
+}
+
 export interface ProviderKeyHealthInputs {
   details: ProviderKeySummary[];
   creds: TenantLlmCredentials;

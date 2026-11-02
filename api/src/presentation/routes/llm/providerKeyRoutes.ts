@@ -20,6 +20,7 @@ import {
   setTenantProviderKey,
   resolveTenantLlmCredentials,
   listTenantProviderKeys,
+  providersConnectedInOtherWorkspaces,
   deleteTenantProviderKey,
   isSupportedProvider,
 } from '../../../application/llm/tenantProviderKeyService';
@@ -27,7 +28,7 @@ import { USAGE_WINDOW_DAYS } from '../../../application/llm/openRouterConnection
 import { listByoPrecedence, parsePrecedenceRef, setByoPrecedence } from '../../../application/llm/byoPrecedence';
 import { clearProviderAuthAlert, loadProviderAuthAlert } from '../../../application/llm/providerAuthAlerts';
 import { probeByoProvider } from '../../../application/llm/byoCredentialHealth';
-import { resolveProviderKeyHealth } from '../../../application/llm/providerKeyHealth';
+import { resolveProviderKeyHealth, withOtherWorkspaceVerdict } from '../../../application/llm/providerKeyHealth';
 import { composeSelfHostedCredential, isLocalRuntimeProvider } from '../../../application/llm/selfHostedCredential';
 import { byoProviderUsage30d, byoUsageByProvider } from '../../../application/llm/gatewayUsageLog';
 import { mountProviderModelRoutes } from '../providerModelRoutes';
@@ -93,7 +94,15 @@ export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
     // decrypts but is refused upstream is not ready, and neither is one whose vendor is
     // reachable only from a runtime of the tenant's own while none is online — the read
     // used to say `ready` there while the Test button, one line below, said otherwise.
-    const { status, configured, usable } = await resolveProviderKeyHealth(c.env, access.tenantId, provider, { details, creds, authAlert });
+    const health = await resolveProviderKeyHealth(c.env, access.tenantId, provider, { details, creds, authAlert });
+    const { configured, usable } = health;
+    // Not connected HERE, but the same person connected it in ANOTHER workspace: say so,
+    // so the editor's preflight banner names the real cause (a tenant mismatch) instead of
+    // silence. One indexed read, made only for the not-connected case and only for a user.
+    const elsewhere = health.status === 'not_connected' && access.userId
+      ? (await providersConnectedInOtherWorkspaces(c.env, access.userId, access.tenantId, [provider])).includes(provider)
+      : false;
+    const status = withOtherWorkspaceVerdict(health.status, elsewhere);
     const usage = await byoProviderUsage30d(c.env, access.tenantId, provider);
     return c.json({
       provider, configured, usable, status,
