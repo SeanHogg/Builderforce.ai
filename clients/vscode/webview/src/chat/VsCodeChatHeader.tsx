@@ -5,7 +5,7 @@
  * is the standard History lever, which swaps the body to the shared history list.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import { HeaderIcon, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import { post, type LabelBundle } from '../vscodeBridge';
 import { makeT, surfaceHeaderLabels } from './chatLabels';
@@ -28,12 +28,9 @@ export interface VsCodeChatHeaderProps {
   version?: string;
   /** Opens the visualization beside the chat — given only where the board is not drawn here. */
   onVisualize?: () => void;
-  /** The composer, drawn in the header's shrinkable context slot (ticket #6430): the prompt
-   *  sits beside the BF logo/version instead of a separate hero input below the header. */
-  context?: ReactNode;
 }
 
-export function VsCodeChatHeader({ running, copy, history, onNewChat, bundle, version, onVisualize, context }: VsCodeChatHeaderProps) {
+export function VsCodeChatHeader({ running, copy, history, onNewChat, bundle, version, onVisualize }: VsCodeChatHeaderProps) {
   const t = makeT(bundle);
   const headerLabels = useMemo(() => surfaceHeaderLabels(bundle), [bundle]);
   const copyLabel = copy.state === 'error'
@@ -46,7 +43,6 @@ export function VsCodeChatHeader({ running, copy, history, onNewChat, bundle, ve
     <SurfaceHeader
       title={null}
       running={running}
-      context={context}
       actions={(
         <>
           {version && (

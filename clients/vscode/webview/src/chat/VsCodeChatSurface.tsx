@@ -271,52 +271,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           version={init.extensionVersion}
           // Only where the board is not drawn above the chat (the sidebar view).
           onVisualize={init.boardBeside ? () => post('visualization.open') : undefined}
-          // The composer lives in the header's context slot (#6430): the prompt sits beside
-          // the BF logo/version, not a separate hero input below the header.
-          context={(
-            <VsCodeComposer
-              composerId={composerId}
-              init={init}
-              apiReq={apiReq}
-              draftStore={draftStore}
-              running={conv.sending}
-              pendingAttachments={conv.pendingAttachments}
-              uploading={conv.uploading}
-              onAttach={conv.attach}
-              onRemoveAttachment={conv.removeAttachment}
-              contextUsage={conv.contextUsage}
-              onSubmit={submit}
-              onQueue={queueAfter}
-              sendSteers={sendSteers}
-              onStop={stop}
-              onPickStarter={pickStarter}
-              focusToken={focusToken}
-              chatId={chatId}
-              projectId={associatedProjectId}
-              ensureChatId={ensureChatId}
-              chatTickets={rail.typeaheadTickets}
-              linkTicket={linkTicket}
-              participants={participants}
-              mentionable={mentionable}
-              hasLiveChildren={liveChildren.length > 0}
-              recipient={recipient}
-              chooseRecipient={chooseRecipient}
-              persona={persona}
-              onPersona={setPersona}
-              personaAgents={personaAgents}
-              queue={queued.items}
-              onRemoveQueued={queued.remove}
-              mode={modeControl}
-              memory={memoryControl}
-              shaping={shaping}
-              models={models}
-              servedModel={servedModel}
-              autoMode={autoModeControl}
-              session={session}
-              // The empty state shows the same starters as tiles.
-              suggest={chatId != null}
-            />
-          )}
         />
       )}
       rail={chatId != null && !historyOpen && railHasContent(serverChatId, activeChat) && (
@@ -384,6 +338,53 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}
       footer={(
         <SurfaceFooter
+          // The composer belongs in the footer — the prompt is the conversation's
+          // input, not header chrome. (#6430 moved it into the header's context
+          // slot; that is reverted here.)
+          composer={(
+            <VsCodeComposer
+              composerId={composerId}
+              init={init}
+              apiReq={apiReq}
+              draftStore={draftStore}
+              running={conv.sending}
+              pendingAttachments={conv.pendingAttachments}
+              uploading={conv.uploading}
+              onAttach={conv.attach}
+              onRemoveAttachment={conv.removeAttachment}
+              contextUsage={conv.contextUsage}
+              onSubmit={submit}
+              onQueue={queueAfter}
+              sendSteers={sendSteers}
+              onStop={stop}
+              onPickStarter={pickStarter}
+              focusToken={focusToken}
+              chatId={chatId}
+              projectId={associatedProjectId}
+              ensureChatId={ensureChatId}
+              chatTickets={rail.typeaheadTickets}
+              linkTicket={linkTicket}
+              participants={participants}
+              mentionable={mentionable}
+              hasLiveChildren={liveChildren.length > 0}
+              recipient={recipient}
+              chooseRecipient={chooseRecipient}
+              persona={persona}
+              onPersona={setPersona}
+              personaAgents={personaAgents}
+              queue={queued.items}
+              onRemoveQueued={queued.remove}
+              mode={modeControl}
+              memory={memoryControl}
+              shaping={shaping}
+              models={models}
+              servedModel={servedModel}
+              autoMode={autoModeControl}
+              session={session}
+              // The empty state shows the same starters as tiles.
+              suggest={chatId != null}
+            />
+          )}
           // The chat's live sub-agents: who works for whom, and the owner's levers.
           above={<SubagentStrip chatId={chatId} labels={init.labels} liveLabels={tlLabels.live} />}
           confirm={conv.pendingConfirm && (

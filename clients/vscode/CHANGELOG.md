@@ -2,10 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.10.123] — The prompt lives in the header, and typing keeps up
+## [2026.10.123] — The prompt returns to the footer, and typing keeps up
 
-- **"What are we working on?" now sits in the panel header.** The composer moved out of the footer into the header beside the BuilderForce logo and version, so the empty chat no longer shows a separate hero input below the header. The action buttons wrap onto their own row under the prompt.
-- **Typing in the prompt is responsive again.** The recipient placeholder ("Message {name}…") is computed once per recipient instead of on every keystroke, removing the per-keystroke lag that had crept back into the composer.
+- **The prompt lives in the footer again.** The composer moved back out of the panel header (where #6430 had put it) into the footer's composer slot, so the input sits with the conversation instead of beside the logo.
+- **Typing in the prompt is responsive again.** The recipient placeholder ("Message {name}…") is computed once per recipient instead of on every keystroke, and the per-keystroke lag that had crept back into the composer is removed.
 
 ## [2026.10.122] — A folder review keeps its place
 
