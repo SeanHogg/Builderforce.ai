@@ -36,6 +36,8 @@ export interface LateRepushLimit {
   allow(): boolean;
   /** A build finished; one with no late step resets the count. */
   built(hadLate: boolean): void;
+  /** Start afresh: a user- or host-initiated push (not itself a late re-push). */
+  reset(): void;
 }
 
 export function createLateRepushLimit(max: number = MAX_LATE_REPUSHES): LateRepushLimit {
@@ -43,6 +45,7 @@ export function createLateRepushLimit(max: number = MAX_LATE_REPUSHES): LateRepu
   return {
     allow: () => used < max && ++used > 0,
     built: (hadLate) => { if (!hadLate) used = 0; },
+    reset: () => { used = 0; },
   };
 }
 
@@ -67,7 +70,10 @@ export function createInitBudget(onLate?: () => void, budgetMs: number = INIT_ST
     async step<T>(name: string, work: Promise<T>, fallback: T, answered: (value: T) => boolean = () => true): Promise<T> {
       const started = Date.now();
       let settled = false;
-      const landed = work.then((value) => { settled = true; return answered(value); }, () => { settled = true; return false; });
+      const landed = work.then(
+        (value) => { settled = true; return answered(value); },
+        (error: unknown) => { settled = true; logLine(`[init] ${name} failed: ${error instanceof Error ? error.message : String(error)}`); return false; },
+      );
       const value = await withinMs(work, budgetMs, fallback);
       if (!settled) {
         anyLate = true;

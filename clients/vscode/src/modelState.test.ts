@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("vscode", () => ({
   EventEmitter: class {
@@ -26,6 +26,10 @@ const memento = () => {
 // only in memory did not, so Specific came back with nothing picked and every turn failed
 // `no_specific_model` while the `/` menu still showed Kimi K3.
 describe("the model pick survives a reload", () => {
+  // `modelState` pulls in the whole brain-embedded bundle (real, not mocked): cold, under a
+  // combined run's load, that first import outlasts a test's 5 s and strands its async
+  // body, which then binds a store on a module the NEXT test shares. Warm it once, outside any test.
+  beforeAll(async () => { await import("@seanhogg/builderforce-brain-embedded"); }, 120_000);
   beforeEach(() => vi.resetModules());
 
   it("restores the saved pick at activation", async () => {

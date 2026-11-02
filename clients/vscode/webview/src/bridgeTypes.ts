@@ -65,6 +65,8 @@ export interface InitData {
   /** Degraded frame: the route is still resolving and the saved pick is an on-device model, so the
    *  panel renders (no account needed) instead of waiting on a token it does not need. */
   localPick?: true;
+  /** The tenant this frame is for (absent before the first mint). */
+  tenantId?: number;
   grounding?: string;
   signedIn: boolean;
   /** The configured `builderforce.permissionMode`, as a boolean: the standing answer to

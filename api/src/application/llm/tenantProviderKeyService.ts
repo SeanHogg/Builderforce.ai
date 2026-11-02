@@ -597,12 +597,11 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, openaiRes, xaiRes, kimiRes, anthropicRes2, vendorKeys, configured, openRouterConnections, modelSelections] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, kimiRes, vendorKeys, configured, openRouterConnections, modelSelections] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
     resolveKimiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as KimiOAuthResolution),
-    resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId),
     listOpenRouterConnections(env, tenantId).catch(() => [] as OpenRouterConnection[]),

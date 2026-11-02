@@ -77,3 +77,23 @@ describe("createLateRepushLimit", () => {
     expect(limit.allow()).toBe(true);
   });
 });
+
+describe("createLateRepushLimit.reset", () => {
+  it("a user- or host-initiated push starts the budget afresh even while a step stays slow", () => {
+    const limit = createLateRepushLimit(1);
+    expect(limit.allow()).toBe(true);
+    limit.built(true);
+    expect(limit.allow()).toBe(false);
+    limit.reset();
+    expect(limit.allow()).toBe(true);
+  });
+});
+
+describe("a step that rejects", () => {
+  it("falls back and names the failure in the log", async () => {
+    logLine.mockReset();
+    const budget = createInitBudget(undefined, 50);
+    expect(await budget.step("modelRoute", Promise.reject(new Error("no route")), "fallback")).toBe("fallback");
+    expect(logLine).toHaveBeenCalledWith("[init] modelRoute failed: no route");
+  });
+});

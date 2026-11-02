@@ -216,8 +216,10 @@ export class WorkspaceSurface implements vscode.Disposable {
     );
   }
 
-  /** Re-push init (token / project / model / labels). */
+  /** Re-push init (token / project / model / labels). A user- or host-initiated push starts
+   *  the late re-push budget afresh; a late re-push itself goes through `sendInit` directly. */
   refresh(): void {
+    this.lateRepush.reset();
     void this.sendInit();
   }
 
@@ -266,6 +268,7 @@ export class WorkspaceSurface implements vscode.Disposable {
           : hostPageEngines.attach({ post: (m) => this.post(m) });
         // A reloaded webview abandoned any model load it was streaming.
         hooks.modelFiles?.release(this);
+        this.lateRepush.reset();
         await this.sendInit();
         if (this.pendingIntent) {
           this.sendIntent(this.pendingIntent);
@@ -550,8 +553,9 @@ export class WorkspaceSurface implements vscode.Disposable {
         surface: this.surfaceRequest,
         boardBeside: !!this.host.boardBeside,
         // Only the newest init re-pushes: a superseded build's callback would post a duplicate.
-        onLate: () => { if (live.has(this) && seq === this.initSeq && this.lateRepush.allow()) this.refresh(); },
-        onBuilt: (hadLate) => this.lateRepush.built(hadLate),
+        onLate: () => { if (live.has(this) && seq === this.initSeq && this.lateRepush.allow()) void this.sendInit(); },
+        // A superseded build says nothing about the newest one.
+        onBuilt: (hadLate) => { if (seq === this.initSeq) this.lateRepush.built(hadLate); },
       });
       if (seq !== this.initSeq) return this.latestInit;
       this.post(this.host.frame ? this.host.frame(init) : init);

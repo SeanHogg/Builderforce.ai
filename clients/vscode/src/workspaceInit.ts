@@ -5,16 +5,17 @@ import { JOURNAL_FILE } from "./localFirstJournalIo";
 import { listLocalModels, localModelOptions } from "./localModels";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "@builderforce/agent-tools/node-posix-shell";
-import { getTenantJwt, getCurrentUserId } from "./bfApi";
+import { getTenantJwt, getCurrentUserId, signedInTenantId } from "./bfApi";
 import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY } from "./gateway";
 import { fetchPersonalityBlock } from "./personalityLimbic";
 import { INIT_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
 import { getEditorContext, getEditorContextLive } from "./editorContext";
-import { clientPinOf } from "@builderforce/local-inference";
+import { initFrameAuth } from "./initFrameAuth";
 import { detectPendingChanges, EMPTY_CHANGE_SET } from "./gitChanges";
 import { resolveModelRoute, type ModelRoute } from "./modelRouting";
 import { pickedChoice } from "./modelState";
 import { createInitBudget } from "./initBudget";
+import { ttlCache } from "./ttlCache";
 import { localModelLabels } from "./localModelLabels";
 import { inferenceModeLabels } from "./inferenceModeLabels";
 import { currentInferenceMode, inferenceModeInit } from "./inferenceModeSetting";
@@ -86,7 +87,7 @@ export async function buildWorkspaceInit(
     // composer's menu is built from the gateway catalogue, which by definition cannot
     // know about them — so without this the panel offered no way to pick one and the
     // feature existed only in the command palette.
-    budget.step("localModels", listLocalModels(getLocalModelsConfig()).then(localModelOptions), []),
+    budget.step("localModels", localModelRowsNow(), []),
     // What is uncommitted RIGHT NOW. Seeds the chat's pending-changes bar so a panel
     // opened after the edits still says they are waiting; refreshed via
     // `pendingChanges` messages.
@@ -94,8 +95,6 @@ export async function buildWorkspaceInit(
   ]);
   const grounding = await groundingP;
   opts.onBuilt?.(budget.hadLate());
-  // The route is still resolving and the saved pick is an on-device model: let the panel render.
-  const localPick = modelChoice === fallbackRoute && !!clientPinOf(modelChoice.model);
   return {
     type: "init",
     baseUrl: getBaseUrl(),
@@ -118,10 +117,8 @@ export async function buildWorkspaceInit(
     chatHistoryPath: path.join(ctx.globalStorageUri.fsPath, JOURNAL_FILE),
     platformPolicy: platformPolicy().snapshot(),
     ...inferenceModeInit(),
-    // OMITTED (not null) when signed in without one yet: a degraded frame must not wipe the
-    // webview's live token (bridgeState keeps it); explicit null means signed out.
-    ...(signedIn && token === null ? {} : { token }),
-    ...(localPick ? { localPick: true } : {}),
+    // token / tenantId / localPick: see `initFrameAuth`.
+    ...initFrameAuth({ signedIn, token, tenantId: signedInTenantId(), routeDegraded: modelChoice === fallbackRoute, model: modelChoice.model }),
     // Manual pick > active project's Evermind pin > configured default. Sending the
     // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
     // model on every completion (auto-following learning bumps mid-session).
@@ -178,6 +175,23 @@ export async function buildWorkspaceInit(
     // How an attached picture is prepared for the model (`builderforce.images.*`).
     images: imagePrepSettings(),
   };
+}
+
+type LocalModelRows = ReturnType<typeof localModelOptions>;
+const localModelRows = ttlCache<string, Promise<LocalModelRows>>(5_000);
+
+/**
+ * The probe is fresh per build, so a build that gave up on it would make the late re-push
+ * probe AGAIN and maybe time out again. Memoized for a few seconds, from when it LANDS, so
+ * the re-push reads the answer that arrived.
+ */
+function localModelRowsNow(): Promise<LocalModelRows> {
+  const hit = localModelRows.get("rows");
+  if (hit) return hit.value;
+  const probe = listLocalModels(getLocalModelsConfig()).then(localModelOptions);
+  localModelRows.set("rows", probe);
+  probe.then(() => localModelRows.set("rows", probe), () => localModelRows.invalidate("rows"));
+  return probe;
 }
 
 /** The route to show while the real one resolves: the saved pick, read with no network. */

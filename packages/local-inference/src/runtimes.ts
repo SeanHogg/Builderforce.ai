@@ -15,14 +15,7 @@
  * plan and the catalog binding all read the fields below.
  */
 
-export type LocalRuntimeId =
-  | 'synapse'
-  | 'ollama'
-  | 'freetoken'
-  | 'bfi'
-  | 'webllm'
-  | 'browser'
-  | 'kimi-code';
+export type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'bfi' | 'webllm' | 'browser' | 'kimi-code';
 
 /**
  * Where a runtime's calls go, and what (if anything) authenticates them. An on-device

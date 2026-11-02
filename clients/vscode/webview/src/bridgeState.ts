@@ -13,6 +13,8 @@ import type { BrainIntent, InitData } from './bridgeTypes';
 import { handleFrame, request, subscribe } from './bridgeTransport';
 
 let token: string | null = null;
+/** The tenant the held token was issued for, when a frame said so (else unknown). */
+let tokenTenant: number | undefined;
 /** The latest tenant token (refreshed by the host). transport.getToken reads this. */
 export const getToken = (): string | null => token;
 
@@ -107,7 +109,16 @@ export function refreshToken(): Promise<void> {
 handleFrame('init', (m) => {
   // A frame that OMITS `token` is degraded (the host's mint was late): the live token stays.
   // An explicit `null` is the host saying signed out.
-  if ('token' in m) token = (m.token as string | null | undefined) ?? null;
+  const frameTenant = typeof m.tenantId === 'number' ? m.tenantId : undefined;
+  if ('token' in m) {
+    token = (m.token as string | null | undefined) ?? null;
+    tokenTenant = token ? frameTenant : undefined;
+  } else if (token && frameTenant !== undefined && tokenTenant !== undefined && tokenTenant !== frameTenant) {
+    // A workspace switch / re-key: the held token is the OLD tenant's. Drop it so the
+    // root mints a fresh one rather than reading another tenant's data.
+    token = null;
+    tokenTenant = undefined;
+  }
   initData = m as unknown as InitData;
   editorContext = initData.editorContext;
   pendingChanges = initData.pendingChanges;

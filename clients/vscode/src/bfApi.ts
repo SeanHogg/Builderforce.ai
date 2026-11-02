@@ -12,6 +12,7 @@ export {
   probeEditorKey,
   refreshTenantJwt,
   setSelectedWorkspace,
+  signedInTenantId,
   workspaceTenantId,
 } from "./bfApi/session";
 

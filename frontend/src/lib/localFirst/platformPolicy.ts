@@ -45,6 +45,7 @@ import {
   type PlatformRequestRecord,
 } from '@builderforce/local-first';
 import { isSessionStorageKey } from '../auth';
+import { reportBackgroundFailure } from '../reportError';
 import { bootWebHostStore, type BootWebHostOptions, type WebHostBoot } from './bootWebHost';
 import {
   runWebNetworkDenialSelfCheckOnce,
@@ -204,7 +205,7 @@ export function bootWebPlatformPolicy(): void {
   // NODE_ENV=test), so tests boot the policy without paying for the probe.
   if (process.env.NODE_ENV === 'production') {
     runWebNetworkDenialSelfCheckOnce().catch((error: unknown) => {
-      console.error(`BuilderForce web network-denial self-check: crashed — ${String(error)}`);
+      void reportBackgroundFailure({ message: `BuilderForce web network-denial self-check: crashed — ${String(error)}`, level: 'error' });
     });
   }
 }

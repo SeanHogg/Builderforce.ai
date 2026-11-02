@@ -77,7 +77,7 @@ export function WorkspaceApp() {
   // A pinned on-device model skips this gate's mint; a board that needs the gateway
   // mints for itself (`useBoardAuth`).
   useEffect(() => {
-    if (!init?.signedIn || init.localRoute || init.localPick) return;
+    if (!init?.signedIn || init.localRoute) return;
     if (init.token || getToken()) {
       setTokenFailed(false);
       return;
