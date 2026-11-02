@@ -41,7 +41,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-4ECEJUCZ.mjs";
+} from "./chunk-QYIJWKQO.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
