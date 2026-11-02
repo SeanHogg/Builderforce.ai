@@ -50,7 +50,8 @@
      "role": "plan",
      "toolCalls": 0,
      "advertisedTools": 1,
-     "catalogTools": 1
+     "catalogTools": 1,
+     "answeredInProse": true
     },
     "result": "0 tool call(s) · 51 chars · finish: stop · prompt 10 tok",
     "isError": false,
@@ -131,7 +132,8 @@
      "role": "plan",
      "toolCalls": 0,
      "advertisedTools": 1,
-     "catalogTools": 1
+     "catalogTools": 1,
+     "answeredInProse": true
     },
     "usage": {
      "prompt": 10,

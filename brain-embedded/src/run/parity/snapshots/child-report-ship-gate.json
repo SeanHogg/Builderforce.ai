@@ -104,7 +104,7 @@
      "type": "function",
      "function": {
       "name": "ask_user",
-      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
       "parameters": {
        "type": "object",
        "properties": {
@@ -125,6 +125,10 @@
            "description": {
             "type": "string",
             "description": "Optional one-line explanation of this choice."
+           },
+           "recommended": {
+            "type": "boolean",
+            "description": "Optional: true on the option you would advise as the default pick."
            }
           },
           "required": [
@@ -340,7 +344,7 @@
      "type": "function",
      "function": {
       "name": "ask_user",
-      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
       "parameters": {
        "type": "object",
        "properties": {
@@ -361,6 +365,10 @@
            "description": {
             "type": "string",
             "description": "Optional one-line explanation of this choice."
+           },
+           "recommended": {
+            "type": "boolean",
+            "description": "Optional: true on the option you would advise as the default pick."
            }
           },
           "required": [
@@ -527,7 +535,7 @@
      "type": "function",
      "function": {
       "name": "ask_user",
-      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
       "parameters": {
        "type": "object",
        "properties": {
@@ -548,6 +556,10 @@
            "description": {
             "type": "string",
             "description": "Optional one-line explanation of this choice."
+           },
+           "recommended": {
+            "type": "boolean",
+            "description": "Optional: true on the option you would advise as the default pick."
            }
           },
           "required": [
@@ -722,7 +734,7 @@
      "type": "function",
      "function": {
       "name": "ask_user",
-      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
       "parameters": {
        "type": "object",
        "properties": {
@@ -743,6 +755,10 @@
            "description": {
             "type": "string",
             "description": "Optional one-line explanation of this choice."
+           },
+           "recommended": {
+            "type": "boolean",
+            "description": "Optional: true on the option you would advise as the default pick."
            }
           },
           "required": [
@@ -937,7 +953,7 @@
      "type": "function",
      "function": {
       "name": "ask_user",
-      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
       "parameters": {
        "type": "object",
        "properties": {
@@ -958,6 +974,10 @@
            "description": {
             "type": "string",
             "description": "Optional one-line explanation of this choice."
+           },
+           "recommended": {
+            "type": "boolean",
+            "description": "Optional: true on the option you would advise as the default pick."
            }
           },
           "required": [
@@ -1171,7 +1191,7 @@
      "type": "function",
      "function": {
       "name": "ask_user",
-      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with \"recommended\": true so a default/auto pick can select it.",
       "parameters": {
        "type": "object",
        "properties": {
@@ -1192,6 +1212,10 @@
            "description": {
             "type": "string",
             "description": "Optional one-line explanation of this choice."
+           },
+           "recommended": {
+            "type": "boolean",
+            "description": "Optional: true on the option you would advise as the default pick."
            }
           },
           "required": [
@@ -1374,7 +1398,8 @@
      "role": "code",
      "toolCalls": 0,
      "advertisedTools": 9,
-     "catalogTools": 10
+     "catalogTools": 10,
+     "answeredInProse": true
     },
     "result": "0 tool call(s) · 34 chars · finish: stop · prompt 10 tok",
     "isError": false,
@@ -1476,7 +1501,8 @@
      "role": "code",
      "toolCalls": 0,
      "advertisedTools": 9,
-     "catalogTools": 10
+     "catalogTools": 10,
+     "answeredInProse": true
     },
     "result": "0 tool call(s) · 44 chars · finish: stop · prompt 10 tok",
     "isError": false,
@@ -1676,7 +1702,8 @@
      "role": "verify",
      "toolCalls": 0,
      "advertisedTools": 9,
-     "catalogTools": 10
+     "catalogTools": 10,
+     "answeredInProse": true
     },
     "result": "0 tool call(s) · 16 chars · finish: stop · prompt 10 tok",
     "isError": false,
@@ -1881,7 +1908,8 @@
      "role": "code",
      "toolCalls": 0,
      "advertisedTools": 9,
-     "catalogTools": 10
+     "catalogTools": 10,
+     "answeredInProse": true
     },
     "usage": {
      "prompt": 10,
@@ -1934,7 +1962,8 @@
      "role": "code",
      "toolCalls": 0,
      "advertisedTools": 9,
-     "catalogTools": 10
+     "catalogTools": 10,
+     "answeredInProse": true
     },
     "usage": {
      "prompt": 10,
@@ -2062,7 +2091,8 @@
      "role": "verify",
      "toolCalls": 0,
      "advertisedTools": 9,
-     "catalogTools": 10
+     "catalogTools": 10,
+     "answeredInProse": true
     },
     "usage": {
      "prompt": 10,
