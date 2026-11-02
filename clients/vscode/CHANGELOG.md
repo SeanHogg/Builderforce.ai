@@ -2,7 +2,7 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.10.123] — The prompt returns to the footer, and typing keeps up
+## [2026.10.124] — The prompt returns to the footer, and typing keeps up
 
 - **The prompt lives in the footer again.** The composer moved back out of the panel header (where #6430 had put it) into the footer's composer slot, so the input sits with the conversation instead of beside the logo.
 - **Typing in the prompt is responsive again.** The recipient placeholder ("Message {name}…") is computed once per recipient instead of on every keystroke, and the per-keystroke lag that had crept back into the composer is removed.

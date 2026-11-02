@@ -123,7 +123,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     turnContent: "",
     stopped: false,
     facts: { refused: false },
-    cache: new CacheServedStreak(state.reads.servedStreak),
+    cache: input.cacheStreak ?? new CacheServedStreak(state.reads.servedStreak),
     ...(budget ? { budget } : {}),
   };
   const isReadOnly = readOnlyPort(run);

@@ -81,6 +81,10 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
     modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model) },
+    // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
+    // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
+    // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
+    cacheStreak: run.cacheStreak,
     ...(signal ? { signal } : {}),
   });
   await settleBrainRun(run, outcome, last);

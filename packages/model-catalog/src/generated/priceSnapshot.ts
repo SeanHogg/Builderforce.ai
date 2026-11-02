@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-01T23:17:34.499Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-02T00:31:49.113Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -136,7 +136,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "google/gemma-3-12b-it": [5e-8, 1.5e-7],
   "google/gemma-3-27b-it": [8e-8, 3.5e-7],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [6.75e-8, 2.25e-7],
+  "google/gemma-4-26b-a4b-it": [2e-8, 6e-8],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -360,7 +360,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
   "qwen/qwen3-32b": [8e-8, 2.8e-7],
   "qwen/qwen3-coder": [3e-7, 0.000001],
-  "qwen/qwen3-coder-30b-a3b-instruct": [7e-8, 2.8e-7],
+  "qwen/qwen3-coder-30b-a3b-instruct": [1.5e-7, 6e-7],
   "qwen/qwen3-coder-flash": [1.95e-7, 9.75e-7],
   "qwen/qwen3-coder-next": [1.2e-7, 8e-7],
   "qwen/qwen3-next-80b-a3b-instruct": [9e-8, 0.0000011],
@@ -411,9 +411,9 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "tencent/hy-mt2-1.8b": [4.4e-8, 1.77e-7],
   "tencent/hy-mt2-30b-a3b": [7.4e-8, 2.95e-7],
   "tencent/hy-mt2-7b": [7.4e-8, 2.95e-7],
-  "tencent/hy3": [8.25e-8, 3.3e-7],
+  "tencent/hy3": [1.32e-7, 5.28e-7],
   "tencent/hy3-preview": [1.8e-7, 6e-7],
-  "tencent/hy4-preview": [7.506e-7, 0.0000022509],
+  "tencent/hy4-preview": [8.34e-7, 0.000002501],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [5.5e-7, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -453,7 +453,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [6e-9, 0.0000068],
-  "z-ai/glm-5.3": [6.99e-8, 0.0000014],
+  "z-ai/glm-5.3": [8e-8, 0.0000036],
   "z-ai/glm-5.3-flash": [2.85e-8, 9.23e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],

@@ -8,6 +8,7 @@ import type { ToolSchema } from "@builderforce/agent-tools";
 import type { ParsedToolCall } from "@builderforce/agent-loop";
 import type { EventSink, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "./contract.js";
 import type { PolicyContext, PolicyModules, PolicyToolCall } from "./policy/index.js";
+import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import type { TurnInterruption } from "./surface.js";
 
 /** What a caller hands the agent. */
@@ -19,6 +20,13 @@ export interface RunAgentInput {
   resume?: RunState;
   /** Steps this invocation may take before yielding. `1` on a cloud tick; unbounded when omitted. */
   maxSteps?: number;
+  /**
+   * The no-progress counter the run's read-coverage feeds (`policy/tools/cacheServedStreak`).
+   * The surface whose read-coverage answers the calls OWNS the instance and hands it here, so
+   * there is one counter, not a kernel twin the surface never feeds. Seeded from `resume` when
+   * omitted; a surface that supplies one keeps its count across the step yields it steers into.
+   */
+  cacheStreak?: CacheServedStreak;
   /** The cancellation signal. A fired signal settles the run `failed` with reason `cancelled`. */
   signal?: AbortSignal;
   /**
