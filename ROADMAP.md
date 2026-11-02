@@ -320,7 +320,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **Windows command routed to bash loses backslashes** (`packages/agent-tools/src/node-posix-shell.ts`). *Blocker: a trace of the routing decision.*
 - **Self-Directed Agents are Windows-only.** *Blocker: a Mac; an X11 session.*
 - **Installers unsigned, no updater.** Windows and macOS signing are wired; Tauri updater signing isn't. *Blocker: signing secrets in both repos.* Then delete `SpawnDownloadButton`'s first-run hints.
-- **~3.3 GB after indexing one small package.** *Blocker: a memory profile.*
+- **~3.3 GB after indexing one small package.** Profiled and the dominant retention fixed (2026-11-01): host `meta.text` kept the full card text per node; now clipped to a 256-char excerpt, full text stays in the engine. See DONE.md.
 - **Phase 3 browser/VM host.** *Blocker: prompt-injection defence first.*
 - **pi-tui is the last `@mariozechner/pi-*` dep.** 23 importers left; migrate to Ink.
 - **Engine convergence:** sandbox-aware provider; `read`, `exec`, `process` stay native; `RelayTaskEngine`.

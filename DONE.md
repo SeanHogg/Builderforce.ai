@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-11-01 — ~3.3 GB indexing memory: host meta.text kept the full card text per node; clipped to a 256-char excerpt
+
+A reproducible heap profile of indexing one small package attributed the dominant per-node host retention: `meta.text` stored the full card text on every node, while the renderer clips to 140 chars and the full text already lives in the engine (`DocEntry.text`). Added `META_TEXT_EXCERPT = 256` in `packages/agent-tools/src/knowledge/index/hostIndex.ts` and clamped the retained excerpt; profiled 300 cards at ~1.9 MB heap delta with `meta.text` at 78 KB. Pinned by `packages/agent-tools/src/knowledge/index/indexMemory.profile.test.ts` (49 tests). Commit `f6eb694f8`.
+
 ## ✅ RESOLVED 2026-11-01 — Knowledge review survives agent edits, view changes and slow plans (VS Code 2026.10.122)
 
 - **Auto-swap.** A mutating `run.tool` moved an unpinned panel to Changes mid-review. `visualizationViewState` now has `reviewing`: the mutation counts, the view holds. `useKnowledgeHost` counts live reviews (`reviewCount`), because a superseded review's cleanup runs after its replacement starts.
