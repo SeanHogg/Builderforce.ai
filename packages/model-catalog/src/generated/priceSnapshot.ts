@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-02T00:31:49.113Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-02T01:00:44.887Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -136,7 +136,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "google/gemma-3-12b-it": [5e-8, 1.5e-7],
   "google/gemma-3-27b-it": [8e-8, 3.5e-7],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [2e-8, 6e-8],
+  "google/gemma-4-26b-a4b-it": [2e-8, 5.9e-8],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],

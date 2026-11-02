@@ -58,6 +58,13 @@ const MAX_SEARCH_K = 50;
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 const zRef = z.string().min(5).max(512).regex(/^(src|ent|fact):/, 'a NodeRef (src: | ent: | fact:)');
+/**
+ * A ref inside an EXTRACTED upload is admitted at up to 4096 chars: a producer can emit a
+ * longer one (a deep path plus a long section slug), and one over-long ref must not 400 the
+ * whole review — `putExtracted` drops what exceeds the graph's 512-char bound and reports
+ * the count. WriteBody facts/relations/stale keep the strict 512 zRef.
+ */
+const zExtractedRef = z.string().min(5).max(4096).regex(/^(src|ent|fact:)/, 'a NodeRef (src: | ent: | fact:)');
 /** The origin is admitted as any of the four so the WRITER answers `extracted` (400), not zod. */
 const zOrigin = z.enum(['extracted', 'model', 'human', 'agent']);
 const zAnchor = z.object({
@@ -97,22 +104,22 @@ const WriteBody = z.object({
   stale: z.array(z.object({ sourceRef: zRef, currentHash: z.string().max(160) })).default([]),
 });
 const zKNode = z.object({
-  ref: zRef, kind: z.string().max(64), label: z.string().max(2048), pack: z.string().max(64),
-  partition: z.string().max(128).optional(), area: zRef.optional(), importance: z.number(),
+  ref: zExtractedRef, kind: z.string().max(64), label: z.string().max(2048), pack: z.string().max(64),
+  partition: z.string().max(128).optional(), area: zExtractedRef.optional(), importance: z.number(),
   origin: zOrigin, sourceHash: z.string().max(160).optional(), stale: z.boolean().optional(),
   badges: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
 });
 const zKEdge = z.object({
-  from: zRef, to: zRef, kind: z.string().max(32), weight: z.number(), origin: zOrigin,
+  from: zExtractedRef, to: zExtractedRef, kind: z.string().max(32), weight: z.number(), origin: zOrigin,
   confidence: z.number().optional(), verdict: z.enum(['allowed', 'same', 'skips', 'upward']).optional(),
   cycle: z.boolean().optional(),
 });
 const ExtractedBody = z.array(z.object({
-  sourceRef: zRef,
+  sourceRef: zExtractedRef,
   sourceHash: z.string().max(160),
   nodes: z.array(zKNode),
   edges: z.array(zKEdge),
-  keys: z.array(z.object({ ref: zRef, key: z.string().max(512) })),
+  keys: z.array(z.object({ ref: zExtractedRef, key: z.string().max(512) })),
 }));
 const AnalysisBody = z.object({
   version: z.literal(1),
@@ -236,11 +243,11 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     const extracted = await parseBody(c, ExtractedBody);
     if (byteLength(extracted) > MAX_EXTRACTED_BYTES) return tooLarge(MAX_EXTRACTED_BYTES);
     try {
-      await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
+      const { skippedRefs } = await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
     } catch (error) {
       return writeRefusal(error);
     }
-    return json({ ok: true, hash });
+    return json({ ok: true, hash, skippedRefs });
   }));
 
   router.put('/:projectId/code-analysis/:sha', (c) => withPorts(c, async (p) => {

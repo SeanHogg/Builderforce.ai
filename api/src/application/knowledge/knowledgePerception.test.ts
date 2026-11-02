@@ -89,4 +89,52 @@ describe('putExtracted', () => {
     expect(label.startsWith('first line second line')).toBe(true);
     expect(label.length).toBeLessThanOrEqual(120);
   });
+
+  it('drops individual refs over 512 chars, stores the rest, and reports the skipped count', async () => {
+    const { deps, put, markRelationsStale } = harness(undefined);
+    const long = `src:r::${'a'.repeat(600)}`; // a deep-path ref a producer emitted over the bound
+    const bad = entry('bad.md', 'h');
+    bad.nodes.push({ ref: long, kind: 'symbol', label: 'over-long', pack: 'docs', importance: 0, origin: 'extracted' });
+    bad.edges.push({ from: `src:r::bad.md`, to: long, kind: 'calls', weight: 1, origin: 'extracted' });
+    bad.keys.push({ ref: long, key: 'k' });
+    const good = entry('good.md', 'h');
+    const result = await putExtracted(deps, 'h', [bad, good]);
+    expect(result).toEqual({ skippedRefs: 3 });
+    const stored = (put.mock.calls[0] as unknown as [string, Extracted[]])[1];
+    expect(stored.map((e) => e.sourceRef)).toEqual(['src:r::bad.md', 'src:r::good.md']);
+    expect(stored[0]!.nodes.map((n) => n.ref)).toEqual(['src:r::bad.md']);
+    expect(stored[0]!.edges).toEqual([]);
+    expect(stored[0]!.keys).toEqual([]);
+    for (const e of stored) {
+      expect(e.sourceRef.length).toBeLessThanOrEqual(512);
+      for (const n of e.nodes) expect(n.ref.length).toBeLessThanOrEqual(512);
+    }
+    // Both sources are new to the object, so both are still marked stale — held-set semantics unchanged.
+    expect(markRelationsStale).toHaveBeenCalledTimes(2);
+    expect(bump).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops an entire entry whose sourceRef is over 512 chars, counting everything it carried', async () => {
+    const { deps, put, markRelationsStale } = harness(undefined);
+    const bad = entry(`${'b'.repeat(600)}.md`, 'h');
+    const result = await putExtracted(deps, 'h', [bad, entry('good.md', 'h')]);
+    expect(result).toEqual({ skippedRefs: 2 }); // the entry + its one node
+    const stored = (put.mock.calls[0] as unknown as [string, Extracted[]])[1];
+    expect(stored.map((e) => e.sourceRef)).toEqual(['src:r::good.md']);
+    // The dropped entry's source is never marked.
+    expect(markRelationsStale).toHaveBeenCalledTimes(1);
+    expect(markRelationsStale).toHaveBeenCalledWith('src:r::good.md', 'h');
+    expect(bump).toHaveBeenCalledTimes(1);
+  });
+
+  it('source_hash_mismatch still 400s even when an over-long ref is present', async () => {
+    const { deps, put, markRelationsStale } = harness(undefined);
+    const bad = entry('a.md', 'h');
+    bad.nodes.push({ ref: `src:r::${'a'.repeat(600)}`, kind: 'symbol', label: 'x', pack: 'docs', importance: 0, origin: 'extracted' });
+    const err = await putExtracted(deps, 'h', [bad, entry('b.md', 'h-other')]).catch((e: unknown) => e);
+    expect(err).toMatchObject({ name: 'KnowledgeWriteError', status: 400, code: 'source_hash_mismatch' });
+    expect(put).not.toHaveBeenCalled();
+    expect(markRelationsStale).not.toHaveBeenCalled();
+    expect(bump).not.toHaveBeenCalled();
+  });
 });

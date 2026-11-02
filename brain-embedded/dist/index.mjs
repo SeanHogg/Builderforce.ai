@@ -1444,7 +1444,7 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [2e-8, 6e-8],
+  "google/gemma-4-26b-a4b-it": [2e-8, 59e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -18862,7 +18862,7 @@ async function runAgent(input) {
     turnContent: "",
     stopped: false,
     facts: { refused: false },
-    cache: new CacheServedStreak(state.reads.servedStreak),
+    cache: input.cacheStreak ?? new CacheServedStreak(state.reads.servedStreak),
     ...budget2 ? { budget: budget2 } : {}
   };
   const isReadOnly = readOnlyPort(run);
@@ -24288,8 +24288,11 @@ ${turnContext}` : systemPrompt),
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
     readCoverage: new ReadCoverage2(),
-    // How many calls in a row that cache has answered — a run circling its own reads
-    // is forced to hand off or change (`cacheServedStreak.ts`).
+    // The run's ONE no-progress counter, fed by the read-coverage above and handed to the
+    // kernel (`run/runPrepared.ts`) to persist into `RunState.reads.servedStreak` — the Brain
+    // owns the instance it feeds, so a kernel-built twin would start empty and die at any step
+    // boundary. The Brain builds its context fresh per invocation (no kernel-resume path), so
+    // this starts empty; the kernel seeds the counter from saved state for callers that resume.
     cacheStreak: new CacheServedStreak(),
     // The A3 progress detector — a run that says it is ready and keeps reading, circles,
     // undoes its own edit or repeats a failure is steered, then forced, then asked
@@ -26226,6 +26229,10 @@ async function runPrepared(run) {
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
     modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model) },
+    // The Brain's read-coverage owns the no-progress counter (`callPreflight`/`callPostStep`
+    // feed it); hand the kernel that ONE instance to persist, so a circling run keeps its count
+    // across the step yield it is steered into — not a kernel-built twin the Brain never feeds.
+    cacheStreak: run.cacheStreak,
     ...signal ? { signal } : {}
   });
   await settleBrainRun(run, outcome, last);

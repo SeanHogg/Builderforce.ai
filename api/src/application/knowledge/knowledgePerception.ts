@@ -8,7 +8,7 @@ import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import type { Env } from '../../env';
 import { r2AnalysisSnapshots } from './knowledgeBlobs';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
-import { clampExtracted } from './knowledgePrivacy';
+import { clampExtracted, sanitizeExtracted } from './knowledgePrivacy';
 import { KnowledgeWriteError } from './knowledgeWriteError';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
 
@@ -36,12 +36,14 @@ interface Scope { env: Env; tenantId: number; projectId: number }
  *     the object, and a later file joining it says nothing about the earlier ones).
  * A root-level output (`~tag:…`) is not a source's content, so nothing is marked for it.
  * Node labels are reduced to one line first — extracted output is structure, never source text.
+ * Individual refs longer than the graph's 512-char bound are dropped (with everything they
+ * touch), never the whole upload: `putExtracted` returns how many were skipped.
  */
 export async function putExtracted(
   deps: Scope & { extracted: ExtractedCachePort; store: Pick<KnowledgeStorePort, 'markRelationsStale'> },
   hash: string,
   extracted: readonly Extracted[],
-): Promise<void> {
+): Promise<{ skippedRefs: number }> {
   const stray = extracted.find((e) => e.sourceHash !== hash);
   if (stray) {
     throw new KnowledgeWriteError(
@@ -49,16 +51,18 @@ export async function putExtracted(
       `extracted output for ${stray.sourceRef} is at hash '${stray.sourceHash}', not the '${hash}' it was uploaded under`,
     );
   }
+  const { entries, skippedRefs } = sanitizeExtracted(extracted);
   const held = new Set(((await deps.extracted.get(hash)) ?? []).map((e) => e.sourceRef));
-  await deps.extracted.put(hash, clampExtracted(extracted));
+  await deps.extracted.put(hash, clampExtracted(entries));
   try {
-    if (hash.startsWith('~')) return;
-    for (const entry of extracted) {
+    if (hash.startsWith('~')) return { skippedRefs };
+    for (const entry of entries) {
       if (!held.has(entry.sourceRef)) await deps.store.markRelationsStale(entry.sourceRef, hash);
     }
   } finally {
     await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
   }
+  return { skippedRefs };
 }
 
 export async function putAnalysisSnapshot(deps: Scope, sha: string, rootId: string, snapshot: unknown): Promise<void> {

@@ -151,6 +151,32 @@ describe('project knowledge routes', () => {
     expect(await res.json()).toMatchObject({ code: 'source_hash_mismatch' });
     expect(put).not.toHaveBeenCalled();
   });
+  it('tolerates an over-long ref: stores the rest, 200 with skippedRefs, and drops nothing valid', async () => {
+    const put = vi.fn();
+    const markRelationsStale = vi.fn(async () => 1);
+    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+      env: {}, db, tenantId, projectId, store: { markRelationsStale }, extracted: { get: vi.fn(async () => undefined), put },
+    }));
+    const long = 'src:r::' + 'x'.repeat(600); // a deep-path ref a producer emitted over the 512 bound
+    const entry = {
+      sourceRef: 'src:r::a.md', sourceHash: 'h1',
+      nodes: [
+        { ref: 'src:r::a.md', kind: 'file', label: 'a.md', pack: 'docs', importance: 0, origin: 'extracted' },
+        { ref: long, kind: 'symbol', label: 'over-long', pack: 'docs', importance: 0, origin: 'extracted' },
+      ],
+      edges: [],
+      keys: [{ ref: long, key: 'k' }],
+    };
+    const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify([entry]) }, {});
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true, hash: 'h1' });
+    expect(body.skippedRefs).toBeGreaterThanOrEqual(1);
+    // The stored object dropped the over-long node and key but kept the valid node.
+    const stored = put.mock.calls[0]![1] as Array<{ nodes: Array<{ ref: string }>; keys: Array<{ ref: string }> }>;
+    expect(stored[0]!.nodes.map((n) => n.ref)).toEqual(['src:r::a.md']);
+    expect(stored[0]!.keys).toEqual([]);
+  });
 
   it('answers a model relation on a source with no sourceHash with 400', async () => {
     const { sourceHash: _omit, ...unhashed } = relation(1);
