@@ -33,6 +33,7 @@ const stubDb = (email: string | null) => ({
 function stubSeating() {
   const added: unknown[] = [];
   const admitted: unknown[] = [];
+  const upgraded: unknown[] = [];
   const seating: MembershipSeating = {
     addMember: async (tenantId, actorUserId, newUserId, role, seatKind) => {
       added.push({ tenantId, actorUserId, newUserId, role, seatKind });
@@ -40,8 +41,11 @@ function stubSeating() {
     admitCollaborator: async (tenantId, newUserId, role) => {
       admitted.push({ tenantId, newUserId, role });
     },
+    upgradeMember: async (tenantId, actorUserId, userId, role, seatKind) => {
+      upgraded.push({ tenantId, actorUserId, userId, role, seatKind });
+    },
   };
-  return { seating, added, admitted };
+  return { seating, added, admitted, upgraded };
 }
 
 const invite = (over: Partial<Record<string, unknown>> = {}) => ({
@@ -88,9 +92,51 @@ describe('landPendingInvitations', () => {
   it('accepts without re-adding when the person is already a member', async () => {
     roleOf.mockResolvedValue(TenantRole.MANAGER as never);
     pending.mockResolvedValue([invite()] as never);
-    const { seating, added } = stubSeating();
+    const { seating, added, upgraded } = stubSeating();
     await landPendingInvitations(stubDb('ada@x.com'), env, seating, 'user-1');
     expect(added).toEqual([]);
+    // A manager outranks the developer invite — no upgrade, the row just resolves.
+    expect(upgraded).toEqual([]);
+    expect(accept).toHaveBeenCalledOnce();
+  });
+
+  it('upgrades a stranded canvas collaborator when their full workspace invite lands', async () => {
+    // The production bug: seated via a canvas share as contributor + collaborator
+    // seat, then invited to the workspace proper — the invite used to be stamped
+    // accepted with no membership change, stranding them at contributor (every
+    // mutating built-in tool 403s below developer).
+    roleOf.mockResolvedValue(TenantRole.CONTRIBUTOR as never);
+    pending.mockResolvedValue([invite()] as never);
+    const { seating, added, upgraded } = stubSeating();
+    await landPendingInvitations(stubDb('ada@x.com'), env, seating, 'user-1');
+    expect(added).toEqual([]);
+    expect(upgraded).toEqual([
+      { tenantId: 7, actorUserId: 'mgr-1', userId: 'user-1', role: TenantRole.DEVELOPER, seatKind: SEAT_KIND.SEAT },
+    ]);
+    expect(accept).toHaveBeenCalledWith(expect.anything(), env, { id: 'inv-1', tenantId: 7, inviteeRef: 'user-1' });
+  });
+
+  it('leaves the invite pending when the upgrade would seat past a downgraded plan', async () => {
+    roleOf.mockResolvedValue(TenantRole.CONTRIBUTOR as never);
+    capacity.mockResolvedValue({ plan: TenantPlan.FREE, maxSeats: 1, members: 1, pendingInvites: 1 });
+    pending.mockResolvedValue([invite()] as never);
+    const { seating, upgraded } = stubSeating();
+    await landPendingInvitations(stubDb('ada@x.com'), env, seating, 'user-1');
+    expect(upgraded).toEqual([]);
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it('does not read seat capacity for a collaborator-seat invite to an existing member', async () => {
+    // A viewer invite outranks nothing for a contributor, so this exercises the
+    // no-downgrade boundary too: no upgrade, no capacity read, row just accepted.
+    roleOf.mockResolvedValue(TenantRole.CONTRIBUTOR as never);
+    pending.mockResolvedValue([invite({ seatKind: SEAT_KIND.COLLABORATOR, role: TenantRole.VIEWER })] as never);
+    const { seating, added, admitted, upgraded } = stubSeating();
+    await landPendingInvitations(stubDb('ada@x.com'), env, seating, 'user-1');
+    expect(added).toEqual([]);
+    expect(admitted).toEqual([]);
+    expect(upgraded).toEqual([]);
+    expect(capacity).not.toHaveBeenCalled();
     expect(accept).toHaveBeenCalledOnce();
   });
 

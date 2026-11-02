@@ -496,3 +496,47 @@ describe('formatChatDiagnostics — WHERE the work ran', () => {
     expect(without).toMatch(/not on this chat row/);
   });
 });
+
+/**
+ * The caller's WORKSPACE ROLE. A run whose every mutating built-in tool came back HTTP
+ * 403 ("requires at least the 'developer' role (caller has 'contributor')") used to read
+ * as an unexplained refusal — the report named the failed step but not the gate that
+ * produced it, nor what would clear it.
+ */
+describe('formatChatDiagnostics — workspace role', () => {
+  it('states the role directly under the tenant/user line when the surface knows it', () => {
+    const lines = formatChatDiagnostics(baseline({ role: 'contributor' }));
+    const tenantLine = lines.findIndex((l) => l.startsWith('- Tenant: '));
+    expect(lines[tenantLine + 1]).toBe('- Workspace role: contributor');
+  });
+
+  it('omits the line when the role is unknown — "not gathered" must never read as "no role"', () => {
+    for (const role of [null, undefined, ''] as Array<string | null | undefined>) {
+      expect(formatChatDiagnostics(baseline({ role })).some((l) => l.startsWith('- Workspace role:'))).toBe(false);
+    }
+  });
+});
+
+describe('parseRoleGateRefusal', () => {
+  const serverMessage =
+    "'tasks.create' changes workspace data and requires at least the 'developer' role (caller has 'contributor')";
+
+  it('extracts both roles from the exact BuiltinToolForbiddenError message', () => {
+    expect(parseRoleGateRefusal(serverMessage)).toEqual({ requiredRole: 'developer', callerRole: 'contributor' });
+  });
+
+  it('still parses when the message arrives wrapped in HTTP and error framing', () => {
+    expect(parseRoleGateRefusal(`HTTP 403 — ${serverMessage} [forbidden]`)).toEqual({ requiredRole: 'developer', callerRole: 'contributor' });
+  });
+
+  it('returns nulls for unrelated messages — a parser that guesses manufactures causes', () => {
+    expect(parseRoleGateRefusal('attachment not found')).toEqual({ requiredRole: null, callerRole: null });
+    expect(parseRoleGateRefusal('The user must be a member of the workspace')).toEqual({ requiredRole: null, callerRole: null });
+    expect(parseRoleGateRefusal(null)).toEqual({ requiredRole: null, callerRole: null });
+    expect(parseRoleGateRefusal(undefined)).toEqual({ requiredRole: null, callerRole: null });
+  });
+
+  it('carries the remediation the report renders for a gated step', () => {
+    expect(ROLE_GATE_REMEDIATION).toBe('Re-select the workspace or ask a manager to raise your role.');
+  });
+});

@@ -244,6 +244,23 @@ export class TenantService {
     return persisted;
   }
 
+  /** Change an existing member's role AND seat kind in one write — the pending
+   *  workspace invite landing for somebody already seated as a canvas guest.
+   *  See `Tenant.upgradeMember`. */
+  async upgradeMember(
+    tenantId: number,
+    actorUserId: string,
+    targetUserId: string,
+    role: TenantRole,
+    seatKind: SeatKind,
+  ): Promise<Tenant> {
+    const tenant = await this.getTenant(tenantId);
+    const updated = tenant.upgradeMember(actorUserId, targetUserId, role, seatKind);
+    const persisted = await this.persist(updated);
+    await this.announceMembership(tenantId, [targetUserId]);
+    return persisted;
+  }
+
   async deleteTenant(id: number): Promise<void> {
     const tenant = await this.getTenant(id);
     await this.tenants.delete(asTenantId(id));

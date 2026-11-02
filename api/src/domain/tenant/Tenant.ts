@@ -277,6 +277,50 @@ export class Tenant {
   }
 
   /**
+   * Change an existing active member's role AND seat kind in one write.
+   *
+   * The landing of a full workspace invite for somebody who is already a member —
+   * the canvas collaborator (`contributor` + `collaborator` seat) who later accepts
+   * a real workspace invitation. `changeMemberRole` cannot express it: it leaves
+   * `seatKind` untouched, so the collaborator's mutating tools would unlock while
+   * the seat tally still reads them as a guest (or, inverted, the role would move
+   * without the seat that funds it). The caller decides WHETHER the invite
+   * outranks the current role; the same authority guards as
+   * {@link changeMemberRole} decide whether the actor may make the change at all,
+   * and it is a no-op when nothing would change. `joinedAt` is preserved via the
+   * `rosterWith` upsert pattern, as on every other roster write.
+   */
+  upgradeMember(actorUserId: string, targetUserId: string, role: TenantRole, seatKind: SeatKind): Tenant {
+    if (!this.canManageMembers(actorUserId)) {
+      throw new ForbiddenError('Only owners and managers can change member roles');
+    }
+    const actor  = this.getMember(actorUserId);
+    const target = this.getMember(targetUserId);
+    if (!target) throw new ValidationError(`User '${targetUserId}' is not an active member`);
+
+    // Granting OWNER, or touching an existing owner's role, is owner-only.
+    if ((role === TenantRole.OWNER || target.role === TenantRole.OWNER) && actor?.role !== TenantRole.OWNER) {
+      throw new ForbiddenError('Only an owner can assign or change the owner role');
+    }
+    // The workspace must always retain at least one owner.
+    if (target.role === TenantRole.OWNER && role !== TenantRole.OWNER) {
+      const owners = this.props.members.filter(m => m.isActive && m.role === TenantRole.OWNER);
+      if (owners.length <= 1) {
+        throw new ValidationError('Cannot demote the last owner — promote another member to owner first');
+      }
+    }
+    if (target.role === role && target.seatKind === seatKind) return this;
+
+    return new Tenant({
+      ...this.props,
+      members: this.rosterWith({
+        userId: targetUserId, role, isActive: true, joinedAt: target.joinedAt, seatKind,
+      }),
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Rename the workspace. Only owners and managers may do so.
    * The slug is intentionally left unchanged so existing URLs / references stay stable.
    */

@@ -101,7 +101,8 @@ describe('the review runner — cleanup, listeners and per-root serialisation', 
         const second = runKnowledgeReview(withRoot(ports(secondGate.port), 'same'));
         await firstGate.reached;
         await turns();
-        expect(firstGate.started()).toBe(1);
+        // One review pools its judge calls, so several may be in flight; what matters is that the second root's review has not begun.
+        expect(firstGate.started()).toBeGreaterThanOrEqual(1);
         expect(secondGate.started()).toBe(0);
         firstGate.release();
         await first;
@@ -115,8 +116,8 @@ describe('the review runner — cleanup, listeners and per-root serialisation', 
         const a = runKnowledgeReview(withRoot(ports(aGate.port), 'root-a'));
         const b = runKnowledgeReview(withRoot(ports(bGate.port), 'root-b'));
         await Promise.all([aGate.reached, bGate.reached]);
-        expect(aGate.started()).toBe(1);
-        expect(bGate.started()).toBe(1);
+        expect(aGate.started()).toBeGreaterThanOrEqual(1);
+        expect(bGate.started()).toBeGreaterThanOrEqual(1);
         aGate.release();
         bGate.release();
         await Promise.all([a, b]);

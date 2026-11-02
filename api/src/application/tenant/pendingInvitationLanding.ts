@@ -29,7 +29,8 @@ import { seatCapacityForTenant } from './seatCapacity';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { asSeatKind, consumesSeat } from '../../domain/tenant/SeatKind';
 import type { SeatKind } from '../../domain/tenant/SeatKind';
-import type { TenantPlan, TenantRole } from '../../domain/shared/types';
+import { SEAT_KIND } from '../../domain/tenant/SeatKind';
+import { ROLE_ORDER, type TenantPlan, type TenantRole } from '../../domain/shared/types';
 import { invalidateTaskAssignees } from '../task/taskAssigneeCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
@@ -48,6 +49,13 @@ export type MembershipSeating = {
     seatKind?: SeatKind,
   ): Promise<unknown>;
   admitCollaborator(tenantId: number, newUserId: string, role: TenantRole): Promise<unknown>;
+  upgradeMember(
+    tenantId: number,
+    actorUserId: string,
+    userId: string,
+    role: TenantRole,
+    seatKind: SeatKind,
+  ): Promise<unknown>;
 };
 
 /**
@@ -96,10 +104,17 @@ export async function landPendingInvitations(
 
   for (const invite of pending) {
     try {
-      // Already a member? Resolve the invite without re-adding (addMember would
-      // throw "already a member" and leave the row stuck pending).
-      const alreadyMember = (await tenantRoleOf(db, invite.tenantId, userId)) !== null;
-      if (!alreadyMember) {
+      // Already a member? Never re-add (addMember would throw "already a member"
+      // and leave the row stuck pending) — but an invite that outranks the current
+      // role is an UPGRADE, not a duplicate: a canvas collaborator (contributor +
+      // collaborator seat, seated via `seatAsCollaborator`) who later accepts a
+      // real workspace invite must not stay a contributor forever, or every
+      // mutating built-in tool refuses them with a 403. The invite's role is the
+      // one a manager or owner chose for them, so a higher rank upgrades the
+      // existing membership; a lower or equal rank changes nothing and the row is
+      // just resolved, exactly as before.
+      const currentRole = await tenantRoleOf(db, invite.tenantId, userId);
+      if (currentRole === null) {
         // Re-check seat capacity at ACCEPT time (members-only — this pending row
         // is about to be consumed). The invite-time guard already counted pending
         // seats, but a plan DOWNGRADE after the invites were queued can still
@@ -137,6 +152,41 @@ export async function landPendingInvitations(
           // the invitation stuck pending forever. The board invite gate and the
           // redeemed token are the authorization — see `Tenant.admitCollaborator`.
           await seating.admitCollaborator(invite.tenantId, userId, invite.role);
+        }
+      } else if (
+        ROLE_ORDER.indexOf(invite.role) > ROLE_ORDER.indexOf(currentRole as TenantRole)
+      ) {
+        // The invite OUTRANKS the current membership — upgrade to it. Never the
+        // reverse: an invite ranked at or below the current role resolves the row
+        // with the membership untouched (falls through to acceptInvitation).
+        //
+        // When the invite consumes a workspace seat the upgrade may convert a
+        // collaborator seat into a consuming one, so it faces the SAME accept-time
+        // capacity re-check as the fresh add above: over the cap, leave the row
+        // pending rather than silently promoting past it. It is replayed under
+        // the manager who sent the invite, for the same reason the fresh add is.
+        // A collaborator-seat invite consumes nothing and needs neither the guard
+        // nor the replay — and upgrades nothing in practice, since collaborator
+        // invites carry contributor/viewer roles.
+        if (!invite.invitedByUserId) continue;
+        if (consumesSeat(invite.seatKind)) {
+          let state = seatState.get(invite.tenantId);
+          if (!state) {
+            const cap = await seatCapacityForTenant(db, env, invite.tenantId);
+            state = { plan: cap.plan, seated: cap.members };
+            seatState.set(invite.tenantId, state);
+          }
+          if (!canAddSeat(state.plan, state.seated)) {
+            continue; // over cap — leave pending, do not upgrade
+          }
+          state.seated += 1;
+          await seating.upgradeMember(
+            invite.tenantId, invite.invitedByUserId, userId, invite.role, SEAT_KIND.SEAT,
+          );
+        } else {
+          await seating.upgradeMember(
+            invite.tenantId, invite.invitedByUserId, userId, invite.role, invite.seatKind,
+          );
         }
       }
       await acceptInvitation(db, env, { id: invite.id, tenantId: invite.tenantId, inviteeRef: userId });

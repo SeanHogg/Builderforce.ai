@@ -211,6 +211,39 @@ describe('context verdict — paged reads are not lost context', () => {
     expect(report).toContain('Failed step: llm.complete — RepetitionLoopError');
   });
 
+  it('structures a role-gate refusal — required role, caller role and the remedy on the failed step', () => {
+    // The BuiltinToolForbiddenError message carries both roles as TEXT; a run that died
+    // on the gate used to read as an unexplained refusal. Now the gate is parsed out.
+    const gated: BrainTraceEvent = {
+      ts: '', category: 'error', label: 'builtin_tasks_create', isError: true,
+      result: "HTTP 403 — 'tasks.create' changes workspace data and requires at least the 'developer' role (caller has 'contributor')",
+    };
+    const d = computeBrainDiagnostics([llmTurn(3_000), gated], undefined, [msg('user', 'file a ticket')]);
+    expect(d.errorSteps[0]).toMatchObject({
+      label: 'builtin_tasks_create',
+      requiredRole: 'developer',
+      callerRole: 'contributor',
+      remediation: 'Re-select the workspace or ask a manager to raise your role.',
+    });
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain(
+      "Failed step: builtin_tasks_create — HTTP 403 — 'tasks.create' changes workspace data and requires at least the 'developer' role (caller has 'contributor')" +
+      ' — requires developer, caller is contributor; Re-select the workspace or ask a manager to raise your role.',
+    );
+  });
+
+  it('leaves a failed step with no role gate exactly as it rendered before', () => {
+    const plain: BrainTraceEvent = {
+      ts: '', category: 'error', label: 'builtin_attachments_read', isError: true,
+      result: 'attachment not found',
+    };
+    const d = computeBrainDiagnostics([llmTurn(3_000), plain], undefined, [msg('user', 'read it')]);
+    expect(d.errorSteps[0]).toEqual({ label: 'builtin_attachments_read', message: 'attachment not found' });
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('Failed step: builtin_attachments_read — attachment not found');
+    expect(report).not.toMatch(/— requires /);
+  });
+
   it('reports which model broke mid-turn and was retried, so a retry that also failed is visible', () => {
     const interrupted: BrainTraceEvent = {
       ts: '', category: 'message', label: 'llm.stream_interrupted',

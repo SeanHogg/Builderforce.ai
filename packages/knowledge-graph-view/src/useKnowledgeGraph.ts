@@ -150,10 +150,13 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     }, [shown, lensId, lenses, allowed]);
 
     // Open a READY graph on a lens that SHOWS its findings instead of always 'structure' — once per load.
-    // The user (or host) may still pick any lens afterwards; this never fights a manual pick.
+    // The user (or host) may still pick any lens afterwards; this never fights a manual pick. A host that
+    // OPENED the view on a lens asked for it: that lens stays requested (so a lens that does not apply
+    // to the folder says so, rather than silently swapping to another one).
     const autoSwitched = useRef<{ key: string; from: LensId } | null>(null);
+    const hostChoseLens = opts.initialLens !== undefined;
     useEffect(() => {
-        if (!shown) return;
+        if (!shown || hostChoseLens) return;
         const key = `${shown.scope.rootId}:${generation}`;
         if (autoSwitched.current?.key === key) return;
         autoSwitched.current = { key, from: lensId };

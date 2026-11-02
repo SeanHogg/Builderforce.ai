@@ -42,6 +42,51 @@ describe('admitCollaborator', () => {
   });
 });
 
+describe('upgradeMember', () => {
+  // The landing of a full workspace invite for somebody already seated as a
+  // canvas collaborator: role AND seat kind move in one write, under the
+  // authority of the manager who sent the invite.
+  const seatedGuest = () => workspace().admitCollaborator('guest-1', TenantRole.CONTRIBUTOR);
+
+  it('changes role and seat kind together, keeping one roster row', () => {
+    const upgraded = seatedGuest().upgradeMember('owner-1', 'guest-1', TenantRole.DEVELOPER, SEAT_KIND.SEAT);
+    const rows = upgraded.members.filter((m) => m.userId === 'guest-1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.role).toBe(TenantRole.DEVELOPER);
+    expect(rows[0]?.seatKind).toBe(SEAT_KIND.SEAT);
+    expect(rows[0]?.isActive).toBe(true);
+  });
+
+  it('is a no-op when nothing would change', () => {
+    const seated = workspace().addMember('owner-1', 'dev-1', TenantRole.DEVELOPER);
+    expect(seated.upgradeMember('owner-1', 'dev-1', TenantRole.DEVELOPER, SEAT_KIND.SEAT)).toBe(seated);
+  });
+
+  it('requires the actor to manage members', () => {
+    expect(() => seatedGuest().upgradeMember('guest-1', 'guest-1', TenantRole.DEVELOPER, SEAT_KIND.SEAT))
+      .toThrow(ForbiddenError);
+  });
+
+  it('lets only an owner grant the owner role', () => {
+    const withManager = workspace().addMember('owner-1', 'mgr-1', TenantRole.MANAGER)
+      .admitCollaborator('guest-1', TenantRole.CONTRIBUTOR);
+    expect(() => withManager.upgradeMember('mgr-1', 'guest-1', TenantRole.OWNER, SEAT_KIND.SEAT))
+      .toThrow(ForbiddenError);
+  });
+
+  it('refuses somebody who is not an active member', () => {
+    expect(() => workspace().upgradeMember('owner-1', 'ghost-1', TenantRole.DEVELOPER, SEAT_KIND.SEAT))
+      .toThrow(ValidationError);
+  });
+
+  it('keeps the original joinedAt, which the repository upsert never rewrites', () => {
+    const before = seatedGuest();
+    const joinedAt = before.members.find((m) => m.userId === 'guest-1')?.joinedAt;
+    const upgraded = before.upgradeMember('owner-1', 'guest-1', TenantRole.DEVELOPER, SEAT_KIND.SEAT);
+    expect(upgraded.members.find((m) => m.userId === 'guest-1')?.joinedAt).toEqual(joinedAt);
+  });
+});
+
 describe('readmitting somebody who was removed', () => {
   // `removeMember` deactivates in place, so the roster still carries their row. A
   // second entry for the same user is not a stale-looking roster: the repository
