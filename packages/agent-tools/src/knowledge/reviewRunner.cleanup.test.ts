@@ -92,8 +92,19 @@ describe('the review runner — cleanup, listeners and per-root serialisation', 
             };
         };
         const withRoot = (p: KnowledgeReviewPorts, rootId: string): KnowledgeReviewPorts => ({ ...p, source: { ...p.source, rootId } });
-        /** A few macrotask turns: whatever the queued run could have started by now has started. */
-        const turns = async (): Promise<void> => { for (let i = 0; i < 5; i++) await new Promise<void>((resolve) => { setImmediate(resolve); }); };
+        /**
+         * Drain the scheduler. The queued run's lock hand-off rides a promise chain AND
+         * macrotasks, so flush both — generously. CI runners under load interleave far
+         * more turns than a local machine before a queued run could (illegally) start;
+         * five bare macrotasks was enough locally but read settled state as unsettled on
+         * a loaded runner. "Has not started" must be settled state, not a timing guess.
+         */
+        const turns = async (): Promise<void> => {
+            for (let i = 0; i < 20; i++) {
+                await Promise.resolve();
+                await new Promise<void>((resolve) => { setImmediate(resolve); });
+            }
+        };
 
         const firstGate = gate();
         const secondGate = gate();
