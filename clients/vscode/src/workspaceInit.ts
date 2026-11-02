@@ -5,7 +5,7 @@ import { JOURNAL_FILE } from "./localFirstJournalIo";
 import { listLocalModels, localModelOptions } from "./localModels";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "@builderforce/agent-tools/node-posix-shell";
-import { getTenantJwt, getCurrentUserId, signedInTenantId } from "./bfApi";
+import { boundToken, getTenantJwt, getCurrentUserId, workspaceTenantId } from "./bfApi";
 import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY } from "./gateway";
 import { fetchPersonalityBlock } from "./personalityLimbic";
 import { INIT_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
@@ -65,7 +65,7 @@ export async function buildWorkspaceInit(
   const groundingP = stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late });
   const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges] = await Promise.all([
     // Null while signed in is tolerated: the webview mints its own (`WorkspaceApp.mintToken`).
-    budget.step("token", signedIn ? getTenantJwt(ctx.secrets).then((t) => t ?? null) : Promise.resolve(null), null, (t) => t !== null),
+    budget.step("token", signedIn ? getTenantJwt(ctx.secrets).then(boundToken) : Promise.resolve(null), null, (t) => t !== null),
     // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
     // point of shipping this: the agent must not open a chat asking where the code is.
     budget.step("editorContext", getEditorContextLive(), getEditorContext()),
@@ -118,7 +118,7 @@ export async function buildWorkspaceInit(
     platformPolicy: platformPolicy().snapshot(),
     ...inferenceModeInit(),
     // token / tenantId / localPick: see `initFrameAuth`.
-    ...initFrameAuth({ signedIn, token, tenantId: signedInTenantId(), routeDegraded: modelChoice === fallbackRoute, model: modelChoice.model }),
+    ...initFrameAuth({ signedIn, bound: token, workspaceTenantId: workspaceTenantId(), routeDegraded: modelChoice === fallbackRoute, model: modelChoice.model }),
     // Manual pick > active project's Evermind pin > configured default. Sending the
     // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
     // model on every completion (auto-following learning bumps mid-session).

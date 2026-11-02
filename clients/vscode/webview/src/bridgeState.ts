@@ -94,7 +94,8 @@ let refreshing: Promise<void> | null = null;
 export function refreshToken(): Promise<void> {
   refreshing ??= (async () => {
     try {
-      const r = await request<{ token: string | null }>('token.refresh');
+      const r = await request<{ token: string | null; tenantId?: number }>('token.refresh');
+      if (r?.token) tokenTenant = r.tenantId;
       token = r?.token ?? token;
       for (const w of tokenWaiters) w();
     } catch {

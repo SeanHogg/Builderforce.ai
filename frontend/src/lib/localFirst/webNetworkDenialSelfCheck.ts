@@ -35,7 +35,7 @@
  */
 import { PlatformAccessDenied } from '@builderforce/local-first';
 import { API_ORIGIN } from '../apiOrigin';
-import { webPlatformFetch, webPlatformPolicy, webPlatformRequestAccount } from './platformPolicy';
+import { ApiTransportError, fetchWithTransportReport } from '../errors/transportFailure';
 
 /** Default probe URLs — overridable in tests. */
 export const SELF_CHECK_PUSH_URL = `${API_ORIGIN}/api/sync/v1/push`;
@@ -80,6 +80,9 @@ export async function runWebNetworkDenialSelfCheck(
 ): Promise<WebNetworkDenialSelfCheckReport> {
   const pushUrl = urls.pushUrl ?? SELF_CHECK_PUSH_URL;
   const probeUrl = urls.probeUrl ?? SELF_CHECK_PROBE_URL;
+  // Loaded here, not at the top: `./platformPolicy` boots this check, and a static import
+  // back would be a module-evaluation cycle (the architecture guard's no-cycles rule).
+  const { webPlatformFetch, webPlatformPolicy, webPlatformRequestAccount } = await import('./platformPolicy');
 
   // The CURRENT snapshot permits synchronize — there is no denial in force to
   // verify. Read the live policy (the snapshot boot applied), the web twin of
@@ -111,9 +114,12 @@ export async function runWebNetworkDenialSelfCheck(
   // path. It may still fail for ordinary network reasons — only a
   // PlatformAccessDenied here proves the gate over-reached.
   try {
-    await fetch(probeUrl);
+    // The sanctioned transport; silent, since a probe failing for ordinary network reasons is no incident.
+    await fetchWithTransportReport(probeUrl, undefined, { silent: true });
   } catch (error) {
-    if (error instanceof PlatformAccessDenied) {
+    // The transport wraps a rejection; the guard's own refusal is its cause.
+    const cause = error instanceof ApiTransportError ? error.cause : error;
+    if (cause instanceof PlatformAccessDenied) {
       failures.push(`non-platform probe ${probeUrl} was refused by the guard`);
     }
   }

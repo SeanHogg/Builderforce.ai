@@ -22,6 +22,9 @@ export function setSelectedWorkspace(tenantId: number | undefined): void {
   if (tenantId === selectedTenantId) return;
   selectedTenantId = tenantId;
   scopedJwt = undefined; // re-derive on next call
+  // A mint in flight resolved the OLD selection: the next call must start its own.
+  delete exchanges.cached;
+  delete exchanges.forced;
   notifySessionChange("workspace");
   syncOutboxScope();
 }
@@ -65,6 +68,17 @@ function effectiveTenantId(): number | undefined {
  *  What a local chat binds into (PRD 36, `chatAccount.ts`). */
 export function workspaceTenantId(): number | undefined {
   return baseJwt ? effectiveTenantId() : undefined;
+}
+
+/**
+ * The token a frame may carry, bound to the tenant it ACTS as. A parked re-scope hands
+ * back the key tenant's base token while the workspace says another: tagging that one with
+ * the workspace's id would send direct webview writes to the wrong tenant. Fails closed
+ * (null) when the token is not one we minted for the current workspace.
+ */
+export function boundToken(token: string | undefined): { token: string; tenantId: number } | null {
+  const tenantId = token ? tenantOfToken(token) : undefined;
+  return tenantId !== undefined && tenantId === workspaceTenantId() ? { token: token!, tenantId } : null;
 }
 
 /** Tell the durable outboxes which tenants writes now go to (see `outboxStorage.ts`). */
@@ -190,6 +204,7 @@ export function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promi
 }
 
 async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<string | undefined> {
+  const epoch = jwtEpoch;
   const base = await exchangeBaseJwt(secrets, force);
   if (!base) return undefined;
   const target = selectedTenantId ?? base.tenantId;
@@ -205,6 +220,8 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
       headers: { authorization: `Bearer ${base.token}`, "content-type": "application/json" },
       signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
     });
+    // Signed out or re-keyed meanwhile (as in `exchangeBaseJwt`): nothing here is ours to keep.
+    if (epoch !== jwtEpoch) return undefined;
     if (res.status === 404) {
       rescopeUnsupported = true;
       syncOutboxScope();
@@ -220,6 +237,7 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
       return base.token;
     }
     const body = (await res.json()) as { token?: string; expiresIn?: number };
+    if (epoch !== jwtEpoch) return undefined;
     if (!body.token) {
       parkWorkspaceWrites();
       return base.token;

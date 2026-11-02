@@ -6,7 +6,11 @@ const policyState = vi.hoisted(() => ({
 }));
 
 vi.mock("vscode", () => ({ commands: { executeCommand: vi.fn() } }));
-const jwt = vi.hoisted(() => ({ refreshTenantJwt: vi.fn(async () => "fresh"), getTenantJwt: vi.fn(async () => "cached") }));
+const jwt = vi.hoisted(() => ({
+  refreshTenantJwt: vi.fn(async () => "fresh"),
+  getTenantJwt: vi.fn(async () => "cached"),
+  boundToken: vi.fn((token: string | undefined) => (token ? { token } : null)),
+}));
 vi.mock("./bfApi", () => jwt);
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
@@ -102,6 +106,14 @@ describe("token.refresh", () => {
     expect(jwt.refreshTenantJwt).toHaveBeenCalledTimes(1);
     expect(jwt.getTenantJwt).not.toHaveBeenCalled();
     expect(view.posted).toContainEqual({ type: "response", id: "t1", ok: true, result: { token: "fresh" } });
+    view.dispose();
+  });
+
+  it("answers null for a token that is not bound to the workspace in force (fails closed)", async () => {
+    jwt.boundToken.mockReturnValueOnce(null);
+    const view = surface();
+    await handleSharedHostMessage(ctx, view.webview, { type: "token.refresh", id: "t2" }, view.owner);
+    expect(view.posted).toContainEqual({ type: "response", id: "t2", ok: true, result: { token: null } });
     view.dispose();
   });
 });

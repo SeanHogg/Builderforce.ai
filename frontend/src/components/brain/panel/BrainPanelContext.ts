@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { BrainPanelController } from '@/lib/brain/hooks/useBrainPanelController';
+import type { BrainPanelController } from '../hooks/useBrainPanelController';
 
 /**
  * The ONE Brain panel's controller, shared with its sections so none of them is

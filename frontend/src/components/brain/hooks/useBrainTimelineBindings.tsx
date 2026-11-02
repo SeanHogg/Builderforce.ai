@@ -5,7 +5,7 @@ import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { parseSuggestedActions, type useBrainActions, type useBrainChats, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
 import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
-import type { BrainPanelTurn } from './useBrainPanelTurns';
+import type { BrainPanelTurn } from '@/lib/brain/hooks/useBrainPanelTurns';
 
 /**
  * Everything the shared <BrainTimeline> and the pending-question banner are

@@ -10,7 +10,9 @@ import {
   type WorkOptionId,
   type BrainCapabilityId,
 } from '@/lib/brain';
-import type { BrainDockedTab } from './useBrainPanelController';
+
+/** The docked panel's tabs. */
+export type BrainDockedTab = 'chat' | 'history';
 
 /**
  * How a conversation starts and what it is FOR: the composer draft and its focus

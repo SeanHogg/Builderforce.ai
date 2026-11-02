@@ -6,6 +6,7 @@
 
 // Session: the key → tenant-JWT exchange, workspace scoping, sign-out.
 export {
+  boundToken,
   clearJwt,
   getTenantJwt,
   onEditorKeyRejected,

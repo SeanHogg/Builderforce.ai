@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { refreshTenantJwt } from "./bfApi";
+import { boundToken, refreshTenantJwt } from "./bfApi";
 import { logLine } from "./errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
@@ -192,8 +192,9 @@ export async function handleSharedHostMessage(
     // Sent on a 401 (or with no token yet): a FRESH mint, never the cached token the
     // gateway just refused.
     case "token.refresh": {
-      const token = (await refreshTenantJwt(ctx.secrets)) ?? null;
-      respondToWebview(webview, msg.id, true, { token });
+      // Only a token bound to the workspace in force goes out (`boundToken`): fails closed.
+      const bound = boundToken(await refreshTenantJwt(ctx.secrets));
+      respondToWebview(webview, msg.id, true, { token: bound?.token ?? null, tenantId: bound?.tenantId });
       return true;
     }
     case "local.persistence": {
