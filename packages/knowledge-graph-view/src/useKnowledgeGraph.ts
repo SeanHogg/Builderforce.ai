@@ -167,7 +167,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             (id) => lensApplies(LENSES[id], shown) && (!allowed || allowed.includes(id)) && lensFindings(LENSES[id], shown).length > 0,
         );
         if (wanted) setLensId(wanted);
-    }, [shown, generation, lensId, allowed]);
+    }, [shown, generation, lensId, allowed, hostChoseLens]);
 
     const search = useCallback(async (q: string) => {
         const seq = ++searchSeq.current;
