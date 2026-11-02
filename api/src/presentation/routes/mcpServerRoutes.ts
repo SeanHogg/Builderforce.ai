@@ -160,6 +160,9 @@ async function handleRpc(
     tenantId: ctx.access.tenantId,
     keyMaterial: ctx.env.JWT_SECRET,
     surface: ctx.surface,
+    // Keep tools/list on the same role contract as the REST transport: a
+    // sub-developer caller is not advertised mutating tools it could only fail on.
+    role: ctx.access.role,
   };
 
   if (method === 'tools/list') {

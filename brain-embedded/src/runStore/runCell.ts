@@ -101,6 +101,13 @@ export interface RunCell {
    *  is new (and sends nothing when the first edit was the only one). */
   deltaRecordedFiles: string[];
   /**
+   * The `open` capture was refused for a reason that will not change within the run —
+   * the caller's role may not mint a ticket (`requires at least the 'developer' role`).
+   * When set, the settle pass skips its retry: a contributor's run otherwise fires
+   * `from_delta` twice (open + settle) and traces two identical 403 failures.
+   */
+  deltaCaptureRefused: boolean;
+  /**
    * Index in `trace` of the CURRENT run's first event. The trace is a per-CHAT sliding
    * window that spans every run in the session, so any question about "what did THIS run
    * do" must be asked of {@link runTrace}, never of `trace` — reading the whole window let
@@ -233,6 +240,7 @@ export function makeCell(): RunCell {
     touchedFiles: [],
     deltaTicketId: null,
     deltaRecordedFiles: [],
+    deltaCaptureRefused: false,
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,

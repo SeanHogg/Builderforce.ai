@@ -26,6 +26,7 @@
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import { entitledBuiltinTools } from './builtinToolEntitlements';
+import { mayRunBuiltinTool } from './builtinToolAuthority';
 import { withSkillCatalog } from './skillLibraryToolCatalog';
 import { callMcpTool, listToolsForTenant, type McpToolEntry } from './mcpExtensionService';
 import {
@@ -52,6 +53,15 @@ export interface GatewayMcpContext {
   db?: Db;
   fetchImpl?: typeof fetch;
   /**
+   * The caller's tenant role. When set, the ADVERTISED built-in catalog is filtered
+   * to the tools that role may actually run — a contributor/viewer is never offered a
+   * mutating tool that the dispatcher would only refuse. This mirrors the dispatch-time
+   * gate ({@link mayRunBuiltinTool}) so a model cannot be lured into a 403 retry loop,
+   * and the settle-phase `tickets.from_delta` auto-capture never fires for a role that
+   * cannot mint a ticket. Absent = a machine/agent caller, decided by its run.
+   */
+  role?: TenantRole | null;
+  /**
    * Which named surface to advertise ({@link ./toolSurfaces}). Absent = `full`,
    * so every existing caller keeps the whole catalog. An UNKNOWN id is an error
    * rather than a silent `full`, which is why this is resolved here and not
@@ -77,6 +87,23 @@ function surfaceFor(ctx: GatewayMcpContext): ToolSurfaceDefinition {
 const dbFor = (ctx: GatewayMcpContext): Db => ctx.db ?? buildDatabase(ctx.env);
 
 /**
+ * Drop the built-in tools `role` may not run from the advertised catalog.
+ *
+ * The dispatch-time gate stays the enforcement; this is the advertisement half of the
+ * same rule ({@link mayRunBuiltinTool}), so a sub-developer caller's model is never
+ * SHOWN a mutating tool it could only fail on. A role-less caller (an API key, a cloud
+ * agent) keeps the whole catalog — its authority is the run that launched it, exactly
+ * as the gate leaves it to the replayed route.
+ */
+export function roleFilterBuiltinTools<T extends { tool: string; mutates?: boolean }>(
+  role: TenantRole | null | undefined,
+  tools: readonly T[],
+): T[] {
+  if (role == null) return [...tools];
+  return tools.filter((t) => mayRunBuiltinTool(t.tool, t.mutates === true, role));
+}
+
+/**
  * The tenant's full advertised tool list.
  *
  * The two network-bound sources are fetched concurrently: the MCP leg calls every
@@ -98,7 +125,12 @@ export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpTo
   // dropped when the library is empty) — level one of the Agent Skills disclosure, so
   // every consumer of this list learns which skills exist without a change of its own.
   const builtinTools = surfaceIncludesSource(surface, 'builtin')
-    ? await withSkillCatalog(ctx.env, db, ctx.tenantId, await entitledBuiltinTools(ctx.env, ctx.tenantId, null, listBuiltinTools()))
+    ? await withSkillCatalog(
+        ctx.env,
+        db,
+        ctx.tenantId,
+        roleFilterBuiltinTools(ctx.role ?? null, await entitledBuiltinTools(ctx.env, ctx.tenantId, null, listBuiltinTools())),
+      )
     : [];
   return applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
 }

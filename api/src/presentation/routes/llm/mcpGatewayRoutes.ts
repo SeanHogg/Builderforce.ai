@@ -42,6 +42,11 @@ export function mountMcpGatewayRoutes(router: Hono<HonoEnv>): void {
         tenantId: access.tenantId,
         keyMaterial: c.env.JWT_SECRET,
         surface: c.req.query('surface') ?? null,
+        // Advertise only what this role may run — the /v1/mcp/call gate stays the
+        // enforcement, but a contributor's model must not be shown a mutating tool
+        // it could only 403 on (that is what sent VS Code chats into create-retry
+        // loops: 5 refused mutating calls in one run).
+        role: access.role,
       });
       return c.json({ tools, surface: c.req.query('surface')?.trim() || DEFAULT_TOOL_SURFACE });
     } catch (e) {

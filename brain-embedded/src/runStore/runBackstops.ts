@@ -15,7 +15,10 @@ import type { BrainRunRequest } from './runTypes';
 
 /** What a ticket backstop reads and writes of a run. A live RunCell has it all; a SETTLING run gets a detached
  *  snapshot ({@link settleView}), so work that outlives its deadline never touches the NEXT run's cell. */
-export type BackstopState = Pick<RunCell, 'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded'>;
+export type BackstopState = Pick<
+  RunCell,
+  'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded' | 'deltaCaptureRefused'
+>;
 export type BackstopRun = BackstopState & { note?: (ev: BrainTraceEvent) => void };
 
 /** The run's state at the moment it settled, apart from the cell. Trace lines are written to the cell only while
@@ -26,8 +29,22 @@ export function settleView(c: RunCell, runId: string): BackstopRun {
     deltaRecordedFiles: [...c.deltaRecordedFiles],
     deltaTicketId: c.deltaTicketId,
     ticketRecorded: c.ticketRecorded,
+    deltaCaptureRefused: c.deltaCaptureRefused,
     note: (ev) => { if (c.runId === runId) pushTrace(c, ev); },
   };
+}
+
+/**
+ * The message the gateway's role gate throws for a mutating call a caller's role may
+ * not run (`builtinToolAuthority`). A refusal phrased this way is TERMINAL for the run:
+ * the role does not change mid-run, so a settle-phase retry of the same mint can only
+ * 403 again. Matched on a substring of the one stable phrase rather than the whole
+ * message, which also names the tool and the caller's role.
+ */
+const ROLE_REFUSAL = 'requires at least the';
+function isRoleRefusal(out: unknown): boolean {
+  const error = (out as { error?: unknown } | null)?.error;
+  return typeof error === 'string' && error.includes(ROLE_REFUSAL);
 }
 
 function noteOf(c: RunCell | BackstopRun): (ev: BrainTraceEvent) => void {
@@ -82,6 +99,9 @@ export async function recordCodeChangeTicket(
   phase: 'open' | 'settle',
 ): Promise<void> {
   if (!req.runTool || req.projectId == null) return;
+  // The open pass already hit a terminal refusal (the caller's role may not mint a
+  // ticket) — the settle retry would 403 identically, so don't spend it.
+  if (phase === 'settle' && c.deltaCaptureRefused) return;
   const known = new Set(c.deltaRecordedFiles);
   const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
   // Nothing new to say about a ticket that already exists — don't spend a call on it.
@@ -122,6 +142,10 @@ export async function recordCodeChangeTicket(
     // The model's own from_delta/link call is what `ticketRecorded` tracks; a mint we
     // performed satisfies the same guarantee, so the settle pass must not mint again.
     c.ticketRecorded = true;
+  } else if (isRoleRefusal(out)) {
+    // Terminal for the run: the caller's role cannot change mid-run, so the settle
+    // pass must not retry a mint that can only fail the same way again.
+    c.deltaCaptureRefused = true;
   }
   noteOf(c)({
     ts: nowIso(),

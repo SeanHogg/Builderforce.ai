@@ -24,6 +24,7 @@ export function beginRun(c: RunCell, outcomeKey?: RunKey): void {
   c.touchedFiles = [];
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
+  c.deltaCaptureRefused = false;
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
   c.liveTurn = null;
