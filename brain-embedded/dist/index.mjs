@@ -19178,6 +19178,7 @@ function makeCell() {
     touchedFiles: [],
     deltaTicketId: null,
     deltaRecordedFiles: [],
+    deltaCaptureRefused: false,
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
@@ -21931,6 +21932,11 @@ function formatBrainProvenance(events, opts = {}) {
   }
   return lines;
 }
+var ROLE_GATE_REMEDIATION = "Re-select the workspace or ask a manager to raise your role.";
+function parseRoleGateRefusal(message) {
+  const m = typeof message === "string" ? message.match(/requires at least the '([^']+)' role \(caller has '([^']+)'\)/) : null;
+  return { requiredRole: m?.[1] ?? null, callerRole: m?.[2] ?? null };
+}
 function unresolvedAppFailuresInTrace(events) {
   let last = 0;
   for (const ev of events) {
@@ -22059,7 +22065,15 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   }
   const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => {
     const model = e.args?.model;
-    return { label: e.label, message: errorMessageOf(e), ...typeof model === "string" && model !== "default" ? { model } : {} };
+    const message = errorMessageOf(e);
+    const gate = parseRoleGateRefusal(message);
+    return {
+      label: e.label,
+      message,
+      ...typeof model === "string" && model !== "default" ? { model } : {},
+      ...gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {},
+      ...gate.callerRole ? { callerRole: gate.callerRole } : {}
+    };
   });
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
@@ -22186,7 +22200,11 @@ function formatBrainDiagnostics(d) {
   if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
   lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
   if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}`);
+    for (const e of d.errorSteps) {
+      lines.push(
+        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}` + (e.requiredRole || e.callerRole ? ` \u2014 requires ${e.requiredRole ?? "unknown"}, caller is ${e.callerRole ?? "unknown"}${e.remediation ? `; ${e.remediation}` : ""}` : "")
+      );
+    }
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
   }
   if (d.advertisedToolsLastTurn != null) {
@@ -22433,10 +22451,16 @@ function settleView(c, runId) {
     deltaRecordedFiles: [...c.deltaRecordedFiles],
     deltaTicketId: c.deltaTicketId,
     ticketRecorded: c.ticketRecorded,
+    deltaCaptureRefused: c.deltaCaptureRefused,
     note: (ev) => {
       if (c.runId === runId) pushTrace(c, ev);
     }
   };
+}
+var ROLE_REFUSAL = "requires at least the";
+function isRoleRefusal(out) {
+  const error = out?.error;
+  return typeof error === "string" && error.includes(ROLE_REFUSAL);
 }
 function noteOf(c) {
   return "note" in c && c.note ? c.note : (ev) => pushTrace(c, ev);
@@ -22449,6 +22473,7 @@ function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
 }
 async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (!req.runTool || req.projectId == null) return;
+  if (phase === "settle" && c.deltaCaptureRefused) return;
   const known = new Set(c.deltaRecordedFiles);
   const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
   if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
@@ -22477,6 +22502,8 @@ async function recordCodeChangeTicket(serverChatId, c, req, phase) {
     const id = out?.id;
     if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
     c.ticketRecorded = true;
+  } else if (isRoleRefusal(out)) {
+    c.deltaCaptureRefused = true;
   }
   noteOf(c)({
     ts: nowIso(),
@@ -26252,6 +26279,7 @@ function beginRun(c, outcomeKey) {
   c.touchedFiles = [];
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
+  c.deltaCaptureRefused = false;
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
   c.liveTurn = null;
@@ -28650,6 +28678,9 @@ function formatChatDiagnostics(d) {
     `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}` + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : "")
   );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
+  if (d.role != null && d.role.trim() !== "") {
+    lines.push(`- Workspace role: ${d.role}`);
+  }
   const acct = d.account;
   if (acct) {
     lines.push(
@@ -28844,6 +28875,7 @@ async function gatherChatDiagnostics(src) {
     selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
+    role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,
     agents: agents.map((a) => ({
@@ -29820,6 +29852,7 @@ export {
   RESTING_CHAT_MODE,
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
+  ROLE_GATE_REMEDIATION,
   RUN_REFRESH_MS,
   ReadCoverage2 as ReadCoverage,
   RepetitionLoopError,
@@ -30075,6 +30108,7 @@ export {
   parseMessageAuthor,
   parseMessageProvenance,
   parsePmoFocus,
+  parseRoleGateRefusal,
   parseStepMessage,
   parseSubagentOrigin,
   perMillionUsd,
