@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { formatChatDiagnostics, classifyModelFunding, type ChatDiagnosticsData, type ChatDiagnosticsRun } from './chatDiagnostics';
+import { parseRoleGateRefusal, ROLE_GATE_REMEDIATION } from './brainTriage';
 
 /** A healthy, fully-gathered chat — each test perturbs only the field under test. */
 function baseline(over: Partial<ChatDiagnosticsData> = {}): ChatDiagnosticsData {

@@ -402,6 +402,8 @@ export {
   narratedUnadvertisedInTrace,
   answeredInProseInTrace,
   isTicketWriteTool,
+  parseRoleGateRefusal,
+  ROLE_GATE_REMEDIATION,
 } from './brainTriage';
 export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, BrainDiagnosticsContext, ByoUnresolvedEntry, ToolExposure } from './brainTriage';
 

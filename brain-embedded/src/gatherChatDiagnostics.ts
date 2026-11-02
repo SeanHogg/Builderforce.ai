@@ -95,6 +95,9 @@ export interface ChatDiagnosticsSources {
   selectedProjectName?: string | null;
   tenantId?: number | string | null;
   userId?: string | null;
+  /** The caller's workspace role, when the host already knows it (from its own stored
+   *  tenant/token — NEVER a new read: a capture must add no round trips). */
+  role?: string | null;
   /** The transcript — read for the newest assistant turn's learn outcome and the
    *  message/step counts. */
   messages?: readonly ChatDiagnosticsMessageLike[];
@@ -242,6 +245,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
+    role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,
     agents: agents.map((a) => ({

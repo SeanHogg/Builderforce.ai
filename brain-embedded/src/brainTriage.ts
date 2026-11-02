@@ -568,6 +568,31 @@ export function formatBrainProvenance(
  *    turn came back empty/failed while token counts stayed LOW — the model
  *    itself produced nothing, not the context.
  */
+/**
+ * The remediation for a role-gate refusal, stated once here so the report and every
+ * surface agree on the advice.
+ */
+export const ROLE_GATE_REMEDIATION =
+  'Re-select the workspace or ask a manager to raise your role.';
+
+/**
+ * Parse a `BuiltinToolForbiddenError` message — the API's role gate for mutating
+ * built-in tools throws exactly one shape
+ * (`'tasks.create' changes workspace data and requires at least the 'developer' role (caller has 'contributor')`
+ * — `api/.../builtinToolAuthority.ts`), but nothing about it was STRUCTURED, so a run
+ * that died on a role gate read as an unexplained refusal. Returns both roles, or nulls
+ * for any other message — a parser that guesses on unrelated text manufactures causes.
+ */
+export function parseRoleGateRefusal(message: string | null | undefined): {
+  requiredRole: string | null;
+  callerRole: string | null;
+} {
+  const m = typeof message === 'string'
+    ? message.match(/requires at least the '([^']+)' role \(caller has '([^']+)'\)/)
+    : null;
+  return { requiredRole: m?.[1] ?? null, callerRole: m?.[2] ?? null };
+}
+
 export interface BrainDiagnostics {
   turns: number;
   toolCalls: number;
@@ -599,7 +624,7 @@ export interface BrainDiagnostics {
    * whole transcript hunting for the failure. Capped, because a run that fails
    * repeatedly should not push everything else out of the report.
    */
-  errorSteps: { label: string; message: string; model?: string }[];
+  errorSteps: { label: string; message: string; model?: string; requiredRole?: string; callerRole?: string; remediation?: string }[];
   /** Distinct models that actually answered, first-seen order. */
   modelsUsed: string[];
   /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
@@ -978,7 +1003,15 @@ export function computeBrainDiagnostics(
     .reverse()
     .map((e) => {
       const model = (e.args as { model?: unknown } | undefined)?.model;
-      return { label: e.label, message: errorMessageOf(e), ...(typeof model === 'string' && model !== 'default' ? { model } : {}) };
+      const message = errorMessageOf(e);
+      const gate = parseRoleGateRefusal(message);
+      return {
+        label: e.label,
+        message,
+        ...(typeof model === 'string' && model !== 'default' ? { model } : {}),
+        ...(gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {}),
+        ...(gate.callerRole ? { callerRole: gate.callerRole } : {}),
+      };
     });
 
   const modelsUsed = modelsUsedInTrace(events);
@@ -1244,7 +1277,14 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
   // hunting for the failure; naming it is the difference between a number and a lead.
   if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label}${e.model ? ` on ${e.model}` : ''} — ${e.message}`);
+    for (const e of d.errorSteps) {
+      lines.push(
+        `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ''} — ${e.message}`
+          + (e.requiredRole || e.callerRole
+            ? ` — requires ${e.requiredRole ?? 'unknown'}, caller is ${e.callerRole ?? 'unknown'}${e.remediation ? `; ${e.remediation}` : ''}`
+            : ''),
+      );
+    }
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
   }
   // What the model could actually CALL, per turn — not the registry-wide total. A run

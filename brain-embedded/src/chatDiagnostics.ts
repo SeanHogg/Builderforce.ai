@@ -208,6 +208,19 @@ export interface ChatDiagnosticsData {
   selectedProjectName?: string | null;
   tenantId?: number | string | null;
   userId?: string | null;
+  /**
+   * The caller's WORKSPACE (tenant) role — 'viewer' | 'contributor' | 'developer' |
+   * 'manager' | 'owner', as the surface knows it.
+   *
+   * Reported because a whole class of failures is a ROLE GATE, not a wiring fault:
+   * every mutating built-in tool (`tasks.create`, …) requires at least `developer`,
+   * so a chat whose caller is seated as a `contributor` (the canvas-collaborator
+   * default) dies on HTTP 403 for everything that changes workspace data. Without
+   * this line the report's failed steps are unexplained refusals; with it, the cause
+   * and the remedy are stated. Rendered ONLY when the surface actually knows the role
+   * — a missing line means "not gathered", never "no role".
+   */
+  role?: string | null;
   /** The project Evermind head for the CHAT's project (not the selected one). */
   evermind?: ChatDiagnosticsEvermind | null;
   /** The server learn-gate outcome for the most recent assistant turn, if known. */
@@ -818,6 +831,12 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
       + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : ''),
   );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : 'unknown'} · User: ${d.userId ?? 'unknown'}`);
+  // Printed only when known: an absent line means "not gathered", never "no role".
+  // Every mutating built-in tool is gated at ≥ developer, so a `contributor` here is
+  // the likely cause of a run whose failed steps are all HTTP 403 role refusals.
+  if (d.role != null && d.role.trim() !== '') {
+    lines.push(`- Workspace role: ${d.role}`);
+  }
 
   // Account: plan, billing, quota and model entitlement. Rendered BEFORE the Evermind
   // block because it explains a whole class of "the model is dumb / it stopped

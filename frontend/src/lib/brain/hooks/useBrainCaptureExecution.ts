@@ -83,6 +83,7 @@ export function useBrainCaptureExecution({
           projects.find((p) => p.id === (pinnedProjectId ?? viewingProjectId))?.name ?? null,
         tenantId: tenant?.id ?? null,
         userId: user?.id ?? null,
+        role: tenant?.role ?? null,
         messages: conv.messages,
         // The full dialogue is the server chat, opened at the page it was captured from.
         // Origin + path only: a query string can carry a share or invite token, and this
