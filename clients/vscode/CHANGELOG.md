@@ -2,8 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [Unreleased] — Signing in is optional
+## [2026.10.126] — The panel opens at once, and a model you picked says why it could not run
 
+- **The panel no longer waits on the network to open.** Everything it needs from the gateway now loads in the background, so a slow or silent request cannot hold it on "Connecting…". Late answers fill in as they arrive, and requests that never answer now time out. A slow step is named in the BuilderForce output channel.
+- **A picked model that cannot run says so.** In Hybrid, a pick this machine cannot authorize, such as an expired Kimi login, used to be replaced by free models with no explanation. The chat now names the pick and the reason, once per run, with secrets and your home path removed.
+- **Requests stay in the right workspace.** A token that does not belong to the selected workspace is no longer used, including during a workspace switch or after signing out.
+- **The activation network check no longer reports a false failure** when other requests happen to be running at the same time.
+- **`@seanhogg/builderforce-memory` 2026.10.38.** The extension's installed copies had fallen behind the versions it declares.
 - **Signed out is no longer a wall.** The chat panel and sidebar work without an account: chat with a local model or your own provider keys; with no route available, an inline banner offers Sign in, Connect a provider, or Use a local model instead of replacing the chat.
 
 ## [2026.10.125] — A run that keeps re-reading the same thing is told to move on

@@ -205,11 +205,7 @@ export function bootWebPlatformPolicy(): void {
   // NODE_ENV=test), so tests boot the policy without paying for the probe.
   if (process.env.NODE_ENV === 'production') {
     runWebNetworkDenialSelfCheckOnce().catch((error: unknown) => {
-      const message = `BuilderForce web network-denial self-check: crashed — ${String(error)}`;
-      // Reported durably; the console is the last resort when the report itself could not go out.
-      void reportBackgroundFailure({ message, level: 'error' }).then((sent) => {
-        if (!sent) console.error(message);
-      });
+      void reportBackgroundFailure({ message: `BuilderForce web network-denial self-check: crashed — ${String(error)}`, level: 'error' });
     });
   }
 }

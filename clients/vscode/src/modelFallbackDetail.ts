@@ -4,7 +4,7 @@ import type { ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** A secret-bearing key name (`api_key`, `accessToken`, `refresh-token`, `secret`, …). */
-const SECRET_KEY = "(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization)";
+const SECRET_KEY = "(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password)";
 
 /**
  * The failure's message made safe to PERSIST in a chat (it is shown in the notice and kept
@@ -23,11 +23,13 @@ export function redactFallbackText(text: string, home: string = os.homedir()): s
     .replace(/(\bhttps?:\/\/[^\s?#"'<>)]*)\?[^\s"'<>)]*/gi, "$1")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
     .replace(new RegExp(`(["']?\\b${SECRET_KEY}["']?\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,;&"'}]+)`, "gi"), "$1[redacted]")
+    // `Authorization: <credential>`: the scheme word (Bearer/Basic) survives, the credential does not.
+    .replace(/(\bauthorization["']?\s*[=:]\s*(?:(?:Bearer|Basic)\s+)?)(?!\[redacted\]|(?:Bearer|Basic)\s)[^\s,;&"'}]+/gi, "$1[redacted]")
     .replace(/\b(?:sk|bfk)[-_]\S+/gi, "[redacted]");
 }
 
 /** Why a pick fell back, for the notice's second clause: the failure's message, redacted and clamped to one short line. */
 export function fallbackDetail(event: ModelFallbackEvent): string {
   const line = redactFallbackText(event.reason).replace(/\s+/g, " ").trim();
-  return line.length > 160 ? `${line.slice(0, 159)}...` : line;
+  return line.length > 160 ? `${line.slice(0, 157)}...` : line;
 }

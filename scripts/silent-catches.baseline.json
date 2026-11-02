@@ -14,9 +14,9 @@
     "durable-object-direct-report": 0
   },
   "agent-runtime/src": {
-    "empty-catch": 435,
+    "empty-catch": 433,
     "empty-promise-catch": 100,
-    "literal-promise-catch": 223,
+    "literal-promise-catch": 220,
     "console-only": 44,
     "durable-object-direct-report": 0
   },

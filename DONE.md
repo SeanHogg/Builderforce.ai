@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-02 — VS Code panel stalled on "Connecting…", and a Hybrid pick silently became free models (VS Code 2026.10.126 · api 2026.10.97 · frontend 2026.10.102)
+
+- **Stall.** `buildWorkspaceInit` awaited every step serially, and the first `init` frame waited for all of them. The ~5 minutes matches undici's 300 s `headersTimeout`, so an unbounded fetch is the likely cause; which one was not captured. Each step now runs concurrently under `initBudget` (2.5 s). A late real answer re-pushes init, capped per surface, and a slow step logs `[init] <step>`. `fetchAuthed`, the personality block and the Kimi refresh are bounded.
+- **Degraded frames and tenancy.** A token-less frame keeps the webview's token only for the same tenant (`initFrameAuth`). `boundToken` refuses a token that does not act as the selected workspace, on init and on `token.refresh`, and a mint overtaken by sign-out returns nothing.
+- **Silent swap.** A Hybrid pick that cannot be authorized sends a redacted reason through the existing fallback notice, once per run (`pickUnavailable`, `modelFallbackDetail`).
+- **a6937d561 repaired.** Removed the unimported `connectedAccounts` wiring in `gateway.ts` / `localModels.ts`, the MiniMax and Moonshot placeholder credential sources and resolvers, the duplicate Anthropic resolve, and the four `*-code` runtimes that had no credential source.
+- **Also.** G27 self-check counts only its own probe; every consumer on `@seanhogg/builderforce-memory` 2026.10.38; harness tsconfig paths; frontend cycle, `api-transport` and layering guards (Brain panel hooks moved to `components/brain/hooks`).
+
 ## ✅ RESOLVED 2026-11-01 — ~3.3 GB indexing memory: host meta.text kept the full card text per node; clipped to a 256-char excerpt
 
 A reproducible heap profile of indexing one small package attributed the dominant per-node host retention: `meta.text` stored the full card text on every node, while the renderer clips to 140 chars and the full text already lives in the engine (`DocEntry.text`). Added `META_TEXT_EXCERPT = 256` in `packages/agent-tools/src/knowledge/index/hostIndex.ts` and clamped the retained excerpt; profiled 300 cards at ~1.9 MB heap delta with `meta.text` at 78 KB. Pinned by `packages/agent-tools/src/knowledge/index/indexMemory.profile.test.ts` (49 tests). Commit `f6eb694f8`.
