@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.125] — A run that keeps re-reading the same thing is told to move on
+
+- **The no-progress breaker actually fires now.** A run whose calls keep being answered from its own read cache is circling, and the counter that catches it is now the single instance the Brain feeds and the kernel persists — a duplicate the Brain never updated meant the breaker could not fire across a step yield. The agent is steered to change something or hand off, instead of repeating the same read.
+
 ## [2026.10.124] — The prompt returns to the footer, and typing keeps up
 
 - **The prompt lives in the footer again.** The composer moved back out of the panel header (where #6430 had put it) into the footer's composer slot, so the input sits with the conversation instead of beside the logo.
