@@ -169,7 +169,7 @@ describe('project knowledge routes', () => {
     };
     const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify([entry]) }, {});
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as { ok: boolean; hash: string; skippedRefs: number };
     expect(body).toMatchObject({ ok: true, hash: 'h1' });
     expect(body.skippedRefs).toBeGreaterThanOrEqual(1);
     // The stored object dropped the over-long node and key but kept the valid node.

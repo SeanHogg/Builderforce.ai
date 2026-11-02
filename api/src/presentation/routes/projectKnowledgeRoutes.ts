@@ -64,7 +64,7 @@ const zRef = z.string().min(5).max(512).regex(/^(src|ent|fact):/, 'a NodeRef (sr
  * whole review — `putExtracted` drops what exceeds the graph's 512-char bound and reports
  * the count. WriteBody facts/relations/stale keep the strict 512 zRef.
  */
-const zExtractedRef = z.string().min(5).max(4096).regex(/^(src|ent|fact:)/, 'a NodeRef (src: | ent: | fact:)');
+const zExtractedRef = z.string().min(5).max(4096).regex(/^(src|ent|fact):/, 'a NodeRef (src: | ent: | fact:)');
 /** The origin is admitted as any of the four so the WRITER answers `extracted` (400), not zod. */
 const zOrigin = z.enum(['extracted', 'model', 'human', 'agent']);
 const zAnchor = z.object({
@@ -244,10 +244,10 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     if (byteLength(extracted) > MAX_EXTRACTED_BYTES) return tooLarge(MAX_EXTRACTED_BYTES);
     try {
       const { skippedRefs } = await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
+      return json({ ok: true, hash, skippedRefs });
     } catch (error) {
       return writeRefusal(error);
     }
-    return json({ ok: true, hash, skippedRefs });
   }));
 
   router.put('/:projectId/code-analysis/:sha', (c) => withPorts(c, async (p) => {

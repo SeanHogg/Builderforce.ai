@@ -4,7 +4,7 @@
  * extracted node labels are reduced to one line before they are stored.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
+import type { Extracted, NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 
 const bump = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: bump, knowledgeVersion: vi.fn() }));
@@ -92,7 +92,7 @@ describe('putExtracted', () => {
 
   it('drops individual refs over 512 chars, stores the rest, and reports the skipped count', async () => {
     const { deps, put, markRelationsStale } = harness(undefined);
-    const long = `src:r::${'a'.repeat(600)}`; // a deep-path ref a producer emitted over the bound
+    const long = `src:r::${'a'.repeat(600)}` as NodeRef; // a deep-path ref a producer emitted over the bound
     const bad = entry('bad.md', 'h');
     bad.nodes.push({ ref: long, kind: 'symbol', label: 'over-long', pack: 'docs', importance: 0, origin: 'extracted' });
     bad.edges.push({ from: `src:r::bad.md`, to: long, kind: 'calls', weight: 1, origin: 'extracted' });
