@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-02T01:00:44.887Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-02T03:42:45.054Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -96,7 +96,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v4-pro": [0.0000016, 0.0000032],
   "deepseek/deepseek-v4-pro-0813": [1.15e-7, 0.000004],
   "deepseek/deepseek-v4.1-flash": [4.5e-8, 5e-7],
-  "deepseek/deepseek-v4.1-flash-1017": [1.5e-7, 6e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 0.0000012],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 1.5e-7],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 0.000003],
@@ -136,7 +136,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "google/gemma-3-12b-it": [5e-8, 1.5e-7],
   "google/gemma-3-27b-it": [8e-8, 3.5e-7],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [2e-8, 5.9e-8],
+  "google/gemma-4-26b-a4b-it": [1.9e-8, 5.8e-8],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -160,7 +160,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "meta-llama/llama-3.1-70b-instruct": [4e-7, 4e-7],
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-1b-instruct": [2.7e-8, 2.01e-7],
-  "meta-llama/llama-3.2-3b-instruct": [5e-8, 3.3e-7],
+  "meta-llama/llama-3.2-3b-instruct": [5.09e-8, 3.35e-7],
   "meta-llama/llama-3.3-70b-instruct": [1e-7, 3.2e-7],
   "meta-llama/llama-4-maverick": [1.875e-7, 6.525e-7],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -182,7 +182,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "minimax/minimax-m2.5": [2.7e-7, 9.5e-7],
   "minimax/minimax-m2.7": [3e-7, 0.0000012],
   "minimax/minimax-m3": [3e-7, 0.0000012],
-  "minimax/minimax-m3.1-flash": [7.5e-8, 3e-7],
+  "minimax/minimax-m3.1-flash": [1.5e-7, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 0.000002],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -324,7 +324,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-chat-latest": [0.000005, 0.00003],
   "openai/gpt-oss-120b": [1.5e-7, 6e-7],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
-  "openai/gpt-oss-20b": [3e-8, 1.3e-7],
+  "openai/gpt-oss-20b": [1.8e-8, 9e-8],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
   "openai/gpt-oss-safeguard-20b": [7.5e-8, 3e-7],
   "openai/o3": [0.000002, 0.000008],
