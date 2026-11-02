@@ -17,6 +17,8 @@ function assertActsAs(token: string, asTenant: number | undefined): void {
   }
 }
 
+const AUTHED_FETCH_TIMEOUT_MS = 60_000;
+
 /**
  * The one authenticated fetch: JWT exchange, act-as assertion, and the 401
  * refresh-and-retry. Resolves `undefined` when there is no credential (signed
@@ -35,6 +37,9 @@ export async function fetchAuthed(
     assertActsAs(t, asTenant);
     return trackReachability(fetch(`${getBaseUrl()}${path}`, {
       ...init,
+      // Unbounded, a server that never answers holds the caller for undici's 300 s default;
+      // an upload (FormData) may legitimately run longer, so it is left to its caller.
+      ...(init.signal || init.body instanceof FormData ? {} : { signal: AbortSignal.timeout(AUTHED_FETCH_TIMEOUT_MS) }),
       // A multipart body (an attachment upload) carries its own boundary in the header
       // fetch writes for it; forcing JSON there would make the body unreadable.
       headers: {

@@ -60,6 +60,7 @@ import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
 import { createTurnQueue } from "./runTurnQueue";
 import { askedText } from "./runAsked";
+import { fallbackDetail } from "./modelFallbackDetail";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
 export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
@@ -262,7 +263,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
     // A Hybrid pick that failed and was answered with Auto is announced to THIS chat's
     // panel, which shows the one-line notice — a fallback is never silent.
-    const transport = await ports.stream((event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from }));
+    // A sub-agent's stream stays silent: its parent run already told the person.
+    const transport = await ports.stream(p.child ? undefined : (event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from, reason: fallbackDetail(event) }));
     const role = p.child?.role;
     const routed: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
     const stream: BrainStreamFn = ports.recordUsage

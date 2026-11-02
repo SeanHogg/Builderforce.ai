@@ -141,9 +141,9 @@ export function installHostRunDriver(): () => void {
 
   // Hybrid's pick failed and the turn was answered with Auto — shown only for the chat
   // this panel is showing (runs for other chats keep going out in the host).
-  const offFallback = onHostMessage<{ chatId: number; from: string }>('run.modelFallback', (m) => {
+  const offFallback = onHostMessage<{ chatId: number; from: string; reason?: string }>('run.modelFallback', (m) => {
     if (context.chatId != null && m.chatId !== context.chatId) return;
-    hostModelFallback.report({ from: m.from, reason: '' });
+    hostModelFallback.report({ from: m.from, reason: m.reason ?? '' });
   });
 
   // Which runs are a chat's live sub-agents. Each child's own run is mirrored by `run.sync`

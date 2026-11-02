@@ -78,13 +78,33 @@ function defaultModel(): string | undefined {
   return vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") || undefined;
 }
 
+/** The routing choice an explicit pick makes — the ONE sync mapping, shared by the resolver
+ *  and {@link pickedChoice}. `model` overrides the pick's own (the entitled one). */
+function choiceOfPick(pick: ModelPick | undefined, model: string | undefined = pick?.model): EffectiveModelChoice | undefined {
+  if (pick?.mode === "auto") return routingFor({ mode: "auto" });
+  if (pick?.mode === "byo_pool") return routingFor({ mode: "byo_pool" });
+  if (pick?.mode === "model" && model) return { model, modelStrict: true, ...routingFor({ mode: "model", model }) };
+  return undefined;
+}
+
+/**
+ * The saved explicit pick as a choice, read from memory with NO network — what a caller
+ * that cannot wait on {@link resolveEffectiveModelChoice} (entitlement and the project's
+ * Evermind head are reads) shows meanwhile, so a late resolution never reports another
+ * model than the one picked. Entitlement is not checked (the late frame corrects a pick
+ * the plan cannot use). Nothing picked ⇒ `{}` (inherit; the resolved choice follows).
+ */
+export function pickedChoice(): EffectiveModelChoice {
+  return choiceOfPick(selected) ?? {};
+}
+
 export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage): Promise<EffectiveModelChoice> {
-  if (selected?.mode === "auto") return routingFor({ mode: "auto" });
-  if (selected?.mode === "byo_pool") return routingFor({ mode: "byo_pool" });
   if (selected?.mode === "model" && selected.model) {
     const model = await entitled(secrets, selected.model);
-    return model ? { model, modelStrict: true, ...routingFor({ mode: "model", model }) } : routingFor({ mode: "auto" });
+    return (model ? choiceOfPick(selected, model) : undefined) ?? routingFor({ mode: "auto" });
   }
+  const explicit = choiceOfPick(selected);
+  if (explicit) return explicit;
   const project = getSelectedProject();
   if (project) {
     const head = await getProjectEvermindHead(secrets, project.id).catch(() => undefined);

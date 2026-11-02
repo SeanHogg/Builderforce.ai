@@ -9,12 +9,15 @@ import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY } from "./gateway";
 import { fetchPersonalityBlock } from "./personalityLimbic";
 import { INIT_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
-import { getEditorContextLive } from "./editorContext";
-import { detectPendingChanges } from "./gitChanges";
-import { resolveModelRoute } from "./modelRouting";
+import { getEditorContext, getEditorContextLive } from "./editorContext";
+import { clientPinOf } from "@builderforce/local-inference";
+import { detectPendingChanges, EMPTY_CHANGE_SET } from "./gitChanges";
+import { resolveModelRoute, type ModelRoute } from "./modelRouting";
+import { pickedChoice } from "./modelState";
+import { createInitBudget } from "./initBudget";
 import { localModelLabels } from "./localModelLabels";
 import { inferenceModeLabels } from "./inferenceModeLabels";
-import { inferenceModeInit } from "./inferenceModeSetting";
+import { currentInferenceMode, inferenceModeInit } from "./inferenceModeSetting";
 import { chatTicketsLabels } from "./chatTicketsLabels";
 import { chatSurfaceLabels } from "./chatSurfaceLabels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
@@ -43,44 +46,56 @@ export async function buildWorkspaceInit(
     session: WorkspaceCanvasSession;
     surface: "chat" | "graph";
     boardBeside?: boolean;
-    /** The definition index was still building at the deadline and has now landed: re-push init. */
-    onGroundingLate?: () => void;
+    /** A step (the definition index, the token, the model route…) was still pending at its
+     *  deadline and has now landed: re-push init. Fires at most once per build. */
+    onLate?: () => void;
+    /** The build finished; `true` when any step went past its budget (see `createLateRepushLimit`). */
+    onBuilt?: (hadLate: boolean) => void;
   },
 ): Promise<Record<string, unknown>> {
   const signedIn = !!(await ctx.secrets.get(SECRET_KEY));
-  const token = signedIn ? ((await getTenantJwt(ctx.secrets)) ?? null) : null;
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
-  // point of shipping this: the agent must not open a chat asking where the code is.
-  const editorContext = await getEditorContextLive();
-  // `projectId → name` for every project, so the header can name the project an
-  // existing chat belongs to (best-effort; falls back to "No project").
-  const projectNames: Record<string, string> = {};
-  if (signedIn) {
-    try {
-      for (const [id, name] of await getProjectNames(ctx.secrets)) projectNames[String(id)] = name;
-    } catch {
-      /* names are best-effort */
-    }
-  }
-  // The signed-in user's PERSONALITY-only directive block — fetched once per
-  // session (cached in `personalityLimbic.ts`) and injected into the webview's
-  // ambient system channel, so the Brain chat's tone reflects the user. The
-  // webview can't bundle the shared compiler (--no-dependencies), so the host
-  // fetches the compiled block from the gateway. '' when the user has no
-  // profile (a no-op) or offline.
-  let personalityBlock = "";
-  if (signedIn) {
-    try {
-      const userId = (await getCurrentUserId(ctx.secrets)) ?? undefined;
-      personalityBlock = await fetchPersonalityBlock(ctx.secrets, userId ? { userId } : undefined);
-    } catch {
-      /* personality is best-effort — never blocks init */
-    }
-  }
-  // The SAME seam every other AI surface routes through, so the panel cannot drift
-  // onto a different model (or a different transport) from the chat participant.
-  const modelChoice = await resolveModelRoute(ctx.secrets);
+  // The panel shows "Connecting…" until this frame is posted, so NOTHING here may wait on
+  // the network: the slow steps run together, each under a short budget, and a late one
+  // degrades to a safe value and re-pushes init when it lands (`onLate`).
+  const budget = createInitBudget(opts.onLate);
+  const fallbackRoute = pickedRoute();
+  // Grounding starts with the rest (its own budget): not queued behind them.
+  const groundingP = stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late });
+  const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges] = await Promise.all([
+    // Null while signed in is tolerated: the webview mints its own (`WorkspaceApp.mintToken`).
+    budget.step("token", signedIn ? getTenantJwt(ctx.secrets).then((t) => t ?? null) : Promise.resolve(null), null, (t) => t !== null),
+    // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
+    // point of shipping this: the agent must not open a chat asking where the code is.
+    budget.step("editorContext", getEditorContextLive(), getEditorContext()),
+    // `projectId → name` for every project, so the header can name the project an
+    // existing chat belongs to (best-effort; falls back to "No project").
+    budget.step("projectNames", signedIn ? projectNamesOf(ctx) : Promise.resolve({}), {} as Record<string, string>, (names) => Object.keys(names).length > 0),
+    // The signed-in user's PERSONALITY-only directive block — fetched once per
+    // session (cached in `personalityLimbic.ts`) and injected into the webview's
+    // ambient system channel, so the Brain chat's tone reflects the user. The
+    // webview can't bundle the shared compiler (--no-dependencies), so the host
+    // fetches the compiled block from the gateway. '' when the user has no
+    // profile (a no-op) or offline.
+    budget.step("personality", signedIn ? personalityBlockOf(ctx) : Promise.resolve(""), "", (block) => block !== ""),
+    // The SAME seam every other AI surface routes through, so the panel cannot drift
+    // onto a different model (or a different transport) from the chat participant.
+    // Late, it shows the saved pick (read with no network), never another model.
+    budget.step("modelRoute", resolveModelRoute(ctx.secrets), fallbackRoute),
+    // The models this MACHINE can serve, in the shared builder's row shape. The
+    // composer's menu is built from the gateway catalogue, which by definition cannot
+    // know about them — so without this the panel offered no way to pick one and the
+    // feature existed only in the command palette.
+    budget.step("localModels", listLocalModels(getLocalModelsConfig()).then(localModelOptions), []),
+    // What is uncommitted RIGHT NOW. Seeds the chat's pending-changes bar so a panel
+    // opened after the edits still says they are waiting; refreshed via
+    // `pendingChanges` messages.
+    budget.step("pendingChanges", detectPendingChanges(), EMPTY_CHANGE_SET),
+  ]);
+  const grounding = await groundingP;
+  opts.onBuilt?.(budget.hadLate());
+  // The route is still resolving and the saved pick is an on-device model: let the panel render.
+  const localPick = modelChoice === fallbackRoute && !!clientPinOf(modelChoice.model);
   return {
     type: "init",
     baseUrl: getBaseUrl(),
@@ -103,7 +118,10 @@ export async function buildWorkspaceInit(
     chatHistoryPath: path.join(ctx.globalStorageUri.fsPath, JOURNAL_FILE),
     platformPolicy: platformPolicy().snapshot(),
     ...inferenceModeInit(),
-    token,
+    // OMITTED (not null) when signed in without one yet: a degraded frame must not wipe the
+    // webview's live token (bridgeState keeps it); explicit null means signed out.
+    ...(signedIn && token === null ? {} : { token }),
+    ...(localPick ? { localPick: true } : {}),
     // Manual pick > active project's Evermind pin > configured default. Sending the
     // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
     // model on every completion (auto-following learning bumps mid-session).
@@ -120,16 +138,10 @@ export async function buildWorkspaceInit(
     // used to default this off in its own code and never consult the setting, so
     // changing the setting moved the participant and left the panel asking.
     autoApproveDefault: autoApproveDefault(),
-    // The models this MACHINE can serve, in the shared builder's row shape. The
-    // composer's menu is built from the gateway catalogue, which by definition cannot
-    // know about them — so without this the panel offered no way to pick one and the
-    // feature existed only in the command palette.
-    localModels: localModelOptions(await listLocalModels(getLocalModelsConfig())),
+    localModels,
     // The workspace SHAPE only: run notes change after every run and reach each run
     // fresh through the host (`recentActivitySection`), so this prompt stays cacheable.
-    // Bounded: a cold definition index is a whole-workspace parse, and the panel shows
-    // "Connecting…" until init lands — it is re-pushed when the index arrives.
-    grounding: await stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: opts.onGroundingLate }),
+    grounding,
     // Live editor context (active file / selection / open tabs). Seeds the React
     // app's ambient system channel; refreshed via `editorContext` messages.
     editorContext,
@@ -140,10 +152,7 @@ export async function buildWorkspaceInit(
     // `hasWorkspace` is kept — other consumers read it.
     workspaceRoot: root,
     git: editorContext?.git,
-    // What is uncommitted RIGHT NOW. Seeds the chat's pending-changes bar so a panel
-    // opened after the edits still says they are waiting; refreshed via
-    // `pendingChanges` messages.
-    pendingChanges: await detectPendingChanges(),
+    pendingChanges,
     // The sidebar's active project — injected into the system prompt (so the
     // Brain scopes platform tools without asking for a projectId) AND used to
     // scope newly-created chats. Re-pushed on project change via refresh.
@@ -169,6 +178,22 @@ export async function buildWorkspaceInit(
     // How an attached picture is prepared for the model (`builderforce.images.*`).
     images: imagePrepSettings(),
   };
+}
+
+/** The route to show while the real one resolves: the saved pick, read with no network. */
+function pickedRoute(): ModelRoute {
+  return { ...pickedChoice(), inferenceMode: currentInferenceMode() };
+}
+
+async function projectNamesOf(ctx: vscode.ExtensionContext): Promise<Record<string, string>> {
+  const names: Record<string, string> = {};
+  for (const [id, name] of await getProjectNames(ctx.secrets)) names[String(id)] = name;
+  return names;
+}
+
+async function personalityBlockOf(ctx: vscode.ExtensionContext): Promise<string> {
+  const userId = (await getCurrentUserId(ctx.secrets)) ?? undefined;
+  return fetchPersonalityBlock(ctx.secrets, userId ? { userId } : undefined);
 }
 
 /** The `builderforce.images.*` caps the panel's picture prep runs with (brain-embedded `ImagePrepOptions`). */

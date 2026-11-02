@@ -57,6 +57,8 @@ const nonEmpty = (s: string | undefined | null): s is string => typeof s === "st
  * cached — a failure cached for the session left personality off until the editor
  * restarted. Signed out it returns before any request.
  */
+const PERSONALITY_TIMEOUT_MS = 10_000;
+
 async function requestPersonalityLayers(secrets: vscode.SecretStorage, persona?: PersonaContext): Promise<PersonalityLayers | null> {
   try {
     const key = await getApiKey(secrets);
@@ -65,6 +67,8 @@ async function requestPersonalityLayers(secrets: vscode.SecretStorage, persona?:
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({ text: "", ...(persona ?? {}) }),
+      // Unbounded, a gateway that never answers held every caller (the panel's init) for undici's 300 s.
+      signal: AbortSignal.timeout(PERSONALITY_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = (await res.json()) as { block?: string; personaBlock?: string; setpoints?: LimbicState };

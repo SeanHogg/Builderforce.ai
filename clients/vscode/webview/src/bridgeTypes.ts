@@ -62,6 +62,9 @@ export interface InitData {
    * surface cannot drift from the chat participant the way the codebase scanner once did.
    */
   localRoute?: { baseUrl: string; model: string };
+  /** Degraded frame: the route is still resolving and the saved pick is an on-device model, so the
+   *  panel renders (no account needed) instead of waiting on a token it does not need. */
+  localPick?: true;
   grounding?: string;
   signedIn: boolean;
   /** The configured `builderforce.permissionMode`, as a boolean: the standing answer to

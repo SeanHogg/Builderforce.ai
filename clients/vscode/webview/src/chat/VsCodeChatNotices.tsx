@@ -18,7 +18,7 @@
 
 import { useMemo } from 'react';
 import { parseByoUnresolved, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
-import { ChatErrorBanner, ModelFallbackNotice, useDismissibleNotice } from '@seanhogg/builderforce-brain-ui';
+import { ChatErrorBanner, ModelFallbackNotice, useDismissibleNotice, useModelFallback } from '@seanhogg/builderforce-brain-ui';
 import { hostModelFallback } from '../hostRunDriver';
 import { openUpgrade } from '../accountPlan';
 import { invalidatePlanSnapshot } from '../planSnapshot';
@@ -46,6 +46,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
   const byoProviders = byoEntries.map((e) => e.provider).join(', ');
   const byoOtherWorkspace = byoEntries.length > 0 && byoEntries.every((e) => e.reason === 'other-workspace');
   const cap = useDismissibleNotice(conv.providerCap);
+  const fallbackEvent = useModelFallback(hostModelFallback);
 
   return (
     <>
@@ -85,7 +86,8 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
       <ModelFallbackNotice
         channel={hostModelFallback}
         labels={{
-          fallback: t('app.modelFallback', 'Your pick {model} failed; answered with Auto.'),
+          // The line names the pick; WHY (the host's clamped detail) follows in brackets.
+          fallback: t('app.modelFallback', 'Your pick {model} failed; answered with Auto.') + (fallbackEvent?.reason ? ` (${fallbackEvent.reason})` : ''),
           dismiss: errorLabels.dismiss,
         }}
       />

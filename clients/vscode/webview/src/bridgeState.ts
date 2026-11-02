@@ -105,7 +105,9 @@ export function refreshToken(): Promise<void> {
 }
 
 handleFrame('init', (m) => {
-  token = (m.token as string | null | undefined) ?? null;
+  // A frame that OMITS `token` is degraded (the host's mint was late): the live token stays.
+  // An explicit `null` is the host saying signed out.
+  if ('token' in m) token = (m.token as string | null | undefined) ?? null;
   initData = m as unknown as InitData;
   editorContext = initData.editorContext;
   pendingChanges = initData.pendingChanges;

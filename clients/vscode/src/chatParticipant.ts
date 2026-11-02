@@ -6,6 +6,7 @@ import { isRunning, runAbortSignal, withRunUsage } from "@seanhogg/builderforce-
 import { ChatMessage, SECRET_KEY, getLocalModelsConfig } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn, routeStream } from "./modelRouting";
+import { fallbackDetail } from "./modelFallbackDetail";
 import { streamNoLocalModel } from "./noLocalModelPrompt";
 import { OWNER_NAME, type BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
@@ -328,7 +329,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         // Every call lands in the chat's run usage ledger — its spend, offline (PRD 36).
         stream: withRunUsage(
           routeStream(modelChoice, key, (event) => {
-            stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}_\n\n`);
+            const why = fallbackDetail(event);
+            stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}${why ? ` (${why})` : ""}_\n\n`);
           }),
           local.usage,
           { chatId: runChatId, runKey: runChatId, mode: "work" },

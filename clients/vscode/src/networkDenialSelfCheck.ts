@@ -12,7 +12,7 @@
  *
  * What it proves, once, at activation:
  *   1. a platform request the policy refuses never reaches the network
- *      (the request journal shows zero new `attempted` records);
+ *      (the request journal shows zero new `attempted` records for the probe's URL);
  *  2. a non-platform request is NOT refused by the guard (a dead boundary
  *     cannot fake a denial);
  *   3. the result is surfaced on the BuilderForce output channel either way —
@@ -62,6 +62,16 @@ function skippedReport(reason: string): NetworkDenialSelfCheckReport {
 
 function failedReport(failures: readonly string[], attemptedDelta: number, blockedDelta: number): NetworkDenialSelfCheckReport {
   return { ran: true, verified: false, skipped: false, reason: failures.join("; "), attemptedDelta, blockedDelta, failures };
+}
+
+/** The journal records the URL as fetch received it; compare in canonical form so a
+ *  re-spelling (case, default port) cannot hide the probe's own attempt. */
+function normalizedUrl(url: string): string {
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -121,7 +131,12 @@ export async function runNetworkDenialSelfCheck(
   void probeRefused;
 
   const after = platformRequestAccount();
-  const attemptedDelta = after.attempted - before.attempted;
+  // Only attempts at the probe's OWN url count: activation runs beside real, permitted
+  // traffic (the sidebar's reads), and that is not the refused request reaching the network.
+  const probe = normalizedUrl(pushUrl);
+  const attemptedAt = (account: typeof before) =>
+    account.recent.filter((record) => record.outcome === "attempted" && normalizedUrl(record.url) === probe).length;
+  const attemptedDelta = attemptedAt(after) - attemptedAt(before);
   const blockedDelta = after.blocked - before.blocked;
   if (attemptedDelta !== 0) {
     failures.push(`${attemptedDelta} platform request(s) reached the network while refused`);

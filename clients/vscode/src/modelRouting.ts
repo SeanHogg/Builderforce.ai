@@ -103,6 +103,12 @@ export interface ModelRoute {
    */
   unauthorized?: { provider: LocalRuntimeId; detail: string };
   /**
+   * Hybrid, a real turn: the pick could not be authorized on this machine, so the turn is
+   * answered with Auto. Carried so {@link routeStream} tells the person through the same
+   * fallback notice a failed pick gets, instead of free models answering unexplained.
+   */
+  pickUnavailable?: { model: string; detail: string };
+  /**
    * Hybrid: the connected accounts this editor calls itself (Kimi), read per Auto call and
    * tried after this device and before the gateway (`createHostModelStream`).
    */
@@ -194,7 +200,8 @@ async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRo
     // Only Specific promises the pick and nothing else; Hybrid answers with Auto.
     const failTurn = choice.inferenceMode === "specific" && localRuntime(pin.provider).gatewayVendor !== undefined;
     if (request.turn) logLine(`[route] ${choice.model} could not run on this machine (${authorized.detail}); ${failTurn ? "failing the turn" : "routing to the gateway"}.`);
-    return failTurn ? { ...choice, unauthorized: { provider: pin.provider, detail: authorized.detail } } : choice;
+    if (failTurn) return { ...choice, unauthorized: { provider: pin.provider, detail: authorized.detail } };
+    return request.turn && choice.model && choice.inferenceMode === "hybrid" ? { ...choice, pickUnavailable: { model: choice.model, detail: authorized.detail } } : choice;
   }
   if (request.turn) logLine(`[route] ${choice.model} runs on this machine via ${pin.provider}.`);
   return { ...choice, local: { ...pin, endpoint: authorized.endpoint } };
@@ -285,7 +292,9 @@ function logLocalFirstAttempt(record: LocalFirstAttemptRecord): void {
  *
  * `onFallback` is told when Hybrid's pick failed (transport-class) and the turn was
  * answered with Auto — the surface that started the turn shows the one-line notice
- * (the webview through its run host, the chat participant in its response stream).
+ * (the webview through its run host, the chat participant in its response stream); it is
+ * also told once, up front, when the pick could not be authorized here
+ * ({@link ModelRoute.pickUnavailable}).
  */
 export function routeStream(
   route: ModelRoute,
@@ -295,6 +304,9 @@ export function routeStream(
   if (route.unauthorized) throw unauthorizedError(route.unauthorized);
   if (routeNeedsLocalModel(route)) throw new Error(NO_LOCAL_MODEL);
   if (!apiKey && routeRequiresSignIn(route)) throw new Error(NOT_SIGNED_IN);
+  // The pick never ran (it could not be authorized here): say so once, the way a pick that
+  // failed mid-call is told — the turn is answered with Auto either way.
+  if (route.pickUnavailable) onFallback?.({ from: route.pickUnavailable.model, reason: route.pickUnavailable.detail });
   const cloud = !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey) : null;
   const local = route.local;
   const pinnedRef = local ? formatLocalModelRef(local.provider, local.model) : null;

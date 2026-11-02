@@ -57,6 +57,8 @@ export type KimiRefreshResult = { kind: "refreshed"; record: KimiCredentialRecor
 /** The subset of `fetch` this module needs, injected so the grant is testable. */
 export type KimiFetch = (input: string, init: RequestInit) => Promise<Response>;
 
+const KIMI_REFRESH_TIMEOUT_MS = 15_000;
+
 /**
  * Perform one `refresh_token` grant against the user's own Kimi account.
  *
@@ -71,12 +73,18 @@ export async function refreshKimiAccessToken(
   const request = kimiRefreshTokenRequest(refreshToken, (deps.env ?? process.env) as KimiOAuthEnv);
 
   let response: Response;
+  let text: string;
   try {
+    // One signal bounds the headers AND the body read: a Kimi that never answers must not
+    // hold a caller (the panel's init) for undici's 300 s default.
+    const signal = AbortSignal.timeout(KIMI_REFRESH_TIMEOUT_MS);
     response = await fetchImpl(request.url, {
       method: request.method,
       headers: request.headers,
       body: request.body,
+      signal,
     });
+    text = await response.text();
   } catch (error) {
     return { kind: "unavailable", detail: `Could not reach ${request.url}: ${(error as Error).message}` };
   }
@@ -86,7 +94,7 @@ export async function refreshKimiAccessToken(
   // would discard exactly that.
   const outcome = parseKimiTokenResponse(
     response.status,
-    parseKimiResponseBody(await response.text()),
+    parseKimiResponseBody(text),
     refreshToken,
   );
   if (outcome.kind === "tokens") {

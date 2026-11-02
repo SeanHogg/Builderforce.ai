@@ -38,7 +38,6 @@ import {
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
 import { hostPageEngines } from "./pageEngineBridge";
-import { connectedAccounts, localCredentialSnapshot } from "./gateway";
 
 // Re-exported for the editor modules that already reach the local path through this
 // file (the panel's proxy fence, the Synapse catalog, the model-state pin check, the
@@ -82,7 +81,6 @@ export function resolveLocalChatEndpoint(
  * Every model this machine can serve directly, for the pickers. Probed FRESH (the user
  * opening a picker may have just started a runtime) and without capability cards — a
  * row needs only the id. Kimi's rows come from the install already read.
- * Also includes models from connected BYO provider accounts.
  */
 export async function listLocalModels(config: LocalModelsConfig, fetchImpl: FetchLike = globalFetch): Promise<LocalModel[]> {
   if (!config.enabled) return [];
@@ -95,24 +93,7 @@ export async function listLocalModels(config: LocalModelsConfig, fetchImpl: Fetc
         label: entry.displayName,
       }))
     : [];
-  // Connected BYO provider models — each provider that has a connected account
-  // contributes its catalog models from the credential snapshot.
-  const byoModels: LocalModel[] = [];
-  const accounts = connectedAccounts({}, async () => ({}));
-  for (const provider of accounts.providers) {
-    const snapshot = localCredentialSnapshot(provider);
-    if (!snapshot || !snapshot.baseUrl) continue;
-    const providerModels = snapshot.models ?? [];
-    for (const m of providerModels) {
-      byoModels.push({
-        ref: formatLocalModelRef(provider, m.model),
-        provider,
-        model: m.model,
-        label: m.displayName ?? m.model,
-      });
-    }
-  }
-  return [...probes.flatMap((p) => p.models), ...kimi, ...byoModels];
+  return [...probes.flatMap((p) => p.models), ...kimi];
 }
 
 /**

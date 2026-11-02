@@ -16,6 +16,7 @@ import { captureFromEditor, navigateFromCanvas, openCapturedFile } from "./canva
 import type { WorkspaceCanvasSession } from "./workspaceSession";
 import { postToWebview, respondToWebview, type WebviewInbound, type WebviewOwner } from "./webviewHostBridge";
 import { buildWorkspaceInit } from "./workspaceInit";
+import { createLateRepushLimit } from "./initBudget";
 import { LocalFetchProxy } from "./localFetchProxy";
 import { pickWorkspaceContext } from "./contextPicker";
 import { hostAttachmentIngress } from "./hostIngress";
@@ -536,6 +537,8 @@ export class WorkspaceSurface implements vscode.Disposable {
    *  (read before the pick landed) must never be posted after a newer one. */
   private initSeq = 0;
   private latestInit: Promise<void> = Promise.resolve();
+  /** Caps chained late re-pushes (a hung gateway must not keep re-rendering the panel). */
+  private readonly lateRepush = createLateRepushLimit();
 
   /** Resolves once the NEWEST init is posted — a superseded build waits on it rather than
    *  returning early, so a caller (`ready`) still posts after an init has landed. */
@@ -547,7 +550,8 @@ export class WorkspaceSurface implements vscode.Disposable {
         surface: this.surfaceRequest,
         boardBeside: !!this.host.boardBeside,
         // Only the newest init re-pushes: a superseded build's callback would post a duplicate.
-        onGroundingLate: () => { if (live.has(this) && seq === this.initSeq) this.refresh(); },
+        onLate: () => { if (live.has(this) && seq === this.initSeq && this.lateRepush.allow()) this.refresh(); },
+        onBuilt: (hadLate) => this.lateRepush.built(hadLate),
       });
       if (seq !== this.initSeq) return this.latestInit;
       this.post(this.host.frame ? this.host.frame(init) : init);

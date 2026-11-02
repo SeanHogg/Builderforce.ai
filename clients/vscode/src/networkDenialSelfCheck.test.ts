@@ -79,6 +79,30 @@ describe("G27 activation-time network-denial self-check", () => {
     expect(delta.blocked).toBe(1);
   });
 
+  it("does not count unrelated concurrent platform traffic as the refused probe reaching the network", async () => {
+    bindPlatformPolicy({ subscriptions } as never);
+    await platformPolicyResolved();
+    // Activation runs beside real, PERMITTED platform traffic (a read the gate lets through).
+    // Fire one while the check's probes are in flight: it journals an `attempted` record for
+    // another URL, which is not the refused push reaching the network. Pre-aborted, so no
+    // socket opens in the test host.
+    const installed = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      void installed("https://api.builderforce.ai/api/health", { signal: AbortSignal.abort() }).catch(() => undefined);
+      return installed(input, init);
+    }) as typeof fetch;
+    restoreFetch = () => {
+      globalThis.fetch = installed;
+    };
+    const before = platformRequestAccount();
+    const report = await runNetworkDenialSelfCheck();
+
+    expect(accountDelta(before).attempted).toBeGreaterThan(0);
+    expect(report.failures).toEqual([]);
+    expect(report.verified).toBe(true);
+    expect(report.attemptedDelta).toBe(0);
+  });
+
   it("skips (does not assert a denial) when the resolved mode permits synchronize", async () => {
     bindPlatformPolicy({ subscriptions } as never);
     // Let the first refresh land, THEN set the permitted snapshot: a set before resolution

@@ -22,11 +22,7 @@ export type LocalRuntimeId =
   | 'bfi'
   | 'webllm'
   | 'browser'
-  | 'kimi-code'
-  | 'xai-code'
-  | 'minimax-code'
-  | 'moonshot-code'
-  | 'anthropic-code';
+  | 'kimi-code';
 
 /**
  * Where a runtime's calls go, and what (if anything) authenticates them. An on-device
@@ -160,15 +156,6 @@ const KIMI_CODE_CATALOG_ALIASES: Readonly<Record<string, string>> = {
   'kimi-latest': '~moonshotai/kimi-latest',
 };
 
-/** Priced catalog ids for the other connected BYO accounts. Both the bare id a provider lists and the
- *  vendor-prefixed one resolve; an unlisted id is unpriced, which the ledger reports as unknown. */
-const BYO_CATALOG_ALIASES: Readonly<Record<'xai' | 'minimax' | 'moonshot' | 'anthropic', Readonly<Record<string, string>>>> = {
-  xai: { 'grok-4': 'x-ai/grok-4', 'grok-code-fast-1': 'x-ai/grok-code-fast-1', 'grok-3': 'x-ai/grok-3', 'grok-3-mini': 'x-ai/grok-3-mini' },
-  minimax: { 'MiniMax-M2': 'minimax/minimax-m2', 'MiniMax-M2.1': 'minimax/minimax-m2.1', 'MiniMax-M1': 'minimax/minimax-m1' },
-  moonshot: { 'kimi-k2-0905-preview': 'moonshotai/kimi-k2-0905', 'kimi-k2-thinking': 'moonshotai/kimi-k2-thinking', 'kimi-k2.5': 'moonshotai/kimi-k2.5' },
-  anthropic: { 'claude-sonnet-4-5': 'anthropic/claude-sonnet-4.5', 'claude-opus-4-1': 'anthropic/claude-opus-4.1', 'claude-haiku-4-5': 'anthropic/claude-haiku-4.5' },
-};
-
 /** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */
 export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
   { id: 'synapse', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
@@ -224,14 +211,6 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     reach: 'page',
   },
   { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code', catalogAliases: KIMI_CODE_CATALOG_ALIASES, providerSampling: true, accountProvider: 'kimi' },
-  // Connected BYO accounts a client calls from the person's own machine. Each is hosted
-  // (`onDevice: false`), declared (the credential carries the model list), and reached by an
-  // explicit pin or Hybrid's `accounts` — never by on-device local-first. Priced through the
-  // catalog aliases below; an id with no alias is UNPRICED (unknown), never free.
-  { id: 'xai-code', automaticRank: Number.POSITIVE_INFINITY, label: 'xAI Grok', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'xai-oauth', catalogAliases: BYO_CATALOG_ALIASES.xai, accountProvider: 'xai' },
-  { id: 'minimax-code', automaticRank: Number.POSITIVE_INFINITY, label: 'MiniMax', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'minimax', catalogAliases: BYO_CATALOG_ALIASES.minimax, accountProvider: 'minimax' },
-  { id: 'moonshot-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Moonshot', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'moonshot', catalogAliases: BYO_CATALOG_ALIASES.moonshot, accountProvider: 'moonshot' },
-  { id: 'anthropic-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Anthropic', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'anthropic', catalogAliases: BYO_CATALOG_ALIASES.anthropic, accountProvider: 'anthropic' },
 ];
 
 /** The runtimes reached over HTTP — what a prober, a settings form or an endpoint

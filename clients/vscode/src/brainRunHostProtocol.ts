@@ -86,8 +86,8 @@ export type RunHostMessage =
   /** A chat's LIVE sub-agents — each is a run of its own, mirrored by its run key. */
   | { type: "run.children"; chatId: number; children: ChildView[] }
   /** Hybrid's pick (`from`) failed and the turn was answered with Auto — the panel shows
-   *  the one-line notice for this chat. */
-  | { type: "run.modelFallback"; chatId: number; from: string };
+   *  the one-line notice for this chat. `reason` is WHY (clamped), shown after the line. */
+  | { type: "run.modelFallback"; chatId: number; from: string; reason?: string };
 
 /** A webview panel watching the runs — anything that can be posted to. */
 export interface RunSink {

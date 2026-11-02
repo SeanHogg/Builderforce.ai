@@ -77,7 +77,7 @@ export function WorkspaceApp() {
   // A pinned on-device model skips this gate's mint; a board that needs the gateway
   // mints for itself (`useBoardAuth`).
   useEffect(() => {
-    if (!init?.signedIn || init.localRoute) return;
+    if (!init?.signedIn || init.localRoute || init.localPick) return;
     if (init.token || getToken()) {
       setTokenFailed(false);
       return;
@@ -105,7 +105,7 @@ export function WorkspaceApp() {
   // SIGNED OUT IS NOT A WALL (offline-first): the chat renders and runs on whatever local /
   // BYO route exists; with none, `VsCodeChatNotices` shows an inline banner offering
   // Sign in / Connect a provider / Use a local model. See `signedOutGate.ts`.
-  const gate = rootGate({ signedIn: init.signedIn, hasToken, localRoute: !!init.localRoute, tokenFailed });
+  const gate = rootGate({ signedIn: init.signedIn, hasToken, localRoute: !!(init.localRoute || init.localPick), tokenFailed });
   if (gate !== 'ready') {
     if (gate === 'connecting') return <div className="bf-center">{t('app.connecting', 'Connecting…')}</div>;
     return (
