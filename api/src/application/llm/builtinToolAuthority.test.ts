@@ -17,8 +17,8 @@ describe('mayRunBuiltinTool — the tool-path twin of the route gates', () => {
     }
   });
 
-  it('lets any member write only their OWN chat and session rows', () => {
-    for (const tool of ['brain.create', 'brain.update', 'brain.delete', 'chats.link_ticket', 'chats.consolidate', 'my_sessions.revoke']) {
+  it('lets any member write only their OWN chat and session rows, and record their work delta', () => {
+    for (const tool of ['brain.create', 'brain.update', 'brain.delete', 'chats.link_ticket', 'chats.consolidate', 'my_sessions.revoke', 'tickets.from_delta']) {
       expect(mayRunBuiltinTool(tool, true, TenantRole.CONTRIBUTOR)).toBe(true);
     }
   });

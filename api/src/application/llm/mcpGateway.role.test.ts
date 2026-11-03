@@ -15,10 +15,10 @@ describe('roleFilterBuiltinTools — the advertised catalog honours the caller r
     { tool: 'brain.create', mutates: true },
   ];
 
-  it('hides every workspace write from a contributor and a viewer, keeping their own-chat writes', () => {
+  it('hides workspace writes from a contributor and a viewer, keeping their own-chat writes and work-delta recording', () => {
     for (const role of [TenantRole.CONTRIBUTOR, TenantRole.VIEWER]) {
       const ids = roleFilterBuiltinTools(role, tools).map((t) => t.tool);
-      expect(ids).toEqual(['tasks.list', 'brain.create']);
+      expect(ids).toEqual(['tasks.list', 'tickets.from_delta', 'brain.create']);
     }
   });
 

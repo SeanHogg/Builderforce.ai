@@ -39,6 +39,15 @@ const SELF_SCOPED_TOOLS: ReadonlySet<string> = new Set([
   'chats.unlink_ticket',
   'chats.consolidate',     // merge the caller's own chats
   'chats.invite_agent',    // add a participant to the caller's chat; starts nothing
+  // Record a code change the CALLER just made, attributed to them (createdBy = the
+  // caller) and tied back to the caller's own chat via chatId — the work-recording
+  // twin of chats.link_ticket. Every editor session's persona orders it to call this
+  // after changing code, so excluding it left a contributor-seated session able to
+  // edit files but unable to record the work: the board went dark and the
+  // settle-phase auto-capture could never fire. Measured on chat #200: a session
+  // holding a shipped commit was told to record it and found the tool did not exist
+  // (caller role 'contributor', filtered out of the advertised catalog here).
+  'tickets.from_delta',
   'my_sessions.revoke',    // the caller's own login sessions
   'my_sessions.revoke_others',
 ]);
