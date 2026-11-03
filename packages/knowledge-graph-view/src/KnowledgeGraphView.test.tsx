@@ -66,12 +66,27 @@ describe('KnowledgeGraphView', () => {
         const onCompose = vi.fn();
         await mount([codeFixture()], { onCompose });
         const list = screen.getByTestId('kg-list');
+        // Findings are nested: expand the group before its rows exist.
+        fireEvent.click(within(list).getByRole('button', { name: /Clone group/ }));
         const clone = list.querySelector('[data-finding="clone-group"]') as HTMLElement;
         fireEvent.click(within(clone).getByRole('button', { name: L.fixWithAgent }));
         expect(onCompose).toHaveBeenCalledTimes(1);
         const text = onCompose.mock.calls[0]![0] as string;
         expect(text).toContain('clone group g1');
         expect(text).toContain('app/billing.tsx');
+        expect(text).not.toMatch(/[{}]/);
+    });
+
+    it('routes the selected findings to onCompose as ONE batched request', async () => {
+        const onCompose = vi.fn();
+        await mount([codeFixture()], { onCompose });
+        const list = screen.getByTestId('kg-list');
+        fireEvent.click(within(list).getByRole('button', { name: L.selectAll }));
+        fireEvent.click(within(list).getByRole('button', { name: /Fix \d+ with agent/ }));
+        expect(onCompose).toHaveBeenCalledTimes(1);
+        const text = onCompose.mock.calls[0]![0] as string;
+        expect(text.startsWith('Resolve these 5 findings together')).toBe(true);
+        expect(text).toContain('- ');
         expect(text).not.toMatch(/[{}]/);
     });
 
@@ -84,6 +99,10 @@ describe('KnowledgeGraphView', () => {
         const graph = mixedFixture();
         await mount([graph]);
         const list = screen.getByTestId('kg-list');
+        // Nested groups are lazy: expand each before its rows exist.
+        const groups = within(list).getAllByRole('button', { expanded: false })
+            .filter((el) => el.getAttribute('aria-expanded') !== null);
+        for (const group of groups) fireEvent.click(group);
         const shown = [...list.querySelectorAll('[data-finding]')].map((el) => el.getAttribute('data-finding'));
         expect(shown.sort()).toEqual(graph.findings.map((f) => f.kind).sort());
     });

@@ -134,6 +134,9 @@ describe('a recreated source (another project)', () => {
 });
 
 describe('finding rows', () => {
+  // Findings are nested and lazy: a group's rows render only once the group is expanded.
+  const expandGroup = (name: RegExp) => fireEvent.click(screen.getByRole('button', { name }));
+
   it('names the sections a contradiction sets against each other', async () => {
     const graph = docsFixture();
     const withParams: KnowledgeGraph = {
@@ -145,6 +148,7 @@ describe('finding rows', () => {
     const onCompose = vi.fn();
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([withParams])} onCompose={onCompose} /></div>);
     await screen.findByTestId('kg-list');
+    expandGroup(/Contradiction/);
     const row = document.querySelector('[data-finding="contradiction"]') as HTMLElement;
     expect(within(row).getByText('Reconcile §2 of lease.md with policy.md.')).toBeTruthy();
     fireEvent.click(within(row).getByRole('button', { name: L.fixWithAgent }));
@@ -160,6 +164,7 @@ describe('finding rows', () => {
     const onCompose = vi.fn();
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([unnamed])} onCompose={onCompose} /></div>);
     await screen.findByTestId('kg-list');
+    expandGroup(/Clone group/);
     const row = document.querySelector('[data-finding="clone-group"]') as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: L.fixWithAgent }));
     const text = onCompose.mock.calls[0]![0] as string;

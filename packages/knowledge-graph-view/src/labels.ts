@@ -63,6 +63,20 @@ export interface KnowledgeGraphLabels {
     fixWithAgent: string;
     /** Keyed by the requestKey suffix (`knowledgeGraph.fix.cloneGroup` → `cloneGroup`); `generic` is the fallback. */
     fix: Record<string, string>;
+    // Findings panel — multiselect + nested lazy rows (PRD 38 §4.6)
+    /** The selection toolbar above the findings (multiselect Fix with agent). */
+    selectAll: string;
+    clearSelection: string;
+    /** The primary batch action; `{count}` is how many findings are selected. */
+    fixSelected: string;
+    /** Names the selection under the button; `{count}`. */
+    selectedCount: string;
+    /** One batch request's intro line; `{count}`. */
+    fixBatch: string;
+    /** Grouping of the findings into nested rows. */
+    groupFindingsBy: string;
+    /** A lazy group row's collapsed summary; `{count}`. */
+    findingsCollapsed: string;
     // Node panel
     nodePanelTitle: string;
     nodeKind: string;
@@ -218,6 +232,13 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     severity: { error: 'Error', warn: 'Warning', info: 'Note' },
     showFinding: 'Show',
     fixWithAgent: 'Fix with agent',
+    selectAll: 'Select all',
+    clearSelection: 'Clear',
+    fixSelected: 'Fix {count} with agent',
+    selectedCount: '{count} selected',
+    fixBatch: 'Resolve these {count} findings together, in one change:',
+    groupFindingsBy: 'kind',
+    findingsCollapsed: '{count} findings — expand to load',
     fix: {
         cloneGroup: 'Consolidate the duplicated code[[ in clone group {group}]]: {items}. Extract one shared implementation and point every copy at it.',
         violation: 'Fix the layer violation: {items}. Move the dependency behind a port so {from} no longer uses {to} directly.',

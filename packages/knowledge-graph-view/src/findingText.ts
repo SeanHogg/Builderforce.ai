@@ -31,6 +31,18 @@ export function findingRequest(f: Finding, labels: KnowledgeGraphLabels, index: 
 }
 
 /**
+ * The multiselect Fix-with-agent request (PRD 38 §4.6): the selected findings' individual
+ * requests under ONE batch intro line, so a single agent pass resolves them together. The
+ * intro is the catalog's `fixBatch` template; the lines are each finding's FIXED request.
+ * Never a model call.
+ */
+export function findingBatchRequest(findings: readonly Finding[], labels: KnowledgeGraphLabels, index: ReadonlyMap<string, KNode>): string {
+    const intro = fillTemplate(labels.fixBatch, { count: findings.length });
+    const lines = findings.map((f) => `- ${findingRequest(f, labels, index)}`);
+    return [intro, ...lines].join('\n');
+}
+
+/**
  * The sentence a finding's row shows beside its title, when the finding says more than
  * its nodes do. A contradiction reads as WHICH sections disagree; nothing else has one.
  */

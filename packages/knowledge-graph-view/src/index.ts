@@ -10,7 +10,7 @@ export {
 } from './labels';
 export { LENSES, LENS_ORDER, lensesFor, lensApplies, lensFindings, type LensDef } from './lenses';
 export { ReviewFailure, type ReviewFailureDetail } from './reviewFailure';
-export { findingDetail, findingRequest, findingTitle } from './findingText';
+export { findingDetail, findingRequest, findingBatchRequest, findingTitle } from './findingText';
 export { edgeKindLabel, kindLabel, packLabel } from './names';
 export { layout3d, planeOrder, type Layout3D, type LayoutOptions } from './scene/layout3d';
 export { KG_TOKENS, cssVar, readThemeColors, useThemeColors, type ThemeTone, type ThemeColors } from './scene/themeColors';

@@ -194,8 +194,11 @@ export async function loadGraph(
   const root = rootById(rootId, workspaceFolders());
   if (!root) return null;
   const open = openRoot(secrets, root);
-  const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) });
-  const index = await getHostKnowledgeIndex(rootId).catch(() => undefined);
+  // Read in parallel: the partitions and the index are independent inputs to the build.
+  const [partitions, index] = await Promise.all([
+    readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) }),
+    getHostKnowledgeIndex(rootId).catch(() => undefined),
+  ]);
   return buildStoredGraph({
     rootId, store: open.store, manifest: open.manifest, packs: reviewPacks({ partitions }),
     ...(index ? { nearDuplicates: index.nearDuplicates() } : {}),

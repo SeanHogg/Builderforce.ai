@@ -75,7 +75,49 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     // A source that holds its graph is painted as-is: no load, no loading state.
     const held = source.snapshot;
 
-    // Scopes → pick the most recently reviewed root.
+    /** Latest values, readable from async continuations before state settles. */
+    const rootIdRef = useRef<string | null>(null);
+    rootIdRef.current = rootId;
+    const loadFocusRef = useRef(loadFocus);
+    loadFocusRef.current = loadFocus;
+    /** The `${rootId}:${generation}:${focus}` already loading/loaded for THIS source — a state-driven rerun never re-reads it. */
+    const loadedKey = useRef<{ source: KnowledgeGraphSource; key: string } | null>(null);
+
+    // ONE root's graph, and the host's baseline when it keeps one, read in parallel. The
+    // baseline belongs to the root and generation, so a refocus does not fetch it again.
+    const loadGraphForRoot = useCallback((root: string, focus: string[] | undefined, gen: number) => {
+        const key = `${root}:${gen}:${(focus ?? []).join(' ')}`;
+        if (loadedKey.current?.source === source && loadedKey.current.key === key) return;
+        const entry = { source, key };
+        loadedKey.current = entry;
+        const memoKey = `${root}:${gen}`;
+        const memo = baselineMemo.current;
+        // The same root and generation is a REFOCUS (a search's hits): the graph on screen stays
+        // up while it loads, and stays if the reload fails.
+        const refocus = memo !== null && memo.source === source && memo.key === memoKey;
+        if (!refocus) setStatus('loading');
+        const before = refocus
+            ? Promise.resolve(memo.value)
+            : (source.baseline ? source.baseline(root).catch(() => null) : Promise.resolve(null));
+        Promise.all([source.load(root, focus ? { focus } : undefined), before])
+            .then(([g, base]) => {
+                if (loadedKey.current !== entry) return;
+                baselineMemo.current = { source, key: memoKey, value: base };
+                setGraph(g);
+                setBaseline(base);
+                // A scope EXISTS (rootId was picked) but its graph is gone or unreadable: this is
+                // NOT "never reviewed" — say the load failed so the view can offer Retry.
+                setStatus(g ? 'ready' : 'load-failed');
+            })
+            .catch(() => {
+                if (loadedKey.current !== entry) return;
+                loadedKey.current = null; // a Retry (same key) is not deduped away
+                if (!refocus) setStatus('load-failed');
+            });
+    }, [source]);
+
+    // Scopes AND the newest root's graph load IN PARALLEL — the reading is not serial (§4.6).
+    // The graph starts loading off the SAME scopes read, not in a later state-driven pass.
     useEffect(() => {
         if (held) return undefined;
         let live = true;
@@ -86,39 +128,22 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 const sorted = [...found].sort(newestFirst);
                 setScopes(sorted);
                 if (sorted.length === 0) { setStatus('empty'); setRootId(null); return; }
-                setRootId((current) => (current && sorted.some((s) => s.rootId === current) ? current : sorted[0]!.rootId));
+                const current = rootIdRef.current;
+                const root = current && sorted.some((s) => s.rootId === current) ? current : sorted[0]!.rootId;
+                loadGraphForRoot(root, loadFocusRef.current, generation);
+                setRootId(root);
             })
             .catch(() => { if (live) setStatus('error'); });
         return () => { live = false; };
-    }, [source, held, generation]);
+    }, [source, held, generation, loadGraphForRoot]);
 
-    // Root (+ the refs to load around) → its graph, and the host's baseline when it keeps one.
-    // The baseline belongs to the root and generation, so a refocus does not fetch it again.
+    // A root picked in the picker, opened by a finished review, or refocused by a search
+    // loads in its own pass; the dedupe key keeps this from re-reading what the scopes pass
+    // already started.
     useEffect(() => {
-        if (held || !rootId) return undefined;
-        let live = true;
-        const key = `${rootId}:${generation}`;
-        const memo = baselineMemo.current;
-        // The same root and generation is a REFOCUS (a search's hits): the graph on screen stays
-        // up while it loads, and stays if the reload fails.
-        const refocus = memo !== null && memo.source === source && memo.key === key;
-        if (!refocus) setStatus('loading');
-        const before = refocus
-            ? Promise.resolve(memo.value)
-            : (source.baseline ? source.baseline(rootId).catch(() => null) : Promise.resolve(null));
-        Promise.all([source.load(rootId, loadFocus ? { focus: loadFocus } : undefined), before])
-            .then(([g, base]) => {
-                if (!live) return;
-                baselineMemo.current = { source, key, value: base };
-                setGraph(g);
-                setBaseline(base);
-                // A scope EXISTS (rootId was picked) but its graph is gone or unreadable: this is
-                // NOT "never reviewed" — say the load failed so the view can offer Retry.
-                setStatus(g ? 'ready' : 'load-failed');
-            })
-            .catch(() => { if (live && !refocus) setStatus('load-failed'); });
-        return () => { live = false; };
-    }, [source, held, rootId, generation, loadFocus]);
+        if (held || !rootId) return;
+        loadGraphForRoot(rootId, loadFocus, generation);
+    }, [held, rootId, loadFocus, generation, loadGraphForRoot]);
 
     // Live updates for the open root.
     useEffect(() => {
