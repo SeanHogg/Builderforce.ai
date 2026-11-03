@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.126",
+  "version": "2026.10.127",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -167,6 +167,30 @@
         "title": "%command.openKnowledgeGraph%",
         "category": "BuilderForce",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "builderforce.createKnowledgePack",
+        "title": "%command.createKnowledgePack%",
+        "category": "BuilderForce",
+        "icon": "$(package)"
+      },
+      {
+        "command": "builderforce.loadKnowledgePack",
+        "title": "%command.loadKnowledgePack%",
+        "category": "BuilderForce",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "builderforce.exportKnowledgePack",
+        "title": "%command.exportKnowledgePack%",
+        "category": "BuilderForce",
+        "icon": "$(export)"
+      },
+      {
+        "command": "builderforce.updateKnowledgePack",
+        "title": "%command.updateKnowledgePack%",
+        "category": "BuilderForce",
+        "icon": "$(sync)"
       },
       {
         "command": "builderforce.scheduleMeeting",

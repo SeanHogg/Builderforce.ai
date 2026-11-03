@@ -17,6 +17,7 @@ import { getSelectedProject, onProjectChange } from "../projectState";
 import { VisualizationPanel } from "../visualizationPanel";
 import { rootIdOfSourceRef } from "@builderforce/agent-tools/knowledge";
 import { reviewArgumentOf, reviewedRoots, rootById, rootForPath } from "./knowledgeRoots";
+import { registerKnowledgePackCommands } from "./knowledgePackCommands";
 import { configureKnowledgeHost, linkedKnowledgeClient, log, rootKnowledgeFiles, workspaceFolders } from "./knowledgeService";
 import { uploadLocalSnapshot, type UploadMarks } from "./knowledgeStores";
 
@@ -71,6 +72,7 @@ async function folderToReview(uri: unknown): Promise<vscode.Uri | undefined> {
 
 export function registerKnowledgeCommands(context: vscode.ExtensionContext): void {
   configureKnowledgeHost(context.workspaceState);
+  registerKnowledgePackCommands(context);
   context.subscriptions.push(
     vscode.commands.registerCommand("builderforce.reviewFolder", async (uri?: unknown) => {
       const target = await folderToReview(uri);
