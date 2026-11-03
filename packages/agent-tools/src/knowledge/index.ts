@@ -61,3 +61,7 @@ export {
     type FileEditPorts, type KnownKeysCache, type FileEditResult, type WatchFileEditsArgs,
 } from './fileEdits.js';
 export { claimSimilarity, type SimilarIndex } from './claimSimilarity.js';
+export {
+    mergePacks, packFromSnapshot, parsePack, serializePack,
+    type PackFromSnapshotArgs, type PortableKnowledgePack,
+} from './portablePack.js';
