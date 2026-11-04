@@ -4,16 +4,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES, lensesFor } from './lenses';
-import { codeFixture, docsFixture, fixtureSource, mixedFixture } from './testing';
+import { codeFixture, docsFixture, fixtureSource, mixedFixture, openList } from './testing';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 
 // jsdom has no WebGL, so the view stays on the list; the 3D chunk is never requested.
+
 vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
 async function mount(graphs: KnowledgeGraph[], props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
     const source = fixtureSource(graphs);
     const utils = render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} {...props} /></div>);
-    if (graphs.length > 0) await screen.findByTestId('kg-list');
+    if (graphs.length > 0) await openList({ screen, fireEvent });
     return { source, ...utils };
 }
 

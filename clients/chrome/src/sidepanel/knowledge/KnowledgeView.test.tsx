@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS, KnowledgeGraphView } from '@builderforce/knowledge-graph-view';
-import { codeFixture, docsFixture, fixtureSource, mixedFixture } from '@builderforce/knowledge-graph-view/testing';
+import { codeFixture, docsFixture, fixtureSource, mixedFixture, openList } from '@builderforce/knowledge-graph-view/testing';
 import { catalogReader, knowledgeGraphLabels } from '@builderforce/knowledge-browser';
 import catalogs from 'virtual:rovr-knowledge-catalogs';
 import { KnowledgeView } from './KnowledgeView';
@@ -32,7 +32,7 @@ afterEach(() => {
 /** The list the view paints first, with React's per-render `useId` values neutralised. */
 async function paintedList(ui: ReactElement): Promise<string> {
   const { container, unmount } = render(ui);
-  await screen.findByTestId('kg-list');
+  await openList({ screen, fireEvent });
   const html = container.querySelector('[data-testid="kg-list"]')!.outerHTML.replace(/«r[0-9a-z]+»|:r[0-9a-z]+:/g, 'ID');
   unmount();
   return html;
@@ -103,3 +103,4 @@ describe('Rovr Knowledge destination', () => {
     expect(fetch.mock.calls.map((call) => (call as unknown[])[0])).toContain('/api/projects/7/knowledge/scopes');
   });
 });
+

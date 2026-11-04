@@ -18,5 +18,5 @@ export type {
     KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, ReviewControl,
     ReviewEstimate, ReviewRequest, ReviewTarget, FactActions, LensId, KnowledgePanelRenderer,
     KnowledgePanelRenderProps, KnowledgeConfirm, KnowledgeBaseline, KnowledgeSnapshot, EvidenceSide,
-    SourceLocation, FindingEvidence,
+    SourceLocation, FindingEvidence, ViewMode,
 } from './types';

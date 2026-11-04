@@ -6,6 +6,7 @@
 
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from './lenses';
+import { cmp } from './order';
 
 /** Nodes at a phone's width (PRD 38 §4.6: "the view opens focused, top 60"). */
 export const PHONE_FOCUS_NODES = 60;
@@ -16,8 +17,9 @@ export interface VisibleGraph {
     edges: KEdge[];
 }
 
-const byImportance = (a: KNode, b: KNode): number =>
-    b.importance - a.importance || (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
+/** Importance descending, ties by ref. */
+export const byImportance = (a: KNode, b: KNode): number =>
+    b.importance - a.importance || cmp(a.ref, b.ref);
 
 /** The top `max` nodes by importance plus every `keep` ref, and the edges between them. */
 export function focusGraph(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>, max: number, keep: readonly string[] = []): VisibleGraph {
@@ -44,6 +46,16 @@ export function labelFor(index: ReadonlyMap<string, KNode>, ref: string): string
     if (n) return n.label;
     const at = ref.indexOf('::');
     return at >= 0 ? ref.slice(at + 2) : ref;
+}
+
+/** A `src:` ref's root-relative file path (a section's `#anchor` dropped); undefined for facts and entities. */
+export function pathOf(ref: string): string | undefined {
+    if (!ref.startsWith('src:')) return undefined;
+    const at = ref.indexOf('::');
+    if (at < 0) return undefined;
+    const path = ref.slice(at + 2);
+    const hash = path.indexOf('#');
+    return hash >= 0 ? path.slice(0, hash) : path;
 }
 
 /** Facts, claims and entities about a node (its `about` edges, both directions). */
@@ -75,7 +87,7 @@ export function localSearch(graph: Pick<KnowledgeGraph, 'nodes'>, q: string, k =
         const score = (label === needle ? 3 : at === 0 ? 2 : at > 0 ? 1 : 0.5) + n.importance;
         hits.push({ ref: n.ref, score, tier: 'exact' });
     }
-    return hits.sort((a, b) => b.score - a.score || (a.ref < b.ref ? -1 : 1)).slice(0, k);
+    return hits.sort((a, b) => b.score - a.score || cmp(a.ref, b.ref)).slice(0, k);
 }
 
 /** The partition matrix: cross-partition edge counts, and the worst verdict per cell. */
@@ -132,6 +144,6 @@ export function byPartition(nodes: readonly KNode[]): Array<{ partition: string 
     const groups = new Map<string | undefined, KNode[]>();
     for (const n of nodes) (groups.get(n.partition) ?? groups.set(n.partition, []).get(n.partition)!).push(n);
     return [...groups.entries()]
-        .sort(([a], [b]) => (a === undefined ? 1 : b === undefined ? -1 : a < b ? -1 : a > b ? 1 : 0))
+        .sort(([a], [b]) => (a === undefined ? 1 : b === undefined ? -1 : cmp(a, b)))
         .map(([partition, list]) => ({ partition, nodes: list.sort(byImportance) }));
 }

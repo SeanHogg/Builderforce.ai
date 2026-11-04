@@ -2,6 +2,19 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.129] — The knowledge view is a picture, not a list
+
+- **A 2D graph is the default view everywhere.** It needs no WebGL. Partitions are drawn as bands, nodes are sized by importance and toned by the active lens, and you can pan, zoom (wheel, pinch or buttons) and click the nearest node. The view used to fall back to a plain file list whenever WebGL or motion was unavailable.
+- **A mind map of the folder.** It shows each top-level folder, its subfolders and its most important files, with counts, and each branch is toned by its worst finding. Click a folder to focus its files.
+- **3D stays available wherever WebGL exists.** Reduced motion now turns off only the camera flight. The list remains as an accessible alternative.
+- **Deterministic insights in every view.**
+  - Headline metrics: files, links, findings, cycles, layer violations, duplicate sets, unused code, broken links and stale facts. Each tile opens the lens that explains it.
+  - Charts of what the folder is made of, the most-referenced and most-referencing files, the layer pairs that depend on each other most, and findings by kind. Clicking a bar focuses those nodes.
+  - Everything is computed from the graph. No model call is made.
+- **The selected chip is readable.** The editor's "soft accent" used to be an opaque link colour, which put light text on a light fill. It is now a tint.
+- **Copy diagnostics says why.** It reports WebGL and reduced motion separately, how many nodes were drawn versus the total and why, nodes, edges and findings by kind, and the last review's throughput.
+- **Reviews read and extract files in parallel.** This uses `@seanhogg/builderforce-memory` 2026.10.39. Eight files are in flight by default. The stored result is identical to a one-file-at-a-time review, and Stop still ends at a file boundary.
+
 ## [2026.10.128] — Portable knowledge packs
 
 - **Portable knowledge packs.** Four new commands — **BuilderForce: Create Knowledge Pack**, **Load Knowledge Pack**, **Export Knowledge Pack** and **Update Knowledge Pack** — turn a reviewed folder's knowledge into one `.bfpack` file any LLM can use. Create reviews a workspace folder and writes the pack into `.builderforce/knowledge/packs/`; Load opens a pack and makes its graph queryable in chat and Synapse retrieval; Export writes a pack anywhere; Update re-reviews the pack's source folder and merges in what changed.

@@ -1,5 +1,5 @@
 /**
- * The view's controls: the reviewed folder, search, the 3D/list choice, Before/After (when
+ * The view's controls: the reviewed folder, search, the view modes (graph, 3D, map, list), Before/After (when
  * the host keeps a baseline), and the lenses — a deliberate horizontal scroller (never a
  * wrap that pushes the graph off a phone).
  *
@@ -13,7 +13,12 @@ import type { KnowledgeGraphLabels } from './labels';
 import type { LensDef } from './lenses';
 import { cssVar } from './scene/themeColors';
 import { chip, input } from './styles';
-import type { KnowledgeScopeSummary, LensId } from './types';
+import type { KnowledgeScopeSummary, LensId, ViewMode } from './types';
+
+/** Each view's name, as data. */
+const VIEW_WORD: Record<ViewMode, (l: KnowledgeGraphLabels) => string> = {
+    graph: (l) => l.viewGraph, '3d': (l) => l.view3d, map: (l) => l.viewMap, list: (l) => l.viewList,
+};
 
 export type LensControl = 'chips' | 'tabs';
 export type Revision = 'after' | 'before';
@@ -27,16 +32,17 @@ export interface ToolbarProps {
     lens: LensId;
     onLens(id: LensId): void;
     onSearch(q: string): void;
-    can3D: boolean;
-    mode: '3d' | 'list';
-    onMode(mode: '3d' | 'list'): void;
+    /** The views on offer (3D only where WebGL exists), in display order. */
+    modes: readonly ViewMode[];
+    mode: ViewMode;
+    onMode(mode: ViewMode): void;
     actions?: ReactNode;
     lensControl?: LensControl;
     /** Present when the host keeps a baseline: which graph is drawn, and whether "before" exists. */
     revision?: { value: Revision; hasBefore: boolean; onChange(r: Revision): void };
 }
 
-export function Toolbar({ labels, scopes, rootId, onRoot, lenses, lens, onLens, onSearch, can3D, mode, onMode, actions, lensControl = 'chips', revision }: ToolbarProps) {
+export function Toolbar({ labels, scopes, rootId, onRoot, lenses, lens, onLens, onSearch, modes, mode, onMode, actions, lensControl = 'chips', revision }: ToolbarProps) {
     const [q, setQ] = useState('');
     const tabs = lensControl === 'tabs';
     const lensRow = { display: 'flex', gap: 6, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 } as const;
@@ -72,12 +78,11 @@ export function Toolbar({ labels, scopes, rootId, onRoot, lenses, lens, onLens, 
                         style={{ ...input, flex: 1 }}
                     />
                 </form>
-                {can3D && (
-                    <div role="group" style={{ display: 'flex', gap: 4 }}>
-                        <button type="button" aria-pressed={mode === '3d'} style={chip(mode === '3d')} onClick={() => onMode('3d')}>{labels.view3d}</button>
-                        <button type="button" aria-pressed={mode === 'list'} style={chip(mode === 'list')} onClick={() => onMode('list')}>{labels.viewList}</button>
-                    </div>
-                )}
+                <div role="group" aria-label={labels.viewModesLabel} style={{ display: 'flex', gap: 4 }}>
+                    {modes.map((m) => (
+                        <button key={m} type="button" aria-pressed={mode === m} style={chip(mode === m)} onClick={() => onMode(m)}>{VIEW_WORD[m](labels)}</button>
+                    ))}
+                </div>
                 {revision && (
                     <div role="group" aria-label={labels.revisionLabel} style={{ display: 'flex', gap: 4 }}>
                         <button type="button" aria-pressed={revision.value === 'before'} disabled={!revision.hasBefore} style={{ ...chip(revision.value === 'before'), ...(revision.hasBefore ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }} onClick={() => revision.onChange('before')}>

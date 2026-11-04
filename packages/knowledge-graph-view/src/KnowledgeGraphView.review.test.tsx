@@ -4,8 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
-import { FIXTURE_PLAN, FIXTURE_REPORT, docsFixture, fixtureSource } from './testing';
+import { FIXTURE_PLAN, FIXTURE_REPORT, docsFixture, fixtureSource, openList } from './testing';
 import type { KnowledgeReviewEvent, ReviewControl, ReviewEstimate, ReviewRequest } from './types';
+
 
 vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
@@ -41,7 +42,7 @@ function scripted(opts: ScriptOptions = {}) {
 
 async function startReview(source: ReturnType<typeof scripted>['source']) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
-  await screen.findByTestId('kg-list');
+  await openList({ screen, fireEvent });
   fireEvent.click(screen.getByRole('button', { name: L.reviewFolder }));
 }
 
@@ -123,7 +124,7 @@ describe('Live after a review', () => {
     const { source, subscribeLive } = scripted();
     const rememberFact = vi.fn(async () => undefined);
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={{ ...source, rememberFact }} /></div>);
-    const list = await screen.findByTestId('kg-list');
+    const list = await openList({ screen, fireEvent });
     await waitFor(() => expect(subscribeLive).toHaveBeenCalledTimes(1));
     fireEvent.click(within(list).getAllByRole('button', { pressed: false })[0]!);
     fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'Legal owns this' } });

@@ -52,7 +52,7 @@ describe('CanvasKnowledgeSurface', () => {
   it("prices the confirm chip from the SERVER's estimate through the same client", async () => {
     stubSource([GRAPH]);
     render(<CanvasKnowledgeSurface projectId={7} onExit={vi.fn()} />);
-    await screen.findByTestId('kg-list');
+    await openList();
     const options = mocks.createKnowledgeSource.mock.calls[0]![0] as { callPrice(): Promise<unknown> };
     expect(await options.callPrice()).toEqual({ perCallUsd: 0.01, model: 'm', local: false });
     expect(mocks.judgeEstimate).toHaveBeenCalledTimes(1);
@@ -64,7 +64,7 @@ describe('CanvasKnowledgeSurface', () => {
 
     const region = screen.getByTestId('canvas-knowledge-surface');
     expect(region.getAttribute('aria-label')).toBe('creationCanvas.surface.knowledge.regionLabel');
-    expect(await screen.findByTestId('kg-list')).toBeTruthy();
+    expect(await openList()).toBeTruthy();
     expect(screen.getAllByText('a.md').length).toBeGreaterThan(0);
 
     expect(mocks.createClient).toHaveBeenCalledWith(7);
@@ -94,7 +94,7 @@ describe('CanvasKnowledgeSurface', () => {
     window.history.replaceState(null, '', `/?surface=knowledge&kgFocus=${encodeURIComponent(JSON.stringify([REF]))}`);
     const { load } = stubSource([GRAPH]);
     render(<CanvasKnowledgeSurface projectId={7} onExit={vi.fn()} />);
-    await screen.findByTestId('kg-list');
+    await openList();
     expect(load).toHaveBeenCalledWith('p', { focus: [REF] });
   });
 
@@ -110,6 +110,9 @@ describe('CanvasKnowledgeSurface', () => {
     stubSource([GRAPH]);
     const composeDraft = vi.fn();
     render(<CanvasKnowledgeSurface projectId={7} onExit={vi.fn()} composeDraft={composeDraft} />);
+    // Finding rows render once their group is opened, and the list holds the findings.
+    const list = await openList();
+    for (const toggle of list.querySelectorAll('button[aria-expanded="false"]')) fireEvent.click(toggle);
     fireEvent.click(await screen.findByRole('button', { name: 'Fix with agent' }));
     expect(composeDraft).toHaveBeenCalledTimes(1);
     expect(composeDraft.mock.calls[0]![0]).toContain('orphan documents');
@@ -119,7 +122,7 @@ describe('CanvasKnowledgeSurface', () => {
   it('offers no Fix button without a composer', async () => {
     stubSource([GRAPH]);
     render(<CanvasKnowledgeSurface projectId={7} onExit={vi.fn()} />);
-    await screen.findByTestId('kg-list');
+    await openList();
     expect(screen.queryByRole('button', { name: 'Fix with agent' })).toBeNull();
   });
 
@@ -128,10 +131,16 @@ describe('CanvasKnowledgeSurface', () => {
     const onExit = vi.fn();
     render(<CanvasKnowledgeSurface projectId={7} onExit={onExit} />);
     const region = screen.getByTestId('canvas-knowledge-surface');
-    await screen.findByTestId('kg-list');
+    await openList();
     fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' });
     expect(onExit).not.toHaveBeenCalled();
     fireEvent.keyDown(region, { key: 'Escape' });
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 });
+
+/** The view opens on the 2D graph; these tests read the list (its text alternative), so open it first. */
+async function openList(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'List' }));
+  return screen.findByTestId('kg-list');
+}

@@ -16,6 +16,7 @@ import { Color, DoubleSide, InstancedMesh, Matrix4, Vector3 } from 'three';
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from '../lenses';
 import { layout3d, type Layout3D } from './layout3d';
+import { useIdleValue } from '../useIdleValue';
 import { edgeBuffers, nodeInstances } from './buffers';
 import { cssVar, useThemeColors, type ThemeColors } from './themeColors';
 
@@ -30,21 +31,11 @@ export interface GraphSceneProps {
     /** Plane captions: a partition name, or the host's word for "none". */
     planeLabel(partition: string): string;
     label: string;
+    /** Jump the camera to the target instead of flying (reduced motion). */
+    reducedMotion?: boolean;
 }
 
 type OrbitHandle = { target: Vector3; update(): void };
-
-function useIdleLayout(rootId: string, nodes: readonly KNode[], edges: readonly KEdge[]): Layout3D | null {
-    const [layout, setLayout] = useState<Layout3D | null>(null);
-    useEffect(() => {
-        let live = true;
-        const run = () => { if (live) setLayout(layout3d(rootId, nodes, edges)); };
-        const idle = (globalThis as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
-        if (idle) idle(run); else setTimeout(run, 0);
-        return () => { live = false; };
-    }, [rootId, nodes, edges]);
-    return layout;
-}
 
 function Nodes({ layout, nodes, lens, colors, selected, onSelect }: {
     layout: Layout3D; nodes: readonly KNode[]; lens: LensDef; colors: ThemeColors; selected: string | null; onSelect(ref: string): void;
@@ -100,15 +91,23 @@ function Edges({ layout, edges, colors }: { layout: Layout3D; edges: readonly KE
     );
 }
 
-function FlyTo({ target, controls }: { target: readonly [number, number, number] | null; controls: RefObject<OrbitHandle | null> }) {
+function FlyTo({ target, controls, reducedMotion }: { target: readonly [number, number, number] | null; controls: RefObject<OrbitHandle | null>; reducedMotion: boolean }) {
     const { camera, invalidate } = useThree();
     const goal = useRef<Vector3 | null>(null);
     useEffect(() => { goal.current = target ? new Vector3(...target) : null; invalidate(); }, [target, invalidate]);
     useFrame(() => {
         const c = controls.current;
         if (!goal.current || !c) return;
-        c.target.lerp(goal.current, 0.12);
         const offset = new Vector3(6, 5, 8).add(goal.current);
+        if (reducedMotion) {
+            c.target.copy(goal.current);
+            camera.position.copy(offset);
+            c.update();
+            goal.current = null;
+            invalidate();
+            return;
+        }
+        c.target.lerp(goal.current, 0.12);
         camera.position.lerp(offset, 0.08);
         c.update();
         if (c.target.distanceTo(goal.current) < 0.01) goal.current = null;
@@ -129,10 +128,10 @@ function RepaintOnShow() {
     return null;
 }
 
-export default function GraphScene({ rootId, nodes, edges, lens, selected, focus, onSelect, planeLabel, label }: GraphSceneProps) {
+export default function GraphScene({ rootId, nodes, edges, lens, selected, focus, onSelect, planeLabel, label, reducedMotion = false }: GraphSceneProps) {
     const [host, setHost] = useState<HTMLDivElement | null>(null);
     const colors = useThemeColors(host);
-    const layout = useIdleLayout(rootId, nodes, edges);
+    const layout = useIdleValue(() => layout3d(rootId, nodes, edges), [rootId, nodes, edges]);
     const controls = useRef<OrbitHandle | null>(null);
     const target = useMemo(() => {
         const ref = selected ?? focus[0];
@@ -161,7 +160,7 @@ export default function GraphScene({ rootId, nodes, edges, lens, selected, focus
                     <Edges layout={layout} edges={edges} colors={colors} />
                     <Nodes layout={layout} nodes={nodes} lens={lens} colors={colors} selected={selected} onSelect={onSelect} />
                     <OrbitControls ref={controls as never} makeDefault enableDamping />
-                    <FlyTo target={target} controls={controls} />
+                    <FlyTo target={target} controls={controls} reducedMotion={reducedMotion} />
                     <RepaintOnShow />
                 </Canvas>
             )}

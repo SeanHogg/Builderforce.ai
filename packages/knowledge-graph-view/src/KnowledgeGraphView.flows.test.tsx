@@ -7,8 +7,9 @@ import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { packLabel } from './names';
 import { PHONE_FOCUS_NODES } from './graphModel';
-import { codeFixture, docsFixture, fixtureSource } from './testing';
+import { codeFixture, docsFixture, fixtureSource, openList } from './testing';
 import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
+
 
 vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 
@@ -34,7 +35,7 @@ describe('search beyond the loaded graph', () => {
   it('loads around the hit when it is not in the loaded graph, then selects it', async () => {
     const { load, searchApi, src } = source([{ ref: hidden.ref, score: 1, tier: 'bm25' }]);
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     expect(load).toHaveBeenCalledTimes(1);
 
     search('hidden');
@@ -48,7 +49,7 @@ describe('search beyond the loaded graph', () => {
     const inGraph = loaded.nodes.find((n) => n.label === 'lease.md')!;
     const { load, src } = source([{ ref: inGraph.ref, score: 1, tier: 'exact' }]);
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
 
     search('lease');
     const panel = await screen.findByRole('dialog');
@@ -65,7 +66,7 @@ describe('search beyond the loaded graph', () => {
       : Promise.resolve([{ ref: other.ref, score: 1, tier: 'exact' }])));
     const src = { ...fixtureSource([loaded]), search: searchApi } as KnowledgeGraphSource;
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
 
     search('slow');
     search('fast');
@@ -88,7 +89,7 @@ describe('search beyond the loaded graph', () => {
       : Promise.resolve([{ ref: hidden.ref, score: 1, tier: 'bm25' }])));
     const src = { ...fixtureSource([loaded]), load, search: searchApi } as KnowledgeGraphSource;
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
 
     search('hidden');
     await screen.findByRole('dialog');
@@ -109,7 +110,7 @@ describe('search beyond the loaded graph', () => {
   it('keeps the loaded graph and still focuses the hit when the reload fails', async () => {
     const { load, src } = source([{ ref: hidden.ref, score: 1, tier: 'bm25' }]);
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     load.mockRejectedValueOnce(new Error('offline'));
 
     search('hidden');
@@ -125,7 +126,7 @@ describe('a recreated source (another project)', () => {
     const first = mk();
     const second = mk();
     const { rerender } = render(<div style={{ height: 600 }}><KnowledgeGraphView source={first} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     await waitFor(() => expect(first.baseline).toHaveBeenCalledTimes(1));
 
     rerender(<div style={{ height: 600 }}><KnowledgeGraphView source={second} /></div>);
@@ -147,7 +148,7 @@ describe('finding rows', () => {
     };
     const onCompose = vi.fn();
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([withParams])} onCompose={onCompose} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     expandGroup(/Contradiction/);
     const row = document.querySelector('[data-finding="contradiction"]') as HTMLElement;
     expect(within(row).getByText('Reconcile §2 of lease.md with policy.md.')).toBeTruthy();
@@ -163,7 +164,7 @@ describe('finding rows', () => {
     };
     const onCompose = vi.fn();
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([unnamed])} onCompose={onCompose} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     expandGroup(/Clone group/);
     const row = document.querySelector('[data-finding="clone-group"]') as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: L.fixWithAgent }));
@@ -180,7 +181,7 @@ describe('Trace from the node panel', () => {
         <KnowledgeGraphView source={fixtureSource([codeFixture()])} labels={{ edgeKinds: { references: 'verweist auf' } }} />
       </div>,
     );
-    const list = await screen.findByTestId('kg-list');
+    const list = await openList({ screen, fireEvent });
     fireEvent.click(within(list).getByRole('button', { name: /app\/page\.tsx/ }));
     const panel = await screen.findByRole('dialog');
     expect(within(panel).queryByRole('img', { name: L.traceTitle })).toBeNull();
@@ -212,7 +213,7 @@ describe('compact (phone) view', () => {
   it('opens on the top 60 nodes, says so, and Show all reveals the rest', async () => {
     narrow();
     render(<div style={{ height: 640 }}><KnowledgeGraphView source={fixtureSource([big()])} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     expect(rows()).toHaveLength(PHONE_FOCUS_NODES);
     expect(rows().map((r) => r.querySelectorAll('span')[1]!.textContent)).toContain('n000.md');
     expect(rows().map((r) => r.querySelectorAll('span')[1]!.textContent)).not.toContain('n099.md');
@@ -228,7 +229,7 @@ describe('compact (phone) view', () => {
   it('keeps tap targets at 40px and opens a node as a bottom sheet', async () => {
     narrow();
     render(<div style={{ height: 640 }}><KnowledgeGraphView source={fixtureSource([big()])} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     expect(rows()[0]!.style.minHeight).toBe('40px');
     fireEvent.click(rows()[0]!);
     const sheet = await screen.findByRole('dialog');
@@ -240,7 +241,7 @@ describe('compact (phone) view', () => {
 
   it('opens a node as a side panel on a wide container, and shows every node', async () => {
     render(<div style={{ height: 640 }}><KnowledgeGraphView source={fixtureSource([big()])} /></div>);
-    await screen.findByTestId('kg-list');
+    await openList({ screen, fireEvent });
     expect(rows()).toHaveLength(100);
     expect(screen.queryByRole('button', { name: L.showAll })).toBeNull();
     fireEvent.click(rows()[0]!);

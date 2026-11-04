@@ -34,6 +34,9 @@ import type {
 export type LensId =
     | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
 
+/** How the graph is drawn: 2D graph (default), 3D scene (WebGL only), folder mind map, or the accessible list. */
+export type ViewMode = 'graph' | '3d' | 'map' | 'list';
+
 export interface KnowledgeScopeSummary {
     rootId: string;
     title: string;

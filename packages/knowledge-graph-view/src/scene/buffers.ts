@@ -7,6 +7,7 @@
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from '../lenses';
+import { cmp } from '../order';
 import type { Layout3D } from './layout3d';
 import type { ThemeTone } from './themeColors';
 
@@ -59,16 +60,31 @@ export function edgeBucket(e: KEdge): { bucket: string; tone: ThemeTone } {
     return { bucket: e.kind, tone: KIND_TONE[e.kind] ?? 'edge' };
 }
 
-export function edgeBuffers(edges: readonly KEdge[], layout: Layout3D): EdgeBuffer[] {
-    const groups = new Map<string, { tone: ThemeTone; points: number[] }>();
+export interface EdgeGroup<P> {
+    bucket: string;
+    tone: ThemeTone;
+    /** One [from, to] position pair per drawn edge. */
+    pairs: Array<readonly [P, P]>;
+}
+
+/** Edges bucketed by tone (kind, or violation / cycle), buckets sorted; an edge with an unplaced end is skipped. Shared by the 3D buffers and the 2D paths. */
+export function groupEdges<P>(edges: readonly KEdge[], at: (ref: string) => P | undefined): Array<EdgeGroup<P>> {
+    const groups = new Map<string, EdgeGroup<P>>();
     for (const e of edges) {
-        const a = layout.positions.get(e.from), b = layout.positions.get(e.to);
+        const a = at(e.from), b = at(e.to);
         if (!a || !b) continue;
         const { bucket, tone } = edgeBucket(e);
-        const g = groups.get(bucket) ?? groups.set(bucket, { tone, points: [] }).get(bucket)!;
-        g.points.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+        const g = groups.get(bucket) ?? groups.set(bucket, { bucket, tone, pairs: [] }).get(bucket)!;
+        g.pairs.push([a, b]);
     }
-    return [...groups.entries()]
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([bucket, g]) => ({ bucket, tone: g.tone, positions: new Float32Array(g.points), count: g.points.length / 6 }));
+    return [...groups.values()].sort((a, b) => cmp(a.bucket, b.bucket));
+}
+
+export function edgeBuffers(edges: readonly KEdge[], layout: Layout3D): EdgeBuffer[] {
+    return groupEdges(edges, (ref) => layout.positions.get(ref)).map((g) => ({
+        bucket: g.bucket,
+        tone: g.tone,
+        positions: new Float32Array(g.pairs.flatMap(([a, b]) => [a[0], a[1], a[2], b[0], b[1], b[2]])),
+        count: g.pairs.length,
+    }));
 }

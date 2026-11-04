@@ -29,7 +29,7 @@
   --bf-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
   --bf-border-strong: var(--vscode-focusBorder, rgba(128, 128, 128, 0.5));
   --bf-accent: var(--vscode-textLink-foreground, #4f80ff);
-  --bf-accent-soft: var(--vscode-textLink-activeForeground, rgba(79, 128, 255, 0.4));
+  --bf-accent-soft: color-mix(in srgb, var(--vscode-textLink-foreground, #4f80ff) 18%, transparent);
   /* Text/icons ON an accent or error fill (the composer's Send and Stop). */
   --bf-on-accent: var(--vscode-button-foreground, #fff);
   --bf-text-secondary: var(--vscode-descriptionForeground, var(--bf-text-muted));

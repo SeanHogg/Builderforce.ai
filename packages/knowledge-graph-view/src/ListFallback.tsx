@@ -1,6 +1,6 @@
 /**
- * The graph as a list — for no WebGL, reduced motion, and as the FIRST paint while the
- * lazy 3D chunk loads (PRD 38 §4.6, §5.6). The same data: nodes grouped by partition
+ * The graph as a list — the accessible text alternative to the 2D graph, the map and the 3D
+ * scene (PRD 38 §4.6, §5.6). The same data: nodes grouped by partition
  * (most important first, toned by the active lens), and every finding of every lens.
  */
 
@@ -23,16 +23,14 @@ export interface ListFallbackProps {
     onSelect(ref: string): void;
     onShow(refs: string[]): void;
     onCompose?: ((text: string) => void) | undefined;
-    note?: string | undefined;
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
 }
 
-export function ListFallback({ graph, nodes, lens, labels, selected, onSelect, onShow, onCompose, note, evidence, onOpenSource }: ListFallbackProps) {
+export function ListFallback({ graph, nodes, lens, labels, selected, onSelect, onShow, onCompose, evidence, onOpenSource }: ListFallbackProps) {
     const groups = byPartition(nodes);
     return (
         <div data-testid="kg-list" style={{ display: 'grid', gap: 16, padding: 12, overflow: 'auto', alignContent: 'start' }}>
-            {note && <p style={{ ...muted, margin: 0 }}>{note}</p>}
             {groups.map(({ partition, nodes: members }) => (
                 <section key={partition ?? ''} aria-label={partition ?? labels.partitionNone} style={{ display: 'grid', gap: 6 }}>
                     <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: cssVar('muted'), textTransform: 'uppercase', letterSpacing: '.04em' }}>

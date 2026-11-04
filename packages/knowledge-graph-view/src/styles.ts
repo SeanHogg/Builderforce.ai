@@ -27,7 +27,7 @@ export const chip = (active: boolean): CSSProperties => ({
     ...button, flex: 'none', fontWeight: active ? 700 : 500,
     background: active ? cssVar('accentSoft') : 'transparent',
     borderColor: active ? cssVar('accent') : cssVar('border'),
-    color: active ? cssVar('accent') : cssVar('text'),
+    color: cssVar('text'),
 });
 
 export const card: CSSProperties = {

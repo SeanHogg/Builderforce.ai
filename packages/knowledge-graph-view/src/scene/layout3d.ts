@@ -14,6 +14,7 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { cmp, round } from '../order';
 
 export interface Layout3D {
     /** ref → [x, y, z] */
@@ -55,9 +56,6 @@ function rng(seed: number): () => number {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
-
-const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-const round = (n: number): number => Math.round(n * 1e4) / 1e4;
 
 /** Partitions top-down: by explicit order, else by net outgoing cross-partition edges. */
 export function planeOrder(nodes: readonly KNode[], edges: readonly KEdge[], explicit?: readonly string[]): string[] {

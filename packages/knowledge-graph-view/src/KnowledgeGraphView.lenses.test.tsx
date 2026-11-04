@@ -11,7 +11,7 @@ import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES, LENS_ORDER } from './lenses';
 import type { LensDef } from './lenses';
-import { codeFixture, docsFixture, fixtureSource, mixedFixture } from './testing';
+import { codeFixture, docsFixture, expandAllFindings, fixtureSource, mixedFixture } from './testing';
 import type { LensId } from './types';
 
 interface SceneProps { nodes: KNode[]; edges: KEdge[]; lens: LensDef }
@@ -34,6 +34,8 @@ const MOUNT_WAIT = { timeout: 10_000 };
 
 async function mount3D(graph: KnowledgeGraph, props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([graph])} {...props} /></div>);
+  // The view opens on the 2D graph: 3D is one chip away.
+  fireEvent.click(await screen.findByRole('button', { name: L.view3d }, MOUNT_WAIT));
   await waitFor(() => expect(scene.props).not.toBeNull(), MOUNT_WAIT);
 }
 
@@ -44,7 +46,11 @@ async function pick(id: LensId) {
 }
 const labelled = (label: string) => scene.props!.nodes.find((n) => n.label === label)!;
 const style = (label: string) => scene.props!.lens.nodeStyle(labelled(label));
-const asideKinds = () => [...document.querySelectorAll('aside[aria-label="' + L.findingsTitle + '"] [data-finding]')].map((el) => el.getAttribute('data-finding')).sort();
+const asideKinds = () => {
+  const aside = document.querySelector('aside[aria-label="' + L.findingsTitle + '"]')!;
+  expandAllFindings({ fireEvent }, aside);
+  return [...document.querySelectorAll('aside[aria-label="' + L.findingsTitle + '"] [data-finding]')].map((el) => el.getAttribute('data-finding')).sort();
+};
 const kinds = (edges: KEdge[]) => [...new Set(edges.map((e) => e.kind))].sort();
 
 describe('lens effects on the 3D scene', () => {
@@ -183,6 +189,7 @@ describe('list fallback parity', () => {
     const graph = mixedFixture();
     await mount3D(graph);
     fireEvent.click(screen.getByRole('button', { name: L.viewList }));
+    expandAllFindings({ fireEvent }, screen.getByTestId('kg-list'));
     const shown = [...screen.getByTestId('kg-list').querySelectorAll('[data-finding]')].map((el) => el.getAttribute('data-finding')).sort();
     expect(shown).toEqual(graph.findings.map((f) => f.kind).sort());
   });

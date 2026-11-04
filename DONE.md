@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-11-03 — The knowledge view showed a file list instead of a visual; selected chip unreadable; review processed files serially (VS Code 2026.10.129 · memory 2026.10.39)
+
+- **List instead of a visual.** `useCan3D` combined `hasWebGL() && !prefersReducedMotion()`, so in a webview without WebGL, or under OS reduced motion, the only renderer was `ListFallback`. The view now offers four modes (`ViewMode`): `graph`, the default, a 2D SVG graph (`graph2d/`, laid out from the deterministic `layout3d` into partition bands); `3d`, offered whenever WebGL exists, where reduced motion only skips the camera flight; `map`, a radial folder mind map (`map/`); and `list`.
+  - Pan and zoom live in `usePanZoom`: a re-fit happens on a new layout, and a drag writes the viewBox through a ref.
+  - Clicks resolve to the nearest node centre (`hitTest.ts`), and only the top 25 nodes are tab stops; arrow keys walk the rest (`useRoving`).
+- **Insights.** `insights/insightsModel.ts` is pure and needs no model call. It computes headline metrics with the lens that explains each, the composition of the graph, fan-in/fan-out hotspots, cross-partition coupling and findings by kind. These render as tiles and SVG bar charts in the aside in every mode. The empty right column is gone.
+- **Unreadable selection.** The VS Code webview mapped `--bf-accent-soft` to the opaque `--vscode-textLink-activeForeground`, which put light-blue text on a light-blue fill. It is now a `color-mix` tint, and `chip(active)` uses the text colour.
+- **Diagnostics.** `graphDiagnostics.ts` reports WebGL and reduced motion separately, nodes drawn versus total and why, kind counts and the last review's throughput.
+- **Serial review.** memory `reviewDirectory` prefetches each file's read and extraction through `prefetchOrdered`, bounded at 8 by default and order-preserving. Judging, writes and the manifest stay in file order. Same-hash extraction is serialised so the extract cache never loses an entry. An abort ends at a file boundary after started work settles.
+- **Also.**
+  - Main CI had been red since `867f254f2` made finding rows lazy: `KnowledgeGraphView.lenses` and `CanvasKnowledgeSurface` read unexpanded rows. Their setup now expands the groups (`expandAllFindings`); expected values are unchanged.
+  - `cmp`/`round` were consolidated into `order.ts`.
+  - Every consumer moved to memory and memory-engine `^2026.10.39`.
+
 ## ✅ RESOLVED 2026-11-02 — VS Code panel stalled on "Connecting…", and a Hybrid pick silently became free models (VS Code 2026.10.126 · api 2026.10.97 · frontend 2026.10.102)
 
 - **Stall.** `buildWorkspaceInit` awaited every step serially, and the first `init` frame waited for all of them. The ~5 minutes matches undici's 300 s `headersTimeout`, so an unbounded fetch is the likely cause; which one was not captured. Each step now runs concurrently under `initBudget` (2.5 s). A late real answer re-pushes init, capped per surface, and a slow step logs `[init] <step>`. `fetchAuthed`, the personality block and the Kimi refresh are bounded.

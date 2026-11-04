@@ -48,7 +48,33 @@ export interface KnowledgeGraphLabels {
     showAll: string;
     view3d: string;
     viewList: string;
-    listFallbackNote: string;
+    viewGraph: string;
+    viewMap: string;
+    /** The view-mode group's name. */
+    viewModesLabel: string;
+    /** The graph / map's one-line how-to (also its SVG description). */
+    graphHint: string;
+    /** A node's accessible name: `{label}`, `{kind}`. */
+    nodeAria: string;
+    /** A mind-map folder's accessible name: `{name}`, `{count}` files. */
+    mapBranch: string;
+    /** The mind map's "+N more" leaf; `{count}`. */
+    mapMore: string;
+    zoomLabel: string;
+    zoomIn: string;
+    zoomOut: string;
+    zoomReset: string;
+    // Insights
+    insightsTitle: string;
+    /** A headline metric's name, keyed by metric id. */
+    metrics: Record<string, string>;
+    chartKinds: string;
+    chartPartitions: string;
+    chartAreas: string;
+    hotspotsIn: string;
+    hotspotsOut: string;
+    couplingTitle: string;
+    chartFindings: string;
     partitionNone: string;
     /** An edge kind in a trace step (`references` → "references"), keyed by the camelCased kind. Unknown kinds show raw. */
     edgeKinds: Record<string, string>;
@@ -212,7 +238,31 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     showAll: 'Show all',
     view3d: '3D',
     viewList: 'List',
-    listFallbackNote: 'Showing the list view.',
+    viewGraph: 'Graph',
+    viewMap: 'Map',
+    viewModesLabel: 'View',
+    graphHint: 'Scroll or pinch to zoom, drag to pan, select a node for its details.',
+    nodeAria: '{label}, {kind}',
+    mapBranch: '{name}, {count} files',
+    mapMore: '+{count} more',
+    zoomLabel: 'Zoom',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    zoomReset: 'Fit to view',
+    insightsTitle: 'Insights',
+    metrics: {
+        files: 'Files', sections: 'Sections', symbols: 'Symbols and entities', edges: 'Edges', findings: 'Findings',
+        errors: 'Errors', warnings: 'Warnings', notes: 'Notes', cycles: 'Cycles', violations: 'Layer violations',
+        cloneGroups: 'Duplicate sets', duplicates: 'Duplicated files', unusedFiles: 'Unused files', unusedExports: 'Unused exports',
+        brokenLinks: 'Broken links', stale: 'Stale facts',
+    },
+    chartKinds: 'Nodes by kind',
+    chartPartitions: 'Files by partition',
+    chartAreas: 'Files by area',
+    hotspotsIn: 'Most depended on',
+    hotspotsOut: 'Depends on the most',
+    couplingTitle: 'Strongest coupling between partitions',
+    chartFindings: 'Findings by kind',
     partitionNone: 'No partition',
     edgeKinds: {
         references: 'references', contains: 'contains', links: 'links to', about: 'is about', mentions: 'mentions',
@@ -346,6 +396,7 @@ export function resolveLabels(partial?: Partial<KnowledgeGraphLabels>): Knowledg
         lenses: { ...d.lenses, ...partial.lenses },
         lensHints: { ...d.lensHints, ...partial.lensHints },
         legend: { ...d.legend, ...partial.legend },
+        metrics: { ...d.metrics, ...partial.metrics },
         edgeKinds: { ...d.edgeKinds, ...partial.edgeKinds },
         packs: { ...d.packs, ...partial.packs },
         findingKinds: { ...d.findingKinds, ...partial.findingKinds },

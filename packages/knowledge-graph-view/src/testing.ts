@@ -129,3 +129,20 @@ export function fixtureSource(graphs: KnowledgeGraph[], opts: { review?: boolean
     };
     return s;
 }
+
+/** What `openList` needs from testing-library, injected so this module imports none (it ships in the source-only package). */
+export interface ListOpener {
+    screen: { findByRole(role: 'button', options: { name: string }): Promise<Element>; findByTestId(id: string): Promise<HTMLElement> };
+    fireEvent: { click(element: Element): unknown };
+}
+
+/** The view opens on the 2D graph; tests that read the list (its accessible text alternative) switch to it with this. */
+export async function openList({ screen, fireEvent }: ListOpener, name = 'List'): Promise<HTMLElement> {
+    fireEvent.click(await screen.findByRole('button', { name }));
+    return screen.findByTestId('kg-list');
+}
+
+/** Findings render their rows only once a group is opened: opens every collapsed group under `root`. */
+export function expandAllFindings({ fireEvent }: Pick<ListOpener, 'fireEvent'>, root: ParentNode): void {
+    for (const toggle of root.querySelectorAll('button[aria-expanded="false"]')) fireEvent.click(toggle);
+}
