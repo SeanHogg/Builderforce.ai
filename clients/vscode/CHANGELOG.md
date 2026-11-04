@@ -2,11 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.128] — Portable knowledge packs
+
+- **Portable knowledge packs.** Four new commands — **BuilderForce: Create Knowledge Pack**, **Load Knowledge Pack**, **Export Knowledge Pack** and **Update Knowledge Pack** — turn a reviewed folder's knowledge into one `.bfpack` file any LLM can use. Create reviews a workspace folder and writes the pack into `.builderforce/knowledge/packs/`; Load opens a pack and makes its graph queryable in chat and Synapse retrieval; Export writes a pack anywhere; Update re-reviews the pack's source folder and merges in what changed.
+
 ## [2026.10.127] — A role-gate refusal now says who refused and what role you need
 
 - **A refused step names the gate.** When the platform refuses a tool for lack of a role — for example "developer required, caller is contributor" — the diagnostics now show the required role, the caller's role, and what would clear it, instead of an unexplained refusal. Your tenant role is captured with the diagnostics so the report shows what the server saw.
 - **The built-in tool catalog is role-filtered.** Tools your role cannot call are no longer advertised to the model, and terminal ticket-capture refusals are recorded as learnings rather than retried.
-- **Portable knowledge packs.** Four new commands — **BuilderForce: Create Knowledge Pack**, **Load Knowledge Pack**, **Export Knowledge Pack** and **Update Knowledge Pack** — turn a reviewed folder's knowledge into one `.bfpack` file any LLM can use. Create reviews a workspace folder and writes the pack into `.builderforce/knowledge/packs/`; Load opens a pack and makes its graph queryable in chat and Synapse retrieval; Export writes a pack anywhere; Update re-reviews the pack's source folder and merges in what changed.
 - **`@seanhogg/builderforce-memory` 2026.10.38, applied everywhere.** The parallel judge/compare pool honours Stop, and over-long reference slugs in document extraction are capped.
 
 ## [2026.10.126] — The panel opens at once, and a model you picked says why it could not run
