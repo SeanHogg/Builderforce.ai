@@ -35785,6 +35785,8 @@
     "title": "Connaissances",
     "regionLabel": "Graphe de connaissances",
     "loading": "Chargement du graphe de connaissances…",
+    "refreshing": "Mise à jour…",
+    "refreshFailed": "Échec de la mise à jour : dernier graphe affiché. Réessayer",
     "errorTitle": "Le graphe de connaissances n’a pas pu se charger",
     "errorBody": "Une erreur est survenue lors de la lecture des connaissances de ce dossier. Réessayez.",
     "retry": "Réessayer",

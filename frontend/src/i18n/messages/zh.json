@@ -35785,6 +35785,8 @@
     "title": "知识",
     "regionLabel": "知识图谱",
     "loading": "正在加载知识图谱…",
+    "refreshing": "正在更新…",
+    "refreshFailed": "无法更新，正在显示上一次的图谱。重试",
     "errorTitle": "知识图谱无法加载",
     "errorBody": "读取此文件夹的知识时出错。请重试。",
     "retry": "重试",

@@ -5,6 +5,9 @@ export interface SelectedProject {
   name: string;
 }
 
+/** Persisted (per-machine) id of the workspace the editor is acting as. */
+export const SELECTED_TENANT_KEY = "builderforce.selectedTenantId";
+
 const KEY = "builderforce.selectedProject";
 let mem: vscode.Memento | undefined;
 const emitter = new vscode.EventEmitter<SelectedProject | undefined>();

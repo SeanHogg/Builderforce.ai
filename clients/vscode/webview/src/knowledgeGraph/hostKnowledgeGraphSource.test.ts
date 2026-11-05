@@ -244,4 +244,12 @@ describe('the editor knowledge source — the rest of the port', () => {
     await createHostKnowledgeGraphSource(host.t).rememberFact!({ content: 'billing is here', ref: 'src:ws::a.ts', rootId: 'ws' });
     expect(host.calls.at(-1)).toEqual({ op: 'remember', rootId: 'ws', ref: 'src:ws::a.ts', content: 'billing is here' });
   });
+
+  it('asks the host for the last-seen graph, and reads a failed call as nothing remembered', async () => {
+    const host = fakeHost();
+    expect(await createHostKnowledgeGraphSource(host.t).lastSeen!()).toBeNull();
+    expect(host.calls.at(-1)).toEqual({ op: 'lastSeen' });
+    const broken: KnowledgeTransport = { call: () => Promise.reject(new Error('no host')), onEvent: () => () => undefined };
+    expect(await createHostKnowledgeGraphSource(broken).lastSeen!()).toBeNull();
+  });
 });

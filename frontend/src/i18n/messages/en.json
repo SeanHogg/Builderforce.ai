@@ -35785,6 +35785,8 @@
     "title": "Knowledge",
     "regionLabel": "Knowledge graph",
     "loading": "Loading the knowledge graph…",
+    "refreshing": "Updating…",
+    "refreshFailed": "Couldn’t update — showing the last graph. Retry",
     "errorTitle": "The knowledge graph could not load",
     "errorBody": "Something went wrong reading this folder’s knowledge. Try again.",
     "retry": "Try again",

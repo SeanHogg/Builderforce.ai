@@ -138,6 +138,12 @@ export interface KnowledgeGraphSource {
      * paints it on the first render and never loads. `scopes`/`load` still answer for it.
      */
     snapshot?: KnowledgeSnapshot;
+    /**
+     * The scopes and the graph this host showed last time, painted on the first frame while the fresh
+     * read runs. Absent ⇒ the view starts empty. Must be fast (a local read) and never throw. The HOST
+     * remembers on its own after each successful full `load` it serves.
+     */
+    lastSeen?(): Promise<{ scopes: KnowledgeScopeSummary[]; rootId: string; graph: KnowledgeGraph } | null>;
     /** Where a finding was seen: line ranges and an excerpt, when the host knows them. */
     evidence?(finding: Finding, side: EvidenceSide): FindingEvidence[];
     /** Finds the code behind a screenshot (vision read, then deterministic matches). Absent ⇒ no pinpoint input. */

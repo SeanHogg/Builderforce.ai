@@ -65,6 +65,36 @@
   --kg-line-6: #fbbf24;
   --kg-line-7: #fb7185;
   --kg-line-8: #94a3b8;
+  /* Surface vocabulary. Hues follow the host theme where it has one (VS Code charts, ANSI), else the literal. */
+  --kg-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Control height: 30px on a fine pointer, 40px (a tap target) on a coarse one — see the media query below. */
+  --kg-control: 30px;
+  /* Heat ramp w1 (quiet) .. w5 (hot): grey, steel, amber, orange, red. */
+  --kg-w-1: var(--kg-border);
+  --kg-w-2: color-mix(in srgb, var(--kg-node-file) 38%, var(--kg-panel));
+  --kg-w-3: color-mix(in srgb, var(--kg-duplicate) 62%, var(--kg-bg));
+  --kg-w-4: var(--kg-cycle);
+  --kg-w-5: var(--kg-violation);
+  /* Route hues l1..l4. */
+  --kg-l-1: var(--kg-accent);
+  --kg-l-2: var(--vscode-terminal-ansiCyan, #2dd4bf);
+  --kg-l-3: var(--vscode-charts-purple, #a78bfa);
+  --kg-l-4: var(--vscode-charts-orange, #fb923c);
+  /* Architecture layer bands. */
+  --kg-band-entry: var(--kg-accent);
+  --kg-band-presentation: var(--vscode-charts-blue, #4d9eff);
+  --kg-band-application: var(--vscode-charts-purple, #a78bfa);
+  --kg-band-domain: var(--vscode-charts-green, #34d399);
+  --kg-band-infrastructure: var(--vscode-charts-orange, #fb923c);
+  --kg-band-data: var(--vscode-charts-yellow, #facc15);
+  --kg-band-other: var(--kg-unused);
+}
+
+/* Coarse pointer: keep the 40px tap target. */
+@media (pointer: coarse) {
+  :where(:root) {
+    --kg-control: 40px;
+  }
 }
 
 /* Light: a host opts in with `html[data-theme='light']` (the web and the VS Code canvas do; Rovr mirrors its OS scheme onto it). */
@@ -101,6 +131,22 @@
   --kg-line-6: #b45309;
   --kg-line-7: #be123c;
   --kg-line-8: #475569;
+  --kg-l-2: var(--vscode-terminal-ansiCyan, #0f766e);
+  --kg-l-3: var(--vscode-charts-purple, #6d28d9);
+  --kg-l-4: var(--vscode-charts-orange, #c2410c);
+  --kg-band-presentation: var(--vscode-charts-blue, #2d60ff);
+  --kg-band-application: var(--vscode-charts-purple, #6d28d9);
+  --kg-band-domain: var(--vscode-charts-green, #047857);
+  --kg-band-infrastructure: var(--vscode-charts-orange, #c2410c);
+  --kg-band-data: var(--vscode-charts-yellow, #a16207);
+}
+
+/* VS Code light themes: the editor's own orange/yellow/green charts hues are too pale as text-weight marks; darken them toward black like hostTokens.css does for cycle/duplicate. */
+:where(body.vscode-light, body.vscode-high-contrast-light) {
+  --kg-l-4: color-mix(in srgb, var(--vscode-charts-orange, #c2410c) 70%, black);
+  --kg-band-domain: color-mix(in srgb, var(--vscode-charts-green, #047857) 75%, black);
+  --kg-band-infrastructure: color-mix(in srgb, var(--vscode-charts-orange, #c2410c) 70%, black);
+  --kg-band-data: color-mix(in srgb, var(--vscode-charts-yellow, #a16207) 75%, black);
 }
 
 /* Keyboard focus on the SVG nodes: stations, issue pins and the graph and map nodes show a ring from :focus-visible only (a mouse click draws none). */

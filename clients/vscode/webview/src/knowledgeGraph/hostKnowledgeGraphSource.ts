@@ -170,6 +170,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     load: (rootId, q) => t.call<KnowledgeGraph | null>({
       op: 'load', rootId, ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}),
     }),
+    // The extension keeps the last full load on disk; any failure is "nothing remembered".
+    lastSeen: () => t.call<{ scopes: KnowledgeScopeSummary[]; rootId: string; graph: KnowledgeGraph } | null>({ op: 'lastSeen' }).catch(() => null),
     async targets(): Promise<ReviewTarget[]> {
       const rows = await t.call<KnowledgeTargetRow[]>({ op: 'targets' });
       return rows.map((r) => ({ id: r.id, kind: r.kind, ...(r.title ? { title: r.title } : {}) }));

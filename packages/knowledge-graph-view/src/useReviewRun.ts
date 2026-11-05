@@ -49,6 +49,8 @@ export interface ReviewRun {
     dismiss(): void;
     /** The phase last reported by the run, for diagnostics. Ref-backed: reading it never re-renders. */
     readonly lastPhase?: ReviewProgress['phase'];
+    /** The root the run is reviewing, once the plan or the request names it. Ref-backed like `lastPhase`. */
+    readonly rootId?: string;
 }
 
 export function useReviewRun(
@@ -150,5 +152,5 @@ export function useReviewRun(
         running.current = null;
     }, []);
 
-    return { state, available: !!source.review, start, answer, rereviewAll, stop, dismiss, get lastPhase() { return lastPhase.current; } };
+    return { state, available: !!source.review, start, answer, rereviewAll, stop, dismiss, get lastPhase() { return lastPhase.current; }, get rootId() { return planRoot.current ?? lastReq.current.rootId; } };
 }

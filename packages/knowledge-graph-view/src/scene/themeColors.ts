@@ -53,6 +53,24 @@ export const KG_TOKENS = {
     line6: ['--kg-line-6', '--bf-warning'],
     line7: ['--kg-line-7', '--bf-danger'],
     line8: ['--kg-line-8', '--bf-text-muted'],
+    // The surface's heat ramp (w1 quiet … w5 hot) and its four route hues (l1..l4).
+    w1: ['--kg-w-1', '--bf-border'],
+    w2: ['--kg-w-2', '--bf-accent'],
+    w3: ['--kg-w-3', '--bf-warning'],
+    w4: ['--kg-w-4', '--bf-warning'],
+    w5: ['--kg-w-5', '--bf-danger'],
+    l1: ['--kg-l-1', '--bf-accent'],
+    l2: ['--kg-l-2', '--bf-success'],
+    l3: ['--kg-l-3', '--bf-text-secondary'],
+    l4: ['--kg-l-4', '--bf-warning'],
+    // Architecture layer bands.
+    bandEntry: ['--kg-band-entry', '--bf-accent'],
+    bandPresentation: ['--kg-band-presentation', '--bf-accent'],
+    bandApplication: ['--kg-band-application', '--bf-text-secondary'],
+    bandDomain: ['--kg-band-domain', '--bf-success'],
+    bandInfrastructure: ['--kg-band-infrastructure', '--bf-warning'],
+    bandData: ['--kg-band-data', '--bf-warning'],
+    bandOther: ['--kg-band-other', '--bf-text-muted'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type ThemeTone = keyof typeof KG_TOKENS;

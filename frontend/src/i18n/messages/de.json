@@ -35785,6 +35785,8 @@
     "title": "Wissen",
     "regionLabel": "Wissensgraph",
     "loading": "Wissensgraph wird geladen…",
+    "refreshing": "Wird aktualisiert…",
+    "refreshFailed": "Aktualisierung fehlgeschlagen – der letzte Graph wird angezeigt. Erneut versuchen",
     "errorTitle": "Der Wissensgraph konnte nicht geladen werden",
     "errorBody": "Beim Lesen des Wissens dieses Ordners ist ein Fehler aufgetreten. Versuche es erneut.",
     "retry": "Erneut versuchen",

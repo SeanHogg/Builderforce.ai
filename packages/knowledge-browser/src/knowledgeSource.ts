@@ -38,6 +38,7 @@ import { estimateReview, type CallPricePort } from './reviewEstimate';
 import { rootKindOf, type KnowledgeDegradedReporter } from './directorySourceKit';
 import { browserSyncStatus, reviewRecords } from './syncStatus';
 import { pinpointImage, type PinpointHost } from './pinpoint';
+import { lastSeenMemory } from './lastSeen';
 
 /** The widest graph the platform builds; the sync counts read it. */
 const SYNC_MAX_NODES = 2000;
@@ -77,6 +78,8 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
   const loadedBy = new Map<string, Parameters<KnowledgeGraphSource['load']>[1]>();
   const scopeRecords = new Map<string, KnowledgeScopeRecord>();
   const rights = factRightsCache((rootId) => client.facts(rootId));
+  /** What this project showed last (in memory, per page life): the view's first frame. */
+  const seen = lastSeenMemory(opts.projectId);
   let providers: DirectoryProvider[] = [];
   /** The root the view last loaded — whose facts a fact action is about. */
   let lastRoot: string | null = null;
@@ -129,6 +132,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     loadedBy.set(rootId, q);
     const graph = await client.graph(rootId, { ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}) });
     rights.loaded(rootId, graph?.scope.digest);
+    seen.loaded(rootId, graph, !!q?.focus?.length);
     return graph;
   };
 
@@ -189,9 +193,12 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       scopesListing = listing.catch(() => undefined);
       const records = await listing;
       for (const r of records) scopeRecords.set(r.rootId, r);
-      return records.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
+      const found = records.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
+      seen.scopes(found);
+      return found;
     },
     load,
+    lastSeen: seen.read,
     async baseline(rootId) {
       // The view lists scopes before it loads a root (again after a review, which moves the
       // digests): wait for that listing so "before" is the review before the newest one.

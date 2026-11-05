@@ -35785,6 +35785,8 @@
     "title": "Conocimiento",
     "regionLabel": "Grafo de conocimiento",
     "loading": "Cargando el grafo de conocimiento…",
+    "refreshing": "Actualizando…",
+    "refreshFailed": "No se pudo actualizar: se muestra el último grafo. Reintentar",
     "errorTitle": "No se pudo cargar el grafo de conocimiento",
     "errorBody": "Algo salió mal al leer el conocimiento de esta carpeta. Inténtalo de nuevo.",
     "retry": "Reintentar",

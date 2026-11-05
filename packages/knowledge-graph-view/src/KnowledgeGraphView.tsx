@@ -45,7 +45,9 @@ import type { SurfaceEnv } from './surface/registry';
 import { scopeFindings } from './surface/scope';
 import { stationOfRef } from './surface/stations';
 import { Spine } from './surface/Spine';
-import { SurfaceFrame, SurfaceState } from './surface/SurfaceStates';
+import { SceneState, SceneStatus } from './surface/SceneState';
+import { SurfaceFrame } from './surface/SurfaceStates';
+import { EMPTY_GRAPH } from './emptyGraph';
 import { useSurface } from './surface/useSurface';
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, SourceLocation, ViewMode } from './types';
@@ -97,7 +99,8 @@ export function KnowledgeGraphView({
     // Before/After: offered when the host keeps a baseline; "before" draws the baseline graph.
     const keepsBaseline = !!source.baseline || !!source.snapshot;
     const showingBefore = revision === 'before' && !!kg.baseline;
-    const graph = showingBefore ? kg.baseline!.graph : kg.graph;
+    const real = showingBefore ? kg.baseline!.graph : kg.graph; // null until a graph arrives; the frame is drawn regardless
+    const graph = real ?? EMPTY_GRAPH;
     const side = showingBefore ? 'baseline' as const : 'current' as const;
     const evidenceFor = useMemo(() => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined), [source]);
     const evidenceOf = useMemo(() => (evidenceFor ? (f: Finding) => evidenceFor(f, side) : undefined), [evidenceFor, side]);
@@ -119,7 +122,7 @@ export function KnowledgeGraphView({
     const drawn = useMemo(() => (visible ? lensGraph(visible, lens) : null), [visible, lens]);
     const index = useMemo(() => nodeIndex(graph ?? { nodes: [] }), [graph]);
     const diagnosticsText = () => graphDiagnosticsText({
-        status: kg.status, rootId: kg.rootId, graph: graph ?? null, drawn: drawn ? { nodes: drawn.nodes.length, edges: drawn.edges.length } : null,
+        status: kg.status, rootId: kg.rootId, graph: real, drawn: drawn ? { nodes: drawn.nodes.length, edges: drawn.edges.length } : null,
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, time: new Date().toISOString(),
     });
@@ -127,17 +130,7 @@ export function KnowledgeGraphView({
     const { select, show, pickLens, pickQuestion, pinpointed, unpin } = useSurfaceActions(kg, surface, () => setTracing(false));
 
     const review = <ReviewProgress run={kg.review} labels={labels} titleOf={titleOf} onContinue={(rootId) => kg.review.start({ rootId })} />;
-    if (kg.status === 'error' || kg.status === 'load-failed' || kg.status === 'empty' || !graph || !visible || !drawn) {
-        const status = kg.status === 'error' || kg.status === 'load-failed' || kg.status === 'empty' ? kg.status : 'loading';
-        return (
-            <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
-                <SurfaceState
-                    status={status} labels={labels} source={source} review={review} reviewStatus={kg.review.state.status}
-                    start={kg.review.start} openReview={openReview} onRetry={kg.reload}
-                />
-            </SurfaceFrame>
-        );
-    }
+    if (!visible || !drawn) return null; // unreachable: `graph` is never null (EMPTY_GRAPH stands in); narrows the memos
 
     const s = labels.surface;
     const hasLines = surface.lines.lines.length > 0;
@@ -190,7 +183,8 @@ export function KnowledgeGraphView({
                 {...(keepsBaseline ? { revision: { value: (showingBefore ? 'before' : 'after') as Revision, hasBefore: !!kg.baseline, onChange: setRevision } } : {})}
                 actions={(
                     <>
-                        <ReviewLauncher source={source} labels={labels} start={(req) => kg.review.start(req.target || req.pick ? req : { rootId: graph.scope.rootId })} primary={false} defaultOpen={!!openReview} status={kg.review.state.status} />
+                        {/* with no graph the scene's empty card is the ONE review action (a failed read has none, so the toolbar keeps it) */}
+                        {(real || kg.status === 'load-failed' || kg.status === 'error') && <ReviewLauncher source={source} labels={labels} start={(req) => kg.review.start(req.target || req.pick ? req : kg.rootId ? { rootId: kg.rootId } : {})} primary={false} defaultOpen={!!openReview} status={kg.review.state.status} />}
                         <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                             <button type="button" style={{ ...quietButton, minHeight: 32 }} onClick={() => void diagCopy.copy(diagnosticsText())}>{labels.copyDiagnostics}</button>
                             <CopiedNote status={diagCopy.status} labels={labels} />
@@ -210,22 +204,27 @@ export function KnowledgeGraphView({
                 {hasLines && !phone && <div style={{ width: compact ? 'auto' : 260, flex: 'none', overflow: 'auto', padding: 12 }}>{linesPanel}</div>}
                 <div style={{ flex: 1, minWidth: 0, minHeight: compact ? 320 : 0, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        <ViewSurface
-                            mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
-                            selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show}
-                            onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
-                        />
+                        {real ? (
+                            <ViewSurface
+                                mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
+                                selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show}
+                                onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
+                            />
+                        ) : (
+                            <SceneState status={kg.status} labels={labels} source={source} review={null} reviewStatus={kg.review.state.status} start={kg.review.start} openReview={openReview} onRetry={kg.reload} />
+                        )}
+                        <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} />
                     </div>
                     {hasLines && <PathStrip path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} />}
                 </div>
-                <ActPanel
+                {real && <ActPanel
                     graph={graph} findings={findings} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={scopeName}
                     compact={compact} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
                     evidence={evidenceOf} onOpenSource={onOpenSource}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
-                </ActPanel>
+                </ActPanel>}
             </div>
             {phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel}</Sheet>}
             <NodeSheet

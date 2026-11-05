@@ -41,7 +41,8 @@ import { applyModelPick } from "./modelPick";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
 import { buildModelItems, installStepDurability, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
-import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./projectState";
+import { SELECTED_TENANT_KEY, getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./projectState";
+import { clearLastSeen } from "./knowledge/knowledgeLastSeen";
 import { getProjectNames, invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
@@ -116,8 +117,6 @@ function chatTitleOf(item: bfApi.BfBrainChat | number | string | SessionTreeNode
 
 type TaskNode = { kind: "task"; task: bfApi.BfTask };
 
-/** Persisted (per-machine) id of the workspace the editor is acting as. */
-const SELECTED_TENANT_KEY = "builderforce.selectedTenantId";
 
 /** The Work view's workspace + project rows; re-resolved after a workspace switch or
  *  platform write so the rows and the view header show the active workspace. */
@@ -1423,6 +1422,7 @@ async function signOut(
   await context.globalState.update(SELECTED_TENANT_KEY, undefined);
   setGroundingSummary(undefined);
   setSelectedProject(undefined);
+  await clearLastSeen(context.globalStorageUri.fsPath); // the next sign-in may be another account's: its graphs are not shown
   if (!opts.quiet) vscode.window.showInformationMessage("BuilderForce: signed out.");
   refreshAuthBoundSurfaces();
 }

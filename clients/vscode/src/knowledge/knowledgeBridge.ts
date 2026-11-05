@@ -8,15 +8,17 @@
  */
 
 import * as vscode from "vscode";
-import { factKeyOf, type Finding, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
+import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
 import { factRightsCache, humanFactBatch, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { openWorkspace } from "../openWorkspace";
+import { SELECTED_TENANT_KEY, getSelectedProject } from "../projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import {
   KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
   type KnowledgeTargetRow,
 } from "./knowledgeProtocol";
 import { applyKnipFix } from "./knowledgeFixes";
+import { readLastSeen, workspaceKey, writeLastSeen } from "./knowledgeLastSeen";
 import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
@@ -46,6 +48,8 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly live = new Map<string, () => void>();
   /** The root the view last loaded — whose facts a fact action is about. */
   private lastRoot: string | undefined;
+  /** The scopes the view last listed: written beside the graph the next open paints first. */
+  private lastScopes: KnowledgeScopeRow[] | undefined;
   /** How the view last loaded each root; Live's refresh repeats it. */
   private readonly loadedBy = new Map<string, GraphQuery>();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
@@ -67,13 +71,16 @@ export class KnowledgeBridge implements vscode.Disposable {
   /** One call's answer (the caller responds with it, or with the error). */
   async handle(call: KnowledgeCall): Promise<unknown> {
     switch (call.op) {
-      case "scopes": return this.scopes();
+      case "scopes": return (this.lastScopes = await this.scopes());
+      case "lastSeen": return readLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey());
       case "load": {
         this.lastRoot = call.rootId;
         const query: GraphQuery = { ...(call.focus ? { focus: call.focus } : {}), ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) };
         this.loadedBy.set(call.rootId, query);
         const graph = await loadGraph(this.secrets, call.rootId, query);
         this.rights.loaded(call.rootId, graph?.scope.digest);
+        // Only a FULL load is what the next open paints first (a focus load is a partial picture).
+        if (graph && !call.focus) void this.rememberLastSeen(call.rootId, graph);
         return graph;
       }
       case "targets": return this.targets();
@@ -101,6 +108,23 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
       case "syncStatus": return rootSyncStatus(this.secrets, this.rootOf(call.rootId));
       case "applyFix": return this.applyFix(call.rootId, call.finding);
+    }
+  }
+
+  /** The last-seen file's key: this workspace's folders under the acting tenant + linked project ("local" when unlinked). */
+  private lastSeenKey(): string {
+    const project = getSelectedProject();
+    const tenant = this.host.ctx.globalState.get<number>(SELECTED_TENANT_KEY);
+    return workspaceKey(workspaceFolders(), project ? `${tenant ?? "none"}:${project.id}` : "local");
+  }
+
+  /** Writes the last full load beside the scopes the view last listed; never throws (the view waits for nothing). */
+  private async rememberLastSeen(rootId: string, graph: KnowledgeGraph): Promise<void> {
+    try {
+      const scopes = this.lastScopes ?? await this.scopes();
+      await writeLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey(), { scopes, rootId, graph });
+    } catch (error) {
+      log("lastSeen", error instanceof Error ? error.message : String(error));
     }
   }
 

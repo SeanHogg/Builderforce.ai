@@ -170,6 +170,10 @@ export interface KnowledgeGraphLabels {
     title: string;
     regionLabel: string;
     loading: string;
+    /** Shown in the scene's corner while a fresh read replaces the graph on screen. */
+    refreshing: string;
+    /** The fresh read failed; the last graph stays drawn and this offers Retry. */
+    refreshFailed: string;
     errorTitle: string;
     errorBody: string;
     retry: string;
@@ -358,6 +362,8 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     title: 'Knowledge',
     regionLabel: 'Knowledge graph',
     loading: 'Loading the knowledge graph…',
+    refreshing: 'Updating…',
+    refreshFailed: 'Couldn’t update — showing the last graph. Retry',
     errorTitle: 'The knowledge graph could not load',
     errorBody: 'Something went wrong reading this folder’s knowledge. Try again.',
     retry: 'Try again',

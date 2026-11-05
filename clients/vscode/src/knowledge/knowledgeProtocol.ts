@@ -35,6 +35,7 @@ export interface KnowledgeReviewRequest {
 export type KnowledgeCall =
   | { op: "scopes" }
   | { op: "load"; rootId: string; focus?: string[]; maxNodes?: number }
+  | { op: "lastSeen" }
   | { op: "targets" }
   | { op: "plan"; req: KnowledgeReviewRequest; stream: string }
   | { op: "run"; reviewId: string }

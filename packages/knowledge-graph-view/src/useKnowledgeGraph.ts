@@ -29,6 +29,10 @@ export interface KnowledgeGraphState {
     query: string;
     hits: KnowledgeSearchHit[] | null;
     review: ReviewRun;
+    /** The graph on screen is the last one seen (or a reload is in flight): a fresh read has not landed yet. */
+    stale: boolean;
+    /** The fresh read failed while a graph was drawn; that graph stays and the view offers Retry. */
+    refreshFailed: boolean;
     selectRoot(rootId: string): void;
     setLens(id: LensId): void;
     select(ref: string | null): void;
@@ -42,6 +46,9 @@ const newestFirst = (a: KnowledgeScopeSummary, b: KnowledgeScopeSummary): number
 
 /** The lenses a graph with findings should open on, in preference order (first that applies AND has findings). */
 const FINDINGS_FIRST: readonly LensId[] = ['unused', 'partitions', 'duplication', 'knowledge', 'structure'];
+
+/** The least time between two re-reads of a graph that a running review is growing. */
+const GROW_INTERVAL_MS = 4000;
 
 export interface KnowledgeGraphOptions {
     initialLens?: LensId;
@@ -62,6 +69,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     const [query, setQuery] = useState('');
     const [hits, setHits] = useState<KnowledgeSearchHit[] | null>(null);
     const [generation, setGeneration] = useState(0);
+    const [stale, setStale] = useState(false);
+    const [refreshFailed, setRefreshFailed] = useState(false);
     // A finished review is the only thing that makes an open root newly watchable, so it alone re-subscribes Live.
     const [reviewEpoch, setReviewEpoch] = useState(0);
     // The refs the open root's graph is loaded around: the host's initial focus, then a search's hits that
@@ -80,8 +89,22 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     rootIdRef.current = rootId;
     const loadFocusRef = useRef(loadFocus);
     loadFocusRef.current = loadFocus;
+    /** The graph on screen, readable from async continuations before state settles (set where `setGraph` is). */
+    const graphRef = useRef<KnowledgeGraph | null>(null);
+    const paint = useCallback((g: KnowledgeGraph | null) => { graphRef.current = g; setGraph(g); }, []);
+    /** Bumped by anything that supersedes a review-growth re-read (a load, a finished review, a source swap). */
+    const growSeq = useRef(0);
     /** The `${rootId}:${generation}:${focus}` already loading/loaded for THIS source — a state-driven rerun never re-reads it. */
     const loadedKey = useRef<{ source: KnowledgeGraphSource; key: string } | null>(null);
+    // Another SOURCE (another project) never shows the old one's graph: clear everything BEFORE the
+    // new source's effects run, so its own lastSeen can paint. (State set during render re-renders at once.)
+    const prevSource = useRef(source);
+    if (prevSource.current !== source) {
+        prevSource.current = source;
+        graphRef.current = null; rootIdRef.current = null; loadedKey.current = null; baselineMemo.current = null; growSeq.current += 1;
+        setGraph(null); setRootId(null); setBaseline(null); setScopes([]); setStale(false); setRefreshFailed(false); setStatus('loading');
+        setSelected(null); setHits(null); setLoadFocus(initialLoadFocus.current);
+    }
 
     // ONE root's graph, and the host's baseline when it keeps one, read in parallel. The
     // baseline belongs to the root and generation, so a refocus does not fetch it again.
@@ -90,12 +113,18 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         if (loadedKey.current?.source === source && loadedKey.current.key === key) return;
         const entry = { source, key };
         loadedKey.current = entry;
+        growSeq.current += 1;
         const memoKey = `${root}:${gen}`;
         const memo = baselineMemo.current;
         // The same root and generation is a REFOCUS (a search's hits): the graph on screen stays
         // up while it loads, and stays if the reload fails.
         const refocus = memo !== null && memo.source === source && memo.key === memoKey;
-        if (!refocus) setStatus('loading');
+        // A reload of the root on screen keeps its picture (stale until the new one lands); another
+        // root clears to empty-with-status.
+        const keep = graphRef.current?.scope.rootId === root;
+        setRefreshFailed(false);
+        if (keep) setStale(true);
+        else { paint(null); setBaseline(null); setStale(false); setStatus('loading'); }
         const before = refocus
             ? Promise.resolve(memo.value)
             : (source.baseline ? source.baseline(root).catch(() => null) : Promise.resolve(null));
@@ -103,8 +132,10 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             .then(([g, base]) => {
                 if (loadedKey.current !== entry) return;
                 baselineMemo.current = { source, key: memoKey, value: base };
-                setGraph(g);
+                if (!g && graphRef.current) { loadedKey.current = null; setRefreshFailed(true); return; }
+                paint(g);
                 setBaseline(base);
+                setStale(false);
                 // A scope EXISTS (rootId was picked) but its graph is gone or unreadable: this is
                 // NOT "never reviewed" — say the load failed so the view can offer Retry.
                 setStatus(g ? 'ready' : 'load-failed');
@@ -112,30 +143,50 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             .catch(() => {
                 if (loadedKey.current !== entry) return;
                 loadedKey.current = null; // a Retry (same key) is not deduped away
-                if (!refocus) setStatus('load-failed');
+                // A drawn graph is never replaced by the failure screen: it stays, flagged.
+                if (graphRef.current) setRefreshFailed(true); else setStatus('load-failed');
             });
-    }, [source]);
+    }, [source, paint]);
 
     // Scopes AND the newest root's graph load IN PARALLEL — the reading is not serial (§4.6).
     // The graph starts loading off the SAME scopes read, not in a later state-driven pass.
     useEffect(() => {
         if (held) return undefined;
         let live = true;
-        setStatus('loading');
+        let freshScopes = false;
+        let scopesFailed = false;
+        if (graphRef.current) { setStale(true); setRefreshFailed(false); } else setStatus('loading');
+        // What this host showed last time paints on the first frame; any fresh answer wins over it.
+        if (!graphRef.current && source.lastSeen) {
+            source.lastSeen().then((seen) => {
+                if (!live || freshScopes || graphRef.current || !seen) return;
+                setScopes([...seen.scopes].sort(newestFirst));
+                setRootId(seen.rootId);
+                paint(seen.graph);
+                setStale(true);
+                setRefreshFailed(scopesFailed);
+                setStatus('ready');
+            }).catch(() => undefined);
+        }
         source.scopes()
             .then((found) => {
                 if (!live) return;
+                freshScopes = true;
                 const sorted = [...found].sort(newestFirst);
                 setScopes(sorted);
-                if (sorted.length === 0) { setStatus('empty'); setRootId(null); return; }
+                if (sorted.length === 0) { paint(null); setStale(false); setStatus('empty'); setRootId(null); return; }
                 const current = rootIdRef.current;
                 const root = current && sorted.some((s) => s.rootId === current) ? current : sorted[0]!.rootId;
                 loadGraphForRoot(root, loadFocusRef.current, generation);
                 setRootId(root);
             })
-            .catch(() => { if (live) setStatus('error'); });
+            .catch(() => {
+                if (!live) return;
+                scopesFailed = true;
+                if (graphRef.current) { setStale(true); setRefreshFailed(true); } else setStatus('error');
+            });
         return () => { live = false; };
-    }, [source, held, generation, loadGraphForRoot]);
+    }, [source, held, generation, loadGraphForRoot, paint]);
 
     // A root picked in the picker, opened by a finished review, or refocused by a search
     // loads in its own pass; the dedupe key keeps this from re-reading what the scopes pass
@@ -148,19 +199,57 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     // Live updates for the open root.
     useEffect(() => {
         if (held || !rootId || !source.subscribeLive) return undefined;
-        return source.subscribeLive(rootId, (g) => setGraph(g));
+        return source.subscribeLive(rootId, paint);
         // `reviewEpoch`: a finished review may have opened (and so made watchable) this very root.
-    }, [source, held, rootId, reviewEpoch]);
+    }, [source, held, rootId, reviewEpoch, paint]);
 
     // A finished review is a new "after", and its previous review the host's new "before".
     const onReviewDone = useCallback((doneRoot: string) => {
         searchSeq.current += 1;
+        growSeq.current += 1;
+        growing.current = null;
         setRootId(doneRoot);
         setLoadFocus(initialLoadFocus.current);
         setGeneration((n) => n + 1);
         setReviewEpoch((n) => n + 1);
     }, []);
     const review = useReviewRun(source, onReviewDone);
+
+    // The open root grows while it is being reviewed: on a progress event that advanced, re-read it
+    // refocus-style (the picture stays) at most once per GROW_INTERVAL_MS. The done path does the final load.
+    // A re-read lands only if nothing newer started meanwhile (`growSeq`: any load, a finished review or a
+    // source swap bumps it) AND the review of THIS root is still running (`growing`). A re-read held back by
+    // the throttle runs once the window opens (trailing), with the latest progress.
+    const grown = useRef<{ at: number; phase: string; done: number }>({ at: 0, phase: '', done: -1 });
+    const growing = useRef<string | null>(null);
+    const reviewState = review.state;
+    const reviewRoot = review.rootId;
+    useEffect(() => {
+        const root = rootIdRef.current;
+        if (held || reviewState.status !== 'running' || !root || !reviewRoot || reviewRoot !== root) {
+            growing.current = null;
+            if (reviewState.status !== 'running') grown.current = { at: 0, phase: '', done: -1 };
+            return undefined;
+        }
+        growing.current = root;
+        const p = reviewState.progress;
+        if (!p) return undefined;
+        const last = grown.current;
+        if (p.phase === last.phase && p.done <= last.done) return undefined;
+        const run = () => {
+            grown.current = { at: Date.now(), phase: p.phase, done: p.done };
+            const seq = growSeq.current;
+            const focus = loadFocusRef.current;
+            source.load(root, focus ? { focus } : undefined).then((g) => {
+                if (!g || growSeq.current !== seq || growing.current !== root || rootIdRef.current !== root) return;
+                paint(g); setStale(false); setRefreshFailed(false); setStatus('ready');
+            }).catch(() => undefined);
+        };
+        const wait = GROW_INTERVAL_MS - (Date.now() - last.at);
+        if (wait <= 0) { run(); return undefined; }
+        const timer = setTimeout(run, wait);
+        return () => clearTimeout(timer);
+    }, [held, reviewState, reviewRoot, source, paint]);
 
     const shown = held ? held.graph : graph;
     const allowed = opts.lenses;
@@ -226,12 +315,14 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             status: 'ready',
             scopes: [{ rootId: heldRoot, title: held.title ?? heldRoot, packs: held.graph.scope.packs }],
             rootId: heldRoot, graph: held.graph, baseline: held.baseline ?? null, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
+            stale: false, refreshFailed: false,
             selectRoot: () => undefined, setLens: setLensId, select: setSelected, setFocus, search,
             reload: () => setGeneration((n) => n + 1),
         };
     }
     return {
         status, scopes, rootId, graph, baseline, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
+        stale, refreshFailed,
         selectRoot, setLens: setLensId, select: setSelected, setFocus, search,
         reload: () => setGeneration((n) => n + 1),
     };

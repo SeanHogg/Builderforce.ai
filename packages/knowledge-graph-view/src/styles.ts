@@ -7,9 +7,35 @@
  */
 
 import type { CSSProperties } from 'react';
-import { cssVar } from './scene/themeColors';
+import { cssVar, type ThemeTone } from './scene/themeColors';
 
 export const TAP = 40;
+
+/**
+ * Density-aware control height: `--kg-control` is 30px on a fine pointer and 40px on a coarse one
+ * (tokens.css owns the `@media (pointer: coarse)` switch). The 40px fallback keeps the tap target
+ * for any host that has not loaded tokens.css. Works in inline styles, including inside `calc()`.
+ */
+export const CONTROL = 'var(--kg-control, 40px)';
+
+/** The mono stack; hosts may load JetBrains Mono, the package loads nothing. */
+export const MONO = 'var(--kg-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)';
+
+export type LayerId = 'entry' | 'presentation' | 'application' | 'domain' | 'infrastructure' | 'data' | 'other';
+
+const LAYER_TONE: Record<LayerId, ThemeTone> = {
+    entry: 'bandEntry', presentation: 'bandPresentation', application: 'bandApplication', domain: 'bandDomain',
+    infrastructure: 'bandInfrastructure', data: 'bandData', other: 'bandOther',
+};
+
+/** The band colour (a `var()` chain) of an architecture layer. */
+export const layerColor = (layer: LayerId): string => cssVar(LAYER_TONE[layer]);
+
+/** Heat ramp colour for a 1..5 level (clamped). */
+export const heatColor = (level: number): string => cssVar((['w1', 'w2', 'w3', 'w4', 'w5'] as const)[Math.min(5, Math.max(1, Math.round(level))) - 1]!);
+
+/** Route colour for a 1..4 line. */
+export const routeColor = (line: number): string => cssVar((['l1', 'l2', 'l3', 'l4'] as const)[Math.min(4, Math.max(1, Math.round(line))) - 1]!);
 
 export const button: CSSProperties = {
     minHeight: TAP, minWidth: TAP, padding: '0 14px', borderRadius: 999, cursor: 'pointer',
