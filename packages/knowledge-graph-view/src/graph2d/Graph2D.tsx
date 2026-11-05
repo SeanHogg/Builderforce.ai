@@ -99,7 +99,7 @@ const NodeLayer = memo(function NodeLayer({ ordered, layout, lens, selected, sto
                 const r = Math.max(nodeRadius(n.importance), 3 * perPx);
                 return (
                     <g
-                        key={n.ref} data-id={n.ref} role="button" aria-pressed={n.ref === selected} style={{ cursor: 'pointer', outline: 'none' }}
+                        key={n.ref} data-id={n.ref} role="button" aria-pressed={n.ref === selected} style={{ cursor: 'pointer' }}
                         tabIndex={stops.has(n.ref) || n.ref === selected ? 0 : -1} data-keep={stops.has(n.ref) || n.ref === selected ? '1' : undefined}
                         aria-label={fillTemplate(labels.nodeAria, { label: n.label, kind: kindLabel(labels, n.kind) })}
                         onKeyDown={(e) => {

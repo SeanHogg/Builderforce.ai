@@ -11,6 +11,13 @@ export const ANALYZERS = [
   { name: 'knip', version: '5.30.0', command: 'npm exec --yes --package=knip@5.30.0 --package=typescript@5.6.3 --call="knip --reporter=json --no-progress"' },
 ] as const;
 
+/** The pinned knip invocation, applying its own fixes (`--fix`) instead of reporting. Deleting files is opt-in per call. */
+export function knipFixCommand(fixTypes: readonly ('exports' | 'files')[]): string {
+  const knip = ANALYZERS.find((a) => a.name === 'knip')!;
+  const removeFiles = fixTypes.includes('files') ? '--allow-remove-files ' : '';
+  return knip.command.replace('--reporter=json --no-progress', `--fix --fix-type ${fixTypes.join(',')} ${removeFiles}--no-progress`);
+}
+
 /** npm diagnostics may surround JSON in a shell's combined stdout/stderr stream. */
 export function parseAnalyzerJson(text: string): any {
   const start = text.indexOf('{');

@@ -23,27 +23,17 @@ import {
 } from '@seanhogg/builderforce-memory/knowledge';
 import { CONTENT_HASH_FIELD, hashText, type SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import { extractSymbols, symbolLanguageOf, type CodeSymbol, type SymbolLanguage } from '../symbols.js';
+import { contentBadges } from './codeFileBadges.js';
 import { CODE_FINDING_RULES } from './codeFindings.js';
+import { codeLanguageOf, isShellPath } from './codeMask.js';
 import { basenameOf, CODE_BADGES, CODE_PACK_ID, codeFileNode } from './codeNodes.js';
 
 /** Where a project overrides the code layers. */
 export const CODE_PARTITIONS_FILE = '.builderforce/partitions.json';
 
-/** The N-layer default (PRD 38 §4.4). Order 0 is the top layer; first matching layer wins. */
-export const CODE_LAYERS: PartitionRegistry = {
-    partitions: [
-        { id: 'presentation', order: 0, match: ['**/routes/**', '**/components/**', '**/app/**', '**/pages/**', '**/webview/**'] },
-        { id: 'application', order: 1, match: ['**/application/**', '**/use-cases/**'] },
-        { id: 'domain', order: 2, match: ['**/domain/**'] },
-        { id: 'infrastructure', order: 3, match: ['**/infrastructure/**', '**/db/**', '**/adapters/**'] },
-    ],
-    allow: {
-        presentation: ['application', 'domain'],
-        application: ['domain'],
-        domain: [],
-        infrastructure: ['domain', 'application'],
-    },
-};
+/** The N-layer default (PRD 38 §4.4), generated from `codeLayers`' tables; see `buildCodeGraph` for the full folder, name and import-direction rules. */
+export { CODE_LAYERS } from './codeLayers.js';
+import { CODE_LAYERS } from './codeLayers.js';
 
 /** Symbol-extractor families that are not code: prose and DDL (as the repo map excludes them). */
 const NOT_CODE: ReadonlySet<SymbolLanguage> = new Set<SymbolLanguage>(['markdown', 'sql']);
@@ -52,6 +42,8 @@ const GENERATED = /\.min\.js$/i;
 
 /** True when the code pack reads `path` (root-relative). */
 export function isCodePath(path: string): boolean {
+    // Shell scripts are code, never docs: `[[ … ]]` in one is a test, not a wiki link.
+    if (isShellPath(path)) return true;
     const language = symbolLanguageOf(path);
     return language !== undefined && !NOT_CODE.has(language) && !GENERATED.test(path);
 }
@@ -74,7 +66,7 @@ export function codeParser(symbolsOf: SymbolSource = extractSymbols): KnowledgeP
         accepts: (source) => source.content.kind === 'text' && isCodePath(source.id),
         parse: (source) => {
             const text = textOf(source);
-            return text.trim() ? [{ text, metadata: { language: symbolLanguageOf(source.id) ?? '' } }] : [];
+            return text.trim() ? [{ text, metadata: { language: codeLanguageOf(source.id) ?? '' } }] : [];
         },
         extract(source: SourceDocument, _sections, ctx: ExtractContext): Extracted {
             const path = source.id;
@@ -86,9 +78,10 @@ export function codeParser(symbolsOf: SymbolSource = extractSymbols): KnowledgeP
             const node = codeFileNode(ctx.rootId, path, {
                 sourceHash,
                 badges: {
-                    [CODE_BADGES.language]: symbolLanguageOf(path) ?? '',
+                    [CODE_BADGES.language]: codeLanguageOf(path) ?? '',
                     [CODE_BADGES.symbols]: symbols.length,
                     [CODE_BADGES.exports]: exported.length,
+                    ...contentBadges(path, text, symbols),
                 },
             });
             return {

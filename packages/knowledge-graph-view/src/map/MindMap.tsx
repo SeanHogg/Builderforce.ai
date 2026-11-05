@@ -70,7 +70,7 @@ const Branches = memo(function Branches(p: LayerProps) {
                     <g
                         key={b.id} data-id={b.id} data-branch={b.kind} data-severity={b.severity} role="button" aria-label={w.aria}
                         aria-pressed={b.kind === 'file' ? active : undefined} tabIndex={b.depth <= 1 || active ? 0 : -1} data-keep={b.depth <= 1 || active ? '1' : undefined}
-                        style={{ cursor: 'pointer', outline: 'none' }}
+                        style={{ cursor: 'pointer' }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(b); } else onArrow(e); }}
                     >
                         <circle

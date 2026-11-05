@@ -10,7 +10,7 @@
  * composes that one finding. *Show* focuses a finding's nodes. Never a model call.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './template';
@@ -30,6 +30,10 @@ export interface FindingsPanelProps {
     /** Where each finding was seen (the host's `evidence`, bound to this graph's side). */
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
+    /** Drawn beside a row's severity (the Act panel's provenance badge). */
+    badge?: ((f: Finding) => ReactNode) | undefined;
+    /** Opens the Resolve drawer on a finding. Absent ⇒ no Resolve button. */
+    onResolve?: ((f: Finding) => void) | undefined;
 }
 
 const SEVERITY_TONE = { error: 'violation', warn: 'cycle', info: 'muted' } as const;
@@ -46,9 +50,11 @@ interface FindingRowProps {
     onCompose?: ((text: string) => void) | undefined;
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
+    badge?: ((f: Finding) => ReactNode) | undefined;
+    onResolve?: ((f: Finding) => void) | undefined;
 }
 
-function FindingRow({ f, labels, index, checked, onToggle, onShow, onCompose, evidence, onOpenSource }: FindingRowProps) {
+function FindingRow({ f, labels, index, checked, onToggle, onShow, onCompose, evidence, onOpenSource, badge, onResolve }: FindingRowProps) {
     return (
         <li data-finding={f.kind} style={{ ...card, display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -63,11 +69,13 @@ function FindingRow({ f, labels, index, checked, onToggle, onShow, onCompose, ev
                     {labels.severity[f.severity]}
                 </span>
                 <strong style={{ fontSize: 13 }}>{findingTitle(f, labels)}</strong>
+                {badge?.(f)}
             </div>
             <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{findingDetail(f, labels, index) ?? findingItems(f, index)}</p>
             {evidence && <EvidenceList items={evidence(f)} onOpenSource={onOpenSource} />}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={button} onClick={() => onShow([...f.nodes])}>{labels.showFinding}</button>
+                {onResolve && <button type="button" style={button} aria-label={fillTemplate(labels.surface.resolveFindingAria, { title: findingTitle(f, labels) })} onClick={() => onResolve(f)}>{labels.surface.resolveFinding}</button>}
                 {onCompose && (
                     <button type="button" style={primaryButton} onClick={() => onCompose(findingRequest(f, labels, index))}>
                         {labels.fixWithAgent}
@@ -78,7 +86,7 @@ function FindingRow({ f, labels, index, checked, onToggle, onShow, onCompose, ev
     );
 }
 
-export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evidence, onOpenSource }: FindingsPanelProps) {
+export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evidence, onOpenSource, badge, onResolve }: FindingsPanelProps) {
     const index = useMemo(() => nodeIndex(graph), [graph]);
     // The multiselect Fix-with-agent selection (by finding id; stable within a load).
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -159,7 +167,7 @@ export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evid
                                                 <FindingRow
                                                     key={f.id} f={f} labels={labels} index={index}
                                                     checked={selected.has(f.id)} onToggle={toggle}
-                                                    onShow={onShow} onCompose={onCompose} evidence={evidence} onOpenSource={onOpenSource}
+                                                    onShow={onShow} onCompose={onCompose} evidence={evidence} onOpenSource={onOpenSource} badge={badge} onResolve={onResolve}
                                                 />
                                             ))}
                                         </ul>

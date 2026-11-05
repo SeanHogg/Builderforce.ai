@@ -1,14 +1,17 @@
 /**
  * `KnowledgeGraphView` — the ONE view of a knowledge graph, on every host (PRD 38 §4.6).
  *
- * The default view is the 2D graph; the 3D scene (a lazy chunk, only where WebGL exists), the
- * folder mind map and the list are one chip away, and the insights aside shows in every one.
- * In a compact container (a phone, a narrow panel) the view
- * opens focused on the top 60 nodes, lenses scroll sideways and panels become bottom
- * sheets. With no reviewed folder it explains itself and offers **Review a folder**.
+ * A composition root: it holds the graph's state and the surface's state, and lays out the
+ * parts, each its own module. Header (spine, ask bar, panel buttons, overlays); left, the
+ * lines and their stations; centre, the camera switcher, the question chips and the scene,
+ * with the path strip below; right, the Act panel. The cameras and the panel buttons are
+ * registries (`surface/cameras.tsx`, `surface/panels.ts`), so this file names none of them.
+ *
+ * Compact: panels stack under the scene, the node is a bottom sheet; below `PHONE_WIDTH` the
+ * left panel is a sheet too. With no reviewed folder it offers **Review a folder**.
  */
 
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { useKnowledgeGraph } from './useKnowledgeGraph';
 import { CopiedNote, useCopyText } from './copyText';
@@ -20,19 +23,37 @@ import { Toolbar, type LensControl, type Revision } from './Toolbar';
 import { ReviewLauncher } from './ReviewLauncher';
 import { ReviewProgress } from './ReviewProgress';
 import { ViewSurface } from './ViewSurface';
-import { FindingsPanel } from './FindingsPanel';
 import { LensPanel } from './LensPanel';
 import { InsightsPanel } from './insights/InsightsPanel';
-import { NodePanel } from './NodePanel';
-import { TracePanel } from './TracePanel';
-import { Panel } from './Sheet';
-import { cssVar } from './scene/themeColors';
-import { button, heading, muted, quietButton } from './styles';
+import { NodeSheet } from './NodeSheet';
+import { SurfaceNotes } from './SurfaceNotes';
+import { Sheet } from './Sheet';
+import { chip, quietButton } from './styles';
+import { CAMERAS } from './surface/cameras';
+import { ActPanel } from './surface/ActPanel';
+import { CameraBar } from './surface/CameraBar';
+import { LinesPanel } from './surface/LinesPanel';
+import { OverlayMenu } from './surface/OverlayMenu';
+import { PanelDock } from './surface/PanelDock';
+import { PathStrip } from './surface/PathStrip';
+import { PinpointInput } from './surface/PinpointInput';
+import { TimeSlider, useHistory } from './surface/TimeSlider';
+import { buildSpine } from './surface/path';
+import { questionForLens } from './surface/questions';
+import { useSurfaceActions } from './surface/useSurfaceActions';
+import type { SurfaceEnv } from './surface/registry';
+import { scopeFindings } from './surface/scope';
+import { stationOfRef } from './surface/stations';
+import { Spine } from './surface/Spine';
+import { SurfaceFrame, SurfaceState } from './surface/SurfaceStates';
+import { useSurface } from './surface/useSurface';
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, SourceLocation, ViewMode } from './types';
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
 const MAX_DRAWN_NODES = 2000;
+/** Below this container width the left panel collapses into a sheet. */
+const PHONE_WIDTH = 480;
 
 export interface KnowledgeGraphViewProps {
     source: KnowledgeGraphSource;
@@ -66,27 +87,30 @@ export function KnowledgeGraphView({
     const rootRef = useRef<HTMLElement>(null);
     const width = useContainerWidth(rootRef);
     const compact = width > 0 && width < COMPACT_WIDTH;
+    const phone = width > 0 && width < PHONE_WIDTH;
     const env = useRenderEnvironment();
-    const [chosen, setMode] = useState<ViewMode>('graph');
-    const modes = useMemo<ViewMode[]>(() => (env.webgl ? ['graph', '3d', 'map', 'list'] : ['graph', 'map', 'list']), [env.webgl]);
-    const mode: ViewMode = modes.includes(chosen) ? chosen : 'graph';
-    const [showAll, setShowAll] = useState(false);
-    const [tracing, setTracing] = useState(false);
+    const [chosen, setMode] = useState<ViewMode | null>(null);
+    const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
     const [revision, setRevision] = useState<Revision>('after');
-    // The always-available capture for a bug/improvement report (English on purpose — see reviewDiagnostics.ts).
-    const diagCopy = useCopyText();
+    const diagCopy = useCopyText(); // the bug-report capture (English on purpose — see reviewDiagnostics.ts)
 
     // Before/After: offered when the host keeps a baseline; "before" draws the baseline graph.
     const keepsBaseline = !!source.baseline || !!source.snapshot;
     const showingBefore = revision === 'before' && !!kg.baseline;
     const graph = showingBefore ? kg.baseline!.graph : kg.graph;
     const side = showingBefore ? 'baseline' as const : 'current' as const;
-    const evidenceFor = useMemo(
-        () => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined),
-        [source],
-    );
+    const evidenceFor = useMemo(() => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined), [source]);
     const evidenceOf = useMemo(() => (evidenceFor ? (f: Finding) => evidenceFor(f, side) : undefined), [evidenceFor, side]);
     const { lens, selected } = kg;
+    // The time slider: the commit picked marks the stations it changed (the "changed" question and metric).
+    const commits = useHistory(source, kg.rootId);
+    const [picked, setPicked] = useState<string | null>(null);
+    useEffect(() => setPicked(null), [kg.rootId]);
+    const changed = useMemo(() => new Set(commits.commits.find((c) => c.sha === picked)?.refs ?? []), [commits, picked]);
+    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed });
+    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasSync: !!source.syncStatus };
+    const cameras = graph ? CAMERAS.filter((c) => c.available(graph, surfaceEnv)) : [];
+    const mode: ViewMode = cameras.find((c) => c.id === chosen)?.id ?? cameras.find((c) => c.id === 'transit')?.id ?? 'graph';
     const visible = useMemo(() => {
         if (!graph) return null;
         const keep = [...kg.focus, ...(selected ? [selected] : [])];
@@ -94,124 +118,120 @@ export function KnowledgeGraphView({
     }, [graph, compact, showAll, kg.focus, selected]);
     const drawn = useMemo(() => (visible ? lensGraph(visible, lens) : null), [visible, lens]);
     const index = useMemo(() => nodeIndex(graph ?? { nodes: [] }), [graph]);
-    const copyDiagnostics = () => void diagCopy.copy(graphDiagnosticsText({
+    const diagnosticsText = () => graphDiagnosticsText({
         status: kg.status, rootId: kg.rootId, graph: graph ?? null, drawn: drawn ? { nodes: drawn.nodes.length, edges: drawn.edges.length } : null,
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, time: new Date().toISOString(),
-    }));
+    });
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
-    const show = (refs: string[]) => { kg.setFocus(refs); if (refs[0]) kg.select(refs[0]); };
-    const select = (ref: string) => { setTracing(false); kg.select(ref); };
+    const { select, show, pickLens, pickQuestion, pinpointed, unpin } = useSurfaceActions(kg, surface, () => setTracing(false));
 
     const review = <ReviewProgress run={kg.review} labels={labels} titleOf={titleOf} onContinue={(rootId) => kg.review.start({ rootId })} />;
-    const frame = (children: ReactNode) => (
-        <section
-            ref={rootRef}
-            aria-label={labels.regionLabel}
-            style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: cssVar('bg'), color: cssVar('text'), fontSize: 13 }}
-        >
-            {children}
-        </section>
+    if (kg.status === 'error' || kg.status === 'load-failed' || kg.status === 'empty' || !graph || !visible || !drawn) {
+        const status = kg.status === 'error' || kg.status === 'load-failed' || kg.status === 'empty' ? kg.status : 'loading';
+        return (
+            <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
+                <SurfaceState
+                    status={status} labels={labels} source={source} review={review} reviewStatus={kg.review.state.status}
+                    start={kg.review.start} openReview={openReview} onRetry={kg.reload}
+                />
+            </SurfaceFrame>
+        );
+    }
+
+    const s = labels.surface;
+    const hasLines = surface.lines.lines.length > 0;
+    const findings = scopeFindings(lensFindings(lens, graph), surface.stations, surface.scope);
+    const truncated = graph.stats.truncated || visible.nodes.length < graph.nodes.length;
+    const selectedNode = selected ? index.get(selected) ?? null : null;
+    const spineStation = surface.station ?? (selected ? surface.stations.byId.get(stationOfRef(surface.stations, selected) ?? '') ?? null : null);
+    const scopeName = surface.station ? surface.station.name : surface.lineChosen && surface.line ? fillTemplate(s.lineName, { name: surface.line.name }) : null;
+    const linesPanel = (
+        <LinesPanel
+            lines={surface.lines} stations={surface.stations} overlay={surface.overlay} labels={labels} lineId={surface.line?.id ?? null}
+            selectedStation={surface.station?.id ?? null} onSelectLine={surface.selectLine} onSelectStation={surface.selectStation}
+        />
     );
 
-    if (kg.status === 'error') {
-        return frame(
-            <div role="alert" style={{ padding: 24, display: 'grid', gap: 10, justifyItems: 'start' }}>
-                <h2 style={heading}>{labels.errorTitle}</h2>
-                <p style={{ ...muted, margin: 0 }}>{labels.errorBody}</p>
-                <button type="button" style={button} onClick={kg.reload}>{labels.retry}</button>
-            </div>,
-        );
-    }
-    if (kg.status === 'load-failed') {
-        // A scope exists but its graph is gone/unreadable — this is NOT the "never reviewed" empty state.
-        return frame(
-            <div role="alert" style={{ padding: 24, display: 'grid', gap: 12, justifyItems: 'start', maxWidth: 560 }}>
-                <h2 style={heading}>{labels.loadFailedTitle}</h2>
-                <p style={{ ...muted, margin: 0 }}>{labels.loadFailedBody}</p>
-                <button type="button" style={button} onClick={kg.reload}>{labels.retry}</button>
-                {review}
-            </div>,
-        );
-    }
-    if (kg.status === 'empty' || (kg.status === 'loading' && !graph)) {
-        const empty = kg.status === 'empty';
-        return frame(
-            <div style={{ padding: 24, display: 'grid', gap: 12, justifyItems: 'start', maxWidth: 560 }}>
-                {empty ? (
-                    <>
-                        <h2 style={heading}>{labels.emptyTitle}</h2>
-                        <p style={{ ...muted, margin: 0, fontSize: 13 }}>{labels.emptyBody}</p>
-                        <ReviewLauncher source={source} labels={labels} start={kg.review.start} defaultOpen={!!openReview} status={kg.review.state.status} />
-                    </>
-                ) : <p role="status" style={muted}>{labels.loading}</p>}
-                {review}
-            </div>,
-        );
-    }
-    if (!graph || !visible || !drawn) return frame(<p role="status" style={muted}>{labels.loading}</p>);
-
-    const findings = lensFindings(lens, graph);
-    const truncated = graph.stats.truncated || visible.nodes.length < graph.nodes.length;
-
-    return frame(
-        <>
+    return (
+        <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <Toolbar
-                labels={labels} scopes={kg.scopes} rootId={kg.rootId} onRoot={kg.selectRoot}
-                lenses={kg.lenses} lens={lens.id} onLens={kg.setLens} onSearch={(q) => void kg.search(q)}
-                modes={modes} mode={mode} onMode={setMode} lensControl={lensControl}
+                labels={labels} scopes={kg.scopes} rootId={kg.rootId} onRoot={kg.selectRoot} onSearch={(q) => void kg.search(q)}
+                spine={(
+                    <Spine
+                        labels={labels} items={buildSpine({ rootTitle: titleOf(graph.scope.rootId), station: spineStation, node: selectedNode, nodeLabel: (r) => labelFor(index, r) })}
+                        onPick={(item) => {
+                            if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'station') kg.select(null); else if (item.id) select(item.id);
+                        }}
+                    />
+                )}
+                askWrap={(form) => (
+                    <PinpointInput
+                        source={source} rootId={kg.rootId} graph={graph} stations={surface.stations} labels={labels} onSelect={select} onCompose={onCompose}
+                        onMatches={pinpointed} onClear={unpin}
+                    >
+                        {form}
+                    </PinpointInput>
+                )}
+                time={<TimeSlider commits={commits.commits} capped={commits.total} picked={picked} labels={labels} onPick={setPicked} changedStations={new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size} />}
+                panels={(
+                    <PanelDock
+                        graph={graph} env={surfaceEnv} labels={labels} surface={surface} renderPanel={renderPanel} source={source} rootId={kg.rootId ?? undefined}
+                        rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnosticsText={diagnosticsText} onCamera={setMode} cameras={cameras.map((c) => c.id)} onShow={show} onCompose={onCompose}
+                    />
+                )}
+                overlays={(
+                    <OverlayMenu
+                        labels={labels} stations={surface.stations.stations} bindings={surface.overlay.bindings} preset={surface.preset}
+                        onPreset={surface.setPreset} onChannel={surface.setChannel} onPins={surface.setPins}
+                    />
+                )}
+                linesToggle={phone && hasLines ? <button type="button" aria-expanded={linesOpen} style={chip(linesOpen)} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</button> : undefined}
                 {...(keepsBaseline ? { revision: { value: (showingBefore ? 'before' : 'after') as Revision, hasBefore: !!kg.baseline, onChange: setRevision } } : {})}
                 actions={(
                     <>
                         <ReviewLauncher source={source} labels={labels} start={(req) => kg.review.start(req.target || req.pick ? req : { rootId: graph.scope.rootId })} primary={false} defaultOpen={!!openReview} status={kg.review.state.status} />
                         <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                            <button type="button" style={{ ...quietButton, minHeight: 32 }} onClick={copyDiagnostics}>{labels.copyDiagnostics}</button>
+                            <button type="button" style={{ ...quietButton, minHeight: 32 }} onClick={() => void diagCopy.copy(diagnosticsText())}>{labels.copyDiagnostics}</button>
                             <CopiedNote status={diagCopy.status} labels={labels} />
                         </span>
                     </>
                 )}
             />
-            <div style={{ display: 'grid', gap: 8, padding: '8px 12px' }}>
-                {review}
-                <p style={{ ...muted, margin: 0 }}>
-                    {fillTemplate(labels.statsLine, { nodes: graph.stats.nodes, edges: graph.stats.edges, sources: graph.stats.sources })}
-                    {truncated && <> · {compact && !showAll ? fillTemplate(labels.focusedNote, { count: visible.nodes.length }) : labels.truncatedNote}</>}
-                    {compact && !showAll && visible.nodes.length < graph.nodes.length && (
-                        <> <button type="button" style={{ ...quietButton, minHeight: 40 }} onClick={() => setShowAll(true)}>{labels.showAll}</button></>
-                    )}
-                </p>
-                {kg.hits && kg.hits.length === 0 && <p role="status" style={{ ...muted, margin: 0 }}>{fillTemplate(labels.searchNoHits, { query: kg.query })}</p>}
-            </div>
+            <CameraBar
+                labels={labels} cameras={cameras} mode={mode} onMode={setMode} stations={surface.stations.stations} question={surface.question} onQuestion={pickQuestion}
+                litCount={surface.lit ? surface.lit.size : null} lenses={kg.lenses} lens={lens.id} onLens={pickLens} lensControl={lensControl}
+            />
+            <SurfaceNotes
+                labels={labels} review={review} stats={graph.stats} truncated={truncated} compact={compact} showAll={showAll}
+                drawn={visible.nodes.length} total={graph.nodes.length} noHits={kg.hits && kg.hits.length === 0 ? kg.query : null} onShowAll={() => setShowAll(true)}
+            />
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: compact ? 'column' : 'row', overflow: compact ? 'auto' : 'hidden' }}>
-                <div style={{ position: 'relative', flex: 1, minHeight: compact ? 320 : 0, minWidth: 0, overflow: 'auto' }}>
-                    <ViewSurface
-                        mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
-                        selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} onSelect={select} onShow={show}
-                        onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
-                    />
-                </div>
-                <aside aria-label={labels.findingsTitle} style={{ width: compact ? 'auto' : 340, flex: 'none', overflow: 'auto', padding: 12, display: 'grid', gap: 12, alignContent: 'start', borderInlineStart: compact ? 'none' : `1px solid ${cssVar('border')}` }}>
-                    <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={kg.setLens} onShow={show} findingKinds={mode !== 'list'} />
-                    <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
-                    {/* The list already holds every finding of the graph; the aside would only repeat them. */}
-                    {mode !== 'list' && <FindingsPanel graph={graph} findings={findings} labels={labels} onShow={show} onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource} />}
-                </aside>
-            </div>
-            <Panel
-                render={renderPanel} open={!!selected && index.has(selected)} compact={compact} closeLabel={labels.close}
-                title={selected ? labelFor(index, selected) : labels.nodePanelTitle}
-                onClose={() => { setTracing(false); kg.select(null); }}
-            >
-                {selected && (
-                    <>
-                        <NodePanel
-                            graph={graph} nodeRef={selected} labels={labels} source={source} confirm={confirm}
-                            onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload}
+                {hasLines && !phone && <div style={{ width: compact ? 'auto' : 260, flex: 'none', overflow: 'auto', padding: 12 }}>{linesPanel}</div>}
+                <div style={{ flex: 1, minWidth: 0, minHeight: compact ? 320 : 0, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
+                        <ViewSurface
+                            mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
+                            selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show}
+                            onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
                         />
-                        {tracing && <TracePanel graph={graph} from={selected} labels={labels} />}
-                    </>
-                )}
-            </Panel>
-        </>,
+                    </div>
+                    {hasLines && <PathStrip path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} />}
+                </div>
+                <ActPanel
+                    graph={graph} findings={findings} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={scopeName}
+                    compact={compact} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
+                    evidence={evidenceOf} onOpenSource={onOpenSource}
+                >
+                    <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
+                    <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
+                </ActPanel>
+            </div>
+            {phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel}</Sheet>}
+            <NodeSheet
+                graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
+                compact={compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload}
+            />
+        </SurfaceFrame>
     );
 }

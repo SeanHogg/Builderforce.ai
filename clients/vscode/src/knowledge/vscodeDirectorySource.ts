@@ -6,8 +6,7 @@
  * (`knowledgeFs.ts`), skipping the ONE list every host's review skips (`KNOWLEDGE_SKIP_DIRS`).
  */
 
-import { createFsDirectorySource, type HashCache, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
-import type { DirectorySource } from "@seanhogg/builderforce-memory/knowledge";
+import { createFsDirectorySource, type FsDirectorySource, type HashCache, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
 
 export type { HashCache, KnowledgeFs };
 
@@ -20,6 +19,6 @@ export interface DirectorySourceOptions {
   hashCache?: HashCache;
 }
 
-export function createDirectorySource(opts: DirectorySourceOptions): DirectorySource {
+export function createDirectorySource(opts: DirectorySourceOptions): FsDirectorySource {
   return createFsDirectorySource(opts);
 }

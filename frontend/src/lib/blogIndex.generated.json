@@ -1,5 +1,20 @@
 [
   {
+    "slug": "paste-a-screenshot-find-the-code",
+    "title": "Paste a screenshot, find the code behind it",
+    "date": "2026-11-05",
+    "description": "You can see the symptom on screen and still have no idea where it lives in the code. Paste the screenshot into the knowledge view and it narrows a codebase to the files behind what is showing, then hands the path to the agent. A transit map of your system replaces the graph of thousands of dots.",
+    "tags": [
+      "knowledge-graph",
+      "code-quality",
+      "debugging",
+      "idea-to-real",
+      "agents",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "point-it-at-a-folder-and-see-what-it-knows",
     "title": "Point it at a folder and see what it knows",
     "date": "2026-10-28",

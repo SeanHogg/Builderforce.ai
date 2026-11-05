@@ -13,6 +13,7 @@ import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './labels';
 import { packLabel } from './names';
 import { ReviewFailed } from './ReviewFailed';
+import { SkippedUploads } from './SkippedList';
 import type { ReviewRun } from './useReviewRun';
 import { cssVar } from './scene/themeColors';
 import { button, card, heading, muted, primaryButton, quietButton } from './styles';
@@ -94,6 +95,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                     {fillTemplate(labels.reviewDoneBody, { extracted: r.extracted, judged: r.judged, facts: r.factsWritten })}
                 </p>
                 {r.unjudged > 0 && <p style={{ ...muted, margin: 0 }}>{fillTemplate(labels.reviewUnjudged, { count: r.unjudged })}</p>}
+                {s.skipped && <SkippedUploads items={s.skipped} labels={labels} />}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {r.unjudged > 0 && <button type="button" style={primaryButton} onClick={() => onContinue(s.rootId)}>{labels.reviewContinue}</button>}
                     {dismiss}

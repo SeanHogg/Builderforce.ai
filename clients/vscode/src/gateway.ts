@@ -11,6 +11,7 @@ import {
   parseBfiDiscovery,
   type LocalEndpoint,
 } from "@builderforce/local-inference";
+import type { ChatContentPart } from "./chatContent";
 import { type LocalModelsConfig } from "./localModels";
 import { readDesktopModelsEndpoint } from "./desktopContext";
 import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } from "./kimiCodeInstall";
@@ -30,8 +31,8 @@ export interface ToolCall {
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  /** null is valid for an assistant turn that only emits tool calls. */
-  content: string | null;
+  /** null is valid for an assistant turn that only emits tool calls; parts carry an image to a vision model (`chatContent.ts`). */
+  content: string | ChatContentPart[] | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }
@@ -548,16 +549,22 @@ export async function streamBuilderInsights(
 }
 
 /** Non-streaming completion (used by the codebase scanner). */
+/** Sampling bounds a non-streaming completion may ask the gateway for; absent = the gateway's defaults. */
+export interface CompletionOptions { temperature?: number; maxTokens?: number }
+
 export async function complete(
   secrets: vscode.SecretStorage,
   messages: ChatMessage[],
   model: string | undefined,
   signal?: AbortSignal,
+  options: CompletionOptions = {},
 ): Promise<string> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error(NOT_SIGNED_IN);
   const body: Record<string, unknown> = { messages, stream: false };
   if (model) body.model = model;
+  if (options.temperature !== undefined) body.temperature = options.temperature;
+  if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
   const res = await fetch(`${getBaseUrl()}/llm/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },

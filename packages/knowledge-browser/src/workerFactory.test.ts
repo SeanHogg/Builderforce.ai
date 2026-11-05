@@ -7,6 +7,7 @@
  * `reviewWorkerClient.ts` (or any other module here), the loader lands in the shared edge
  * runtime again and `next build` fails with `ReferenceError: document is not defined`.
  */
+/// <reference types="node" />
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

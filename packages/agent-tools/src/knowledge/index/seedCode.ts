@@ -11,9 +11,10 @@
  * file gone since the last seed is removed from the index.
  */
 
-import { buildGraph, compareStr, MAX_NODES_CAP, type Extracted, type NodeRef, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import { compareStr, MAX_NODES_CAP, type Extracted, type NodeRef, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import { CONTENT_HASH_FIELD, hashText, type SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import type { CodeSymbol } from '../../symbols.js';
+import { buildCodeGraph } from '../codeGraph.js';
 import { isCodePath } from '../codePack.js';
 import { knowledgePacks } from '../knowledgePacks.js';
 import type { HostKnowledgeIndexCore } from './contract.js';
@@ -90,7 +91,7 @@ export async function seedCodeCards(
     const seen = new Set<string>();
     for (const chunk of chunkByArea(extracted)) {
         if (opts.signal?.aborted) return new Set(opts.previous ?? []);
-        const graph = buildGraph({ rootId, extracted: chunk, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
+        const graph = buildCodeGraph({ rootId, extracted: chunk, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
         const keys = new Map<string, string[]>();
         for (const ex of chunk) {
             for (const { ref, key } of ex.keys) keys.set(ref, [...(keys.get(ref) ?? []), key]);

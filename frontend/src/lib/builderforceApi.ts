@@ -8,6 +8,7 @@ import { CHANNEL_PLATFORMS, type ChannelPlatform, type WorkflowNodeKind as Serve
 import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
 import type { TaskFileChange, TaskFileContent, TaskRepoStatus } from './taskWorkspaceTypes';
 import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
+import { gatewayErrorMessage, type VisionContentPart } from '@builderforce/agent-tools/knowledge';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
@@ -618,26 +619,23 @@ export type LlmError = Error & { status?: number; code?: string; body?: Record<s
 export async function parseLlmError(res: Response): Promise<Error> {
   if (res.status === 402) return planLimitErrorFromResponse(res);
   const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-  const errVal = body.error;
-  const msg = typeof errVal === 'string'
-    ? errVal
-    : (errVal && typeof errVal === 'object' && 'message' in errVal
-        ? String((errVal as { message?: unknown }).message ?? '')
-        : '');
-  const err = new Error(msg || res.statusText || 'LLM request failed') as LlmError;
+  const err = new Error(gatewayErrorMessage(body, res.statusText || 'LLM request failed')) as LlmError;
   err.status = res.status;
   err.code = typeof body.code === 'string' ? body.code : undefined;
   err.body = body;
   return err;
 }
 
+/** An OpenAI-style content part: the gateway moves a request carrying an image onto a vision-capable model. */
+export type LlmContentPart = VisionContentPart;
+
 /** OpenAI-compatible chat completion (uses tenant JWT for billing).
  *  Default model is `openai/gpt-4o-mini` — cheap and fast for ambient calls.
  *  Pass `model` for tasks that need stronger instruction-following (e.g.
  *  structured prompt generation, multi-rule analysis). */
 export async function llmChat(
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  options?: { temperature?: number; maxTokens?: number; model?: string }
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string | LlmContentPart[] }>,
+  options?: { temperature?: number; maxTokens?: number; model?: string | null }
 ): Promise<{ content: string }> {
   // Streams through the shared transport for headers + the 401 redirect, but
   // keeps its own error parsing: the gateway returns OpenAI-shaped error
@@ -646,7 +644,8 @@ export async function llmChat(
   const res = await apiRequestStream('/llm/v1/chat/completions', {
     method: 'POST',
     body: JSON.stringify({
-      model: options?.model ?? 'openai/gpt-4o-mini',
+      // `model: null` leaves the model to the gateway (a vision request needs one it picks).
+      ...(options?.model === null ? {} : { model: options?.model ?? 'openai/gpt-4o-mini' }),
       messages,
       temperature: options?.temperature ?? 0.3,
       max_tokens: options?.maxTokens ?? 4096,

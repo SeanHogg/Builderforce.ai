@@ -14,8 +14,8 @@
  * first render, nothing to load. Pure: no I/O.
  */
 
-import { MAX_NODES_CAP, buildGraph, type Finding, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { analysisToExtracted, knowledgePacks } from '@builderforce/agent-tools/knowledge';
+import { MAX_NODES_CAP, type Finding, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { analysisToExtracted, buildCodeGraph, knowledgePacks } from '@builderforce/agent-tools/knowledge';
 import { compareAnalysis, type AnalysisIssue, type CodeAnalysisComparison, type CodeAnalysisSnapshot } from '@builderforce/agent-tools';
 import type { EvidenceSide, FindingEvidence, KnowledgeGraphSource, SourceLocation } from '@builderforce/knowledge-graph-view';
 
@@ -25,7 +25,7 @@ export function codeAnalysisRootId(snapshot: CodeAnalysisSnapshot): string {
 }
 
 function graphOf(snapshot: CodeAnalysisSnapshot, rootId: string): KnowledgeGraph {
-  return buildGraph(
+  return buildCodeGraph(
     { rootId, extracted: analysisToExtracted(snapshot, rootId), facts: [], relations: [], packs: knowledgePacks() },
     { maxNodes: MAX_NODES_CAP },
   );

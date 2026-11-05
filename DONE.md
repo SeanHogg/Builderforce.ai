@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-11-05 — Knowledge visualizer Option B+: transit map, questions, overlays, panels, and screenshot pinpoint (VS Code 2026.10.130 · memory 2026.10.40, unpublished)
+
+- **One surface (PRD 38 "The visualizer, Option B+").**
+  - **Views:** a transit map of lines from each entry point through the layers to stores and outside services; questions in place of lenses; Map, System, Graph, Mind map, Tower 3D, Heat, List and Sequence.
+  - **Overlays:** any metric can drive any channel.
+  - **Panels:** Sync, Coverage, Patterns, API (OpenAPI skeleton and Postman export), Fix queue and Simulate (run by the agent).
+  - **Navigation:** a path strip, a drill path (spine) and a time slider fed by git history.
+- **Pinpoint from a screenshot (VS Code, web and Rovr).**
+  - A vision call reads the text in the image.
+  - Each text is matched by exact source and catalog search, then one import hop.
+  - Every match shows its provenance.
+  - Diagnose hands the path to the agent.
+  - The matching core is shared in `agent-tools/knowledge/pinpointMatch.ts`.
+- **Code-pack data.**
+  - New per-file badges: complexity and max complexity, coverage (from coverage files), churn (git), owner (CODEOWNERS), patterns, routes, layer rule and entry.
+  - One `buildCodeGraph` places layers in every graph builder (API, web, index seed, prefetch, stored graph), so the server and local graphs agree. The API cache key moved to `kg:v4`.
+- **Things that were silently wrong, now fixed:**
+  - Uploads rejected as too large are listed per file instead of counted in `skippedTooLarge`.
+  - The review report and Sync show every skipped file and folder with its reason.
+  - Scratch copies are skipped and reported: nested checkouts, but only when the root is a git work tree; `.worktrees`, `*.local` and `_*_src`.
+  - Shell scripts are code.
+- **Fix queue safety:** knip fixes run only on a clean work tree, one at a time per root. Strays are restored in `finally`. Saves made during the run are kept and reported.
+
 ## ✅ RESOLVED 2026-11-03 — The knowledge view showed a file list instead of a visual; selected chip unreadable; review processed files serially (VS Code 2026.10.129 · memory 2026.10.39)
 
 - **List instead of a visual.** `useCan3D` combined `hasWebGL() && !prefersReducedMotion()`, so in a webview without WebGL, or under OS reduced motion, the only renderer was `ListFallback`. The view now offers four modes (`ViewMode`): `graph`, the default, a 2D SVG graph (`graph2d/`, laid out from the deterministic `layout3d` into partition bands); `3d`, offered whenever WebGL exists, where reduced motion only skips the camera flight; `map`, a radial folder mind map (`map/`); and `list`.

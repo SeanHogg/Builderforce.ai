@@ -8,18 +8,23 @@
  */
 
 import * as vscode from "vscode";
-import { factKeyOf, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
+import { factKeyOf, type Finding, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
 import { factRightsCache, humanFactBatch, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { openWorkspace } from "../openWorkspace";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import {
-  KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFocusFrame, type KnowledgeScopeRow,
+  KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
   type KnowledgeTargetRow,
 } from "./knowledgeProtocol";
-import { reviewedRoots, rootById, rootForPath } from "./knowledgeRoots";
+import { applyKnipFix } from "./knowledgeFixes";
+import { vscodeFixPorts } from "./knowledgeFixesHost";
+import { rootHistory } from "./knowledgeHistory";
+import { pinpointRoot } from "./knowledgePinpointHost";
+import { rootSyncStatus } from "./knowledgeSync";
+import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { subscribeLiveGraph } from "./knowledgeLive";
-import { linkedKnowledgeClient, loadGraph, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
+import { linkedKnowledgeClient, loadGraph, log, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
@@ -92,7 +97,21 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "baseline": return this.baseline(call.rootId);
       case "compose": await openWorkspace(this.host.ctx, { kind: "seed", text: call.text }); return null;
       case "takeFocus": { const focus = pendingFocus; pendingFocus = null; return focus; }
+      case "pinpoint": return pinpointRoot(this.secrets, this.rootOf(call.rootId), call.image);
+      case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
+      case "syncStatus": return rootSyncStatus(this.secrets, this.rootOf(call.rootId));
+      case "applyFix": return this.applyFix(call.rootId, call.finding);
     }
+  }
+
+  private rootOf(rootId: string): KnowledgeRoot {
+    const root = rootById(rootId, workspaceFolders());
+    if (!root) throw new Error(vscode.l10n.t("This folder is not open in the workspace."));
+    return root;
+  }
+
+  private applyFix(rootId: string, finding: Finding): Promise<KnowledgeFixResult> {
+    return applyKnipFix(vscodeFixPorts(this.rootOf(rootId).rootPath), rootId, finding);
   }
 
   private async scopes(): Promise<KnowledgeScopeRow[]> {

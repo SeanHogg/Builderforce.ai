@@ -2,6 +2,33 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.130] — Paste a screenshot, find the code; the knowledge view is a map
+
+- **Paste a screenshot.** Paste, drop or pick a screenshot in the ask bar. A vision model reads the visible text. The text is then traced through your translation catalogs and source to the files that show it, plus one import further. Each match says how it was found: exact, catalog or import. **Diagnose with the agent** hands the path and its findings to the agent.
+- **A transit map of the code.**
+  - Lines run from each entry point through the layers (entry, presentation, application, domain, infrastructure) to stores and outside services.
+  - Stations are areas of the code. Ends with nowhere to go are marked.
+  - A path strip steps through the selected line.
+- **Questions replace lenses.** The questions include "Where does it go?", "What is wrong?", "What has no test?", "What patterns are here?" and "What changed?". Every old lens is still reachable.
+- **Views:** Map, System (N-tier), Graph, Mind map, Tower 3D, Heat, List and Sequence. Overlays let any metric drive any channel: anti-patterns, complexity, coverage, usage, churn, changes or owner can set colour, size or height, ring or fill, line width, pulse or outline.
+- **Panels:**
+  - Sync shows this machine against the server, with every skipped file and its reason.
+  - Coverage.
+  - Patterns.
+  - API: routes, with an OpenAPI skeleton or Postman export.
+  - Fix queue: a deterministic fix for unused code, which only runs on a clean work tree and never touches your edits. Other kinds of finding go to the agent as a prompt.
+  - Simulate: the agent writes and runs a test for a path.
+- **New per-file data:**
+  - Cyclomatic complexity.
+  - Coverage, read from your coverage files.
+  - Churn, from git.
+  - Owners, from CODEOWNERS.
+  - Detected patterns.
+  - HTTP routes.
+  - The rule that placed each file in its layer.
+- **Layers are placed by folder, then by name, then by import direction.** Far fewer files are left with no partition, and the server and local graphs now agree.
+- **Fewer unrelated files in a review.** Scratch copies (nested checkouts, `.worktrees`, `*.local`, vendored `_*_src` folders) are skipped. Each skip is reported in Sync.
+
 ## [2026.10.129] — The knowledge view is a picture, not a list
 
 - **A 2D graph is the default view everywhere.** It needs no WebGL. Partitions are drawn as bands, nodes are sized by importance and toned by the active lens, and you can pan, zoom (wheel, pinch or buttons) and click the nearest node. The view used to fall back to a plain file list whenever WebGL or motion was unavailable.

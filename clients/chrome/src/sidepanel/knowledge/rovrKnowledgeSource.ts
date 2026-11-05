@@ -7,9 +7,10 @@
  * graph and the labels are the package's — the same code the web runs.
  */
 
+import { gatewayErrorMessage, pinpointVisionRequest } from '@builderforce/agent-tools/knowledge';
 import { createKnowledgeClient } from '@builderforce/knowledge-client';
 import {
-  canPickDirectory, createKnowledgeSource, fsAccessDirectoryProvider, uploadDirectoryProvider, type DirectoryProvider,
+  canPickDirectory, createKnowledgeSource, fsAccessDirectoryProvider, uploadDirectoryProvider, type DirectoryProvider, type PinpointHost,
 } from '@builderforce/knowledge-browser';
 import type { KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
 import type { AuthenticatedFetch } from '../../api/apiClient';
@@ -39,6 +40,24 @@ export interface RovrKnowledgeDeps {
   reportError(error: unknown, operation: string): void;
 }
 
+/**
+ * Pinpoint's vision call over Rovr's authenticated fetch: THE shared vision request (no
+ * pinned model; the gateway routes to a vision-capable one, or answers
+ * `model_input_unsupported`, shown to the person via the shared error parser). No `catalogKeys`: the i18n catalogs
+ * belong to the web app's bundle, Rovr ships none to look a screen string up in, so
+ * Rovr matches by the literal scan of the folder it reviewed (and imports).
+ */
+export function rovrPinpointHost(fetch: AuthenticatedFetch): PinpointHost {
+  return {
+    async describe(imageDataUrl) {
+      const res = await fetch('/llm/v1/chat/completions', { method: 'POST', json: pinpointVisionRequest(imageDataUrl) });
+      if (!res.ok) throw new Error(gatewayErrorMessage(await res.json().catch(() => ({})), `gateway ${res.status}`));
+      const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      return data.choices?.[0]?.message?.content ?? '';
+    },
+  };
+}
+
 export function createRovrKnowledgeSource({ projectId, fetch, reportError }: RovrKnowledgeDeps): KnowledgeGraphSource {
   const client = createKnowledgeClient({ projectId, fetch });
   return createKnowledgeSource({
@@ -46,6 +65,7 @@ export function createRovrKnowledgeSource({ projectId, fetch, reportError }: Rov
     client,
     callPrice: () => client.judgeEstimate(),
     directorySources: async () => rovrDirectoryProviders(),
+    pinpoint: rovrPinpointHost(fetch),
     createWorker: rovrReviewWorker,
     onDegraded: (what, error) => reportError(error, `knowledge.${what.replace(/\s+/g, '-')}`),
   });

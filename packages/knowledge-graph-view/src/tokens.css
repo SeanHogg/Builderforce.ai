@@ -50,6 +50,21 @@
   --kg-plane: rgba(148, 163, 184, 0.12);
   --kg-warn-bg: rgba(251, 146, 60, 0.16);
   --kg-error: #fca5a5;
+  /* Severity ramp, 1 (clean) to 5 (worst): the colour channel of the surface's stations. */
+  --kg-sev-1: #4ade80;
+  --kg-sev-2: #a3e635;
+  --kg-sev-3: #facc15;
+  --kg-sev-4: #fb923c;
+  --kg-sev-5: #f87171;
+  /* Line palette: one hue per entry point, cycled after eight. */
+  --kg-line-1: #4d9eff;
+  --kg-line-2: #a78bfa;
+  --kg-line-3: #22d3ee;
+  --kg-line-4: #f472b6;
+  --kg-line-5: #34d399;
+  --kg-line-6: #fbbf24;
+  --kg-line-7: #fb7185;
+  --kg-line-8: #94a3b8;
 }
 
 /* Light: a host opts in with `html[data-theme='light']` (the web and the VS Code canvas do; Rovr mirrors its OS scheme onto it). */
@@ -73,4 +88,25 @@
   --kg-plane: rgba(100, 116, 139, 0.1);
   --kg-warn-bg: rgba(194, 65, 12, 0.12);
   --kg-error: #991b1b;
+  --kg-sev-1: #15803d;
+  --kg-sev-2: #4d7c0f;
+  --kg-sev-3: #a16207;
+  --kg-sev-4: #c2410c;
+  --kg-sev-5: #b91c1c;
+  --kg-line-1: #2d60ff;
+  --kg-line-2: #6d28d9;
+  --kg-line-3: #0e7490;
+  --kg-line-4: #be185d;
+  --kg-line-5: #047857;
+  --kg-line-6: #b45309;
+  --kg-line-7: #be123c;
+  --kg-line-8: #475569;
+}
+
+/* Keyboard focus on the SVG nodes: stations, issue pins and the graph and map nodes show a ring from :focus-visible only (a mouse click draws none). */
+[data-station]:focus-visible,
+[data-pin]:focus-visible,
+svg [data-id][role="button"]:focus-visible {
+  outline: 2px solid var(--kg-accent);
+  outline-offset: 2px;
 }

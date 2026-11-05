@@ -15,7 +15,7 @@
  */
 
 import {
-    buildGraph, DEFAULT_REVIEW_MODEL_CALLS, planDetail, reviewDirectory, srcRef,
+    DEFAULT_REVIEW_MODEL_CALLS, planDetail, reviewDirectory, srcRef,
     type AnalyzerPort, type DirectorySource, type Extracted, type JudgementPort, type KnowledgeGraph,
     type KnowledgePack, type KnowledgeStore, type LiveOverlay, type NodeRef, type PartitionRegistry, type PlanDetail, type ReviewPlan,
     type ReviewProgress, type ReviewReport, type SimilarPair,
@@ -26,7 +26,12 @@ import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { extractSymbols, type CodeSymbol } from '../symbols.js';
 import { codeAnalyzers } from './codeAnalyzers.js';
 import type { SymbolSource } from './codePack.js';
+import { readEntryPaths } from './codeEntryPoints.js';
+import { buildCodeGraph } from './codeGraph.js';
+import { withRootSignals } from './codeRootSignals.js';
+import type { CoverageRoot, CoverageSkip } from './codeCoverage.js';
 import { currentFileHashes, pruneEditedFiles } from './fileEdits.js';
+import type { HistoryPort } from './historyPort.js';
 import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
 import { judgementWithTimeout, DEFAULT_JUDGEMENT_TIMEOUT_MS } from './judgement.js';
@@ -69,6 +74,12 @@ export interface KnowledgeReviewPorts {
     analyzers?: AnalyzerPort;
     /** The code layers (`.builderforce/partitions.json` or the default). */
     partitions?: PartitionRegistry;
+    /** OPTIONAL version history: with it code files carry a `churn` badge (see `gitHistoryPort`); without it, none. */
+    history?: HistoryPort;
+    /** OPTIONAL reviewed folder on disk: coverage files and CODEOWNERS are read from it for the `coverage` and `owner` badges. */
+    rootFiles?: CoverageRoot;
+    /** Told what the root signals left out (stale or oversize coverage), for the sync status. */
+    onSignalsSkipped?(skipped: readonly CoverageSkip[]): void;
     /** The host's knowledge index: fed the root's graph once the review is done (§4.3, last step), reported as the `index` phase. */
     index?: ReviewIndexPort;
     /** A linked host's platform graph of the root; null or a failure ⇒ the graph is built from the store. */
@@ -106,9 +117,33 @@ function recordingAnalyzers(inner: AnalyzerPort, manifest: IngestManifest): Anal
     };
 }
 
+/** The files a review saw: its confirmed plan's (no second walk), else one listing of the source. Manifests the plan skipped as `no-pack` are included (entry points come from them). */
+function reviewedPaths(source: DirectorySource | undefined, plan: PlanDetail | undefined): () => Promise<string[]> {
+    return async () => {
+        if (plan) return [...plan.files.map((f) => f.path), ...plan.plan.skipped.map((f) => f.path)];
+        const paths: string[] = [];
+        if (source) for await (const f of source.list()) paths.push(f.path);
+        return paths;
+    };
+}
+
 /** The ONE pack list, with this host's symbols, analyzers and layers. */
-export function reviewPacks(ports: Pick<KnowledgeReviewPorts, 'symbolsOf' | 'analyzers' | 'partitions'>, manifest?: IngestManifest): KnowledgePack[] {
-    const analyzers = ports.analyzers && manifest ? recordingAnalyzers(ports.analyzers, manifest) : ports.analyzers;
+export function reviewPacks(
+    ports: Pick<KnowledgeReviewPorts, 'symbolsOf' | 'analyzers' | 'partitions' | 'history' | 'rootFiles' | 'onSignalsSkipped'> & { source?: DirectorySource },
+    manifest?: IngestManifest,
+    /** The review's confirmed plan: the files the signals are read for (default: one listing of the source). */
+    plan?: PlanDetail,
+): KnowledgePack[] {
+    // Coverage, churn and owners are read once per review, alongside the analyzers (only a running review has a manifest to record them in).
+    const source = ports.source;
+    const signals = {
+        ...(ports.history ? { history: ports.history } : {}),
+        ...(ports.rootFiles ? { files: ports.rootFiles } : {}),
+        ...(source ? { entryPaths: (candidates: readonly string[]) => readEntryPaths(source, candidates) } : {}),
+        ...(ports.onSignalsSkipped ? { onSkipped: ports.onSignalsSkipped } : {}),
+    };
+    const withSignals = manifest ? withRootSignals(ports.analyzers, signals, reviewedPaths(source, plan)) : ports.analyzers;
+    const analyzers = withSignals && manifest ? recordingAnalyzers(withSignals, manifest) : withSignals;
     return knowledgePacks({
         ...(ports.symbolsOf ? { symbolsOf: ports.symbolsOf } : {}),
         ...(analyzers ? { analyzers } : {}),
@@ -181,7 +216,7 @@ async function reviewAndIndex(
     const report = await reviewDirectory({
         source: ports.source,
         store: ports.store,
-        packs: reviewPacks(ports, ports.manifest),
+        packs: reviewPacks(ports, ports.manifest, opts.plan),
         manifest: ports.manifest,
         // A per-request timeout so a stalled engine cannot hang the whole review at `judge`:
         // the affected sections stay unjudged and a later run judges them again. The wrapper
@@ -263,7 +298,8 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
         if (hit) extracted.push(hit);
     }
     const [facts, relations] = await Promise.all([store.facts({ rootId }), store.relations({ rootId })]);
-    return buildGraph(
+    // The ONE graph builder for code: the default layers are resolved over the whole file graph (folder, name, import direction).
+    return buildCodeGraph(
         {
             rootId, extracted, facts, relations, packs: args.packs,
             ...(args.live ? { live: args.live } : {}),

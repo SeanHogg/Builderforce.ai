@@ -34,8 +34,28 @@ import type {
 export type LensId =
     | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
 
-/** How the graph is drawn: 2D graph (default), 3D scene (WebGL only), folder mind map, or the accessible list. */
-export type ViewMode = 'graph' | '3d' | 'map' | 'list';
+/**
+ * How the graph is drawn: the transit map, the 2D graph, the 3D tower (WebGL only), the folder
+ * mind map, or the accessible list. A new camera is a value here plus a row in `surface/cameras.tsx`.
+ */
+export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | 'sequence' | 'list';
+
+/** What a screenshot pinpointed: the AI read the image, the host matched the strings deterministically. */
+export type PinpointResult = {
+    description: string;
+    anchors: { text: string; provenance: 'vision' }[];
+    matches: { ref: string; why: string; provenance: 'exact' | 'catalog' | 'import' }[];
+};
+
+/** Where the host's sync of a reviewed root stands: local against server, what was skipped, which sources exist. */
+export type SyncStatus = {
+    /** `edges` absent ⇒ not measured (a linked folder); `truncated` ⇒ the graph was cut short. */
+    local: { files: number; edges?: number; docs: number; truncated?: boolean };
+    server?: { files: number; edges?: number; docs: number; truncated?: boolean };
+    /** Absent ⇒ unknown: no review recorded what it skipped (never read as "nothing skipped"). `bytes` absent ⇒ not measured. */
+    skipped?: { path: string; bytes?: number; reason: string }[];
+    sources: { id: 'code' | 'docs' | 'coverage' | 'usage' | 'traces' | 'openapi' | 'history' | 'owners'; state: 'collected' | 'estimated' | 'absent'; note?: string }[];
+};
 
 export interface KnowledgeScopeSummary {
     rootId: string;
@@ -77,10 +97,13 @@ export interface ReviewEstimate {
     local?: boolean;
 }
 
+/** A file the review did not store, and why (`bytes` absent ⇒ not measured). */
+export type SkippedFile = { path: string; bytes?: number; reason: string };
+
 export type KnowledgeReviewEvent =
     | { type: 'plan'; plan: ReviewPlan; estimate?: ReviewEstimate }
     | { type: 'progress'; progress: MemoryReviewProgress }
-    | { type: 'done'; rootId: string; report: ReviewReport }
+    | { type: 'done'; rootId: string; report: ReviewReport; skipped?: SkippedFile[] }
     | { type: 'cancelled' };
 
 export interface ReviewControl {
@@ -117,6 +140,14 @@ export interface KnowledgeGraphSource {
     snapshot?: KnowledgeSnapshot;
     /** Where a finding was seen: line ranges and an excerpt, when the host knows them. */
     evidence?(finding: Finding, side: EvidenceSide): FindingEvidence[];
+    /** Finds the code behind a screenshot (vision read, then deterministic matches). Absent ⇒ no pinpoint input. */
+    pinpoint?(image: Blob, rootId: string): Promise<PinpointResult>;
+    /** The commits of the root, for the time slider and the changed set. Absent ⇒ no slider. */
+    history?(rootId: string): Promise<{ commits: { sha: string; title: string; at: string; refs: string[] }[] }>;
+    /** Local against server counts, skipped files and data sources. Absent ⇒ no Sync panel. */
+    syncStatus?(rootId: string): Promise<SyncStatus>;
+    /** A deterministic codemod for a finding (unused-export, unused-file). Absent ⇒ Resolve prompts the agent. */
+    applyFix?(finding: Finding): Promise<{ branch?: string; changed: string[] }>;
 }
 
 /** Compare's "before". */

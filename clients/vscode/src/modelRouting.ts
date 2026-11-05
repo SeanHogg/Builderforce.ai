@@ -56,7 +56,9 @@ import {
   getBaseUrl,
   getLocalModelsConfig,
   type ChatMessage,
+  type CompletionOptions,
 } from "./gateway";
+import { hasImageParts, IMAGE_NEEDS_GATEWAY, textOnly } from "./chatContent";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
@@ -348,17 +350,26 @@ export async function routeComplete(
   secrets: vscode.SecretStorage,
   messages: ChatMessage[],
   signal?: AbortSignal,
+  options?: CompletionOptions,
 ): Promise<string> {
   if (route.unauthorized) throw unauthorizedError(route.unauthorized);
-  if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal, hostPageEngines.fetch());
+  if (hasImageParts(messages)) {
+    // An image goes to a vision model through the gateway - never to an on-device text model.
+    if (route.local || localOnly(route)) throw new Error(IMAGE_NEEDS_GATEWAY);
+    if (routeNeedsSpecificModel(route)) throw new Error(NO_SPECIFIC_MODEL);
+    assertPlatformCapability("gateway-inference");
+    return complete(secrets, messages, route.model, signal, options);
+  }
+  const text = textOnly(messages);
+  if (route.local) return completeLocal(route.local.endpoint, route.local.model, text, signal, hostPageEngines.fetch());
   if (routeNeedsSpecificModel(route)) throw new Error(NO_SPECIFIC_MODEL);
   const signedIn = Boolean(await getApiKey(secrets));
   if (route.localFirst) {
     const cloudPermitted = !localOnly(route) && platformPolicy().allows("gateway-inference") && signedIn;
     return completeLocalFirst({
       probes: route.localFirst.probes,
-      messages,
-      cloud: cloudPermitted ? () => complete(secrets, messages, route.model, signal) : null,
+      messages: text,
+      cloud: cloudPermitted ? () => complete(secrets, messages, route.model, signal, options) : null,
       noModel: localOnly(route) || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN,
       fetch: hostPageEngines.fetch(),
       ...(signal ? { signal } : {}),
@@ -367,7 +378,7 @@ export async function routeComplete(
   }
   if (localOnly(route)) throw new Error(NO_LOCAL_MODEL);
   assertPlatformCapability("gateway-inference");
-  return complete(secrets, messages, route.model, signal);
+  return complete(secrets, messages, route.model, signal, options);
 }
 
 /**
@@ -380,7 +391,7 @@ export async function routeComplete(
 export async function completeOnDevice(messages: readonly ChatMessage[], signal?: AbortSignal): Promise<string> {
   return completeLocalFirst({
     probes: await probeOnDeviceRuntimes(getLocalModelsConfig()),
-    messages,
+    messages: textOnly(messages),
     cloud: null,
     noModel: NO_LOCAL_MODEL,
     fetch: hostPageEngines.fetch(),

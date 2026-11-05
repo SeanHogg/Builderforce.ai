@@ -56,6 +56,13 @@ export interface KnowledgeScopeRecord extends ScopeRecord {
   previousDigest?: string;
 }
 
+/** An upload the client skipped instead of throwing; nothing is dropped without a trace. */
+export interface SkippedUpload {
+  path: string;
+  bytes: number;
+  reason: string;
+}
+
 /** Code-pack analyzer snapshot, as produced by agent-tools `codeAnalysis.ts`. Opaque here. */
 export type AnalysisSnapshotPayload = Record<string, unknown>;
 
@@ -73,6 +80,8 @@ export interface JudgeEstimate {
 export interface KnowledgeClient {
   /** KnowledgeStore over POST …/knowledge/write, GET …/knowledge/scopes, extracted cache routes. */
   store: KnowledgeStore;
+  /** Uploads this client skipped (path, bytes, reason); a host lists them in its sync status. */
+  readonly skipped?: readonly SkippedUpload[];
   /** JudgementPort over POST …/knowledge/judge (a routed, usage-attributed model call). */
   judgement: JudgementPort;
   scopes(): Promise<KnowledgeScopeRecord[]>;

@@ -19,6 +19,7 @@ import path from "node:path";
 import { basename, resolve } from "node:path";
 import { realpath, stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
+import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history.js";
 import {
   claimSimilarity, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReviewDetail,
   reviewIndexPort, reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
@@ -155,6 +156,7 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
   const partitions = await readPartitions({ caps });
   const symbols = await onPremSymbolIndex(workspaceRoot).filesUnder(rel || undefined).catch(loggedFallback("symbol index", []));
   const index = await getHostKnowledgeIndex(rootId).catch(loggedFallback("knowledge index", undefined));
+  const history = await gitHistoryPort(rootPath, { onWarn: (message) => logDebug(`[knowledge] history: ${message}`) });
   // The root's ONE manifest (the review and the folder watch share it). The store is the
   // linked client's, taken fresh each time so a rotated API key is picked up. A root reviewed
   // under its old, name-based id keeps its manifest: migrated on first read.
@@ -183,6 +185,8 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
       onWarn: (message) => logDebug(`[knowledge] analysis: ${message}`),
     }),
     judgement: linked.client.judgement,
+    ...(history ? { history } : {}),
+    rootFiles: { fs: containerKnowledgeFs, rootPath },
     // After the review the root's graph feeds the knowledge index (the shared runner does it).
     index: reviewIndexPort(() => getHostKnowledgeIndex(rootId)),
     platformGraph: (id) => linked.client.graph(id),

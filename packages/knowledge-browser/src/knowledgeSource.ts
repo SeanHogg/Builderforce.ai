@@ -14,6 +14,11 @@
  *             `reopen` (no picker), so Live runs on a root reviewed in an earlier session.
  *             The reload is `load` itself, with the query the view last loaded the root by
  *   estimate → the plan's model calls × the host's `callPrice` port (none ⇒ calls only)
+ *   syncStatus → server counts from the graph, local from the open directory, skipped from
+ *             the client; source states from the badges the graph carries (`syncStatus.ts`).
+ *   pinpoint → when the host passes `pinpoint` (vision + catalogs): the shared matching core
+ *             over a literal scan of the open directory, else the server search (`pinpoint.ts`).
+ *             No `history`/`applyFix`: the browser has no git and no shell, so the view hides those controls
  *
  * The host supplies the client (built on ITS authenticated fetch), where it can review
  * from (`directorySources`), its worker when its bundler needs one, and its reporter.
@@ -22,7 +27,7 @@
  */
 
 import { factKeyOf, type DirectorySource, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
-import { KNOWLEDGE_REVIEW_MODEL_CALLS, factRightsCache, humanFactBatch } from '@builderforce/agent-tools/knowledge';
+import { KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, factRightsCache, humanFactBatch, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, ReviewControl, ReviewRequest, ReviewTarget } from '@builderforce/knowledge-graph-view';
 import { openManifest } from './manifestStore';
@@ -31,6 +36,11 @@ import type { ReviewPorts } from './reviewJob';
 import { watchDirectory } from './liveWatch';
 import { estimateReview, type CallPricePort } from './reviewEstimate';
 import { rootKindOf, type KnowledgeDegradedReporter } from './directorySourceKit';
+import { browserSyncStatus, reviewRecords } from './syncStatus';
+import { pinpointImage, type PinpointHost } from './pinpoint';
+
+/** The widest graph the platform builds; the sync counts read it. */
+const SYNC_MAX_NODES = 2000;
 
 /** One way a host can get a directory: its workspace, a folder upload or picker, a drive. */
 export interface DirectoryProvider {
@@ -53,6 +63,8 @@ export interface KnowledgeSourceOptions {
   callPrice?: CallPricePort;
   /** Where a degraded path (no targets, no manifest, a missed live refresh) is reported. */
   onDegraded: KnowledgeDegradedReporter;
+  /** Pinpoint from a screenshot: the host's vision call and catalogs. Absent => the source offers no pinpoint. */
+  pinpoint?: PinpointHost;
 }
 
 export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGraphSource {
@@ -138,8 +150,15 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     const workerOpts = opts.createWorker ? { createWorker: opts.createWorker } : {};
     const plan = await runReview({ ...base, mode: 'plan' }, ports, workerOpts);
     const estimate = await estimateReview(plan, opts.callPrice, onDegraded);
+    // What this review leaves out is recorded per root (plan counts and skips, uploads skipped DURING it) for the sync status.
+    const recorder = createReviewRecorder({
+      rootId: dir.rootId, store: reviewRecords, client,
+      folders: () => (dir as { skippedFolders?: () => SkippedFolder[] }).skippedFolders?.() ?? [],
+    });
+    recorder.planned(plan);
     yield { type: 'plan', plan, estimate };
     if (!(await ctl.confirm(plan, estimate))) { yield { type: 'cancelled' }; return; }
+    recorder.begin();
 
     const queue: Array<KnowledgeReviewEvent | { type: 'failed'; error: unknown }> = [];
     let wake: (() => void) | null = null;
@@ -148,7 +167,9 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       .then((report: ReviewReport) => {
         // The new review IS the files' current state: nothing is pending against it.
         pendingChanges.get(dir.rootId)?.clear();
-        push({ type: 'done', rootId: dir.rootId, report });
+        recorder.finish();
+        const skipped = reviewRecords.get(dir.rootId)?.skipped;
+        push({ type: 'done', rootId: dir.rootId, report, ...(skipped ? { skipped } : {}) });
       }, (error: unknown) => push({ type: 'failed', error }));
     for (;;) {
       while (queue.length > 0) {
@@ -223,6 +244,18 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       const scope = scopeRecords.get(rootId) ?? { rootId, title: rootId, packs: [] };
       await client.store.write(humanFactBatch({ scope, ref, content }));
       rights.invalidate(rootId);
+    },
+    ...(opts.pinpoint ? {
+      pinpoint: (image: Blob, rootId: string) => pinpointImage({
+        client,
+        host: opts.pinpoint!,
+        directory: async (id) => opened.get(id) ?? (await reopenRoot(id)),
+        graph: (id) => client.graph(id, { maxNodes: SYNC_MAX_NODES }),
+      }, image, rootId),
+    } : {}),
+    async syncStatus(rootId) {
+      const graph = await client.graph(rootId, { maxNodes: SYNC_MAX_NODES });
+      return browserSyncStatus({ graph, record: reviewRecords.get(rootId) });
     },
     async factActions(ref) {
       const key = factKeyOf(ref as NodeRef);

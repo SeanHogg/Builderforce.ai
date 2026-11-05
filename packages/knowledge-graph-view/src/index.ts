@@ -6,8 +6,13 @@
 export { KnowledgeGraphView, type KnowledgeGraphViewProps } from './KnowledgeGraphView';
 export {
     DEFAULT_KNOWLEDGE_GRAPH_LABELS, resolveLabels, fillTemplate, camelKind,
-    type KnowledgeGraphLabels, type FindingKindLabels,
+    type KnowledgeGraphLabels, type FindingKindLabels, type SurfaceLabels, type StringLabelKey,
 } from './labels';
+export { buildStations, changedRefs, type Station, type StationModel } from './surface/stations';
+export { buildLines, type Line, type LinesModel } from './surface/lines';
+export { makeOverlay, PRESETS, METRICS, CHANNELS, type Bindings, type OverlayModel } from './surface/overlays';
+export { QUESTIONS, type QuestionId } from './surface/questions';
+export type { CameraDef, PanelDef, SceneProps, PanelProps, SurfaceEnv } from './surface/registry';
 export { LENSES, LENS_ORDER, lensesFor, lensApplies, lensFindings, type LensDef } from './lenses';
 export { ReviewFailure, type ReviewFailureDetail } from './reviewFailure';
 export { findingDetail, findingRequest, findingBatchRequest, findingTitle } from './findingText';
@@ -18,5 +23,5 @@ export type {
     KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, ReviewControl,
     ReviewEstimate, ReviewRequest, ReviewTarget, FactActions, LensId, KnowledgePanelRenderer,
     KnowledgePanelRenderProps, KnowledgeConfirm, KnowledgeBaseline, KnowledgeSnapshot, EvidenceSide,
-    SourceLocation, FindingEvidence, ViewMode,
+    SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile,
 } from './types';

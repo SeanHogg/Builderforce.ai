@@ -12,6 +12,7 @@ import { createKnowledgeSource } from '@builderforce/knowledge-browser';
 import { createWebKnowledgeClient } from '@/lib/knowledge/webKnowledgeClient';
 import { webDirectoryProviders } from '@/lib/knowledge/webDirectoryProviders';
 import { reportKnowledgeDegraded } from '@/lib/knowledge/webHost';
+import { webPinpointHost } from '@/lib/knowledge/webPinpoint';
 import { knowledgeIntentFromQuery } from '@builderforce/agent-tools/prefetch';
 import { useKnowledgeGraphLabels } from '@/lib/knowledge/labels';
 import styles from './styles/surfaces.module.css';
@@ -54,6 +55,7 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
       callPrice: () => client.judgeEstimate(),
       directorySources: () => webDirectoryProviders({ projectId, workspaceTitle }),
       onDegraded: reportKnowledgeDegraded,
+      pinpoint: webPinpointHost,
     });
   }, [projectId, workspaceTitle]);
 

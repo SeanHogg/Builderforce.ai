@@ -6,10 +6,10 @@
  *               references (`repoGraphToExtracted`) and the latest uploaded analysis
  *               snapshot (`analysisToExtracted`);
  *   memory      the facts anchored to the root's sources and the relations touching them;
- *   join        memory's `buildGraph` with the ONE pack list (`knowledgePacks`).
+ *   join        `buildCodeGraph` (memory's `buildGraph` + layer resolution) with the ONE pack list (`knowledgePacks`).
  *
  * Cached through `getOrSetCached` under
- *   kg:v3:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}
+ *   kg:v4:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}
  * New data changes the key — never a TTL invalidation. `scopeDigest` is the review digest
  * plus, for the linked repo, the commit sha (a new commit is new perception).
  *
@@ -20,10 +20,10 @@
  * alone names its perception, and the version token still names the memory.
  */
 import {
-  DEFAULT_MAX_NODES, MAX_NODES_CAP, buildGraph, factRef, pathOfRef, sha256Hex,
+  DEFAULT_MAX_NODES, MAX_NODES_CAP, factRef, pathOfRef, sha256Hex,
   type Extracted, type KnowledgeGraph, type NodeRef,
 } from '@seanhogg/builderforce-memory/knowledge';
-import { analysisToExtracted, knowledgePacks, repoGraphToExtracted, sourcePathOf, type CodeAnalysisSnapshot } from '@builderforce/agent-tools';
+import { analysisToExtracted, buildCodeGraph, knowledgePacks, repoGraphToExtracted, sourcePathOf, type CodeAnalysisSnapshot } from '@builderforce/agent-tools';
 import { getOrSetCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
 import type { AnalysisSnapshotPort, ExtractedCachePort, KnowledgeStorePort, RepoGraphPort } from './knowledgePorts';
 
@@ -59,7 +59,7 @@ export function clampMaxNodes(raw: number | undefined): number {
 export function knowledgeGraphCacheKey(parts: {
   tenantId: number; projectId: number; rootId: string; scopeDigest: string; version: string; focusHash: string; maxNodes: number;
 }): string {
-  return `kg:v3:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
+  return `kg:v4:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
 }
 
 const focusHashOf = (focus: readonly string[]): string =>
@@ -143,7 +143,7 @@ async function cachedBuild(
     if (!extracted) return null;
     const facts = await deps.store.facts(sourcePathsOf(extracted, q.rootId));
     const relations = await deps.store.relations(q.rootId, new Set(facts.map((f) => factRef(f.key))));
-    return buildGraph(
+    return buildCodeGraph(
       { rootId: q.rootId, extracted, facts, relations, packs: knowledgePacks() },
       { maxNodes, focus: focus as NodeRef[] },
     );

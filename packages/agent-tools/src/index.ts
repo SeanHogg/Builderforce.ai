@@ -41,7 +41,7 @@ export * from "./semantic-tools.js";
 export * from "./stableStringify.js";
 export * from "./policyGateCallKey.js";
 export * from './codeAnalysis.js';
-export { savedCodeAnalysisSummary } from './codeAnalysisTool.js';
+export { knipFixCommand, savedCodeAnalysisSummary } from './codeAnalysisTool.js';
 // The code pack for memory's knowledge graph (PRD 38); also the `./knowledge` subpath.
 export * from './knowledge/index.js';
 // The ONE lexical scorer (tool_search / skill ranking) + the deferred-tool meta tool.

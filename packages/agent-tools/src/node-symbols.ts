@@ -23,7 +23,7 @@ import type { RepoSymbolsCapability, SymbolFindResult, SymbolMatch } from "./cap
 import { isUnderScopeDir, normalizeScopeDir } from "./glob.js";
 import { gitIgnoredMatcher, gitIgnoredSubset } from "./node-git-ignore.js";
 import { extractSymbols, isSymbolIndexable, SYMBOL_KINDS, type CodeSymbol, type SymbolKind } from "./symbols.js";
-import { WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
+import { isSkippedDirName, WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
 
 // The tree-sitter extractor (web-tree-sitter WASM, regex fallback per language) lives in
 // its own module and is re-exported from this export condition.
@@ -140,7 +140,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private skipped(rel: string): boolean {
     const segments = rel.split("/");
     const dirs = isSymbolIndexable(rel) ? segments.slice(0, -1) : segments;
-    return dirs.some((d) => d.startsWith(".") || this.skipDirs.has(d));
+    return dirs.some((d) => d.startsWith(".") || isSkippedDirName(d, this.skipDirs));
   }
 
   /** Repo-relative POSIX path for an absolute or relative path, or null when outside. */
@@ -315,7 +315,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
       for (const entry of entries) {
         const abs = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name.startsWith(".") || this.skipDirs.has(entry.name) || isIgnored(toRel(abs))) continue;
+          if (entry.name.startsWith(".") || isSkippedDirName(entry.name, this.skipDirs) || isIgnored(toRel(abs))) continue;
           queue.push(abs);
         } else if (entry.isFile() && isSymbolIndexable(entry.name)) {
           const rel = toRel(abs);

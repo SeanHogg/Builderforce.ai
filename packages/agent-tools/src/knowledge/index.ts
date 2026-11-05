@@ -37,7 +37,7 @@ export {
 export { HUMAN_FACT_SOURCE, humanFactBatch, humanFactKey } from './humanFact.js';
 export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
-    type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
+    type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
 export { fileManifest, manifestFileName, migratingRootFiles, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export { folderIdOf, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
@@ -65,3 +65,20 @@ export {
     mergePacks, packFromSnapshot, parsePack, serializePack,
     type PackFromSnapshotArgs, type PortableKnowledgePack,
 } from './portablePack.js';
+export { buildCodeGraph } from './codeGraph.js';
+export { LAYER_IDS, isDefaultLayers, type LayerId, type LayerRule } from './codeLayers.js';
+export { coverageSourceState, type CoverageRoot, type CoverageSkip, type CoverageSourceState } from './codeCoverage.js';
+export { CHURN_DAYS, type HistoryPort } from './historyPort.js';
+export { isSkippedDirName, isVcsMetadataName, type SkippedFolder, type SkippedFolderReason } from '../skipDirs.js';
+export { CODEOWNERS_LOCATIONS } from './codeOwners.js';
+export { blobDataUrl } from './blobDataUrl.js';
+export { gatewayErrorMessage } from './gatewayError.js';
+export {
+    createReviewRecorder, graphCounts, repoGraphEdgeCount, reviewRecordStore,
+    type GraphCounts, type RecordPersistence, type ReviewRecord, type ReviewRecorder, type ReviewRecordStore, type SkippedEntry, type SkippedUploads,
+} from './reviewRecord.js';
+export {
+    MAX_PINPOINT_IMAGE_BYTES, MAX_PINPOINT_MATCHES, MAX_PINPOINT_TEXTS, PINPOINT_VISION_MAX_TOKENS, PINPOINT_VISION_SYSTEM,
+    checkPinpointDataUrl, checkPinpointImage, cleanTexts, isCatalogPath, keysOfValue, matchAnchors, parseVisionReply, pinpointVisionRequest,
+    type PinpointHit, type PinpointMatch, type PinpointMatchResult, type PinpointPorts, type PinpointProvenance, type VisionContentPart,
+} from './pinpointMatch.js';

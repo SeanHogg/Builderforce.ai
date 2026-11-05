@@ -13,6 +13,7 @@
  * with a fake tree and no browser.
  */
 
+import { isVcsMetadataName, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
 import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import {
   byPath, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleContentHash, textDocument,
@@ -71,21 +72,34 @@ export function createFsAccessDirectorySource(
   handle: FsDirectoryHandleLike,
   host: string,
   limits = FS_WALK_LIMITS,
-): DirectorySource {
+): DirectorySource & { skippedFolders(): SkippedFolder[] } {
   const rootId = hostRootId(host, 'folder', handle.name);
   const files = new Map<string, FsFileHandleLike>();
+  const skipped: SkippedFolder[] = [];
   let walked: Promise<void> | null = null;
 
   const walk = (): Promise<void> => {
     walked ??= (async () => {
       const queue: Array<{ dir: FsDirectoryHandleLike; prefix: string; depth: number }> = [{ dir: handle, prefix: '', depth: 0 }];
+      let rootIsRepo = false;
       while (queue.length > 0 && files.size < limits.maxFiles) {
         const { dir, prefix, depth } = queue.shift()!;
-        for await (const entry of dir.values()) {
+        const entries: Array<FsFileHandleLike | FsDirectoryHandleLike> = [];
+        for await (const entry of dir.values()) entries.push(entry);
+        // The rule agent-tools' walker applies: a root that is itself a git work tree skips a child folder
+        // with its own `.git` DIRECTORY (a vendored clone). A `.git` FILE is a submodule / worktree link,
+        // so it never triggers it; a root that is no work tree keeps every child.
+        if (depth === 0) rootIsRepo = entries.some((e) => e.name === '.git');
+        else if (rootIsRepo && entries.some((e) => e.name === '.git' && e.kind === 'directory')) {
+          skipped.push({ path: prefix.replace(/\/$/, ''), reason: 'nested-checkout' });
+          continue;
+        }
+        for (const entry of entries) {
           const path = normalizePath(`${prefix}${entry.name}`);
           if (entry.kind === 'directory') {
             if (depth + 1 < limits.maxDepth && !isSkippedPath(`${path}/`)) queue.push({ dir: entry, prefix: `${path}/`, depth: depth + 1 });
-          } else if (!isSkippedPath(path)) {
+          } else if (!isVcsMetadataName(entry.name) && !isSkippedPath(path)) {
+            // A file called `.git` is a link to a repository store, not a source (as in agent-tools' walker).
             if (files.size >= limits.maxFiles) break;
             files.set(path, entry);
           }
@@ -98,6 +112,7 @@ export function createFsAccessDirectorySource(
   return {
     rootId,
     title: handle.name,
+    skippedFolders: () => [...skipped],
     async *list() {
       await walk();
       for (const [path, entry] of byPath(files)) {

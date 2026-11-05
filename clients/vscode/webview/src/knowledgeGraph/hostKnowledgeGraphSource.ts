@@ -19,14 +19,15 @@
  * handshake is tested without a webview.
  */
 
-import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { blobDataUrl, checkPinpointImage, rootIdOfSourceRef } from '@builderforce/agent-tools/knowledge';
 import { ReviewFailure } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, ReviewControl,
-  ReviewRequest, ReviewTarget,
+  KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, PinpointResult,
+  ReviewControl, ReviewRequest, ReviewTarget, SyncStatus,
 } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeCall, KnowledgeEvent, KnowledgePlanReply, KnowledgeTargetRow,
+  KnowledgeCall, KnowledgeEvent, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgePlanReply, KnowledgeTargetRow,
 } from '../../../src/knowledge/knowledgeProtocol';
 
 export interface KnowledgeTransport {
@@ -154,7 +155,7 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         const e = await Promise.race([events.next(), expired]);
         if (e === 'expired') return;
         if (e.type === 'progress') yield { type: 'progress', progress: e.progress };
-        else if (e.type === 'done') { yield { type: 'done', rootId: e.rootId, report: e.report }; return; }
+        else if (e.type === 'done') { yield { type: 'done', rootId: e.rootId, report: e.report, ...(e.skipped ? { skipped: e.skipped } : {}) }; return; }
         else if (e.type === 'failed') throw failureOf(e);
       }
     } finally {
@@ -195,5 +196,17 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
       return canDelete ? { delete: async () => { await t.call({ op: 'deleteFact', ref }); } } : undefined;
     },
     baseline: (rootId) => t.call<KnowledgeBaseline | null>({ op: 'baseline', rootId }),
+    async pinpoint(image: Blob, rootId: string): Promise<PinpointResult> {
+      checkPinpointImage(image);
+      return t.call<PinpointResult>({ op: 'pinpoint', rootId, image: await blobDataUrl(image) });
+    },
+    history: (rootId: string) => t.call<KnowledgeHistoryResult>({ op: 'history', rootId }),
+    syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
+    applyFix(finding: Finding): Promise<KnowledgeFixResult> {
+      const source = finding.nodes.find((ref) => rootIdOfSourceRef(ref) !== undefined);
+      const rootId = source ? rootIdOfSourceRef(source) : undefined;
+      if (!rootId) return Promise.reject(new Error('knowledge: the finding names no source of a root'));
+      return t.call<KnowledgeFixResult>({ op: 'applyFix', rootId, finding });
+    },
   };
 }

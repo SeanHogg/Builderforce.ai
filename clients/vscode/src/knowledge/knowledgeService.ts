@@ -18,13 +18,14 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, claimSimilarity, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, reviewIndexPort, reviewPacks, rootPorts, runKnowledgeReview,
+  buildStoredGraph, claimSimilarity, createReviewRecorder, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, repoGraphEdgeCount, reviewIndexPort, reviewPacks, rootPorts, runKnowledgeReview,
   workspaceCodeAnalyzers,
-  type KnowledgeReviewOptions, type KnowledgeReviewPorts,
+  type FsDirectorySource, type KnowledgeReviewOptions, type KnowledgeReviewPorts, type RepoGraphPort, type ReviewRecorder,
 } from "@builderforce/agent-tools/knowledge";
+import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { createKnowledgeClient, type AnalysisSnapshotPayload, type KnowledgeClient } from "@builderforce/knowledge-client";
-import type { DirectorySource, KnowledgeGraph, KnowledgeStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
+import type { KnowledgeGraph, KnowledgeStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { repoMapPort } from "@builderforce/repo-map";
@@ -39,6 +40,7 @@ import { createDirectorySource, type HashCache } from "./vscodeDirectorySource";
 import { fileManifest, manifestFileName, selectKnowledgeStore, type KnowledgeFiles } from "./knowledgeStores";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
 import { editorJudgement } from "./knowledgeJudgement";
+import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 
 /** Hashes remembered across reviews, so a re-review re-hashes only what changed on disk. */
 const hashCache: HashCache = new Map();
@@ -47,6 +49,7 @@ const hashCache: HashCache = new Map();
 let reviewedRootsMemento: RootsMemento | undefined;
 export function configureKnowledgeHost(memento: RootsMemento): void {
   reviewedRootsMemento = memento;
+  useRecordMemento(memento);
 }
 
 export const log = (what: string, error: unknown): void =>
@@ -74,7 +77,7 @@ export function linkedKnowledgeClient(secrets: vscode.SecretStorage): KnowledgeC
 /** One root, opened: where its files are, where its knowledge goes, and its manifest. */
 export interface OpenRoot {
   root: KnowledgeRoot;
-  source: DirectorySource;
+  source: FsDirectorySource;
   store: KnowledgeStore;
   client?: KnowledgeClient;
   manifest: IngestManifest;
@@ -114,13 +117,32 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): Op
 
 const withClient = (client: KnowledgeClient | undefined) => (client ? { client } : {});
 
+/** The repo map, reporting the import-edge count of each graph it builds to the review's record (the sync panel's local edges). */
+function measuringRepoMap(recorder: ReviewRecorder): RepoGraphPort {
+  return {
+    accepts: (path, size) => repoMapPort.accepts(path, size),
+    create() {
+      const graph = repoMapPort.create();
+      return {
+        addFile: (path, content) => graph.addFile(path, content),
+        build() {
+          const built = graph.build();
+          recorder.edges(repoGraphEdgeCount(built));
+          return built;
+        },
+      };
+    },
+  };
+}
+
 /** The review's ports for an opened root: symbols, analyzers, layers, judgement and the index. */
-async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot): Promise<KnowledgeReviewPorts> {
+async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, recorder: ReviewRecorder): Promise<KnowledgeReviewPorts> {
   const { root, client } = open;
   const caps = buildLocalCapabilityProvider(root.folderPath);
   const partitions = await readPartitions({ caps });
   const symbols = await workspaceSymbolIndex(root.folderPath).filesUnder(root.rel || undefined).catch(() => []);
   const judgement = await editorJudgement(secrets, client);
+  const history = await gitHistoryPort(root.rootPath, { onWarn: (message) => log("history", message) });
   const index = await getHostKnowledgeIndex(root.rootId).catch((error: unknown) => { log("index", error); return undefined; });
   return {
     source: open.source,
@@ -131,12 +153,15 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot): Promi
     analyzers: workspaceCodeAnalyzers({
       caps,
       partitions,
-      repoGraph: repoMapPort,
+      repoGraph: measuringRepoMap(recorder),
       ...(root.rel ? { path: root.rel } : {}),
       ...(client ? { upload: (sha: string, snapshot: unknown) => client.putAnalysis(sha, snapshot as AnalysisSnapshotPayload) } : {}),
       onUploadError: (error) => log("analysis upload", error),
       onWarn: (message) => log("analysis", message),
     }),
+    ...(history ? { history } : {}),
+    rootFiles: { fs: vscodeKnowledgeFs(), rootPath: root.rootPath },
+    onSignalsSkipped: (skipped) => recorder.signals(skipped),
     ...(judgement ? { judgement } : {}),
     ...(index ? { similar: claimSimilarity(index, open.store, root.rootId) } : {}),
     // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
@@ -162,18 +187,24 @@ export function onKnowledgeChanged(cb: (rootId: string) => void): () => void {
 
 export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): RootReview {
   const open = openRoot(secrets, root);
+  // What this review skips (plan, folders, coverage, uploads during the run) is recorded per root for the sync status.
+  const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, ...(open.client ? { client: open.client } : {}), folders: () => open.source.skippedFolders() });
   let ports: Promise<KnowledgeReviewPorts> | undefined;
-  const portsOnce = () => (ports ??= reviewPorts(secrets, open));
+  const portsOnce = () => (ports ??= reviewPorts(secrets, open, recorder));
   return {
     open,
     async plan(force) {
-      return planKnowledgeReviewDetail(await portsOnce(), { force: !!force });
+      const detail = await planKnowledgeReviewDetail(await portsOnce(), { force: !!force });
+      recorder.planned(detail.plan);
+      return detail;
     },
     async run(opts) {
       const p = await portsOnce();
       if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
       // The shared runner feeds the knowledge index (reported as the `index` phase).
+      recorder.begin();
       const report = await runKnowledgeReview(p, opts);
+      recorder.finish();
       for (const cb of changedListeners) cb(root.rootId);
       return report;
     },

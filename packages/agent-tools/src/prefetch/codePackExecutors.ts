@@ -11,10 +11,12 @@
  * relevant analyzer FAILED answers nothing — missing output is never reported as clean.
  */
 
-import { buildGraph, compareStr, MAX_NODES_CAP, partitionOf, partitionSeverity, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import { compareStr, MAX_NODES_CAP, partitionOf, partitionSeverity, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_PARTITIONS_FILE, loadCodePartitions } from '../knowledge/codePack.js';
 import { codeAnalyzers } from '../knowledge/codeAnalyzers.js';
+import { buildCodeGraph } from '../knowledge/codeGraph.js';
+import { isDefaultLayers, placedLayerRegistry } from '../knowledge/codeLayers.js';
 import { knowledgePacks } from '../knowledge/knowledgePacks.js';
 import { analyseWorkspace, forgetWorkspaceAnalyses } from '../knowledge/workspaceAnalysis.js';
 import type { PrefetchExecHost, PrefetchRunner } from './contract.js';
@@ -33,7 +35,10 @@ export async function readPartitions(host: Pick<PrefetchExecHost, 'caps'>): Prom
     }
 }
 
-interface Analysis { snapshot: CodeAnalysisSnapshot; findings: Finding[]; partitions: PartitionRegistry }
+/** The layers the graph's findings were judged against: its registry, and the layer each file was placed in. */
+interface Layers { registry: PartitionRegistry; layerOf(path: string): string | undefined }
+
+interface Analysis { snapshot: CodeAnalysisSnapshot; findings: Finding[]; layers: Layers }
 
 async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Analysis | null> {
     const partitions = await readPartitions(host);
@@ -44,8 +49,12 @@ async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Ana
     if (!snapshot || signal.aborted) return null;
     const packs = knowledgePacks({ analyzers: codeAnalyzers({ run: async () => ({ analysis: snapshot, repoGraph }) }), partitions });
     const extracted = await packs[0]!.analyzers!.analyse(host.rootId, signal);
-    const graph = buildGraph({ rootId: host.rootId, extracted, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
-    return { snapshot, findings: graph.findings, partitions };
+    const graph = buildCodeGraph({ rootId: host.rootId, extracted, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
+    // The graph placed every file (folder, name, import direction); the verdicts below must use THOSE layers, not a second glob match.
+    const placed = new Map(graph.nodes.flatMap((n) => { const path = pathOfRef(n.ref); return path !== undefined && n.partition !== undefined ? [[path, n.partition] as const] : []; }));
+    const registry = isDefaultLayers(partitions) ? placedLayerRegistry(partitions) : partitions;
+    const layerOf = isDefaultLayers(partitions) ? (path: string) => placed.get(path) : (path: string) => partitionOf(path, partitions);
+    return { snapshot, findings: graph.findings, layers: { registry, layerOf } };
 }
 
 /**
@@ -69,7 +78,7 @@ interface CodeAction {
     title: (n: number) => string;
     none: string;
     /** The findings this action counts, from the code pack's of its kinds. Default: all of them. */
-    select?(findings: Finding[], snapshot: CodeAnalysisSnapshot, partitions: PartitionRegistry): Finding[];
+    select?(findings: Finding[], snapshot: CodeAnalysisSnapshot, layers: Layers): Finding[];
     /** The action answers for the focus files when the person is working in some. */
     focusScoped?: boolean;
 }
@@ -84,14 +93,14 @@ interface CodeAction {
  * when an import between its two files is itself a violation, judged here in the import's own
  * direction, and it is reported with that import's verdict, severity and layers.
  */
-function importViolations(findings: Finding[], snapshot: CodeAnalysisSnapshot, partitions: PartitionRegistry): Finding[] {
+function importViolations(findings: Finding[], snapshot: CodeAnalysisSnapshot, layers: Layers): Finding[] {
     const pairKey = (a: string, b: string): string => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
     const violating = new Map<string, { verdict: 'upward' | 'skips'; from: string; to: string }>();
     for (const e of snapshot.edges) {
         if (e.from === e.to) continue;
-        const from = partitionOf(e.from, partitions);
-        const to = partitionOf(e.to, partitions);
-        const verdict = verdictOf(from, to, partitions);
+        const from = layers.layerOf(e.from);
+        const to = layers.layerOf(e.to);
+        const verdict = verdictOf(from, to, layers.registry);
         if (verdict !== 'upward' && verdict !== 'skips') continue;
         // Imports both ways on one pair: the upward one (an error) wins over a skip (a warning), whichever edge comes first.
         const key = pairKey(e.from, e.to);
@@ -141,7 +150,7 @@ function codeActionRunner(host: PrefetchExecHost, action: CodeAction): PrefetchR
             const tool = analysis.snapshot.tools.find((t) => t.name === action.analyzer);
             if (!tool || tool.status !== 'complete') return undefined;
             const ofKind = analysis.findings.filter((f) => action.kinds.includes(f.kind));
-            let findings = action.select ? action.select(ofKind, analysis.snapshot, analysis.partitions) : ofKind;
+            let findings = action.select ? action.select(ofKind, analysis.snapshot, analysis.layers) : ofKind;
             const focus = action.focusScoped ? focusSet(host, analysis.snapshot.nodes) : new Set<string>();
             if (focus.size > 0) findings = findings.filter((f) => f.nodes.some((ref) => focus.has(pathOfRef(ref) ?? '')));
             const scope = focus.size > 0 ? ` among the ${focus.size} file(s) you are working in` : '';

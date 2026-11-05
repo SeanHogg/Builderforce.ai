@@ -53,6 +53,11 @@ export default defineConfig({
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-git-remote.ts"),
       },
       {
+        // The review's git history port (the `churn` badge), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-git-history.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-git-history.ts"),
+      },
+      {
         // PreFetch tool detection's Node probe, same NodeNext `.js` form.
         find: "@builderforce/agent-tools/node-prefetch.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-prefetch.ts"),

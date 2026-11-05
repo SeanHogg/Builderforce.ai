@@ -1,25 +1,17 @@
 /**
- * The view's controls: the reviewed folder, search, the view modes (graph, 3D, map, list), Before/After (when
- * the host keeps a baseline), and the lenses — a deliberate horizontal scroller (never a
- * wrap that pushes the graph off a phone).
- *
- * The lenses are toggle chips in a `nav` by default. A host whose lenses ARE its panel's
- * views (an embedded report that replaces its own tabs) asks for `lensControl="tabs"`: the
- * same row as a `tablist`, so the panel keeps the tab semantics its users rely on.
+ * The surface header: the reviewed folder, the spine (where you are), the ask bar (search
+ * today; the pinpoint screenshot input joins it), the panel buttons, the overlay menu,
+ * Before/After (when the host keeps a baseline) and the host's actions. The cameras, the
+ * questions and the lenses are the centre controls (`surface/CameraBar.tsx`).
  */
 
 import { useState, type ReactNode } from 'react';
 import type { KnowledgeGraphLabels } from './labels';
-import type { LensDef } from './lenses';
 import { cssVar } from './scene/themeColors';
 import { chip, input } from './styles';
-import type { KnowledgeScopeSummary, LensId, ViewMode } from './types';
+import type { KnowledgeScopeSummary } from './types';
 
-/** Each view's name, as data. */
-const VIEW_WORD: Record<ViewMode, (l: KnowledgeGraphLabels) => string> = {
-    graph: (l) => l.viewGraph, '3d': (l) => l.view3d, map: (l) => l.viewMap, list: (l) => l.viewList,
-};
-
+/** `tabs` when the lenses ARE the host panel's views; the same row as a `tablist`. */
 export type LensControl = 'chips' | 'tabs';
 export type Revision = 'after' | 'before';
 
@@ -28,61 +20,48 @@ export interface ToolbarProps {
     scopes: KnowledgeScopeSummary[];
     rootId: string | null;
     onRoot(rootId: string): void;
-    lenses: LensDef[];
-    lens: LensId;
-    onLens(id: LensId): void;
     onSearch(q: string): void;
-    /** The views on offer (3D only where WebGL exists), in display order. */
-    modes: readonly ViewMode[];
-    mode: ViewMode;
-    onMode(mode: ViewMode): void;
+    /** The drill path. */
+    spine?: ReactNode;
+    /** The panel registry's buttons. */
+    panels?: ReactNode;
+    /** The overlay popover. */
+    overlays?: ReactNode;
+    /** The time slider. */
+    time?: ReactNode;
+    /** Wraps the search form so the pinpoint input catches a paste or a drop anywhere on the ask bar. */
+    askWrap?: ((form: ReactNode) => ReactNode) | undefined;
+    /** Opens the lines as a sheet where the left panel has collapsed. */
+    linesToggle?: ReactNode;
     actions?: ReactNode;
-    lensControl?: LensControl;
     /** Present when the host keeps a baseline: which graph is drawn, and whether "before" exists. */
     revision?: { value: Revision; hasBefore: boolean; onChange(r: Revision): void };
 }
 
-export function Toolbar({ labels, scopes, rootId, onRoot, lenses, lens, onLens, onSearch, modes, mode, onMode, actions, lensControl = 'chips', revision }: ToolbarProps) {
+export function Toolbar({ labels, scopes, rootId, onRoot, onSearch, spine, panels, overlays, time, askWrap, linesToggle, actions, revision }: ToolbarProps) {
     const [q, setQ] = useState('');
-    const tabs = lensControl === 'tabs';
-    const lensRow = { display: 'flex', gap: 6, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 } as const;
-    const lensItems = lenses.map((l) => (
-        <button
-            key={l.id}
-            type="button"
-            role={tabs ? 'tab' : undefined}
-            aria-selected={tabs ? l.id === lens : undefined}
-            aria-pressed={tabs ? undefined : l.id === lens}
-            title={labels.lensHints[l.id]}
-            onClick={() => onLens(l.id)}
-            style={{ ...chip(l.id === lens), scrollSnapAlign: 'start' }}
-        >
-            {labels.lenses[l.id]}
-        </button>
-    ));
+    const search = (
+        <form role="search" onSubmit={(e) => { e.preventDefault(); onSearch(q); }} style={{ display: 'flex', flex: '1 1 180px', minWidth: 0 }}>
+            <input
+                type="search" aria-label={labels.searchLabel} placeholder={labels.searchPlaceholder} value={q}
+                onChange={(e) => setQ(e.target.value)} style={{ ...input, flex: 1 }}
+            />
+        </form>
+    );
     return (
         <div style={{ display: 'grid', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${cssVar('border')}` }}>
+            {spine}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 {scopes.length > 1 && (
                     <select aria-label={labels.scopeLabel} value={rootId ?? ''} onChange={(e) => onRoot(e.target.value)} style={{ ...input, maxWidth: 220 }}>
                         {scopes.map((s) => <option key={s.rootId} value={s.rootId}>{s.title}</option>)}
                     </select>
                 )}
-                <form role="search" onSubmit={(e) => { e.preventDefault(); onSearch(q); }} style={{ display: 'flex', flex: '1 1 180px', minWidth: 0 }}>
-                    <input
-                        type="search"
-                        aria-label={labels.searchLabel}
-                        placeholder={labels.searchPlaceholder}
-                        value={q}
-                        onChange={(e) => setQ(e.target.value)}
-                        style={{ ...input, flex: 1 }}
-                    />
-                </form>
-                <div role="group" aria-label={labels.viewModesLabel} style={{ display: 'flex', gap: 4 }}>
-                    {modes.map((m) => (
-                        <button key={m} type="button" aria-pressed={mode === m} style={chip(mode === m)} onClick={() => onMode(m)}>{VIEW_WORD[m](labels)}</button>
-                    ))}
-                </div>
+                {linesToggle}
+                {(askWrap ?? ((form: ReactNode) => form))(search)}
+                {panels}
+                {overlays}
+                {time}
                 {revision && (
                     <div role="group" aria-label={labels.revisionLabel} style={{ display: 'flex', gap: 4 }}>
                         <button type="button" aria-pressed={revision.value === 'before'} disabled={!revision.hasBefore} style={{ ...chip(revision.value === 'before'), ...(revision.hasBefore ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }} onClick={() => revision.onChange('before')}>
@@ -95,10 +74,6 @@ export function Toolbar({ labels, scopes, rootId, onRoot, lenses, lens, onLens, 
                 )}
                 {actions}
             </div>
-            {tabs
-                ? <div role="tablist" aria-label={labels.lensesLabel} style={lensRow}>{lensItems}</div>
-                : <nav aria-label={labels.lensesLabel} style={lensRow}>{lensItems}</nav>}
         </div>
     );
 }
-

@@ -72,3 +72,8 @@ export function repoGraphUnder(graph: SerializedRepoGraphShape, folder: string |
         },
     };
 }
+
+/** `path` with forward slashes and no trailing slash — the ONE spelling the knowledge walkers compare absolute and root-relative paths in. */
+export function slashPath(path: string): string {
+    return path.replace(/\\/g, '/').replace(/\/+$/, '');
+}

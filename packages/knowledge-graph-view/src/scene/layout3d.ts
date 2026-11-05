@@ -30,6 +30,15 @@ export interface LayoutOptions {
 }
 
 export const PLANE_GAP = 6;
+
+/**
+ * A tower's height from the size channel's level (1 to 5): taller for worse. A node with no
+ * level (the channel is off or has no data) stands at a neutral height. The tallest tower
+ * (3.1) stays under {@link PLANE_GAP}, so a tower never reaches the plane above it.
+ */
+export function towerHeight(level: number | undefined): number {
+    return level === undefined ? 1.2 : round(0.6 + level * 0.5);
+}
 export const LAYOUT_ITERATIONS = 40;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const AREA_SPACING = 4.5;

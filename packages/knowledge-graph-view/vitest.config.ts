@@ -48,6 +48,7 @@ export default {
     exclude: ['**/node_modules/**', 'dist/**'],
     // testing-library unmounts between tests only when `afterEach` is global.
     globals: true,
+    setupFiles: ['./vitest.setup.ts'],
     testTimeout: 30_000,
   },
 };

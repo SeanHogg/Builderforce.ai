@@ -17,7 +17,8 @@
  * Types only, plus the frame names: no `vscode`, no React.
  */
 
-import type { KnowledgeGraph, ReviewPlan, ReviewProgress, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
+import type { PinpointMatchResult } from "@builderforce/agent-tools/knowledge";
+import type { Finding, KnowledgeGraph, ReviewPlan, ReviewProgress, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
@@ -47,7 +48,53 @@ export type KnowledgeCall =
   | { op: "deleteFact"; ref: string }
   | { op: "baseline"; rootId: string }
   | { op: "compose"; text: string }
-  | { op: "takeFocus" };
+  | { op: "takeFocus" }
+  // The screenshot rides as a base64 data URL (a Blob does not survive postMessage reliably).
+  | { op: "pinpoint"; rootId: string; image: string }
+  | { op: "history"; rootId: string }
+  | { op: "syncStatus"; rootId: string }
+  | { op: "applyFix"; rootId: string; finding: Finding };
+
+/** The view's `PinpointResult` is this shape: the matching core's own result type. */
+export type KnowledgePinpointResult = PinpointMatchResult;
+
+export interface KnowledgeHistoryResult {
+  commits: { sha: string; title: string; at: string; refs: string[] }[];
+}
+
+/**
+ * Counts of a root. `edges` is absent when this host did not measure it (a linked editor keeps
+ * no local graph); `truncated` when the platform graph's own cap cut the count short.
+ *
+ * The view's `SyncStatus` (`knowledge-graph-view` `types.ts`) needs the same four changes: `local.edges?`,
+ * `skipped?` (absent = no list recorded, "unknown"), `skipped[].bytes?` and `truncated?` on the counts.
+ * The extension host cannot import that package, so the shape is restated here.
+ */
+export interface KnowledgeSyncCounts { files: number; edges?: number; docs: number; truncated?: boolean }
+
+export interface KnowledgeSyncSkipped { path: string; bytes?: number; reason: string }
+
+export interface KnowledgeSyncStatus {
+  local: KnowledgeSyncCounts;
+  server?: KnowledgeSyncCounts;
+  /** Absent when no review has recorded a list: "unknown", not "none". */
+  skipped?: KnowledgeSyncSkipped[];
+  sources: {
+    id: "code" | "docs" | "coverage" | "usage" | "traces" | "openapi" | "history" | "owners";
+    state: "collected" | "estimated" | "absent";
+    note?: string;
+  }[];
+}
+
+export interface KnowledgeFixResult {
+  branch?: string;
+  /** The finding's files knip changed. */
+  changed: string[];
+  /** Files the person saved during the run that knip also changed: left as they are, to be checked. */
+  conflicts?: string[];
+  /** What the fix did beyond the named export: knip fixes the whole file. */
+  note?: string;
+}
 
 export type KnowledgeOp = KnowledgeCall["op"];
 
@@ -81,7 +128,7 @@ export interface KnowledgeEventFrame {
 export type KnowledgeEvent =
   | { stream: string; type: "planned"; reply: KnowledgePlanReply }
   | { stream: string; type: "progress"; progress: ReviewProgress }
-  | { stream: string; type: "done"; rootId: string; report: ReviewReport }
+  | { stream: string; type: "done"; rootId: string; report: ReviewReport; skipped?: KnowledgeSyncSkipped[] }
   // `error` is the reason shown to the person; the rest is the diagnostic detail the view's
   // *Copy details* carries (the stack, the extension build, the folder) — all logged host-side too.
   | { stream: string; type: "failed"; error: string; detail?: string; host?: string; rootPath?: string }

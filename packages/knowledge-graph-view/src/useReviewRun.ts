@@ -13,14 +13,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReviewPlan, ReviewProgress, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { failureDetailOf, type ReviewFailureDetail } from './reviewFailure';
-import type { KnowledgeGraphSource, ReviewEstimate, ReviewRequest } from './types';
+import type { KnowledgeGraphSource, ReviewEstimate, ReviewRequest, SkippedFile } from './types';
 
 export type ReviewState =
     | { status: 'idle' }
     | { status: 'planning' }
     | { status: 'confirm'; plan: ReviewPlan; estimate?: ReviewEstimate }
     | { status: 'running'; progress?: ReviewProgress }
-    | { status: 'done'; rootId: string; report: ReviewReport }
+    | { status: 'done'; rootId: string; report: ReviewReport; skipped?: SkippedFile[] }
     | { status: 'cancelled' }
     | { status: 'aborted' }
     | ReviewErrorState;
@@ -101,7 +101,7 @@ export function useReviewRun(
                         lastPhase.current = ev.progress.phase;
                         setState({ status: 'running', progress: ev.progress });
                     } else if (ev.type === 'done') {
-                        setState(ev.report.aborted ? { status: 'aborted' } : { status: 'done', rootId: ev.rootId, report: ev.report });
+                        setState(ev.report.aborted ? { status: 'aborted' } : { status: 'done', rootId: ev.rootId, report: ev.report, ...(ev.skipped?.length ? { skipped: ev.skipped } : {}) });
                         onDoneRef.current(ev.rootId, ev.report);
                     } else {
                         setState({ status: 'cancelled' });

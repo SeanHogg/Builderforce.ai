@@ -18,6 +18,8 @@ import type { LensDef } from '../lenses';
 import { layout3d, type Layout3D } from './layout3d';
 import { useIdleValue } from '../useIdleValue';
 import { edgeBuffers, nodeInstances } from './buffers';
+import { towerBodies, type SceneChannels } from './channels';
+import { Pipes, Towers } from './Towers';
 import { cssVar, useThemeColors, type ThemeColors } from './themeColors';
 
 export interface GraphSceneProps {
@@ -33,6 +35,8 @@ export interface GraphSceneProps {
     label: string;
     /** Jump the camera to the target instead of flying (reduced motion). */
     reducedMotion?: boolean;
+    /** The overlay channels (height, fill band, shell, pipe width). Absent ⇒ the plain spheres and lines. */
+    channels?: SceneChannels | undefined;
 }
 
 type OrbitHandle = { target: Vector3; update(): void };
@@ -128,10 +132,11 @@ function RepaintOnShow() {
     return null;
 }
 
-export default function GraphScene({ rootId, nodes, edges, lens, selected, focus, onSelect, planeLabel, label, reducedMotion = false }: GraphSceneProps) {
+export default function GraphScene({ rootId, nodes, edges, lens, selected, focus, onSelect, planeLabel, label, reducedMotion = false, channels }: GraphSceneProps) {
     const [host, setHost] = useState<HTMLDivElement | null>(null);
     const colors = useThemeColors(host);
     const layout = useIdleValue(() => layout3d(rootId, nodes, edges), [rootId, nodes, edges]);
+    const bodies = useMemo(() => (channels && layout ? towerBodies(nodeInstances(nodes, layout, lens), channels.nodes) : null), [channels, layout, nodes, lens]);
     const controls = useRef<OrbitHandle | null>(null);
     const target = useMemo(() => {
         const ref = selected ?? focus[0];
@@ -157,8 +162,17 @@ export default function GraphScene({ rootId, nodes, edges, lens, selected, focus
                             </Html>
                         </group>
                     ))}
-                    <Edges layout={layout} edges={edges} colors={colors} />
-                    <Nodes layout={layout} nodes={nodes} lens={lens} colors={colors} selected={selected} onSelect={onSelect} />
+                    {channels && bodies ? (
+                        <>
+                            <Towers bodies={bodies} colors={colors} selected={selected} onSelect={onSelect} />
+                            {channels.pipeWidth ? <Pipes edges={edges} bodies={bodies} channels={channels} colors={colors} /> : <Edges layout={layout} edges={edges} colors={colors} />}
+                        </>
+                    ) : (
+                        <>
+                            <Edges layout={layout} edges={edges} colors={colors} />
+                            <Nodes layout={layout} nodes={nodes} lens={lens} colors={colors} selected={selected} onSelect={onSelect} />
+                        </>
+                    )}
                     <OrbitControls ref={controls as never} makeDefault enableDamping />
                     <FlyTo target={target} controls={controls} reducedMotion={reducedMotion} />
                     <RepaintOnShow />

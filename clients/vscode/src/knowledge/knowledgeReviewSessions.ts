@@ -19,6 +19,7 @@ import { logReviewFailure } from "./knowledgeFailureLog";
 import type { KnowledgeEvent, KnowledgeReviewRequest } from "./knowledgeProtocol";
 import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
+import { reviewRecords } from "./knowledgeSyncStatus";
 
 interface Session {
   review: RootReview;
@@ -114,7 +115,11 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
         },
       })
       .then(
-        (report) => this.post({ stream: reviewId, type: "done", rootId, report }),
+        (report) => {
+          // What this review left out, from its record (the plan, folders, coverage, uploads).
+          const skipped = reviewRecords.get(rootId)?.skipped;
+          this.post({ stream: reviewId, type: "done", rootId, report, ...(skipped ? { skipped } : {}) });
+        },
         (error: unknown) => this.post({
           stream: reviewId,
           type: "failed",

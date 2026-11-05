@@ -39,6 +39,20 @@ export const KG_TOKENS = {
     plane: ['--kg-plane', '--bf-surface-2'],
     warnBg: ['--kg-warn-bg', '--bf-warning-bg'],
     errorText: ['--kg-error', '--bf-error'],
+    // The 5-step severity ramp (1 clean … 5 worst) and the line palette of the transit map.
+    sev1: ['--kg-sev-1', '--bf-success'],
+    sev2: ['--kg-sev-2', '--bf-success'],
+    sev3: ['--kg-sev-3', '--bf-warning'],
+    sev4: ['--kg-sev-4', '--bf-warning'],
+    sev5: ['--kg-sev-5', '--bf-danger'],
+    line1: ['--kg-line-1', '--bf-accent'],
+    line2: ['--kg-line-2', '--bf-text-secondary'],
+    line3: ['--kg-line-3', '--bf-link'],
+    line4: ['--kg-line-4', '--bf-text-secondary'],
+    line5: ['--kg-line-5', '--bf-success'],
+    line6: ['--kg-line-6', '--bf-warning'],
+    line7: ['--kg-line-7', '--bf-danger'],
+    line8: ['--kg-line-8', '--bf-text-muted'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type ThemeTone = keyof typeof KG_TOKENS;

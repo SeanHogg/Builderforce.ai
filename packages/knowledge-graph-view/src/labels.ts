@@ -11,10 +11,160 @@
  */
 
 import type { LensId, ReviewTarget } from './types';
+import type { Layer, Provenance } from './surface/layers';
+import type { ChannelId, MetricId, PresetId } from './surface/overlays';
+import type { NoteKey, QuestionId } from './surface/questions';
 
 export { camelKind, fillTemplate } from './template';
 
 export type FindingKindLabels = Record<string, string>;
+
+/** The keys of `KnowledgeGraphLabels` that hold one string (a registry row names its label by one). */
+export type StringLabelKey = { [K in keyof KnowledgeGraphLabels]: KnowledgeGraphLabels[K] extends string ? K : never }[keyof KnowledgeGraphLabels];
+
+/** The words of the transit-map surface: header, lines, overlays, questions, path strip, Act panel. */
+export interface SurfaceLabels {
+    spineLabel: string;
+    panelsLabel: string;
+    overlaysButton: string;
+    overlaysTitle: string;
+    /** The overlay button's name: `{preset}`. */
+    presetLabel: string;
+    presets: Record<PresetId | 'custom', string>;
+    channels: Record<ChannelId | 'pins', string>;
+    metricNames: Record<MetricId, string>;
+    notSetUp: string;
+    on: string;
+    off: string;
+    questionsLabel: string;
+    moreQuestions: string;
+    questions: Record<QuestionId, string>;
+    /** A question's answer line: `{count}` stations. */
+    answerCount: string;
+    answerNone: string;
+    /** The question needs data this folder has not collected. */
+    answerNotSetUp: string;
+    /** A lit station's note; `{value}`. */
+    notes: Record<NoteKey, string>;
+    linesTitle: string;
+    linesButton: string;
+    linesEmpty: string;
+    /** `{name}`. */
+    lineName: string;
+    /** `{count}`. */
+    lineStops: string;
+    /** `{name}`. */
+    stationsOn: string;
+    stationsPick: string;
+    /** `{count}` entry points left without a line. */
+    omittedLines: string;
+    /** `{files}`, `{layer}`. */
+    stationMeta: string;
+    legendTitle: string;
+    /** A legend row: `{channel}`, `{metric}`. */
+    legendRow: string;
+    /** `{count}` lines. */
+    interchange: string;
+    terminus: Record<'data' | 'external' | 'end', string>;
+    untestedSegment: string;
+    /** The map's SVG description: `{lines}`, `{stations}`. */
+    mapDescription: string;
+    /** A station's accessible name: `{name}`, `{layer}`, `{files}`. */
+    stationAria: string;
+    /** A pin's accessible name: `{count}`, `{name}`. */
+    pinAria: string;
+    /** Stations left off the map by its cap: `{count}`. */
+    moreStations: string;
+    layers: Record<Layer | 'other', string>;
+    pathTitle: string;
+    pathEmpty: string;
+    /** `{n}` of `{total}`. */
+    pathStep: string;
+    pathBack: string;
+    pathNext: string;
+    /** The edge between two stops: `{kind}`, `{count}`. */
+    pathHop: string;
+    actTitle: string;
+    /** `{scope}`. */
+    actScope: string;
+    actScopeAll: string;
+    showFiles: string;
+    /** `{level}` of 5. */
+    levelOf5: string;
+    stationFacts: string;
+    provenance: Record<Provenance, string>;
+    /** Resolve on a finding row. */
+    resolveFinding: string;
+    /** The Resolve button's accessible name, which says which finding: `{title}`. */
+    resolveFindingAria: string;
+    /** The Tower draws only the first pipes: `{count}`. */
+    pipesCapped: string;
+    /** Names the colours of the System camera's finding bar. */
+    kindsLegend: string;
+    /** A sequence message between stops with no reference between them. */
+    noDirectReference: string;
+    /** The contract-tests request names only the first `{count}` endpoints. */
+    testsCapped: string;
+    /** A screenshot over the size limit: `{size}` MB. */
+    imageTooLarge: string;
+    /** The time slider draws only the latest `{count}` commits. */
+    historyCapped: string;
+    /** The done card: `{count}` files were not stored (the list says which and why). */
+    skippedUploads: string;
+    /** Why a file was skipped, by reason id (`too-large` is `tooLarge`); a reason this build has no words for shows as sent. */
+    skipReasons: Record<'tooLarge' | 'unreadable' | 'rateLimited' | 'unsupported' | 'other', string>;
+    /** The System camera: `{tiers}`, `{components}`; a component's name `{name}`, `{files}`, `{findings}`. */
+    system: Record<'description' | 'componentAria' | 'antiBar' | 'data' | 'dataEmpty' | 'empty', string>;
+    /** The Heat camera: `{layers}`, `{components}`; `{name}`, `{files}`; the legend `{size}`, `{colour}`, `{bar}`. */
+    heat: Record<'description' | 'cellAria' | 'legend' | 'empty', string>;
+    /** The Sequence camera: `{stops}`, `{messages}`; `{from}`, `{to}`, `{label}`. */
+    sequence: Record<'description' | 'empty' | 'messageAria', string>;
+    sync: Record<
+        'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
+        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria',
+        string
+    >;
+    syncSteps: Record<'walk' | 'graph' | 'upload' | 'match' | 'analyse' | 'skipped', string>;
+    syncStates: Record<'ok' | 'pending' | 'attention', string>;
+    syncSources: Record<'code' | 'docs' | 'coverage' | 'usage' | 'traces' | 'openapi' | 'history' | 'owners', string>;
+    syncExcluded: Record<'nested' | 'worktrees' | 'local' | 'vendored', string>;
+    sourceStates: Record<'collected' | 'estimated' | 'absent', string>;
+    /** `{count}`, `{total}`; `{file}`, `{complexity}`, `{coverage}`. */
+    coverage: Record<
+        'notSetUpTitle' | 'notSetUpBody' | 'kpiFiles' | 'kpiFilesValue' | 'kpiMean' | 'kpiComplexity' | 'kpiRisky' | 'scatterTitle' | 'scatterAria'
+        | 'axisX' | 'axisY' | 'gapsTitle' | 'gapsNone' | 'gapRow' | 'runWithValues' | 'promptTests' | 'promptText' | 'noComplexity',
+        string
+    >;
+    /** `{family}`, `{layer}`, `{count}`. */
+    patterns: Record<
+        'notSetUpTitle' | 'notSetUpBody' | 'matrixTitle' | 'antiRow' | 'cellAria' | 'listTitle' | 'listRow' | 'listHint' | 'antiTitle' | 'antiNone'
+        | 'resolve' | 'showInTower' | 'lights',
+        string
+    >;
+    /** `{file}`, `{count}`, `{names}`, `{routes}`. */
+    api: Record<
+        'notSetUpTitle' | 'notSetUpBody' | 'kpiEndpoints' | 'kpiUndocumented' | 'contractMissing' | 'documented' | 'undocumented' | 'callers'
+        | 'noCallers' | 'downloadFailed' | 'tryIt' | 'requestLine' | 'copyCurl' | 'exportOpenapi' | 'exportPostman' | 'contractTests' | 'contractTestsText' | 'groupAria',
+        string
+    >;
+    /** `{branch}`, `{count}`. */
+    resolve: Record<
+        'empty' | 'provenanceLabel' | 'fixTitle' | 'fixIntro' | 'applyFix' | 'applying' | 'applied' | 'appliedNoBranch' | 'changedFiles' | 'failed'
+        | 'promptTitle' | 'promptIntro' | 'prompt' | 'noComposer' | 'checksTitle' | 'checkFiles' | 'checkStations' | 'checkReview' | 'undoNote' | 'show',
+        string
+    >;
+    /** `{path}`, `{values}`. */
+    simulate: Record<'pathTitle' | 'pathEmpty' | 'valuesLabel' | 'valuesPlaceholder' | 'run' | 'requestText' | 'noValues' | 'sent' | 'noComposer' | 'note', string>;
+    /** `{description}`, `{path}`, `{findings}`. */
+    pinpoint: Record<
+        'label' | 'button' | 'hint' | 'reading' | 'failed' | 'noMatch' | 'thumbAlt' | 'descriptionTitle' | 'anchorsTitle' | 'matchesTitle' | 'diagnose'
+        | 'diagnoseText' | 'noFindings' | 'clear' | 'clearAria' | 'dropHere' | 'notImage',
+        string
+    >;
+    pinpointProvenance: Record<'vision' | 'exact' | 'catalog' | 'import', string>;
+    /** `{title}`, `{at}`, `{count}`. */
+    time: Record<'label' | 'aria' | 'now' | 'commitAria' | 'changed', string>;
+}
 
 export interface KnowledgeGraphLabels {
     title: string;
@@ -48,8 +198,21 @@ export interface KnowledgeGraphLabels {
     showAll: string;
     view3d: string;
     viewList: string;
+    /** The camera and drawer names (the switcher's and the header's buttons). */
+    viewSystem: string;
+    viewHeat: string;
+    viewSequence: string;
+    panelSync: string;
+    panelCoverage: string;
+    panelPatterns: string;
+    panelApi: string;
+    panelResolve: string;
+    panelSimulate: string;
     viewGraph: string;
+    /** The folder mind map. */
     viewMap: string;
+    /** The transit map: lines from the entry points through the layers. */
+    viewTransit: string;
     /** The view-mode group's name. */
     viewModesLabel: string;
     /** The graph / map's one-line how-to (also its SVG description). */
@@ -188,6 +351,7 @@ export interface KnowledgeGraphLabels {
     copyDiagnostics: string;
     reviewProgress: string;
     phases: Record<'plan' | 'extract' | 'resolve' | 'judge' | 'write' | 'index' | 'done', string>;
+    surface: SurfaceLabels;
 }
 
 export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
@@ -236,10 +400,20 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     truncatedNote: 'Showing the most important part of a large graph. Search reaches everything.',
     focusedNote: 'Showing the top {count} nodes.',
     showAll: 'Show all',
-    view3d: '3D',
+    view3d: 'Tower',
     viewList: 'List',
+    viewSystem: 'System',
+    viewHeat: 'Heat',
+    viewSequence: 'Sequence',
+    panelSync: 'Sync',
+    panelCoverage: 'Coverage',
+    panelPatterns: 'Patterns',
+    panelApi: 'API',
+    panelResolve: 'Fix queue',
+    panelSimulate: 'Simulate',
     viewGraph: 'Graph',
-    viewMap: 'Map',
+    viewMap: 'Mind map',
+    viewTransit: 'Map',
     viewModesLabel: 'View',
     graphHint: 'Scroll or pinch to zoom, drag to pan, select a node for its details.',
     nodeAria: '{label}, {kind}',
@@ -384,6 +558,240 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     phases: {
         plan: 'Planning', extract: 'Reading', resolve: 'Resolving', judge: 'Judging', write: 'Writing', index: 'Indexing', done: 'Done',
     },
+    surface: {
+        spineLabel: 'Where you are',
+        panelsLabel: 'Panels',
+        overlaysButton: 'Overlays',
+        overlaysTitle: 'What the map shows',
+        presetLabel: '{preset} overlays',
+        presets: { risk: 'Risk', quality: 'Quality', activity: 'Activity', ownership: 'Ownership', custom: 'Custom' },
+        channels: { colour: 'Colour', size: 'Size · height', ring: 'Ring · fill · bar', width: 'Line width', pulse: 'Pulse', outline: 'Outline', pins: 'Issue pins' },
+        metricNames: { anti: 'Anti-patterns', cx: 'Complexity', cov: 'Coverage gap', use: 'Usage', churn: 'Churn', changed: 'Changed', owner: 'Owner', none: 'Off' },
+        notSetUp: 'Not set up',
+        on: 'On',
+        off: 'Off',
+        questionsLabel: 'Questions',
+        moreQuestions: 'More questions',
+        questions: {
+            where: 'Where does it go?', wrong: 'What is wrong?', untested: 'What has no test?', patterns: 'What patterns are here?',
+            changed: 'What changed?', callers: 'Who else calls these?', copied: 'What is copied?', unused: 'What is never called?',
+            claims: 'What do the docs claim?', layers: 'How is it layered?', knowledge: 'What do we know about it?',
+        },
+        answerCount: '{count} stations',
+        answerNone: 'No station matches.',
+        answerNotSetUp: 'Not set up: this needs data that has not been collected.',
+        notes: {
+            patterns: '{value}', copied: '{value} clone groups', unused: '{value} unused', claims: '{value} claims',
+            layers: '{value}', knowledge: '{value} facts', changed: 'Changed',
+        },
+        linesTitle: 'Lines',
+        linesButton: 'Lines',
+        linesEmpty: 'No entry points were found, so there are no lines.',
+        lineName: '{name} line',
+        lineStops: '{count} stops',
+        stationsOn: 'Stations on {name}',
+        stationsPick: 'Pick a line to list its stations.',
+        omittedLines: '{count} more entry points are not drawn as lines.',
+        stationMeta: '{files} files · {layer}',
+        legendTitle: 'On the map',
+        legendRow: '{channel}: {metric}',
+        interchange: 'Interchange: {count} lines',
+        terminus: { data: 'Data store', external: 'External service', end: 'Ends here' },
+        untestedSegment: 'Dashed: no test covers it',
+        mapDescription: '{lines} lines across {stations} stations. Select a station for its details.',
+        stationAria: '{name}, {layer}, {files} files',
+        pinAria: '{count} findings at {name}',
+        moreStations: '+{count} more stations are not drawn.',
+        layers: {
+            entry: 'Entry points', presentation: 'Presentation', application: 'Application', domain: 'Domain',
+            infrastructure: 'Infrastructure', other: 'Other',
+        },
+        pathTitle: 'Path',
+        pathEmpty: 'Pick a line or a station to read its path.',
+        pathStep: 'Stop {n} of {total}',
+        pathBack: 'Previous stop',
+        pathNext: 'Next stop',
+        pathHop: '{kind} · {count}',
+        actTitle: 'Act',
+        actScope: 'Scope: {scope}',
+        actScopeAll: 'Whole graph',
+        showFiles: 'Show files',
+        levelOf5: '{level} of 5',
+        stationFacts: 'About this station',
+        provenance: { deterministic: 'Deterministic', heuristic: 'Heuristic', runtime: 'Runtime' },
+        resolveFinding: 'Resolve',
+        resolveFindingAria: 'Resolve: {title}',
+        pipesCapped: 'Showing only the first {count} pipes.',
+        kindsLegend: 'Finding kinds',
+        noDirectReference: 'no direct reference',
+        testsCapped: 'The request names only the first {count} endpoints.',
+        imageTooLarge: 'That image is larger than {size} MB.',
+        historyCapped: 'Showing only the latest {count} commits.',
+        skippedUploads: '{count} files were not stored.',
+        skipReasons: { tooLarge: 'Too large to store', unreadable: 'Could not be read', rateLimited: 'Server was busy', unsupported: 'Not a supported file', other: 'Other reason' },
+        system: {
+            description: 'System view: {tiers} tiers, {components} components. Select a component for its details.',
+            componentAria: '{name}, {files} files, {findings} findings',
+            antiBar: 'Findings by kind',
+            data: 'Data and external services',
+            dataEmpty: 'No data store or external service ends a line.',
+            empty: 'There are no components to draw.',
+        },
+        heat: {
+            description: 'Heat grid: {layers} layers, {components} components. Select a cell for its details.',
+            cellAria: '{name}, {files} files',
+            legend: 'Cell size: {size} · Colour: {colour} · Bar: {bar}',
+            empty: 'There are no components to draw.',
+        },
+        sequence: {
+            description: 'Sequence of {stops} stops and {messages} messages.',
+            empty: 'Pick a line or a station to draw its sequence.',
+            messageAria: '{from} to {to}: {label}',
+        },
+        sync: {
+            loading: 'Reading the sync status…',
+            failed: 'The sync status could not be read.',
+            localTitle: 'Local',
+            serverTitle: 'Server',
+            files: 'Files',
+            edges: 'Edges',
+            docs: 'Docs',
+            notUploaded: 'Not uploaded yet',
+            pipelineTitle: 'Pipeline',
+            skippedTitle: 'Skipped files',
+            skippedNone: 'Nothing was skipped.',
+            skippedRow: '{path} · {size} · {reason}',
+            skippedRowNoSize: '{path} · {reason}',
+            edgesNotMeasured: 'Not measured',
+            skippedUnknown: 'Unknown: no review recorded what it skipped.',
+            truncatedNote: 'The graph was cut short (truncated).',
+            sourcesTitle: 'Data sources',
+            excludedTitle: 'Excluded folders',
+            excludedNote: 'These folders are never read.',
+            barAria: '{label}: local {local}, server {server}',
+        },
+        syncSteps: { walk: 'Files walked', graph: 'Graph built', upload: 'Uploaded', match: 'Server matches local', analyse: 'Sources collected', skipped: 'Nothing skipped' },
+        syncStates: { ok: 'Done', pending: 'Waiting', attention: 'Needs attention' },
+        syncSources: { code: 'Code', docs: 'Documents', coverage: 'Coverage', usage: 'Usage', traces: 'Traces', openapi: 'OpenAPI', history: 'History', owners: 'Owners' },
+        syncExcluded: { nested: 'Nested git checkouts', worktrees: '.worktrees folders', local: '*.local folders', vendored: 'Vendored _*_src folders' },
+        sourceStates: { collected: 'Collected', estimated: 'Estimated', absent: 'Not set up' },
+        coverage: {
+            notSetUpTitle: 'Coverage is not set up',
+            notSetUpBody: 'No coverage file (coverage-final.json or lcov.info) was found under the reviewed folder, so no coverage number is shown. Run the tests with coverage on, then review the folder again.',
+            kpiFiles: 'Files with coverage',
+            kpiFilesValue: '{count} of {total}',
+            kpiMean: 'Mean coverage',
+            kpiComplexity: 'Total complexity',
+            kpiRisky: 'Complex and under-tested',
+            scatterTitle: 'Complexity against coverage',
+            scatterAria: '{count} files plotted. Complexity runs left to right and coverage bottom to top.',
+            axisX: 'Complexity',
+            axisY: 'Coverage',
+            gapsTitle: 'Riskiest gaps',
+            gapsNone: 'No complex file is under-tested.',
+            gapRow: '{complexity} complexity · {coverage} covered',
+            runWithValues: 'Run with values',
+            promptTests: 'Prompt tests',
+            promptText: 'Write tests for {file}. It has complexity {complexity} and {coverage} line coverage. Cover the untested branches, run them and report the new coverage.',
+            noComplexity: 'Complexity has not been measured.',
+        },
+        patterns: {
+            notSetUpTitle: 'Patterns are not set up',
+            notSetUpBody: 'No pattern was detected in this folder, so the matrix is empty.',
+            matrixTitle: 'Pattern families by layer',
+            antiRow: 'Anti-pattern',
+            cellAria: '{family}, {layer}: {count}',
+            listTitle: 'Patterns found',
+            listRow: '{count} files',
+            listHint: 'Heuristic: read from names, exports, imports and size.',
+            antiTitle: 'Anti-patterns',
+            antiNone: 'No anti-patterns were found.',
+            resolve: 'Resolve',
+            showInTower: 'Show in Tower',
+            lights: '{family} lights {count} stations',
+        },
+        api: {
+            notSetUpTitle: 'No endpoints found',
+            notSetUpBody: 'No route registration was found. Routes are read from Hono and Express registrations.',
+            kpiEndpoints: 'Endpoints',
+            kpiUndocumented: 'Undocumented',
+            contractMissing: 'There is no OpenAPI contract in this folder, so every endpoint is undocumented.',
+            documented: 'Documented',
+            undocumented: 'Undocumented',
+            callers: 'Called from: {names}',
+            noCallers: 'No station imports this file.',
+            downloadFailed: 'The file could not be downloaded.',
+            tryIt: 'Try it',
+            requestLine: 'Request',
+            copyCurl: 'Copy as curl',
+            exportOpenapi: 'Export OpenAPI skeleton',
+            exportPostman: 'Export Postman collection',
+            contractTests: 'Contract tests',
+            contractTestsText: 'Write contract tests for these endpoints from the OpenAPI skeleton, run them and report each result: {routes}.',
+            groupAria: '{file}: {count} endpoints',
+        },
+        resolve: {
+            empty: 'Choose Resolve on a finding to work on it here.',
+            provenanceLabel: 'Source',
+            fixTitle: 'Deterministic fix',
+            fixIntro: 'A codemod can fix this kind of finding.',
+            applyFix: 'Apply the fix',
+            applying: 'Applying…',
+            applied: 'Applied on branch {branch}.',
+            appliedNoBranch: 'Applied.',
+            changedFiles: '{count} files changed',
+            failed: 'The fix could not be applied.',
+            promptTitle: 'Ask the agent',
+            promptIntro: 'No codemod exists for this kind, so the agent does the work.',
+            prompt: 'Prompt the agent',
+            noComposer: 'The host has no composer to send the request to.',
+            checksTitle: 'Checks',
+            checkFiles: 'The finding names {count} files.',
+            checkStations: 'It touches {count} stations.',
+            checkReview: 'Review the folder again to confirm the finding is gone.',
+            undoNote: 'Undo is not offered here: revert the branch to undo the change.',
+            show: 'Show',
+        },
+        simulate: {
+            pathTitle: 'Path to drive',
+            pathEmpty: 'Pick a line or a station first; the simulation drives its path.',
+            valuesLabel: 'Values to use',
+            valuesPlaceholder: 'amount=100, currency=EUR',
+            run: 'Ask the agent to run it',
+            requestText: 'Write and run a test that drives this path: {path}. Use these values: {values}. Report each step: what was called, what it returned, and where it failed.',
+            noValues: 'none given; choose sensible ones',
+            sent: 'Sent to the agent. The result comes from its run; nothing is shown before.',
+            noComposer: 'The host has no agent composer, so nothing can be run.',
+            note: 'Simulate never fakes a run. The agent writes the test, runs it and reports each step.',
+        },
+        pinpoint: {
+            label: 'Screenshot',
+            button: 'Screenshot',
+            hint: 'Paste, drop or pick a screenshot to find the code behind it.',
+            reading: 'Reading the screenshot…',
+            failed: 'The screenshot could not be read.',
+            noMatch: 'Nothing in the code matched this screenshot.',
+            thumbAlt: 'Your screenshot',
+            descriptionTitle: 'What it shows',
+            anchorsTitle: 'Text read from the image',
+            matchesTitle: 'Where it is in the code',
+            diagnose: 'Diagnose with the agent',
+            diagnoseText: 'A screenshot shows: {description}. The code behind it, in order: {path}. Findings on that path: {findings}. Find out what is wrong and fix it.',
+            noFindings: 'none',
+            clear: 'Clear',
+            dropHere: 'Drop a screenshot here',
+            clearAria: 'Clear screenshot',
+            notImage: 'That file is not an image.',
+        },
+        pinpointProvenance: { vision: 'Vision', exact: 'Exact match', catalog: 'Catalog key', import: 'Import' },
+        time: {
+            label: 'History',
+            aria: 'History: pick a commit to mark the stations it changed',
+            now: 'Now',
+            commitAria: '{title}, {at}',
+            changed: '{count} stations changed in this commit',
+        },
+    },
 };
 
 /** Host labels over the defaults, one level deep for the nested maps. */
@@ -404,5 +812,17 @@ export function resolveLabels(partial?: Partial<KnowledgeGraphLabels>): Knowledg
         fix: { ...d.fix, ...partial.fix },
         origins: { ...d.origins, ...partial.origins },
         phases: { ...d.phases, ...partial.phases },
+        surface: mergeSurface(d.surface, partial.surface),
     };
+}
+
+/** The surface words over the defaults, one map deeper (its maps hold strings only). */
+function mergeSurface(d: SurfaceLabels, partial?: Partial<SurfaceLabels>): SurfaceLabels {
+    if (!partial) return d;
+    const out: Record<string, unknown> = { ...d, ...partial };
+    for (const key of Object.keys(d) as Array<keyof SurfaceLabels>) {
+        const base = d[key];
+        if (typeof base === 'object') out[key] = { ...base, ...(partial[key] as object | undefined) };
+    }
+    return out as unknown as SurfaceLabels;
 }

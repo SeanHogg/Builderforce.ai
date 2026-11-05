@@ -57,6 +57,40 @@ export function codeFixture(root = 'code'): KnowledgeGraph {
     ]);
 }
 
+/**
+ * A small system with entry points, areas and the code-pack badges the surface reads: two
+ * entry files (one inside an area, one in an area-less `cron/` folder), four layers, coverage,
+ * complexity, churn, owners and patterns on some files, and two findings.
+ */
+export function surfaceFixture(root = 'sys'): KnowledgeGraph {
+    const area = (name: string, importance: number): KNode =>
+        node(root, `area/${name}`, { kind: 'area', label: name, pack: 'code', importance });
+    const a = (name: string) => src(root, `area/${name}`) as KNode['ref'];
+    const f = (path: string, partition: string, areaName: string | null, importance: number, badges?: KNode['badges']) =>
+        node(root, path, { pack: 'code', partition, importance, ...(areaName ? { area: a(areaName) } : {}), ...(badges ? { badges } : {}) });
+    const nodes = [
+        area('Web app', 0.6), area('API', 0.9), area('repositories', 0.4),
+        f('web/main.tsx', 'entry', 'Web app', 0.5),
+        f('web/page.tsx', 'presentation', 'Web app', 0.4),
+        f('api/routes.ts', 'presentation', 'API', 0.7, { complexity: 30, maxComplexity: 9, churn: 12, routes: 'GET /users/:id;POST /users' }),
+        f('api/useCase.ts', 'application', 'API', 0.8, { complexity: 12, coverage: 0.8, churn: 4, owner: 'platform', patterns: 'repository, adapter' }),
+        f('db/repo.ts', 'infrastructure', 'repositories', 0.4, { complexity: 5, coverage: 0.2, churn: 2, owner: 'platform', cloneGroup: 'g1' }),
+        f('cron/job.ts', 'entry', null, 0.1),
+    ];
+    const ref = (path: string) => src(root, path);
+    const edges = [
+        edge(ref('web/main.tsx'), ref('web/page.tsx'), 'references', { verdict: 'allowed' }),
+        edge(ref('web/page.tsx'), ref('api/routes.ts'), 'references', { verdict: 'allowed' }),
+        edge(ref('api/routes.ts'), ref('api/useCase.ts'), 'references', { verdict: 'allowed' }),
+        edge(ref('api/useCase.ts'), ref('db/repo.ts'), 'references', { verdict: 'allowed' }),
+        edge(ref('cron/job.ts'), ref('api/useCase.ts'), 'references', { verdict: 'skips' }),
+    ];
+    return graph(root, ['code'], nodes, edges, [
+        finding('partition-violation', 'code', [ref('cron/job.ts'), ref('api/useCase.ts')], 'error', { verdict: 'skips', from: 'entry', to: 'application', kind: 'references' }),
+        finding('clone-group', 'code', [ref('db/repo.ts'), ref('api/routes.ts')], 'warn', { group: 'g1', members: 2 }),
+    ]);
+}
+
 export function docsFixture(root = 'docs'): KnowledgeGraph {
     const d = (path: string, partition: string, importance: number) => node(root, path, { partition, importance });
     const a = d('lease.md', '(root)', 0.9), b = d('policy/termination.md', 'policy', 0.6), o = d('notes/old.md', 'notes', 0.1);
@@ -132,14 +166,23 @@ export function fixtureSource(graphs: KnowledgeGraph[], opts: { review?: boolean
 
 /** What `openList` needs from testing-library, injected so this module imports none (it ships in the source-only package). */
 export interface ListOpener {
-    screen: { findByRole(role: 'button', options: { name: string }): Promise<Element>; findByTestId(id: string): Promise<HTMLElement> };
+    screen: {
+        findByRole(role: 'button', options: { name: string }, waitFor?: { timeout?: number }): Promise<Element>;
+        findByTestId(id: string, options?: undefined, waitFor?: { timeout?: number }): Promise<HTMLElement>;
+    };
     fireEvent: { click(element: Element): unknown };
 }
 
-/** The view opens on the 2D graph; tests that read the list (its accessible text alternative) switch to it with this. */
+/** The camera bar appears only after the graph has loaded and laid out; a role query over a big jsdom tree is slow, so wait generously. */
+const CAMERA_WAIT = { timeout: 20_000 };
+
+/**
+ * The view opens on the Map (or the 2D graph without entry points); tests that read the list (its accessible text
+ * alternative) switch to it with this. It waits for the camera bar to exist, so it does not depend on load timing.
+ */
 export async function openList({ screen, fireEvent }: ListOpener, name = 'List'): Promise<HTMLElement> {
-    fireEvent.click(await screen.findByRole('button', { name }));
-    return screen.findByTestId('kg-list');
+    fireEvent.click(await screen.findByRole('button', { name }, CAMERA_WAIT));
+    return screen.findByTestId('kg-list', undefined, CAMERA_WAIT);
 }
 
 /** Findings render their rows only once a group is opened: opens every collapsed group under `root`. */

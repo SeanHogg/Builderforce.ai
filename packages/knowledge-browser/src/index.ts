@@ -6,6 +6,7 @@
  */
 
 export { createKnowledgeSource, type DirectoryProvider, type KnowledgeSourceOptions } from './knowledgeSource';
+export type { PinpointHost } from './pinpoint';
 export { runReview, type RunReviewOptions, type WorkerFactory } from './reviewWorkerClient';
 export { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
 export { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ReviewStart, type ToReviewWorker } from './reviewProtocol';

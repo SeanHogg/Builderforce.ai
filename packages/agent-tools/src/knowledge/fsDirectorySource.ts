@@ -9,7 +9,8 @@
  *   read   — the file as text (memory's binary check and size cap decide what is used);
  *   watch  — the port's watcher, reporting root-relative paths of listed files only.
  *
- * Install and build trees and VCS stores ({@link KNOWLEDGE_SKIP_DIRS}, the ONE list every
+ * Install and build trees, VCS stores, `.worktrees/`, `*.local/`, vendored `_*_src/` and nested git
+ * checkouts ({@link KNOWLEDGE_SKIP_DIRS}, the ONE list every
  * host walks by — the browser's sources test paths with {@link isSkippedPath}) are never walked. Inside
  * `.builderforce/` only the review's own inputs are listed (the ignore file, the layer
  * override) — snapshots and indexes are never sources. `.gitignore` /
@@ -18,10 +19,8 @@
 
 import { mediaTypeOfPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import type { SourceDocument } from '@seanhogg/builderforce-memory/ingest';
-import { WORKSPACE_SKIP_DIRS } from '../skipDirs.js';
-
-/** Never walked, whatever the host skips. */
-const VCS_DIRS: ReadonlySet<string> = new Set(['.git', '.hg', '.svn']);
+import { isSkippedDirName, isVcsMetadataName, skippedDirReason, WORKSPACE_SKIP_DIRS, type SkippedFolder } from '../skipDirs.js';
+import { slashPath } from './rootRelative.js';
 
 /** Directory names no review walks, on any host (the definition index's list). */
 export const KNOWLEDGE_SKIP_DIRS: ReadonlySet<string> = WORKSPACE_SKIP_DIRS;
@@ -32,9 +31,15 @@ export function normalizePath(path: string): string {
 }
 
 /** Whether a root-relative path sits under a skipped directory (a trailing `/` names a directory). */
-export function isSkippedPath(path: string, skipDirs: ReadonlySet<string> = KNOWLEDGE_SKIP_DIRS): boolean {
+export function isSkippedPath(
+    path: string,
+    skipDirs: ReadonlySet<string> = KNOWLEDGE_SKIP_DIRS,
+    /** Nested checkouts a walk found (see `skippedFolders()`): everything under one is skipped too. */
+    nestedCheckouts?: ReadonlySet<string>,
+): boolean {
     const dirs = path.replace(/\\/g, '/').split('/').slice(0, -1);
-    return dirs.some((name) => skipDirs.has(name) || VCS_DIRS.has(name));
+    if (dirs.some((name) => isSkippedDirName(name, skipDirs) || isVcsMetadataName(name))) return true;
+    return !!nestedCheckouts && dirs.some((_, i) => nestedCheckouts.has(dirs.slice(0, i + 1).join('/')));
 }
 
 /** The document memory reads for one text file of a root. */
@@ -70,7 +75,6 @@ export interface FsDirectorySourceOptions {
     hashCache?: HashCache;
 }
 
-const norm = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '');
 const join = (a: string, b: string): string => (a ? `${a}/${b}` : b);
 
 /**
@@ -87,15 +91,23 @@ export function listsFile(rel: string): boolean {
     return !isBuilderforceState(rel);
 }
 
-export function createFsDirectorySource(opts: FsDirectorySourceOptions): DirectorySource {
+/** A directory source that remembers the folders its last walk left out. */
+export type FsDirectorySource = DirectorySource & {
+    /** Folders the latest `list()` skipped by rule (nested checkouts, `.worktrees/`, `*.local/`, `_*_src/`), with the reason. */
+    skippedFolders(): SkippedFolder[];
+};
+
+export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirectorySource {
     const { fs, rootId, title, skipDirs = KNOWLEDGE_SKIP_DIRS } = opts;
-    const root = norm(opts.rootPath);
+    const root = slashPath(opts.rootPath);
     const cache: HashCache = opts.hashCache ?? new Map();
     const walks = (rel: string): boolean => {
         const name = rel.slice(rel.lastIndexOf('/') + 1);
-        return !skipDirs.has(name) && !VCS_DIRS.has(name);
+        return !isSkippedDirName(name, skipDirs) && !isVcsMetadataName(name);
     };
-    const underWalked = (rel: string): boolean => !isSkippedPath(rel, skipDirs);
+    let skipped: SkippedFolder[] = [];
+    const nested = new Set<string>();
+    const underWalked = (rel: string): boolean => !isSkippedPath(rel, skipDirs, nested);
 
     const hashOf = async (abs: string): Promise<{ hash: string; size: number }> => {
         const st = await fs.stat(abs);
@@ -109,6 +121,9 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): Directo
     async function* list(): AsyncIterable<{ path: string; hash: string; size: number }> {
         const queue: string[] = [''];
         let listed = 0;
+        skipped = [];
+        nested.clear();
+        let rootIsRepo = false;
         while (queue.length > 0) {
             const dir = queue.shift()!;
             let entries: Array<[string, 'file' | 'dir']>;
@@ -117,13 +132,26 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): Directo
             } catch {
                 continue; // An unreadable folder is skipped, never a failed review.
             }
+            // A root that is itself a git work tree skips a child folder with its own `.git` DIRECTORY (a vendored clone). A `.git` FILE
+            // is a submodule / worktree link inside this repository: its files are this repository's. A root that is no work tree (a
+            // folder of several repositories) keeps every child.
+            if (!dir) rootIsRepo = entries.some(([name]) => name === '.git');
+            else if (rootIsRepo && entries.some(([name, kind]) => name === '.git' && kind === 'dir')) {
+                nested.add(dir);
+                skipped.push({ path: dir, reason: 'nested-checkout' });
+                continue;
+            }
             for (const [name, kind] of [...entries].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
                 const rel = join(dir, name);
                 if (kind === 'dir') {
                     if (walks(rel)) queue.push(rel);
+                    else {
+                        const reason = skippedDirReason(name);
+                        if (reason) skipped.push({ path: rel, reason });
+                    }
                     continue;
                 }
-                if (!listsFile(rel)) continue;
+                if (isVcsMetadataName(name) || !listsFile(rel)) continue; // a `.git` FILE is a link to a repository store, not a source
                 try {
                     const { hash, size } = await hashOf(`${root}/${rel}`);
                     yield { path: rel, hash, size };
@@ -143,7 +171,7 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): Directo
     const watch = fs.watch
         ? (cb: (paths: string[]) => void) => fs.watch!(root, (paths) => {
             const rel = paths
-                .map(norm)
+                .map(slashPath)
                 .filter((p) => p.startsWith(`${root}/`))
                 .map((p) => p.slice(root.length + 1))
                 .filter((p) => listsFile(p) && underWalked(p));
@@ -151,5 +179,5 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): Directo
         })
         : undefined;
 
-    return { rootId, title, list, read, ...(watch ? { watch } : {}) };
+    return { rootId, title, list, read, skippedFolders: () => [...skipped], ...(watch ? { watch } : {}) };
 }

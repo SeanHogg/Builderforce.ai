@@ -20,7 +20,7 @@
  *   judgeEstimate()   GET  …/knowledge/judge/estimate → ≈ USD of one judged section (+ local)
  *   getExtracted      GET  …/knowledge/extracted/:hash (404 → undefined)
  *   putExtracted      PUT  …/knowledge/extracted/:hash — a 413 (payload_too_large) is SKIPPED
- *                     and counted on `store.skippedTooLarge`, never thrown; a 400
+ *                     and listed on `store.skipped` ({path, bytes, reason}), never thrown; a 400
  *                     source_hash_mismatch still throws
  *   preloadExtracted  POST …/knowledge/extracted/bulk in chunks of PRELOAD_CHUNK hashes —
  *                     a best-effort hint: returned entries are cached per hash and
@@ -59,6 +59,7 @@ import {
   type KnowledgeClient,
   type KnowledgeClientOptions,
   type KnowledgeScopeRecord,
+  type SkippedUpload,
 } from './types.js';
 
 /** Rows (facts + relations + stale marks) one write call carries — the server's bound. */
@@ -229,7 +230,12 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
       // count — the review keeps going and the file's facts are still written. Anything else
       // (e.g. 400 source_hash_mismatch) still throws.
       if (error instanceof KnowledgeApiError && error.status === 413) {
-        skippedTooLarge += 1;
+        // Named by the file's source ref (the extracted entries carry it), sized in encoded bytes.
+        skipped.push({
+          path: extracted[0]?.sourceRef ?? `extracted/${hash}`,
+          bytes: new TextEncoder().encode(JSON.stringify(extracted)).length,
+          reason: 'too-large',
+        });
         return;
       }
       throw error;
@@ -241,12 +247,12 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
   // answers a cached hash (including cached misses) without a round trip.
   // ---------------------------------------------------------------------------
   const extractedCache = new Map<string, Extracted[] | undefined>();
-  let skippedTooLarge = 0;
+  const skipped: SkippedUpload[] = [];
 
-  // The client store exposes KnowledgeStore plus the 413-skip counter (not part of the
-  // interface — a host reads it for progress/reporting).
+  // The client store exposes KnowledgeStore plus the skipped-upload list (not part of the
+  // interface — a host reads it for progress/reporting and sync status).
   const store: KnowledgeStore & {
-    readonly skippedTooLarge: number;
+    readonly skipped: readonly SkippedUpload[];
     readonly preloadExtracted: (hashes: readonly string[]) => Promise<void>;
     batched: <T>(work: (flush: () => Promise<void>) => Promise<T>) => Promise<T>;
   } = {
@@ -291,14 +297,17 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
        * last chunk, so there is nothing to flush or bound locally — `work` runs as-is.
        */
       batched: async <T>(work: (flush: () => Promise<void>) => Promise<T>): Promise<T> => work(async () => {}),
-      /** Count of `putExtracted` calls skipped because the payload was too large (HTTP 413). */
-      get skippedTooLarge(): number {
-        return skippedTooLarge;
+      /** `putExtracted` calls skipped, with path, size and reason (413 => 'too-large'). */
+      get skipped(): readonly SkippedUpload[] {
+        return skipped;
       },
   };
 
   return {
     store,
+    get skipped(): readonly SkippedUpload[] {
+      return skipped;
+    },
     judgement: {
       judge: (req: JudgementRequest): Promise<JudgementResult> =>
         jsonCall<JudgementResult>('/knowledge/judge', {

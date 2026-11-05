@@ -302,6 +302,14 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
+- **Bogus "missing" doc nodes from shell scripts remain in Builderforce until memory 2026.10.40 is in use.**
+  - The fix is in builderforce-memory 2026.10.40 (commits c1d581c and 0f58614). It has three parts:
+    - Scripts are never docs.
+    - `[[x]]` inside code is not a link.
+    - `EXTRACTOR_VERSION` 2, so stored reviews re-extract.
+  - Builderforce still pins `^2026.10.39`.
+  - Agent-tools' new code badges (complexity, routes, patterns, shell as code) also only reach files whose content has not changed once that version is in use. The extract cache is keyed on memory's `EXTRACTOR_VERSION`.
+  - *Blocker: push tag `v2026.10.40` in builderforce-memory to publish it. Publishing is a public release the session could not perform. Then bump `@seanhogg/builderforce-memory` to `^2026.10.40` in every lockfile and re-review the agentic workspace. That last step closes this entry and checks the PRD 38 "Done when" numbers (at most 5% No partition; server sources equal local).*
 - **The editor can act in a tenant where the person has no connections.** One VS Code session ran in tenant #1 as `contributor`, while its Kimi, Anthropic, MiniMax, Moonshot and xAI accounts and chats #195/#198 belonged to another workspace. *Blocker: which tenant the key is bound to and why it was selected needs the live membership and key rows.*
 - **Direct calls for xAI, MiniMax, Moonshot and Anthropic accounts are not built.** The half-built attempt in a6937d561 was removed: only Kimi has a server credential source (`localCredential.ts`). Add a source per provider, then its runtime entry, to let these accounts run from the person's machine.
 - **Packaging does not check installed dependencies against declared ranges.** `clients/vscode/node_modules` held memory 2026.10.35 and engine 2026.10.28 under `^2026.10.37`. Make `ensure-linked-builds.mjs` fail on a mismatch.
@@ -350,6 +358,12 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **202 unscoped tenant queries in 89 files.**
 - **14 of 37 permissions advisory.**
 - **God modules:** `builtinMcpService` 4,607, `adminRoutes` 2,994, `creationSessionRoutes` 2,994, `TaskMgmtContent` 2,761, `agentHostRoutes` 2,173, `ManagerService` 2,126, `managerDiagnostics` 1,878, `boardsync/providers` 1,859, `extension.ts` 1,707, `api/src/index.ts` 1,536, `jobRoutes` 1,261, `MarketplacePageClient` 1,161.
+- **QA blind spots:**
+  - Coverage is configured only in `agent-runtime/vitest.config.ts`, and there with `all: false`, so files no test loads never count against the thresholds.
+  - api, frontend, clients/vscode, packages and brain-embedded have tests (1,369, 699, 190, 409 and 196 files) but no coverage.
+  - The API "OpenAPI" is `api/src/openapi/schema.ts`: TypeScript interfaces documenting 9 endpoints, against 2,554 route registrations in 280 modules under `presentation/routes`; only 12 modules have zod request schemas (`*.schemas.ts`). There is no machine-readable spec, so there is no contract testing and no Postman export.
+  
+  Fixing this unblocks the visualizer's Coverage lens and API view. *The visualizer's Coverage and API panels shipped on 2026-11-05 (VS Code 2026.10.130). They show coverage as "Not set up" and every route as undocumented until this is fixed in the repo: v8 coverage with `all: true` per package, and an OpenAPI 3.1 document generated from the routes.*
 - **`builderforceApi.ts` 9,988 lines.** Split to `lib/api/<domain>.ts`.
 - **Unused primitives:** ~21 `fetchProjects()` callers, 128 raw storage sites, 76 `canEdit` guards, 55 `smoothstep` literals; `stage.connect` has no production caller.
 - **Canvas real-browser pass** misses the `+` command bar, bottom nav and Brain-not-covering.

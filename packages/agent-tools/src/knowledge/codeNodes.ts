@@ -27,6 +27,24 @@ export const CODE_BADGES = {
     unusedExports: 'unusedExports',
     /** knip: unused dependencies declared by the file (a package manifest). */
     unusedDependencies: 'unusedDependencies',
+    /** Sum of cyclomatic complexity over the file's functions (deterministic). */
+    complexity: 'complexity',
+    /** The worst function's cyclomatic complexity (deterministic). */
+    maxComplexity: 'maxComplexity',
+    /** 0..1 line coverage from `coverage-final.json` / `lcov.info` under the root (runtime). */
+    coverage: 'coverage',
+    /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
+    churn: 'churn',
+    /** First CODEOWNERS owner of the file (deterministic). */
+    owner: 'owner',
+    /** Comma-separated design-pattern ids (heuristic). */
+    patterns: 'patterns',
+    /** `METHOD path` route registrations joined by `;`, capped at 50 (deterministic). */
+    routes: 'routes',
+    /** The rule that placed the file's layer: `folder`, `name` or `imports`. */
+    layerRule: 'layerRule',
+    /** `1` on a package entry point a manifest names (`main` / `bin` / `exports`): layer resolution reads it, never the filesystem. */
+    entry: 'entry',
 } as const;
 
 /**
@@ -69,3 +87,10 @@ export function rootLevelExtracted(tag: string, node: KNode, edges: KEdge[]): Ex
 }
 
 export { basenameOf };
+
+/**
+ * The `sourceRef` of the ONE root-level Extracted that carries a review's signals (coverage,
+ * churn, owner, entry). Not a `src:` ref, so it is no source of the root; its nodes are `src:`
+ * file nodes that exist only where the per-file parser also made one.
+ */
+export const ROOT_SIGNALS_REF: NodeRef = 'ent:code:root-signals';
