@@ -10055,39 +10055,113 @@ var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
 import {
-  compareStr as compareStr2,
+  compareStr as compareStr4,
   loadPartitions,
   normalizeKey
 } from "@seanhogg/builderforce-memory/knowledge";
 import { CONTENT_HASH_FIELD, hashText as hashText3 } from "@seanhogg/builderforce-memory/ingest";
 
-// ../packages/agent-tools/src/knowledge/codeFindings.ts
-import {
-  compareStr,
-  findingId,
-  requestKeyFor,
-  MAX_FINDING_NODES
-} from "@seanhogg/builderforce-memory/knowledge";
+// ../packages/agent-tools/src/knowledge/codeComplexity.ts
+var TERNARY = String.raw`\?(?![.:,)=]|\(\s*\)\s*:)`;
+var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
+var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
 import { canonicalJson, srcRef } from "@seanhogg/builderforce-memory/knowledge";
 import { areaOfPath } from "@seanhogg/builderforce-memory/working";
 import { hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
 
+// ../packages/agent-tools/src/knowledge/codePatterns.ts
+import { compareStr } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/codeRoutes.ts
+var METHODS = "get|post|put|patch|delete|options|head|all";
+var ROUTER_FILE = new RegExp(
+  String.raw`\bfrom\s*['"](?:hono(?:/[^'"]*)?|@hono/[^'"]*|express|fastify|koa-router|@koa/router|[^'"]*/router(?:\.js)?)['"]` + String.raw`|\brequire\s*\(\s*['"](?:express|hono)['"]\s*\)|\bnew\s+Hono\b|\bexpress\.Router\s*\(|\bRouter\s*\(\s*\)`
+);
+var REGISTRATION = new RegExp(String.raw`([A-Za-z_$][\w$]*)\s*\.\s*(${METHODS}|route)\s*\(\s*(['"` + "`" + String.raw`])(/[^'"` + "`" + String.raw`]*)\3\s*(,)?`, "g");
+var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "`" + String.raw`])(/[^'"` + "`" + String.raw`]*)\2\s*,`, "y");
+var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
+
+// ../packages/agent-tools/src/knowledge/codeFindings.ts
+import {
+  compareStr as compareStr2,
+  findingId,
+  requestKeyFor,
+  MAX_FINDING_NODES
+} from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/codeLayers.ts
+import { compareStr as compareStr3, matchGlob as matchGlob2 } from "@seanhogg/builderforce-memory/knowledge";
+var FOLDER_LAYERS = {
+  presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
+  application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
+  domain: ["domain", "models", "entities", "types"],
+  infrastructure: ["infrastructure", "db", "adapters", "repositories", "providers", "storage", "persistence", "migrations"]
+};
+var NOT_AT_TOP_LEVEL = /* @__PURE__ */ new Set(["clients"]);
+var NAME_RULES = [
+  { layer: "presentation", globs: ["*.tsx", "*.jsx", "*.vue", "*.svelte"], beatsFolder: true },
+  { layer: "infrastructure", globs: ["*Repository.*", "*Adapter.*", "*Provider.*", "*Storage.*", "*Gateway.*", "*Dao.*"] },
+  { layer: "domain", globs: ["*.types.*", "*.model.*", "*.entity.*", "*Model.*", "*Entity.*", "*Types.*", "types.*", "models.*", "entities.*"] },
+  { layer: "application", globs: ["*Service.*", "*UseCase.*", "*Client.*", "*Command.*", "*Query.*", "*Manager.*"] },
+  { layer: "presentation", globs: ["use*.*"], guard: /^use[A-Z]/ },
+  { layer: "presentation", globs: ["*Route.*", "*Routes.*", "*Handler.*", "*Controller.*", "*Page.*", "*View.*", "*.route.*"] }
+];
+var ALLOW = {
+  presentation: ["application", "domain"],
+  application: ["domain"],
+  domain: [],
+  infrastructure: ["domain", "application"]
+};
+var TABLE_LAYERS = Object.keys(FOLDER_LAYERS);
+function defaultLayerRegistry() {
+  return {
+    layerSet: "default",
+    partitions: TABLE_LAYERS.map((id, order) => ({
+      id,
+      order,
+      match: [
+        ...FOLDER_LAYERS[id].map((seg) => NOT_AT_TOP_LEVEL.has(seg) ? `**/*/${seg}/**` : `**/${seg}/**`),
+        ...NAME_RULES.filter((r) => r.layer === id && !r.guard).flatMap((r) => r.globs.map((g) => `**/${g}`))
+      ]
+    })),
+    allow: { ...ALLOW }
+  };
+}
+var CODE_LAYERS = defaultLayerRegistry();
+
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
 import { DOCS_PACK } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-import { CLONE_GROUP_BADGE, compareStr as compareStr3, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";
+import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
 import {
-  buildGraph,
   DEFAULT_REVIEW_MODEL_CALLS,
   planDetail,
   reviewDirectory,
   srcRef as srcRef4
 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/codeGraph.ts
+import {
+  buildGraph
+} from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/rootId.ts
+import { sha256Hex as sha256Hex2 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/codeRootSignals.ts
+import { canonicalJson as canonicalJson2, compareStr as compareStr6 } from "@seanhogg/builderforce-memory/knowledge";
+import { hashText as hashText4 } from "@seanhogg/builderforce-memory/ingest";
+
+// ../packages/agent-tools/src/knowledge/codeCoverage.ts
+var MAX_FILE_BYTES = 40 * 1024 * 1024;
+
+// ../packages/agent-tools/src/knowledge/codeOwners.ts
+import { matchGlob as matchGlob3 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
 import {
@@ -10096,7 +10170,7 @@ import {
   filesManifestKey,
   isBinaryText,
   knownKeysOfEntities,
-  sha256Hex as sha256Hex2,
+  sha256Hex as sha256Hex3,
   srcRef as srcRef3
 } from "@seanhogg/builderforce-memory/knowledge";
 
@@ -10118,7 +10192,7 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
 ].join("\n");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-import { hashText as hashText4 } from "@seanhogg/builderforce-memory/ingest";
+import { hashText as hashText5 } from "@seanhogg/builderforce-memory/ingest";
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
 var FAILED_RETAIN_MS = 2 * 6e4;
 var cache = createShaCache({
@@ -10129,23 +10203,30 @@ var cache = createShaCache({
 import {
   factRef,
   pathOfRef,
-  sha256Hex as sha256Hex3
+  sha256Hex as sha256Hex4
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-import { loadKnowledgeIndex, sha256Hex as sha256Hex4 } from "@seanhogg/builderforce-memory/knowledge";
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
-import { sha256Hex as sha256Hex5 } from "@seanhogg/builderforce-memory/knowledge";
+import { loadKnowledgeIndex, sha256Hex as sha256Hex5 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 import { factKeyOf } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/portablePack.ts
 import {
-  canonicalJson as canonicalJson2,
-  compareStr as compareStr4
+  canonicalJson as canonicalJson3,
+  compareStr as compareStr7
 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/pinpointMatch.ts
+import { srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
+var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
+var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
+var PINPOINT_VISION_SYSTEM = [
+  "You read a screenshot of a software product.",
+  'Reply with JSON only: {"description": one line saying what the screen shows and, if it looks stuck or broken, how,',
+  '"texts": the exact visible strings (labels, headings, buttons, status text, error messages), at most 12, verbatim}.'
+].join(" ");
 
 // ../packages/agent-tools/src/toolSearch.ts
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -24601,7 +24682,7 @@ function relevantTools(tools, query) {
 // src/runStore/callPreflight.ts
 import { stillInWorkingContext } from "@seanhogg/builderforce-memory/working";
 function callPreflight(run) {
-  const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
+  const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage: readCoverage2, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
   return async (rawCall, ctx) => {
     const iter = ctx.step;
@@ -24701,11 +24782,11 @@ function callPreflight(run) {
       }
     }
     if (isDedupableRead(call2.name)) {
-      if (readCoverage.isRepeat(call2.name, args)) {
-        const cached2 = readCoverage.cachedResult(call2.name, args);
+      if (readCoverage2.isRepeat(call2.name, args)) {
+        const cached2 = readCoverage2.cachedResult(call2.name, args);
         if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
           const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
-          const visit = readCoverage.record(call2.name, args);
+          const visit = readCoverage2.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
           const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
           const replayed = trimToolResult(call2.name, cached2.result ?? null, {
@@ -24734,9 +24815,9 @@ ${revisit}` : replayNote,
         run.cacheStreak.served(iter);
         return { result: { data: stub } };
       }
-      const covered = readCoverage.coveredRead(call2.name, args);
+      const covered = readCoverage2.coveredRead(call2.name, args);
       if (covered) {
-        const visit = readCoverage.record(call2.name, args);
+        const visit = readCoverage2.record(call2.name, args);
         const target = visit ? visitTarget(args) : void 0;
         const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
         const note = revisit ? `${covered.note}
@@ -24763,9 +24844,9 @@ ${revisit}` : covered.note;
         run.cacheStreak.served(iter);
         return { result: { data: stub } };
       }
-      const derived = readCoverage.derivedSearch(call2.name, args);
+      const derived = readCoverage2.derivedSearch(call2.name, args);
       if (derived) {
-        const visit = readCoverage.record(call2.name, args);
+        const visit = readCoverage2.record(call2.name, args);
         const target = visit ? visitTarget(args) : void 0;
         const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
         const served = trimToolResult(call2.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
@@ -24789,7 +24870,7 @@ ${revisit}` : covered.note;
         run.cacheStreak.served(iter);
         return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
       }
-      readCoverage.invalidate(call2.name, args);
+      readCoverage2.invalidate(call2.name, args);
     }
     return call2 === rawCall ? void 0 : { rewrite: call2 };
   };
@@ -24812,7 +24893,7 @@ function declineMalformedCall2(run, call2) {
   return { data: declined, isError: true };
 }
 function callRunner(run) {
-  const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
+  const { c, chatId, req, readCoverage: readCoverage2, failures, writeLedger, placeholderLedger } = run;
   const { runTool } = req;
   return async (call2, ctx) => {
     const iter = ctx.step;
@@ -24874,7 +24955,7 @@ function callRunner(run) {
         }
       }
       if (isReadTool) {
-        const visit = readCoverage.record(call2.name, args);
+        const visit = readCoverage2.record(call2.name, args);
         const target = visit ? visitTarget(args) : void 0;
         advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
         if (advisory) {
@@ -24901,12 +24982,12 @@ ${delegate}` : delegate;
 
 // src/runStore/callPostStep.ts
 function callPostStep(run) {
-  const { c, readCoverage, usedTools } = run;
+  const { c, readCoverage: readCoverage2, usedTools } = run;
   return (call2, result, row) => {
     run.progress.observe(call2.name, call2.args, result);
     if (run.pendingReplay) {
       const replay = run.pendingReplay;
-      readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
+      readCoverage2.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
       run.pendingReplay = null;
       return void 0;
     }
@@ -24920,9 +25001,9 @@ function callPostStep(run) {
       return void 0;
     }
     if (ran.isReadTool && !isFailedToolResult(ran.out)) {
-      readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, ...ran.served !== void 0 ? { served: ran.served } : {}, anchor: row });
+      readCoverage2.cacheResult(call2.name, args, { result: ran.out ?? null, ...ran.served !== void 0 ? { served: ran.served } : {}, anchor: row });
     } else if (!isFailedToolResult(ran.out)) {
-      recordShellFileRead(readCoverage, call2.name, args, ran.out, ran.truncated !== true, row);
+      recordShellFileRead(readCoverage2, call2.name, args, ran.out, ran.truncated !== true, row);
     }
     pushTrace(c, {
       ts: nowIso(),

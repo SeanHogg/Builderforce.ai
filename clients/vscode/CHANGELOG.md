@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.131] — Shell scripts are code; the new per-file data reaches every file
+
+- **Shell scripts are code, not docs.** They no longer show up as documents. `[[x]]` inside code is no longer read as a link, so no "missing" doc nodes appear for it.
+- **Every file gets the new per-file data on its next review.** That data is complexity, coverage, churn, owners, patterns and routes. Stored reviews are re-extracted once, so files that have not changed get it too.
+- Built on builderforce-memory 2026.10.40.
+
 ## [2026.10.130] — Paste a screenshot, find the code; the knowledge view is a map
 
 - **Paste a screenshot.** Paste, drop or pick a screenshot in the ask bar. A vision model reads the visible text. The text is then traced through your translation catalogs and source to the files that show it, plus one import further. Each match says how it was found: exact, catalog or import. **Diagnose with the agent** hands the path and its findings to the agent.

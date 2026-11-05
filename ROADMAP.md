@@ -302,14 +302,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
-- **Bogus "missing" doc nodes from shell scripts remain in Builderforce until memory 2026.10.40 is in use.**
-  - The fix is in builderforce-memory 2026.10.40 (commits c1d581c and 0f58614). It has three parts:
-    - Scripts are never docs.
-    - `[[x]]` inside code is not a link.
-    - `EXTRACTOR_VERSION` 2, so stored reviews re-extract.
-  - Builderforce still pins `^2026.10.39`.
-  - Agent-tools' new code badges (complexity, routes, patterns, shell as code) also only reach files whose content has not changed once that version is in use. The extract cache is keyed on memory's `EXTRACTOR_VERSION`.
-  - *Blocker: push tag `v2026.10.40` in builderforce-memory to publish it. Publishing is a public release the session could not perform. Then bump `@seanhogg/builderforce-memory` to `^2026.10.40` in every lockfile and re-review the agentic workspace. That last step closes this entry and checks the PRD 38 "Done when" numbers (at most 5% No partition; server sources equal local).*
 - **The editor can act in a tenant where the person has no connections.** One VS Code session ran in tenant #1 as `contributor`, while its Kimi, Anthropic, MiniMax, Moonshot and xAI accounts and chats #195/#198 belonged to another workspace. *Blocker: which tenant the key is bound to and why it was selected needs the live membership and key rows.*
 - **Direct calls for xAI, MiniMax, Moonshot and Anthropic accounts are not built.** The half-built attempt in a6937d561 was removed: only Kimi has a server credential source (`localCredential.ts`). Add a source per provider, then its runtime entry, to let these accounts run from the person's machine.
 - **Packaging does not check installed dependencies against declared ranges.** `clients/vscode/node_modules` held memory 2026.10.35 and engine 2026.10.28 under `^2026.10.37`. Make `ensure-linked-builds.mjs` fail on a mismatch.

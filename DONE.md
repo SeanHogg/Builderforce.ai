@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-11-05 — Knowledge visualizer Option B+: transit map, questions, overlays, panels, and screenshot pinpoint (VS Code 2026.10.130 · memory 2026.10.40, unpublished)
+## ✅ RESOLVED 2026-11-05 — Knowledge visualizer Option B+: transit map, questions, overlays, panels, and screenshot pinpoint (VS Code 2026.10.130 · memory 2026.10.40, published 2026-11-05 and in use from VS Code 2026.10.131)
 
 - **One surface (PRD 38 "The visualizer, Option B+").**
   - **Views:** a transit map of lines from each entry point through the layers to stores and outside services; questions in place of lenses; Map, System, Graph, Mind map, Tower 3D, Heat, List and Sequence.

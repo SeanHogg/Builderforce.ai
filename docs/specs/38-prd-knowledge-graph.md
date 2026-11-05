@@ -35,8 +35,9 @@ The exact exception has not been observed. The failure card and the BuilderForce
 
 The surface shipped in VS Code 2026.10.130. DONE.md (2026-11-05) records what was built. Acceptance is still open:
 
-1. Publish builderforce-memory 2026.10.40. Bump Builderforce to it in every lockfile.
-2. Re-review the `agentic` workspace and check:
+Memory 2026.10.40 is published and in use from VS Code 2026.10.131.
+
+1. Re-review the `agentic` workspace with 2026.10.131 and check:
    - At most 5% of files are drawn as "No partition".
    - The server's source count equals the local count.
    - Pasting a screenshot of the review progress card filters to `ReviewProgress.tsx` → `labels.ts` → `useReviewRun.ts` → the review runner.
