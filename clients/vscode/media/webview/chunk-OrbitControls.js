@@ -1,4 +1,4 @@
-import{dy as sy,bq as ry,c$ as ay,r as He,j as Ai,dz as z1}from"./index.js";/**
+import{dC as sy,bu as ry,d3 as ay,r as He,j as Ai,dD as z1}from"./index.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT
