@@ -534,8 +534,12 @@ export class RepetitionLoopError extends StreamInterruptedError {
  * {@link chatErrorAction}.
  */
 async function defaultMapError(res: Response): Promise<Error> {
-  const body = await res.json().catch(() => ({}));
-  return brainRequestError(res.status, body, res.statusText);
+  return brainRequestError(res.status, await readErrorBody(res), res.statusText);
+}
+
+/** An error response's JSON body, or an empty object when it has none (a proxy's HTML page, an empty 5xx). */
+export async function readErrorBody(res: Response): Promise<unknown> {
+  return res.json().catch(() => ({}));
 }
 
 /**

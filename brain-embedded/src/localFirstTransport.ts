@@ -47,6 +47,7 @@ import {
   type StreamChatOptions,
   type StreamChatResult,
   type StreamHandlers,
+  readErrorBody,
 } from './streamChatCompletion';
 import { summarizeLocalFirstAttempt, type LocalFirstAttemptSummary } from './localFirstTraces';
 import { BrainRequestError, NOT_SIGNED_IN, PROVIDER_AUTH_REQUIRED, brainRequestError } from './chatError';
@@ -80,7 +81,7 @@ function refusesCredential(body: unknown): boolean {
  */
 function providerErrorMapper(provider: string, label: string): (res: Response) => Promise<Error> {
   return async (res) => {
-    const body = await res.json().catch(() => ({}));
+    const body = await readErrorBody(res);
     const mapped = brainRequestError(res.status, body, res.statusText);
     if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
     return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
