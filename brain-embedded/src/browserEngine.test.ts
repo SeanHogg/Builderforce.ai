@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BROWSER_ENGINE_BASE_URL, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import type { BrainStreamFn } from './brainRunStore';
-import {
-  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
-  createBrowserEngineProber,
-  promptApiEngine,
-  toPromptApiTurn,
-} from './browserEngine';
+import { createBrowserEngineProber, promptApiEngine, toPromptApiTurn } from './browserEngine';
+import { builtInModelIdentity } from './builtInAi/identity';
 import { createLocalFirstStream, localTransport } from './localFirstTransport';
 import { pageEnginesFetch } from './pageEngines/fetchShim';
 import { streamChatCompletion } from './streamChatCompletion';
@@ -14,11 +10,13 @@ import { streamChatCompletion } from './streamChatCompletion';
 /**
  * The browser's own model as a local-first runtime. Load-bearing:
  *
- *  - readiness is asked WITHOUT a download: `downloadable`/`downloading` is not offered;
+ *  - readiness is asked WITHOUT a download: `create()` is what starts a download, so it
+ *    is only ever called for a model that is `available` (never `downloadable`/`downloading`);
  *  - the in-page route speaks exactly the SSE the shared streamer parses, so a browser
  *    turn is indistinguishable from an Ollama one to the loop;
  *  - every refusal (tools, oversized, unavailable, a failure before the first delta) is
- *    a non-2xx, so the failover reaches the gateway before the user saw anything.
+ *    a non-2xx, so the failover reaches the gateway before the user saw anything;
+ *  - the model is named for THIS browser's vendor (Gemini Nano / Phi-4-mini), per PRD 42 A1.
  */
 
 const CHAT_URL = `${BROWSER_ENGINE_BASE_URL}/v1/chat/completions`;
@@ -74,11 +72,27 @@ function installLanguageModel(options: {
   return { factory, sessions };
 }
 
+/** The probe/engine name the model for THIS browser — stub Chrome's navigator so the
+ *  vendor identity resolves to Gemini Nano (PRD 42 · A1). */
+function installChrome() {
+  (globalThis as { navigator?: unknown }).navigator = {
+    userAgentData: { brands: [{ brand: 'Google Chrome', version: '138' }] },
+  };
+}
+
+/** Stub Edge's navigator so the vendor identity resolves to Phi-4-mini. */
+function installEdge() {
+  (globalThis as { navigator?: unknown }).navigator = {
+    userAgentData: { brands: [{ brand: 'Microsoft Edge', version: '138' }] },
+  };
+}
+
 const passthrough = vi.fn(async (_input: string, _init: RequestInit) => new Response('base', { status: 200 }));
 
 afterEach(() => {
   delete (globalThis as { LanguageModel?: unknown }).LanguageModel;
   delete (globalThis as { ai?: unknown }).ai;
+  delete (globalThis as { navigator?: unknown }).navigator;
   passthrough.mockClear();
   vi.restoreAllMocks();
 });
@@ -90,7 +104,8 @@ const post = (body: unknown, signal?: AbortSignal): RequestInit => ({
 });
 
 describe('the Prompt API engine probe', () => {
-  it('offers the one model only when it is ready, with the session quota as its window', async () => {
+  it('offers the one model only when it is ready, named for this browser, with the session quota as its window', async () => {
+    installChrome();
     const { factory, sessions } = installLanguageModel({ quota: 9_216 });
     const probe = await createBrowserEngineProber().probe();
     expect(probe).toEqual({
@@ -105,6 +120,7 @@ describe('the Prompt API engine probe', () => {
           label: 'Gemini Nano',
           tools: false,
           contextTokens: 9_216,
+          state: 'ready',
         },
       ],
     });
@@ -113,16 +129,33 @@ describe('the Prompt API engine probe', () => {
     expect(sessions[0]!.destroy).toHaveBeenCalled();
   });
 
-  it('never offers a model that would have to download first', async () => {
-    for (const availability of ['downloadable', 'downloading', 'unavailable']) {
+  it('names Phi-4-mini in Edge', async () => {
+    installEdge();
+    installLanguageModel({ quota: 8_192 });
+    const probe = await createBrowserEngineProber().probe();
+    expect(probe?.models[0]).toMatchObject({ model: 'phi-4-mini', label: 'Phi-4-mini', state: 'ready' });
+  });
+
+  it('reports a not-ready model as a downloadable/downloading row — never offered for a turn, never measured', async () => {
+    installChrome();
+    for (const [availability, state] of [
+      ['downloadable', 'downloadable'],
+      ['downloading', 'downloading'],
+    ] as const) {
       const { factory } = installLanguageModel({ availability });
-      expect(await createBrowserEngineProber().probe(), availability).toBeNull();
+      const probe = await createBrowserEngineProber().probe();
+      expect(probe?.models[0], availability).toMatchObject({ model: 'gemini-nano', state, contextTokens: 4_096 });
       // Asking never creates a session — create() is what starts a download.
       expect(factory.create).not.toHaveBeenCalled();
     }
   });
 
-  it('is null without the Prompt API, and reads the legacy surface when that is all there is', async () => {
+  it('is null when the API is unavailable or absent, and reads the legacy surface when that is all there is', async () => {
+    installChrome();
+    installLanguageModel({ availability: 'unavailable' });
+    expect(await createBrowserEngineProber().probe()).toBeNull();
+
+    delete (globalThis as { LanguageModel?: unknown }).LanguageModel;
     expect(await createBrowserEngineProber().probe()).toBeNull();
     (globalThis as { ai?: unknown }).ai = {
       languageModel: {
@@ -131,7 +164,7 @@ describe('the Prompt API engine probe', () => {
       },
     };
     const probe = await createBrowserEngineProber().probe();
-    expect(probe?.models[0]?.contextTokens).toBe(BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS);
+    expect(probe?.models[0]?.contextTokens).toBe(builtInModelIdentity().fallbackContextTokens);
   });
 
   it('asks the browser once per TTL, again when fresh or expired', async () => {
@@ -281,16 +314,18 @@ describe('local first on the browser engine', () => {
     vi.fn<BrainStreamFn>(async () => ({ text, toolCalls: [], finishReason: 'stop', resolvedModel: 'cloud/model' }));
 
   it('serves a tool-free turn in the page and names it as the local ref', async () => {
+    installChrome();
     installLanguageModel();
     const cloud = cloudAnswer('from-cloud');
     const stream = createLocalFirstStream({ probes: [await page()], cloud, fetch: browserEngineFetch(passthrough) });
     const result = await stream({ messages: [{ role: 'user', content: 'x' }] });
     expect(result.text).toBe('Hello');
-    expect(result.resolvedModel).toBe('local/browser/gemini-nano');
+    expect(result.resolvedModel).toBe(`local/browser/${builtInModelIdentity().model}`);
     expect(cloud).not.toHaveBeenCalled();
   });
 
   it('fails over to the cloud invisibly when the page refuses, and sends tool turns straight there', async () => {
+    installChrome();
     installLanguageModel({ failCreate: new Error('component crashed') });
     const cloud = cloudAnswer('from-cloud');
     const stream = createLocalFirstStream({ probes: [await page()], cloud, fetch: browserEngineFetch(passthrough) });

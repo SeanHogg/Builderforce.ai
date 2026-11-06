@@ -41,6 +41,13 @@ export interface LocalModel {
   tools?: boolean;
   /** Context window in tokens, when the runtime reports one. Absent = unknown. */
   contextTokens?: number;
+  /**
+   * Readiness of a model the runtime can see but not serve yet — `downloadable` (present
+   * but not fetched) or `downloading` (a fetch is in flight). Absent/`ready` = servable
+   * now. Routing only ever serves `ready` rows; the others exist so a picker can offer an
+   * opt-in Download (PRD 42 · Part A2). Only the `browser` built-in runtime reports these.
+   */
+  state?: 'ready' | 'downloadable' | 'downloading';
 }
 
 /** One runtime's answer. */

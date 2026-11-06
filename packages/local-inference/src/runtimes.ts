@@ -196,7 +196,9 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
   {
     id: 'browser',
     automaticRank: 40,
-    label: 'Gemini Nano',
+    // PRD 42 · A1 — generic; the probe row carries the vendor's label ("Gemini Nano",
+    // "Phi-4-mini"), so the picker shows "Gemini Nano (Chrome)" / "Phi-4-mini (Edge)".
+    label: 'Built-in model',
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
     catalog: 'declared',

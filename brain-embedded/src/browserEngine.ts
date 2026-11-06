@@ -19,7 +19,6 @@
 import {
   BROWSER_ENGINE_BASE_URL,
   formatLocalModelRef,
-  localRuntime,
   type LocalRuntimeProbe,
 } from '@builderforce/local-inference';
 import {
@@ -41,23 +40,30 @@ import {
   promptStreamDeltas,
   type PromptApiMessage,
   type PromptApiSession,
-} from './promptApi';
+} from './builtInAi/promptApi';
+import { builtInModelIdentity } from './builtInAi/identity';
 
-/** The id the browser engine's one model goes by (`local/browser/gemini-nano`). */
-export const BROWSER_ENGINE_MODEL = 'gemini-nano';
+/**
+ * The browser engine's one model — which model and which fallback window are the VENDOR'S
+ * data ({@link builtInModelIdentity}), not constants here: Edge's `LanguageModel` is
+ * Phi-4-mini, not Gemini Nano, and is named and windowed accordingly (PRD 42 · A1).
+ */
 
-/** The window assumed when the browser will not say (Gemini Nano's smallest shipped
- *  input quota, rounded down) — conservative, so the plan sends a long call to the cloud
- *  rather than discovering the overflow at the engine. */
-export const BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS = 4_096;
+/** Maps the Prompt API availability onto the probe-row `state` vocabulary. */
+function probeState(availability: 'available' | 'downloadable' | 'downloading'): 'ready' | 'downloadable' | 'downloading' {
+  return availability === 'available' ? 'ready' : availability;
+}
 
 // ── Probe ────────────────────────────────────────────────────────────────────
 
-/** The browser runtime's probe (null when the model is not ready) and its reset. */
+/** The browser runtime's probe (null when no built-in model is present at all) and its reset. */
 export type BrowserEngineProber = Pick<PageEngine, 'probe' | 'invalidate'>;
 
-/** The session's input budget, read once from a throwaway session. Creating a session
- *  for an `available` model downloads nothing. */
+/**
+ * The session's input budget, read once from a throwaway session. Only ever called for a
+ * model that is `available` — creating a session for an `available` model downloads
+ * nothing (PRD 42 · A2: never a surprise download).
+ */
 async function readInputQuota(): Promise<number | undefined> {
   const factory = promptApiFactory();
   if (!factory) return undefined;
@@ -77,7 +83,30 @@ async function probeOnce(
   knownQuota: () => number | undefined,
   learnQuota: (q: number) => void,
 ): Promise<LocalRuntimeProbe | null> {
-  if ((await promptApiAvailability()) !== 'available') return null;
+  const identity = builtInModelIdentity();
+  const availability = await promptApiAvailability();
+  if (availability === 'unavailable') return null;
+  // A `downloadable`/`downloading` model is reported as a row with its `state` so the
+  // picker can offer an opt-in Download — but it is never offered for a chat turn, and we
+  // never measure its quota (creating a session could start the download).
+  if (availability !== 'available') {
+    return {
+      provider: 'browser',
+      endpoint: { baseUrl: BROWSER_ENGINE_BASE_URL },
+      reachable: true,
+      models: [
+        {
+          ref: formatLocalModelRef('browser', identity.model),
+          provider: 'browser',
+          model: identity.model,
+          label: identity.label,
+          tools: false,
+          contextTokens: identity.fallbackContextTokens,
+          state: probeState(availability),
+        },
+      ],
+    };
+  }
   let contextTokens = knownQuota();
   if (contextTokens === undefined) {
     contextTokens = await readInputQuota();
@@ -89,12 +118,13 @@ async function probeOnce(
     reachable: true,
     models: [
       {
-        ref: formatLocalModelRef('browser', BROWSER_ENGINE_MODEL),
+        ref: formatLocalModelRef('browser', identity.model),
         provider: 'browser',
-        model: BROWSER_ENGINE_MODEL,
-        label: localRuntime('browser').label,
+        model: identity.model,
+        label: identity.label,
         tools: false,
-        contextTokens: contextTokens ?? BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
+        contextTokens: contextTokens ?? identity.fallbackContextTokens,
+        state: 'ready',
       },
     ],
   };
@@ -154,8 +184,11 @@ export function toPromptApiTurn(
 
 const isQuotaError = (e: unknown): boolean => (e as { name?: unknown } | null)?.name === 'QuotaExceededError';
 
+// The chunk names THIS browser's model — the vendor's id, not a hard-coded one (A1).
+const engineModelId = (): string => builtInModelIdentity().model;
+
 const chunk = (delta: { content?: string }, finish: string | null): ChatCompletionChunk => ({
-  model: BROWSER_ENGINE_MODEL,
+  model: engineModelId(),
   choices: [{ index: 0, delta, finish_reason: finish }],
 });
 
