@@ -16,11 +16,11 @@ const PACK = 'pack:docs-1a2b3c4d';
 
 interface Row { key: string; source: string; path: string }
 
-function setup(rows: Row[], opts: { scopeExists?: boolean; sources?: number } = {}) {
+function setup(rows: Row[], opts: { scopeExists?: boolean; sources?: number; relationsUnder?: number } = {}) {
   const facts = [...rows];
   const store = {
     scope: vi.fn(async () => (opts.scopeExists === false ? null : { rootId: PACK, title: 'Docs', packs: [] })),
-    deleteRelationsUnder: vi.fn(async () => 2),
+    deleteRelationsUnder: vi.fn(async () => opts.relationsUnder ?? 2),
     deleteFactsBySource: vi.fn(async (source: string) => {
       const gone = facts.filter((f) => f.source === source).map((f) => f.key);
       for (const k of gone) facts.splice(facts.findIndex((f) => f.key === k), 1);
@@ -45,7 +45,8 @@ describe('deleteKnowledgeRoot', () => {
   });
 
   it('is 404 only when there is no scope AND nothing was deleted', async () => {
-    const d = setup([], { scopeExists: false });
+    // "Nothing deleted" includes relations: the fake must not report 2 relations under a root that has none.
+    const d = setup([], { scopeExists: false, relationsUnder: 0 });
     expect(await d.run(PACK)).toMatchObject({ ok: false, status: 404 });
     expect(mocks.bump).not.toHaveBeenCalled();
   });

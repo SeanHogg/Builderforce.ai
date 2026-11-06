@@ -74,10 +74,15 @@ describe('packGraph', () => {
         const full = await packGraph(pack);
         const capped = await packGraph(pack, { maxNodes: 2 });
         expect(full!.nodes.length).toBeGreaterThan(2);
-        // maxNodes caps the REAL nodes kept; the rest is folded into area summary nodes (truncateGraph).
+        // `maxNodes` is the number of top-by-importance nodes kept; truncateGraph (memory engine,
+        // dist/knowledge/truncate.js) ALSO keeps focus nodes, every node a finding names, changed
+        // nodes and the 1-hop neighbours of all of those, up to a hard cap of 2000 — so the real
+        // nodes of a capped graph may exceed `maxNodes`. Everything else folds into area nodes.
         expect(full!.stats.truncated).toBe(false);
         expect(capped!.stats.truncated).toBe(true);
-        expect(capped!.nodes.filter((n) => n.kind !== 'area').length).toBeLessThanOrEqual(2);
+        // The `maxNodes` most important nodes are always among those kept.
+        const top2 = [...full!.nodes].sort((a, b) => b.importance - a.importance || (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0)).slice(0, 2);
+        for (const n of top2) expect(capped!.nodes.some((c) => c.ref === n.ref)).toBe(true);
         const focused = await packGraph(pack, { focus: ['src:docs::lease.md'] });
         expect(focused?.nodes.some((n) => n.ref === 'src:docs::lease.md')).toBe(true);
     });

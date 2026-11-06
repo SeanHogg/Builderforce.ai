@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { getTableColumns } from 'drizzle-orm';
 import { knowledgeScopes } from '../../infrastructure/database/schema';
 
-const sql = readFileSync(fileURLToPath(new URL('../../../migrations/1294_knowledge_scope_provenance.sql', import.meta.url)), 'utf8');
+const sql = readFileSync(fileURLToPath(new URL('../../../migrations/1294_knowledge_scope_provenance.sql', import.meta.url).href), 'utf8');
 
 describe('1294 knowledge_scopes.provenance', () => {
   it('adds one nullable jsonb column, idempotently, with no default and no backfill', () => {
