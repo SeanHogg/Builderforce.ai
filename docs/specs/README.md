@@ -27,6 +27,8 @@ sequence is a PRD that shipped. Index last rewritten 2026-10-25.
 | 37 | [Coordinated Role Participation & Execution Verification](./37-prd-coordinated-role-participation.md) | Mostly built | Make › Autonomous delivery |
 | 38 | [Knowledge graph & extraction](./38-prd-knowledge-graph.md) | Mostly built; open items in ROADMAP | Make › Knowledge review |
 | 39 | [Platform close-out](./39-prd-platform-closeout.md) | Partly built | OTHER › Infrastructure |
+| 40 | [Portable knowledge packs](./40-prd-knowledge-packs.md) | Design for review | Make › Cloud and IDE agent runs |
+| 41 | [Offline understanding and the run delta](./41-prd-offline-understanding-and-run-delta.md) | Design for review | Make › Cloud and IDE agent runs; Local-first |
 
 Also here:
 
