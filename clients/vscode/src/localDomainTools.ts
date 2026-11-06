@@ -99,7 +99,8 @@ export type LocalDomainToolErrorCode =
   | "platform_tool_required"
   | "tool_arguments_required"
   | "invalid_arguments"
-  | "invalid_status";
+  | "invalid_status"
+  | "unknown_project";
 
 export class LocalDomainToolError extends Error {
   constructor(
@@ -308,9 +309,42 @@ function statusOf(args: Readonly<Record<string, unknown>>, fallback?: string): s
 
 type LocalWrite = { entityType: "project" | "ticket"; id: string; record?: LocalRecord };
 
+const PROJECT_ID_NUMERIC = /^\d+$/;
+
+/**
+ * The panel's selected project is surfaced to the model as a NUMERIC server id
+ * (see `activeProjectDirective`), but the local store keys projects by client
+ * UUID. Nothing else translates the two id spaces, so a local tool handed the
+ * numeric id would die with `No such local project: 11` — and the same 11 sent
+ * to a platform tool collides with another tenant. Resolve the numeric id to
+ * the live client UUID here, at the tool boundary, before the repository
+ * lookup. An exact local-id match always wins; a numeric id falls back to the
+ * server-id mapping row, resolved only when that mapping points at a live
+ * project. Anything else is a named error the model can recover from — never a
+ * silent guess.
+ */
+async function resolveLocalProjectId(
+  store: LocalFirstStore,
+  projectId: string,
+): Promise<string> {
+  const raw = typeof projectId === "string" ? projectId.trim() : "";
+  if (!PROJECT_ID_NUMERIC.test(raw)) return projectId;
+
+  const mapped = await store.read((tx) => tx.mappingByServerId("project", raw));
+  if (mapped) {
+    const target = await store.read((tx) => tx.get("project", mapped.clientEntityId));
+    if (target && !target.deletedAt) return mapped.clientEntityId;
+  }
+  throw new LocalDomainToolError(
+    "unknown_project",
+    `No such local project: ${raw}. Pass the local project UUID, or a numeric id that is synced to this workspace.`,
+  );
+}
+
 async function writeLocally(
   tool: LocalDomainToolName,
   repository: LocalWorkRepositoryPort,
+  store: LocalFirstStore,
   args: Readonly<Record<string, unknown>>,
 ): Promise<LocalWrite> {
   switch (tool) {
@@ -351,7 +385,7 @@ async function writeLocally(
       const parentTicketId = optionalString(args, "parentTicketId");
       const id = optionalString(args, "id");
       const record = await repository.createTicket({
-        projectId: requireString(args, "projectId"),
+        projectId: await resolveLocalProjectId(store, requireString(args, "projectId")),
         title: requireString(args, "title"),
         status: statusOf(args, DEFAULT_TICKET_STATUS),
         ...(description ? { description } : {}),
@@ -481,7 +515,7 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
       return { kind: "platform", tool: name, result: await options.platformTool(name, platformArgs(name, args)) };
     }
 
-    const write = await writeLocally(name, options.repository, args);
+    const write = await writeLocally(name, options.repository, options.store, args);
     const syncEvent = await queuedEventFor(options.store, write.entityType, write.id);
     options.syncQueue.enqueue([syncEvent]);
     return Object.freeze({

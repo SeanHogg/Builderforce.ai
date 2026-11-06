@@ -30,6 +30,7 @@ import type { ChildControls, ChildOwner } from "./childRunSpawner";
 import type { ChildApprover } from "./childApprovalRelay";
 import type { EditorRunSettings } from "./stageModels";
 import type { RunOutcomeReport } from "@seanhogg/builderforce-brain-embedded";
+import type { PlatformChatIdentity } from "./platformTools";
 
 /** The top-level owner's name, as the chat shows it (a brand, not translated). */
 export const OWNER_NAME = "BuilderForce";
@@ -58,7 +59,7 @@ export interface BrainRunHostPorts {
    * `children` is THIS run's handle on its sub-agents and `signal` its Stop — built here
    * (not by the port) because only the run knows who it is: its key, its chat, its depth.
    */
-  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean; audit?: { auditId: string; runId: string } }): Promise<readonly ToolDef[]>;
+  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean; audit?: { auditId: string; runId: string }; chatIdentity?: PlatformChatIdentity }): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
   /**

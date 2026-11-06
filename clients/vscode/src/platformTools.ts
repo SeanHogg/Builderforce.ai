@@ -43,8 +43,46 @@ function stringifyResult(result: unknown): string {
 // The advertised catalog is stable; cache it briefly so the chat doesn't refetch
 // the tool list on every message. Keyed by base URL (busted on sign-out/URL change
 // via clearPlatformToolsCache); short TTL covers a freshly-deployed catalog.
+// The RAW entries are cached, not the adapted ToolDefs: each call adapts with the
+// identity it is given, so two chats inside one TTL cannot inherit each other's
+// `chatId` translation through a shared `execute` closure.
 const CATALOG_TTL = 60_000;
-const catalogCache = ttlCache<string, ToolDef[]>(CATALOG_TTL);
+const catalogCache = ttlCache<string, McpToolEntry[]>(CATALOG_TTL);
+
+/**
+ * The chat identity a platform-tool call's `chatId` arguments are translated through
+ * at the dispatch boundary. `localChatId` is the id the model sees (a local chat's
+ * view key — the run host's numeric chat id or the persistence chat id); the gateway
+ * knows only `serverChatId`.
+ */
+export interface PlatformChatIdentity {
+  /** The id this chat answers to locally. */
+  localChatId: unknown;
+  /** The server chat this local chat is bound to; `null` = not bound yet. */
+  serverChatId: number | null;
+}
+
+/**
+ * The `chatId` to send the platform for one tool call's args. The model may pass the
+ * LOCAL chat id (it sees only local ids): when it matches this run's known local id
+ * AND the run's local chat is bound, the bound server id goes instead. An UNBOUND
+ * chat is a named error rather than a 502 round trip; an args chatId that is not this
+ * chat's (another chat's, or no identity supplied) passes through untouched.
+ */
+function chatIdForServer(
+  identity: PlatformChatIdentity | undefined,
+  args: Record<string, unknown>,
+): { args: Record<string, unknown> } | { error: string } {
+  const argChatId = args.chatId;
+  if (identity == null || argChatId === undefined) return { args };
+  // The model's args arrive as JSON: the same chat id may be the run host's number or
+  // its string form. Anything else is a different chat's id and passes through.
+  if (String(argChatId) !== String(identity.localChatId)) return { args };
+  if (identity.serverChatId == null) {
+    return { error: `chat_not_synced: chat ${String(argChatId)} has no server binding yet` };
+  }
+  return { args: argChatId === identity.serverChatId ? args : { ...args, chatId: identity.serverChatId } };
+}
 
 /** Drop the cached catalog (call on sign-out / workspace change). */
 export function clearPlatformToolsCache(): void {
@@ -55,25 +93,37 @@ export function clearPlatformToolsCache(): void {
  * Fetch the shared platform-tool catalog and adapt it to ToolDef[]. Returns an
  * empty list (never throws) when signed out or the relay is unreachable, so the
  * chat keeps working with just the local file tools.
+ *
+ * `identity` is THIS chat's local↔server binding: when given, an `execute` that
+ * receives a `chatId` equal to the known local id sends the bound server id to the
+ * relay instead, so server-side tools never see a local chat id. Omit it (webviews,
+ * one-off fetches) and arguments pass through verbatim, as before.
  */
-export async function listPlatformTools(secrets: vscode.SecretStorage): Promise<ToolDef[]> {
+export async function listPlatformTools(
+  secrets: vscode.SecretStorage,
+  identity?: PlatformChatIdentity,
+): Promise<ToolDef[]> {
   const key = await getApiKey(secrets);
   if (!key) return [];
   const url = getBaseUrl();
   const cached = catalogCache.get(url);
-  if (cached) return cached.value;
-  let entries: McpToolEntry[] = [];
-  try {
-    // A run that starts while the network is down would otherwise hold NO platform tools,
-    // and every `builtin_*` call it was told to make would fail as an unknown tool.
-    const res = await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, {
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    }));
-    if (!res.ok) return [];
-    const body = (await res.json()) as { tools?: McpToolEntry[] };
-    entries = Array.isArray(body.tools) ? body.tools : [];
-  } catch {
-    return [];
+  let entries: McpToolEntry[];
+  if (cached) {
+    entries = cached.value;
+  } else {
+    try {
+      // A run that starts while the network is down would otherwise hold NO platform tools,
+      // and every `builtin_*` call it was told to make would fail as an unknown tool.
+      const res = await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, {
+        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      }));
+      if (!res.ok) return [];
+      const body = (await res.json()) as { tools?: McpToolEntry[] };
+      entries = Array.isArray(body.tools) ? body.tools : [];
+    } catch {
+      return [];
+    }
+    catalogCache.set(url, entries);
   }
 
   const tools = entries.map((e): ToolDef => ({
@@ -84,9 +134,12 @@ export async function listPlatformTools(secrets: vscode.SecretStorage): Promise<
     // write-confirm gate; anything else (incl. external tools that omit it) asks.
     mutating: e.mutates !== false,
     remote: true,
-    execute: (args) => callPlatformTool(secrets, e.extensionId, e.tool, args),
+    execute: (args) => {
+      const translated = chatIdForServer(identity, args);
+      if ("error" in translated) return Promise.resolve(translated.error);
+      return callPlatformTool(secrets, e.extensionId, e.tool, translated.args);
+    },
   }));
-  catalogCache.set(url, tools);
   return tools;
 }
 

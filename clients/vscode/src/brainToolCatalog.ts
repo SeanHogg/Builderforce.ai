@@ -15,6 +15,7 @@
 import type * as vscode from "vscode";
 import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs } from "./cognition";
+import type { PlatformChatIdentity } from "./platformTools";
 import { listPlatformTools } from "./platformTools";
 import { subagentToolDef } from "./subagentTool";
 import { subagentFanOutToolDef } from "./subagentFanOutTool";
@@ -36,10 +37,14 @@ export async function brainToolCatalog(
   signal?: () => AbortSignal | undefined,
   /** `memory: false` — the chat's Memory switch is off: no `recall_facts` /
    *  `remember_fact`, so the run neither reads nor writes project memory. Default on. */
-  opts: { memory?: boolean } = {},
+  opts: { memory?: boolean; chatIdentity?: PlatformChatIdentity } = {},
 ): Promise<ToolDef[]> {
   const cognitionTools = projectId != null && opts.memory !== false ? cognitionToolDefs(secrets, projectId) : [];
-  const platformTools = await listPlatformTools(secrets);
+  // The identity this chat's platform calls translate through: a `chatId` argument equal
+  // to `chatIdentity.localChatId` is sent as the bound server chat id, so the relay never
+  // sees a local chat id (an unbound chat is a named error instead of a 502 round trip).
+  // No identity (a surface that never bound one) keeps the old verbatim pass-through.
+  const platformTools = await listPlatformTools(secrets, opts.chatIdentity);
   // The ticket branch review needs both halves: the project's tickets AND a checkout to
   // compare their branches in.
   // `semantic_search` stays only while Builderforce Desktop answers and `read_compressed`

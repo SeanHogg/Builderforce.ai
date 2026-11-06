@@ -388,6 +388,47 @@ describe("localDomainTools", () => {
     expect(await repository.listProjects()).toHaveLength(1);
   });
 
+  it("resolves a numeric server project id to the local UUID via the mapping", async () => {
+    const { store, repository, syncQueue, tools } = harness();
+    const project = await repository.createProject({ name: "Board" });
+    await store.transact(async (tx) => {
+      await tx.putMapping({
+        destination: ACCOUNT,
+        entityType: "project",
+        clientEntityId: project.id,
+        serverId: "11",
+        serverVersion: 1,
+      });
+    });
+
+    const created = await tools.execute("ticket-create", { projectId: "11", title: "From server id" });
+    if (created.kind !== "local") throw new Error("expected a local result");
+    expect(created.record?.payload).toMatchObject({ projectId: project.id, title: "From server id" });
+    expect(syncQueue.queued).toHaveLength(1);
+  });
+
+  it("treats an unmapped numeric project id as unknown_project, not a guess", async () => {
+    const { repository, store, syncQueue, tools } = harness();
+    await repository.createProject({ name: "Board" });
+
+    await expect(tools.execute("ticket-create", { projectId: "9999", title: "Orphan" })).rejects.toMatchObject({
+      code: "unknown_project",
+    });
+    await expect(tools.execute("ticket-create", { projectId: "9999", title: "Orphan" })).rejects.toThrow(
+      /no such local project: 9999/i,
+    );
+    expect(syncQueue.queued).toEqual([]);
+  });
+
+  it("still resolves an exact local UUID project id unchanged", async () => {
+    const { repository, tools } = harness();
+    const project = await repository.createProject({ name: "Board" });
+
+    const created = await tools.execute("ticket-create", { projectId: project.id, title: "Local id" });
+    if (created.kind !== "local") throw new Error("expected a local result");
+    expect(created.record?.payload).toMatchObject({ projectId: project.id, title: "Local id" });
+  });
+
   it("exposes LocalDomainToolError codes", () => {
     expect(new LocalDomainToolError("connected_only_tool", "no")).toBeInstanceOf(Error);
     expect(new LocalDomainToolError("unknown_domain_tool", "no")).toMatchObject({

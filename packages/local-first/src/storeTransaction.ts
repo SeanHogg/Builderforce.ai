@@ -180,6 +180,14 @@ export class Transaction implements LocalFirstTransaction {
     return clone(this.mappings.get(mappingKey({ entityType, clientEntityId, destination })));
   }
 
+  async mappingByServerId(entityType: LocalEntityType, serverId: string): Promise<ServerMapping | undefined> {
+    if (typeof serverId !== 'string' || serverId.trim() === '') return undefined;
+    for (const mapping of this.mappings.values()) {
+      if (mapping.entityType === entityType && mapping.serverId === serverId) return clone(mapping);
+    }
+    return undefined;
+  }
+
   async putReceipt(receipt: SyncReceipt): Promise<void> {
     this.assertMutable();
     this.receipts.set(receipt.eventId, clone(receipt));

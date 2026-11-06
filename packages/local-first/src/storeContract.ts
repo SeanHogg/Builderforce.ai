@@ -62,6 +62,14 @@ export interface LocalFirstTransaction {
   acknowledge(eventIds: readonly string[]): Promise<void>;
   putMapping(mapping: ServerMapping): Promise<void>;
   mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
+  /**
+   * The reverse of `mapping`: the row whose `serverId` is `serverId` for
+   * `entityType`, regardless of destination. Mappings are keyed by client id,
+   * so this scans the type's rows — bounded by the entity count, not the whole
+   * store. What hands a caller a numeric server id (a prompt directive, a
+   * platform receipt) resolves it back to the live client id through this.
+   */
+  mappingByServerId(entityType: LocalEntityType, serverId: string): Promise<ServerMapping | undefined>;
   putReceipt(receipt: SyncReceipt): Promise<void>;
   putConflict(conflict: SyncConflict): Promise<void>;
   conflicts(): Promise<SyncConflict[]>;

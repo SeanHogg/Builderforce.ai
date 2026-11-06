@@ -133,6 +133,22 @@ async function mergePulled(
     baseVersion: remote.version,
     provenance: { ...remote.provenance, deviceId: remote.provenance?.deviceId ?? 'remote', source: 'imported' },
   });
+  // A pulled server row MAY name its own server id alongside the client id
+  // (`serverId` is not part of `LocalRecord`; the wire row carries it when the
+  // server knows it). Record the mapping so a caller handed the numeric server
+  // id (a prompt directive names the selected project by it) resolves it back to
+  // the live client id via `mappingByServerId`. Idempotent — writing the same
+  // row again is the same mapping.
+  const serverId = 'serverId' in remote ? (remote as { serverId?: unknown }).serverId : undefined;
+  if (typeof serverId === 'string' && serverId.trim() !== '') {
+    await tx.putMapping({
+      destination,
+      entityType: remote.entityType,
+      clientEntityId: remote.id,
+      serverId,
+      serverVersion: remote.version,
+    });
+  }
   return false;
 }
 

@@ -227,7 +227,10 @@ export function activeProjectDirective(project?: ActiveProject | null): string |
     `The current project is "${project.name}" (projectId ${project.id}). ` +
     `When the user asks to review, create, list, or operate on pull requests, tasks, specs, or other ` +
     `project-scoped items without naming a project, use projectId ${project.id} by default — ` +
-    `do NOT ask the user for the project id.\n\n` +
+    `do NOT ask the user for the project id. ` +
+    `This ${project.id} is the NUMERIC SERVER id: platform/builtin tools take it, but the local ` +
+    `domain tools (ticket-create, project-create, ...) take the project's local UUID; a numeric ` +
+    `id is auto-resolved to the local UUID only when that project is synced to this workspace.\n\n` +
     PROJECT_MEMORY_DIRECTIVE
   );
 }

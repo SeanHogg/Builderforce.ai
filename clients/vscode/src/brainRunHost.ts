@@ -57,6 +57,7 @@ import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
 import { OWNER_NAME, type BrainRunHost, type BrainRunHostPorts, type RunNoteOptions, type ToolRunInfo } from "./brainRunHostContract";
+import type { PlatformChatIdentity } from "./platformTools";
 import { runContextFields, startRunRepo } from "./runSetup";
 import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
@@ -232,13 +233,26 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok });
     };
 
+    // The run's chat OFF this machine (PRD 36) — bound now when signed in, bounded by
+    // `CHAT_IDENTITY_TIMEOUT_MS`: a slow/unreachable identity endpoint degrades the run
+    // to the UNBOUND identity (local path) instead of holding it. Without the port the
+    // chat id is itself a server chat (and is what the server calls name).
+    const identity = await bindIdentityWithin(
+      ports.chatIdentity ? () => ports.chatIdentity!(chatId) : undefined,
+      ports.chatIdentityTimeoutMs ?? CHAT_IDENTITY_TIMEOUT_MS,
+    );
+    const serverChatId = identity ? identity.serverChatId : chatId;
     // THIS run's sub-agents — and, for a sub-agent, its own (the pointer nests). Read at
     // call time: the run's abort controller is created by `startRun`, after this catalog.
     const children = childControls(childHost, ownerOf(p, OWNER_NAME));
     // A sub-agent is a clone of its owner: the same catalog, built the same way.
     // The chat's Memory switch (`p.evermind`) gates the memory TOOLS as well as the
     // loop's recall: "off" must mean the run neither reads nor writes project memory.
-    const defs = await ports.tools(projectId, children, () => runAbortSignal(key), { memory: p.evermind, ...(p.audit ? { audit: p.audit } : {}) });
+    // A sub-agent shares its owner's chat: it runs in the owner's Brain chat, so it
+    // is threaded the SAME chat identity and translates `chatId` args through it too.
+    const opts: { memory: boolean; audit?: { auditId: string; runId: string }; chatIdentity?: PlatformChatIdentity } =
+      { memory: p.evermind, ...(p.audit ? { audit: p.audit } : {}), ...(identity ? { chatIdentity: { localChatId: chatId, serverChatId: identity.serverChatId } } : {}) };
+    const defs = await ports.tools(projectId, children, () => runAbortSignal(key), opts);
     broadcast({ type: "run.tools", chatId: key, count: defs.length });
     const native = createNativeRunTool({
       defs,
@@ -275,15 +289,6 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const stream: BrainStreamFn = ports.recordUsage
       ? ports.recordUsage(routed, { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) })
       : routed;
-    // The run's chat OFF this machine (PRD 36) — bound now when signed in, bounded by
-    // `CHAT_IDENTITY_TIMEOUT_MS`: a slow/unreachable identity endpoint degrades the run
-    // to the UNBOUND identity (local path) instead of holding it. Without the port the
-    // chat id is itself a server chat (and is what the server calls name).
-    const identity = await bindIdentityWithin(
-      ports.chatIdentity ? () => ports.chatIdentity!(chatId) : undefined,
-      ports.chatIdentityTimeoutMs ?? CHAT_IDENTITY_TIMEOUT_MS,
-    );
-    const serverChatId = identity ? identity.serverChatId : chatId;
     const surface = p.modelSurface ?? null;
     // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
     // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
