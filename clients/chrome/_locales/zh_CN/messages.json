@@ -869,6 +869,22 @@
     "message": "选择模型",
     "description": "Button: open the composer's Model tab to pick a model"
   },
+  "modelUnresponsive": {
+    "message": "{model} 没有响应。请选择其他模型以继续。",
+    "description": "Chat error: the picked model stayed silent; {model} is its name"
+  },
+  "chooseAnotherModel": {
+    "message": "更换模型",
+    "description": "Error banner button: open the composer's Model tab to pick another model"
+  },
+  "providerSignIn": {
+    "message": "{label} 需要你重新登录。",
+    "description": "Chat error: a provider on the person's own account refused the credential; {label} is the provider"
+  },
+  "signInToProvider": {
+    "message": "登录 {label}",
+    "description": "Error banner button: start the provider's sign-in; {label} is the provider"
+  },
   "engineCrashed": {
     "message": "设备上的模型已崩溃。请重新发送以重启它。",
     "description": "Chat error: the on-device model crashed (it restarts on the next send)"

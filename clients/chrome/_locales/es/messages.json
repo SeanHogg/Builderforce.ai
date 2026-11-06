@@ -869,6 +869,22 @@
     "message": "Elegir un modelo",
     "description": "Button: open the composer's Model tab to pick a model"
   },
+  "modelUnresponsive": {
+    "message": "{model} no responde. Elige otro modelo para continuar.",
+    "description": "Chat error: the picked model stayed silent; {model} is its name"
+  },
+  "chooseAnotherModel": {
+    "message": "Elegir modelo",
+    "description": "Error banner button: open the composer's Model tab to pick another model"
+  },
+  "providerSignIn": {
+    "message": "{label} necesita que vuelvas a iniciar sesión.",
+    "description": "Chat error: a provider on the person's own account refused the credential; {label} is the provider"
+  },
+  "signInToProvider": {
+    "message": "Iniciar sesión en {label}",
+    "description": "Error banner button: start the provider's sign-in; {label} is the provider"
+  },
   "engineCrashed": {
     "message": "El modelo de este dispositivo se ha bloqueado. Vuelve a enviar para reiniciarlo.",
     "description": "Chat error: the on-device model crashed (it restarts on the next send)"
