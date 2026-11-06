@@ -193,6 +193,18 @@
         "icon": "$(sync)"
       },
       {
+        "command": "builderforce.uploadKnowledgePack",
+        "title": "%command.uploadKnowledgePack%",
+        "category": "BuilderForce",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "builderforce.removeUploadedKnowledgePack",
+        "title": "%command.removeUploadedKnowledgePack%",
+        "category": "BuilderForce",
+        "icon": "$(trash)"
+      },
+      {
         "command": "builderforce.scheduleMeeting",
         "title": "%command.scheduleMeeting%",
         "category": "BuilderForce",

@@ -211,6 +211,25 @@ describe('context verdict — paged reads are not lost context', () => {
     expect(report).toContain('Failed step: llm.complete — RepetitionLoopError');
   });
 
+  it('appends the failed request detail under a failed step that carries one', () => {
+    const failed: BrainTraceEvent = {
+      ts: '', category: 'error', label: 'llm.complete', isError: true,
+      args: {
+        model: 'local/kimi-code/k3',
+        step: 2,
+        failure: {
+          phase: 'headers',
+          destination: { kind: 'provider', label: 'Kimi Code', host: 'api.kimi.ai' },
+          elapsedMs: 240_000, idleMs: 240_000, requestBytes: 20_480, messageCount: 12, toolCount: 5, credential: 'resolved',
+        },
+      },
+      result: 'StreamInterruptedError: Kimi Code (api.kimi.ai) sent no response for 240s',
+    };
+    const report = formatBrainDiagnostics(computeBrainDiagnostics([llmTurn(3_000), failed], undefined, [msg('user', 'go')])).join('\n');
+    expect(report).toContain('Failed step: llm.complete on local/kimi-code/k3');
+    expect(report).toContain('  destination Kimi Code (api.kimi.ai) · no response headers · after 240s · request 20.0 KB · 12 messages · 5 tools · credential resolved');
+  });
+
   it('structures a role-gate refusal — required role, caller role and the remedy on the failed step', () => {
     // The BuiltinToolForbiddenError message carries both roles as TEXT; a run that died
     // on the gate used to read as an unexplained refusal. Now the gate is parsed out.

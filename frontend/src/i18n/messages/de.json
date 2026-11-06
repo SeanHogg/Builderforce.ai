@@ -20719,7 +20719,14 @@
     "empty": "In dieses Projekt wurde noch kein Wissenspaket hochgeladen. Führe in VS Code „BuilderForce: Wissenspaket hochladen“ aus, um eines hinzuzufügen.",
     "select": "Verwenden",
     "selected": "In Verwendung",
-    "summary": "{count} von {total} Paketen in Verwendung"
+    "summary": "{count} von {total} Paketen in Verwendung",
+    "provenanceByWithOn": "Geprüft von {reviewer} mit {model}, {date}",
+    "provenanceByWith": "Geprüft von {reviewer} mit {model}",
+    "provenanceByOn": "Geprüft von {reviewer}, {date}",
+    "provenanceBy": "Geprüft von {reviewer}",
+    "provenanceWithOn": "Geprüft mit {model}, {date}",
+    "provenanceWith": "Geprüft mit {model}",
+    "provenanceOn": "Geprüft am {date}"
   },
   "creationCanvas": {
     "costToBuild": "Baukosten",

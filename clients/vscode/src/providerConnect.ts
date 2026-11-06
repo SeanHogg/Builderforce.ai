@@ -2,14 +2,17 @@
  * Connecting a model provider's subscription FROM THE EDITOR — and doing it at the moment
  * a turn needs it.
  *
- * Two entry points, one flow:
+ * Three entry points, one flow:
  *   • {@link connectProviderInteractively} — the "Model Provider Connections" command
  *     (`byoConnections.ts`) and the picker's "connect Kimi" row;
  *   • {@link ensureLocalProviderCredential} — a turn about to call a provider from this
  *     machine. It resolves the local credential and, when the workspace has no usable
- *     connection, OFFERS to connect right there instead of silently falling back to a
- *     different model. A connect started here lands in Builderforce's integrations (the
- *     gateway stores the grant) and the access token is persisted locally for the turn.
+ *     connection, launches the sign-in right there (once per session; a cancel is
+ *     remembered) instead of silently falling back to a different model. A connect
+ *     started here lands in Builderforce's integrations (the gateway stores the grant)
+ *     and the access token is persisted locally for the turn;
+ *   • {@link signInToAccountProvider} — the chat banner's Sign-in button, which overrides
+ *     a remembered cancel.
  *
  * The connect itself is `@builderforce/provider-connect` — the same start/poll contract
  * Rovr and the web settings card run.
@@ -22,6 +25,7 @@ import {
   startProviderConnect,
   type LocalCredentialOutcome,
 } from "@builderforce/provider-connect";
+import { LOCAL_RUNTIMES } from "@builderforce/local-inference";
 import { gatewayRequest } from "./gatewayRequest";
 import { connectedAccounts } from "./localProviderCredentials";
 import type { ConnectedAccounts } from "@builderforce/provider-connect/accounts";
@@ -102,18 +106,63 @@ export async function connectProviderInteractively(
   }
 }
 
+/**
+ * The chat banner's "Sign in to {label}": run the connect for the account provider a failed turn
+ * named. The provider arrives from the webview, so it is matched against the runtime registry
+ * (`accountProvider`) and the display name comes from there - the webview names nothing it is
+ * not allowed to connect. False when no runtime is backed by that provider, or the connect did
+ * not finish.
+ */
+export async function signInToAccountProvider(secrets: vscode.SecretStorage, provider: unknown): Promise<boolean> {
+  const runtime = LOCAL_RUNTIMES.find((r) => r.accountProvider !== undefined && r.accountProvider === provider);
+  if (!runtime?.accountProvider) return false;
+  // The person asked for this one: it overrides an earlier cancel, and shares the single flight with a turn's own prompt.
+  declined.delete(runtime.accountProvider);
+  return connectOnce(secrets, runtime.accountProvider, runtime.label);
+}
+
 /** The editor's connected accounts (the shared implementation Rovr runs too), created on
  *  first use with this editor's authenticated gateway call. */
 export function editorAccounts(secrets: vscode.SecretStorage): ConnectedAccounts {
   return connectedAccounts(secrets, () => gatewayRequest(secrets));
 }
 
-/** One prompt per provider at a time: three turns that start together ask once. */
-const prompting = new Map<string, Promise<LocalCredentialOutcome>>();
+/** One sign-in per provider at a time: three turns that start together (or a turn and the banner's button) ask once. */
+const prompting = new Map<string, Promise<boolean>>();
+
+/** Providers whose automatic sign-in the person cancelled this session; only the banner's Sign-in button clears it. */
+const declined = new Set<string>();
+
+/** Whether the person cancelled (or failed) this provider's automatic sign-in this session. */
+export function signInDeclined(provider: string): boolean {
+  return declined.has(provider);
+}
+
+/** Test seam: forget every remembered cancel and in-flight sign-in. */
+export function resetProviderSignIn(): void {
+  declined.clear();
+  prompting.clear();
+}
+
+function connectOnce(secrets: vscode.SecretStorage, provider: string, label: string): Promise<boolean> {
+  const pending = prompting.get(provider);
+  if (pending) return pending;
+  const run = connectProviderInteractively(secrets, provider, label)
+    .then((connected) => {
+      if (connected) declined.delete(provider);
+      else declined.add(provider);
+      return connected;
+    })
+    .finally(() => prompting.delete(provider));
+  prompting.set(provider, run);
+  return run;
+}
 
 /**
- * A credential this machine may send to the provider right now, connecting first when
- * the workspace has none (or its grant is dead) and the person agrees.
+ * A credential this machine may send to the provider right now. When the workspace has none (or its
+ * grant is dead) the sign-in is launched ONCE per session: a cancel is remembered, so the next turn
+ * reports the missing connection instead of opening the browser again, until the person clicks the
+ * chat banner's Sign-in button.
  */
 export async function ensureLocalProviderCredential(
   secrets: vscode.SecretStorage,
@@ -123,20 +172,11 @@ export async function ensureLocalProviderCredential(
 ): Promise<LocalCredentialOutcome> {
   const store = editorAccounts(secrets).store(provider);
   const first = await store.resolve();
-  if (first.kind === "credential" || first.kind === "unavailable" || !prompt) return first;
+  if (first.kind === "credential" || first.kind === "unavailable" || !prompt || declined.has(provider)) return first;
 
-  const pending = prompting.get(provider);
-  if (pending) return pending;
-  const run = (async (): Promise<LocalCredentialOutcome> => {
-    const connect = vscode.l10n.t("Connect {0}", label);
-    const ask = first.kind === "reconnect"
-      ? vscode.l10n.t("Your {0} connection needs to be renewed before this turn can use it.", label)
-      : vscode.l10n.t("This turn runs on {0}, and your workspace has no {0} account connected yet.", label);
-    const pick = await vscode.window.showInformationMessage(ask, connect);
-    if (pick !== connect) return first;
-    if (!(await connectProviderInteractively(secrets, provider, label))) return first;
-    return store.resolve();
-  })().finally(() => prompting.delete(provider));
-  prompting.set(provider, run);
-  return run;
+  // Straight into the sign-in: the browser opens with the code and a cancellable progress
+  // notification waits for approval. A confirm toast in front of it was missable, and a
+  // missed toast looked like a silent failure.
+  if (!(await connectOnce(secrets, provider, label))) return first;
+  return store.resolve();
 }

@@ -50,6 +50,8 @@ import { replaceWorkspaceMap } from "./idePersona";
 import { RunKnowledgeRecorder, recordingOnly } from "@builderforce/agent-tools";
 import { createChildRuns } from "./childRuns";
 import { createRunRelay } from "./runRelay";
+import { createLlmFailureLogger } from "./llmFailureLog";
+import { hostLog } from "./hostLog";
 import { childControls } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay } from "./childApprovalRelay";
@@ -97,6 +99,8 @@ async function bindIdentityWithin(
 
 export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const relay = createRunRelay();
+  /** A failed model call (`llm.complete` error step) is one line in the output channel - the webview's banner cannot carry the request detail. */
+  const logLlmFailures = createLlmFailureLogger(hostLog);
   const notes = new Map<number, RunKnowledgeRecorder>();
   /** Live per-run gate flags; `needsConfirm` reads them so a switch flipped mid-run
    *  takes effect on the NEXT call instead of after the run (the shared gate's rule). */
@@ -118,6 +122,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     (chatId) => {
       relay.sync(chatId);
       approvals.changed(chatId);
+      logLlmFailures(getRunSnapshot(chatId).trace);
     },
     relay.forget,
   );

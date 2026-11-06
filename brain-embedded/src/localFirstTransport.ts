@@ -38,7 +38,10 @@ import {
 import { isVolatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { estimateTokensFromChars, profileWorkload } from '@builderforce/workload';
 import {
+  RepetitionLoopError,
+  StreamInterruptedError,
   streamChatCompletion,
+  TransportError,
   type BrainTransport,
   type ChatCompletionMessage,
   type StreamChatOptions,
@@ -46,7 +49,8 @@ import {
   type StreamHandlers,
 } from './streamChatCompletion';
 import { summarizeLocalFirstAttempt, type LocalFirstAttemptSummary } from './localFirstTraces';
-import { NOT_SIGNED_IN } from './chatError';
+import { BrainRequestError, NOT_SIGNED_IN, PROVIDER_AUTH_REQUIRED, brainRequestError } from './chatError';
+import { hostOf } from './streamFailureDetail';
 import { contextWindowOf } from './windowFit/modelWindow';
 
 /** The `fetch` a host lends the local path (the global in every host by default). */
@@ -58,6 +62,35 @@ type StreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHa
 
 /** Read at CALL time so a harness that swaps the global is honoured. */
 const globalFetch: LocalFetch = (input, init) => fetch(input, init);
+
+/** A 403 body that says the CREDENTIAL was refused (as opposed to a plan, region or quota refusal). */
+const AUTH_REFUSAL = /unauthori[sz]ed|unauthenticated|expired|token|credential|authenticat|\bapi[_ ]?key\b|\bkey\b/i;
+
+function refusesCredential(body: unknown): boolean {
+  const b = (body ?? {}) as { code?: unknown; error?: unknown; message?: unknown };
+  const text = [b.code, typeof b.error === 'string' ? b.error : (b.error as { message?: unknown } | undefined)?.message, b.message]
+    .filter((v): v is string => typeof v === 'string')
+    .join(' ');
+  return AUTH_REFUSAL.test(text);
+}
+
+/**
+ * Maps a non-OK response from an account-backed runtime: a 401 (or a 403 whose body says the credential was refused)
+ * names the provider to sign in to; every other status, a plan or region 403 included, maps as the gateway's do.
+ */
+function providerErrorMapper(provider: string, label: string): (res: Response) => Promise<Error> {
+  return async (res) => {
+    const body = await res.json().catch(() => ({}));
+    const mapped = brainRequestError(res.status, body, res.statusText);
+    if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
+    return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
+      status: res.status,
+      code: PROVIDER_AUTH_REQUIRED,
+      provider,
+      providerLabel: label,
+    });
+  };
+}
 
 /**
  * The transport that points the shared streamer at a local runtime.
@@ -82,14 +115,40 @@ export function localTransport(
   fetchImpl: LocalFetch = globalFetch,
   options: { failFast?: boolean; runtime?: LocalRuntimeId } = {},
 ): BrainTransport {
+  const baseUrl = normalizeLocalBaseUrl(endpoint.baseUrl);
+  const runtime = options.runtime ? localRuntime(options.runtime) : undefined;
+  // Whether each request's credential lookup (`endpoint.credential`) settled: a lookup that never returns is the other
+  // way a hosted call can sit silent, and the failure detail says which half it was. Per REQUEST (keyed by its abort
+  // signal) because one transport serves concurrent calls and a shared flag would report another call's state.
+  const credentialStates = new WeakMap<AbortSignal, 'resolved' | 'pending' | 'none'>();
+  const stateOf = (signal: AbortSignal | null | undefined): 'resolved' | 'pending' | 'none' =>
+    (signal ? credentialStates.get(signal) : undefined) ?? 'none';
   return {
-    baseUrl: normalizeLocalBaseUrl(endpoint.baseUrl),
+    baseUrl,
     getToken: () => endpoint.token ?? null,
     wire: 'openai',
-    ...(options.runtime && localRuntime(options.runtime).providerSampling ? { providerSampling: true } : {}),
+    ...(runtime?.providerSampling ? { providerSampling: true } : {}),
+    // A hosted runtime reached directly (Kimi Code) is named in a silence error; an on-device engine keeps the neutral default.
+    ...(runtime && !runtime.onDevice ? { destination: { label: runtime.label, host: hostOf(baseUrl) } } : {}),
+    credentialState: (signal) => stateOf(signal),
+    // A hosted runtime backed by the person's OWN account (registry `accountProvider`) that refuses the credential is a
+    // PROVIDER sign-in problem; mapped to the generic 401 it would be read as a BuilderForce session error.
+    ...(runtime?.accountProvider ? { mapError: providerErrorMapper(runtime.accountProvider, runtime.label) } : {}),
     fetch: async (input, init) => {
+      const signal = init.signal ?? undefined;
+      const mark = (state: 'resolved' | 'pending' | 'none'): void => { if (signal) credentialStates.set(signal, state); };
+      mark(endpoint.credential ? 'pending' : 'none');
+      const tracked: LocalEndpoint = endpoint.credential
+        ? {
+            ...endpoint,
+            credential: async (stale) => {
+              mark('pending');
+              try { return await endpoint.credential!(stale); } finally { mark('resolved'); }
+            },
+          }
+        : endpoint;
       try {
-        return await fetchLocal(endpoint, fetchImpl, rewriteToLocalUrl(input), init);
+        return await fetchLocal(tracked, fetchImpl, rewriteToLocalUrl(input), init);
       } catch (e) {
         if (!options.failFast || init.signal?.aborted) throw e;
         throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
@@ -156,6 +215,7 @@ async function streamOnLocal(
   handlers: StreamHandlers,
   transport: BrainTransport,
   messages: ChatCompletionMessage[],
+  picked: boolean,
 ): Promise<StreamChatResult> {
   // Whose account made the call is read off the runtime registry, never a runtime id: a HOSTED runtime reached from this
   // machine (Kimi Code) is the person's OWN account, while an on-device engine has no account at all - the reply chip then
@@ -165,8 +225,28 @@ async function streamOnLocal(
   const named: StreamHandlers = handlers.onModel
     ? { ...handlers, onModel: () => handlers.onModel?.(target.ref, account) }
     : handlers;
-  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, named);
+  let served: StreamChatResult;
+  try {
+    // `picked`: the call names this model (a pin, a failover target) and is held to it; a plan attempt names none, so a
+    // silence there is the plan's to route around, not a model the person picked.
+    served = await streamChatCompletion({ ...opts, messages, model: target.model, modelStrict: opts.modelStrict || picked, transport }, named);
+  } catch (e) {
+    throw withModelRef(e, target.ref);
+  }
   return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...(account ? { account } : {}) };
+}
+
+/** An interruption or transport failure re-reported under the full ref (`local/kimi-code/k3`), not the bare id the runtime echoes. */
+function withModelRef(e: unknown, ref: string): unknown {
+  if (e instanceof RepetitionLoopError || !(e instanceof StreamInterruptedError || e instanceof TransportError)) return e;
+  if (e.model === ref) return e;
+  const out = e instanceof StreamInterruptedError
+    ? new StreamInterruptedError(e.message, ref, e.detail, { pinned: e.pinned })
+    : new TransportError(e.message, ref, { cause: e.cause, unreachable: e.unreachable, pinned: e.pinned });
+  out.name = e.name;
+  if (e.stack) out.stack = e.stack;
+  if (e instanceof StreamInterruptedError && e.cause !== undefined) (out as { cause?: unknown }).cause = e.cause;
+  return out;
 }
 
 /** Where a pinned local stream may send a call that names a DIFFERENT model. */
@@ -219,7 +299,7 @@ export function createLocalStream(
         if (target) {
           const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl, { runtime: target.provider });
           const messages = await fittedFor(target, opts, route.fit, probes);
-          return streamOnLocal(target, opts, committingHandlers(handlers, () => undefined, target.ref), t, messages);
+          return streamOnLocal(target, opts, committingHandlers(handlers, () => undefined, target.ref), t, messages, true);
         }
       } else if (route.cloud) {
         return route.cloud(opts, handlers);
@@ -227,7 +307,7 @@ export function createLocalStream(
     }
     if (!pinned) return streamChatCompletion({ ...opts, model, transport }, handlers);
     const messages = await fittedFor(pinned, opts, route.fit, probes);
-    return streamOnLocal(pinned, opts, committingHandlers(handlers, () => undefined, pinned.ref), transport, messages);
+    return streamOnLocal(pinned, opts, committingHandlers(handlers, () => undefined, pinned.ref), transport, messages, true);
   };
 }
 
@@ -361,7 +441,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
       if (local) {
         const transport = localTransport(local.endpoint, input.fetch, { runtime: local.provider });
         const messages = await fittedFor(local, opts, input.fit, input.probes);
-        return streamOnLocal(local, opts, committingHandlers(handlers, () => undefined, local.ref), transport, messages);
+        return streamOnLocal(local, opts, committingHandlers(handlers, () => undefined, local.ref), transport, messages, true);
       }
     }
     // From here the call names no model (a local ref no probe serves cannot be sent
@@ -381,7 +461,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
         if (attempt.kind === 'cloud') return input.cloud!(routed, committingHandlers(handlers, commit));
         const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
         const messages = await fittedFor(attempt, routed, input.fit, input.probes);
-        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages);
+        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages, false);
       },
       { signal: opts.signal, accept: answered, ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}) },
     );

@@ -102,6 +102,9 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
         onUpgrade={() => { invalidatePlanSnapshot(); openUpgrade('pricing'); }}
         onValidateCard={() => { invalidatePlanSnapshot(); openUpgrade('billing'); }}
         onSignIn={() => post('signin')}
+        // A provider on the person's own account (Kimi Code) refused the credential: the HOST runs that
+        // provider's connect (browser + code); the banner clears so the person can resend.
+        onProviderSignIn={(provider) => { post('providerSignIn', { provider }); conv.clearError(); }}
         // Nothing can take the turn for a reason sign-in won't fix: Hybrid (only while on
         // Local only), a local model, or — Specific with nothing picked — the Model tab.
         {...modelRemedies(init, composerId, conv.clearError, () => { conv.retryLastTurn(); })}

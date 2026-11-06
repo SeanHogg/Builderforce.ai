@@ -60,7 +60,23 @@ export type ChatErrorActionKind =
    * attachments and gave up. The words are KEPT (saved or waiting) and are read with the next message; the
    * banner says so in the person's language - the person does not send them again.
    */
-  | 'continuation_timed_out';
+  | 'continuation_timed_out'
+  /**
+   * The model the person SELECTED is not answering - it stayed silent or its connection broke
+   * ({@link ChatErrorAction.model} names it). The pin is respected, never swapped silently: the banner
+   * says so and offers "Choose model" (the composer's model menu).
+   */
+  | 'model_unresponsive'
+  /**
+   * A provider the person's OWN account backs (Kimi Code, called directly from this machine) refused the credential
+   * ({@link ChatErrorAction.provider}, named for the person by {@link ChatErrorAction.label}). That is NOT a
+   * BuilderForce session problem - re-exchanging the BuilderForce token would fix nothing - so it is checked before
+   * the generic 401 and offers "Sign in to {label}" (the editor's provider connect), or Settings on the web.
+   */
+  | 'provider_sign_in';
+
+/** The `code` a transport gives a hosted runtime's credential refusal (see `localTransport`'s `mapError`). */
+export const PROVIDER_AUTH_REQUIRED = 'provider_auth_required';
 
 /** The code a bounded continuation step rejects with (`runStore/deadline.ts`) - never shown raw. */
 export const CONTINUATION_TIMED_OUT = 'continuation_timed_out';
@@ -110,6 +126,12 @@ function localEngineCode(code: string | undefined, message: string): LocalEngine
 
 export interface ChatErrorAction {
   kind: ChatErrorActionKind;
+  /** For `model_unresponsive`: the model (ref) that is not answering. */
+  model?: string;
+  /** For `provider_sign_in`: the account provider to reconnect (registry `accountProvider`, e.g. `kimi`). */
+  provider?: string;
+  /** For `provider_sign_in`: the runtime's display name (e.g. `Kimi Code`). */
+  label?: string;
   /** For `local_engine_failed`: which engine failure it was. */
   engineCode?: LocalEngineFailureCode;
   /** For `platform_refused`: what the policy refused. */
@@ -138,6 +160,10 @@ export class BrainRequestError extends Error {
   readonly unlock?: string;
   readonly requiredPlan?: string;
   readonly feature?: string;
+  /** Set with `code: provider_auth_required`: the account provider whose credential was refused. */
+  readonly provider?: string;
+  /** Set with `provider`: that runtime's display name. */
+  readonly providerLabel?: string;
 
   constructor(
     message: string,
@@ -148,10 +174,14 @@ export class BrainRequestError extends Error {
       unlock?: string;
       requiredPlan?: string;
       feature?: string;
+      provider?: string;
+      providerLabel?: string;
     },
   ) {
     super(message);
     this.name = 'BrainRequestError';
+    this.provider = init.provider;
+    this.providerLabel = init.providerLabel;
     this.status = init.status;
     this.code = init.code;
     this.reason = init.reason;
@@ -231,6 +261,9 @@ export function chatErrorAction(err: unknown): ChatErrorAction | null {
 
   if (err instanceof BrainRequestError) {
     const base = { requiredPlan: err.requiredPlan, feature: err.feature };
+    if (err.code === PROVIDER_AUTH_REQUIRED && err.provider) {
+      return { kind: 'provider_sign_in', provider: err.provider, label: err.providerLabel ?? err.provider };
+    }
     if (err.status === 401) return { kind: 'auth', ...base };
     if (err.unlock === 'validate_card' || err.reason === 'card_required') {
       return { kind: 'validate_card', ...base };
@@ -256,5 +289,14 @@ export function chatErrorAction(err: unknown): ChatErrorAction | null {
   if (AUTH_PROSE.test(message)) return { kind: 'auth' };
   if (CARD_PROSE.test(message)) return { kind: 'validate_card' };
   if (UPGRADE_PROSE.test(message)) return { kind: 'upgrade' };
+  // By name, not `instanceof`: the stream error classes live in a module that imports this one. A repetition
+  // loop is a different failure (the model answered, uselessly) and keeps its own handling.
+  const name = err instanceof Error ? err.name : '';
+  const model = (err as { model?: unknown }).model;
+  // Only a model the person PICKED: an unpinned turn is re-routed by the run policy, and an in-band provider error keeps its own message.
+  const pinned = (err as { pinned?: unknown }).pinned === true;
+  if ((name === 'StreamInterruptedError' || name === 'TransportError') && pinned && typeof model === 'string' && model) {
+    return { kind: 'model_unresponsive', model };
+  }
   return null;
 }

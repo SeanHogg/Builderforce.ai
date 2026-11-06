@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { RepetitionLoopError, StreamInterruptedError, TransportError } from './streamChatCompletion';
 import { BrainRequestError, brainRequestError, chatErrorAction, LOCAL_ENGINE_FAILURE_CODES, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
 
 describe('brainRequestError', () => {
@@ -111,5 +112,29 @@ describe('chatErrorAction', () => {
     expect(chatErrorAction(new Error('platform_gateway_inference_disabled'))).toEqual({ kind: 'platform_refused', capability: 'gateway-inference', setting: 'inferenceMode' });
     expect(chatErrorAction(new Error('platform_external_mcp_disabled'))?.setting).toBe('externalMcp');
     expect(chatErrorAction(new Error('xplatform_send_disabled_y'))).toBeNull();
+  });
+});
+
+describe('chatErrorAction - model_unresponsive', () => {
+  it('offers choosing another model when a stream interruption names its model', () => {
+    const err = new StreamInterruptedError('Kimi Code (api.kimi.ai) sent no response for 240s', 'local/kimi-code/k3', undefined, { pinned: true });
+    expect(chatErrorAction(err)).toEqual({ kind: 'model_unresponsive', model: 'local/kimi-code/k3' });
+  });
+
+  it('offers it only for a PICKED model - an unpinned silence or an in-band provider error keeps its message', () => {
+    expect(chatErrorAction(new StreamInterruptedError('Kimi Code (api.kimi.ai) sent no response for 240s', 'local/kimi-code/k3'))).toBeNull();
+    expect(chatErrorAction(new TransportError('fetch failed', 'local/ollama/qwen3:8b'))).toBeNull();
+    expect(chatErrorAction(new StreamInterruptedError('the model failed mid-answer: context too long', 'local/kimi-code/k3'))).toBeNull();
+  });
+
+  it('covers a transport error with a model, and none without one', () => {
+    expect(chatErrorAction(new TransportError('fetch failed', 'local/ollama/qwen3:8b', { pinned: true }))).toEqual({ kind: 'model_unresponsive', model: 'local/ollama/qwen3:8b' });
+    expect(chatErrorAction(new TransportError('fetch failed'))).toBeNull();
+    expect(chatErrorAction(new StreamInterruptedError('the stream went silent for 5s', undefined))).toBeNull();
+  });
+
+  it('leaves a repetition loop alone, and lets existing kinds win', () => {
+    expect(chatErrorAction(new RepetitionLoopError({ block: 'x', copies: 3, kept: '' }, 'm'))).toBeNull();
+    expect(chatErrorAction(new StreamInterruptedError('the model failed mid-answer: invalid or expired token', 'm'))).toEqual({ kind: 'auth' });
   });
 });

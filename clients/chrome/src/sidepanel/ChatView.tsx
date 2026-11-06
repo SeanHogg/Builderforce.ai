@@ -291,6 +291,8 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
                 retry: () => { conv.retryLastTurn(); },
               })}
               onReconnect={onOpenSettings}
+              // A provider that refused the credential is signed in to where its account is connected: Settings → Model.
+              onProviderSignIn={() => onOpenSettings()}
               onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
               onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
               labels={{
@@ -302,6 +304,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
                 downloadLocalModel: t('downloadLocalModel'),
                 noSpecificModel: t('noSpecificModel'),
                 pickModel: t('pickModel'),
+                modelUnresponsive: t('modelUnresponsive'),
+                chooseAnotherModel: t('chooseAnotherModel'),
+                providerSignIn: t('providerSignIn'),
+                signInToProvider: t('signInToProvider'),
             engineCrashed: t('engineCrashed'),
             engineDetached: t('engineDetached'),
             modelKeepsCrashing: t('modelKeepsCrashing'),

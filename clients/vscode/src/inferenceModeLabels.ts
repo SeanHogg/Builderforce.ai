@@ -59,6 +59,12 @@ export function inferenceModeLabels(): Record<string, string> {
     "app.engineDetached": t("The on-device model stopped before it finished. Send again to retry."),
     "app.modelKeepsCrashing": t("This model keeps crashing on this device. Remove it, or try another model."),
     "app.manageLocalModels": t("Manage on-device models"),
+    // The selected model stopped answering (`model_unresponsive`): `{0}` is handed back as brain-ui's `{model}` token.
+    "app.modelUnresponsive": t("{0} isn't responding. Choose another model to continue.", "{model}"),
+    "app.chooseAnotherModel": t("Choose model"),
+    // A provider on the person's own account (Kimi Code) refused the credential (`provider_sign_in`): `{0}` is handed back as brain-ui's `{label}` token.
+    "app.providerSignIn": t("{0} needs you to sign in again.", "{label}"),
+    "app.signInToProvider": t("Sign in to {0}", "{label}"),
     // A continuation (words typed while a run ended) waited too long on the host (`continuation_timed_out`).
     "app.continuationTimedOut": t("That took too long. Your message is kept and will be read with your next message."),
     // A refusal by the person's own platform policy (`platform_refused`): the mode, the

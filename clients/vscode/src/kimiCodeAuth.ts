@@ -184,7 +184,9 @@ async function resolveToken(
 
   if (refreshed.kind === "refreshed") {
     try {
-      saveCredential(fs, home, refreshed.record);
+      // Back into the file the record CAME from: the CLI keeps several, and rotating into
+      // the default name would leave the one Kimi Code actually reads holding a retired token.
+      saveCredential(fs, home, refreshed.record, state.file);
     } catch (error) {
       // The token in hand is valid and usable; failing the turn because the WRITE failed
       // would trade a working request for a bookkeeping problem. The cost is that the

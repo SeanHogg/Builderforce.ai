@@ -45,6 +45,10 @@ export function chatErrorMessage(error: string, action: ChatErrorAction | null, 
       return platformRefusedMessage(action.setting, labels);
     case 'continuation_timed_out':
       return labels.continuationTimedOut;
+    case 'model_unresponsive':
+      return labels.modelUnresponsive.replace('{model}', action.model ?? '');
+    case 'provider_sign_in':
+      return labels.providerSignIn.replace('{label}', action.label ?? action.provider ?? '');
     default:
       return error;
   }

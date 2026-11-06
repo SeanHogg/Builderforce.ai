@@ -10,6 +10,7 @@ import { setInferenceMode } from "./inferenceModeSetting";
 import { DOWNLOAD_LOCAL_MODEL_COMMAND } from "./noLocalModelPrompt";
 import { callLocalPersistence } from "./localPersistenceDispatch";
 import { createLocalWorkRepository } from "./localWorkRepository";
+import { signInToAccountProvider } from "./providerConnect";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -244,6 +245,9 @@ export async function handleSharedHostMessage(
       return true;
     case "connectProvider":
       void vscode.commands.executeCommand("builderforce.manageByoConnections");
+      return true;
+    case "providerSignIn":
+      void signInToAccountProvider(ctx.secrets, (msg as WebviewInbound & { provider?: unknown }).provider);
       return true;
     case "api.failure":
       logLine(apiFailureLine(msg as ApiFailureMessage));

@@ -35,6 +35,7 @@ export { bindChatHistoryForSync } from './localChat/chatSync';
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.
 export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, TransportError } from './streamChatCompletion';
+export { describeStreamFailure, type StreamFailureDetail } from './streamFailureDetail';
 // THE classification of a failed completion for the run policy, and the timeline step a
 // policy retry records — one of each for every browser agent loop.
 export { providerFailureEvent } from './providerFailure';

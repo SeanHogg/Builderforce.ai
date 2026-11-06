@@ -55,6 +55,9 @@ export const SHARED_HOST_MESSAGES = [
   /** Open "Manage Model Provider Connections" (BYO keys) — the signed-out banner's
    *  "Connect a provider" remedy. Fire-and-forget. */
   'connectProvider',
+  /** Run the connect/sign-in for the account provider a failed turn named (`provider`) - the
+   *  `provider_sign_in` banner's "Sign in to {label}". Fire-and-forget; the person resends. */
+  'providerSignIn',
   /** Run a PreFetch answer chip's command (`command`, `args`; e.g. Open in graph) — one of
    *  the extension's own commands only. Fire-and-forget. */
   'prefetch.chip',

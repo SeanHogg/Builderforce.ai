@@ -17,6 +17,9 @@ type Remedies = Pick<ChatErrorBannerProps, 'onSwitchToHybrid' | 'onDownloadLocal
     | 'modelKeepsCrashing'
     | 'continuationTimedOut'
     | 'manageLocalModels'
+    | 'modelUnresponsive'
+    | 'chooseAnotherModel'
+    | 'providerSignIn'
     | 'platformRefusedMode'
     | 'platformRefusedSync'
     | 'platformRefusedSetting'
@@ -58,6 +61,12 @@ export function useModelRemedies(onDismiss: () => void, composerId: string, retr
       modelKeepsCrashing: t('modelKeepsCrashing'),
       continuationTimedOut: t('continuationTimedOut'),
       manageLocalModels: t('manageLocalModels'),
+      // The selected model stopped answering (`model_unresponsive`): the message names it, the button opens the Model tab.
+      modelUnresponsive: t('modelUnresponsive', { model: '{model}' }),
+      chooseAnotherModel: t('chooseAnotherModel'),
+      // A provider on the person's own account refused the credential (`provider_sign_in`). The web cannot call that
+      // provider directly, so the sentence points at where it is reconnected; no button.
+      providerSignIn: t('providerSignIn', { label: '{label}' }),
       // A platform call this run needed was refused (`platform_refused`): by Local only,
       // by account sync being off, or by another platform setting.
       platformRefusedMode: t('platformRefusedMode'),

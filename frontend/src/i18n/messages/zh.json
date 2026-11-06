@@ -20719,7 +20719,14 @@
     "empty": "此项目尚未上传任何知识包。请在 VS Code 中运行“BuilderForce：上传知识包”来添加。",
     "select": "使用",
     "selected": "使用中",
-    "summary": "已使用 {count}/{total} 个知识包"
+    "summary": "已使用 {count}/{total} 个知识包",
+    "provenanceByWithOn": "由 {reviewer} 使用 {model} 审阅，{date}",
+    "provenanceByWith": "由 {reviewer} 使用 {model} 审阅",
+    "provenanceByOn": "由 {reviewer} 审阅，{date}",
+    "provenanceBy": "由 {reviewer} 审阅",
+    "provenanceWithOn": "使用 {model} 审阅，{date}",
+    "provenanceWith": "使用 {model} 审阅",
+    "provenanceOn": "审阅于 {date}"
   },
   "creationCanvas": {
     "costToBuild": "构建成本",

@@ -70,7 +70,8 @@ export class LocalFetchProxy implements vscode.Disposable {
     // Resolved here, per request, rather than carried in the panel's init payload: a Kimi
     // token read fifteen minutes ago is no longer valid, and a credential the webview was
     // handed once would be exactly that.
-    // A fetch the page performs IS a turn's model call.
+    // A fetch the page performs IS a turn's model call. The sign-in it may launch is single-flight and a cancel is
+    // remembered per provider (`ensureLocalProviderCredential`), so a run of calls never relaunches it.
     const authorized = await authorizeLocalEndpoint(match.provider, match.endpoint, this.secrets, { interactive: true });
     if (!authorized.ok) {
       send("llm.error", { error: authorized.detail });

@@ -20719,7 +20719,14 @@
     "empty": "No knowledge packs have been uploaded to this project yet. In VS Code, run “BuilderForce: Upload Knowledge Pack” to add one.",
     "select": "Use",
     "selected": "In use",
-    "summary": "{count} of {total} packs in use"
+    "summary": "{count} of {total} packs in use",
+    "provenanceByWithOn": "Reviewed by {reviewer} with {model}, {date}",
+    "provenanceByWith": "Reviewed by {reviewer} with {model}",
+    "provenanceByOn": "Reviewed by {reviewer}, {date}",
+    "provenanceBy": "Reviewed by {reviewer}",
+    "provenanceWithOn": "Reviewed with {model}, {date}",
+    "provenanceWith": "Reviewed with {model}",
+    "provenanceOn": "Reviewed {date}"
   },
   "creationCanvas": {
     "scopeKind": "Scope",

@@ -50,9 +50,11 @@ export interface KimiCredentialFs {
  *  refresh it, or has to send the user back to Kimi Code. */
 export type KimiCredentialState =
   /** Usable now, and far enough from expiry to start a request. */
-  | { kind: "fresh"; record: KimiCredentialRecord }
-  /** Still parseable and refreshable, but too close to (or past) expiry to use. */
-  | { kind: "stale"; record: KimiCredentialRecord }
+  | { kind: "fresh"; record: KimiCredentialRecord; file?: string }
+  /** Still parseable and refreshable, but too close to (or past) expiry to use. `file` is
+   *  the base name (no `.json`) of the store file the record came from, so a refresh writes
+   *  back to THAT file rather than a default one. */
+  | { kind: "stale"; record: KimiCredentialRecord; file?: string }
   /** Kimi's signed-out tombstone: the record exists with an empty access token. */
   | { kind: "revoked" }
   /** No file, or a file this reader cannot make sense of. `detail` names the fields it
@@ -117,12 +119,13 @@ function toWire(record: KimiCredentialRecord): Record<string, unknown> {
 
 /** Classify a parsed record against the clock. Exported so the refresh path and the
  *  picker ask the same question in the same place. */
-export function classifyCredential(record: KimiCredentialRecord, nowMs: number): KimiCredentialState {
+export function classifyCredential(record: KimiCredentialRecord, nowMs: number, file?: string): KimiCredentialState {
   if (record.accessToken.length === 0) return { kind: "revoked" };
   const remainingSeconds = record.expiresAt - Math.floor(nowMs / 1000);
+  const where = file === undefined ? {} : { file };
   return remainingSeconds > refreshThresholdSeconds(record.expiresIn)
-    ? { kind: "fresh", record }
-    : { kind: "stale", record };
+    ? { kind: "fresh", record, ...where }
+    : { kind: "stale", record, ...where };
 }
 
 /**
@@ -151,7 +154,14 @@ export function loadCredential(
     return { kind: "unreadable", detail: "Kimi Code is installed but has never signed in." };
   }
 
+  // EVERY parseable file is considered. The CLI keeps several (`kimi-code.json` left over from
+  // an old login next to `kimi-code-env-<hash>.json` for the active provider), so "first file
+  // alphabetically" picked a dead login over a live one, and a tombstone in an early file
+  // hid a live record in a later one. A usable record wins — the latest `expires_at` — and
+  // `revoked` is reported only when no file holds one.
   let lastDetail = "No readable credential in the Kimi Code store.";
+  let sawTombstone = false;
+  let best: { record: KimiCredentialRecord; file: string } | null = null;
   for (const name of files) {
     let parsed: unknown;
     try {
@@ -169,7 +179,8 @@ export function loadCredential(
     // someone they are signed out of Kimi Code when they are signed in sends them to redo
     // a login that was never broken.
     if (typeof wire.access_token === "string" && record.accessToken.length === 0) {
-      return { kind: "revoked" };
+      sawTombstone = true;
+      continue;
     }
     if (record.accessToken.length === 0 || (record.refreshToken.length === 0 && record.expiresAt === 0)) {
       // Neither usable nor refreshable: name the fields so an unfamiliar format is
@@ -179,8 +190,10 @@ export function loadCredential(
       }.`;
       continue;
     }
-    return classifyCredential(record, nowMs);
+    if (!best || record.expiresAt > best.record.expiresAt) best = { record, file: name.replace(/\.json$/i, "") };
   }
+  if (best) return classifyCredential(best.record, nowMs, best.file);
+  if (sawTombstone) return { kind: "revoked" };
   return { kind: "unreadable", detail: lastDetail };
 }
 

@@ -28,6 +28,7 @@ import { describeNetworkError, isConnectFailure, retryOnConnectFailure } from '.
 import { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 import { DEFAULT_MAX_TOKENS, type ReasoningIntent } from './effort';
 import type { LocalFirstAttemptSummary } from './localFirstTraces';
+import { hostOf, type StreamFailureDetail } from './streamFailureDetail';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 export interface BrainTransport {
@@ -63,6 +64,10 @@ export interface BrainTransport {
   /** The provider chooses sampling per model, so no `temperature` is sent — Kimi K3
    *  accepts only `1` and 400s our default (the runtime registry's `providerSampling`). */
   providerSampling?: boolean;
+  /** A provider reached directly (not the gateway): named in a silence error and its detail. Absent = the gateway. */
+  destination?: { label: string; host: string };
+  /** Whether this request's per-request credential lookup settled - read when the request fails. */
+  credentialState?: (attemptSignal?: AbortSignal) => 'resolved' | 'pending' | 'none';
 }
 
 /** OpenAI function-tool spec (the `tools[]` entries sent to the model). */
@@ -445,10 +450,19 @@ interface DeltaToolCall {
  */
 export class StreamInterruptedError extends Error {
   readonly model: string | undefined;
-  constructor(message: string, model: string | undefined) {
+  /** What the failed request looked like (destination, phase, elapsed, size) - for logs and triage. */
+  readonly detail?: StreamFailureDetail;
+  /**
+   * The model was PICKED (named and held strictly) and stayed silent or dropped the connection - the only interruption
+   * where "choose another model" is the right offer. Never set for an in-band provider error.
+   */
+  readonly pinned: boolean;
+  constructor(message: string, model: string | undefined, detail?: StreamFailureDetail, options?: { pinned?: boolean }) {
     super(message);
     this.name = 'StreamInterruptedError';
     this.model = model;
+    this.pinned = options?.pinned === true;
+    if (detail) this.detail = detail;
   }
 }
 
@@ -470,11 +484,14 @@ export class TransportError extends Error {
    * reports the outage instead of retrying.
    */
   readonly unreachable: boolean;
-  constructor(message: string, model: string | undefined = undefined, options?: { cause?: unknown; unreachable?: boolean }) {
+  /** As {@link StreamInterruptedError.pinned}. */
+  readonly pinned: boolean;
+  constructor(message: string, model: string | undefined = undefined, options?: { cause?: unknown; unreachable?: boolean; pinned?: boolean }) {
     super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'TransportError';
     this.model = model;
     this.unreachable = options?.unreachable === true;
+    this.pinned = options?.pinned === true;
   }
 }
 
@@ -612,12 +629,36 @@ async function runStreamChatCompletion(
   // attempts (`retryOnConnectFailure`) is the network being down, not the gateway being
   // silent, and must never be billed to the model as "sent nothing".
   const idleMs = opts.idleTimeoutMs ?? STREAM_IDLE_MS;
+  // A model the caller PICKED and holds strictly: only then is a silent or dropped stream the model's to answer for.
+  const pinned = !!opts.model && !!opts.modelStrict;
+  let attemptStartedAt = Date.now();
+  let attemptSignal: AbortSignal | undefined;
+  const requestJson = JSON.stringify(body);
+  const requestBytes = new TextEncoder().encode(requestJson).byteLength;
+  const failureDetail = (phase: 'headers' | 'body', extra: { idle?: number; bytesReceived?: number } = {}): StreamFailureDetail => {
+    const credential = transport.credentialState?.(attemptSignal);
+    return {
+      phase,
+      destination: transport.destination
+        ? { kind: 'provider', ...transport.destination }
+        : { kind: 'gateway', label: 'the gateway', host: hostOf(transport.baseUrl) },
+      elapsedMs: Date.now() - attemptStartedAt,
+      idleMs: extra.idle ?? idleMs,
+      requestBytes,
+      messageCount: opts.messages.length,
+      toolCount: opts.tools?.length ?? 0,
+      ...(extra.bytesReceived !== undefined ? { bytesReceived: extra.bytesReceived } : {}),
+      ...(credential ? { credential } : {}),
+    };
+  };
   const headerDeadlineOn = Number.isFinite(idleMs) && idleMs > 0;
   let headerTimedOut = false;
   const sendOnce = (): Promise<Response> => {
     // Each attempt gets its own controller: the header deadline aborts THIS attempt only,
     // while the caller's Stop (on `request`) still cancels it — headers and body alike.
+    attemptStartedAt = Date.now();
     const attempt = new AbortController();
+    attemptSignal = attempt.signal;
     const forwardStop = (): void => attempt.abort();
     if (request.signal.aborted) attempt.abort();
     else request.signal.addEventListener('abort', forwardStop, { once: true });
@@ -627,7 +668,7 @@ async function runStreamChatCompletion(
     return doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body: requestJson,
       signal: attempt.signal,
     }).finally(() => clearTimeout(deadline));
   };
@@ -642,7 +683,15 @@ async function runStreamChatCompletion(
   } catch (e) {
     if (opts.signal?.aborted || request.signal.aborted) throw e;
     if (headerTimedOut) {
-      throw new StreamInterruptedError(`the gateway sent nothing for ${Math.round(idleMs / 1000)}s`, model);
+      const quiet = Math.round(idleMs / 1000);
+      throw new StreamInterruptedError(
+        transport.destination
+          ? `${transport.destination.label} (${transport.destination.host}) sent no response for ${quiet}s`
+          : `the gateway sent nothing for ${quiet}s`,
+        model,
+        failureDetail('headers'),
+        { pinned },
+      );
     }
     // A transport-level failure (network error, DNS, refused, timeout before response).
     // This is NOT an HTTP error — we never got a Response. Throw a TransportError so
@@ -650,7 +699,7 @@ async function runStreamChatCompletion(
     if (e instanceof TypeError) {
       // `fetch failed` is all undici's own message says — the reason (timeout, reset,
       // DNS, TLS) is in its `cause` chain, so that is what the message carries.
-      throw new TransportError(describeNetworkError(e), undefined, { cause: e, unreachable: isConnectFailure(e) });
+      throw new TransportError(describeNetworkError(e), undefined, { cause: e, unreachable: isConnectFailure(e), pinned });
     }
     // Rethrow anything else as-is — unexpected.
     throw e;
@@ -768,6 +817,7 @@ async function runStreamChatCompletion(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let bytesReceived = 0;
   while (true) {
     let chunkRead: ReadableStreamReadResult<Uint8Array>;
     try {
@@ -780,12 +830,13 @@ async function runStreamChatCompletion(
       // A user Stop aborts the fetch — that is a cancellation, not an upstream failure.
       if (opts.signal?.aborted) throw e;
       if (e instanceof StreamIdleError) {
-        throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1000)}s`, resolvedModel());
+        throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1000)}s`, resolvedModel(), failureDetail('body', { idle: e.idleMs, bytesReceived }), { pinned });
       }
-      throw new StreamInterruptedError(`the stream dropped mid-answer: ${describeNetworkError(e)}`, resolvedModel());
+      throw new StreamInterruptedError(`the stream dropped mid-answer: ${describeNetworkError(e)}`, resolvedModel(), failureDetail('body', { bytesReceived }), { pinned });
     }
     const { done, value } = chunkRead;
     if (done) break;
+    bytesReceived += value?.byteLength ?? 0;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop() ?? '';
@@ -822,7 +873,7 @@ async function runStreamChatCompletion(
       if (parsed.error) {
         const message = typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error';
         reader.cancel().catch(() => undefined);
-        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
+        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel(), failureDetail('body', { bytesReceived }));
       }
       if (!streamModel && typeof parsed.model === 'string' && parsed.model) streamModel = parsed.model;
       announceModel();

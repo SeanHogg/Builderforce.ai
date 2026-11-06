@@ -20719,7 +20719,14 @@
     "empty": "Aún no se ha subido ningún paquete de conocimiento a este proyecto. En VS Code, ejecuta “BuilderForce: Subir paquete de conocimiento” para añadir uno.",
     "select": "Usar",
     "selected": "En uso",
-    "summary": "{count} de {total} paquetes en uso"
+    "summary": "{count} de {total} paquetes en uso",
+    "provenanceByWithOn": "Revisado por {reviewer} con {model}, {date}",
+    "provenanceByWith": "Revisado por {reviewer} con {model}",
+    "provenanceByOn": "Revisado por {reviewer}, {date}",
+    "provenanceBy": "Revisado por {reviewer}",
+    "provenanceWithOn": "Revisado con {model}, {date}",
+    "provenanceWith": "Revisado con {model}",
+    "provenanceOn": "Revisado el {date}"
   },
   "creationCanvas": {
     "costToBuild": "Costo de construcción",

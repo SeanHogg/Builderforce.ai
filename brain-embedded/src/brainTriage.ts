@@ -11,6 +11,7 @@
 
 import { announcesUntakenAction } from '@builderforce/agent-stall';
 import { turnInterruption } from './finishReason';
+import { describeStreamFailure, type StreamFailureDetail } from './streamFailureDetail';
 import type { BrainMessage } from './types';
 import { isModelReply } from './modelReply';
 import { traceWithPersistedSteps } from './persistedSteps';
@@ -624,7 +625,7 @@ export interface BrainDiagnostics {
    * whole transcript hunting for the failure. Capped, because a run that fails
    * repeatedly should not push everything else out of the report.
    */
-  errorSteps: { label: string; message: string; model?: string; requiredRole?: string; callerRole?: string; remediation?: string }[];
+  errorSteps: { label: string; message: string; model?: string; failure?: StreamFailureDetail; requiredRole?: string; callerRole?: string; remediation?: string }[];
   /** Distinct models that actually answered, first-seen order. */
   modelsUsed: string[];
   /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
@@ -1003,12 +1004,14 @@ export function computeBrainDiagnostics(
     .reverse()
     .map((e) => {
       const model = (e.args as { model?: unknown } | undefined)?.model;
+      const failure = (e.args as { failure?: StreamFailureDetail } | undefined)?.failure;
       const message = errorMessageOf(e);
       const gate = parseRoleGateRefusal(message);
       return {
         label: e.label,
         message,
         ...(typeof model === 'string' && model !== 'default' ? { model } : {}),
+        ...(failure && typeof failure === 'object' ? { failure } : {}),
         ...(gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {}),
         ...(gate.callerRole ? { callerRole: gate.callerRole } : {}),
       };
@@ -1284,6 +1287,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
             ? ` — requires ${e.requiredRole ?? 'unknown'}, caller is ${e.callerRole ?? 'unknown'}${e.remediation ? `; ${e.remediation}` : ''}`
             : ''),
       );
+      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
     }
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
   }

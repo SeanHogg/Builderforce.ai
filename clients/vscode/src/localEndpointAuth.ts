@@ -36,6 +36,18 @@ export type LocalEndpointAuthorization =
 const log = (line: string): void => logLine(`[kimi auth] ${line}`);
 
 /**
+ * The Kimi Code CLI access token Kimi refused (a 401), for this session. Keyed by the token's value so a login the
+ * CLI renews (a different token) is tried again; without it a revoked CLI login was re-sent on every turn and the
+ * workspace connection was never reached.
+ */
+let refusedCliToken: string | null = null;
+
+/** Test seam: forget the session's refusal. */
+export function resetRefusedKimiCliToken(): void {
+  refusedCliToken = null;
+}
+
+/**
  * The per-request credential, with every provider refusal logged: the retry it drives is
  * silent in the chat, so the output channel is where a recurring revocation shows.
  */
@@ -76,17 +88,26 @@ export async function authorizeLocalEndpoint(
       : process.env;
     const fresh = () => ensureFreshKimiToken(nodeFs, install.home, { env });
     const resolved = await fresh();
-    if (resolved.kind === "token") {
+    if (resolved.kind === "token" && resolved.accessToken === refusedCliToken) {
+      // Kimi already refused exactly this token this session: using it again is the loop, so the
+      // workspace connection below answers until the CLI holds a different one.
+      cliDetail = "Kimi refused the Kimi Code CLI login this session.";
+      if (interactive) log(`${cliDetail} Using the workspace connection instead.`);
+    } else if (resolved.kind === "token") {
+      refusedCliToken = null; // a fresh CLI token (different value) clears the mark
       if (interactive) log(`Kimi Code CLI login used (${install.home}, ${install.baseUrl}).`);
       // Re-read before every request: the run outlives the fifteen-minute token it started with.
-      const credential = async () => {
+      const credential = async (rejected?: string) => {
+        if (rejected) refusedCliToken = rejected;
         const next = await fresh();
-        return next.kind === "token" ? next.accessToken : null;
+        // A token Kimi just refused is not offered back: the retry would be refused the same way.
+        return next.kind === "token" && next.accessToken !== refusedCliToken ? next.accessToken : null;
       };
       return { ok: true, endpoint: { baseUrl: install.baseUrl, ...endpoint, token: resolved.accessToken, credential } };
+    } else {
+      cliDetail = resolved.detail;
+      if (interactive) log(`Kimi Code CLI login unusable (${resolved.kind}, sign-in host ${env.KIMI_CODE_OAUTH_HOST ?? "default"}): ${resolved.detail}`);
     }
-    cliDetail = resolved.detail;
-    if (interactive) log(`Kimi Code CLI login unusable (${resolved.kind}, sign-in host ${env.KIMI_CODE_OAUTH_HOST ?? "default"}): ${resolved.detail}`);
   } else if (interactive) {
     log(`No Kimi Code CLI login (${install.reason}): ${install.detail}`);
   }

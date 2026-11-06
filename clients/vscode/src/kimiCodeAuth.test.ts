@@ -98,6 +98,24 @@ describe("credential store", () => {
     expect(loadCredential(fs, HOME, NOW).kind).toBe("revoked");
   });
 
+  it("prefers a live record over a tombstone in an earlier file, with the latest expiry", () => {
+    const { fs } = fakeFs({
+      [path.join(CRED_DIR, "a-signed-out.json")]: JSON.stringify(record(0, "", "")),
+      [CRED_PATH]: JSON.stringify(record(1_788_640_100, "older", "r")),
+      [path.join(CRED_DIR, "kimi-code-env-1.json")]: JSON.stringify(record(1_788_640_900, "newer", "r")),
+    });
+    const state = loadCredential(fs, HOME, NOW);
+    expect(state).toMatchObject({ kind: "fresh", file: "kimi-code-env-1", record: { accessToken: "newer" } });
+  });
+
+  it("reports revoked only when no file holds a usable record", () => {
+    const { fs } = fakeFs({
+      [path.join(CRED_DIR, "a.json")]: JSON.stringify(record(0, "", "")),
+      [CRED_PATH]: JSON.stringify({ blob: "x" }),
+    });
+    expect(loadCredential(fs, HOME, NOW).kind).toBe("revoked");
+  });
+
   it("names the fields of an unfamiliar shape without leaking a value", () => {
     const { fs } = fakeFs({ [CRED_PATH]: JSON.stringify({ blob: "s".repeat(50), kind: "oauth" }) });
     const state = loadCredential(fs, HOME, NOW);
@@ -231,6 +249,20 @@ describe("ensureFreshKimiToken", () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }));
     expect(await ensureFreshKimiToken(fs, HOME, { fetchImpl, nowMs: () => NOW }))
       .toMatchObject({ kind: "signed_out" });
+  });
+
+  it("picks the live login among several files and writes the rotation back to THAT file", async () => {
+    const ENV_PATH = path.join(CRED_DIR, "kimi-code-env-0e4f99c69cc27850.json");
+    const { fs, store } = fakeFs({
+      [CRED_PATH]: JSON.stringify(record(1_700_000_000, "dead-a", "dead-r")),
+      [ENV_PATH]: JSON.stringify(record(1_788_639_592, "env-a", "env-r")),
+    });
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ access_token: "env-new", refresh_token: "env-rot", expires_in: 900 }), { status: 200 }));
+    const result = await ensureFreshKimiToken(fs, HOME, { fetchImpl, nowMs: () => NOW });
+    expect(result).toEqual({ kind: "token", accessToken: "env-new" });
+    expect(new URLSearchParams(fetchImpl.mock.calls[0]![1].body as string).get("refresh_token")).toBe("env-r");
+    expect(JSON.parse(store[ENV_PATH]!)).toMatchObject({ access_token: "env-new", refresh_token: "env-rot" });
+    expect(JSON.parse(store[CRED_PATH]!)).toMatchObject({ access_token: "dead-a" });
   });
 
   it("still returns the token when persisting it fails", async () => {

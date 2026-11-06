@@ -1,3 +1,45 @@
+## ✅ RESOLVED 2026-11-06 — PRD 40 portable knowledge packs: chat, Synapse, Canvas and the platform pack store (VS Code NEXT)
+
+- **§ The format (v1).**
+  - `PortableKnowledgePack` lives in `packages/agent-tools/src/knowledge/portablePack.ts`, with canonical serialization: equal content gives equal bytes, and repeated keys are deduped.
+  - The relation key uses a real NUL, the same as memory's `localSnapshotStore`. The shipped key used a literal `\\u0000`.
+  - `rebasePackRoot` re-keys a pack onto a new root, recomputing claim keys so a moved folder does not duplicate claims.
+  - Update merges by fact key, relation triple and extracted hash. It forgets files deleted from the folder and rebuilds the cards from the merged snapshot.
+- **§ VS Code surface.**
+  - **Load was broken:** it had never indexed anything (`graphOfPack` passed an empty manifest), and chat never queried a pack's index. Both are fixed, so a loaded pack now answers in chat with no folder open.
+  - **Loaded packs:** they re-index one at a time at startup and appear as read-only roots in the knowledge view, where writes are refused with a localized message.
+  - **Create:** it skips the review when nothing changed. Pack files and loaded-pack records are keyed by root id, so two folders with the same name no longer collide.
+  - **Upload and Remove:** new **Upload Knowledge Pack** and **Remove Uploaded Knowledge Pack** commands.
+  - **Translations:** every pack string is in all five l10n bundles.
+- **§ Synapse and Canvas consumption: the seam.**
+  - `packRetrieval.ts` (`PackRegistry`, `PackRetrievalPort`, `withPacks`, `mergeRecalls`) is the one retrieval path.
+  - **Consumers:** VS Code `knowledge.ask`, the context pack and Synapse, web chat `knowledge.ask`, and the Canvas Evermind turn (`EvermindPackPicker`, node data `knowledgePacks`).
+  - **`/graph`:** it opens a pack when a project has no reviewed folder.
+- **§ OD-2: platform pack store (operator decision 2026-11-06).**
+  - An uploaded pack is a project knowledge root under the `pack:` host. There is no new table.
+  - Pack facts carry `source = rootId`. `DELETE /:projectId/knowledge/scopes/:rootId` removes only those facts, in batches with one cache bump.
+  - Removal needs DEVELOPER or higher and refuses host keys.
+- **§ Measure.**
+  - `packages/agent-tools/src/knowledge/index/packMeasure.test.ts` runs the PRD's end-to-end proof:
+    1. Review a docs folder.
+    2. Pack it.
+    3. Serialize, then parse.
+    4. Load into a clean index.
+    5. Ask a question.
+  - It asserts that the termination section's content is in the model's context and that the answer cites the file.
+- **§ OD-1 and OD-3 (operator decisions 2026-11-06).**
+  - **OD-1:** no embeddings in the pack. Packs stay model-agnostic and are re-embedded by hash.
+  - **OD-3:** optional provenance (`reviewedBy`, `judgeModel`, `policy`, `reviewedAt`).
+    - Create and Update fill it in.
+    - Upload stores it in the new nullable `knowledge_scopes.provenance` jsonb column.
+    - The Evermind picker and the VS Code pack lists show it.
+- **Security fixes found in review before shipping.**
+  - Deleting a pack had matched facts by path, which would have deleted other sources' facts on the same paths. It now deletes by provenance only.
+  - Removal had no role gate. It now requires DEVELOPER or higher and refuses host keys.
+  - Upload no longer overwrites any fact it doesn't own.
+  - Pack ids are collision-resistant: a slug plus a short hash.
+- **PRD 40 has no open decisions.**
+
 ## ✅ RESOLVED 2026-11-05 — Knowledge visualizer Option B+: transit map, questions, overlays, panels, and screenshot pinpoint (VS Code 2026.10.130 · memory 2026.10.40, published 2026-11-05 and in use from VS Code 2026.10.131)
 
 - **One surface (PRD 38 "The visualizer, Option B+").**
@@ -611,7 +653,6 @@ export interface RunState {
 Contract changes go through WS1 only. Another workstream that needs a field files the request
 in its hand-off note and keeps working against a local type until WS1 merges the change.
 
-
 ### 4. Workstreams
 
 Workstreams run in parallel wherever the dependency graph allows. **File ownership is
@@ -872,7 +913,6 @@ tests. Each module:
     (§5.1).
   - Every §7 SDK row is covered.
 
-
 #### 5.2 Running this PRD from the BuilderForce VS Code extension
 
 The program can be driven from the BuilderForce chat in VS Code as well as from Claude Code.
@@ -1064,7 +1104,6 @@ the WS that owns each one writes it first (§5.1 step 2). The rows most at risk:
 | Stop kills the running tool; a steer interrupts a step; stop words in text | `policy/steering` + `ToolContext.signal` on every capability | on-prem `agent-loop.ts` (steer skips remaining calls), `bash-tools.exec.ts` (kill on abort), `auto-reply/reply/abort.ts` (`ABORT_TRIGGERS`) | on-prem `abort.test` + exec tests; WS8e tests; a stop conformance case on every adapter |
 | Default repo for git + shell | `agent-tools` resolver + adapter-built `RunTask.workspace` | `git-tools.ts` `inferRepoFromPath`, `ticketBranchTool.ts` `checkoutsUnder` | `git-repo-scope.test`, `ticketBranchReview.test` + WS8b cases |
 
-
 #### 8.2 The uniform outcome row (every run, every entry point)
 
 `entry_point`, `run id`, `steps`, `tool_calls`, `tool_errors`, `compactions`, `stall_recoveries`,
@@ -1088,7 +1127,6 @@ and compaction is unrecorded; WS6 closes those gaps.
 - 2,093 auth-401 model failovers.
 - The builderforce-memory Claude Code hook recalls entries marked `[absorbed→Evermind v511] … (content lost)`: the absorb step kept the key but dropped the body, so recall returns empty stubs. That is builderforce-memory's absorb path, not this program.
 
-
 ### 9. Out of scope
 
 - New capabilities, except the §6.10 efficiency items. Most of those port a capability that one
@@ -1096,8 +1134,6 @@ and compaction is unrecorded; WS6 closes those gaps.
   `read_file` `paths[]`, `model.preflight` and the read-only codemap consolidation.
 - UI redesign. The VS Code / web surfaces keep their UI; only the run underneath changes.
 - Changes to the board and governance behaviour itself (§6.9 retargets dispatch only).
-
-
 
 ## ✅ RESOLVED 2026-10-31 — PRD 38: everything finished, moved out of the spec (rules, model, API, hosts, views, WS1–WS6, decisions)
 
@@ -1919,7 +1955,6 @@ Idea-to-Real blog post, "Point it at a folder and see what it knows". It sits in
 Read** for docs (understand what you have) and **Make → Build** for code (judge the shape,
 not the lines).
 
-
 ### 8. Decisions (operator, 2026-10-28)
 
 1. **The canvas surface name** is `knowledge`.
@@ -1934,8 +1969,6 @@ Knowledge index decisions (taken as proposed):
 - the cloud embedder stays bge-m3;
 - `bf-index` gets the shared comparator only;
 - there are no per-symbol cards.
-
-
 
 ## ✅ RESOLVED 2026-10-30 — PRD 35 WS3/WS4/WS5: cloud, canvas and on-prem tickets run on the one agent; VS Code, web and Rovr chat hardened on the kernel (VS Code 2026.10.116 · api 2026.10.94 · frontend 2026.10.99 · agent-runtime 2026.10.23 · sdk 2026.10.2 · brain-embedded 2026.10.72 · brain-ui 2026.10.30 · Rovr 2026.10.34)
 
@@ -4007,7 +4040,6 @@ User: "why would there be a separate scenario?" The earlier pass left image-run 
 - **Cloud children recurse like the editor's.** A child may spawn while `depth < MAX_SUBAGENT_DEPTH` (3, now one constant in agent-tools that both surfaces read). A tree's tokens bill to its root (`rootExecutionId`). A rehearsal has no delegation capabilities, because a dry run must not start real runs.
 - **The engine reads one field,** `CloudRunDelegation {parent, runtime, spec?}` (`cloudRunDelegation.ts`).
 - Also closes the "Container / Actions images cannot fan out" Gap Register row: `spawn_agents` relays through the same op, and the clone-sync concern is covered by the branch-diff absorb and the sync note.
-
 
 ## ✅ RESOLVED 2026-10-11 — Cloud sub-agents run as their own durable runs; the editor's native chat approves a sub-agent's edits (agent-tools 2026.10.5 · api 2026.10.30 · VSIX 2026.10.20)
 

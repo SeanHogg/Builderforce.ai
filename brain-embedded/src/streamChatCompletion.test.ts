@@ -405,6 +405,34 @@ describe('a model that breaks after the stream opened', () => {
     expect((err as StreamInterruptedError).model).toBe('free/model');
   });
 
+  it('names a provider destination, and records the failed request detail', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    })));
+    const transport: BrainTransport = { ...baseTransport, destination: { label: 'Kimi Code', host: 'api.kimi.ai' }, credentialState: () => 'pending' };
+    const err = await streamChatCompletion({ messages: [{ role: 'user', content: 'hi' }], model: 'k3', transport, idleTimeoutMs: 20 })
+      .catch((e: unknown) => e) as StreamInterruptedError;
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect(err.message).toBe('Kimi Code (api.kimi.ai) sent no response for 0s');
+    expect(err.detail).toMatchObject({
+      phase: 'headers',
+      destination: { kind: 'provider', label: 'Kimi Code', host: 'api.kimi.ai' },
+      messageCount: 1,
+      toolCount: 0,
+      credential: 'pending',
+    });
+    expect(err.detail?.requestBytes).toBeGreaterThan(0);
+  });
+
+  it('records a gateway destination in the detail when the transport names none', async () => {
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    })));
+    const err = await streamChatCompletion({ messages: [], model: 'free/model', transport: baseTransport, idleTimeoutMs: 20 })
+      .catch((e: unknown) => e) as StreamInterruptedError;
+    expect(err.detail?.destination.kind).toBe('gateway');
+  });
+
   it('treats a user Stop before the headers as a cancellation, not a silent gateway', async () => {
     const stop = new AbortController();
     vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {

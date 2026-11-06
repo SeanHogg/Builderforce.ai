@@ -54,6 +54,14 @@ export interface ChatErrorBannerLabels {
   modelKeepsCrashing: string;
   /** A continuation took too long - replaces `continuation_timed_out`; the words are kept and read with the next message. */
   continuationTimedOut: string;
+  /** The selected model is not answering - replaces the raw interruption. Must contain the literal `{model}` token. */
+  modelUnresponsive: string;
+  /** Open the composer's model menu so the person picks another model. */
+  chooseAnotherModel: string;
+  /** `provider_sign_in`: a provider on the person's own account refused the credential. Must contain the literal `{label}` token. */
+  providerSignIn: string;
+  /** The button that starts that provider's sign-in. Must contain the literal `{label}` token. */
+  signInToProvider: string;
   /** Open where on-device models are managed (removed) — offered beside "Pick a model"
    *  for a model that keeps crashing. */
   manageLocalModels: string;
@@ -84,6 +92,10 @@ export const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels = {
   engineDetached: 'The on-device model stopped before it finished. Send again to retry.',
   modelKeepsCrashing: 'This model keeps crashing on this device. Remove it, or try another model.',
   continuationTimedOut: 'That took too long. Your message is kept and will be read with your next message.',
+  modelUnresponsive: "{model} isn't responding. Choose another model to continue.",
+  chooseAnotherModel: 'Choose model',
+  providerSignIn: '{label} needs you to sign in again.',
+  signInToProvider: 'Sign in to {label}',
   manageLocalModels: 'Manage on-device models',
   platformRefusedMode: 'Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.',
   platformRefusedSync: 'Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.',
@@ -121,6 +133,9 @@ export interface ChatErrorBannerProps {
    *  raised it), where a model is picked or the mode changed. Also "try another model"
    *  for a model that keeps crashing. */
   onPickModel?: () => void;
+  /** For the `provider_sign_in` verdict: start that provider's sign-in. Omit where the surface cannot (the web
+   *  points at Settings in the message instead) - the button then isn't offered. */
+  onProviderSignIn?: (provider: string, label: string) => void;
   labels?: Partial<ChatErrorBannerLabels>;
   /** Extra styles merged into the banner container, for host-specific chrome. */
   style?: React.CSSProperties;
@@ -150,6 +165,7 @@ export function ChatErrorBanner({
   onSwitchToHybrid,
   onDownloadLocalModel,
   onPickModel,
+  onProviderSignIn,
   labels: labelOverrides,
   style,
   className,
@@ -165,8 +181,16 @@ export function ChatErrorBanner({
 
   // Each remedy needs BOTH a matching verdict and a handler from the host; a
   // surface that can't perform one simply doesn't offer it.
+  const providerSignIn = kind === 'provider_sign_in' && action?.provider && onProviderSignIn
+    ? { provider: action.provider, label: action.label ?? action.provider, run: onProviderSignIn }
+    : null;
   const primary =
-    kind === 'auth' && onReconnect
+    providerSignIn
+      ? {
+          label: labels.signInToProvider.replace('{label}', providerSignIn.label),
+          onClick: () => providerSignIn.run(providerSignIn.provider, providerSignIn.label),
+        }
+    : kind === 'auth' && onReconnect
       ? { label: labels.reconnect, onClick: onReconnect }
       : kind === 'upgrade' && onUpgrade
         ? {
@@ -181,7 +205,9 @@ export function ChatErrorBanner({
               ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid }
               : kind === 'no_local_model' && onDownloadLocalModel
                 ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel }
-                : (kind === 'no_specific_model' || keepsCrashing) && onPickModel
+                : kind === 'model_unresponsive' && onPickModel
+                  ? { label: labels.chooseAnotherModel, onClick: onPickModel }
+                  : (kind === 'no_specific_model' || keepsCrashing) && onPickModel
                   ? { label: labels.pickModel, onClick: onPickModel }
                   : keepsCrashing && onDownloadLocalModel
                     ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel }

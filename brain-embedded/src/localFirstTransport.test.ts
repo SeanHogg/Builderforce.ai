@@ -313,6 +313,39 @@ data: [DONE]
       for (const key of ['temperature', 'metadata', 'strict']) expect(bodies[0]).not.toHaveProperty(key);
     });
 
+    it('reports a silent Kimi call under the full ref, naming Kimi Code and its host', async () => {
+      const fetchImpl = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }));
+      const stream = createLocalStream(kimi, 'k3', fetchImpl, { ref: 'local/kimi-code/k3' });
+      const err = await stream({ ...hello, idleTimeoutMs: 20 } as Parameters<typeof stream>[0]).catch((e: unknown) => e) as Error & { model?: string; detail?: { destination: { host: string } } };
+      expect(err.name).toBe('StreamInterruptedError');
+      expect(err.model).toBe('local/kimi-code/k3');
+      expect(err.message).toContain('Kimi Code');
+      expect(err.detail?.destination.host).toBe('api.kimi.com');
+    });
+
+    it('marks a silent call on a PINNED model as pinned, and a local-first plan attempt as not', async () => {
+      const silent = (_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      });
+      const pin = createLocalStream(kimi, 'k3', vi.fn(silent), { ref: 'local/kimi-code/k3' });
+      const pinnedErr = await pin({ ...hello, idleTimeoutMs: 20 } as Parameters<typeof pin>[0]).catch((e: unknown) => e) as { pinned?: boolean };
+      expect(pinnedErr.pinned).toBe(true);
+    });
+
+    it('maps a 401 and an auth-worded 403 to a provider sign-in, but a plan 403 keeps the default mapping', async () => {
+      const refuse = (status: number, body: unknown) => async () => new Response(JSON.stringify(body), { status });
+      const run = async (status: number, body: unknown) => {
+        const t = localTransport(kimi, vi.fn(refuse(status, body)), { runtime: 'kimi-code' });
+        const res = await t.fetch!(`${t.baseUrl}${GATEWAY_COMPLETIONS_PATH}`, {});
+        return t.mapError!(res) as Promise<{ code?: string }>;
+      };
+      expect((await run(401, { error: 'bad' })).code).toBe('provider_auth_required');
+      expect((await run(403, { error: 'invalid or expired token' })).code).toBe('provider_auth_required');
+      expect((await run(403, { error: 'Your plan does not include this model' })).code).not.toBe('provider_auth_required');
+    });
+
     it('keeps the temperature for an on-device runtime', async () => {
       const bodies: Record<string, unknown>[] = [];
       const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {

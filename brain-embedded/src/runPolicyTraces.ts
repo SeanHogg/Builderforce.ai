@@ -12,6 +12,7 @@
 
 import type { RunPolicyOutcome } from '@builderforce/run-policy';
 import type { BrainTraceEvent } from './brainTriage';
+import { StreamInterruptedError } from './streamChatCompletion';
 
 /** The implicit hand-off: the planning turn reached for its first code change. */
 export function coderReaskTrace(ts: string, step: number, plannerModel: string | undefined): BrainTraceEvent {
@@ -67,12 +68,13 @@ export function transportRetryTrace(
  * The result keeps the error's class, so triage can tell an interruption from a reset.
  */
 export function providerFailureTrace(ts: string, step: number, model: string | undefined, error: unknown, durationMs?: number): BrainTraceEvent {
+  const failure = error instanceof StreamInterruptedError ? error.detail : undefined;
   return {
     ts,
     category: 'error',
     label: 'llm.complete',
     ...(durationMs !== undefined ? { durationMs } : {}),
-    args: { model: model || 'default', step },
+    args: { model: model || 'default', step, ...(failure ? { failure } : {}) },
     result: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     isError: true,
   };

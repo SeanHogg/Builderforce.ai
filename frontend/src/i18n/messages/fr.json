@@ -20719,7 +20719,14 @@
     "empty": "Aucun pack de connaissances n’a encore été téléversé dans ce projet. Dans VS Code, exécutez « BuilderForce : Téléverser un pack de connaissances » pour en ajouter un.",
     "select": "Utiliser",
     "selected": "Utilisé",
-    "summary": "{count} pack(s) sur {total} utilisé(s)"
+    "summary": "{count} pack(s) sur {total} utilisé(s)",
+    "provenanceByWithOn": "Revu par {reviewer} avec {model}, {date}",
+    "provenanceByWith": "Revu par {reviewer} avec {model}",
+    "provenanceByOn": "Revu par {reviewer}, {date}",
+    "provenanceBy": "Revu par {reviewer}",
+    "provenanceWithOn": "Revu avec {model}, {date}",
+    "provenanceWith": "Revu avec {model}",
+    "provenanceOn": "Revu le {date}"
   },
   "creationCanvas": {
     "costToBuild": "Coût de construction",

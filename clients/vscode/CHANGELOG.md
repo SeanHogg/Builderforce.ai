@@ -2,6 +2,18 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [NEXT] — Knowledge packs answer in chat
+
+- **A loaded knowledge pack answers your questions.** Ask in chat, or let the agent and Synapse look things up, and the pack's knowledge is used too. It works even when no folder is open.
+- **Loaded packs come back on their own.** They are ready again the next time you start the editor, with no need to load them again.
+- **Packs show in the knowledge view as read-only.** You can browse a pack's graph beside your reviewed folders. Reviewing or editing one is refused, and the message tells you to use **Update Knowledge Pack**.
+- **Update keeps the new facts when the source folder moved.** Pick the folder's new location and what the re-review finds is kept in the pack.
+- **Create skips the review when nothing changed.** If the folder's last review is still current, the pack is written straight away.
+- **A pack holds only its own folder.** Creating a pack no longer pulls in the knowledge of other reviewed folders.
+- **Same-named folders get their own packs.** Two folders both called `docs` no longer overwrite each other's pack.
+- **Update follows the folder.** Files you deleted leave the pack, and the search cards are rebuilt from what the pack now holds. A moved folder's claims are no longer counted twice.
+- **A pack never overwrites a folder you have open.** Starting the editor no longer replaces that folder's live knowledge with an older pack.
+
 ## [NEXT] — The knowledge view matches its design, and big repos draw their whole map
 
 - **No loading screen.** The view opens on the last graph you saw and fills in as the review runs.
