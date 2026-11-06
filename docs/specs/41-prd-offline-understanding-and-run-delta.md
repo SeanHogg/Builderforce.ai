@@ -27,6 +27,16 @@ code *is*, and above all what a run *did* to it. This PRD delivers three things:
    - Did any of the **-ilities** change? The list is ISO/IEC 25010.
    - Did **quality** change? This includes whether the agent weakened the tests that judge it.
 
+4. **Predicted measures (Part D).** Classic statistics and ML formulas estimate what cannot
+   be measured at run end:
+   - the probability that a run will need a follow-up fix;
+   - how many problems no detector found;
+   - whether a trend is a real change;
+   - which expensive checks are worth running;
+   - which findings to show first.
+
+   Predictions are labelled, versioned and reproducible, and they never set a verdict.
+
 The governing idea is **diff the facts, not the text**. Both sides of a run are reduced to
 sets of facts and findings by deterministic extractors and analyzers. The delta is a set
 difference with lineage, and every verdict can be traced to evidence and then to code.
@@ -843,6 +853,403 @@ paragraph, cached by `digest`. Rules:
 
 ---
 
+## Part D — Predicted measures
+
+Parts B and C *measure*. Part D *predicts* what measurement cannot settle at run end:
+- whether the run will need a follow-up fix;
+- how many problems no detector found;
+- whether a trend is a real change;
+- which expensive checks are worth their cost;
+- what the person should look at first.
+
+Every formula below is classic and explainable, and it is computed reproducibly.
+
+### D0. The rule: measured decides, predicted advises
+
+1. **A prediction never sets or changes a verdict.**
+   - `packages/run-delta/src/verdict/**` may not import `packages/run-delta/src/predict/**`.
+   - A dependency guard (`check:run-delta-layers`) fails the build otherwise.
+2. **Every prediction carries its uncertainty and its provenance:**
+
+   ```ts
+   interface Prediction {
+     id: string;                         // 'risk.followup-fix', 'estimate.undetected.security', …
+     modelId: string; modelVersion: string; featureSchemaVersion: number;
+     value: number;                      // probability, count or metric
+     interval?: [number, number];        // credible/confidence/prediction interval
+     band?: 'low' | 'medium' | 'high';
+     explanation: Array<{ feature: string; contribution: number }>;   // top contributions, sorted
+     status: 'ok' | 'insufficient-data' | 'not-applicable' | 'model-disabled';
+     inputDigest: string;                // sha256 of the canonical feature vector
+   }
+   ```
+
+3. **Reproducible.**
+   - Models are versioned data artifacts.
+   - Inference uses fixed-point arithmetic (int16 weights, standardized features quantized
+     to 1e-4).
+   - Any randomness uses a PRNG seeded from `inputDigest`.
+   - Outputs are quantized before display.
+   - The same features and model version give the same prediction on every machine, offline
+     included.
+4. **Rendered apart.** Predictions sit in a "Predicted" section of the card and panel. They
+   always carry the word "predicted" or "≈", and they never use verdict colours.
+5. **Below the data threshold, `insufficient-data`.** No prediction is shown from a model
+   that has not met its minimum sample size. A guess is never shown as a prediction.
+
+### D1. The labels pipeline: start recording at the first delta
+
+Every model in this part learns from outcomes, and outcomes cannot be reconstructed later.
+So labels start recording in the same workstream that ships the delta (WS7), before any model
+exists.
+
+**Features are frozen at run end.** A `RunFeatures` vector (versioned schema) is stored with
+the delta:
+- **Size:** lines added and deleted, files touched.
+- **Spread:** change entropy (D2.1).
+- **Structure:**
+  - centrality sum and max of the touched symbols;
+  - entry points reached;
+  - layers touched;
+  - cross-partition edges changed.
+- **History:**
+  - churn over 90 days of the touched files;
+  - count of past follow-up fixes in those files;
+  - age of the touched code.
+- **Delta:**
+  - introduced, resolved and changed counts per dimension;
+  - integrity findings;
+  - tests changed;
+  - diff coverage when measured.
+- **Run:**
+  - entry point (VSIX, cloud, web);
+  - autonomous or interactive;
+  - model tier;
+  - steps;
+  - tool failures.
+- No code, no paths in the trained artifact, and no person-level features (§12.9).
+
+**Outcome labels** (`RunOutcomeLabel`, one row per run and label kind):
+
+| Label | How it is derived | Window |
+|---|---|---|
+| `reverted` | A later commit reverts the run's commit, or more than 50% of the run's added lines are deleted | 30 days |
+| `followup-fix` | **SZZ** (Śliwerski, Zimmermann, Zeller):<br>1. For each later *fix* change, blame the lines it modifies at its parent.<br>2. A fix is a bug-type ticket, a commit message matching the fix registry, or a run started from a delta finding's *Fix with agent*.<br>3. Lines whose facts-hash did not change (comments, whitespace) are ignored, using B1 early cutoff.<br>4. Blamed lines map back to the run through `runCommitMarker` and the run's change set. | 30 days |
+| `ci-red-after-merge` | The first CI run on the merged commit fails in a job touching the changed area | 7 days |
+| `review-rejected` | PR review (PRD 23) requests changes on the run's PR | until the PR closes |
+| `finding-actioned` / `finding-marked-wrong` / `finding-waived` | Panel actions (C11) | immediate |
+
+- **Censoring.** A label is *final* only after its window ends. Before that, the run is
+  right-censored. Survival estimates (D5.4) use censored runs correctly, and classifiers
+  train only on final labels.
+- **Storage.** Labels and features are local-first records (`run-outcome`), synced as mirror
+  records. Training data lives in the ops database, tenant-scoped. A cross-tenant global
+  model trains only on aggregated features, and only with the tenant's consent (§12.8).
+- **Leakage guard.** A feature may only use data available at run end. A unit test fails any
+  feature whose source timestamp is later than `run.finalizedAt`.
+
+### D2. Deterministic statistics (no training, ship first)
+
+**D2.1 Change entropy** (Hassan, 2009). With `pᵢ` the share of the run's changed lines that
+fall in file *i*, over the *n* files touched:
+
+```
+H = −Σ pᵢ log₂ pᵢ        Hₙ = H / log₂ n   (n > 1; else 0)
+```
+
+High normalized entropy means a scattered change, which predicts defects better than raw
+size. It is a `MetricDelta` in quality and a top feature for D5.
+
+**D2.2 Maintainability Index.** Uses tree-sitter Halstead counts. `V` is Halstead volume
+`N log₂ η`, `G` is cyclomatic complexity and `LOC` is lines of code. The normalized variant:
+
+```
+MI = max(0, (171 − 5.2 ln V − 0.23 G − 16.2 ln LOC) × 100 / 171)
+```
+
+It is a per-file metric, with its delta over changed files under `ilities.maintainability`.
+
+**D2.3 Distance from the main sequence** (Martin), per partition. `A` is abstractness and
+`I = Ce / (Ca + Ce)` is instability:
+
+```
+D = |A + I − 1|
+```
+
+**D2.4 Capture–recapture estimate of undetected problems.** For a **detector pair**
+registered as covering the same scope and finding kinds:
+- taint-lite × Semgrep (security);
+- knip × the `unused-export` rule;
+- jscpd × `near-duplicate`.
+
+Let `n₁` and `n₂` be the findings each reports, and `m` those both report, matched by anchor.
+The Chapman bias-corrected estimator:
+
+```
+N̂ = (n₁ + 1)(n₂ + 1) / (m + 1) − 1
+Var(N̂) = (n₁ + 1)(n₂ + 1)(n₁ − m)(n₂ − m) / ((m + 1)²(m + 2))
+undetected ≈ N̂ − (n₁ + n₂ − m)
+```
+
+- It is shown only when `m ≥ 3`, otherwise `insufficient-data`.
+- It is always labelled ≈, because the two detectors are rarely truly independent, and the
+  estimate is biased low when they share blind spots.
+
+**D2.5 Run anomaly score.** The Mahalanobis distance of the run's standardized `RunFeatures`
+from the repo's past runs:
+
+```
+d² = (x − μ)ᵀ Σ̂⁻¹ (x − μ)
+```
+
+- `Σ̂` is the Ledoit–Wolf shrinkage covariance, which stays stable with few runs.
+- A run is flagged "unusual for this project" when `d² > χ²₀.₉₉(k)`, with *k* the number of
+  features.
+- The top contributing features explain the flag.
+- It needs at least 30 past runs.
+
+### D3. Bayesian rule precision (replaces the fixed demotion threshold)
+
+Each rule *r* has precision `θᵣ ~ Beta(α₀, β₀)`.
+- **Prior.** Fitted by empirical Bayes (method of moments) across all rules of the same
+  family and all consenting tenants. This is hierarchical shrinkage, which solves the cold
+  start for a new rule or a new repo.
+- **Votes.** `finding-actioned` or `finding-waived` counts as a true positive (TP);
+  `finding-marked-wrong` counts as a false positive (FP).
+- **Posterior:**
+
+  ```
+  θᵣ | data ~ Beta(α₀ + TP, β₀ + FP)       E[θᵣ] = (α₀ + TP) / (α₀ + β₀ + TP + FP)
+  ```
+
+- **Demote** to `info` when the upper 90% credible bound falls below 0.6. **Restore** when the
+  lower bound rises above 0.8.
+- The bounds come from the regularized incomplete beta inverse, computed deterministically.
+- This replaces §10's fixed "20% for 2 weeks" rule. A rule with 3 votes no longer moves; a
+  rule with 300 moves as soon as the evidence says so.
+- Per-repo posteriors shrink toward the global one, so one noisy repo cannot demote a rule
+  everywhere.
+
+### D4. Calibration
+
+A heuristic score *s* becomes a calibrated probability:
+- **Platt scaling:** `p = σ(A·s + B)` while there are fewer than 1,000 labelled examples.
+- **Isotonic regression** (pool-adjacent-violators) at 1,000 or more.
+
+Quality is tracked with:
+- the **Brier score**: `(1/N) Σ (pᵢ − yᵢ)²`;
+- the **expected calibration error** (ECE): 10 equal-mass bins, `Σ (|Bₖ|/N) |acc(Bₖ) − conf(Bₖ)|`;
+- reliability diagrams in the superadmin analytics.
+
+Every model is recalibrated when its ECE exceeds 0.05 on the trailing 30 days.
+
+`packages/prefetch/src/calibrate.ts` already calibrates the prefetch gate. It moves into
+`packages/stats` (D13), and prefetch imports it from there. The two do not keep separate
+copies.
+
+### D5. Run risk: just-in-time defect prediction
+
+**D5.1 Model.** Regularized logistic regression (Kamei et al., 2013; McIntosh & Kamei, 2018):
+
+```
+P(followup-fix ∨ reverted | x) = σ(wᵀz + b),   z = (x − μ) / s   (stored scaler)
+loss = −Σ [yᵢ log pᵢ + (1 − yᵢ) log(1 − pᵢ)] · cᵢ + λ‖w‖²
+```
+
+- `cᵢ` is the inverse class-frequency weight.
+- The fit is Newton/IRLS with a fixed iteration cap. λ is chosen by **rolling-origin
+  cross-validation**: train on the past and validate on the next month, with no random
+  splits, so the future never leaks into training.
+
+**D5.2 Explanations.** The contributions `wⱼ zⱼ`, the top 3 rendered as reasons, for example
+"spread across 9 files (entropy 0.92)" or "touches 2 entry points".
+
+**D5.3 Replacing blast radius `v1`.** The model replaces C10 `v1` as the risk band only when,
+on a hold-out of at least 500 final-labelled runs, it beats `v1` on all three of:
+- PR-AUC;
+- Brier score;
+- **effort-aware recall**: the share of bad runs caught when reviewing the riskiest 20% of
+  changed lines (Popt).
+
+Until then, `v1` stays and the model's output is shown only as a secondary "predicted risk".
+
+- **Per-repo adaptation.** A mixed-effects variant (repo random intercept, shrunk toward the
+  global model) is trained once a repo has 200 or more final labels.
+- **Artifact** (canonical JSON, digest-named, bundled in the VSIX and refreshed when online):
+
+  ```
+  {modelId, version, featureSchemaVersion, weights(int16), scale, scaler{μ,s}, calibration,
+   trainedOn{from, to, n, tenants}, metrics{prAuc, brier, ece, popt}}
+  ```
+
+**D5.4 Survival view.** For each risk band, a **Kaplan–Meier** estimate of the time until a
+follow-up fix:
+
+```
+Ŝ(t) = Π_{tᵢ ≤ t} (1 − dᵢ / nᵢ)
+```
+
+- This uses the censored runs that classifiers cannot.
+- It renders as, for example, "Runs in this band needed a fix within 14 days 23% of the time
+  (95% CI 18–29%, Greenwood)".
+- A Cox proportional-hazards model is a later option. It is not in v1.
+
+### D6. Naturalness: unusual new code
+
+This applies "On the Naturalness of Buggy Code" (Ray et al., 2016; Hindle et al., 2012). With
+a local code model that exposes log-probabilities (the prefetch `logprob.ts` seam, served by
+bfi-node, WebLLM or Ollama):
+
+```
+surprisal(line) = −(1/|T|) Σ_{t∈T} log₂ p(t | context)      z = (surprisal − μ_repo) / σ_repo
+```
+
+- Computed for **changed lines only**, capped at 2,000 lines per run.
+- `μ_repo` and `σ_repo` come from a sample of the repo's unchanged lines under the same model
+  fingerprint.
+- Lines with `z > 3` are listed as "unusual code" (info), as a place to look. They are never
+  a finding of a defect.
+- Values are quantized to 0.01 bits and cached by `(model fingerprint, file hash)`.
+- With no logprob-capable local model, the measure is `not_measured`.
+
+### D7. Trends: statistical process control
+
+Applied per repo and per metric in the trend view (C11.3): complexity, duplication, the share
+of runs with integrity findings, introduced security errors per run, and so on.
+
+- **EWMA:**
+  - `zₜ = λxₜ + (1 − λ)zₜ₋₁`, with `λ = 0.2`;
+  - control limits `μ ± 3σ√(λ/(2 − λ))`.
+- **CUSUM** (Page), for slow drift:
+  - `Sₜ⁺ = max(0, Sₜ₋₁⁺ + xₜ − μ − k)`, with `k = 0.5σ`;
+  - signal at `h = 5σ`, and the same for the lower side.
+- **Bayesian online change-point detection** (Adams & MacKay, 2007):
+  - hazard `1/100`;
+  - Gaussian model with unknown mean;
+  - marks the run where the regime changed, with its posterior probability.
+- Each needs at least 20 runs of history and shows "learning baseline" before that.
+- A signal is a trend annotation ("duplication has risen for 8 runs since run #412"), with an
+  optional notification. It is not a verdict.
+
+### D8. Reliability growth: is the debt really going down?
+
+**Goel–Okumoto NHPP**, fitted to the cumulative count of a dimension's introduced findings
+over run index *t*:
+
+```
+μ(t) = a(1 − e^(−bt))        remaining ≈ a − μ(t)
+```
+
+- Fitted by maximum likelihood, with a 95% CI from a seeded bootstrap (1,000 resamples).
+- Shown only when the fit converges, there are at least 10 points and `b > 0`. Otherwise
+  `not-applicable`, because the process is not "growing reliability".
+- This puts numbers on PRD 38's headline: "debt goes down".
+
+### D9. Scheduling the expensive tier
+
+**D9.1 Contextual Thompson sampling.**
+- **Decides** whether to run mutation testing, benchmarks or deep SARIF tools on a run.
+- **Context:** risk, blast radius, dimensions touched and files changed.
+- **Model:** a Bayesian logistic regression with a Laplace-approximation posterior predicts
+  `P(check changes a verdict | context)`.
+- **Decision:** run when `P × value(dimension) ≥ cost(check)` and the budget allows.
+- **Seed:** the sample comes from a PRNG seeded by the run's `inputDigest`, so the choice is
+  reproducible.
+- **Record:** the delta stores it as `scheduledBy: {policy, p, seed}`.
+- Policy-mandated checks always run (C11.4).
+- `learned-routing` already does bandit selection for models. Both use the one sampler in
+  `packages/stats`.
+
+**D9.2 Sequential testing for benchmarks** (Wald's SPRT).
+- Hypotheses: `H₀: shift ≤ 0` against `H₁: shift ≥ δ` (δ = the metric's warn threshold).
+- α = 0.01, β = 0.05.
+- Boundaries `A = (1 − β)/α` and `B = β/(1 − α)` on the likelihood ratio.
+- Minimum 5 and maximum 30 interleaved sample pairs.
+- When stopped early, the SPRT decision is reported, not a fixed-sample Mann–Whitney p-value,
+  which would be invalid after optional stopping. At the maximum, C6.2 reporting applies.
+
+### D10. What to look at first
+
+**D10.1 Learning to rank findings.**
+- **Model:** pairwise logistic loss, `log(1 + e^{−(sᵢ − sⱼ)})`, over finding features.
+- **Features:** severity, rule precision posterior (D3), lineage, dimension, centrality,
+  entry-point reach and confidence.
+- **Labels:**
+  - Fix with agent or Accept risk: relevant;
+  - Mark as wrong: negative;
+  - Shown and ignored: weak negative, with **inverse propensity weighting** for position bias.
+- **Effect:** it changes **order only**. Ties break by `findingId`. Evaluated with NDCG@5.
+
+**D10.2 Similar past runs (k-NN).**
+- Uses standardized `RunFeatures` and Euclidean distance, `k = 10`, ties broken by `runId`,
+  over final-labelled runs only.
+- Renders as, for example, "7 of the 10 most similar runs needed no follow-up; 2 were
+  reverted", with links to those runs.
+- It needs at least 50 final-labelled runs in the repo, or in consenting tenants with the
+  same language mix.
+
+### D11. Presentation
+
+The card gains a **Predicted** block under the verdict rows:
+- risk (probability, band and top 3 reasons);
+- the outcome of similar runs;
+- "≈ N undetected" per dimension where capture–recapture applies;
+- the count of unusual lines;
+- an anomaly flag.
+
+Each item opens its explanation in the panel. Trend annotations (D7, D8) live in the trend
+view. All strings are localized, and the theme and 360 px rules apply as in C11.
+
+### D12. Model governance
+
+- **Model cards.** Each model publishes a card: data window, n, tenants, metrics, known
+  limits and intended use.
+- **Drift.**
+  - The population stability index on each feature, `PSI = Σ (aᵢ − eᵢ) ln(aᵢ / eᵢ)`, over 10
+    bins.
+  - PSI above 0.2 or ECE above 0.05 triggers recalibration.
+  - Recalibration failing its gate disables the model, with the status `model-disabled`.
+- **Kill switch.** Per model, in the registry.
+- **Audit.** Every prediction is logged with its model version and `inputDigest`, so any shown
+  prediction can be replayed.
+- **People.** No model scores, ranks or displays individual people. Person-level features are
+  excluded (§12.9).
+
+### D13. `packages/stats`: one home for the maths
+
+A new pure, source-only package. It is deterministic: seeded PRNG (xoshiro128**),
+fixed iteration caps, quantized outputs. It holds:
+
+- **Distributions:** sigmoid; logit; Beta posterior and quantile (regularized incomplete beta
+  inverse); χ² quantile.
+- **Fitting:** logistic regression (IRLS with L2, class weights); Bayesian logistic with a
+  Laplace posterior; Platt scaling; isotonic regression (PAV).
+- **Non-parametric tests:** Mann–Whitney U and Hodges–Lehmann (moved here from C6.2); seeded
+  bootstrap CI; SPRT.
+- **Time series:** EWMA; CUSUM; Bayesian online change-point detection.
+- **Multivariate:** Mahalanobis with Ledoit–Wolf shrinkage; PSI.
+- **Information theory:** Shannon entropy.
+- **Estimators:** Chapman / Lincoln–Petersen; Kaplan–Meier with Greenwood variance;
+  Goel–Okumoto MLE.
+- **Scores:** Brier; ECE; PR-AUC; NDCG; Popt.
+- **Policies:** Thompson sampling.
+
+Before WS15 starts, existing implementations must be found and **migrated, not
+duplicated**, at minimum `packages/prefetch/src/calibrate.ts` and the sampler in
+`packages/learned-routing`.
+
+### D14. Adoption order
+
+| Phase | Ships | Needs |
+|---|---|---|
+| P1 | D0 rule and guard, D1 labels pipeline, D2 deterministic statistics, D13 package | WS7 (the delta exists) |
+| P2 | D3 rule precision, D4 calibration, D7 statistical process control | About 4 weeks of votes and runs |
+| P3 | D5 risk model, survival view, D10.2 similar runs | At least 500 final-labelled runs (global) |
+| P4 | D9 scheduling, D10.1 ranking | WS12 (the optional tier exists) and click data |
+| P5 | D6 naturalness, D8 reliability growth | A logprob-capable local model; at least 10 runs per dimension |
+
+---
+
 ## 4. Contracts summary (new or changed)
 
 | Contract | Package | Change |
@@ -859,6 +1266,10 @@ paragraph, cached by `digest`. Rules:
 | SARIF parse and emit | `packages/sarif` (new, source-only) | Extracted from api, plus export |
 | `run-delta` local entity type | `packages/local-first` records | New union member |
 | Capability visibility hook and context keys | `clients/vscode` + `packages/local-first` capability matrix | New. Replaces `signedIn` gating where it is not account-only. |
+| `Prediction`, `RunFeatures` (versioned schema), `RunOutcomeLabel`, model artifact format | `packages/run-delta/src/predict/*` | New (Part D) |
+| `run-outcome` local entity type | `packages/local-first` records | New union member |
+| Statistics primitives | `packages/stats` (new, pure, source-only) | New. Absorbs `prefetch/calibrate.ts` and the learned-routing sampler. |
+| Verdict/predict layering guard | `scripts/check-run-delta-layers.mjs` | New |
 
 ## 5. Code map
 
@@ -878,7 +1289,11 @@ Builderforce.ai/packages/
   agent-tools/src/knowledge/   extractors → tree-sitter queries (complexity, routes, entry points, capability, test facts)
   agent-tools/src/delta/adapters/  NEW  one adapter per analyzer; reuse prefetch checkExecutors
   knowledge-graph-view/src/delta/  NEW  RunDeltaCard, RunDeltaPanel, DimensionRow, DeltaTrend (presentational) + labels
-  local-first/src/records.ts       + 'run-delta'
+  local-first/src/records.ts       + 'run-delta', 'run-outcome'
+  run-delta/src/predict/           NEW  features.ts, labels/ (szz.ts, revert.ts, ci.ts, review.ts), risk.ts, survival.ts,
+                                        captureRecapture.ts, anomaly.ts, rulePrecision.ts, naturalness.ts, ranking.ts,
+                                        similarRuns.ts, scheduler.ts, trends.ts, reliabilityGrowth.ts, models/ (artifacts)
+  stats/                  NEW  pure maths (D13); prefetch/calibrate.ts and learned-routing sampler migrate here
 
 Builderforce.ai/clients/vscode/src/
   knowledge/backgroundIndexer.ts   NEW  watcher + reconcile + priority scheduler (B2, B6)
@@ -894,6 +1309,8 @@ Builderforce.ai/clients/vscode/src/
 Builderforce.ai/api/
   src/domain/security/scanReportParsers.ts   SARIF parsing moves to packages/sarif
   run delta persistence + importer            (WS11, Opus-reviewed)
+  run outcome labels: SZZ/revert/CI/review label jobs over the ops DB (WS16, Opus-reviewed)
+  scripts/train-run-models.cjs               offline training driver → digest-named model artifacts (WS18)
 ```
 
 No module in this map may grow past about 400 lines. Dimensions, rules and adapters are one
@@ -951,6 +1368,13 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 | WS11 | **SARIF package** (C12), plus persistence and sync (C14): the `run-delta` record, the mirror importer, the `run_deltas` and `run_delta_findings` expand migration | WS7; G15–G18 | **Opus** (migration, storage) |
 | WS12 | **Optional dynamic tier** (C6.2, C8.4): benchmark runner, statistics, diff coverage, Stryker incremental, delta policy for autonomous runs | WS9 | Sonnet |
 | WS13 | **Packaged offline acceptance** (A6) and cloud-run delta (C14) | WS1–WS10 | Sonnet |
+| WS15 | **`packages/stats` and deterministic statistics** (D13, D2, D0 guard). Migrate `prefetch/calibrate.ts` and the learned-routing sampler; their tests run unchanged. | WS7 | Sonnet |
+| WS16 | **Labels pipeline** (D1): `RunFeatures` frozen at run end, the `run-outcome` record, SZZ/revert/CI/review labellers, censoring, the leakage guard, consent-scoped training store. **Starts with WS7.** | WS7, WS11 | **Opus** (storage, privacy, cross-package) |
+| WS17 | **Rule precision, calibration, process control and reliability growth** (D3, D4, D7, D8) | WS15, WS16 | Sonnet |
+| WS18 | **Run risk model** (D5): training driver, rolling-origin validation, artifact format, quantized inference, the replace-`v1` gate, Kaplan–Meier view, model cards and drift (D12) | WS16 with at least 500 final labels | **Opus** (model governance, storage) |
+| WS19 | **Naturalness** (D6), on the prefetch logprob seam | WS15 | Sonnet |
+| WS20 | **Thompson scheduling and SPRT** (D9) | WS12, WS15 | Sonnet |
+| WS21 | **Ranking and similar runs** (D10), plus the card's Predicted block (D11), localized | WS10, WS16 | Sonnet |
 | WS14 | **Ship.** This is a new capability, so: a `release_notes` row (category `new`); an Idea-to-Real blog post on the template in `frontend/src/content/blog/run-your-app-on-the-canvas.md`, placing the delta in the **Measure** act of the arc (proof that a run made things better, not just different); DONE.md moves by section number. | WS10, WS13 | Session model |
 
 Version bumps and ROADMAP/DONE entries stay with the session model.
@@ -996,6 +1420,27 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 - [ ] Card and panel are localized in 5 catalogs, readable in both themes and free of
       horizontal overflow at 360 px.
 
+**Part D**
+- [ ] `check:run-delta-layers` fails when any `verdict/` file imports `predict/`. A fixture
+      shows a high predicted risk leaving every verdict unchanged.
+- [ ] The same features and model artifact give a byte-identical `Prediction` on Windows and
+      Linux CI, offline.
+- [ ] Below the data threshold, every model returns `insufficient-data` and the card shows
+      nothing for it.
+- [ ] The leakage guard fails a fixture feature that reads data later than `finalizedAt`.
+- [ ] SZZ labeller: on a fixture history with a known fix-inducing run, that run gets
+      `followup-fix`. A comment-only later edit does not.
+- [ ] Chapman estimate: unit tests against textbook values. `m < 3` gives
+      `insufficient-data`.
+- [ ] Rule precision: a rule with 3 votes is never demoted. A rule with 200 votes at 30%
+      precision is demoted, and its per-repo posterior shrinks toward the global one.
+- [ ] Risk model replaces `v1` only when it passes the D5.3 gate. The gate result is
+      recorded in the model card.
+- [ ] `prefetch/calibrate.ts` and the learned-routing sampler import from `packages/stats`.
+      No second implementation remains (grep check). Their existing tests pass unchanged.
+- [ ] The SPRT stops early on a fixture with a 20% regression, and runs to the maximum on a
+      no-change fixture.
+
 ## 9. Non-goals
 
 - Full-precision inter-procedural taint analysis or symbolic execution. Taint-lite is a
@@ -1022,8 +1467,17 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
   - Autonomous runs blocked by policy that were later confirmed as correct blocks.
   - Integrity findings (C8.2) per 100 autonomous runs, trending down as prompts and policies
     adapt.
-- **Precision.** "Mark as wrong" rate per rule. Any rule above 20% for 2 weeks is demoted to
-  `info` automatically and listed for rework.
+- **Precision.** The Beta posterior precision per rule (D3). Demotion and restoration follow
+  its credible bounds, and demoted rules are listed for rework.
+- **Prediction quality.** For each model:
+  - Brier score, ECE and PR-AUC on the trailing 30 days;
+  - Popt for run risk;
+  - NDCG@5 for ranking;
+  - coverage of the KM interval;
+  - PSI drift.
+
+  Report also the share of verdict-changing optional checks the scheduler ran versus random
+  scheduling, and the count of labelled runs per week, which gates P3.
 - **Cost.**
   - Plan time.
   - Per-save update latency.
@@ -1034,6 +1488,13 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 - **Kill condition.** After 8 weeks, if fewer than 15% of delta cards are opened **and**
   "mark as wrong" exceeds 30% across rules, cut the scope back to quality and integrity (C8)
   plus security `guard-removed`, `secret` and `capability-added`. Retire the rest.
+- **Kill condition for Part D.** Each model stands or falls on its own:
+  - **Run risk:** if it has not passed the D5.3 gate after 2,000 final labels, retire it and
+    keep `v1`.
+  - **Ranking:** if it does not beat severity-then-centrality ordering on NDCG@5 after 8
+    weeks, retire it.
+  - **Naturalness:** if fewer than 5% of "unusual" lines appear in later `followup-fix` blame,
+    retire it.
 
 ## 11. Risks
 
@@ -1045,6 +1506,10 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 | Background indexing slows typing (see the open slow-typing gap) | Worker thread, 50 ms slices, yield on keystroke, render-count test on the composer before WS3 ships |
 | Determinism breaks through a dependency's nondeterministic output order (jscpd, knip) | Every adapter sorts and canonicalizes its output; the oracle test includes analyzer outputs |
 | Two extractor families (Worker regex, Node tree-sitter) diverge | The `extractor` tag is part of comparability; Worker and VSIX deltas never cross-compare |
+| Predictions are read as verdicts | D0: separate block, "predicted"/≈ wording, no verdict colours, layering guard |
+| Labels are noisy (SZZ misattributes; reverts for non-defect reasons) | Facts-hash early cutoff drops cosmetic lines; label kinds kept separate; models report per-label metrics; Kaplan–Meier is used where censoring dominates |
+| Too few labels for a repo | Hierarchical shrinkage to a global prior; `insufficient-data` rather than a guess; consent-scoped cross-tenant pooling (§12.8) |
+| Feedback loop: ranking hides findings, so they never get labels | Inverse propensity weighting; 10% of card slots are deterministic exploration chosen by seeded order |
 | Delta policy blocks legitimate autonomous work | Policy is per-project data; blocks are overridable with an audited waiver (managed-board authority rule) |
 
 ## 12. Open decisions for the operator
@@ -1068,6 +1533,14 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 7. **G03 engine floor.** WS2 is designed to move into SQLite later. Raising `engines.vscode`
    to ≥ 1.101 unblocks that sooner.
 
+8. **Cross-tenant training.** May the global priors and models (D3, D5, D10.2) pool
+   aggregated, code-free features across tenants, opt-in per tenant? *Proposed: opt-in,
+   default off for enterprise plans and on for free plans, stated in the privacy terms.*
+9. **Person-level features.** Exclude author experience and identity from all features, even
+   though the JIT literature finds them predictive. *Proposed: exclude. Never score people.*
+10. **Label windows.** 30 days for `followup-fix` and `reverted`, 7 days for CI.
+    *Proposed as stated. Shorter windows give labels sooner but miss slower failures.*
+
 ## 13. Methodology references
 
 - Local-first software — Kleppmann, Wiggins, van Hardenberg, McGranaghan (Ink & Switch, 2019).
@@ -1088,3 +1561,25 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 - Mann–Whitney U, Hodges–Lehmann estimator, bootstrap CIs for benchmark comparison.
 - Mutation testing (StrykerJS incremental mode).
 - SARIF 2.1.0 (OASIS): `baselineState`, `partialFingerprints`.
+- Just-in-time defect prediction — Kamei et al. (IEEE TSE 2013); McIntosh and Kamei (TSE 2018);
+  effort-aware evaluation (Popt).
+- SZZ — Śliwerski, Zimmermann and Zeller (MSR 2005).
+- Change entropy — Hassan (ICSE 2009).
+- Naturalness — Hindle et al. (ICSE 2012); Ray et al., "On the Naturalness of Buggy Code"
+  (ICSE 2016).
+- Maintainability Index — Oman and Hagemeister (1992); Halstead (1977).
+- Capture–recapture — Lincoln–Petersen; Chapman (1951); its use in software inspection by
+  Eick et al. (1992).
+- Goel–Okumoto NHPP software reliability growth (1979).
+- Beta–Binomial, empirical Bayes and hierarchical shrinkage — Efron and Morris.
+- Platt scaling (1999); isotonic regression (Zadrozny and Elkan 2002); Brier score; ECE
+  (Guo et al. 2017).
+- Kaplan–Meier (1958) with Greenwood's variance; Cox proportional hazards (1972).
+- EWMA (Roberts 1959); CUSUM (Page 1954); Bayesian online change-point detection (Adams and
+  MacKay 2007).
+- Mahalanobis distance; Ledoit–Wolf shrinkage (2004); population stability index.
+- Thompson sampling (1933; Agrawal and Goyal 2012); Laplace approximation for Bayesian logistic
+  regression.
+- Wald's sequential probability ratio test (1945).
+- Pairwise learning to rank (RankNet, Burges 2005); unbiased LTR with inverse propensity
+  weighting (Joachims et al. 2017); NDCG.
