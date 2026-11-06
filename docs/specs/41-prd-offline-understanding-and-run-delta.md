@@ -172,10 +172,8 @@ dependencies** of the VSIX, run in-process or as bundled CLIs from the extension
 directory. Versions stay pinned in one place, `codeAnalysisTool.ts`, and are reported in each
 analysis record so comparability (C9) can check them.
 
-If bundling makes the VSIX too large (Open decision §12.1), the fallback is a one-time
-**analyzer pack** download into `globalStorage`, triggered when the person is online. Until
-it exists:
-- each missing analyzer's findings are `not_measured` with the reason `analyzer-not-installed`;
+Bundling was decided on 2026-11-06 (§12.1). If a bundled analyzer fails to start:
+- that analyzer's findings are `not_measured`, with the reason `analyzer-unavailable`;
 - a missing analyzer is never shown as zero findings.
 
 ### A4. The scan never needs a key
@@ -283,10 +281,10 @@ The single snapshot JSON (`.builderforce/knowledge/<root>.json`) is rewritten on
 does not suit continuous indexing. The store becomes:
 
 ```
-<storageUri>/knowledge/<rootId>/
+<workspace>/.builderforce/cache/knowledge/<rootId>/
   objects/<aa>/<sha256>.json     # FileFacts and analyzer outputs, immutable, content-addressed
-  manifest.json                  # path → {stat, sha256, gitBlob?, factsHash}; written atomically
-  derived/<queryId>.json         # cross-file query results + their input-hash trace
+  index.sqlite                   # manifest (path → {stat, sha256, gitBlob?, factsHash}) + derived
+                                 #   query results and their input-hash traces, in one transactional file
   snapshot.json                  # the PRD 38 KnowledgeSnapshot, now a projection rebuilt from the above
 ```
 
@@ -295,11 +293,25 @@ does not suit continuous indexing. The store becomes:
   removes.
 - The `KnowledgeSnapshot` and PRD 40 portable pack formats do not change. Both are
   projections of the store.
-- **Location.** The cache moves from the workspace's `.builderforce/` to VS Code's
-  workspace `storageUri`, so it is never committed. `.builderforce/` keeps only
-  human-facing outputs (B9).
-- When G03 (SQLite) unblocks, `manifest.json` and `derived/` move into it. `objects/` stays
-  file-based.
+- **Location** (decided 2026-11-06): the repo directory, `.builderforce/cache/`.
+  - VS Code's `storageUri` gives no I/O speed advantage: both are the same local disk.
+  - The cost of a repo location is **watcher and scanner load**. Thousands of object files
+    inside the workspace would otherwise be seen by:
+    - VS Code's file watcher and search;
+    - git status;
+    - TS server and ESLint watchers;
+    - our own `FileSystemWatcher`, which would create a feedback loop.
+  - So the extension, on first index:
+    - writes `.builderforce/cache/` into `.gitignore`. It appends only, and asks once if
+      `.gitignore` is tracked and dirty;
+    - contributes `configurationDefaults` for `files.watcherExclude` and `search.exclude` on
+      `**/.builderforce/cache/**`;
+    - has its own watcher ignore the path.
+  - The benefit: the cache survives moving or renaming the folder and is easy to inspect or
+    delete. `.builderforce/` outside `cache/` keeps the human-facing outputs (B9).
+- **SQLite from the start** (decided 2026-11-06). `engines.vscode` rises to `^1.101.0`, which
+  closes the G03 engine-floor blocker. `index.sqlite` uses `node:sqlite` with WAL and a busy
+  timeout instead of the 30-second lock steal. `objects/` stays file-based.
 - This is a storage format, so its review goes to an Opus subagent.
 
 ### B5. Derived knowledge as rules (Datalog-style)
@@ -849,7 +861,30 @@ paragraph, cached by `digest`. Rules:
   the expand/contract migration rule. The proposed shape is one `run_deltas` row per run
   (digest, headline, dimension verdicts as columns) plus `run_delta_findings` rows (anchor,
   dimension, rule, severity, lineage), so trends query without JSON scans (3NF). Evidence
-  stays a blob in R2, keyed by digest.
+  stays a blob in R2, keyed by digest. *Decided 2026-11-06: tables, with vectors.*
+- **Vectors** (decided 2026-11-06). These follow the existing pgvector convention from
+  migration `1134_memory_semantic_recall.sql`:
+  - a `vector(1536)` column;
+  - `embedding_model` and `embedded_at` columns;
+  - an HNSW index with `vector_cosine_ops`;
+  - a partial "unembedded" index for the backfill sweep.
+
+  Two columns are added:
+
+  | Column | Content | Used by |
+  |---|---|---|
+  | `run_delta_findings.embedding` | Embedding of the finding's canonical card text (rule, anchor, normalized snippet, evidence summary), through the ONE pinned embedding module (`api/src/application/memory/memoryEmbedding.ts`) | "Similar findings across runs and repos", duplicate-finding collapse, retrieving past fixes for *Fix with agent* |
+  | `run_deltas.features` | `vector(k)` of the standardized `RunFeatures` (D1). This is numeric, not a text embedding, and is versioned by `feature_schema_version`. | k-NN similar runs (D10.2) and the anomaly score (D2.5) as an index query instead of a scan |
+
+  Rules for both columns:
+  - A write never fails for lack of a vector; the backfill sweep fills it later.
+  - The ANN read filters on `embedding_model` or `feature_schema_version`, so vectors from two
+    spaces are never compared.
+  - The backfill sweep is **generalized**, not copied: one sweep over a registry of
+    `(table, column, composer)` rows. Today's `agent_memory` and `project_facts` sweeps
+    become rows in it.
+  - Locally, the same cards go through the deterministic knowledge index (int8 codes, exact
+    tie-break), so offline similarity works without the server.
 
 ---
 
@@ -927,7 +962,12 @@ the delta:
   - model tier;
   - steps;
   - tool failures.
-- No code, no paths in the trained artifact, and no person-level features (§12.9).
+- **People** (decided 2026-11-06): requester, approver, reviewer and agent ids, plus
+  experience features. Experience means prior runs in the repo, prior changes to the touched
+  files, and tenure in the repo.
+  - These are stored with the features, under the access rules of D15.
+  - The trained artifact contains no code, no paths and no person ids: only aggregate
+    experience values.
 
 **Outcome labels** (`RunOutcomeLabel`, one row per run and label kind):
 
@@ -1212,8 +1252,9 @@ view. All strings are localized, and the theme and 360 px rules apply as in C11.
 - **Kill switch.** Per model, in the registry.
 - **Audit.** Every prediction is logged with its model version and `inputDigest`, so any shown
   prediction can be replayed.
-- **People.** No model scores, ranks or displays individual people. Person-level features are
-  excluded (§12.9).
+- **People.** People are scored only through D15, never as a side output of another model.
+  The person-score view shows only risk-adjusted, shrunk and interval-bounded figures, never
+  raw counts as a league table.
 
 ### D13. `packages/stats`: one home for the maths
 
@@ -1238,6 +1279,99 @@ Before WS15 starts, existing implementations must be found and **migrated, not
 duplicated**, at minimum `packages/prefetch/src/calibrate.ts` and the sampler in
 `packages/learned-routing`.
 
+### D15. People scores for managers
+
+*Decided 2026-11-06: managers need people scored.* This covers humans and agents alike.
+An agent is a first-class worker here: the manager is an agent, and agents are hired and
+unhired. The section defines how scoring is done fairly enough to act on.
+
+**D15.1 Attribution.** Every run records its roles:
+- `requester`: who started it;
+- `approvers`;
+- `reviewer` (PRD 23);
+- `agent`: the executing agent;
+- `manager`: the supervising manager agent, if any.
+
+Each outcome label (D1) and each delta finding is attributed to every role on the run, and
+a score is always reported **per role**. Being the approver of a reverted run is a different
+fact from being its requester.
+
+**D15.2 Measures** per person or agent, per role, per period (rolling 90 days):
+
+| Measure | Definition |
+|---|---|
+| Run quality | Share of runs whose headline is `worse` |
+| Follow-up-fix rate | `followup-fix` labels ÷ final-labelled runs |
+| Revert rate | `reverted` ÷ final-labelled runs |
+| Integrity rate | Runs with a C8.2 error ÷ runs. Agents mainly. |
+| Security introductions | Introduced measured security errors per run |
+| Review rejection rate | `review-rejected` ÷ runs with a PR |
+| Fix effectiveness | Share of *Fix with agent* runs whose finding is resolved in the next delta |
+| Approval accuracy (approvers) | Share of approved runs not later `reverted` or `followup-fix` |
+
+**D15.3 Risk adjustment: observed ÷ expected.** Raw rates punish whoever takes the hard
+work. Each rate is **indirectly standardized**, the method used for hospital standardized
+mortality ratios:
+
+```
+E = Σ_{runs of p} P̂(outcome | case-mix features)       O = observed count
+SR = O / E          95% CI: exact Poisson (Garwood) on O, divided by E
+```
+
+- The **case-mix model** is a separate logistic model of the same form as D5. It uses only
+  *change* features: size, entropy, centrality, entry points, churn, layer and dimension
+  flags.
+- It deliberately **excludes person and experience features**. Otherwise it would explain
+  away the very person effect being measured.
+- The D5 risk model may use experience features for prediction. The two models are
+  different by design.
+
+**D15.4 Shrinkage.** Small samples are pulled toward the team. The rate posterior is
+Gamma–Poisson (empirical Bayes):
+
+```
+λ_p | data ~ Gamma(α₀ + O, β₀ + E)        shown: posterior mean of λ_p and its 90% interval
+```
+
+- The prior comes from everyone in the same tenant and role.
+- A person with 3 runs therefore shows close to the team average, with a wide interval,
+  rather than an extreme rate.
+- Below 20 final-labelled runs in the window: `insufficient-data`.
+
+**D15.5 Presentation.**
+- **Funnel plot** (Spiegelhalter, 2005): standardized ratio against expected volume, with
+  95% and 99.8% control limits. Only points outside the limits are called out.
+- A ranked table is never the default view. When a table is shown, it is sorted by the
+  posterior, with the interval drawn, and an "outside limits" flag.
+- Every score links to the runs behind it and their deltas, so a manager can see *why*.
+- The trend per person uses the D7 control charts: is this person's ratio drifting?
+- Surface: the manager **accountability tab**, extended rather than duplicated, for human
+  managers and for the manager agent's coaching and stall-triage loop.
+- The manager agent may use agent scores to route work and to coach. It may not act on a
+  *human's* score automatically.
+
+**D15.6 Access and audit.**
+- Visibility uses the RBAC role gates (`resolveMembership`, `RoleGate`):
+  - a person sees their own scores;
+  - a manager sees their reports;
+  - a tenant admin sees everyone in the tenant;
+  - superadmin sees nothing cross-tenant without the existing audited cross-tenant scope.
+- Every view of another person's score is audit-logged (viewer, subject, time).
+- A tenant setting can disable **human** scoring per tenant, for example where a works
+  council or local law requires it. Agent scoring cannot be disabled.
+- No automatic consequence follows from a human score: no blocking, no reassignment and no
+  notification to others.
+
+**D15.7 Done-checks.**
+- [ ] A person with 3 runs shows `insufficient-data`. A person with 25 runs, all
+      high-risk, does not come out worse than the team on raw size alone (a case-mix test).
+- [ ] Removing every person and experience feature from the case-mix model is enforced by a
+      unit test on its feature schema.
+- [ ] A manager cannot see a non-report's score (an RBAC test), and each view writes an
+      audit row.
+- [ ] With the tenant setting off, every human-score endpoint returns 404 for that tenant.
+      Agent scores are unaffected.
+
 ### D14. Adoption order
 
 | Phase | Ships | Needs |
@@ -1256,7 +1390,7 @@ duplicated**, at minimum `packages/prefetch/src/calibrate.ts` and the sampler in
 |---|---|---|
 | `FileFacts` v3 (`exports`, `calls`, `entryPoints`, `capabilityImports`, `testFacts`) | memory `/knowledge` (types), agent-tools (extractors) | Extended; `EXTRACTOR_VERSION = 3` |
 | Stat manifest, Merkle directory hashes, git blob alternate keys | memory `/knowledge` `plan` | New |
-| Segment fact store (`objects/`, `manifest.json`, `derived/`) | memory `/knowledge` stores + VSIX `knowledgeStores.ts` | Replaces the single snapshot file as the system of record. The snapshot becomes a projection. |
+| Segment fact store (`objects/` + `index.sqlite` for manifest and derived) | memory `/knowledge` stores + VSIX `knowledgeStores.ts` | Replaces the single snapshot file as the system of record. The snapshot becomes a projection. |
 | `FactRule` (scope, reads, version) | memory `/knowledge` | Formalizes `findings.ts` and `codeFindings.ts` |
 | `FindingIdentity` (`anchor`, `members`), lineage matcher | memory `/knowledge` | New. jscpd and knip ids migrate to it. |
 | `comparability.ts` | memory `/knowledge` | Merges `compareAnalysis` and the baseline `comparable` |
@@ -1298,7 +1432,8 @@ Builderforce.ai/packages/
 Builderforce.ai/clients/vscode/src/
   knowledge/backgroundIndexer.ts   NEW  watcher + reconcile + priority scheduler (B2, B6)
   knowledge/knowledgeService.ts    linked = selected ∧ session ∧ synchronize (A2)
-  knowledge/knowledgeStores.ts     segment store at storageUri (B4)
+  knowledge/knowledgeStores.ts     segment store at .builderforce/cache/ + index.sqlite (B4)
+  package.json                     engines.vscode ^1.101.0; configurationDefaults watcher/search excludes
   runDelta/runDeltaHost.ts         NEW  DeltaPorts over the fact store, pre-images, before-tree export
   runChangeBaseline.ts             + dirty pre-image capture (C1.3)
   brainRunHostPorts.ts             finalize → computeRunDelta → card
@@ -1375,6 +1510,7 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 | WS19 | **Naturalness** (D6), on the prefetch logprob seam | WS15 | Sonnet |
 | WS20 | **Thompson scheduling and SPRT** (D9) | WS12, WS15 | Sonnet |
 | WS21 | **Ranking and similar runs** (D10), plus the card's Predicted block (D11), localized | WS10, WS16 | Sonnet |
+| WS22 | **People scores** (D15): role attribution, case-mix model, Gamma–Poisson shrinkage, funnel plot and table in the accountability tab, RBAC, audit and the tenant setting. Localized; both themes; 360 px. | WS16, WS18 (case-mix model) | **Opus** (auth/RBAC, privacy) |
 | WS14 | **Ship.** This is a new capability, so: a `release_notes` row (category `new`); an Idea-to-Real blog post on the template in `frontend/src/content/blog/run-your-app-on-the-canvas.md`, placing the delta in the **Measure** act of the arc (proof that a run made things better, not just different); DONE.md moves by section number. | WS10, WS13 | Session model |
 
 Version bumps and ROADMAP/DONE entries stay with the session model.
@@ -1500,7 +1636,9 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 
 | Risk | Mitigation |
 |---|---|
-| Bundled analyzers inflate the VSIX | Size decision §12.1; analyzer-pack fallback; tree-sitter rules cover the per-edit path anyway |
+| Bundled analyzers inflate the VSIX | Measure the size delta in WS1. Bundle only the analyzers' production dependencies, tree-shaken, and lazy-load them at L3. |
+| The cache in the repo directory loads watchers and git | `.gitignore` entry, `configurationDefaults` for `files.watcherExclude` and `search.exclude`, own watcher ignore (B4) |
+| People scores are unfair or misused | D15: case-mix standardization, shrinkage, intervals and funnel limits, RBAC with audit, the tenant switch, no automatic consequences for humans |
 | Heuristic security and performance rules cause noise, and people stop reading the card | `confidence: heuristic` with ≈; per-rule precision metric with automatic demotion; waivers persist |
 | Pre-image capture of large dirty trees costs disk | Caps (1 MB per file, 50 MB per run); retention until the delta is final plus 14 days; content-addressed dedupe |
 | Background indexing slows typing (see the open slow-typing gap) | Worker thread, 50 ms slices, yield on keystroke, render-count test on the composer before WS3 ships |
@@ -1512,34 +1650,34 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 | Feedback loop: ranking hides findings, so they never get labels | Inverse propensity weighting; 10% of card slots are deterministic exploration chosen by seeded order |
 | Delta policy blocks legitimate autonomous work | Policy is per-project data; blocks are overridable with an audited waiver (managed-board authority rule) |
 
-## 12. Open decisions for the operator
+## 12. Operator decisions (taken 2026-11-06)
 
-1. **Analyzer distribution.** Bundle dependency-cruiser, jscpd and knip in the VSIX (larger
-   package, fully offline from install) or download an analyzer pack on first online launch
-   (smaller package, offline only after one connection). *Proposed: bundle.*
-2. **Fact store location.** VS Code workspace `storageUri` (never committed, lost if the
-   folder moves) or `.builderforce/cache/` gitignored in the repo (survives moves, visible).
-   *Proposed: `storageUri`, with `.builderforce/` keeping human-facing outputs only.*
-3. **Auto-index on open.** Default on for every folder, or on only after the first `/review`
-   or an explicit opt-in. *Proposed: on, L0–L2 always, L3 when idle and on mains power.*
-4. **Signed-out views.** Should `health` and `evermind` run on local data when signed out?
-   *Proposed: yes for both, behind capability keys.*
-5. **Delta policy default for autonomous runs.** Block finalization on C8.2 errors and
-   `guard-removed`, or advisory only at first. *Proposed: block those two; everything else
-   advisory.*
-6. **Server persistence of deltas.** The `run_deltas` and `run_delta_findings` tables (C14), or
-   keep deltas as run artifacts in R2 only and compute trends client-side.
-   *Proposed: tables, for trend queries.*
-7. **G03 engine floor.** WS2 is designed to move into SQLite later. Raising `engines.vscode`
-   to ≥ 1.101 unblocks that sooner.
+1. **Analyzer distribution: bundle** dependency-cruiser, jscpd and knip in the VSIX. The
+   analyzer-pack download in A3 is dropped.
+2. **Fact store location: the repo directory**, `.builderforce/cache/`, with the gitignore,
+   watcher and search exclusions in B4. VS Code's `storageUri` has no I/O advantage; its only
+   gain was keeping watcher load away, and the exclusions provide that.
+3. **Auto-index on open: on.** L0–L2 always; L3 when idle and on mains power.
+4. **Signed-out views:** `health` and `evermind` run on local data behind capability keys.
+5. **Autonomous-run policy:** C8.2 errors and `guard-removed` block finalization of an
+   autonomous run. Everything else is advisory. Interactive runs are never blocked.
+6. **Server persistence: tables with vectors.** `run_deltas` and `run_delta_findings`, plus
+   pgvector columns (C14).
+7. **Engine floor:** `engines.vscode` rises to `^1.101.0`. G03 is unblocked, and WS2 uses
+   SQLite from the start.
+8. **Cross-tenant training:** opt-in. Default off for enterprise plans, on for free plans,
+   stated in the privacy terms.
+9. **People are scored** (managers need it). Person and experience features are allowed in
+   the D5 risk model, and D15 defines the fair scoring method:
+   - risk-adjusted;
+   - shrunk toward the team;
+   - shown with intervals;
+   - RBAC with audit;
+   - a tenant switch for human scoring;
+   - no automatic consequences for humans.
+10. **Label windows:** 30 days for `followup-fix` and `reverted`, 7 days for CI.
 
-8. **Cross-tenant training.** May the global priors and models (D3, D5, D10.2) pool
-   aggregated, code-free features across tenants, opt-in per tenant? *Proposed: opt-in,
-   default off for enterprise plans and on for free plans, stated in the privacy terms.*
-9. **Person-level features.** Exclude author experience and identity from all features, even
-   though the JIT literature finds them predictive. *Proposed: exclude. Never score people.*
-10. **Label windows.** 30 days for `followup-fix` and `reverted`, 7 days for CI.
-    *Proposed as stated. Shorter windows give labels sooner but miss slower failures.*
+No decisions remain open. A new one found during implementation is added here.
 
 ## 13. Methodology references
 
@@ -1581,5 +1719,8 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 - Thompson sampling (1933; Agrawal and Goyal 2012); Laplace approximation for Bayesian logistic
   regression.
 - Wald's sequential probability ratio test (1945).
+- Indirect standardization (standardized mortality ratio); Garwood exact Poisson intervals;
+  funnel plots for institutional comparison — Spiegelhalter (Statistics in Medicine, 2005);
+  Gamma–Poisson empirical Bayes.
 - Pairwise learning to rank (RankNet, Burges 2005); unbiased LTR with inverse propensity
   weighting (Joachims et al. 2017); NDCG.
