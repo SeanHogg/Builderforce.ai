@@ -2,6 +2,18 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [NEXT] — The knowledge view matches its design, and big repos draw their whole map
+
+- **No loading screen.** The view opens on the last graph you saw and fills in as the review runs.
+- **The map covers every file.** On a large repo the map used to show one line with one stop. Stations and lines now come from an outline of every file, and folders roll up so the map stays readable. When the outline is capped, the map says how many files it shows.
+- **A status strip.** It shows sync state, whether this folder matches the server, and a commit scrubber, on phones too.
+- **A cleaner header.** The header has the scope, an ask bar with the screenshot button inside it, and Coverage · Patterns · API · Sync. It also has **Risk overlays** and a **⋯** menu for Review, Copy diagnostics and Before/After. It stays on one line; below 900px the panels fold into one menu.
+- **Views and questions sit on the map.** So do zoom in, zoom out and fit, on every view. **More questions** includes every old lens.
+- **Act cards.** They are numbered actions with Apply, Prompt and Show, plus "Keep this run as a test", "This path is done when…" and the details, open by default.
+- **Paths.** The full-size sequence view is one click from the path strip. Cycles are drawn dashed with ⟲. **Show files** now works for files that were not loaded yet.
+- **Rovr** clears the remembered map on sign-out or when you switch workspaces.
+- Built on builderforce-memory 2026.10.41.
+
 ## [2026.10.131] — Shell scripts are code; the new per-file data reaches every file
 
 - **Shell scripts are code, not docs.** They no longer show up as documents. `[[x]]` inside code is no longer read as a link, so no "missing" doc nodes appear for it.
