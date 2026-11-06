@@ -1799,6 +1799,10 @@ function chatErrorMessage(error, action, labels) {
       return platformRefusedMessage(action.setting, labels);
     case "continuation_timed_out":
       return labels.continuationTimedOut;
+    case "model_unresponsive":
+      return labels.modelUnresponsive.replace("{model}", action.model ?? "");
+    case "provider_sign_in":
+      return labels.providerSignIn.replace("{label}", action.label ?? action.provider ?? "");
     default:
       return error;
   }
@@ -1822,6 +1826,10 @@ var DEFAULT_CHAT_ERROR_LABELS = {
   engineDetached: "The on-device model stopped before it finished. Send again to retry.",
   modelKeepsCrashing: "This model keeps crashing on this device. Remove it, or try another model.",
   continuationTimedOut: "That took too long. Your message is kept and will be read with your next message.",
+  modelUnresponsive: "{model} isn't responding. Choose another model to continue.",
+  chooseAnotherModel: "Choose model",
+  providerSignIn: "{label} needs you to sign in again.",
+  signInToProvider: "Sign in to {label}",
   manageLocalModels: "Manage on-device models",
   platformRefusedMode: "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
   platformRefusedSync: "Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.",
@@ -1842,6 +1850,7 @@ function ChatErrorBanner({
   onSwitchToHybrid,
   onDownloadLocalModel,
   onPickModel,
+  onProviderSignIn,
   labels: labelOverrides,
   style,
   className,
@@ -1852,10 +1861,14 @@ function ChatErrorBanner({
   const kind = action?.kind;
   const keepsCrashing = kind === "local_engine_failed" && action?.engineCode === "model_keeps_crashing";
   const plan = action?.requiredPlan ? planLabel(action.requiredPlan) : null;
-  const primary = kind === "auth" && onReconnect ? { label: labels.reconnect, onClick: onReconnect } : kind === "upgrade" && onUpgrade ? {
+  const providerSignIn = kind === "provider_sign_in" && action?.provider && onProviderSignIn ? { provider: action.provider, label: action.label ?? action.provider, run: onProviderSignIn } : null;
+  const primary = providerSignIn ? {
+    label: labels.signInToProvider.replace("{label}", providerSignIn.label),
+    onClick: () => providerSignIn.run(providerSignIn.provider, providerSignIn.label)
+  } : kind === "auth" && onReconnect ? { label: labels.reconnect, onClick: onReconnect } : kind === "upgrade" && onUpgrade ? {
     label: plan ? labels.upgradeToPlan.replace("{plan}", plan) : labels.upgrade,
     onClick: onUpgrade
-  } : kind === "validate_card" && onValidateCard ? { label: labels.addCard, onClick: onValidateCard } : kind === "sign_in" && onSignIn ? { label: labels.signIn, onClick: onSignIn } : (kind === "no_local_model" || kind === "platform_refused" && action?.setting === "inferenceMode") && onSwitchToHybrid ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid } : kind === "no_local_model" && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : (kind === "no_specific_model" || keepsCrashing) && onPickModel ? { label: labels.pickModel, onClick: onPickModel } : keepsCrashing && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
+  } : kind === "validate_card" && onValidateCard ? { label: labels.addCard, onClick: onValidateCard } : kind === "sign_in" && onSignIn ? { label: labels.signIn, onClick: onSignIn } : (kind === "no_local_model" || kind === "platform_refused" && action?.setting === "inferenceMode") && onSwitchToHybrid ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid } : kind === "no_local_model" && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : kind === "model_unresponsive" && onPickModel ? { label: labels.chooseAnotherModel, onClick: onPickModel } : (kind === "no_specific_model" || keepsCrashing) && onPickModel ? { label: labels.pickModel, onClick: onPickModel } : keepsCrashing && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
   const secondary = kind === "no_local_model" && onSwitchToHybrid && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : keepsCrashing && onPickModel && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
   const message = chatErrorMessage(error, action, labels);
   const actionStyle = {

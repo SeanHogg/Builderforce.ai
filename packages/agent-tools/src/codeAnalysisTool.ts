@@ -11,6 +11,11 @@ export const ANALYZERS = [
   { name: 'knip', version: '5.30.0', command: 'npm exec --yes --package=knip@5.30.0 --package=typescript@5.6.3 --call="knip --reporter=json --no-progress"' },
 ] as const;
 
+/** The pinned knip invocation that only REPORTS (JSON on stdout) and changes nothing: what a re-scan and a fix preview read. */
+export function knipReportCommand(): string {
+  return ANALYZERS.find((a) => a.name === 'knip')!.command;
+}
+
 /** The pinned knip invocation, applying its own fixes (`--fix`) instead of reporting. Deleting files is opt-in per call. */
 export function knipFixCommand(fixTypes: readonly ('exports' | 'files')[]): string {
   const knip = ANALYZERS.find((a) => a.name === 'knip')!;

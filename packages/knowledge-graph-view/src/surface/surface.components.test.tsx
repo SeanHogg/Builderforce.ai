@@ -10,7 +10,8 @@ import { CAMERAS } from './cameras';
 import { LinesPanel } from './LinesPanel';
 import { buildLines } from './lines';
 import { OverlayMenu } from './OverlayMenu';
-import { makeOverlay, PRESETS } from './overlays';
+import { cssVar } from '../scene/themeColors';
+import { lineTone, makeOverlay, PRESETS } from './overlays';
 import { PanelDrawer, PanelToggle } from './PanelDock';
 import { pathOfLine } from './path';
 import { PathStrip } from './PathStrip';
@@ -44,10 +45,15 @@ describe('TransitMap', () => {
         expect(props.onSelectStation).toHaveBeenCalledTimes(2);
     });
 
-    it('draws bands, a route per hop, interchange titles and a terminus per line', () => {
+    it('draws bands, a route per hop, interchange titles and one terminus glyph per ending station with a stub in each line\'s colour', () => {
         const { container } = map();
         expect(container.querySelectorAll('[data-line]').length).toBe(lines.lines.reduce((n, l) => n + l.hops.length, 0));
-        expect(container.querySelectorAll('[data-terminus="data"]')).toHaveLength(2);
+        // Both lines end at the same data store: one glyph, not two drawn over each other.
+        expect(container.querySelectorAll('[data-terminus="data"]')).toHaveLength(1);
+        // Every line that ends there is represented: one stub per line, each in that line's own colour.
+        const stubs = [...container.querySelectorAll('[data-terminus="data"] [data-stub-colour]')].map((el) => el.getAttribute('data-stub-colour'));
+        expect(stubs).toHaveLength(lines.lines.length);
+        expect(new Set(stubs)).toEqual(new Set(lines.lines.map((l) => cssVar(lineTone(l.colourIndex)))));
         expect(screen.getByText(L.surface.layers.entry.toUpperCase())).toBeTruthy();
         expect(container.querySelector(`[data-station="${id('API')}"] title`)?.textContent).toBe(fillTemplate(L.surface.interchange, { count: 2 }));
     });

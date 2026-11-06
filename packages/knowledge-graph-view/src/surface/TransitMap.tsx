@@ -1,26 +1,43 @@
 /**
- * The transit map (PRD 38, Option B+): layer bands top to bottom, one coloured line per
- * entry point, stations on the bands. A station's colour, size, ring, pulse and outline come
- * from the overlay bindings; a line's width too. A segment no test reaches is dashed (only
- * where coverage was collected), a finding is a numbered pin, a station on several lines is
- * an interchange, and a line ends in a data store, an external service, or an "ends here"
- * marker. Colours are tokens, so both themes read; the flow and the pulse animate only when
- * motion is allowed. Every station is a 40px target and a real button.
+ * The transit map (PRD 38, Option B+): layer bands top to bottom, one coloured line per entry
+ * point routed through the corridors between bands, stations on the bands. A station's colour,
+ * size, ring, pulse and outline come from the overlay bindings; a line's width too. A segment no
+ * test reaches is dashed, a finding is a numbered pin, a station on several lines is an
+ * interchange, and a line ends in a named data store, outside service or dead end. Documents
+ * are square stations with dashed "describes" links. A click opens the station card (go
+ * inside, unfold, who calls, API, patterns); unfolding a station is its own state, so the
+ * satellites stay when the card closes. This component composes; the pieces live in
+ * `transit/`. Colours are tokens, so both themes read; motion only when it is allowed.
  */
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { useContainerWidth } from '../environment';
+import { COMPACT_WIDTH } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { usePanZoom } from '../usePanZoom';
 import { usePanZoomRegistration } from './zoom';
 import type { LinesModel } from './lines';
 import { lineTone, segmentUntested, type OverlayModel } from './overlays';
+import type { QuestionId } from './questions';
 import type { Station, StationModel } from './stations';
-import { layoutTransit, OTHER_LAYER, type Point } from './transitLayout';
+import { OTHER_LAYER } from './transitLayout';
+import { buildCard } from './transit/cardModel';
+import { DescribeLinks, Satellites } from './transit/DocLinks';
+import { HopPath } from './transit/HopPath';
+import { StationCard } from './transit/StationCard';
+import { StationMark } from './transit/StationMark';
+import { terminusText } from './transit/termini';
+import { TerminusMark } from './transit/TerminusMark';
+import { bandTitle, TransitBands } from './transit/TransitBands';
+import { satelliteBoxes, satellitePlaces, satellitesOf } from './transit/unfold';
+import type { EnterCheck } from './transit/useDrill';
+import { useCardAnchor } from './transit/useCardAnchor';
+import { useTransitLabels } from './transit/useTransitLabels';
+import { useTransitModel } from './transit/useTransitModel';
 import type { Pin } from './useSurface';
-
-const halo = { paintOrder: 'stroke', stroke: cssVar('bg'), strokeWidth: 3 } as const;
 
 export interface TransitMapProps {
     stations: StationModel;
@@ -33,7 +50,7 @@ export interface TransitMapProps {
     lineId: string | null;
     selectedStation: string | null;
     pins: readonly Pin[];
-    /** A lit station's second line of text. */
+    /** A lit station's second line of text. Keep it stable (`useCallback`): label placement is redone when it changes. */
     noteOf?: ((s: Station) => string | null) | undefined;
     reducedMotion: boolean;
     onSelectStation(id: string): void;
@@ -41,165 +58,193 @@ export interface TransitMapProps {
     label: string;
     /** The title and aria-label of a cycle hop's mark; absent ⇒ the catalog's `surface.cycleHop`. */
     cycleLabel?: string;
+    /** The graph the stations were folded from: documents, terminus names, walls, card issues and unfold read it. */
+    graph?: KnowledgeGraph | null | undefined;
+    /** The bands of a drilled level, top to bottom; absent ⇒ the architecture layers. */
+    order?: readonly string[] | undefined;
+    /** Stations that are neighbours of a drilled level (they cannot be entered). */
+    leaves?: ReadonlySet<string> | undefined;
+    /** A line of words over the map (why a level shows files). */
+    levelNote?: string | null | undefined;
+    question?: QuestionId | undefined;
+    /** Definitions are being read (the card says so rather than "no symbols"). */
+    loading?: boolean | undefined;
+    canEnter?: ((id: string) => EnterCheck) | undefined;
+    onEnter?: ((id: string) => void) | undefined;
+    onQuestion?: ((id: QuestionId) => void) | undefined;
+    onOpenPanel?: ((id: string) => void) | undefined;
 }
 
-function TerminusIcon({ kind, at, color }: { kind: 'data' | 'external' | 'end'; at: Point; color: string }) {
-    const { x, y } = at;
-    if (kind === 'data') {
-        return <path d={`M ${x - 11} ${y - 8} a 11 4 0 0 0 22 0 v 16 a 11 4 0 0 1 -22 0 z M ${x - 11} ${y - 8} a 11 4 0 0 1 22 0 a 11 4 0 0 1 -22 0`} fill={color} stroke={cssVar('bg')} strokeWidth={1.5} />;
-    }
-    if (kind === 'external') {
-        return <path d={`M ${x - 10} ${y} a 10 10 0 1 0 20 0 a 10 10 0 1 0 -20 0 M ${x - 10} ${y} h 20 M ${x} ${y - 10} c 5 5 5 15 0 20 c -5 -5 -5 -15 0 -20`} fill="none" stroke={color} strokeWidth={1.8} />;
-    }
-    return <path d={`M ${x - 8} ${y - 8} L ${x + 8} ${y + 8} M ${x + 8} ${y - 8} L ${x - 8} ${y + 8}`} stroke={cssVar('violation')} strokeWidth={3.5} strokeLinecap="round" fill="none" />;
-}
+const NO_ENTER: EnterCheck = { can: false, reason: 'deepest' };
+const NO_LEAVES: ReadonlySet<string> = new Set();
 
 export function TransitMap(p: TransitMapProps) {
-    const { stations, lines, overlay, labels, lit, selectedStation, pins, noteOf, reducedMotion } = p;
+    const { stations, lines, overlay, labels, lit, selectedStation, pins, reducedMotion } = p;
     const s = labels.surface;
+    const boxRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
+    const cardRef = useRef<HTMLDivElement>(null);
     const width = useContainerWidth(hostRef);
-    const layout = useMemo(() => layoutTransit(stations.stations, lines.lines, width), [stations.stations, lines.lines, width]);
+    const compact = width > 0 && width < COMPACT_WIDTH;
+    const model = useTransitModel({ graph: p.graph ?? null, stations, lines, overlay, width, order: p.order });
+    const { layout } = model;
     // Zoom is the viewBox only (the scene overlay's +, − and Fit): no wheel or drag hook, so the page still scrolls over the map.
     const fitted = useMemo(() => ({ x: 0, y: 0, w: layout.width, h: layout.height }), [layout.width, layout.height]);
     const zoom = usePanZoom(fitted, layout);
     usePanZoomRegistration(zoom);
+
+    // The card and the unfold are two states: the satellites outlive the card that asked for them.
+    const [cardId, setCardId] = useState<string | null>(null);
+    const [unfoldedId, setUnfoldedId] = useState<string | null>(null);
+    const cardIdRef = useRef(cardId);
+    cardIdRef.current = cardId;
+    const anchor = useCardAnchor(boxRef, hostRef, cardRef, cardId, cardId !== null && cardId === unfoldedId, [zoom.viewBox, layout.width, layout.height]);
+
+    const focusStation = useCallback((id: string) => {
+        ([...(hostRef.current?.querySelectorAll('[data-station]') ?? [])].find((el) => el.getAttribute('data-station') === id) as SVGElement | undefined)?.focus({ preventScroll: true });
+    }, []);
+    const closeCard = useCallback(() => {
+        const id = cardIdRef.current;
+        setCardId(null);
+        if (id) focusStation(id);
+    }, [focusStation]);
+
+    // A station that left the map (a level was entered, the graph changed) takes its card and its unfold with it.
+    useEffect(() => {
+        if (cardId && (anchor.missing || !stations.byId.has(cardId))) setCardId(null);
+        if (unfoldedId && !stations.byId.has(unfoldedId)) setUnfoldedId(null);
+    }, [anchor.missing, cardId, unfoldedId, stations.byId]);
+    // Escape with the satellites out and no card open folds them.
+    useEffect(() => {
+        if (!unfoldedId || cardId) return;
+        const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setUnfoldedId(null); };
+        document.addEventListener('keydown', key);
+        return () => document.removeEventListener('keydown', key);
+    }, [unfoldedId, cardId]);
+
+    // A compact card is a bottom sheet on the view's own frame, like the other sheets.
+    const [frame, setFrame] = useState<HTMLElement | null>(null);
+    useLayoutEffect(() => setFrame(boxRef.current?.closest('section') ?? null), []);
+
     const lineById = useMemo(() => new Map(lines.lines.map((l) => [l.id, l] as const)), [lines.lines]);
     const dim = (...ids: string[]) => lit !== null && !ids.every((id) => lit.has(id));
-    const layerName = (layer: string) => s.layers[layer as keyof typeof s.layers] ?? s.layers.other;
-    const widthOf = (lineId: string) => overlay.lineWidth((lineById.get(lineId)?.stops ?? []).flatMap((id) => stations.byId.get(id) ?? []));
+    const layerName = (layer: string) => bandTitle(layer, labels);
     const pinOf = new Map(pins.map((pin) => [pin.stationId, pin.count] as const));
     const undrawn = stations.stations.length - layout.drawn.length;
+    const claims = p.question === 'claims';
+
+    // Unfold: the satellites of the unfolded station, which labels and the card keep clear of.
+    const unfoldStation = unfoldedId ? stations.byId.get(unfoldedId) : undefined;
+    const unfoldAt = unfoldStation ? layout.positions.get(unfoldStation.id) : undefined;
+    const satellites = useMemo(() => (unfoldStation ? satellitesOf(unfoldStation, model.index) : []), [unfoldStation, model.index]);
+    const places = useMemo(() => (unfoldAt ? satellitePlaces(unfoldAt, satellites.length, unfoldAt.y > layout.height / 2) : []), [unfoldAt, satellites, layout.height]);
+    const obstacles = useMemo(() => [...model.obstacles, ...satelliteBoxes(places, satellites)], [model.obstacles, places, satellites]);
+    const { placed, notes } = useTransitLabels({
+        drawn: model.drawn, positions: layout.positions, styles: model.styles, lit, noteOf: p.noteOf, selectedStation, labels,
+        width: layout.width, height: layout.height, obstacles,
+    });
+
+    const cardStation = cardId ? stations.byId.get(cardId) : undefined;
+    const cardSatellites = cardStation ? (cardStation.id === unfoldedId ? satellites : satellitesOf(cardStation, model.index)) : [];
+    const leaves = p.leaves ?? NO_LEAVES;
+    const open = (id: string) => { p.onSelectStation(id); setCardId(id); };
+    // Choosing the unfolded station again folds it; choosing one of its satellites opens its card and leaves them out.
+    const pick = (id: string) => { open(id); if (id === unfoldedId) setUnfoldedId(null); };
+    // Every action closes the card and hands focus back to the station it was about.
+    const act = (id: string, run: () => void) => { run(); setCardId(null); focusStation(id); };
+
+    const cardNode = cardStation && (
+        <StationCard
+            key={cardStation.id}
+            card={buildCard({
+                station: cardStation, labels, layerName: layerName(cardStation.layer ?? OTHER_LAYER), findings: model.findings, index: model.index,
+                enter: p.canEnter?.(cardStation.id) ?? NO_ENTER, satellites: cardSatellites.length, unfolded: unfoldedId === cardStation.id, leaf: leaves.has(cardStation.id),
+            })}
+            labels={labels} compact={compact} at={anchor} boxRef={cardRef} loading={p.loading} onClose={closeCard}
+            onEnter={() => act(cardStation.id, () => { setUnfoldedId(null); p.onEnter?.(cardStation.id); })}
+            onUnfold={() => setUnfoldedId((cur) => (cur === cardStation.id ? null : cardStation.id))}
+            onCallers={() => act(cardStation.id, () => p.onQuestion?.('callers'))}
+            onApi={() => act(cardStation.id, () => p.onOpenPanel?.('api'))}
+            onPatterns={() => act(cardStation.id, () => p.onOpenPanel?.('patterns'))}
+        />
+    );
 
     return (
-        <div ref={hostRef} data-testid="kg-transit" style={{ position: 'relative', width: '100%', overflow: 'auto' }}>
-            <svg
-                role="group" aria-label={p.label} width={layout.width} height={layout.height} viewBox={zoom.viewBox ?? `0 0 ${layout.width} ${layout.height}`}
-                style={{ display: 'block', maxWidth: '100%', color: cssVar('text') }}
-            >
-                <desc>{fillTemplate(s.mapDescription, { lines: lines.lines.length, stations: layout.drawn.length })}</desc>
-                {layout.bands.map((band, i) => (
-                    <g key={band.layer} aria-hidden="true">
-                        <rect x={0} y={band.y} width={layout.width} height={band.h} fill={i % 2 ? cssVar('plane') : 'transparent'} />
-                        <text x={10} y={band.y + 16} fontSize={10} fontWeight={700} letterSpacing="0.08em" fill={cssVar('muted')}>
-                            {layerName(band.layer).toUpperCase()}
-                        </text>
-                    </g>
-                ))}
+        <div ref={boxRef} style={{ position: 'relative', width: '100%' }}>
+            <div ref={hostRef} data-testid="kg-transit" style={{ position: 'relative', width: '100%', overflow: 'auto' }}>
+                <svg
+                    role="group" aria-label={p.label} width={layout.width} height={layout.height} viewBox={zoom.viewBox ?? `0 0 ${layout.width} ${layout.height}`}
+                    // Wider than the container: scroll sideways at full size rather than shrink the labels to a few pixels.
+                    style={{ display: 'block', maxWidth: width > 0 && layout.width > width ? 'none' : '100%', color: cssVar('text') }}
+                >
+                    <desc>{fillTemplate(s.mapDescription, { lines: lines.lines.length, stations: layout.drawn.length })}</desc>
+                    <TransitBands bands={layout.bands} width={layout.width} walls={model.walls} labels={labels} />
+                    <DescribeLinks routes={model.describes} emphasised={claims} label={s.map.describes} />
 
-                {layout.routes.map((r) => {
-                    const line = lineById.get(r.lineId)!;
-                    const w = widthOf(r.lineId);
-                    const from = stations.byId.get(r.from), to = stations.byId.get(r.to);
-                    const untested = from && to ? segmentUntested(from, to) === true : false;
-                    const off = dim(r.from, r.to);
-                    const color = cssVar(lineTone(line.colourIndex));
-                    // A cycle is marked by shape (dashes and a glyph), never by colour alone.
-                    const cycle = line.hops[r.index]?.cycle === true;
-                    const a = layout.positions.get(r.from), b = layout.positions.get(r.to);
-                    const cycleLabel = p.cycleLabel ?? s.cycleHop;
-                    return (
-                        <g key={`${r.lineId}:${r.index}`} opacity={off ? 0.22 : 1} data-line={r.lineId} data-untested={untested || undefined} data-cycle={cycle || undefined}>
-                            <path d={r.d} fill="none" stroke={cssVar('bg')} strokeWidth={w + 4} strokeLinecap="round" strokeLinejoin="round" />
-                            <path
-                                d={r.d} fill="none" stroke={color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round"
-                                strokeDasharray={untested ? '9 7' : cycle ? '3 5' : undefined} style={{ cursor: 'pointer' }} onClick={() => p.onSelectLine(r.lineId)}
+                    {layout.routes.map((r) => {
+                        const line = lineById.get(r.lineId)!;
+                        const from = stations.byId.get(r.from), to = stations.byId.get(r.to);
+                        const untested = from && to ? segmentUntested(from, to) === true : false;
+                        const off = dim(r.from, r.to);
+                        return (
+                            <HopPath
+                                key={`${r.lineId}:${r.index}`} route={r} color={cssVar(lineTone(line.colourIndex))} width={model.widths.get(r.lineId) ?? 6} untested={untested}
+                                cycle={line.hops[r.index]?.cycle === true} dim={off} cycleLabel={p.cycleLabel ?? s.cycleHop} onSelect={() => p.onSelectLine(r.lineId)}
+                                flowing={!reducedMotion && !off && !untested && r.lineId === p.lineId}
                             />
-                            {cycle && a && b && (
-                                <g role="img" aria-label={cycleLabel} data-cycle-mark>
-                                    <title>{cycleLabel}</title>
-                                    <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 + 4} textAnchor="middle" fontSize={14} fontWeight={700} fill={cssVar('text')} {...halo}>⟲</text>
-                                </g>
-                            )}
-                            {!reducedMotion && !off && !untested && r.lineId === p.lineId && (
-                                <path d={r.d} fill="none" stroke={cssVar('bg')} strokeWidth={2} strokeLinecap="round" strokeDasharray="2 14" opacity={0.75} pointerEvents="none">
-                                    <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1.2s" repeatCount="indefinite" />
-                                </path>
-                            )}
-                        </g>
-                    );
-                })}
+                        );
+                    })}
 
-                {lines.lines.map((line) => {
-                    const at = layout.positions.get(line.terminus.stationId);
-                    const station = stations.byId.get(line.terminus.stationId);
-                    if (!at || !station) return null;
-                    const icon = { x: at.x + overlay.style(station).size + 30, y: at.y };
-                    return (
-                        <g key={`t:${line.id}`} data-terminus={line.terminus.kind} opacity={dim(station.id) ? 0.4 : 1}>
-                            <title>{s.terminus[line.terminus.kind]}</title>
-                            <TerminusIcon kind={line.terminus.kind} at={icon} color={cssVar(lineTone(line.colourIndex))} />
-                            <text x={icon.x} y={icon.y + 24} textAnchor="middle" fontSize={10} fill={cssVar('muted')} {...halo}>{s.terminus[line.terminus.kind]}</text>
-                        </g>
-                    );
-                })}
+                    {model.termini.map(({ info, at, from }) => (
+                        <TerminusMark
+                            key={`t:${info.stationId}`} glyph={info.glyph} kind={info.kind} from={from} at={at} text={terminusText(info, labels)} dim={dim(info.stationId)}
+                            lines={info.lineIds.map((id) => ({ color: cssVar(lineTone(lineById.get(id)?.colourIndex ?? 0)), width: model.widths.get(id) ?? 6 }))}
+                        />
+                    ))}
 
-                {layout.drawn.map((id) => {
-                    const station = stations.byId.get(id);
-                    const at = layout.positions.get(id);
-                    if (!station || !at) return null;
-                    const st = overlay.style(station);
-                    const r = st.size, ring = r + 4;
-                    const off = dim(id);
-                    const inter = lines.interchanges.get(id);
-                    const selected = id === selectedStation;
-                    const note = noteOf?.(station);
-                    const tone = (t: ThemeTone) => cssVar(t);
-                    const activate = () => p.onSelectStation(id);
-                    return (
-                        <g
-                            key={id} role="button" tabIndex={0} data-station={id} aria-pressed={selected}
-                            aria-label={fillTemplate(s.stationAria, { name: station.name, layer: layerName(station.layer ?? OTHER_LAYER), files: station.files })}
-                            style={{ cursor: 'pointer' }} opacity={off ? 0.4 : 1}
-                            onClick={activate} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
-                        >
-                            {inter && <title>{fillTemplate(s.interchange, { count: inter.length })}</title>}
-                            <circle cx={at.x} cy={at.y} r={Math.max(20, ring + 6)} fill="transparent" />
-                            {inter && <circle cx={at.x} cy={at.y} r={ring + 3} fill={tone('text')} />}
-                            <circle cx={at.x} cy={at.y} r={ring} fill={cssVar('bg')} />
-                            <circle cx={at.x} cy={at.y} r={r} fill={tone(st.tone)} stroke={cssVar('bg')} strokeWidth={2} />
-                            {st.ring && (
-                                <circle
-                                    cx={at.x} cy={at.y} r={ring} fill="none" stroke={tone(st.ring.tone)} strokeWidth={3}
-                                    strokeDasharray={st.ring.frac > 0 ? `${st.ring.frac * 2 * Math.PI * ring} ${2 * Math.PI * ring}` : '3 3'}
-                                    transform={`rotate(-90 ${at.x} ${at.y})`}
-                                />
-                            )}
-                            {st.pulse && (
-                                <circle cx={at.x} cy={at.y} r={ring} fill="none" stroke={tone('changed')} strokeWidth={2.5} pointerEvents="none">
-                                    {!reducedMotion && <animate attributeName="r" values={`${ring};${ring + 9};${ring}`} dur="2s" repeatCount="indefinite" />}
-                                    {!reducedMotion && <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite" />}
-                                </circle>
-                            )}
-                            {st.outline && <circle cx={at.x} cy={at.y} r={ring + 5} fill="none" stroke={tone('violation')} strokeWidth={1.5} strokeDasharray="2 3" />}
-                            {selected && <circle cx={at.x} cy={at.y} r={ring + 8} fill="none" stroke={tone('accent')} strokeWidth={2.5} />}
-                            <text x={at.x} y={at.y + ring + 14} textAnchor="middle" fontSize={11} fontWeight={off ? 500 : 600} fill={off ? cssVar('muted') : cssVar('text')} {...halo}>
-                                {station.name.length > 16 ? `${station.name.slice(0, 15)}…` : station.name}
-                            </text>
-                            {note && !off && <text x={at.x} y={at.y + ring + 27} textAnchor="middle" fontSize={10} fill={cssVar('accent')} {...halo}>{note}</text>}
-                        </g>
-                    );
-                })}
+                    {unfoldStation && unfoldAt && (
+                        <Satellites
+                            center={unfoldAt} items={satellites} places={places} color={cssVar(model.styles.get(unfoldStation.id)?.tone ?? 'edge')}
+                            parentName={unfoldStation.name} ariaTemplate={s.map.satelliteAria} onSelect={() => open(unfoldStation.id)}
+                        />
+                    )}
 
-                {layout.drawn.filter((id) => pinOf.has(id)).map((id) => {
-                    const station = stations.byId.get(id)!;
-                    const at = layout.positions.get(id)!;
-                    const r = overlay.style(station).size;
-                    const cx = at.x + r + 8, cy = at.y - r - 8;
-                    return (
-                        <g
-                            key={`pin:${id}`} role="button" tabIndex={0} data-pin={id} style={{ cursor: 'pointer' }}
-                            aria-label={fillTemplate(s.pinAria, { count: pinOf.get(id)!, name: station.name })}
-                            onClick={() => p.onSelectStation(id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onSelectStation(id); } }}
-                        >
-                            <circle cx={cx} cy={cy} r={11} fill={cssVar(`sev${station.anti}` as ThemeTone)} stroke={cssVar('bg')} strokeWidth={1.5} />
-                            <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill={cssVar('bg')}>{pinOf.get(id)}</text>
-                        </g>
-                    );
-                })}
-            </svg>
-            {undrawn > 0 && <p style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{fillTemplate(s.moreStations, { count: undrawn })}</p>}
+                    {model.drawn.map((station) => {
+                        const pos = layout.positions.get(station.id), label = placed.get(station.id), style = model.styles.get(station.id);
+                        if (!pos || !label || !style) return null;
+                        const inter = lines.interchanges.get(station.id);
+                        return (
+                            <StationMark
+                                key={station.id} id={station.id} at={pos} style={style} selected={station.id === selectedStation} dim={dim(station.id)}
+                                doc={model.docs.has(station.id)} interchange={inter ? fillTemplate(s.interchange, { count: inter.length }) : null} label={label}
+                                aria={fillTemplate(s.stationAria, { name: station.name, layer: layerName(station.layer ?? OTHER_LAYER), files: station.files })}
+                                accentNote={notes.get(station.id)?.accent === true} reducedMotion={reducedMotion} onActivate={() => pick(station.id)}
+                            />
+                        );
+                    })}
+
+                    {model.drawn.filter((station) => pinOf.has(station.id)).map((station) => {
+                        const pos = layout.positions.get(station.id)!;
+                        const r = model.styles.get(station.id)?.size ?? 8;
+                        const cx = pos.x + r + 8, cy = pos.y - r - 8;
+                        const activate = () => pick(station.id);
+                        return (
+                            <g
+                                key={`pin:${station.id}`} role="button" tabIndex={0} data-pin={station.id} style={{ cursor: 'pointer' }}
+                                aria-label={fillTemplate(s.pinAria, { count: pinOf.get(station.id)!, name: station.name })}
+                                onClick={activate} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
+                            >
+                                <circle cx={cx} cy={cy} r={11} fill={cssVar(`sev${station.anti}` as ThemeTone)} stroke={cssVar('bg')} strokeWidth={1.5} />
+                                <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill={cssVar('bg')}>{pinOf.get(station.id)}</text>
+                            </g>
+                        );
+                    })}
+                </svg>
+                {p.levelNote && <p data-level-note style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{p.levelNote}</p>}
+                {undrawn > 0 && <p style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{fillTemplate(s.moreStations, { count: undrawn })}</p>}
+                {layout.hiddenOnLine > 0 && <p data-more-stops style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{fillTemplate(s.map.moreStops, { count: layout.hiddenOnLine })}</p>}
+            </div>
+            {compact && frame && cardNode ? createPortal(cardNode, frame) : cardNode}
         </div>
     );
 }
-

@@ -36229,8 +36229,37 @@
         "familyOnly": "{family} uniquement",
         "clearFamily": "Retirer le filtre {family}",
         "missingFiles": "{count} fichiers manquent sur le serveur.",
+        "tooLarge": "{count} fichiers étaient trop volumineux pour être stockés.",
         "diagnose": "Diagnostiquer",
         "controls": "Commandes de la scène"
+      },
+      "map": {
+        "wall": "Frontière HTTP",
+        "describes": "décrit",
+        "doc": "Document",
+        "deadEnd": "Impasse : rien ne le lit",
+        "reported": "Signalé ✓",
+        "noSymbolsNote": "Ce graphe n'a pas de symboles : les niveaux sous un paquet affichent des fichiers.",
+        "world": "toute la carte",
+        "drillReset": "La carte a changé, la vue est donc sortie de {name}.",
+        "moreStops": "+{count} arrêts de plus",
+        "satelliteAria": "{name}, dans {parent}",
+        "card": {
+          "close": "Fermer",
+          "issueMore": "+{count} de plus",
+          "goInside": "Entrer ↓",
+          "unfold": "Déplier {count}",
+          "fold": "Replier",
+          "whoCalls": "Qui l'appelle ?",
+          "apiContract": "Contrat d'API",
+          "patterns": "Motifs",
+          "noSymbols": "Aucun symbole ici : il n'y a rien de plus profond.",
+          "leaf": "Hors de ce niveau",
+          "loading": "Lecture des symboles…"
+        },
+        "stats": { "issues": "Problèmes", "complexity": "Complexité", "coverage": "Couverture", "usage": "Usage" },
+        "bands": { "symbol": "Classe", "methods": "Méthodes", "errors": "Erreurs et tests", "leaves": "Sort de ce niveau", "body": "Cette fonction", "callees": "Ce qu'elle appelle" },
+        "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "Fournisseurs de LLM", "github": "API GitHub", "stripe": "Paiements", "mail": "E-mail", "slack": "Slack", "oauth": "Fournisseur de connexion" }
       },
       "rail": {
         "heading": "Lignes depuis les points d'entrée",
@@ -36290,6 +36319,29 @@
         "excludedTitle": "Dossiers exclus",
         "excludedNote": "Ces dossiers ne sont jamais lus.",
         "barAria": "{label} : local {local}, serveur {server}",
+        "deltaLoading": "Lecture des commits…",
+        "parityTitle": "{local} / {server}",
+        "countPair": "{local} / {server}",
+        "parityAll": "Le serveur les a tous.",
+        "parityMissing": "{count} pas encore sur le serveur.",
+        "parityTooLarge": "{count} étaient trop volumineux pour être stockés.",
+        "deltaTitle": "Modifications depuis la dernière revue",
+        "deltaEmpty": "Aucun commit à afficher.",
+        "deltaSummary": "{count} pas encore dans l’image",
+        "deltaPending": "En attente",
+        "deltaApplied": "Dans l’image",
+        "deltaRow": "{sha} · {count} fichiers · {when}",
+        "deltaRowAuthor": "{sha} · {author} · {count} fichiers · {when}",
+        "actionSetUpV8": "Configurer v8",
+        "actionTurnOn": "Activer",
+        "actionGenerate": "Générer",
+        "setUpV8Request": "Configurez la couverture v8 du projet : ajoutez un script et une configuration de couverture, lancez les tests avec la couverture et indiquez les fichiers de couverture produits.",
+        "turnOnRequest": "Activez les traces d’exécution du projet : ajoutez le traçage aux points d’entrée, lancez-le une fois et indiquez où les traces sont écrites.",
+        "excludedNone": "Aucun dossier n’a été exclu.",
+        "excludedFolder": "{path}",
+        "diagnosticsTitle": "Diagnostic",
+        "resend": "Relancer la revue pour réessayer les fichiers ignorés",
+        "resendNote": "Relance toute la revue de ce dossier. Vous la confirmez d’abord.",
         "refresh": "Actualiser"
       },
       "syncSteps": {
@@ -36300,6 +36352,18 @@
         "analyse": "Sources collectées",
         "skipped": "Rien d’ignoré"
       },
+      "syncStepDetails": {
+        "walk": "Lit le dossier ; les dossiers ignorés et exclus sont laissés de côté.",
+        "graph": "Imports, complexité et motifs de chaque fichier.",
+        "upload": "Envoie ce qui a changé au serveur par petits lots.",
+        "match": "Compare le nombre de fichiers, d’arêtes et de documents avec le serveur.",
+        "analyse": "Couverture, historique, responsables et OpenAPI, s’ils existent.",
+        "skipped": "Les fichiers qui n’ont pas pu être stockés sont listés, jamais perdus."
+      },
+      "unavailable": {
+        "notHere": "Non disponible ici",
+        "labelled": "{label} : non disponible ici"
+      },
       "syncStates": {
         "ok": "Terminé",
         "pending": "En attente",
@@ -36309,7 +36373,7 @@
         "code": "Code",
         "docs": "Documents",
         "coverage": "Couverture",
-        "usage": "Usage",
+        "usage": "Utilisation",
         "traces": "Traces",
         "openapi": "OpenAPI",
         "history": "Historique",
@@ -36344,7 +36408,23 @@
         "runWithValues": "Exécuter avec des valeurs",
         "promptTests": "Demander des tests",
         "promptText": "Écris des tests pour {file}. Il a une complexité de {complexity} et {coverage} de couverture de lignes. Couvre les branches non testées, exécute-les et indique la nouvelle couverture.",
-        "noComplexity": "La complexité n’a pas été mesurée."
+        "noComplexity": "La complexité n’a pas été mesurée.",
+        "shapeTitle": "Répartition des tests",
+        "shapeNone": "Aucun fichier de test dans le graphe : la répartition n’est pas mesurée.",
+        "shapeAria": "{unit} unitaires, {integration} d’intégration, {e2e} de bout en bout",
+        "shapeSegment": "{kind} {count}",
+        "unit": "unitaires",
+        "integration": "intégration",
+        "e2e": "e2e",
+        "configTitle": "Où la couverture est configurée",
+        "configNone": "Aucun paquet avec du code n’a été trouvé.",
+        "configAll": "La couverture est configurée dans tous les paquets.",
+        "configNowhere": "La couverture n’est configurée dans aucun paquet.",
+        "configOnly": "La couverture n’est configurée que dans {packages}. Ailleurs, elle n’est pas mesurée.",
+        "applyV8": "Appliquer : couverture v8 dans {count} paquets",
+        "applyV8Request": "Configurez la couverture v8 dans ces {count} paquets : {packages}. Ajoutez la configuration et un script à chacun, lancez les tests avec la couverture et indiquez la nouvelle couverture.",
+        "quadrant": "complexe · non testé",
+        "namesMore": "{names} +{count}"
       },
       "patterns": {
         "notSetUpTitle": "Les motifs ne sont pas configurés",
@@ -36364,7 +36444,13 @@
       "api": {
         "notSetUpTitle": "Aucun endpoint trouvé",
         "notSetUpBody": "Aucun enregistrement de routes n’a été trouvé. Les routes sont lues dans les enregistrements Hono et Express.",
-        "kpiEndpoints": "Endpoints",
+        "kpiEndpoints": "Points d’accès",
+        "kpiParams": "Paramètres",
+        "kpiCallers": "Appelants",
+        "kpiTests": "Fichiers de test",
+        "kpiContract": "Contrat",
+        "pickFile": "Sélectionner {name} sur la carte",
+        "paramWithNote": "{where} · {note}",
         "kpiUndocumented": "Non documentés",
         "contractMissing": "Il n’y a aucun contrat OpenAPI dans ce dossier, donc tous les endpoints sont non documentés.",
         "documented": "Documenté",
@@ -36379,41 +36465,205 @@
         "exportPostman": "Exporter la collection Postman",
         "contractTests": "Tests de contrat",
         "contractTestsText": "Écris des tests de contrat pour ces endpoints à partir du squelette OpenAPI, exécute-les et indique chaque résultat : {routes}.",
-        "groupAria": "{file} : {count} endpoints"
+        "groupAria": "{file} : {count} points d’accès",
+
+        "groupInContract": "Dans le contrat ({count})",
+
+        "groupUndocumented": "Non documentés ({count})",
+
+        "selectEndpoint": "Inclure {route} dans les tests de contrat",
+
+        "selectedCount": "{selected} points d’accès sur {total} sélectionnés pour les tests de contrat",
+
+        "selectAtLeastOne": "Sélectionnez au moins un point d’accès pour générer des tests de contrat.",
+
+        "detailParams": "Paramètres",
+
+        "paramPath": "chemin",
+
+        "paramQuery": "requête",
+
+        "paramBody": "corps",
+
+        "paramBodyNote": "Corps JSON ; sa forme n’a pas été extraite du code.",
+
+        "noParams": "Cette route ne prend aucun paramètre.",
+
+        "detailTested": "Réponses testées",
+
+        "testedYes": "Testé ✓",
+
+        "testedNo": "Non testé ✗",
+
+        "testedBy": "Un fichier de test référence le handler : {names}",
+
+        "testedNone": "Aucun fichier de test ne référence le handler.",
+
+        "detailCallers": "Qui l’appelle",
+
+        "callerFilesNone": "Aucun fichier ne référence le handler.",
+
+        "sandboxTitle": "Essayer · sandbox",
+
+        "baseUrl": "URL de base",
+
+        "baseUrlInvalid": "Saisissez une adresse http ou https, par exemple http://localhost:3000.",
+
+        "baseUrlRemote": "Ce n’est pas une adresse locale. La requête y part telle que saisie.",
+
+        "paramValue": "Valeur de {name}",
+
+        "paramMissing": "Saisissez une valeur pour {name}.",
+
+        "bodyInvalid": "Le corps n’est pas du JSON valide.",
+
+        "bodyLabel": "Corps de la requête (JSON)",
+
+        "send": "Envoyer",
+
+        "sending": "Envoi…",
+
+        "sendUnavailable": "L’envoi est disponible dans l’éditeur.",
+
+        "sendFailed": "La requête a échoué : {message}",
+
+        "resultStatus": "{status} · {ms} ms",
+
+        "resultHeaders": "En-têtes de la réponse",
+
+        "resultBody": "Corps de la réponse",
+
+        "resultTruncated": "Le corps est raccourci à {count} caractères.",
+
+        "resultEmpty": "La réponse n’a pas de corps."
       },
       "resolve": {
         "empty": "Choisissez Résoudre sur un constat pour le traiter ici.",
         "provenanceLabel": "Origine",
-        "fixTitle": "Correction déterministe",
-        "fixIntro": "Un codemod peut corriger ce type de constat.",
-        "applyFix": "Appliquer la correction",
-        "applying": "Application…",
-        "applied": "Appliqué sur la branche {branch}.",
-        "appliedNoBranch": "Appliqué.",
-        "changedFiles": "{count} fichiers modifiés",
-        "failed": "La correction n’a pas pu être appliquée.",
-        "promptTitle": "Demander à l’agent",
-        "promptIntro": "Aucun codemod n’existe pour ce type, c’est donc l’agent qui s’en charge.",
-        "prompt": "Solliciter l’agent",
-        "noComposer": "L’hôte n’a pas de compositeur où envoyer la demande.",
         "checksTitle": "Vérifications",
         "checkFiles": "Le constat nomme {count} fichiers.",
         "checkStations": "Il touche {count} stations.",
         "checkReview": "Relisez le dossier pour confirmer que le constat a disparu.",
-        "undoNote": "L’annulation n’est pas proposée ici : revenez sur la branche pour annuler la modification.",
         "show": "Afficher"
       },
       "simulate": {
         "pathTitle": "Chemin à parcourir",
         "pathEmpty": "Choisissez d’abord une ligne ou une station ; la simulation parcourt son chemin.",
         "valuesLabel": "Valeurs à utiliser",
-        "valuesPlaceholder": "montant=100, devise=EUR",
         "run": "Demander à l’agent de l’exécuter",
         "requestText": "Écris et exécute un test qui parcourt ce chemin : {path}. Utilise ces valeurs : {values}. Indique chaque étape : ce qui a été appelé, ce qui a été renvoyé et où cela a échoué.",
         "noValues": "aucune fournie ; choisis des valeurs raisonnables",
         "sent": "Envoyé à l’agent. Le résultat viendra de son exécution ; rien n’est affiché avant.",
         "noComposer": "L’hôte n’a pas de compositeur d’agent, rien ne peut donc être exécuté.",
-        "note": "Simuler ne simule jamais une exécution. L’agent écrit le test, l’exécute et indique chaque étape."
+        "note": "Simuler ne simule jamais une exécution. L’agent écrit le test, l’exécute et indique chaque étape.",
+        "noRecorded": "L'hôte n'a enregistré aucune valeur pour ce chemin : il n'y a rien à modifier. Le parcours suit tout de même les sauts.",
+        "presets": "Préréglages d'arguments",
+        "presetRecorded": "Enregistré",
+        "colRecorded": "Enregistré",
+        "editAria": "Modifier {name}",
+        "stubsTitle": "Ports simulés",
+        "stubsHint": "Un arrêt simulé répond avec sa valeur enregistrée.",
+        "lineEnter": "entrer dans {name}",
+        "lineCall": "appeler {name}",
+        "lineReturn": "revenir de {name}",
+        "unknownResult": "inconnu : une entrée a été modifiée, seule une vraie exécution peut le dire",
+        "codeTitle": "Étapes du chemin",
+        "noVars": "Aucune valeur n'est connue à cette étape.",
+        "varsTitle": "Variables",
+        "resultTitle": "Résultat",
+        "noResult": "Aucune valeur enregistrée ici.",
+        "stubbedNote": "Cet arrêt est simulé : il répond avec sa valeur enregistrée.",
+        "simulatedBanner": "Simulé, non exécuté : ceci parcourt les sauts du chemin avec les valeurs enregistrées et modifiées. « Demander à l'agent de l'exécuter » fait la vraie exécution.",
+        "saveTest": "Enregistrer sous {file}",
+        "saveTestText": "Écris le fichier de test {file} qui parcourt ce chemin : {path}. Utilise ces valeurs : {values}. Simule ces ports : {stubs}. Enregistre-le dans le dossier de tests du projet et lance-le.",
+        "noStubs": "aucun",
+        "origin": {
+          "recorded": "enregistré",
+          "edited": "modifié"
+        },
+        "startFrom": "Partir de",
+        "startEntry": "L'entrée",
+        "startStop": "Cet arrêt"
+      },
+      "fix": {
+        "title": "Correctif",
+        "queue": "{open} ouverts sur {shown} affichés · {repo} dans le dépôt",
+        "queueTitle": "File des correctifs",
+        "queueAria": "Ouvrir {title}",
+        "queueState": {
+          "open": "ouvert",
+          "applied": "appliqué · vérification",
+          "resolved": "résolu"
+        },
+        "mode": {
+          "group": "Mode de correction",
+          "apply": "Correctif déterministe",
+          "prompt": "Prompt",
+          "noCodemod": "Aucun codemod n'existe pour ce type sur cet hôte."
+        },
+        "primary": {
+          "apply": "Appliquer à la branche fix/…",
+          "prompt": "Envoyer au compositeur",
+          "checks": "Lancer les vérifications",
+          "resolve": "Marquer comme résolu",
+          "resolved": "Résolu ✓",
+          "sent": "Envoyé à l'agent",
+          "running": "En cours…"
+        },
+        "sendToAgent": "Envoyer à l'agent",
+        "noComposer": "Aucun compositeur d'agent n'est connecté.",
+        "undo": "Annuler",
+        "undoNoRecord": "Cet hôte n'a gardé aucune trace du correctif, il ne peut donc pas l'annuler.",
+        "permNote": "S'exécute en votre nom sur la branche fix/…. Annuler revient à la branche où vous étiez ; rien n'atteint la branche principale tant que les vérifications ne passent pas et que vous n'avez pas fusionné.",
+        "previewTitle": "Ce qui change",
+        "previewFiles": "{count} fichiers",
+        "previewFromFiles": "Cet hôte ne peut pas prévisualiser les lignes ; ce sont les fichiers que le constat nomme.",
+        "promptTitle": "Prompt",
+        "promptNote": "Part vers l'unique compositeur, avec ce constat et les quatre vérifications jointes.",
+        "checksTitle": "Résolu seulement quand toutes les vérifications passent",
+        "checksList": "Vérifications",
+        "check": {
+          "types": "Vérifier les types des paquets touchés",
+          "tests": "Les tests ciblés passent",
+          "rescan": "Nouvelle analyse : le problème a disparu",
+          "review": "Revue par l'agent : aucun nouveau constat"
+        },
+        "checkStatus": {
+          "pending": "En attente",
+          "running": "En cours",
+          "pass": "Réussie",
+          "fail": "Échec",
+          "skipped": "Ignorée",
+          "error": "Erreur",
+          "agent": "Envoyé à l'agent"
+        },
+        "checkNoReport": "Cette vérification n'a jamais répondu, elle compte donc comme une erreur.",
+        "changedFiles": "{count} fichiers modifiés",
+        "appliedOn": "Appliqué sur la branche {branch}.",
+        "branchError": "Appliqué sur place : la branche n'a pas pu être créée ({reason}).",
+        "branchUnknown": "la branche du correctif",
+        "requestApply": "Corrige ce constat sur une nouvelle branche nommée fix/… : {title} : {items}. Fais la modification sans la fusionner.",
+        "requestChecks": "Vérifie les types des paquets touchés et lance les tests ciblés pour la modification qui corrige « {title} » ({items}) sur {branch}, et indique chaque résultat.",
+        "requestResolve": "Marque le constat « {title} » ({items}) comme résolu une fois que {branch} a passé ses vérifications.",
+        "requestUndo": "Annule le correctif de « {title} » ({items}) : reviens sur les modifications de {branch}.",
+        "requestPrompt": "Corrige ce constat : {title} : {items}. Fais la modification sur une nouvelle branche nommée fix/…, vérifie les types des paquets touchés, lance les tests ciblés, relance l'analyse pour confirmer que le constat a disparu et relis la modification pour y chercher de nouveaux constats. Indique chaque résultat. Ne fusionne pas.",
+        "requestReview": "Relis la modification qui corrige « {title} » ({items}) sur {branch} et signale tout nouveau constat qu'elle introduit.",
+        "beforeAfter": {
+          "group": "Avant et après",
+          "noBaseline": "Cet hôte ne garde aucune revue antérieure à comparer."
+        },
+        "errors": {
+          "noRoot": "Ce constat ne nomme aucun dossier de l'espace de travail.",
+          "noRecord": "Rien à annuler : l'hôte n'a gardé aucune trace de ce correctif.",
+          "unknown": "L'étape a échoué."
+        },
+        "codemod": {
+          "unusedExport": "Supprimer les exports inutilisés",
+          "unusedFile": "Supprimer les fichiers inutilisés",
+          "unusedDependency": "Supprimer les dépendances inutilisées",
+          "splitByCommand": "Scinder par groupe de commandes",
+          "extractClone": "Extraire le code commun"
+        }
       },
       "pinpoint": {
         "label": "Capture d’écran",

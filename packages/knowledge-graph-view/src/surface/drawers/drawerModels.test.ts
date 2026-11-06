@@ -4,7 +4,8 @@ import { buildStations } from '../stations';
 import { curlOf, endpointsOf, groupByFile, openApiSkeleton, parseRoutes, postmanCollection, toOpenApiPath } from './apiModel';
 import { coverageModel, MAX_GAPS } from './coverageModel';
 import { patternMatrix, topAntiPatterns } from './patternsModel';
-import { formatBytes, pipelineSteps, serverShare } from './syncModel';
+import { formatBytes } from '../../formatBytes';
+import { pipelineSteps, serverShare } from './syncModel';
 
 const graph = surfaceFixture();
 const model = buildStations(graph);

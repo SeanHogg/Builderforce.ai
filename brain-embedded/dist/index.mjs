@@ -85,16 +85,17 @@ import {
   thoughtTextOf,
   trimRepetitionLoop,
   within
-} from "./chunk-CFENY5M7.mjs";
+} from "./chunk-VG2BVO4F.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
   NOT_SIGNED_IN,
   NO_LOCAL_MODEL,
   NO_SPECIFIC_MODEL,
+  PROVIDER_AUTH_REQUIRED,
   brainRequestError,
   chatErrorAction
-} from "./chunk-GCFXVJYE.mjs";
+} from "./chunk-SFVLTQ7J.mjs";
 import {
   PageEngineError,
   abortReason,
@@ -630,6 +631,29 @@ function reasoningForRun(o) {
   return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
+// src/streamFailureDetail.ts
+function hostOf(url) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+var seconds = (ms) => `${Math.round(ms / 1e3)}s`;
+function describeStreamFailure(d) {
+  const parts = [
+    `destination ${d.destination.label} (${d.destination.host})`,
+    d.phase === "headers" ? "no response headers" : "stream failed after headers",
+    `after ${seconds(d.elapsedMs)}`,
+    `request ${(d.requestBytes / 1024).toFixed(1)} KB`,
+    `${d.messageCount} message${d.messageCount === 1 ? "" : "s"}`,
+    `${d.toolCount} tool${d.toolCount === 1 ? "" : "s"}`
+  ];
+  if (d.bytesReceived !== void 0) parts.push(`${d.bytesReceived} B received`);
+  if (d.credential) parts.push(`credential ${d.credential}`);
+  return parts.join(" \xB7 ");
+}
+
 // src/streamChatCompletion.ts
 var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
 function readUpstreamEvidence(frame) {
@@ -658,10 +682,19 @@ function readGatewayRouting(frame) {
 }
 var StreamInterruptedError = class extends Error {
   model;
-  constructor(message, model) {
+  /** What the failed request looked like (destination, phase, elapsed, size) - for logs and triage. */
+  detail;
+  /**
+   * The model was PICKED (named and held strictly) and stayed silent or dropped the connection - the only interruption
+   * where "choose another model" is the right offer. Never set for an in-band provider error.
+   */
+  pinned;
+  constructor(message, model, detail, options) {
     super(message);
     this.name = "StreamInterruptedError";
     this.model = model;
+    this.pinned = options?.pinned === true;
+    if (detail) this.detail = detail;
   }
 };
 var TransportError = class extends Error {
@@ -672,11 +705,14 @@ var TransportError = class extends Error {
    * reports the outage instead of retrying.
    */
   unreachable;
+  /** As {@link StreamInterruptedError.pinned}. */
+  pinned;
   constructor(message, model = void 0, options) {
     super(message, options?.cause !== void 0 ? { cause: options.cause } : void 0);
     this.name = "TransportError";
     this.model = model;
     this.unreachable = options?.unreachable === true;
+    this.pinned = options?.pinned === true;
   }
 };
 var LOOP_QUOTE_CHARS = 90;
@@ -697,8 +733,10 @@ var RepetitionLoopError = class extends StreamInterruptedError {
   }
 };
 async function defaultMapError(res) {
-  const body = await res.json().catch(() => ({}));
-  return brainRequestError(res.status, body, res.statusText);
+  return brainRequestError(res.status, await readErrorBody(res), res.statusText);
+}
+async function readErrorBody(res) {
+  return res.json().catch(() => ({}));
 }
 async function streamChatCompletion(opts, handlers = {}) {
   const request = new AbortController();
@@ -751,10 +789,31 @@ async function runStreamChatCompletion(opts, handlers, request) {
   }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
   const idleMs = opts.idleTimeoutMs ?? STREAM_IDLE_MS;
+  const pinned = !!opts.model && !!opts.modelStrict;
+  let attemptStartedAt = Date.now();
+  let attemptSignal;
+  const requestJson = JSON.stringify(body);
+  const requestBytes = new TextEncoder().encode(requestJson).byteLength;
+  const failureDetail = (phase, extra = {}) => {
+    const credential = transport.credentialState?.(attemptSignal);
+    return {
+      phase,
+      destination: transport.destination ? { kind: "provider", ...transport.destination } : { kind: "gateway", label: "the gateway", host: hostOf(transport.baseUrl) },
+      elapsedMs: Date.now() - attemptStartedAt,
+      idleMs: extra.idle ?? idleMs,
+      requestBytes,
+      messageCount: opts.messages.length,
+      toolCount: opts.tools?.length ?? 0,
+      ...extra.bytesReceived !== void 0 ? { bytesReceived: extra.bytesReceived } : {},
+      ...credential ? { credential } : {}
+    };
+  };
   const headerDeadlineOn = Number.isFinite(idleMs) && idleMs > 0;
   let headerTimedOut = false;
   const sendOnce = () => {
+    attemptStartedAt = Date.now();
     const attempt = new AbortController();
+    attemptSignal = attempt.signal;
     const forwardStop = () => attempt.abort();
     if (request.signal.aborted) attempt.abort();
     else request.signal.addEventListener("abort", forwardStop, { once: true });
@@ -765,7 +824,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
     return doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: requestJson,
       signal: attempt.signal
     }).finally(() => clearTimeout(deadline));
   };
@@ -778,10 +837,16 @@ async function runStreamChatCompletion(opts, handlers, request) {
   } catch (e) {
     if (opts.signal?.aborted || request.signal.aborted) throw e;
     if (headerTimedOut) {
-      throw new StreamInterruptedError(`the gateway sent nothing for ${Math.round(idleMs / 1e3)}s`, model);
+      const quiet = Math.round(idleMs / 1e3);
+      throw new StreamInterruptedError(
+        transport.destination ? `${transport.destination.label} (${transport.destination.host}) sent no response for ${quiet}s` : `the gateway sent nothing for ${quiet}s`,
+        model,
+        failureDetail("headers"),
+        { pinned }
+      );
     }
     if (e instanceof TypeError) {
-      throw new TransportError(describeNetworkError(e), void 0, { cause: e, unreachable: isConnectFailure(e) });
+      throw new TransportError(describeNetworkError(e), void 0, { cause: e, unreachable: isConnectFailure(e), pinned });
     }
     throw e;
   }
@@ -876,6 +941,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
   }
   const decoder = new TextDecoder();
   let buffer = "";
+  let bytesReceived = 0;
   while (true) {
     let chunkRead;
     try {
@@ -883,12 +949,13 @@ async function runStreamChatCompletion(opts, handlers, request) {
     } catch (e) {
       if (opts.signal?.aborted) throw e;
       if (e instanceof StreamIdleError) {
-        throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1e3)}s`, resolvedModel());
+        throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1e3)}s`, resolvedModel(), failureDetail("body", { idle: e.idleMs, bytesReceived }), { pinned });
       }
-      throw new StreamInterruptedError(`the stream dropped mid-answer: ${describeNetworkError(e)}`, resolvedModel());
+      throw new StreamInterruptedError(`the stream dropped mid-answer: ${describeNetworkError(e)}`, resolvedModel(), failureDetail("body", { bytesReceived }), { pinned });
     }
     const { done, value } = chunkRead;
     if (done) break;
+    bytesReceived += value?.byteLength ?? 0;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
@@ -911,7 +978,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
       if (parsed.error) {
         const message = typeof parsed.error === "string" ? parsed.error : parsed.error.message ?? "unknown error";
         reader.cancel().catch(() => void 0);
-        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
+        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel(), failureDetail("body", { bytesReceived }));
       }
       if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
       announceModel();
@@ -1321,11 +1388,11 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
-  "~deepseek/deepseek-pro-latest": [927e-10, 8e-6],
+  "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [59e-9, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1567e-10, 93388e-10],
+  "~moonshotai/kimi-latest": [1529e-10, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1333,7 +1400,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [285e-10, 923e-10],
+  "~z-ai/glm-flash-latest": [284e-10, 923e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -1391,7 +1458,7 @@ var PRICE_SNAPSHOT = {
   "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
   "cohere/command-r7b-12-2024": [375e-10, 15e-8],
   "cohere/north-mini-code:free": [0, 0],
-  "deepseek/deepseek-chat": [2574e-10, 10287e-10],
+  "deepseek/deepseek-chat": [32e-8, 89e-8],
   "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
   "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
   "deepseek/deepseek-r1-0528": [5e-7, 215e-8],
@@ -1400,10 +1467,10 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
   "deepseek/deepseek-v4-flash-0731": [59e-9, 3e-7],
-  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
-  "deepseek/deepseek-v4-pro": [16e-7, 32e-7],
-  "deepseek/deepseek-v4-pro-0813": [103e-9, 411e-8],
-  "deepseek/deepseek-v4.1-flash": [45e-9, 5e-7],
+  "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
+  "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
+  "deepseek/deepseek-v4-pro-0813": [1165e-10, 466e-8],
+  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
   "dots-studio/dots-3-note-preview:free": [0, 0],
@@ -1440,11 +1507,13 @@ var PRICE_SNAPSHOT = {
   "google/gemini-4-argon": [2e-6, 1e-5],
   "google/gemini-4-argon:batch": [1e-6, 5e-6],
   "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
+  "google/gemini-omni-1.1-flash": [15e-7, 9e-6],
+  "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [35e-9, 106e-9],
+  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -1470,7 +1539,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
   "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
-  "meta-llama/llama-3.3-70b-instruct": [2e-7, 52e-8],
+  "meta-llama/llama-3.3-70b-instruct": [59e-8, 79e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
   "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
@@ -1483,13 +1552,9 @@ var PRICE_SNAPSHOT = {
   "meta/muse-spark-open": [125e-8, 425e-8],
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-01": [2e-7, 11e-7],
   "minimax/minimax-m1": [55e-8, 22e-7],
-  "minimax/minimax-m2": [255e-9, 102e-8],
-  "minimax/minimax-m2-her": [3e-7, 12e-7],
-  "minimax/minimax-m2.1": [3e-7, 12e-7],
   "minimax/minimax-m2.5": [27e-8, 95e-8],
-  "minimax/minimax-m2.7": [3e-7, 12e-7],
+  "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
@@ -1531,11 +1596,10 @@ var PRICE_SNAPSHOT = {
   "nousresearch/hermes-4-405b": [1e-6, 3e-6],
   "nvidia/nemotron-3-nano-30b-a3b": [6e-8, 24e-8],
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": [0, 0],
-  "nvidia/nemotron-3-super-120b-a12b": [3e-7, 24e-7],
+  "nvidia/nemotron-3-super-120b-a12b": [75e-9, 4e-7],
   "nvidia/nemotron-3-ultra-550b-a55b": [6e-7, 24e-7],
   "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
-  "nvidia/nemotron-3.5-content-safety:free": [0, 0],
   "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
   "nvidia/nemotron-3.5-super-vl": [15e-8, 5e-7],
@@ -1641,6 +1705,7 @@ var PRICE_SNAPSHOT = {
   "openai/o4-mini:batch": [55e-8, 22e-7],
   "openrouter/auto": [0, 0],
   "openrouter/auto-beta": [0, 0],
+  "openrouter/auto-code": [0, 0],
   "openrouter/bodybuilder": [0, 0],
   "openrouter/free": [0, 0],
   "openrouter/fusion": [0, 0],
@@ -1698,7 +1763,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
   "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
   "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
+  "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
@@ -6488,12 +6553,13 @@ function transportRetryTrace(ts, step, outcome, message) {
   };
 }
 function providerFailureTrace(ts, step, model, error, durationMs) {
+  const failure = error instanceof StreamInterruptedError ? error.detail : void 0;
   return {
     ts,
     category: "error",
     label: "llm.complete",
     ...durationMs !== void 0 ? { durationMs } : {},
-    args: { model: model || "default", step },
+    args: { model: model || "default", step, ...failure ? { failure } : {} },
     result: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     isError: true
   };
@@ -7326,41 +7392,67 @@ var JS_ABSTRACT_METHOD = new RegExp(
 );
 var JS_KEYWORDS = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
 function extractJs(lines, out) {
-  let inClass = false;
+  let cls;
   eachLine(lines, out, (line2, lineNo) => {
-    if (/^\}/.test(line2)) inClass = false;
+    if (/^\}/.test(line2)) cls = void 0;
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line2);
       if (!m) continue;
       const exported = !!m[1];
       if (!exported && /^\s/.test(line2)) continue;
-      out.push({ name: group(m, 2).replace(/^["']|["']$/g, ""), kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class") inClass = true;
+      const name2 = group(m, 2).replace(/^["']|["']$/g, "");
+      out.push({ name: name2, kind: rule.kind, line: lineNo, exported });
+      if (rule.kind === "class") cls = name2;
       return;
     }
-    if (!inClass) return;
+    if (cls === void 0) return;
     const method = JS_METHOD.exec(line2) ?? JS_ABSTRACT_METHOD.exec(line2);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false });
+    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
   });
 }
 function extractPython(lines, out) {
+  let cls;
+  let memberIndent;
   eachLine(lines, out, (line2, lineNo) => {
     const m = /^(\s*)(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)/.exec(line2);
+    const indent = m ? group(m, 1) : /^(\s*)\S/.exec(line2)?.[1] ?? "";
+    if (indent === "" && /^[^\s@#)\]}]/.test(line2) && !(m && group(m, 2) === "class")) {
+      cls = void 0;
+      memberIndent = void 0;
+    }
     if (!m) return;
-    const indent = group(m, 1);
-    if (indent.length > 4 && !indent.startsWith("	")) return;
     const name = group(m, 3);
-    const kind = group(m, 2) === "class" ? "class" : indent.length > 0 ? "method" : "function";
-    out.push({ name, kind, line: lineNo, exported: !name.startsWith("_") });
+    if (group(m, 2) === "class") {
+      if (indent === "") {
+        cls = name;
+        memberIndent = void 0;
+        out.push({ name, kind: "class", line: lineNo, exported: !name.startsWith("_") });
+        return;
+      }
+      if (cls !== void 0 && (memberIndent === void 0 || indent === memberIndent)) {
+        memberIndent ??= indent;
+        out.push({ name, kind: "class", line: lineNo, exported: !name.startsWith("_"), container: cls });
+      }
+      return;
+    }
+    if (indent === "") {
+      out.push({ name, kind: "function", line: lineNo, exported: !name.startsWith("_") });
+      return;
+    }
+    if (cls === void 0) return;
+    memberIndent ??= indent;
+    if (indent === memberIndent) out.push({ name, kind: "method", line: lineNo, exported: !name.startsWith("_"), container: cls });
   });
 }
+var goReceiver = (receiver) => /\(\s*(?:[A-Za-z_]\w*\s+)?\*?\s*([A-Za-z_]\w*)/.exec(receiver)?.[1];
 function extractGo(lines, out) {
   eachLine(lines, out, (line2, lineNo) => {
     const fn = /^func\s+(\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(line2);
     if (fn) {
       const name2 = group(fn, 2);
-      out.push({ name: name2, kind: fn[1] ? "method" : "function", line: lineNo, exported: /^[A-Z]/.test(name2) });
+      const container = fn[1] ? goReceiver(fn[1]) : void 0;
+      out.push({ name: name2, kind: fn[1] ? "method" : "function", line: lineNo, exported: /^[A-Z]/.test(name2), ...container ? { container } : {} });
       return;
     }
     const ty = /^type\s+([A-Za-z_]\w*)\s+(struct|interface)?/.exec(line2);
@@ -7371,13 +7463,31 @@ function extractGo(lines, out) {
     out.push({ name, kind, line: lineNo, exported: /^[A-Z]/.test(name) });
   });
 }
+function rustImplTarget(line2) {
+  const m = /^\s*(?:unsafe\s+)?impl\b(?:\s*<[^>]*>)?\s+([^{]*)/.exec(line2);
+  if (!m) return void 0;
+  const text2 = group(m, 1).replace(/\bwhere\b.*$/, "");
+  const target = text2.includes(" for ") ? text2.slice(text2.indexOf(" for ") + 5) : text2;
+  return /(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)/.exec(target.replace(/^[\s&]+(?:mut\s+|dyn\s+)?/, ""))?.[1];
+}
 function extractRust(lines, out) {
+  let block;
   eachLine(lines, out, (line2, lineNo) => {
+    if (/^\}/.test(line2)) block = void 0;
+    const target = rustImplTarget(line2);
+    if (target) {
+      block = target;
+      return;
+    }
     const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line2);
     if (!m) return;
     const word = group(m, 3);
-    const kind = word === "fn" ? group(m, 1).length > 0 ? "method" : "function" : word === "mod" ? "module" : word;
-    out.push({ name: group(m, 4), kind, line: lineNo, exported: !!m[2] });
+    const indented = group(m, 1).length > 0;
+    const kind = word === "fn" ? indented ? "method" : "function" : word === "mod" ? "module" : word;
+    const name = group(m, 4);
+    const container = kind === "method" ? block : void 0;
+    out.push({ name, kind, line: lineNo, exported: !!m[2], ...container ? { container } : {} });
+    if (word === "trait" && !indented) block = name;
   });
 }
 var OO_TYPE = /^\s*(?:(?:public|private|protected|internal|static|final|abstract|sealed|open|data|partial|export|inline|value)\s+)*(class|interface|enum|record|object|struct|protocol|trait)\s+([A-Za-z_]\w*)/;
@@ -9872,8 +9982,8 @@ var waitAgentsTool = defineTool({
   async execute(args, ctx) {
     const controls = live(ctx);
     if (!controls) return unavailable();
-    const seconds = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number(args.timeout_seconds) || DEFAULT_WAIT_SECONDS));
-    const { reports, running, note } = await controls.wait(handlesOf(args.agents), seconds * 1e3, ctx.signal);
+    const seconds2 = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number(args.timeout_seconds) || DEFAULT_WAIT_SECONDS));
+    const { reports, running, note } = await controls.wait(handlesOf(args.agents), seconds2 * 1e3, ctx.signal);
     const changedFiles = [...new Set(reports.flatMap((r) => r.changedFiles ?? []))];
     return {
       data: {
@@ -10215,8 +10325,19 @@ import { factKeyOf } from "@seanhogg/builderforce-memory/knowledge";
 // ../packages/agent-tools/src/knowledge/portablePack.ts
 import {
   canonicalJson as canonicalJson3,
-  compareStr as compareStr7
+  compareStr as compareStr7,
+  factRef as factRef2,
+  pathOfRef as pathOfRef2
 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+import {
+  compareStr as compareStr8,
+  filesManifestKey as filesManifestKey2,
+  localSnapshotStore,
+  toCards
+} from "@seanhogg/builderforce-memory/knowledge";
+import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
 import { srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
@@ -10415,15 +10536,60 @@ async function resolveContextWindow(modelRef, sources = {}) {
 
 // src/localFirstTransport.ts
 var globalFetch = (input, init) => fetch(input, init);
+var AUTH_REFUSAL = /unauthori[sz]ed|unauthenticated|expired|token|credential|authenticat|\bapi[_ ]?key\b|\bkey\b/i;
+function refusesCredential(body) {
+  const b = body ?? {};
+  const text2 = [b.code, typeof b.error === "string" ? b.error : b.error?.message, b.message].filter((v) => typeof v === "string").join(" ");
+  return AUTH_REFUSAL.test(text2);
+}
+function providerErrorMapper(provider, label) {
+  return async (res) => {
+    const body = await readErrorBody(res);
+    const mapped = brainRequestError(res.status, body, res.statusText);
+    if (res.status !== 401 && !(res.status === 403 && refusesCredential(body))) return mapped;
+    return new BrainRequestError(`${label} rejected the sign-in (${res.status}). ${mapped.message}`, {
+      status: res.status,
+      code: PROVIDER_AUTH_REQUIRED,
+      provider,
+      providerLabel: label
+    });
+  };
+}
 function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
+  const baseUrl = normalizeLocalBaseUrl(endpoint.baseUrl);
+  const runtime = options.runtime ? localRuntime(options.runtime) : void 0;
+  const credentialStates = /* @__PURE__ */ new WeakMap();
+  const stateOf2 = (signal) => (signal ? credentialStates.get(signal) : void 0) ?? "none";
   return {
-    baseUrl: normalizeLocalBaseUrl(endpoint.baseUrl),
+    baseUrl,
     getToken: () => endpoint.token ?? null,
     wire: "openai",
-    ...options.runtime && localRuntime(options.runtime).providerSampling ? { providerSampling: true } : {},
+    ...runtime?.providerSampling ? { providerSampling: true } : {},
+    // A hosted runtime reached directly (Kimi Code) is named in a silence error; an on-device engine keeps the neutral default.
+    ...runtime && !runtime.onDevice ? { destination: { label: runtime.label, host: hostOf(baseUrl) } } : {},
+    credentialState: (signal) => stateOf2(signal),
+    // A hosted runtime backed by the person's OWN account (registry `accountProvider`) that refuses the credential is a
+    // PROVIDER sign-in problem; mapped to the generic 401 it would be read as a BuilderForce session error.
+    ...runtime?.accountProvider ? { mapError: providerErrorMapper(runtime.accountProvider, runtime.label) } : {},
     fetch: async (input, init) => {
+      const signal = init.signal ?? void 0;
+      const mark = (state) => {
+        if (signal) credentialStates.set(signal, state);
+      };
+      mark(endpoint.credential ? "pending" : "none");
+      const tracked = endpoint.credential ? {
+        ...endpoint,
+        credential: async (stale) => {
+          mark("pending");
+          try {
+            return await endpoint.credential(stale);
+          } finally {
+            mark("resolved");
+          }
+        }
+      } : endpoint;
       try {
-        return await fetchLocal(endpoint, fetchImpl, rewriteToLocalUrl(input), init);
+        return await fetchLocal(tracked, fetchImpl, rewriteToLocalUrl(input), init);
       } catch (e) {
         if (!options.failFast || init.signal?.aborted) throw e;
         throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
@@ -10450,11 +10616,25 @@ async function fittedFor(target, opts, fit, probes) {
     ...opts.conversationKey !== void 0 ? { conversation: opts.conversationKey } : {}
   });
 }
-async function streamOnLocal(target, opts, handlers, transport, messages) {
+async function streamOnLocal(target, opts, handlers, transport, messages, picked) {
   const account = localRuntime(target.provider).onDevice ? void 0 : "own";
   const named = handlers.onModel ? { ...handlers, onModel: () => handlers.onModel?.(target.ref, account) } : handlers;
-  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, named);
+  let served;
+  try {
+    served = await streamChatCompletion({ ...opts, messages, model: target.model, modelStrict: opts.modelStrict || picked, transport }, named);
+  } catch (e) {
+    throw withModelRef(e, target.ref);
+  }
   return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}`, ...account ? { account } : {} };
+}
+function withModelRef(e, ref) {
+  if (e instanceof RepetitionLoopError || !(e instanceof StreamInterruptedError || e instanceof TransportError)) return e;
+  if (e.model === ref) return e;
+  const out = e instanceof StreamInterruptedError ? new StreamInterruptedError(e.message, ref, e.detail, { pinned: e.pinned }) : new TransportError(e.message, ref, { cause: e.cause, unreachable: e.unreachable, pinned: e.pinned });
+  out.name = e.name;
+  if (e.stack) out.stack = e.stack;
+  if (e instanceof StreamInterruptedError && e.cause !== void 0) out.cause = e.cause;
+  return out;
 }
 function createLocalStream(endpoint, model, fetchImpl, route = {}) {
   const pin = parseLocalModelRef(route.ref);
@@ -10473,7 +10653,7 @@ function createLocalStream(endpoint, model, fetchImpl, route = {}) {
         if (target) {
           const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl, { runtime: target.provider });
           const messages2 = await fittedFor(target, opts, route.fit, probes);
-          return streamOnLocal(target, opts, committingHandlers(handlers, () => void 0, target.ref), t, messages2);
+          return streamOnLocal(target, opts, committingHandlers(handlers, () => void 0, target.ref), t, messages2, true);
         }
       } else if (route.cloud) {
         return route.cloud(opts, handlers);
@@ -10481,7 +10661,7 @@ function createLocalStream(endpoint, model, fetchImpl, route = {}) {
     }
     if (!pinned) return streamChatCompletion({ ...opts, model, transport }, handlers);
     const messages = await fittedFor(pinned, opts, route.fit, probes);
-    return streamOnLocal(pinned, opts, committingHandlers(handlers, () => void 0, pinned.ref), transport, messages);
+    return streamOnLocal(pinned, opts, committingHandlers(handlers, () => void 0, pinned.ref), transport, messages, true);
   };
 }
 function localFirstWorkload(call2) {
@@ -10528,7 +10708,7 @@ function createLocalFirstStream(input) {
       if (local) {
         const transport = localTransport(local.endpoint, input.fetch, { runtime: local.provider });
         const messages = await fittedFor(local, opts, input.fit, input.probes);
-        return streamOnLocal(local, opts, committingHandlers(handlers, () => void 0, local.ref), transport, messages);
+        return streamOnLocal(local, opts, committingHandlers(handlers, () => void 0, local.ref), transport, messages, true);
       }
     }
     const routed = opts.model ? { ...opts, model: void 0 } : opts;
@@ -10546,7 +10726,7 @@ function createLocalFirstStream(input) {
         if (attempt.kind === "cloud") return input.cloud(routed, committingHandlers(handlers, commit));
         const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
         const messages = await fittedFor(attempt, routed, input.fit, input.probes);
-        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages);
+        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages, false);
       },
       { signal: opts.signal, accept: answered, ...input.onAttempt ? { onAttempt: input.onAttempt } : {} }
     );
@@ -22155,12 +22335,14 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   }
   const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => {
     const model = e.args?.model;
+    const failure = e.args?.failure;
     const message = errorMessageOf(e);
     const gate = parseRoleGateRefusal(message);
     return {
       label: e.label,
       message,
       ...typeof model === "string" && model !== "default" ? { model } : {},
+      ...failure && typeof failure === "object" ? { failure } : {},
       ...gate.requiredRole ? { requiredRole: gate.requiredRole, remediation: ROLE_GATE_REMEDIATION } : {},
       ...gate.callerRole ? { callerRole: gate.callerRole } : {}
     };
@@ -22294,6 +22476,7 @@ function formatBrainDiagnostics(d) {
       lines.push(
         `Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}` + (e.requiredRole || e.callerRole ? ` \u2014 requires ${e.requiredRole ?? "unknown"}, caller is ${e.callerRole ?? "unknown"}${e.remediation ? `; ${e.remediation}` : ""}` : "")
       );
+      if (e.failure) lines.push(`  ${describeStreamFailure(e.failure)}`);
     }
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
   }
@@ -30060,6 +30243,7 @@ export {
   deriveChatTitle,
   describeLiveStep,
   describeNetworkError,
+  describeStreamFailure,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,

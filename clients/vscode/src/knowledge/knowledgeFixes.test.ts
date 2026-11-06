@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { srcRef, type Finding } from "@seanhogg/builderforce-memory/knowledge";
-import { applyKnipFix, knipRanOk, parseStatusZ, type FixPorts, type StatusEntry } from "./knowledgeFixes";
+import { applyKnipFix, fixBranchName, knipRanOk, parseStatusZ, type FixPorts, type StatusEntry } from "./knowledgeFixes";
+
+vi.mock("vscode", async () => (await import("./vscodeL10nMock")).vscodeL10nMock);
 
 const finding = (kind: string, ...paths: string[]): Finding => ({ id: "f", kind, pack: "code", nodes: paths.map((p) => srcRef("r", p)), severity: "warn", params: {} });
 
@@ -15,6 +17,12 @@ interface Options {
   buffers?: string[];
   saves?: string[];
   restoreFails?: boolean;
+  /** Absent = the host has no branch port; true/false = createBranch succeeds/fails. */
+  branch?: boolean;
+  /** The branch the person is on. */
+  on?: string;
+  /** switchTo fails (the branch moved or git refused). */
+  switchFails?: boolean;
 }
 
 function fake(o: Options = {}) {
@@ -22,9 +30,16 @@ function fake(o: Options = {}) {
   const log: string[] = [];
   const ports: FixPorts = {
     hasHead: async () => o.head ?? true,
+    headSha: async () => "h1",
+    hashObjects: async (ps: string[]) => Object.fromEntries(ps.map((p) => [p, "b"])),
     status: async () => (o.statusFails ? undefined : [...tree]),
     dirtyBuffers: () => o.buffers ?? [],
     watchSaves: () => ({ stop: () => o.saves ?? [] }),
+    ...(o.branch === undefined ? {} : {
+      createBranch: async (name: string) => { log.push(`branch:${name}`); return o.branch ? { ok: true as const } : { ok: false as const, reason: "fatal: a branch named that exists" }; },
+      currentBranch: async () => o.on ?? "main",
+      switchTo: async (b: string) => { log.push(`switch:${b}`); return o.switchFails ? { ok: false as const, reason: "no" } : { ok: true as const }; },
+    }),
     run: async () => {
       log.push("run");
       if (o.knip) tree = o.knip();
@@ -133,5 +148,62 @@ describe("helpers", () => {
     expect(knipRanOk(1, "", "npm ERR! 404")).toBe(false);
     expect(knipRanOk(1, "", "")).toBe(false);
     expect(knipRanOk(2, "x", "")).toBe(false);
+  });
+});
+
+describe("applyKnipFix - apply to branch", () => {
+  it("switches to fix/<kind>-<slug>-<time>-<hash> BEFORE running, and returns the branch", async () => {
+    const t = fake({ knip: knipEdits, branch: true });
+    const out = await applyKnipFix(t.ports, "r", finding("unused-export", "src/Billing.ts"));
+    expect(out.branch).toMatch(/^fix\/unused-export-billing-\d{14}-[a-z0-9]{6,8}$/);
+    expect(t.log[0]).toBe(`branch:${out.branch}`);
+    expect(t.log[1]).toBe("run");
+    expect(out.branchError).toBeUndefined();
+  });
+
+  it("applies in place when git cannot switch, and SAYS why (never swallows it)", async () => {
+    const t = fake({ knip: knipEdits, branch: false });
+    const out = await applyKnipFix(t.ports, "r", finding("unused-export", "a.ts"));
+    expect(out.branch).toBeUndefined();
+    expect(out.branchError).toBe("fatal: a branch named that exists");
+    expect(out.changed).toEqual(["a.ts"]);
+  });
+
+  it("applies in place when the host has no branch port", async () => {
+    const out = await applyKnipFix(fake({ knip: knipEdits }).ports, "r", finding("unused-file", "a.ts"));
+    expect(out.branch).toBeUndefined();
+    expect(out.branchError).toBeUndefined();
+  });
+
+  it("records the branch the person was on, so undo can return them to it", async () => {
+    const t = fake({ knip: knipEdits, branch: true, on: "develop" });
+    const seen: { origin?: string }[] = [];
+    await applyKnipFix(t.ports, "r", finding("unused-file", "a.ts"), (snapshot) => { seen.push(snapshot); return "id"; });
+    expect(seen[0]!.origin).toBe("develop");
+  });
+
+  it("records no origin when the fix applied in place", async () => {
+    const t = fake({ knip: knipEdits, branch: false });
+    const seen: { origin?: string }[] = [];
+    await applyKnipFix(t.ports, "r", finding("unused-file", "a.ts"), (snapshot) => { seen.push(snapshot); return "id"; });
+    expect(seen[0]!.origin).toBeUndefined();
+  });
+
+  it("goes back to the original branch when the codemod fails, and does not delete the fix branch", async () => {
+    const t = fake({ knip: knipEdits, branch: true, on: "develop", failRun: new Error("knip could not run") });
+    await expect(applyKnipFix(t.ports, "r", finding("unused-file", "a.ts"))).rejects.toThrow(/knip could not run/);
+    expect(t.log).toContain("switch:develop");
+    expect(t.log.some((l) => l.startsWith("delete"))).toBe(false);
+  });
+
+  it("names branches safely, apart per finding and per moment", () => {
+    const now = new Date("2026-11-06T10:20:30Z");
+    const f1 = { id: "one", kind: "unused-file" }, f2 = { id: "two", kind: "unused-file" };
+    const w = new Set(["a/B c!.test.ts"]);
+    expect(fixBranchName(f1, w, now)).toBe(fixBranchName(f1, w, now)); // deterministic for one moment
+    expect(fixBranchName(f1, w, now)).toMatch(/^fix\/unused-file-b-c-test-20261106102030-[a-z0-9]+$/);
+    expect(fixBranchName(f1, w, now)).not.toBe(fixBranchName(f2, w, now));
+    expect(fixBranchName(f1, w, now)).not.toBe(fixBranchName(f1, w, new Date(now.getTime() + 1000))); // a second try does not collide
+    expect(fixBranchName(f1, new Set(), now)).toMatch(/^fix\/unused-file-20261106102030-[a-z0-9]+$/);
   });
 });

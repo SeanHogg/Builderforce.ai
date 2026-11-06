@@ -55,14 +55,32 @@ export type KnowledgeCall =
   | { op: "history"; rootId: string }
   | { op: "syncStatus"; rootId: string }
   | { op: "applyFix"; rootId: string; finding: Finding }
+  // The staged fix flow: one of the four checks (build, types, lint, tests) through the project's own script, and undo of an applied fix.
+  | { op: "runFixCheck"; rootId: string; check: string; finding: Finding }
+  | { op: "previewFix"; rootId: string; finding: Finding }
+  // Undo names only the fix the host recorded; never paths.
+  | { op: "undoFix"; rootId: string; fixId: string }
+  | { op: "cancelFixCheck"; rootId: string }
   // The API drawer's sandbox Send: the extension performs it (no webview CORS), localhost / dev origins only.
+  | { op: "tryRequest"; req: KnowledgeTryRequest }
+  // The map's class and function levels: the definitions in some files of a root (read from disk, capped; never stored in the graph).
+  // The host treats `fileRefs` as untrusted (validated, capped and path-checked in knowledgeSymbols.ts).
+  // If `untrustedWorkspaces` is ever declared `limited` in package.json, gate `symbols`, `history` and `pinpoint`
+  // (they read the workspace's files or run git in it) on `vscode.workspace.isTrusted`, as the fix flow does.
+  | { op: "symbols"; rootId: string; fileRefs: string[] };
 
+/** One definition, as the view's `SymbolRecord` (restated: the host cannot import that package). */
+export interface KnowledgeSymbolRecord { ref: string; name: string; kind: string; parent: string; line: number; exported: boolean }
+
+/** The view's `TryRequest` / `TryResponse`, restated for the host (it cannot import that package). */
+export interface KnowledgeTryRequest { method: string; url: string; headers?: Record<string, string>; body?: string }
+export interface KnowledgeTryResponse { status: number; headers: Record<string, string>; body: string; ms: number; truncated?: boolean }
 
 /** The view's `PinpointResult` is this shape: the matching core's own result type. */
 export type KnowledgePinpointResult = PinpointMatchResult;
 
 export interface KnowledgeHistoryResult {
-  commits: { sha: string; title: string; at: string; refs: string[] }[];
+  commits: { sha: string; title: string; at: string; refs: string[]; author?: string }[];
 }
 
 /**
@@ -89,8 +107,19 @@ export interface KnowledgeSyncStatus {
   }[];
 }
 
+/** One file of a fix preview: what the codemod would remove (knip's own report), as lines when it names them. */
+export interface FixPreviewRow { path: string; removed?: number; added?: number; lines?: string[] }
+export interface KnowledgeFixPreview { files: FixPreviewRow[] }
+
+/** One check of a fix: skipped when the project has no script for it. */
+export interface KnowledgeCheckReply { status: "pass" | "fail" | "skipped"; detail?: string }
+
 export interface KnowledgeFixResult {
   branch?: string;
+  /** What undo takes: the host recorded what this fix wrote. Absent when the host could not record it. */
+  fixId?: string;
+  /** Why no branch was made (git refused), when the fix applied in place instead. */
+  branchError?: string;
   /** The finding's files knip changed. */
   changed: string[];
   /** Files the person saved during the run that knip also changed: left as they are, to be checked. */

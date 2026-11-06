@@ -21,13 +21,14 @@
 
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { blobDataUrl, checkPinpointImage, rootIdOfSourceRef } from '@builderforce/agent-tools/knowledge';
-import { ReviewFailure } from '@builderforce/knowledge-graph-view';
+import { FixStepError, HOST_CHECK_IDS, ReviewFailure } from '@builderforce/knowledge-graph-view';
+import type { FixCheckResult } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, PinpointResult,
-  ReviewControl, ReviewRequest, ReviewTarget, SyncStatus,
+  ReviewControl, ReviewRequest, ReviewTarget, SymbolRecord, SyncStatus, TryRequest, TryResponse,
 } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeCall, KnowledgeEvent, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgePlanReply, KnowledgeTargetRow,
+  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgePlanReply, KnowledgeTargetRow,
 } from '../../../src/knowledge/knowledgeProtocol';
 
 export interface KnowledgeTransport {
@@ -48,6 +49,14 @@ export const ABORT_GRACE_MS = 30_000;
 
 /** The live-review count after one review starts (`active`) or ends: overlapping reviews hold the flag until the LAST ends. */
 export const reviewCount = (count: number, active: boolean): number => Math.max(0, count + (active ? 1 : -1));
+
+/** The root a finding belongs to (the first of its nodes that names a source). Throws when it names none. */
+function rootOfFinding(finding: Finding): string {
+  const source = finding.nodes.find((ref) => rootIdOfSourceRef(ref) !== undefined);
+  const rootId = source ? rootIdOfSourceRef(source) : undefined;
+  if (!rootId) throw new FixStepError('noRoot');
+  return rootId;
+}
 
 let streams = 0;
 const nextStream = (prefix: string): string => `${prefix}-${++streams}`;
@@ -202,13 +211,57 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
       checkPinpointImage(image);
       return t.call<PinpointResult>({ op: 'pinpoint', rootId, image: await blobDataUrl(image) });
     },
-    history: (rootId: string) => t.call<KnowledgeHistoryResult>({ op: 'history', rootId }),
+    // The wire type is the extension's; the view's `Commit` is mapped from it HERE, once.
+    history: async (rootId: string) => {
+        const out = await t.call<KnowledgeHistoryResult>({ op: 'history', rootId });
+        return { commits: out.commits.map((c) => ({ sha: c.sha, title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
+    },
     syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
     applyFix(finding: Finding): Promise<KnowledgeFixResult> {
-      const source = finding.nodes.find((ref) => rootIdOfSourceRef(ref) !== undefined);
-      const rootId = source ? rootIdOfSourceRef(source) : undefined;
-      if (!rootId) return Promise.reject(new Error('knowledge: the finding names no source of a root'));
-      return t.call<KnowledgeFixResult>({ op: 'applyFix', rootId, finding });
+      try { return t.call<KnowledgeFixResult>({ op: 'applyFix', rootId: rootOfFinding(finding), finding }); } catch (error) { return Promise.reject(error); }
     },
+    // The kinds the extension's knip codemod fixes.
+    applyFixKinds: ['unused-export', 'unused-file'],
+    // The staged fix flow. Each check runs in the extension (the project's own script, or knip's re-scan) and reports as it
+    // starts and as it settles; aborting the request cancels the running one (its whole process tree).
+    async runFixChecks(req, onUpdate) {
+      const rootId = rootOfFinding(req.finding);
+      const results: FixCheckResult[] = [];
+      const cancel = (): void => { void t.call({ op: 'cancelFixCheck', rootId }).catch(() => undefined); };
+      req.signal?.addEventListener('abort', cancel, { once: true });
+      try {
+        for (const id of HOST_CHECK_IDS) {
+          if (req.signal?.aborted) throw new Error('cancelled');
+          onUpdate({ id, status: 'running' });
+          try {
+            const reply = await t.call<KnowledgeCheckReply>({ op: 'runFixCheck', rootId, check: id, finding: req.finding });
+            const result: FixCheckResult = { id, status: reply.status, ...(reply.detail ? { detail: reply.detail } : {}) };
+            results.push(result);
+            onUpdate(result);
+          } catch (error) {
+            // This check could not run at all: say so on it, keep the ones already received, and stop.
+            onUpdate({ id, status: 'error', detail: error instanceof Error ? error.message : String(error) });
+            throw error;
+          }
+        }
+        return results;
+      } finally {
+        req.signal?.removeEventListener('abort', cancel);
+      }
+    },
+    previewFix: (finding: Finding) => t.call<KnowledgeFixPreview | null>({ op: 'previewFix', rootId: rootOfFinding(finding), finding }),
+    // Recorded as a fact on the finding's first file, through the same write path as Add fact.
+    async markResolved(finding: Finding) {
+      await t.call({ op: 'remember', rootId: rootOfFinding(finding), ref: finding.nodes[0]!, content: `Resolved: ${finding.kind} (${finding.id})` });
+    },
+    async undoFix(req) {
+      // Only the id the host handed out; the host knows what the fix wrote.
+      if (!req.applied.fixId) throw new FixStepError('noRecord');
+      await t.call({ op: 'undoFix', rootId: rootOfFinding(req.finding), fixId: req.applied.fixId });
+    },
+    // The extension performs the request (no webview CORS) and refuses anything but localhost / dev origins.
+    tryRequest: (req: TryRequest) => t.call<TryResponse>({ op: 'tryRequest', req }),
+    // The extension reads the files (capped, path-safe) and extracts their definitions; the graph itself never holds them.
+    symbolsOf: (rootId: string, fileRefs: string[]) => t.call<SymbolRecord[]>({ op: 'symbols', rootId, fileRefs }),
   };
 }

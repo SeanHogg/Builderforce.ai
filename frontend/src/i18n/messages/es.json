@@ -36229,8 +36229,37 @@
         "familyOnly": "Solo {family}",
         "clearFamily": "Quitar el filtro {family}",
         "missingFiles": "Faltan {count} archivos en el servidor.",
+        "tooLarge": "{count} archivos eran demasiado grandes para guardarse.",
         "diagnose": "Diagnosticar",
         "controls": "Controles de la escena"
+      },
+      "map": {
+        "wall": "Frontera HTTP",
+        "describes": "describe",
+        "doc": "Documento",
+        "deadEnd": "Callejón sin salida: nada lo lee",
+        "reported": "Reportado ✓",
+        "noSymbolsNote": "Este grafo no tiene símbolos, así que los niveles bajo un paquete muestran archivos.",
+        "world": "todo el mapa",
+        "drillReset": "El mapa cambió, así que la vista salió de {name}.",
+        "moreStops": "+{count} paradas más",
+        "satelliteAria": "{name}, dentro de {parent}",
+        "card": {
+          "close": "Cerrar",
+          "issueMore": "+{count} más",
+          "goInside": "Entrar ↓",
+          "unfold": "Desplegar {count}",
+          "fold": "Plegar",
+          "whoCalls": "¿Quién lo llama?",
+          "apiContract": "Contrato de API",
+          "patterns": "Patrones",
+          "noSymbols": "No hay símbolos aquí: no hay nada más adentro.",
+          "leaf": "Fuera de este nivel",
+          "loading": "Leyendo símbolos…"
+        },
+        "stats": { "issues": "Problemas", "complexity": "Complejidad", "coverage": "Cobertura", "usage": "Uso" },
+        "bands": { "symbol": "Clase", "methods": "Métodos", "errors": "Errores y pruebas", "leaves": "Sale de este nivel", "body": "Esta función", "callees": "A qué llama" },
+        "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "Proveedores de LLM", "github": "API de GitHub", "stripe": "Pagos", "mail": "Correo", "slack": "Slack", "oauth": "Proveedor de inicio de sesión" }
       },
       "rail": {
         "heading": "Líneas desde los puntos de entrada",
@@ -36290,6 +36319,29 @@
         "excludedTitle": "Carpetas excluidas",
         "excludedNote": "Estas carpetas nunca se leen.",
         "barAria": "{label}: local {local}, servidor {server}",
+        "deltaLoading": "Leyendo las confirmaciones…",
+        "parityTitle": "{local} / {server}",
+        "countPair": "{local} / {server}",
+        "parityAll": "El servidor los tiene todos.",
+        "parityMissing": "Faltan {count} en el servidor.",
+        "parityTooLarge": "{count} eran demasiado grandes para guardarse.",
+        "deltaTitle": "Cambios desde la última revisión",
+        "deltaEmpty": "No hay confirmaciones que mostrar.",
+        "deltaSummary": "{count} aún no están en la imagen",
+        "deltaPending": "Pendiente",
+        "deltaApplied": "En la imagen",
+        "deltaRow": "{sha} · {count} archivos · {when}",
+        "deltaRowAuthor": "{sha} · {author} · {count} archivos · {when}",
+        "actionSetUpV8": "Configurar v8",
+        "actionTurnOn": "Activar",
+        "actionGenerate": "Generar",
+        "setUpV8Request": "Configura la cobertura v8 del proyecto: añade un script y una configuración de cobertura, ejecuta las pruebas con cobertura y señala los archivos de cobertura generados.",
+        "turnOnRequest": "Activa las trazas en tiempo de ejecución del proyecto: añade trazado a los puntos de entrada, ejecútalo una vez e indica dónde se escriben las trazas.",
+        "excludedNone": "No se excluyó ninguna carpeta.",
+        "excludedFolder": "{path}",
+        "diagnosticsTitle": "Diagnóstico",
+        "resend": "Revisar de nuevo para reintentar los archivos omitidos",
+        "resendNote": "Inicia de nuevo toda la revisión de esta carpeta. Lo confirmas antes.",
         "refresh": "Actualizar"
       },
       "syncSteps": {
@@ -36299,6 +36351,18 @@
         "match": "El servidor coincide con el local",
         "analyse": "Fuentes recopiladas",
         "skipped": "Nada omitido"
+      },
+      "syncStepDetails": {
+        "walk": "Lee la carpeta; las carpetas ignoradas y excluidas se omiten.",
+        "graph": "Importaciones, complejidad y patrones de cada archivo.",
+        "upload": "Envía lo que cambió al servidor en lotes pequeños.",
+        "match": "Compara el número de archivos, aristas y documentos con el servidor.",
+        "analyse": "Cobertura, historial, propietarios y OpenAPI, si existen.",
+        "skipped": "Los archivos que no se pudieron guardar se listan, nunca se descartan."
+      },
+      "unavailable": {
+        "notHere": "No disponible aquí",
+        "labelled": "{label}: no disponible aquí"
       },
       "syncStates": {
         "ok": "Hecho",
@@ -36344,7 +36408,23 @@
         "runWithValues": "Ejecutar con valores",
         "promptTests": "Pedir pruebas",
         "promptText": "Escribe pruebas para {file}. Tiene complejidad {complexity} y {coverage} de cobertura de líneas. Cubre las ramas sin probar, ejecútalas e informa de la nueva cobertura.",
-        "noComplexity": "La complejidad no se ha medido."
+        "noComplexity": "La complejidad no se ha medido.",
+        "shapeTitle": "Forma de las pruebas",
+        "shapeNone": "No hay archivos de prueba en el grafo, así que no se mide el reparto.",
+        "shapeAria": "{unit} unitarias, {integration} de integración, {e2e} de extremo a extremo",
+        "shapeSegment": "{kind} {count}",
+        "unit": "unitarias",
+        "integration": "integración",
+        "e2e": "e2e",
+        "configTitle": "Dónde está configurada la cobertura",
+        "configNone": "No se encontraron paquetes con código.",
+        "configAll": "La cobertura está configurada en todos los paquetes.",
+        "configNowhere": "La cobertura no está configurada en ningún paquete.",
+        "configOnly": "La cobertura solo está configurada en {packages}. En el resto no se mide.",
+        "applyV8": "Aplicar: cobertura v8 en {count} paquetes",
+        "applyV8Request": "Configura la cobertura v8 en estos {count} paquetes: {packages}. Añade la configuración y un script a cada uno, ejecuta las pruebas con cobertura e informa de la nueva cobertura.",
+        "quadrant": "complejo · sin pruebas",
+        "namesMore": "{names} +{count}"
       },
       "patterns": {
         "notSetUpTitle": "Los patrones no están configurados",
@@ -36364,7 +36444,13 @@
       "api": {
         "notSetUpTitle": "No se encontraron endpoints",
         "notSetUpBody": "No se encontró ningún registro de rutas. Las rutas se leen de registros de Hono y Express.",
-        "kpiEndpoints": "Endpoints",
+        "kpiEndpoints": "Puntos de acceso",
+        "kpiParams": "Parámetros",
+        "kpiCallers": "Llamadores",
+        "kpiTests": "Archivos de prueba",
+        "kpiContract": "Contrato",
+        "pickFile": "Seleccionar {name} en el mapa",
+        "paramWithNote": "{where} · {note}",
         "kpiUndocumented": "Sin documentar",
         "contractMissing": "No hay ningún contrato OpenAPI en esta carpeta, así que todos los endpoints están sin documentar.",
         "documented": "Documentado",
@@ -36379,41 +36465,205 @@
         "exportPostman": "Exportar colección de Postman",
         "contractTests": "Pruebas de contrato",
         "contractTestsText": "Escribe pruebas de contrato para estos endpoints a partir del esqueleto OpenAPI, ejecútalas e informa de cada resultado: {routes}.",
-        "groupAria": "{file}: {count} endpoints"
+        "groupAria": "{file}: {count} puntos de acceso",
+
+        "groupInContract": "En el contrato ({count})",
+
+        "groupUndocumented": "Sin documentar ({count})",
+
+        "selectEndpoint": "Incluir {route} en las pruebas de contrato",
+
+        "selectedCount": "{selected} de {total} endpoints seleccionados para pruebas de contrato",
+
+        "selectAtLeastOne": "Selecciona al menos un endpoint para generar pruebas de contrato.",
+
+        "detailParams": "Parámetros",
+
+        "paramPath": "ruta",
+
+        "paramQuery": "consulta",
+
+        "paramBody": "cuerpo",
+
+        "paramBodyNote": "Cuerpo JSON; su forma no se extrajo del código.",
+
+        "noParams": "Esta ruta no recibe parámetros.",
+
+        "detailTested": "Respuestas probadas",
+
+        "testedYes": "Probado ✓",
+
+        "testedNo": "Sin probar ✗",
+
+        "testedBy": "Un archivo de pruebas hace referencia al handler: {names}",
+
+        "testedNone": "Ningún archivo de pruebas hace referencia al handler.",
+
+        "detailCallers": "Quién lo llama",
+
+        "callerFilesNone": "Ningún archivo hace referencia al handler.",
+
+        "sandboxTitle": "Probar · sandbox",
+
+        "baseUrl": "URL base",
+
+        "baseUrlInvalid": "Escribe una dirección http o https, por ejemplo http://localhost:3000.",
+
+        "baseUrlRemote": "No es una dirección local. La solicitud va a ella tal como la escribiste.",
+
+        "paramValue": "Valor de {name}",
+
+        "paramMissing": "Escribe un valor para {name}.",
+
+        "bodyInvalid": "El cuerpo no es JSON válido.",
+
+        "bodyLabel": "Cuerpo de la solicitud (JSON)",
+
+        "send": "Enviar",
+
+        "sending": "Enviando…",
+
+        "sendUnavailable": "Enviar está disponible en el editor.",
+
+        "sendFailed": "La solicitud falló: {message}",
+
+        "resultStatus": "{status} · {ms} ms",
+
+        "resultHeaders": "Cabeceras de la respuesta",
+
+        "resultBody": "Cuerpo de la respuesta",
+
+        "resultTruncated": "El cuerpo se acortó a {count} caracteres.",
+
+        "resultEmpty": "La respuesta no tiene cuerpo."
       },
       "resolve": {
         "empty": "Elige Resolver en un hallazgo para trabajar en él aquí.",
         "provenanceLabel": "Origen",
-        "fixTitle": "Corrección determinista",
-        "fixIntro": "Un codemod puede corregir este tipo de hallazgo.",
-        "applyFix": "Aplicar la corrección",
-        "applying": "Aplicando…",
-        "applied": "Aplicado en la rama {branch}.",
-        "appliedNoBranch": "Aplicado.",
-        "changedFiles": "{count} archivos modificados",
-        "failed": "No se pudo aplicar la corrección.",
-        "promptTitle": "Pedírselo al agente",
-        "promptIntro": "No existe un codemod para este tipo, así que lo hace el agente.",
-        "prompt": "Pedir al agente",
-        "noComposer": "El host no tiene un compositor al que enviar la solicitud.",
         "checksTitle": "Comprobaciones",
         "checkFiles": "El hallazgo nombra {count} archivos.",
         "checkStations": "Afecta a {count} estaciones.",
         "checkReview": "Revisa la carpeta de nuevo para confirmar que el hallazgo ha desaparecido.",
-        "undoNote": "Aquí no se ofrece deshacer: revierte la rama para deshacer el cambio.",
         "show": "Mostrar"
       },
       "simulate": {
         "pathTitle": "Ruta a recorrer",
         "pathEmpty": "Elige primero una línea o una estación; la simulación recorre su ruta.",
         "valuesLabel": "Valores a usar",
-        "valuesPlaceholder": "importe=100, moneda=EUR",
         "run": "Pedir al agente que lo ejecute",
         "requestText": "Escribe y ejecuta una prueba que recorra esta ruta: {path}. Usa estos valores: {values}. Informa de cada paso: qué se llamó, qué devolvió y dónde falló.",
         "noValues": "no se dieron; elige valores razonables",
         "sent": "Enviado al agente. El resultado vendrá de su ejecución; antes no se muestra nada.",
         "noComposer": "El host no tiene un compositor de agente, así que no se puede ejecutar nada.",
-        "note": "Simular nunca finge una ejecución. El agente escribe la prueba, la ejecuta e informa de cada paso."
+        "note": "Simular nunca finge una ejecución. El agente escribe la prueba, la ejecuta e informa de cada paso.",
+        "noRecorded": "El host no registró valores para esta ruta, así que no hay nada que editar. El recorrido sigue los saltos igualmente.",
+        "presets": "Preajustes de argumentos",
+        "presetRecorded": "Registrado",
+        "colRecorded": "Registrado",
+        "editAria": "Editar {name}",
+        "stubsTitle": "Puertos simulados",
+        "stubsHint": "Una parada simulada responde con su valor registrado.",
+        "lineEnter": "entrar en {name}",
+        "lineCall": "llamar a {name}",
+        "lineReturn": "volver de {name}",
+        "unknownResult": "desconocido: se editó una entrada, así que solo una ejecución real puede decirlo",
+        "codeTitle": "Pasos de la ruta",
+        "noVars": "No se conoce ningún valor en este paso.",
+        "varsTitle": "Variables",
+        "resultTitle": "Resultado",
+        "noResult": "No hay ningún valor registrado aquí.",
+        "stubbedNote": "Esta parada está simulada: responde con su valor registrado.",
+        "simulatedBanner": "Simulado, no ejecutado: recorre los saltos de la ruta con valores registrados y editados. «Pedir al agente que lo ejecute» hace la ejecución real.",
+        "saveTest": "Guardar como {file}",
+        "saveTestText": "Escribe el archivo de pruebas {file} que recorra esta ruta: {path}. Usa estos valores: {values}. Simula estos puertos: {stubs}. Guárdalo en la carpeta de pruebas del proyecto y ejecútalo.",
+        "noStubs": "ninguno",
+        "origin": {
+          "recorded": "registrado",
+          "edited": "editado"
+        },
+        "startFrom": "Empezar desde",
+        "startEntry": "La entrada",
+        "startStop": "Esta parada"
+      },
+      "fix": {
+        "title": "Corrección",
+        "queue": "{open} abiertos de {shown} mostrados · {repo} en el repositorio",
+        "queueTitle": "Cola de correcciones",
+        "queueAria": "Abrir {title}",
+        "queueState": {
+          "open": "abierto",
+          "applied": "aplicado · comprobando",
+          "resolved": "resuelto"
+        },
+        "mode": {
+          "group": "Modo de corrección",
+          "apply": "Corrección determinista",
+          "prompt": "Prompt",
+          "noCodemod": "No hay ningún codemod para este tipo en este host."
+        },
+        "primary": {
+          "apply": "Aplicar a la rama fix/…",
+          "prompt": "Enviar al compositor",
+          "checks": "Ejecutar comprobaciones",
+          "resolve": "Marcar como resuelto",
+          "resolved": "Resuelto ✓",
+          "sent": "Enviado al agente",
+          "running": "Ejecutando…"
+        },
+        "sendToAgent": "Enviar al agente",
+        "noComposer": "No hay ningún compositor de agente conectado.",
+        "undo": "Deshacer",
+        "undoNoRecord": "Este host no guardó un registro de la corrección, así que no puede deshacerla.",
+        "permNote": "Se ejecuta como tú en la rama fix/…. Deshacer vuelve a la rama en la que estabas; nada llega a la rama principal hasta que pasen las comprobaciones y fusiones.",
+        "previewTitle": "Qué cambia",
+        "previewFiles": "{count} archivos",
+        "previewFromFiles": "Este host no puede previsualizar líneas; estos son los archivos que nombra el hallazgo.",
+        "promptTitle": "Prompt",
+        "promptNote": "Va al único compositor, con este hallazgo y las cuatro comprobaciones adjuntas.",
+        "checksTitle": "Resuelto solo cuando pasan todas las comprobaciones",
+        "checksList": "Comprobaciones",
+        "check": {
+          "types": "Comprobar los tipos de los paquetes tocados",
+          "tests": "Pasan las pruebas dirigidas",
+          "rescan": "Nuevo análisis: el problema ya no está",
+          "review": "Revisión del agente: sin hallazgos nuevos"
+        },
+        "checkStatus": {
+          "pending": "En espera",
+          "running": "En curso",
+          "pass": "Superada",
+          "fail": "Fallida",
+          "skipped": "Omitida",
+          "error": "Error",
+          "agent": "Enviado al agente"
+        },
+        "checkNoReport": "Esta comprobación nunca informó, así que cuenta como error.",
+        "changedFiles": "{count} archivos modificados",
+        "appliedOn": "Aplicada en la rama {branch}.",
+        "branchError": "Aplicada en el sitio: no se pudo crear la rama ({reason}).",
+        "branchUnknown": "la rama de la corrección",
+        "requestApply": "Corrige este hallazgo en una rama nueva llamada fix/…: {title}: {items}. Haz el cambio y no lo fusiones.",
+        "requestChecks": "Comprueba los tipos de los paquetes tocados y ejecuta las pruebas dirigidas del cambio que corrige «{title}» ({items}) en {branch}, e informa de cada resultado.",
+        "requestResolve": "Marca el hallazgo «{title}» ({items}) como resuelto cuando {branch} pase sus comprobaciones.",
+        "requestUndo": "Deshaz la corrección de «{title}» ({items}): revierte los cambios en {branch}.",
+        "requestPrompt": "Corrige este hallazgo: {title}: {items}. Haz el cambio en una rama nueva llamada fix/…, comprueba los tipos de los paquetes tocados, ejecuta las pruebas dirigidas, vuelve a analizar para confirmar que el hallazgo ya no está y revisa el cambio por si introduce hallazgos nuevos. Informa de cada resultado. No lo fusiones.",
+        "requestReview": "Revisa el cambio que corrige «{title}» ({items}) en {branch} e informa de cualquier hallazgo nuevo que introduzca.",
+        "beforeAfter": {
+          "group": "Antes y después",
+          "noBaseline": "Este host no guarda una revisión anterior con la que comparar."
+        },
+        "errors": {
+          "noRoot": "Este hallazgo no nombra ninguna carpeta del espacio de trabajo.",
+          "noRecord": "Nada que deshacer: el host no guardó un registro de esta corrección.",
+          "unknown": "El paso falló."
+        },
+        "codemod": {
+          "unusedExport": "Quitar exportaciones sin usar",
+          "unusedFile": "Quitar archivos sin usar",
+          "unusedDependency": "Quitar dependencias sin usar",
+          "splitByCommand": "Dividir por grupo de comandos",
+          "extractClone": "Extraer el código compartido"
+        }
       },
       "pinpoint": {
         "label": "Captura de pantalla",

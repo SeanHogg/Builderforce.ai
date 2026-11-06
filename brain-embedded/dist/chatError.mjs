@@ -5,9 +5,10 @@ import {
   NOT_SIGNED_IN,
   NO_LOCAL_MODEL,
   NO_SPECIFIC_MODEL,
+  PROVIDER_AUTH_REQUIRED,
   brainRequestError,
   chatErrorAction
-} from "./chunk-GCFXVJYE.mjs";
+} from "./chunk-SFVLTQ7J.mjs";
 export {
   BrainRequestError,
   CONTINUATION_TIMED_OUT,
@@ -15,6 +16,7 @@ export {
   NOT_SIGNED_IN,
   NO_LOCAL_MODEL,
   NO_SPECIFIC_MODEL,
+  PROVIDER_AUTH_REQUIRED,
   brainRequestError,
   chatErrorAction
 };

@@ -131,3 +131,50 @@ describe("extractSymbols — TS module and abstract shapes", () => {
     ]);
   });
 });
+
+describe("container: the type a member belongs to", () => {
+  const owner = (path: string, src: string) => Object.fromEntries(extractSymbols(path, src).map((s) => [`${s.name}@${s.line}`, s.container ?? null]));
+
+  it("attributes JS methods to their own class, so two classes can each have a run()", () => {
+    const src = ["export class A {", "  run() {", "  }", "}", "export class B {", "  run() {", "  }", "}", ""].join("\n");
+    expect(owner("x.ts", src)).toEqual({ "A@1": null, "run@2": "A", "B@5": null, "run@6": "B" });
+  });
+
+  it("attributes Python methods to the top-level class, and emits a closure as nothing", () => {
+    const src = [
+      "class Repo:",
+      "    def find(self):",
+      "        def helper():",
+      "            pass",
+      "        return helper",
+      "    def save(self):",
+      "        pass",
+      "def top():",
+      "    def inner():",
+      "        pass",
+      "    return inner",
+      "",
+    ].join("\n");
+    expect(owner("a.py", src)).toEqual({ "Repo@1": null, "find@2": "Repo", "save@6": "Repo", "top@8": null });
+  });
+
+  it("attributes a Go method to its receiver type, pointer or not, generic or not", () => {
+    const src = ["func (r *Repo) Find() {}", "func (s Store[T]) Put() {}", "func (Repo) Anon() {}", "func Free() {}", ""].join("\n");
+    expect(owner("a.go", src)).toEqual({ "Find@1": "Repo", "Put@2": "Store", "Anon@3": "Repo", "Free@4": null });
+  });
+
+  it("attributes Rust fns to the impl target, the type after `for` in a trait impl", () => {
+    const src = [
+      "struct Repo;",
+      "impl Repo {",
+      "    pub fn find(&self) {}",
+      "}",
+      "impl<T> Store for Repo<T> where T: Copy {",
+      "    fn put(&self) {}",
+      "}",
+      "fn free() {}",
+      "",
+    ].join("\n");
+    expect(owner("a.rs", src)).toEqual({ "Repo@1": null, "find@3": "Repo", "put@6": "Repo", "free@8": null });
+  });
+});

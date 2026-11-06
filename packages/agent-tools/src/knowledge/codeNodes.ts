@@ -45,6 +45,8 @@ export const CODE_BADGES = {
     layerRule: 'layerRule',
     /** `1` on a package entry point a manifest names (`main` / `bin` / `exports`): layer resolution reads it, never the filesystem. */
     entry: 'entry',
+    /** Comma-joined ids of the known external services the file imports (`postgres,llm`), from `externalServices.ts` (deterministic). */
+    externals: 'externals',
 } as const;
 
 /**

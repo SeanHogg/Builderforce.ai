@@ -17,7 +17,7 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { LensDef } from '../lenses';
 import { cssVar } from '../scene/themeColors';
 import { CONTROL, muted } from '../styles';
-import type { LensId, SyncStatus, ViewMode } from '../types';
+import type { LensId, ViewMode } from '../types';
 import { CameraBar } from './CameraBar';
 import { QuestionBar } from './QuestionBar';
 import type { QuestionId } from './questions';
@@ -60,17 +60,12 @@ export interface SceneOverlayProps {
     capped?: { shown: number; total: number } | undefined;
     // The error banner: files the server does not have. Absent or 0 ⇒ no banner.
     missingFiles?: number | null | undefined;
+    /** How many of those the review could not store because they were too large (`syncGap`: never more than `missingFiles`). */
+    tooLarge?: number | null | undefined;
     /** Opens the Sync drawer (`surface.openPanel('sync')`). */
     onDiagnose?: (() => void) | undefined;
     /** A phone: stack in flow above the scene instead of floating over it. */
     narrow?: boolean | undefined;
-}
-
-/** How many files the server lacks, from a sync status: the skipped/rejected list when the host recorded one, else the count gap. */
-export function missingFilesOf(status: SyncStatus | null | undefined): number {
-    if (!status) return 0;
-    if (status.skipped !== undefined && status.skipped.length > 0) return status.skipped.length;
-    return status.server ? Math.max(0, status.local.files - status.server.files) : 0;
 }
 
 const banner: CSSProperties = {
@@ -90,7 +85,10 @@ export function SceneOverlay(p: SceneOverlayProps) {
         <div role="group" aria-label={t.controls} data-testid="kg-scene-overlay" style={root}>
             {missing > 0 && (
                 <div role="alert" data-testid="kg-sync-banner" style={{ ...banner, margin: narrow ? 0 : '10px 12px 0' }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>{fillTemplate(t.missingFiles, { count: missing })}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                        {(p.tooLarge ?? 0) > 0 && <strong style={{ color: cssVar('violation') }}>{fillTemplate(t.tooLarge, { count: Math.min(p.tooLarge ?? 0, missing) })} </strong>}
+                        {fillTemplate(t.missingFiles, { count: missing })}
+                    </span>
                     {p.onDiagnose && (
                         <button
                             type="button"

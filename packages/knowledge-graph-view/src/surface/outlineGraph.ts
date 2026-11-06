@@ -34,7 +34,8 @@ interface Decoded { files: KNode[]; edges: KEdge[] }
 const decodedBy = new WeakMap<GraphOutline, Decoded>();
 const viewBy = new WeakMap<KnowledgeGraph, OutlineView>();
 
-const tailOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1) || path;
+/** The last segment of a path (the whole thing when it has no slash): the ONE tail the map uses for file names. */
+export const tailOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1) || path;
 
 function badgesOf(badges: Record<string, number | string> | undefined): KNode['badges'] | undefined {
     if (!badges) return undefined;
@@ -86,6 +87,11 @@ export function outlineView(graph: KnowledgeGraph): OutlineView | null {
     };
     viewBy.set(graph, view);
     return view;
+}
+
+/** The files the map reads: the outline's on a truncated graph, else the graph's own file nodes. */
+export function fileNodesOf(graph: KnowledgeGraph): KNode[] {
+    return outlineView(graph)?.files ?? graph.nodes.filter((n) => n.kind === 'file');
 }
 
 /** The references the map reads: the outline's links on a truncated graph, else the graph's own edges. */

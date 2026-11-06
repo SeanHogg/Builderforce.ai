@@ -14,10 +14,12 @@
  * {@link rootById} still resolves an old id a memento or a chip kept.
  */
 
+import { realpathSync } from "fs";
 import * as path from "path";
 import { pathToFileURL } from "url";
 import { folderIdOf, repoIdOfRemote, rootIdFor, rootRelOf } from "@builderforce/agent-tools/knowledge";
 import { gitOriginUrlSync } from "@builderforce/agent-tools/node-git-remote";
+import { isSafeRelative } from "./safePath";
 
 /** The editor's host segment of a root id. */
 export const VSCODE_HOST = "vscode";
@@ -104,14 +106,33 @@ export function rootById(rootId: string, folders: readonly WorkspaceFolderRef[])
   const resolved = folders.map((f) => slash(path.resolve(f.path)));
   for (const folder of resolved) {
     const rel = rootRelOf(knowledgeRootId(folder), rootId);
-    if (rel !== undefined) return rootOf(folder, rel);
+    if (rel !== undefined) return confined(folder, rel);
   }
   for (const folder of resolved) {
     const legacy = legacyRootIdOf({ folderPath: folder, rel: "" });
     if (rootId === legacy) return rootOf(folder, "");
-    if (rootId.startsWith(`${legacy}/`)) return rootOf(folder, rootId.slice(legacy.length + 1));
+    if (rootId.startsWith(`${legacy}/`)) return confined(folder, rootId.slice(legacy.length + 1));
   }
   return undefined;
+}
+
+/**
+ * The root for `rel` under `folder`, only when `rel` cannot leave it. A root id arrives from the webview, so
+ * `base:../../x`, `base:C:/x` or a link inside the folder must not name a place outside the workspace folder:
+ * the relative path must be safe, and where the folder exists its real path must sit inside the real folder.
+ * This is the ONE check, so every op that resolves a root id (symbols, history, fixes, pinpoint, try) has it.
+ */
+function confined(folder: string, rel: string): KnowledgeRoot | undefined {
+  if (rel === "") return rootOf(folder, "");
+  if (!isSafeRelative(rel)) return undefined;
+  const root = rootOf(folder, slash(rel));
+  try {
+    const realFolder = slash(realpathSync(folder));
+    return inside(slash(realpathSync(root.rootPath)), realFolder) ? root : undefined;
+  } catch (error) {
+    // A folder that does not exist yet has no link to follow out of the workspace; any other failure refuses.
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? root : undefined;
+  }
 }
 
 

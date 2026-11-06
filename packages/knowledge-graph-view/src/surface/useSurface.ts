@@ -5,14 +5,16 @@
  * memoizes the readings, so a host with no entry points simply gets no lines.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useReducer, useState } from 'react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { fixFlowReducer, initialFlow, type FixFlowAction, type FixFlowState } from './fix/fixFlow';
 import { buildLines, type Line, type LinesModel } from './lines';
 import { makeOverlay, PRESETS, presetOf, setChannel, type Bindings, type ChannelId, type MetricId, type OverlayModel, type PresetId } from './overlays';
 import { mapEdges } from './outlineGraph';
 import { pathOfLine, pathOfStations, type PathModel } from './path';
 import { litStations, type QuestionContext, type QuestionId } from './questions';
 import { buildStations, changedRefs, stationOfRef, type Station, type StationModel } from './stations';
+import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
 
 export interface Pin { stationId: string; count: number }
 
@@ -20,6 +22,8 @@ export interface SurfaceModel {
     stations: StationModel;
     lines: LinesModel;
     overlay: OverlayModel;
+    /** The map's drill: package, class and function levels below the world map. */
+    drill: DrillModel;
     preset: PresetId | 'custom';
     question: QuestionId;
     /** The pattern family the patterns question is narrowed to ("Behavioural only"); null = every family. */
@@ -42,6 +46,9 @@ export interface SurfaceModel {
     /** The open drawer (a PANELS id) and the finding Resolve works on. */
     panel: string | null;
     resolving: Finding | null;
+    /** The staged fix flow of every finding worked on, by finding id: closing the drawer keeps an applied fix's Undo. */
+    fixFlows: Readonly<Record<string, FixFlowState>>;
+    dispatchFix(findingId: string, action: FixFlowAction): void;
     setPreset(id: PresetId): void;
     setChannel(channel: ChannelId, metric: MetricId): void;
     setPins(on: boolean): void;
@@ -65,6 +72,8 @@ export interface SurfaceOptions {
     focus?: readonly string[] | undefined;
     /** Refs a picked commit changed (the time slider); they join the baseline's changed set. */
     changed?: ReadonlySet<string> | undefined;
+    /** Reads the definitions of some files, for the map's class and function levels; absent ⇒ those levels show files. */
+    symbols?: SymbolLoader | undefined;
 }
 
 const MAX_PINS = 12;
@@ -79,6 +88,8 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const [pinned, setPinned] = useState<readonly string[] | null>(null);
     const [panel, setPanel] = useState<string | null>(null);
     const [resolving, setResolving] = useState<Finding | null>(null);
+    const [fixFlows, dispatchFlows] = useReducer((m: Record<string, FixFlowState>, a: { id: string; action: FixFlowAction }) => ({ ...m, [a.id]: fixFlowReducer(m[a.id] ?? initialFlow(a.id), a.action) }), {});
+    const dispatchFix = useCallback((id: string, action: FixFlowAction) => dispatchFlows({ id, action }), []);
     const historyChanged = opts.changed;
 
     const stations = useMemo<StationModel>(
@@ -90,6 +101,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
         [graph, stations],
     );
     const overlay = useMemo(() => makeOverlay(bindings, stations.stations), [bindings, stations]);
+    const drill = useDrill(graph, stations, opts.symbols);
 
     const chosen = lines.lines.find((l) => l.id === lineId) ?? null;
     const line = chosen ?? lines.lines[0] ?? null;
@@ -134,8 +146,8 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     }, [path]);
 
     return {
-        stations, lines, overlay, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
-        context, pins, scope, pinned, panel, resolving,
+        stations, lines, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
+        context, pins, scope, pinned, panel, resolving, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),
         setPins: (on) => setBindings((b) => ({ ...b, pins: on ? 'on' : 'off' })),

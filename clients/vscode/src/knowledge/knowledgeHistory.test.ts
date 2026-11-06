@@ -12,4 +12,11 @@ describe("history", () => {
       { sha: "def", at: "2026-11-04T10:00:00Z", title: "init", refs: [ref("README.md")] },
     ]);
   });
+
+  it("carries the commit author through to the view's history", () => {
+    const log = ["@@@abc|2026-11-05T10:00:00Z|Sean Hogg\u001ffix: a | b", "src/a.ts"].join("\n");
+    expect(historyOf(parseRecentCommits(log), "r")).toEqual([
+      { sha: "abc", at: "2026-11-05T10:00:00Z", title: "fix: a | b", author: "Sean Hogg", refs: [ref("src/a.ts")] },
+    ]);
+  });
 });

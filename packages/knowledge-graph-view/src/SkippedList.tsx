@@ -5,7 +5,7 @@
  */
 
 import { fillTemplate, camelKind, type KnowledgeGraphLabels } from './labels';
-import { formatBytes } from './surface/drawers/syncModel';
+import { formatBytes } from './formatBytes';
 import { muted } from './styles';
 import type { SkippedFile } from './types';
 

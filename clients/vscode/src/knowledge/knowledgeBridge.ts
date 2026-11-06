@@ -17,12 +17,14 @@ import {
   KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
   type KnowledgeTargetRow,
 } from "./knowledgeProtocol";
-import { applyKnipFix } from "./knowledgeFixes";
+import { KnowledgeFixSession } from "./knowledgeFixSession";
 import { readLastSeen, workspaceKey, writeLastSeen } from "./knowledgeLastSeen";
 import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
 import { rootSyncStatus } from "./knowledgeSync";
+import { rootSymbols, SymbolsGate } from "./knowledgeSymbols";
+import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { subscribeLiveGraph } from "./knowledgeLive";
@@ -47,6 +49,8 @@ export interface KnowledgeBridgeHost {
 export class KnowledgeBridge implements vscode.Disposable {
   private readonly reviews: KnowledgeReviewSessions;
   private readonly live = new Map<string, () => void>();
+  /** One symbols read per root at a time; an identical request shares the answer on its way. */
+  private readonly symbolsGate = new SymbolsGate();
   /** The root the view last loaded — whose facts a fact action is about. */
   private lastRoot: string | undefined;
   /** The scopes the view last listed: written beside the graph the next open paints first. */
@@ -55,6 +59,19 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly loadedBy = new Map<string, GraphQuery>();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
   private readonly rights: FactRightsCache = factRightsCache(async (rootId) => (await linkedKnowledgeClient(this.secrets)?.facts(rootId)) ?? null);
+
+  /** Apply, undo and check of a fix: the trust gate, the once-per-root confirmation, the per-root lock. */
+  private readonly fixes = new KnowledgeFixSession({
+    trusted: () => vscode.workspace.isTrusted,
+    untrustedError: () => new Error(vscode.l10n.t("Trust this workspace before applying or checking a fix.")),
+    confirmScripts: async (rootId) => (await vscode.window.showWarningMessage(
+      vscode.l10n.t("Run this project's scripts (the fix tool, type check, tests, knip re-scan) in {0}? They run with your environment, including your credentials.", this.rootOf(rootId).rootPath),
+      { modal: true },
+      vscode.l10n.t("Run scripts"),
+    )) !== undefined,
+    declinedError: () => new Error(vscode.l10n.t("The scripts were not run.")),
+    fixPorts: vscodeFixPorts,
+  });
 
   constructor(private readonly host: KnowledgeBridgeHost) {
     this.reviews = new KnowledgeReviewSessions(host.ctx.secrets, (e) => this.event(e), `BuilderForce for VS Code ${host.ctx.extension.packageJSON.version as string}`);
@@ -111,6 +128,15 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
       case "syncStatus": return rootSyncStatus(this.secrets, this.rootOf(call.rootId));
       case "applyFix": return this.applyFix(call.rootId, call.finding);
+      case "runFixCheck": return this.fixes.check(call.rootId, this.rootOf(call.rootId).rootPath, call.check, call.finding);
+      case "previewFix": return this.fixes.preview(call.rootId, this.rootOf(call.rootId).rootPath, call.finding);
+      case "undoFix": return this.fixes.undo(call.rootId, this.rootOf(call.rootId).rootPath, call.fixId);
+      case "cancelFixCheck": this.fixes.cancel(call.rootId); return null;
+      case "tryRequest": return tryRequestOf(call.req);
+      case "symbols": {
+        const rootPath = this.rootOf(call.rootId).rootPath;
+        return this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs));
+      }
     }
   }
 
@@ -138,7 +164,7 @@ export class KnowledgeBridge implements vscode.Disposable {
   }
 
   private applyFix(rootId: string, finding: Finding): Promise<KnowledgeFixResult> {
-    return applyKnipFix(vscodeFixPorts(this.rootOf(rootId).rootPath), rootId, finding);
+    return this.fixes.apply(rootId, this.rootOf(rootId).rootPath, finding);
   }
 
   private async scopes(): Promise<KnowledgeScopeRow[]> {
@@ -210,5 +236,6 @@ export class KnowledgeBridge implements vscode.Disposable {
     for (const stop of this.live.values()) stop();
     this.live.clear();
     this.reviews.dispose();
+    this.fixes.dispose();
   }
 }

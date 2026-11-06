@@ -131,3 +131,18 @@ describe('pathNotes', () => {
         expect(stationNote({ ...model.stations[0]!, cov: 0.9, patterns: [], findingIds: [] }, L)).toBeNull();
     });
 });
+
+describe('PathStrip hop route labels', () => {
+    it('draws the label of a hop after its words, and nothing for a hop with none', () => {
+        const labels = path.hops.map((_, i) => (i === 0 ? 'PUT 1.4 MB' : null));
+        strip({ routeLabels: labels });
+        const routes = document.querySelectorAll('[data-route]');
+        expect(routes).toHaveLength(1);
+        expect(routes[0]!.textContent).toContain('PUT 1.4 MB');
+    });
+
+    it('draws no label when none is known (never a guess)', () => {
+        strip();
+        expect(document.querySelector('[data-route]')).toBeNull();
+    });
+});

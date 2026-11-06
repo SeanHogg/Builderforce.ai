@@ -21,22 +21,17 @@ import { findingDetail, findingItems, findingRequest, findingTitle } from '../fi
 import { nodeIndex } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
-import { button, heading, heatColor, MONO, muted } from '../styles';
+import { button, heading, MONO, muted } from '../styles';
 import type { FindingEvidence, SourceLocation } from '../types';
+import { fixQueueCounts, fixQueueText } from './fix/fixModes';
 import { acceptanceChecks, actionCards, testRequestFor, type ActionCard, type FindingSource } from './actModel';
-import type { Provenance } from './layers';
 import { frac, metricStatus, type MetricId } from './overlays';
 import type { PathModel } from './path';
 import { findingProvenance } from './scope';
 import type { Station } from './stations';
-import { Card, Chip, pillStyle } from './ui';
+import { Card, Chip, Pin, pillStyle, ProvenanceBadge } from './ui';
 
-const PROVENANCE_TONE: Record<Provenance, ThemeTone> = { deterministic: 'agrees', heuristic: 'cycle', runtime: 'accent' };
 const SOURCE_TONE: Record<FindingSource, ThemeTone> = { exact: 'agrees', analyzer: 'accent', model: 'cycle' };
-
-export function ProvenanceBadge({ provenance, labels }: { provenance: Provenance; labels: KnowledgeGraphLabels }) {
-    return <Chip tone={PROVENANCE_TONE[provenance]} data-provenance={provenance}>{labels.surface.provenance[provenance]}</Chip>;
-}
 
 /** Where a card's finding comes from: exact / analyzer / model. */
 export function SourceChip({ source, labels }: { source: FindingSource; labels: KnowledgeGraphLabels }) {
@@ -67,7 +62,9 @@ export interface ActPanelProps {
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
     /** The host's source can apply a deterministic fix (`!!source.applyFix`): Apply shows on unused-export / unused-file cards. */
-    canApply?: boolean | undefined;
+    canApply?: boolean | ((kind: string) => boolean) | undefined;
+    /** Ids of the findings the fix flow resolved this session: they are not "open" in the queue count. */
+    resolved?: ReadonlySet<string> | undefined;
     /** Opens a drawer by PANELS id (`surface.openPanel`): the Fix queue link opens 'resolve'. */
     onOpenPanel?: ((id: string) => void) | undefined;
     /** The selected line's or pinned path; with stops it offers Keep-as-test and the done-when footer. */
@@ -103,12 +100,7 @@ function Cards({ cards, p, index }: { cards: ActionCard[]; p: ActPanelProps; ind
                 return (
                     <Card as="li" key={f.id} style={{ display: 'grid', gap: 6 }}>
                         <div data-card={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                            <span
-                                aria-hidden="true"
-                                style={{ flex: 'none', width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, fontFamily: MONO, background: heatColor(level), color: cssVar('bg') }}
-                            >
-                                {i + 1}
-                            </span>
+                            <Pin n={i + 1} level={level} />
                             <strong style={{ flex: 1, minWidth: 0, fontSize: 13, overflowWrap: 'anywhere' }}>{title}</strong>
                             <SourceChip source={source} labels={labels} />
                         </div>
@@ -137,11 +129,12 @@ export function ActPanel(p: ActPanelProps) {
     const [details, setDetails] = useState(true);
     const detailsId = useId();
     const index = useMemo(() => nodeIndex(p.graph), [p.graph]);
-    const cards = useMemo(() => actionCards(p.findings, p.canApply === true), [p.findings, p.canApply]);
+    const cards = useMemo(() => actionCards(p.findings, p.canApply ?? false), [p.findings, p.canApply]);
     const hasPath = !!path && path.stops.length > 0;
     const done = useMemo(() => acceptanceChecks(p.findings, labels, index), [p.findings, labels, index]);
     const pathName = p.pathTitle || path?.stops.map((x) => x.name).join(' → ') || '';
     const queue = fillTemplate(t.fixQueue, { count: p.findings.length });
+    const queueCounts = fixQueueText(fixQueueCounts(p.findings, p.graph.findings.length, p.resolved ?? new Set()), labels);
 
     return (
         <aside
@@ -184,6 +177,7 @@ export function ActPanel(p: ActPanelProps) {
                         {p.compact && <button type="button" data-link="coverage" style={small} onClick={() => p.onOpenPanel?.('coverage')}>{t.linkCoverage}</button>}
                         {p.compact && <button type="button" data-link="api" style={small} onClick={() => p.onOpenPanel?.('api')}>{t.linkApi}</button>}
                         <button type="button" data-link="resolve" style={{ ...small, ...pillStyle(false), fontWeight: 600 }} onClick={() => p.onOpenPanel?.('resolve')}>{queue}</button>
+                        <span data-testid="kg-act-queue" style={muted}>{queueCounts}</span>
                     </div>
                 )}
             </section>

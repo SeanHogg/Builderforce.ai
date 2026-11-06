@@ -31,6 +31,8 @@ import type {
     Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
 } from '@seanhogg/builderforce-memory/knowledge';
 
+import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
+
 export type LensId =
     | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
 
@@ -149,11 +151,80 @@ export interface KnowledgeGraphSource {
     /** Finds the code behind a screenshot (vision read, then deterministic matches). Absent ⇒ no pinpoint input. */
     pinpoint?(image: Blob, rootId: string): Promise<PinpointResult>;
     /** The commits of the root, for the time slider and the changed set. Absent ⇒ no slider. */
-    history?(rootId: string): Promise<{ commits: { sha: string; title: string; at: string; refs: string[] }[] }>;
+    history?(rootId: string): Promise<{ commits: Commit[] }>;
     /** Local against server counts, skipped files and data sources. Absent ⇒ no Sync panel. */
     syncStatus?(rootId: string): Promise<SyncStatus>;
     /** A deterministic codemod for a finding (unused-export, unused-file). Absent ⇒ Resolve prompts the agent. */
-    applyFix?(finding: Finding): Promise<{ branch?: string; changed: string[] }>;
+    applyFix?(finding: Finding): Promise<AppliedFix>;
+    /**
+     * The finding kinds `applyFix` handles beyond the builtin codemods (`surface/codemods.ts`).
+     * Absent ⇒ only the builtin rows. A kind not listed here is sent to the agent.
+     */
+    applyFixKinds?: readonly string[];
+    /** Runs the four checks of a fix (`FIX_CHECK_IDS`), reporting each as it settles. Absent ⇒ the step goes to the agent. */
+    runFixChecks?(req: FixStepRequest, onUpdate: (update: FixCheckUpdate) => void): Promise<FixCheckResult[]>;
+    /** What a fix would change, before it is applied (files, and lines when the host can tell). Absent ⇒ the preview lists the finding's files. */
+    previewFix?(finding: Finding): Promise<FixPreview | null>;
+    /** Records a finding as resolved. Absent ⇒ the step goes to the agent. */
+    markResolved?(finding: Finding): Promise<void>;
+    /** Reverts an applied fix. Absent ⇒ the step goes to the agent. */
+    undoFix?(req: FixStepRequest): Promise<void>;
+    /** The values recorded along a path's stops (arguments, returns, payload sizes) and argument presets. Absent ⇒ Simulate edits nothing. */
+    recordedValues?(rootId: string, stopIds: string[]): Promise<RecordedRun | null>;
+    /**
+     * Performs one HTTP request for the API drawer's sandbox (*Try it · Send*). The HOST performs it (an
+     * editor has no webview CORS problem) and enforces WHERE it may go: it rejects a request outside
+     * localhost and its configured dev origins, with an Error whose message the drawer shows. Absent ⇒ the
+     * drawer offers no Send (a web host without a safe server-side proxy), only copy-as-curl.
+     */
+    tryRequest?(req: TryRequest): Promise<TryResponse>;
+    /**
+     * The definitions (classes, functions, methods) in some files of the root, read when the map goes inside a
+     * package: the stored graph holds files only, so symbols are loaded lazily and never stored. The view asks
+     * for at most 200 file refs at a time (`SYMBOL_FILES`). Absent ⇒ a host without file contents (the web): the
+     * map's levels below a package show files and say so.
+     */
+    symbolsOf?(rootId: string, fileRefs: string[]): Promise<SymbolRecord[]>;
+}
+
+/** One definition. `ref` names it (`<file ref>#<name>`); `parent` is its file's ref, or its class's ref for a member. */
+export interface SymbolRecord {
+    ref: string;
+    name: string;
+    kind: 'class' | 'function' | 'method' | 'interface' | 'type' | 'enum' | 'const' | 'struct' | 'trait' | 'module' | (string & {});
+    parent: string;
+    /** 1-based. */
+    line: number;
+    exported: boolean;
+}
+
+/** One sandbox request. `url` is absolute: the base URL the person typed plus the route. */
+export interface TryRequest {
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: string;
+}
+
+/** What came back. `body` is text (the host caps its size); `ms` is the round trip. */
+export interface TryResponse {
+    status: number;
+    headers: Record<string, string>;
+    body: string;
+    ms: number;
+    /** The host stopped reading at its size cap. */
+    truncated?: boolean;
+}
+
+/** One commit of the root: the time slider's dot, the changed set (`refs`) and the Sync delta feed's row. THE one commit type. */
+export interface Commit {
+    sha: string;
+    title: string;
+    at: string;
+    /** The node refs the commit touched. */
+    refs: string[];
+    /** Who made it, when the host knows. */
+    author?: string;
 }
 
 /** Compare's "before". */

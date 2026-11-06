@@ -5,3 +5,5 @@ export { StatusDot, type StatusDotProps, type StatusState } from './StatusDot';
 export { Menu, type MenuItem, type MenuProps } from './Menu';
 export { Card, type CardProps } from './Card';
 export { Chip, type ChipProps } from './Chip';
+export { ProvenanceBadge } from './ProvenanceBadge';
+export { Pin } from './Pin';

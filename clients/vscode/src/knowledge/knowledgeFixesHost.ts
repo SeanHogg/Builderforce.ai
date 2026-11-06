@@ -19,7 +19,7 @@ export function rootRelative(rootPath: string, fsPath: string): string | undefin
   return rel === "" || rel.startsWith("..") || path.isAbsolute(rel) ? undefined : rel;
 }
 
-export function vscodeFixPorts(rootPath: string): FixPorts {
+export function vscodeFixPorts(rootPath: string): FixPorts & ReturnType<typeof nodeFixPorts> {
   const under = (doc: vscode.TextDocument): string | undefined => (doc.uri.scheme === "file" ? rootRelative(rootPath, doc.uri.fsPath) : undefined);
   return {
     ...nodeFixPorts(rootPath),

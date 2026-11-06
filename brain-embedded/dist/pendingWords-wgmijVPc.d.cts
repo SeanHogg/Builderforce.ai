@@ -432,6 +432,39 @@ interface LocalFirstAttemptRecord {
 }
 
 /**
+ * WHAT a failed model request looked like - the structured detail a stream interruption
+ * carries, so a transcript and the editor's log name the destination, the phase it died in,
+ * how long it waited and how big the request was, instead of just "sent nothing for 240s".
+ *
+ * Pure data + ONE describe function: triage (`brainTriage.ts`) and the host logs both read
+ * `describeStreamFailure`, so the two can never word the same failure differently.
+ */
+interface StreamFailureDetail {
+    /** `headers`: no response headers arrived. `body`: headers arrived, then silence or a drop. */
+    phase: 'headers' | 'body';
+    /** Where the request went: our gateway, or a provider reached directly (Kimi Code). */
+    destination: {
+        kind: 'gateway' | 'provider';
+        label: string;
+        host: string;
+    };
+    /** Milliseconds since the attempt started. */
+    elapsedMs: number;
+    /** The silence budget that tripped, when applicable. */
+    idleMs: number;
+    /** Length of the JSON request body. */
+    requestBytes: number;
+    messageCount: number;
+    toolCount: number;
+    /** Body phase: bytes of response received before the failure. */
+    bytesReceived?: number;
+    /** Whether a per-request credential lookup finished before the deadline. */
+    credential?: 'resolved' | 'pending' | 'none';
+}
+/** One human line for logs and triage. */
+declare function describeStreamFailure(d: StreamFailureDetail): string;
+
+/**
  * Did the run actually GET ANYWHERE?
  *
  * The A-vs-B triage in `brainTriage.ts` answers "why did a turn come back
@@ -1245,6 +1278,7 @@ interface BrainDiagnostics {
         label: string;
         message: string;
         model?: string;
+        failure?: StreamFailureDetail;
         requiredRole?: string;
         callerRole?: string;
         remediation?: string;
@@ -1535,6 +1569,13 @@ interface BrainTransport {
     /** The provider chooses sampling per model, so no `temperature` is sent — Kimi K3
      *  accepts only `1` and 400s our default (the runtime registry's `providerSampling`). */
     providerSampling?: boolean;
+    /** A provider reached directly (not the gateway): named in a silence error and its detail. Absent = the gateway. */
+    destination?: {
+        label: string;
+        host: string;
+    };
+    /** Whether this request's per-request credential lookup settled - read when the request fails. */
+    credentialState?: (attemptSignal?: AbortSignal) => 'resolved' | 'pending' | 'none';
 }
 /** OpenAI function-tool spec (the `tools[]` entries sent to the model). */
 interface BrainToolSpec {
@@ -1880,7 +1921,16 @@ interface StreamChatResult {
  */
 declare class StreamInterruptedError extends Error {
     readonly model: string | undefined;
-    constructor(message: string, model: string | undefined);
+    /** What the failed request looked like (destination, phase, elapsed, size) - for logs and triage. */
+    readonly detail?: StreamFailureDetail;
+    /**
+     * The model was PICKED (named and held strictly) and stayed silent or dropped the connection - the only interruption
+     * where "choose another model" is the right offer. Never set for an in-band provider error.
+     */
+    readonly pinned: boolean;
+    constructor(message: string, model: string | undefined, detail?: StreamFailureDetail, options?: {
+        pinned?: boolean;
+    });
 }
 /**
  * A transport-level failure: the fetch itself threw (network error, DNS failure,
@@ -1900,9 +1950,12 @@ declare class TransportError extends Error {
      * reports the outage instead of retrying.
      */
     readonly unreachable: boolean;
+    /** As {@link StreamInterruptedError.pinned}. */
+    readonly pinned: boolean;
     constructor(message: string, model?: string | undefined, options?: {
         cause?: unknown;
         unreachable?: boolean;
+        pinned?: boolean;
     });
 }
 /**
@@ -3207,4 +3260,4 @@ declare function replayPendingWords(chatId: number, persistence: Pick<BrainRunPe
 /** The app started: replay every chat this person left words in, not only the one that happens to be opened. */
 declare function replayAllPendingWords(persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<number>;
 
-export { type DispatchRefusal as $, type StaffingSummary as A, type BrainMessage as B, type ChatInputAttachment as C, ASK_USER_TOOL as D, type Effort as E, ASK_USER_TOOL_SPEC as F, type AnswerOriginCost as G, type AskUserMessageLike as H, type AskUserOption as I, type AskUserPayload as J, type AskUserToolSpec as K, type LocalFirstAccount as L, type AssembledToolCall as M, type AvoidedRunCall as N, type BrainDiagnosticsContext as O, type ProjectMemoryRequest as P, type BrainRunOutcome as Q, type RunKey as R, type SpendSavingsSummary as S, type BrainRunPhase as T, type UsageSurface as U, type BuildBrainTriageOptions as V, type ByoUnresolvedEntry as W, CHAT_MODES as X, CHAT_MODE_ICON as Y, type ChatWorkDirectiveOptions as Z, type CompletionMetadata as _, type BrainTraceEvent as a, computeBrainDiagnostics as a$, type EffortProfile as a0, type EvermindLearnOutcome as a1, type EvermindLearnTarget as a2, type ImageUrlContentPart as a3, type LocalFirstAttemptSummary as a4, MAX_STOP_HOOK_ROUNDS as a5, type MemoryAnswerOptions as a6, type MemoryFirstAnswer as a7, type MemorySurface as a8, type ModelPreflightResult as a9, StreamInterruptedError as aA, type SubagentOrigin as aB, type TextContentPart as aC, type ToolExposure as aD, TransportError as aE, UNBACKED_TICKET_CLAIM_NOTICE as aF, UNBACKED_WRITE_CLAIM_NOTICE as aG, USAGE_SURFACES as aH, USAGE_SURFACE_HEADER as aI, type UpstreamTurnEvidence as aJ, accountUsedInTrace as aK, activityTarget as aL, answeredInProseInTrace as aM, askStopHook as aN, askUserAnchorId as aO, askUserBlock as aP, attachEvermindLearn as aQ, buildBrainTriageReport as aR, byoReasonHint as aS, byoUnresolvedInTrace as aT, byoUnresolvedSummary as aU, chatConversationDirective as aV, chatModeDirective as aW, chatRosterFromParticipants as aX, chatWorkDirective as aY, clearPendingWords as aZ, coerceAskUserPayload as a_, type ModelScore as aa, type ModelTurn as ab, type ModelWindowSources as ac, NEW_CHAT_MODE as ad, type PendingAskUser as ae, type PersonaSubagent as af, type PrefetchResult as ag, RESTING_CHAT_MODE as ah, ROLE_GATE_REMEDIATION as ai, type ReasoningLevel as aj, type RepeatStreak as ak, type RepeatedTarget as al, RepetitionLoopError as am, type RunLineage as an, type RunOutcomeReport as ao, type RunPipelineSettings as ap, type RunStageModels as aq, type RunStopHook as ar, type RunStopInput as as, STEP_MESSAGE_ROLE as at, SUBAGENT_OF_META_KEY as au, type SavingsBreakdown as av, type SavingsBySource as aw, type SavingsSourceKey as ax, type ServedRead as ay, type SpendBreakdown as az, type BrainRunActivity as b, computeRunProgress as b0, contextWindowOf as b1, describeLiveStep as b2, detectAnnouncedButUnmadeToolCall as b3, detectUnbackedTicketClaim as b4, detectUnbackedWriteClaim as b5, effortProfile as b6, formatBrainDiagnostics as b7, formatBrainProvenance as b8, formatBytes as b9, parseSubagentOrigin as bA, projectMemoryHooks as bB, reasoningForRun as bC, resolveContextWindow as bD, savedChatOf as bE, selectPendingAskUser as bF, serializeAskUser as bG, serverChatIdOf as bH, setPendingWordsOwner as bI, shortenTarget as bJ, staffingSummaryInTrace as bK, stallRecoveriesInTrace as bL, stallUnrecoveredInTrace as bM, streamChatCompletion as bN, stripAskUser as bO, summarizeLocalFirstAttempt as bP, toolActivity as bQ, toolExposureInTrace as bR, workFiledNotStaffedVerdict as bS, forgetPendingWords as bT, markPendingWordsRead as bU, registerPendingWordsReplay as bV, rememberPendingWords as bW, replayAllPendingWords as bX, replayPendingWords as bY, formatDispatchRefusals as ba, formatEvermindLearnStep as bb, formatModelScorecard as bc, formatModelTurnLog as bd, formatStaffingSummary as be, hasEditIntent as bf, isChatMode as bg, isDispatchTool as bh, isEffort as bi, isEvermindModel as bj, isFailedToolResult as bk, isMutationTool as bl, isStepMessage as bm, isTicketWriteTool as bn, isUsageSurface as bo, localFallbackTrace as bp, midRunNotice as bq, modelFailoversInTrace as br, modelScorecard as bs, modelTurnLog as bt, modelsUsedInTrace as bu, narratedUnadvertisedInTrace as bv, normalizeChatMode as bw, parseAskUser as bx, parseByoUnresolved as by, parseRoleGateRefusal as bz, type BrainRunPersistence as c, type BrainRunRequest as d, type BrainTransport as e, type BrainChat as f, type BrainStreamFn as g, type RunEndOutcome as h, type CompletionUsage as i, type ChatCompletionMessage as j, type StreamChatOptions as k, type StreamHandlers as l, type StreamChatResult as m, type LocalFirstAttemptRecord as n, type LocalFirstAttempt as o, type LocalFirstWorkload as p, type EvermindRunHooks as q, type BrainToolSpec as r, type BrainModality as s, type ChatMode as t, type RunWindowSources as u, type ReasoningIntent as v, type ChatRosterAgent as w, type ContentPart as x, type RunProgress as y, type BrainDiagnostics as z };
+export { type DispatchRefusal as $, type StaffingSummary as A, type BrainMessage as B, type ChatInputAttachment as C, ASK_USER_TOOL as D, type Effort as E, ASK_USER_TOOL_SPEC as F, type AnswerOriginCost as G, type AskUserMessageLike as H, type AskUserOption as I, type AskUserPayload as J, type AskUserToolSpec as K, type LocalFirstAccount as L, type AssembledToolCall as M, type AvoidedRunCall as N, type BrainDiagnosticsContext as O, type ProjectMemoryRequest as P, type BrainRunOutcome as Q, type RunKey as R, type SpendSavingsSummary as S, type BrainRunPhase as T, type UsageSurface as U, type BuildBrainTriageOptions as V, type ByoUnresolvedEntry as W, CHAT_MODES as X, CHAT_MODE_ICON as Y, type ChatWorkDirectiveOptions as Z, type CompletionMetadata as _, type BrainTraceEvent as a, coerceAskUserPayload as a$, type EffortProfile as a0, type EvermindLearnOutcome as a1, type EvermindLearnTarget as a2, type ImageUrlContentPart as a3, type LocalFirstAttemptSummary as a4, MAX_STOP_HOOK_ROUNDS as a5, type MemoryAnswerOptions as a6, type MemoryFirstAnswer as a7, type MemorySurface as a8, type ModelPreflightResult as a9, type StreamFailureDetail as aA, StreamInterruptedError as aB, type SubagentOrigin as aC, type TextContentPart as aD, type ToolExposure as aE, TransportError as aF, UNBACKED_TICKET_CLAIM_NOTICE as aG, UNBACKED_WRITE_CLAIM_NOTICE as aH, USAGE_SURFACES as aI, USAGE_SURFACE_HEADER as aJ, type UpstreamTurnEvidence as aK, accountUsedInTrace as aL, activityTarget as aM, answeredInProseInTrace as aN, askStopHook as aO, askUserAnchorId as aP, askUserBlock as aQ, attachEvermindLearn as aR, buildBrainTriageReport as aS, byoReasonHint as aT, byoUnresolvedInTrace as aU, byoUnresolvedSummary as aV, chatConversationDirective as aW, chatModeDirective as aX, chatRosterFromParticipants as aY, chatWorkDirective as aZ, clearPendingWords as a_, type ModelScore as aa, type ModelTurn as ab, type ModelWindowSources as ac, NEW_CHAT_MODE as ad, type PendingAskUser as ae, type PersonaSubagent as af, type PrefetchResult as ag, RESTING_CHAT_MODE as ah, ROLE_GATE_REMEDIATION as ai, type ReasoningLevel as aj, type RepeatStreak as ak, type RepeatedTarget as al, RepetitionLoopError as am, type RunLineage as an, type RunOutcomeReport as ao, type RunPipelineSettings as ap, type RunStageModels as aq, type RunStopHook as ar, type RunStopInput as as, STEP_MESSAGE_ROLE as at, SUBAGENT_OF_META_KEY as au, type SavingsBreakdown as av, type SavingsBySource as aw, type SavingsSourceKey as ax, type ServedRead as ay, type SpendBreakdown as az, type BrainRunActivity as b, computeBrainDiagnostics as b0, computeRunProgress as b1, contextWindowOf as b2, describeLiveStep as b3, describeStreamFailure as b4, detectAnnouncedButUnmadeToolCall as b5, detectUnbackedTicketClaim as b6, detectUnbackedWriteClaim as b7, effortProfile as b8, formatBrainDiagnostics as b9, parseByoUnresolved as bA, parseRoleGateRefusal as bB, parseSubagentOrigin as bC, projectMemoryHooks as bD, reasoningForRun as bE, resolveContextWindow as bF, savedChatOf as bG, selectPendingAskUser as bH, serializeAskUser as bI, serverChatIdOf as bJ, setPendingWordsOwner as bK, shortenTarget as bL, staffingSummaryInTrace as bM, stallRecoveriesInTrace as bN, stallUnrecoveredInTrace as bO, streamChatCompletion as bP, stripAskUser as bQ, summarizeLocalFirstAttempt as bR, toolActivity as bS, toolExposureInTrace as bT, workFiledNotStaffedVerdict as bU, forgetPendingWords as bV, markPendingWordsRead as bW, registerPendingWordsReplay as bX, rememberPendingWords as bY, replayAllPendingWords as bZ, replayPendingWords as b_, formatBrainProvenance as ba, formatBytes as bb, formatDispatchRefusals as bc, formatEvermindLearnStep as bd, formatModelScorecard as be, formatModelTurnLog as bf, formatStaffingSummary as bg, hasEditIntent as bh, isChatMode as bi, isDispatchTool as bj, isEffort as bk, isEvermindModel as bl, isFailedToolResult as bm, isMutationTool as bn, isStepMessage as bo, isTicketWriteTool as bp, isUsageSurface as bq, localFallbackTrace as br, midRunNotice as bs, modelFailoversInTrace as bt, modelScorecard as bu, modelTurnLog as bv, modelsUsedInTrace as bw, narratedUnadvertisedInTrace as bx, normalizeChatMode as by, parseAskUser as bz, type BrainRunPersistence as c, type BrainRunRequest as d, type BrainTransport as e, type BrainChat as f, type BrainStreamFn as g, type RunEndOutcome as h, type CompletionUsage as i, type ChatCompletionMessage as j, type StreamChatOptions as k, type StreamHandlers as l, type StreamChatResult as m, type LocalFirstAttemptRecord as n, type LocalFirstAttempt as o, type LocalFirstWorkload as p, type EvermindRunHooks as q, type BrainToolSpec as r, type BrainModality as s, type ChatMode as t, type RunWindowSources as u, type ReasoningIntent as v, type ChatRosterAgent as w, type ContentPart as x, type RunProgress as y, type BrainDiagnostics as z };

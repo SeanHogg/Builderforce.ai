@@ -16,7 +16,8 @@ import { buildSpine, type SpineItem } from './path';
 import { entryLabel } from './pathNotes';
 import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
-import { missingFilesOf, type SceneOverlayProps } from './SceneOverlay';
+import type { SceneOverlayProps } from './SceneOverlay';
+import { syncGap } from './drawers/syncModel';
 import { stationOfRef } from './stations';
 import type { SurfaceModel } from './useSurface';
 import type { ZoomApi } from './zoom';
@@ -64,13 +65,18 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     const pathTitle = lineName ? fillTemplate(s.path.title, { line: fillTemplate(s.lineName, { name: lineName }), entry }) : null;
     const truncated = graph.stats.truncated || i.visibleNodes < graph.nodes.length;
 
+    const gap = syncGap(i.sync); // ONE reading: the banner's two numbers cannot disagree
+    const drilled = surface.drill.canOut && i.mode === 'transit';
     const overlayProps: SceneOverlayProps = {
         labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, zoom: i.zoom, narrow: layout.phone,
-        outTo: surface.station ? lineLabel : null, onOut: () => surface.selectStation(null),
+        // Inside a drilled level "Out" goes up one level; otherwise it leaves the picked station for the line.
+        // The drill is the transit map's: other cameras keep the station-to-line "Out".
+        outTo: drilled ? surface.drill.parent?.name ?? s.map.world : surface.station ? lineLabel : null,
+        onOut: drilled ? surface.drill.out : () => surface.selectStation(null),
         stations: surface.stations.stations, question: surface.question, onQuestion: i.pickQuestion, lenses: kg.lenses, lens: i.lens.id, onLens: i.pickLens,
         family: surface.family, onClearFamily: () => surface.setFamily(null),
         stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: surface.stations.capped,
-        missingFiles: missingFilesOf(i.sync), onDiagnose: () => surface.openPanel('sync'),
+        missingFiles: gap.missing, tooLarge: gap.tooLarge, onDiagnose: () => surface.openPanel('sync'),
     };
     return { layout, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
 }

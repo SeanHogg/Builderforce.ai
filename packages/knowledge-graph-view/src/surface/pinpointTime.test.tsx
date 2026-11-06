@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { surfaceFixture } from '../testing';
-import type { KnowledgeGraphSource, PinpointResult } from '../types';
+import type { Commit, KnowledgeGraphSource, PinpointResult } from '../types';
 import { PinpointInput } from './PinpointInput';
 import { buildStations } from './stations';
-import { TimeSlider, useHistory, type Commit } from './TimeSlider';
+import { TimeSlider, useHistory } from './TimeSlider';
 import { MAX_IMAGE_BYTES } from './usePinpoint';
 
 const graph = surfaceFixture();
@@ -183,7 +183,8 @@ describe('TimeSlider', () => {
         const seen: Array<ReturnType<typeof useHistory>> = [];
         function Probe({ source }: { source: KnowledgeGraphSource }) { seen.push(useHistory(source, 'sys')); return null; }
         render(<Probe source={base} />);
-        expect(seen.at(-1)).toEqual({ commits: [], total: 0 });
+        // No history port: nothing to load, so never "loading".
+        expect(seen.at(-1)).toEqual({ commits: [], total: 0, loading: false });
         render(<Probe source={{ ...base, history: async () => ({ commits: [...commits].reverse() }) }} />);
         await waitFor(() => expect(seen.at(-1)!.commits.map((c) => c.sha)).toEqual(['a1', 'b2']));
     });

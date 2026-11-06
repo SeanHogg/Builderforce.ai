@@ -78,6 +78,17 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 - **Knowledge review of `agentic` fails.** The linked client makes 3 requests per file on the plan-rpm bucket (~50,000 for this tree) and one 429 or 413 ends the review. Next: move to builderforce-memory 2026.10.36, use `batched` + `preloadExtracted`, add bulk routes and 429 retry, ship a VSIX ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)).
 - **PRD 38 residual items (docs sweep 2026-11-01).** Its Review Persistence section says `docs/knowledge/38-review-*.md`; the actual contract is the `--review-root` CLI flag plus `packages/agent-tools/src/knowledge/reviewRunner.ts` (which writes only `.review/`), and no caller passes a `knowledge/` root. Its Knowledge Client §3 table maps step kinds to statuses (triggered/awaiting_results/etc.) with no corresponding runtime code; either implement or strike. Its §4 asserts the knowledge graph has quote-level and learning-level nodes — only file-level nodes exist.
+- **No source of recorded runtime values for the knowledge view (PRD 38).** Several features are wired and tested but have nothing to show yet:
+  - The Simulate drawer's recorded and editable values, which use the optional `recordedValues` source port.
+  - Path-hop payload sizes ("PUT 1.4 MB"), which need a `payloadBytes` file badge.
+  - The Sync drawer's "Traces" row.
+
+  Each one stays honestly empty and never shows a guess. Hop labels show the route only. The cause is that nothing captures the argument and return value at each stop, or the request and response size, during a request or test run. Static extraction (`codeFileBadges`) cannot see these. What fixing it needs:
+  - a runtime recorder;
+  - a traces source that serves its output to `recordedValues`;
+  - a `payloadBytes` badge.
+
+  *Blocker: no runtime trace recorder exists. It is a new subsystem, a candidate for PRD 41's run delta.*
 - **Predicted measures over the knowledge graph (planned, not started).** The graph has the inputs, but nothing predicts a measure; only PageRank importance is computed. The shared maths and the per-file predictions are planned in PRD 41 Part D: risk, entropy, shrunk rates, trends and cost estimates. Its formulas live in the builderforce-memory `stats` module (D13); there is no new package.
 
   PRD 38 adds the graph-only formulas, computed at graph build and stored as badges:

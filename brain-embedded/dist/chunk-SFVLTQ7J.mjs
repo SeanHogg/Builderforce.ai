@@ -1,4 +1,5 @@
 // src/chatError.ts
+var PROVIDER_AUTH_REQUIRED = "provider_auth_required";
 var CONTINUATION_TIMED_OUT = "continuation_timed_out";
 var NOT_SIGNED_IN = "not_signed_in";
 var NO_LOCAL_MODEL = "no_local_model";
@@ -16,9 +17,15 @@ var BrainRequestError = class extends Error {
   unlock;
   requiredPlan;
   feature;
+  /** Set with `code: provider_auth_required`: the account provider whose credential was refused. */
+  provider;
+  /** Set with `provider`: that runtime's display name. */
+  providerLabel;
   constructor(message, init) {
     super(message);
     this.name = "BrainRequestError";
+    this.provider = init.provider;
+    this.providerLabel = init.providerLabel;
     this.status = init.status;
     this.code = init.code;
     this.reason = init.reason;
@@ -71,6 +78,9 @@ function chatErrorAction(err) {
   const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   if (err instanceof BrainRequestError) {
     const base = { requiredPlan: err.requiredPlan, feature: err.feature };
+    if (err.code === PROVIDER_AUTH_REQUIRED && err.provider) {
+      return { kind: "provider_sign_in", provider: err.provider, label: err.providerLabel ?? err.provider };
+    }
     if (err.status === 401) return { kind: "auth", ...base };
     if (err.unlock === "validate_card" || err.reason === "card_required") {
       return { kind: "validate_card", ...base };
@@ -94,10 +104,17 @@ function chatErrorAction(err) {
   if (AUTH_PROSE.test(message)) return { kind: "auth" };
   if (CARD_PROSE.test(message)) return { kind: "validate_card" };
   if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
+  const name = err instanceof Error ? err.name : "";
+  const model = err.model;
+  const pinned = err.pinned === true;
+  if ((name === "StreamInterruptedError" || name === "TransportError") && pinned && typeof model === "string" && model) {
+    return { kind: "model_unresponsive", model };
+  }
   return null;
 }
 
 export {
+  PROVIDER_AUTH_REQUIRED,
   CONTINUATION_TIMED_OUT,
   NOT_SIGNED_IN,
   NO_LOCAL_MODEL,
@@ -107,4 +124,4 @@ export {
   brainRequestError,
   chatErrorAction
 };
-//# sourceMappingURL=chunk-GCFXVJYE.mjs.map
+//# sourceMappingURL=chunk-SFVLTQ7J.mjs.map

@@ -36229,8 +36229,37 @@
         "familyOnly": "{family} only",
         "clearFamily": "Clear the {family} filter",
         "missingFiles": "{count} files are missing on the server.",
+        "tooLarge": "{count} files were too large to store.",
         "diagnose": "Diagnose",
         "controls": "Scene controls"
+      },
+      "map": {
+        "wall": "HTTP boundary",
+        "describes": "describes",
+        "doc": "Document",
+        "deadEnd": "Dead end: nothing reads it",
+        "reported": "Reported ✓",
+        "noSymbolsNote": "This graph has no symbols, so the levels below a package show files.",
+        "world": "the whole map",
+        "drillReset": "The map changed, so the view went back out of {name}.",
+        "moreStops": "+{count} more stops",
+        "satelliteAria": "{name}, inside {parent}",
+        "card": {
+          "close": "Close",
+          "issueMore": "+{count} more",
+          "goInside": "Go inside ↓",
+          "unfold": "Unfold {count}",
+          "fold": "Fold",
+          "whoCalls": "Who calls this?",
+          "apiContract": "API contract",
+          "patterns": "Patterns",
+          "noSymbols": "No symbols here: nothing lies further inside.",
+          "leaf": "Outside this level",
+          "loading": "Reading symbols…"
+        },
+        "stats": { "issues": "Issues", "complexity": "Complexity", "coverage": "Coverage", "usage": "Usage" },
+        "bands": { "symbol": "Class", "methods": "Methods", "errors": "Errors and tests", "leaves": "Leaves this level", "body": "This function", "callees": "What it calls" },
+        "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "LLM providers", "github": "GitHub API", "stripe": "Payments", "mail": "Email", "slack": "Slack", "oauth": "Sign-in provider" }
       },
       "rail": {
         "heading": "Lines from the entry points",
@@ -36290,6 +36319,29 @@
         "excludedTitle": "Excluded folders",
         "excludedNote": "These folders are never read.",
         "barAria": "{label}: local {local}, server {server}",
+        "deltaLoading": "Reading the commits…",
+        "parityTitle": "{local} / {server}",
+        "countPair": "{local} / {server}",
+        "parityAll": "The server has all of them.",
+        "parityMissing": "{count} not on the server yet.",
+        "parityTooLarge": "{count} were too large to store.",
+        "deltaTitle": "Changes since the last review",
+        "deltaEmpty": "No commits to show.",
+        "deltaSummary": "{count} not in the picture yet",
+        "deltaPending": "Pending",
+        "deltaApplied": "In the picture",
+        "deltaRow": "{sha} · {count} files · {when}",
+        "deltaRowAuthor": "{sha} · {author} · {count} files · {when}",
+        "actionSetUpV8": "Set up v8",
+        "actionTurnOn": "Turn on",
+        "actionGenerate": "Generate",
+        "setUpV8Request": "Set up v8 coverage for the project: add a coverage script and config, run the tests with coverage on, and report the coverage files it writes.",
+        "turnOnRequest": "Turn on runtime traces for the project: add tracing to the entry points, run it once and report where the traces are written.",
+        "excludedNone": "No folder was left out.",
+        "excludedFolder": "{path}",
+        "diagnosticsTitle": "Diagnostics",
+        "resend": "Review again to retry skipped files",
+        "resendNote": "Starts the whole review again for this folder. You confirm it first.",
         "refresh": "Refresh"
       },
       "syncSteps": {
@@ -36299,6 +36351,18 @@
         "match": "Server matches local",
         "analyse": "Sources collected",
         "skipped": "Nothing skipped"
+      },
+      "syncStepDetails": {
+        "walk": "Reads the folder; ignored and excluded folders are left out.",
+        "graph": "Imports, complexity and patterns for each file.",
+        "upload": "Sends what changed to the server in small batches.",
+        "match": "Compares file, edge and doc counts with the server.",
+        "analyse": "Coverage, history, owners and OpenAPI, when present.",
+        "skipped": "Files that could not be stored are listed, never dropped."
+      },
+      "unavailable": {
+        "notHere": "Not available here",
+        "labelled": "{label}: not available here"
       },
       "syncStates": {
         "ok": "Done",
@@ -36344,7 +36408,23 @@
         "runWithValues": "Run with values",
         "promptTests": "Prompt tests",
         "promptText": "Write tests for {file}. It has complexity {complexity} and {coverage} line coverage. Cover the untested branches, run them and report the new coverage.",
-        "noComplexity": "Complexity has not been measured."
+        "noComplexity": "Complexity has not been measured.",
+        "shapeTitle": "Test shape",
+        "shapeNone": "No test files in the graph, so the split is not measured.",
+        "shapeAria": "{unit} unit, {integration} integration, {e2e} end-to-end tests",
+        "shapeSegment": "{kind} {count}",
+        "unit": "unit",
+        "integration": "integration",
+        "e2e": "e2e",
+        "configTitle": "Where coverage is configured",
+        "configNone": "No packages with code were found.",
+        "configAll": "Coverage is configured in every package.",
+        "configNowhere": "Coverage is not configured in any package.",
+        "configOnly": "Coverage is configured in {packages} only. Elsewhere no coverage is measured.",
+        "applyV8": "Apply: v8 coverage in {count} packages",
+        "applyV8Request": "Set up v8 coverage in these {count} packages: {packages}. Add the coverage config and a script to each, run the tests with coverage on and report the new coverage.",
+        "quadrant": "complex · untested",
+        "namesMore": "{names} +{count}"
       },
       "patterns": {
         "notSetUpTitle": "Patterns are not set up",
@@ -36365,6 +36445,12 @@
         "notSetUpTitle": "No endpoints found",
         "notSetUpBody": "No route registration was found. Routes are read from Hono and Express registrations.",
         "kpiEndpoints": "Endpoints",
+        "kpiParams": "Parameters",
+        "kpiCallers": "Callers",
+        "kpiTests": "Test files",
+        "kpiContract": "Contract",
+        "pickFile": "Select {name} on the map",
+        "paramWithNote": "{where} · {note}",
         "kpiUndocumented": "Undocumented",
         "contractMissing": "There is no OpenAPI contract in this folder, so every endpoint is undocumented.",
         "documented": "Documented",
@@ -36379,41 +36465,205 @@
         "exportPostman": "Export Postman collection",
         "contractTests": "Contract tests",
         "contractTestsText": "Write contract tests for these endpoints from the OpenAPI skeleton, run them and report each result: {routes}.",
-        "groupAria": "{file}: {count} endpoints"
+        "groupAria": "{file}: {count} endpoints",
+
+        "groupInContract": "In contract ({count})",
+
+        "groupUndocumented": "Undocumented ({count})",
+
+        "selectEndpoint": "Include {route} in the contract tests",
+
+        "selectedCount": "{selected} of {total} endpoints selected for contract tests",
+
+        "selectAtLeastOne": "Select at least one endpoint to generate contract tests.",
+
+        "detailParams": "Parameters",
+
+        "paramPath": "path",
+
+        "paramQuery": "query",
+
+        "paramBody": "body",
+
+        "paramBodyNote": "JSON body; its shape was not extracted from the code.",
+
+        "noParams": "This route takes no parameters.",
+
+        "detailTested": "Responses tested",
+
+        "testedYes": "Tested ✓",
+
+        "testedNo": "Not tested ✗",
+
+        "testedBy": "A test file references the handler: {names}",
+
+        "testedNone": "No test file references the handler.",
+
+        "detailCallers": "Who calls it",
+
+        "callerFilesNone": "No file references the handler.",
+
+        "sandboxTitle": "Try it · sandbox",
+
+        "baseUrl": "Base URL",
+
+        "baseUrlInvalid": "Enter an http or https address, for example http://localhost:3000.",
+
+        "baseUrlRemote": "This is not a local address. The request goes to it as typed.",
+
+        "paramValue": "Value of {name}",
+
+        "paramMissing": "Enter a value for {name}.",
+
+        "bodyInvalid": "The body is not valid JSON.",
+
+        "bodyLabel": "Request body (JSON)",
+
+        "send": "Send",
+
+        "sending": "Sending…",
+
+        "sendUnavailable": "Send is available in the editor.",
+
+        "sendFailed": "The request failed: {message}",
+
+        "resultStatus": "{status} · {ms} ms",
+
+        "resultHeaders": "Response headers",
+
+        "resultBody": "Response body",
+
+        "resultTruncated": "The body is shortened to {count} characters.",
+
+        "resultEmpty": "The response has no body."
       },
       "resolve": {
         "empty": "Choose Resolve on a finding to work on it here.",
         "provenanceLabel": "Source",
-        "fixTitle": "Deterministic fix",
-        "fixIntro": "A codemod can fix this kind of finding.",
-        "applyFix": "Apply the fix",
-        "applying": "Applying…",
-        "applied": "Applied on branch {branch}.",
-        "appliedNoBranch": "Applied.",
-        "changedFiles": "{count} files changed",
-        "failed": "The fix could not be applied.",
-        "promptTitle": "Ask the agent",
-        "promptIntro": "No codemod exists for this kind, so the agent does the work.",
-        "prompt": "Prompt the agent",
-        "noComposer": "The host has no composer to send the request to.",
         "checksTitle": "Checks",
         "checkFiles": "The finding names {count} files.",
         "checkStations": "It touches {count} stations.",
         "checkReview": "Review the folder again to confirm the finding is gone.",
-        "undoNote": "Undo is not offered here: revert the branch to undo the change.",
         "show": "Show"
       },
       "simulate": {
         "pathTitle": "Path to drive",
         "pathEmpty": "Pick a line or a station first; the simulation drives its path.",
         "valuesLabel": "Values to use",
-        "valuesPlaceholder": "amount=100, currency=EUR",
         "run": "Ask the agent to run it",
         "requestText": "Write and run a test that drives this path: {path}. Use these values: {values}. Report each step: what was called, what it returned, and where it failed.",
         "noValues": "none given; choose sensible ones",
         "sent": "Sent to the agent. The result comes from its run; nothing is shown before.",
         "noComposer": "The host has no agent composer, so nothing can be run.",
-        "note": "Simulate never fakes a run. The agent writes the test, runs it and reports each step."
+        "note": "Simulate never fakes a run. The agent writes the test, runs it and reports each step.",
+        "noRecorded": "The host recorded no values for this path, so there is nothing to edit. The walk still follows the hops.",
+        "presets": "Argument presets",
+        "presetRecorded": "Recorded",
+        "colRecorded": "Recorded",
+        "editAria": "Edit {name}",
+        "stubsTitle": "Stubbed ports",
+        "stubsHint": "A stubbed stop answers with its recorded value.",
+        "lineEnter": "enter {name}",
+        "lineCall": "call {name}",
+        "lineReturn": "return from {name}",
+        "unknownResult": "unknown: an input was edited, so only a real run can say",
+        "codeTitle": "Steps in the path",
+        "noVars": "No values are known at this step.",
+        "varsTitle": "Variables",
+        "resultTitle": "Result",
+        "noResult": "No value recorded here.",
+        "stubbedNote": "This stop is stubbed: it answers with its recorded value.",
+        "simulatedBanner": "Simulated, not executed: this walks the hops of the path with recorded and edited values. \"Ask the agent to run it\" does the real run.",
+        "saveTest": "Save as {file}",
+        "saveTestText": "Write the test file {file} that drives this path: {path}. Use these values: {values}. Stub these ports: {stubs}. Save it in the project's test folder and run it.",
+        "noStubs": "none",
+        "origin": {
+          "recorded": "recorded",
+          "edited": "edited"
+        },
+        "startFrom": "Start from",
+        "startEntry": "The entry",
+        "startStop": "This stop"
+      },
+      "fix": {
+        "title": "Fix",
+        "queue": "{open} open of {shown} shown · {repo} in the repo",
+        "queueTitle": "Fix queue",
+        "queueAria": "Open {title}",
+        "queueState": {
+          "open": "open",
+          "applied": "applied · checking",
+          "resolved": "resolved"
+        },
+        "mode": {
+          "group": "Fix mode",
+          "apply": "Deterministic fix",
+          "prompt": "Prompt",
+          "noCodemod": "No codemod exists for this kind on this host."
+        },
+        "primary": {
+          "apply": "Apply to branch fix/…",
+          "prompt": "Send to the composer",
+          "checks": "Run checks",
+          "resolve": "Mark resolved",
+          "resolved": "Resolved ✓",
+          "sent": "Sent to the agent",
+          "running": "Running…"
+        },
+        "sendToAgent": "Send to agent",
+        "noComposer": "No agent composer is connected.",
+        "undo": "Undo",
+        "undoNoRecord": "This host kept no record of the fix, so it cannot undo it.",
+        "permNote": "Runs as you on branch fix/…. Undo restores the branch you were on; nothing reaches the main branch until the checks pass and you merge.",
+        "previewTitle": "What it changes",
+        "previewFiles": "{count} files",
+        "previewFromFiles": "This host cannot preview lines; these are the files the finding names.",
+        "promptTitle": "Prompt",
+        "promptNote": "Goes to the one composer, with this finding and the four checks attached.",
+        "checksTitle": "Resolved only when every check passes",
+        "checksList": "Checks",
+        "check": {
+          "types": "Typecheck the touched packages",
+          "tests": "Targeted tests pass",
+          "rescan": "Re-scan: the issue is gone",
+          "review": "Review by the agent: no new findings"
+        },
+        "checkStatus": {
+          "pending": "Waiting",
+          "running": "Running",
+          "pass": "Passed",
+          "fail": "Failed",
+          "skipped": "Skipped",
+          "error": "Error",
+          "agent": "Sent to agent"
+        },
+        "checkNoReport": "This check never reported, so it counts as an error.",
+        "changedFiles": "{count} files changed",
+        "appliedOn": "Applied on branch {branch}.",
+        "branchError": "Applied in place: the branch could not be created ({reason}).",
+        "branchUnknown": "the fix branch",
+        "requestApply": "Fix this finding on a new branch named fix/…: {title}: {items}. Make the change and do not merge it.",
+        "requestChecks": "Typecheck the touched packages and run the targeted tests for the change that fixes \"{title}\" ({items}) on {branch}, and report each result.",
+        "requestResolve": "Mark the finding \"{title}\" ({items}) as resolved once {branch} passes its checks.",
+        "requestUndo": "Undo the fix for \"{title}\" ({items}): revert the changes on {branch}.",
+        "requestPrompt": "Fix this finding: {title}: {items}. Make the change on a new branch named fix/…, typecheck the touched packages, run the targeted tests, re-scan to confirm the finding is gone, and review the change for new findings. Report each result. Do not merge.",
+        "requestReview": "Review the change that fixes \"{title}\" ({items}) on {branch} and report any new finding it introduces.",
+        "beforeAfter": {
+          "group": "Before and after",
+          "noBaseline": "This host keeps no earlier review to compare with."
+        },
+        "errors": {
+          "noRoot": "This finding names no folder of the workspace.",
+          "noRecord": "Nothing to undo: the host kept no record of this fix.",
+          "unknown": "The step failed."
+        },
+        "codemod": {
+          "unusedExport": "Remove unused exports",
+          "unusedFile": "Remove unused files",
+          "unusedDependency": "Remove unused dependencies",
+          "splitByCommand": "Split by command group",
+          "extractClone": "Extract the shared code"
+        }
       },
       "pinpoint": {
         "label": "Screenshot",

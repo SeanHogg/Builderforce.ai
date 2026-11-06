@@ -22,9 +22,11 @@ const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString(
 /** A source over the surface fixture, with the optional host methods the header reads. */
 function sourceOf(extra: Partial<KnowledgeGraphSource> = {}, graphs: KnowledgeGraph[] = [surfaceFixture()]): KnowledgeGraphSource {
     const base = fixtureSource(graphs);
+    // ONE instant for every root: the view opens the most recently reviewed, so a clock tick between two roots would reorder them.
+    const reviewed = minutesAgo(2);
     return {
         ...base,
-        scopes: async () => graphs.map((g, i) => ({ rootId: g.scope.rootId, title: i === 0 ? 'Builderforce' : g.scope.rootId, packs: g.scope.packs, lastReviewedAt: minutesAgo(2) })),
+        scopes: async () => graphs.map((g, i) => ({ rootId: g.scope.rootId, title: i === 0 ? 'Builderforce' : g.scope.rootId, packs: g.scope.packs, lastReviewedAt: reviewed })),
         ...extra,
     };
 }

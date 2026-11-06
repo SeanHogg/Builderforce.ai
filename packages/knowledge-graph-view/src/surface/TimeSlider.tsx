@@ -10,25 +10,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
 import { CONTROL, MONO, muted } from '../styles';
-import type { KnowledgeGraphSource } from '../types';
+import type { Commit, KnowledgeGraphSource } from '../types';
 import { QuietButton } from './ui';
-
-export type Commit = { sha: string; title: string; at: string; refs: string[] };
 
 const MAX_DOTS = 40;
 const SHA_LENGTH = 7;
 
 /** The commits of a root, oldest first, capped to the latest {@link MAX_DOTS}; empty while loading, on failure, or with no history. */
-export function useHistory(source: KnowledgeGraphSource, rootId: string | null): { commits: Commit[]; total: number } {
-    const [state, setState] = useState<{ commits: Commit[]; total: number }>({ commits: [], total: 0 });
+export interface HistoryRead { commits: Commit[]; total: number; /** The read is still on the way (never "no commits"). */ loading: boolean }
+
+export function useHistory(source: KnowledgeGraphSource, rootId: string | null): HistoryRead {
+    const [state, setState] = useState<HistoryRead>({ commits: [], total: 0, loading: !!source.history && !!rootId });
     const read = source.history;
     useEffect(() => {
-        setState({ commits: [], total: 0 });
+        setState({ commits: [], total: 0, loading: !!read && !!rootId });
         if (!read || !rootId) return;
         let live = true;
         read.call(source, rootId).then(
-            (h) => { if (live) setState({ commits: [...h.commits].sort((a, b) => a.at.localeCompare(b.at)).slice(-MAX_DOTS), total: h.commits.length }); },
-            () => { /* no history: no slider */ },
+            (h) => { if (live) setState({ commits: [...h.commits].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(-MAX_DOTS), total: h.commits.length, loading: false }); },
+            () => { if (live) setState({ commits: [], total: 0, loading: false }); /* no history: no slider */ },
         );
         return () => { live = false; };
     }, [read, source, rootId]);

@@ -36229,8 +36229,37 @@
         "familyOnly": "Nur {family}",
         "clearFamily": "Filter {family} aufheben",
         "missingFiles": "{count} Dateien fehlen auf dem Server.",
+        "tooLarge": "{count} Dateien waren zu groß zum Speichern.",
         "diagnose": "Diagnose",
         "controls": "Szenensteuerung"
+      },
+      "map": {
+        "wall": "HTTP-Grenze",
+        "describes": "beschreibt",
+        "doc": "Dokument",
+        "deadEnd": "Sackgasse: nichts liest es",
+        "reported": "Gemeldet ✓",
+        "noSymbolsNote": "Dieser Graph hat keine Symbole, daher zeigen die Ebenen unter einem Paket Dateien.",
+        "world": "die ganze Karte",
+        "drillReset": "Die Karte hat sich geändert, deshalb ist die Ansicht aus {name} herausgegangen.",
+        "moreStops": "+{count} weitere Halte",
+        "satelliteAria": "{name}, in {parent}",
+        "card": {
+          "close": "Schließen",
+          "issueMore": "+{count} weitere",
+          "goInside": "Hineingehen ↓",
+          "unfold": "{count} aufklappen",
+          "fold": "Zuklappen",
+          "whoCalls": "Wer ruft das auf?",
+          "apiContract": "API-Vertrag",
+          "patterns": "Muster",
+          "noSymbols": "Hier gibt es keine Symbole: weiter innen liegt nichts.",
+          "leaf": "Außerhalb dieser Ebene",
+          "loading": "Symbole werden gelesen…"
+        },
+        "stats": { "issues": "Probleme", "complexity": "Komplexität", "coverage": "Abdeckung", "usage": "Nutzung" },
+        "bands": { "symbol": "Klasse", "methods": "Methoden", "errors": "Fehler und Tests", "leaves": "Verlässt diese Ebene", "body": "Diese Funktion", "callees": "Was sie aufruft" },
+        "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "LLM-Anbieter", "github": "GitHub-API", "stripe": "Zahlungen", "mail": "E-Mail", "slack": "Slack", "oauth": "Anmeldeanbieter" }
       },
       "rail": {
         "heading": "Linien von den Einstiegspunkten",
@@ -36282,7 +36311,7 @@
         "edges": "Kanten",
         "docs": "Dokumente",
         "notUploaded": "Noch nicht hochgeladen", "skippedRowNoSize": "{path} · {reason}", "edgesNotMeasured": "Nicht gemessen", "skippedUnknown": "Unbekannt: Keine Prüfung hat aufgezeichnet, was übersprungen wurde.", "truncatedNote": "Der Graph wurde abgeschnitten (gekürzt).",
-        "pipelineTitle": "Pipeline",
+        "pipelineTitle": "Ablauf",
         "skippedTitle": "Übersprungene Dateien",
         "skippedNone": "Nichts wurde übersprungen.",
         "skippedRow": "{path} · {size} · {reason}",
@@ -36290,6 +36319,29 @@
         "excludedTitle": "Ausgeschlossene Ordner",
         "excludedNote": "Diese Ordner werden nie gelesen.",
         "barAria": "{label}: lokal {local}, Server {server}",
+        "deltaLoading": "Commits werden gelesen…",
+        "parityTitle": "{local} / {server}",
+        "countPair": "{local} / {server}",
+        "parityAll": "Der Server hat alle.",
+        "parityMissing": "{count} noch nicht auf dem Server.",
+        "parityTooLarge": "{count} waren zu groß zum Speichern.",
+        "deltaTitle": "Änderungen seit der letzten Prüfung",
+        "deltaEmpty": "Keine Commits vorhanden.",
+        "deltaSummary": "{count} noch nicht im Bild",
+        "deltaPending": "Ausstehend",
+        "deltaApplied": "Im Bild",
+        "deltaRow": "{sha} · {count} Dateien · {when}",
+        "deltaRowAuthor": "{sha} · {author} · {count} Dateien · {when}",
+        "actionSetUpV8": "v8 einrichten",
+        "actionTurnOn": "Einschalten",
+        "actionGenerate": "Erzeugen",
+        "setUpV8Request": "Richte die v8-Abdeckung für das Projekt ein: Abdeckungsskript und Konfiguration hinzufügen, Tests mit Abdeckung ausführen und die erzeugten Abdeckungsdateien nennen.",
+        "turnOnRequest": "Schalte Laufzeit-Traces für das Projekt ein: Tracing an den Einstiegspunkten ergänzen, einmal ausführen und melden, wo die Traces abgelegt werden.",
+        "excludedNone": "Es wurde kein Ordner ausgelassen.",
+        "excludedFolder": "{path}",
+        "diagnosticsTitle": "Diagnose",
+        "resend": "Erneut prüfen, um übersprungene Dateien zu wiederholen",
+        "resendNote": "Startet die gesamte Prüfung dieses Ordners erneut. Sie bestätigen sie zuerst.",
         "refresh": "Aktualisieren"
       },
       "syncSteps": {
@@ -36299,6 +36351,18 @@
         "match": "Server stimmt mit lokal überein",
         "analyse": "Quellen erfasst",
         "skipped": "Nichts übersprungen"
+      },
+      "syncStepDetails": {
+        "walk": "Liest den Ordner; ignorierte und ausgeschlossene Ordner werden übersprungen.",
+        "graph": "Importe, Komplexität und Muster jeder Datei.",
+        "upload": "Sendet Änderungen in kleinen Paketen an den Server.",
+        "match": "Vergleicht Datei-, Kanten- und Dokumentzahlen mit dem Server.",
+        "analyse": "Abdeckung, Verlauf, Verantwortliche und OpenAPI, sofern vorhanden.",
+        "skipped": "Nicht speicherbare Dateien werden aufgelistet, nie verworfen."
+      },
+      "unavailable": {
+        "notHere": "Hier nicht verfügbar",
+        "labelled": "{label}: hier nicht verfügbar"
       },
       "syncStates": {
         "ok": "Fertig",
@@ -36344,7 +36408,23 @@
         "runWithValues": "Mit Werten ausführen",
         "promptTests": "Tests anfordern",
         "promptText": "Schreibe Tests für {file}. Die Datei hat die Komplexität {complexity} und {coverage} Zeilenabdeckung. Decke die ungetesteten Zweige ab, führe die Tests aus und melde die neue Abdeckung.",
-        "noComplexity": "Die Komplexität wurde nicht gemessen."
+        "noComplexity": "Die Komplexität wurde nicht gemessen.",
+        "shapeTitle": "Testverteilung",
+        "shapeNone": "Keine Testdateien im Graphen, die Verteilung wird nicht gemessen.",
+        "shapeAria": "{unit} Unit-, {integration} Integrations-, {e2e} End-to-End-Tests",
+        "shapeSegment": "{kind} {count}",
+        "unit": "Unit",
+        "integration": "Integration",
+        "e2e": "E2E",
+        "configTitle": "Wo die Abdeckung konfiguriert ist",
+        "configNone": "Keine Pakete mit Code gefunden.",
+        "configAll": "Die Abdeckung ist in jedem Paket konfiguriert.",
+        "configNowhere": "In keinem Paket ist die Abdeckung konfiguriert.",
+        "configOnly": "Die Abdeckung ist nur in {packages} konfiguriert. Anderswo wird sie nicht gemessen.",
+        "applyV8": "Anwenden: v8-Abdeckung in {count} Paketen",
+        "applyV8Request": "Richte die v8-Abdeckung in diesen {count} Paketen ein: {packages}. Füge jeweils Konfiguration und Skript hinzu, führe die Tests mit Abdeckung aus und melde die neue Abdeckung.",
+        "quadrant": "komplex · ungetestet",
+        "namesMore": "{names} +{count}"
       },
       "patterns": {
         "notSetUpTitle": "Muster sind nicht eingerichtet",
@@ -36365,6 +36445,12 @@
         "notSetUpTitle": "Keine Endpunkte gefunden",
         "notSetUpBody": "Es wurde keine Routenregistrierung gefunden. Routen werden aus Hono- und Express-Registrierungen gelesen.",
         "kpiEndpoints": "Endpunkte",
+        "kpiParams": "Parameter",
+        "kpiCallers": "Aufrufer",
+        "kpiTests": "Testdateien",
+        "kpiContract": "Vertrag",
+        "pickFile": "{name} auf der Karte auswählen",
+        "paramWithNote": "{where} · {note}",
         "kpiUndocumented": "Undokumentiert",
         "contractMissing": "In diesem Ordner gibt es keinen OpenAPI-Vertrag, daher sind alle Endpunkte undokumentiert.",
         "documented": "Dokumentiert",
@@ -36379,41 +36465,205 @@
         "exportPostman": "Postman-Collection exportieren",
         "contractTests": "Vertragstests",
         "contractTestsText": "Schreibe Vertragstests für diese Endpunkte anhand des OpenAPI-Gerüsts, führe sie aus und melde jedes Ergebnis: {routes}.",
-        "groupAria": "{file}: {count} Endpunkte"
+        "groupAria": "{file}: {count} Endpunkte",
+
+        "groupInContract": "Im Vertrag ({count})",
+
+        "groupUndocumented": "Nicht dokumentiert ({count})",
+
+        "selectEndpoint": "{route} in die Vertragstests aufnehmen",
+
+        "selectedCount": "{selected} von {total} Endpunkten für Vertragstests ausgewählt",
+
+        "selectAtLeastOne": "Wähle mindestens einen Endpunkt, um Vertragstests zu erzeugen.",
+
+        "detailParams": "Parameter",
+
+        "paramPath": "Pfad",
+
+        "paramQuery": "Query",
+
+        "paramBody": "Body",
+
+        "paramBodyNote": "JSON-Body; seine Form wurde nicht aus dem Code gelesen.",
+
+        "noParams": "Diese Route hat keine Parameter.",
+
+        "detailTested": "Getestete Antworten",
+
+        "testedYes": "Getestet ✓",
+
+        "testedNo": "Nicht getestet ✗",
+
+        "testedBy": "Eine Testdatei verweist auf den Handler: {names}",
+
+        "testedNone": "Keine Testdatei verweist auf den Handler.",
+
+        "detailCallers": "Wer ruft ihn auf",
+
+        "callerFilesNone": "Keine Datei verweist auf den Handler.",
+
+        "sandboxTitle": "Ausprobieren · Sandbox",
+
+        "baseUrl": "Basis-URL",
+
+        "baseUrlInvalid": "Gib eine http- oder https-Adresse ein, zum Beispiel http://localhost:3000.",
+
+        "baseUrlRemote": "Das ist keine lokale Adresse. Die Anfrage geht unverändert dorthin.",
+
+        "paramValue": "Wert für {name}",
+
+        "paramMissing": "Gib einen Wert für {name} ein.",
+
+        "bodyInvalid": "Der Body ist kein gültiges JSON.",
+
+        "bodyLabel": "Request-Body (JSON)",
+
+        "send": "Senden",
+
+        "sending": "Wird gesendet…",
+
+        "sendUnavailable": "Senden ist im Editor verfügbar.",
+
+        "sendFailed": "Die Anfrage ist fehlgeschlagen: {message}",
+
+        "resultStatus": "{status} · {ms} ms",
+
+        "resultHeaders": "Antwort-Header",
+
+        "resultBody": "Antwort-Body",
+
+        "resultTruncated": "Der Body ist auf {count} Zeichen gekürzt.",
+
+        "resultEmpty": "Die Antwort hat keinen Body."
       },
       "resolve": {
         "empty": "Wählen Sie bei einem Befund „Beheben“, um hier daran zu arbeiten.",
         "provenanceLabel": "Quelle",
-        "fixTitle": "Deterministische Korrektur",
-        "fixIntro": "Ein Codemod kann diese Art von Befund beheben.",
-        "applyFix": "Korrektur anwenden",
-        "applying": "Wird angewendet …",
-        "applied": "Auf Branch {branch} angewendet.",
-        "appliedNoBranch": "Angewendet.",
-        "changedFiles": "{count} Dateien geändert",
-        "failed": "Die Korrektur konnte nicht angewendet werden.",
-        "promptTitle": "Den Agenten beauftragen",
-        "promptIntro": "Für diese Art gibt es keinen Codemod, daher übernimmt der Agent die Arbeit.",
-        "prompt": "Agenten beauftragen",
-        "noComposer": "Der Host hat keinen Composer, an den die Anfrage gesendet werden könnte.",
         "checksTitle": "Prüfungen",
         "checkFiles": "Der Befund nennt {count} Dateien.",
         "checkStations": "Er betrifft {count} Stationen.",
         "checkReview": "Prüfen Sie den Ordner erneut, um zu bestätigen, dass der Befund verschwunden ist.",
-        "undoNote": "Rückgängig machen wird hier nicht angeboten: Setzen Sie den Branch zurück, um die Änderung rückgängig zu machen.",
         "show": "Anzeigen"
       },
       "simulate": {
         "pathTitle": "Zu durchlaufender Pfad",
         "pathEmpty": "Wählen Sie zuerst eine Linie oder eine Station; die Simulation durchläuft ihren Pfad.",
         "valuesLabel": "Zu verwendende Werte",
-        "valuesPlaceholder": "betrag=100, waehrung=EUR",
         "run": "Agenten bitten, es auszuführen",
         "requestText": "Schreibe und führe einen Test aus, der diesen Pfad durchläuft: {path}. Verwende diese Werte: {values}. Melde jeden Schritt: was aufgerufen wurde, was zurückkam und wo es fehlschlug.",
         "noValues": "keine angegeben; wähle sinnvolle",
         "sent": "An den Agenten gesendet. Das Ergebnis stammt aus seinem Lauf; vorher wird nichts angezeigt.",
         "noComposer": "Der Host hat keinen Agenten-Composer, daher kann nichts ausgeführt werden.",
-        "note": "Simulieren täuscht nie einen Lauf vor. Der Agent schreibt den Test, führt ihn aus und meldet jeden Schritt."
+        "note": "Simulieren täuscht nie einen Lauf vor. Der Agent schreibt den Test, führt ihn aus und meldet jeden Schritt.",
+        "noRecorded": "Der Host hat für diesen Pfad keine Werte aufgezeichnet, daher gibt es nichts zu bearbeiten. Der Durchlauf folgt trotzdem den Sprüngen.",
+        "presets": "Argument-Voreinstellungen",
+        "presetRecorded": "Aufgezeichnet",
+        "colRecorded": "Aufgezeichnet",
+        "editAria": "{name} bearbeiten",
+        "stubsTitle": "Simulierte Ports",
+        "stubsHint": "Eine simulierte Station antwortet mit ihrem aufgezeichneten Wert.",
+        "lineEnter": "{name} betreten",
+        "lineCall": "{name} aufrufen",
+        "lineReturn": "aus {name} zurückkehren",
+        "unknownResult": "unbekannt: Eine Eingabe wurde bearbeitet, nur ein echter Lauf kann es sagen",
+        "codeTitle": "Schritte im Pfad",
+        "noVars": "In diesem Schritt sind keine Werte bekannt.",
+        "varsTitle": "Variablen",
+        "resultTitle": "Ergebnis",
+        "noResult": "Hier ist kein Wert aufgezeichnet.",
+        "stubbedNote": "Diese Station ist simuliert: Sie antwortet mit ihrem aufgezeichneten Wert.",
+        "simulatedBanner": "Simuliert, nicht ausgeführt: Dies geht die Sprünge des Pfads mit aufgezeichneten und bearbeiteten Werten durch. „Agent den Lauf ausführen lassen“ macht den echten Lauf.",
+        "saveTest": "Speichern als {file}",
+        "saveTestText": "Schreibe die Testdatei {file}, die diesen Pfad durchläuft: {path}. Verwende diese Werte: {values}. Simuliere diese Ports: {stubs}. Speichere sie im Testordner des Projekts und führe sie aus.",
+        "noStubs": "keine",
+        "origin": {
+          "recorded": "aufgezeichnet",
+          "edited": "bearbeitet"
+        },
+        "startFrom": "Starten bei",
+        "startEntry": "Dem Einstieg",
+        "startStop": "Dieser Station"
+      },
+      "fix": {
+        "title": "Korrektur",
+        "queue": "{open} offen von {shown} angezeigt · {repo} im Repository",
+        "queueTitle": "Korrektur-Warteschlange",
+        "queueAria": "{title} öffnen",
+        "queueState": {
+          "open": "offen",
+          "applied": "angewendet · Prüfung",
+          "resolved": "gelöst"
+        },
+        "mode": {
+          "group": "Korrekturmodus",
+          "apply": "Deterministische Korrektur",
+          "prompt": "Prompt",
+          "noCodemod": "Für diese Art gibt es auf diesem Host keinen Codemod."
+        },
+        "primary": {
+          "apply": "Auf Branch fix/… anwenden",
+          "prompt": "An den Composer senden",
+          "checks": "Prüfungen ausführen",
+          "resolve": "Als gelöst markieren",
+          "resolved": "Gelöst ✓",
+          "sent": "An den Agent gesendet",
+          "running": "Läuft…"
+        },
+        "sendToAgent": "An Agent senden",
+        "noComposer": "Es ist kein Agent-Composer verbunden.",
+        "undo": "Rückgängig",
+        "undoNoRecord": "Dieser Host hat keine Aufzeichnung der Korrektur und kann sie daher nicht rückgängig machen.",
+        "permNote": "Läuft als Sie auf dem Branch fix/…. Rückgängig kehrt zum vorherigen Branch zurück; nichts erreicht den Hauptbranch, bevor die Prüfungen bestehen und Sie zusammenführen.",
+        "previewTitle": "Was sich ändert",
+        "previewFiles": "{count} Dateien",
+        "previewFromFiles": "Dieser Host kann keine Zeilen vorab anzeigen; dies sind die Dateien, die der Befund nennt.",
+        "promptTitle": "Prompt",
+        "promptNote": "Geht an den einen Composer, mit diesem Befund und den vier Prüfungen im Anhang.",
+        "checksTitle": "Nur gelöst, wenn alle Prüfungen bestehen",
+        "checksList": "Prüfungen",
+        "check": {
+          "types": "Typen der betroffenen Pakete prüfen",
+          "tests": "Gezielte Tests bestehen",
+          "rescan": "Neu scannen: das Problem ist weg",
+          "review": "Prüfung durch den Agent: keine neuen Befunde"
+        },
+        "checkStatus": {
+          "pending": "Wartet",
+          "running": "Läuft",
+          "pass": "Bestanden",
+          "fail": "Fehlgeschlagen",
+          "skipped": "Übersprungen",
+          "error": "Fehler",
+          "agent": "An Agent gesendet"
+        },
+        "checkNoReport": "Diese Prüfung hat nie berichtet und zählt daher als Fehler.",
+        "changedFiles": "{count} Dateien geändert",
+        "appliedOn": "Auf Branch {branch} angewendet.",
+        "branchError": "Direkt angewendet: Der Branch konnte nicht erstellt werden ({reason}).",
+        "branchUnknown": "der Korrektur-Branch",
+        "requestApply": "Behebe diesen Befund auf einem neuen Branch namens fix/…: {title}: {items}. Nimm die Änderung vor und führe sie nicht zusammen.",
+        "requestChecks": "Prüfe die Typen der betroffenen Pakete und führe die gezielten Tests für die Änderung aus, die „{title}“ ({items}) auf {branch} behebt, und melde jedes Ergebnis.",
+        "requestResolve": "Markiere den Befund „{title}“ ({items}) als gelöst, sobald {branch} seine Prüfungen besteht.",
+        "requestUndo": "Mache die Korrektur für „{title}“ ({items}) rückgängig: setze die Änderungen auf {branch} zurück.",
+        "requestPrompt": "Behebe diesen Befund: {title}: {items}. Nimm die Änderung auf einem neuen Branch namens fix/… vor, prüfe die Typen der betroffenen Pakete, führe die gezielten Tests aus, scanne neu, um zu bestätigen, dass der Befund weg ist, und prüfe die Änderung auf neue Befunde. Melde jedes Ergebnis. Nicht zusammenführen.",
+        "requestReview": "Prüfe die Änderung, die „{title}“ ({items}) auf {branch} behebt, und melde jeden neuen Befund, den sie einführt.",
+        "beforeAfter": {
+          "group": "Vorher und nachher",
+          "noBaseline": "Dieser Host hält keine frühere Prüfung zum Vergleichen vor."
+        },
+        "errors": {
+          "noRoot": "Dieser Befund nennt keinen Ordner des Arbeitsbereichs.",
+          "noRecord": "Nichts rückgängig zu machen: Der Host hat keine Aufzeichnung dieser Korrektur.",
+          "unknown": "Der Schritt ist fehlgeschlagen."
+        },
+        "codemod": {
+          "unusedExport": "Ungenutzte Exporte entfernen",
+          "unusedFile": "Ungenutzte Dateien entfernen",
+          "unusedDependency": "Ungenutzte Abhängigkeiten entfernen",
+          "splitByCommand": "Nach Befehlsgruppe aufteilen",
+          "extractClone": "Gemeinsamen Code herausziehen"
+        }
       },
       "pinpoint": {
         "label": "Screenshot",
@@ -36440,7 +36690,7 @@
         "import": "Import"
       },
       "time": {
-        "label": "Review",
+        "label": "Prüfung",
         "aria": "Verlauf: Wählen Sie einen Commit, um die von ihm geänderten Stationen zu markieren",
         "now": "Jetzt",
         "commitAria": "{title}, {at}",

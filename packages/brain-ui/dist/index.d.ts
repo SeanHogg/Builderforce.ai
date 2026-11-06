@@ -243,6 +243,14 @@ interface ChatErrorBannerLabels {
     modelKeepsCrashing: string;
     /** A continuation took too long - replaces `continuation_timed_out`; the words are kept and read with the next message. */
     continuationTimedOut: string;
+    /** The selected model is not answering - replaces the raw interruption. Must contain the literal `{model}` token. */
+    modelUnresponsive: string;
+    /** Open the composer's model menu so the person picks another model. */
+    chooseAnotherModel: string;
+    /** `provider_sign_in`: a provider on the person's own account refused the credential. Must contain the literal `{label}` token. */
+    providerSignIn: string;
+    /** The button that starts that provider's sign-in. Must contain the literal `{label}` token. */
+    signInToProvider: string;
     /** Open where on-device models are managed (removed) — offered beside "Pick a model"
      *  for a model that keeps crashing. */
     manageLocalModels: string;
@@ -287,6 +295,9 @@ interface ChatErrorBannerProps {
      *  raised it), where a model is picked or the mode changed. Also "try another model"
      *  for a model that keeps crashing. */
     onPickModel?: () => void;
+    /** For the `provider_sign_in` verdict: start that provider's sign-in. Omit where the surface cannot (the web
+     *  points at Settings in the message instead) - the button then isn't offered. */
+    onProviderSignIn?: (provider: string, label: string) => void;
     labels?: Partial<ChatErrorBannerLabels>;
     /** Extra styles merged into the banner container, for host-specific chrome. */
     style?: react__default.CSSProperties;
@@ -299,7 +310,7 @@ interface ChatErrorBannerProps {
      */
     role?: 'alert' | 'status';
 }
-declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, onProviderSignIn, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
 
 /**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than

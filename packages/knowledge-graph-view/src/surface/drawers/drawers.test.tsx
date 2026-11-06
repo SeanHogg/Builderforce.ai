@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The six drawers, each through the real surface state: what they show, what they send, and how they degrade. */
+/** The drawers (Resolve and Simulate are in resolveSimulate.drawers.test.tsx), each through the real surface state: what they show, what they send, and how they degrade. */
 import type { ComponentType } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -12,8 +12,6 @@ import { useSurface, type SurfaceModel } from '../useSurface';
 import { ApiPanel } from './ApiPanel';
 import { CoveragePanel } from './CoveragePanel';
 import { PatternsPanel } from './PatternsPanel';
-import { ResolvePanel } from './ResolvePanel';
-import { SimulatePanel } from './SimulatePanel';
 import { SyncPanel } from './SyncPanel';
 
 const graph = surfaceFixture();
@@ -54,7 +52,8 @@ describe('SyncPanel', () => {
         expect(screen.getByTestId('kg-sync-skipped').textContent).toContain('big.bin · 3.0 MB · too large');
         expect(document.querySelector('[data-source="coverage"]')!.textContent).toContain(L.surface.sourceStates.absent);
         expect(screen.getByText('no lcov')).toBeTruthy();
-        expect(screen.getByText(L.surface.syncExcluded.vendored)).toBeTruthy();
+        // A review that recorded no excluded folder says so; the static categories are no longer listed.
+        expect(screen.getByText(L.surface.sync.excludedNone)).toBeTruthy();
         expect(screen.getByRole('meter', { name: fillTemplate(L.surface.sync.barAria, { label: 'Files', local: 10, server: 8 }) })).toBeTruthy();
     });
 
@@ -205,73 +204,5 @@ describe('ApiPanel', () => {
         expect(revoke).toHaveBeenCalledWith('blob:x');
         fireEvent.click(screen.getByRole('button', { name: L.surface.api.contractTests }));
         expect(props.onCompose).toHaveBeenCalledWith(fillTemplate(L.surface.api.contractTestsText, { routes: 'POST /users, GET /users/:id' }));
-    });
-});
-
-describe('ResolvePanel', () => {
-    const unused: Finding = { id: 'u', kind: 'unused-file', pack: 'code', nodes: ['src:sys::cron/job.ts'] as never, severity: 'info', params: { count: 1, files: 1 }, requestKey: 'knowledgeGraph.fix.unusedFile' };
-
-    function open(f: Finding | null, props: Partial<PanelProps>) {
-        function Harness() {
-            const surface = useSurface(graph, null);
-            seen.surface = surface;
-            return (
-                <>
-                    <button type="button" onClick={() => surface.resolve(f)}>open</button>
-                    <ResolvePanel graph={graph} labels={L} surface={surface} onShow={vi.fn()} onClose={vi.fn()} {...props} />
-                </>
-            );
-        }
-        render(<Harness />);
-        fireEvent.click(screen.getByText('open'));
-    }
-
-    it('asks which finding when none was chosen', () => {
-        mount(ResolvePanel);
-        expect(screen.getByText(L.surface.resolve.empty)).toBeTruthy();
-    });
-
-    it('applies a codemod where the source offers one, and shows the branch', async () => {
-        const applyFix = vi.fn().mockResolvedValue({ branch: 'fix/unused', changed: ['cron/job.ts'] });
-        const onChanged = vi.fn();
-        open(unused, { source: { scopes: async () => [], load: async () => null, applyFix }, onChanged });
-        fireEvent.click(screen.getByRole('button', { name: L.surface.resolve.applyFix }));
-        const done = await screen.findByTestId('kg-resolve-done');
-        expect(applyFix).toHaveBeenCalledWith(unused);
-        expect(onChanged).toHaveBeenCalledTimes(1); // the graph reloads, so the fixed finding disappears
-        expect(done.textContent).toContain(fillTemplate(L.surface.resolve.applied, { branch: 'fix/unused' }));
-        expect(screen.getByText(L.surface.resolve.undoNote)).toBeTruthy();
-    });
-
-    it('prompts the agent for a kind with no codemod, or a source without applyFix', () => {
-        const onCompose = vi.fn();
-        open(graph.findings[0]!, { onCompose, source: { scopes: async () => [], load: async () => null, applyFix: vi.fn() } });
-        expect(screen.queryByRole('button', { name: L.surface.resolve.applyFix })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: L.surface.resolve.prompt }));
-        expect(onCompose).toHaveBeenCalledTimes(1);
-    });
-
-    it('reports a codemod that failed', async () => {
-        open(unused, { source: { scopes: async () => [], load: async () => null, applyFix: vi.fn().mockRejectedValue(new Error('x')) } });
-        fireEvent.click(screen.getByRole('button', { name: L.surface.resolve.applyFix }));
-        expect((await screen.findByRole('alert')).textContent).toBe(L.surface.resolve.failed);
-    });
-});
-
-describe('SimulatePanel', () => {
-    it('draws the path, and sends a request with the path and the typed values (never a result)', () => {
-        const props = mount(SimulatePanel);
-        const stops = seen.surface!.path.stops.map((s) => s.name);
-        expect(stops.length).toBeGreaterThan(1);
-        fireEvent.change(screen.getByLabelText(L.surface.simulate.valuesLabel), { target: { value: 'amount=100' } });
-        fireEvent.click(screen.getByRole('button', { name: L.surface.simulate.run }));
-        expect(props.onCompose).toHaveBeenCalledWith(fillTemplate(L.surface.simulate.requestText, { path: stops.join(' → '), values: 'amount=100' }));
-        expect(screen.getByRole('status').textContent).toBe(L.surface.simulate.sent);
-    });
-
-    it('cannot run without a composer, and says so', () => {
-        mount(SimulatePanel, { onCompose: undefined });
-        expect((screen.getByRole('button', { name: L.surface.simulate.run }) as HTMLButtonElement).disabled).toBe(true);
-        expect(screen.getByText(L.surface.simulate.noComposer)).toBeTruthy();
     });
 });

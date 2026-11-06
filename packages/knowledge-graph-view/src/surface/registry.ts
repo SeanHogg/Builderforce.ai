@@ -10,7 +10,9 @@ import type { ComponentType } from 'react';
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels, StringLabelKey } from '../labels';
 import type { LensDef } from '../lenses';
+import type { Revision } from '../revision';
 import type { FindingEvidence, KnowledgeGraphSource, SourceLocation, SyncStatus, ViewMode } from '../types';
+import type { HistoryRead } from './TimeSlider';
 import type { SurfaceModel } from './useSurface';
 
 /** What a row's `available` rule may depend on. */
@@ -73,10 +75,18 @@ export interface PanelProps {
     syncFailed?: boolean | undefined;
     /** Reads again through the same hook. */
     onRefreshSync?: (() => void) | undefined;
+    /** The root's ONE history read (the time slider's); the Sync drawer's delta feed draws it and fetches nothing. */
+    history?: HistoryRead | undefined;
+    /** When the root was last reviewed: the delta feed's line between applied and pending. */
+    lastReviewedAt?: string | undefined;
+    /** Starts the view's review flow again for this root (the confirm chip still asks); absent when the host cannot review. */
+    onResendSkipped?: (() => void) | undefined;
     labels: KnowledgeGraphLabels;
     surface: SurfaceModel;
     onShow(refs: string[]): void;
     onCompose?: ((text: string) => void) | undefined;
+    /** Before/After, when the host keeps a baseline; the Resolve flow repeats the header menu's toggle. */
+    revision?: { value: Revision; hasBefore: boolean; onChange(r: Revision): void } | undefined;
     /** Switches the scene (Patterns: Show in Tower). `cameras` are the ones available now. */
     onCamera?: ((mode: ViewMode) => void) | undefined;
     cameras?: readonly ViewMode[] | undefined;

@@ -86,9 +86,12 @@ const pathParams = (path: string): string[] => [...toOpenApiPath(path).matchAll(
 /** The request line of an endpoint, as a person reads it. */
 export const requestLine = (e: Route): string => `${e.method} ${e.path}`;
 
+/** Whether a method carries a request body. THE one rule (the parameter list, the curl line, the sandbox and the request builder all read it). */
+export const bodyMethod = (method: string): boolean => method === 'POST' || method === 'PUT' || method === 'PATCH';
+
 /** `curl` for an endpoint against `$BASE_URL`; a body-bearing method sends an empty JSON object. */
 export function curlOf(e: Route): string {
-    const body = e.method === 'POST' || e.method === 'PUT' || e.method === 'PATCH' ? " -H 'Content-Type: application/json' -d '{}'" : '';
+    const body = bodyMethod(e.method) ? " -H 'Content-Type: application/json' -d '{}'" : '';
     return `curl -X ${e.method === 'ALL' ? 'GET' : e.method} "$BASE_URL${e.path}"${body}`;
 }
 

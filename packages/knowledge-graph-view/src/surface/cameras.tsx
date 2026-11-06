@@ -4,14 +4,15 @@
  * `ViewMode`; `ViewSurface` and the switcher read this array and know no camera by name.
  */
 
-import { lazy, Suspense, useMemo, type ComponentType } from 'react';
+import { lazy, Suspense, useCallback, useMemo, type ComponentType } from 'react';
 import { fillTemplate } from '../labels';
 import { Graph2D } from '../graph2d/Graph2D';
 import { ListFallback } from '../ListFallback';
 import { MindMap } from '../map/MindMap';
 import { MAX_PIPES, nodeChannels, pipeWidthOf } from '../scene/channels';
 import { cssVar } from '../scene/themeColors';
-import { questionDef } from './questions';
+import { makeOverlay } from './overlays';
+import { litStations, questionDef } from './questions';
 import type { CameraDef, SceneProps } from './registry';
 import type { Station } from './stations';
 import { HeatGrid } from './HeatGrid';
@@ -88,20 +89,38 @@ function ListCamera(p: SceneProps) {
     );
 }
 
-function TransitCamera({ surface, labels, reducedMotion }: SceneProps) {
+const NO_PINS: readonly never[] = [];
+const noop = (): void => undefined;
+
+function TransitCamera({ surface, labels, reducedMotion, graph }: SceneProps) {
     const q = questionDef(surface.question);
-    const noteOf = (st: Station): string | null => {
-        if (surface.lit && !surface.lit.has(st.id)) return null;
+    // Inside a drilled level the map draws that level's own stations and lines, with the bindings unchanged,
+    // and the active question and lens are asked of THAT level's stations and lines.
+    const { drill } = surface, view = drill.view;
+    const overlay = useMemo(() => (view ? makeOverlay(surface.overlay.bindings, view.stations.stations) : surface.overlay), [view, surface.overlay]);
+    const stationId = view ? drill.selected : surface.station?.id ?? null;
+    const lit = useMemo(() => {
+        if (!view) return surface.lit;
+        const line = view.lines.lines[0] ?? null;
+        return litStations(surface.question, view.stations.stations, { lines: view.lines, line, selected: stationId ? view.stations.byId.get(stationId) ?? null : null, family: surface.family });
+    }, [view, surface.lit, surface.question, surface.family, stationId]);
+    // Stable, so the map's label placement is only redone when what it says changes.
+    const noteOf = useCallback((st: Station): string | null => {
+        if (lit && !lit.has(st.id)) return null;
         const note = q.note(st);
         if (!note) return null;
         const value = note.key === 'layers' ? labels.surface.layers[note.value as keyof typeof labels.surface.layers] ?? note.value : note.value;
         return fillTemplate(labels.surface.notes[note.key], { value });
-    };
+    }, [lit, q, labels]);
+    const levelNote = drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
     return (
         <TransitMap
-            stations={surface.stations} lines={surface.lines} overlay={surface.overlay} labels={labels} lit={surface.lit}
-            lineId={surface.line?.id ?? null} selectedStation={surface.station?.id ?? null} pins={surface.pins} noteOf={noteOf}
-            reducedMotion={reducedMotion} onSelectStation={surface.selectStation} onSelectLine={surface.selectLine} label={labels.regionLabel}
+            stations={view?.stations ?? surface.stations} lines={view?.lines ?? surface.lines} overlay={overlay} labels={labels} lit={lit}
+            lineId={view ? view.lines.lines[0]?.id ?? null : surface.line?.id ?? null} selectedStation={stationId}
+            pins={view ? NO_PINS : surface.pins} noteOf={noteOf} reducedMotion={reducedMotion}
+            onSelectStation={view ? drill.select : surface.selectStation} onSelectLine={view ? noop : surface.selectLine} label={labels.regionLabel}
+            graph={graph} order={view?.order} leaves={view?.leaves} levelNote={levelNote} question={surface.question} loading={drill.loading}
+            canEnter={drill.canEnter} onEnter={drill.enter} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel}
         />
     );
 }

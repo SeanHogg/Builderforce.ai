@@ -21,6 +21,7 @@ const MAX_REFS_PER_COMMIT = 200;
 export function historyOf(commits: readonly RecentCommit[], rootId: string): KnowledgeHistoryResult["commits"] {
   return commits.map((c) => ({
     sha: c.sha, at: c.at, title: c.title,
+    ...(c.author ? { author: c.author } : {}),
     refs: c.paths.slice(0, MAX_REFS_PER_COMMIT).map((p) => srcRef(rootId, p)),
   }));
 }

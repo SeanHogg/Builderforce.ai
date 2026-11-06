@@ -3,15 +3,17 @@
  * assistive tech reads the value), and the honest "not set up" block. Tokens only.
  */
 
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
+import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { card, heading, muted } from '../../styles';
 
-export function Kpi({ label, value, tone }: { label: string; value: ReactNode; tone?: ThemeTone }) {
+export function Kpi({ label, value, tone, badge }: { label: string; value: ReactNode; tone?: ThemeTone; /** Where the number comes from (a provenance badge). */ badge?: ReactNode }) {
     return (
         <div style={{ ...card, padding: 8, display: 'grid', gap: 2 }}>
             <span style={muted}>{label}</span>
             <strong style={{ fontSize: 18, color: tone ? cssVar(tone) : cssVar('text') }}>{value}</strong>
+            {badge && <span style={{ justifySelf: 'start' }}>{badge}</span>}
         </div>
     );
 }
@@ -45,4 +47,15 @@ export function Section({ title, children }: { title: string; children: ReactNod
             {children}
         </section>
     );
+}
+
+/** A state in words, coloured by its tone (never colour alone: the text says it). */
+export function StateLabel({ tone, children, ...rest }: Omit<HTMLAttributes<HTMLSpanElement>, 'style' | 'className'> & { tone: ThemeTone; children: ReactNode }) {
+    return <span {...rest} style={{ fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', color: cssVar(tone) }}>{children}</span>;
+}
+
+/** What a control says when this host cannot do it (no composer, no history, no review): text, never a dead button. */
+export function Unavailable({ labels, label, testId }: { labels: KnowledgeGraphLabels; label?: string | undefined; testId?: string | undefined }) {
+    const t = labels.surface.unavailable;
+    return <span role="status" data-testid={testId} style={muted}>{label === undefined ? t.notHere : fillTemplate(t.labelled, { label })}</span>;
 }

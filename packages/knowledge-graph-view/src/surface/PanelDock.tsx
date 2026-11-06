@@ -11,7 +11,7 @@ import type { KnowledgeGraphLabels } from '../labels';
 import { Panel } from '../Sheet';
 import type { KnowledgeGraphSource, KnowledgePanelRenderer, ViewMode } from '../types';
 import { HEADER_PANELS, PANELS, type PanelId } from './panels';
-import type { PanelDef, SurfaceEnv } from './registry';
+import type { PanelDef, PanelProps, SurfaceEnv } from './registry';
 import type { SyncRead } from './syncPill';
 import { Menu, Segmented } from './ui';
 import type { SurfaceModel } from './useSurface';
@@ -73,23 +73,28 @@ export interface PanelDrawerProps {
     diagnosticsText?: (() => string) | undefined;
     /** The root's ONE sync read (`useSyncStatus`), handed to the Sync drawer. */
     sync?: SyncRead | undefined;
+    history?: PanelProps['history'];
+    lastReviewedAt?: string | undefined;
+    onResendSkipped?: (() => void) | undefined;
     onCamera?: ((mode: ViewMode) => void) | undefined;
     cameras?: readonly ViewMode[] | undefined;
     onShow(refs: string[]): void;
     onCompose?: ((text: string) => void) | undefined;
+    /** Before/After for the Resolve flow (the same state as the header menu). */
+    revision?: PanelProps['revision'];
     /** Overrides the registry (tests); the app uses the real one. */
     panels?: readonly PanelDef[];
 }
 
 export function PanelDrawer({
-    graph, env, labels, surface, panel, onPanel, renderPanel, source, rootId, rootTitle, onChanged, diagnosticsText, sync, onCamera, cameras, onShow, onCompose, panels = PANELS,
+    graph, env, labels, surface, panel, onPanel, renderPanel, source, rootId, rootTitle, onChanged, diagnosticsText, sync, history, lastReviewedAt, onResendSkipped, onCamera, cameras, onShow, onCompose, revision, panels = PANELS,
 }: PanelDrawerProps) {
     const open = availablePanels(graph, env, panels).find((p) => p.id === panel) ?? null;
     const Body = open?.component;
     const subtitle = open ? (labels.surface.drawerSubtitle as Record<string, string | undefined>)[open.id] : undefined;
     return (
         <Panel render={renderPanel} open={!!open} compact={env.compact} closeLabel={labels.close} title={open ? labels[open.labelKey] : ''} subtitle={subtitle} width={500} onClose={() => onPanel(null)}>
-            {Body && <Body graph={graph} source={source} rootId={rootId} rootTitle={rootTitle} onChanged={onChanged} diagnosticsText={diagnosticsText} sync={sync?.status} syncFailed={sync?.failed} onRefreshSync={sync?.refresh} onCamera={onCamera} cameras={cameras} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} onClose={() => onPanel(null)} />}
+            {Body && <Body graph={graph} source={source} rootId={rootId} rootTitle={rootTitle} onChanged={onChanged} diagnosticsText={diagnosticsText} sync={sync?.status} syncFailed={sync?.failed} onRefreshSync={sync?.refresh} history={history} lastReviewedAt={lastReviewedAt} onResendSkipped={onResendSkipped} onCamera={onCamera} cameras={cameras} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} revision={revision} onClose={() => onPanel(null)} />}
         </Panel>
     );
 }

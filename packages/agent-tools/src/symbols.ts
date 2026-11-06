@@ -49,6 +49,12 @@ export interface CodeSymbol {
   line: number;
   /** Visible outside its file/module (an `export`, a capitalised Go name, a `pub` item…). */
   exported: boolean;
+  /**
+   * The type a member belongs to: the class of a JS/TS or Python method, the receiver type of a Go
+   * method, the target of a Rust `impl` (or the `trait` an item is declared in). Absent on a
+   * top-level definition and in languages whose members are not attributed.
+   */
+  container?: string;
 }
 
 /** Definitions returned per file — a generated or data file must not flood a map. */
@@ -130,45 +136,66 @@ const JS_ABSTRACT_METHOD = new RegExp(
 const JS_KEYWORDS = new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
 
 function extractJs(lines: string[], out: CodeSymbol[]): void {
-  let inClass = false;
+  // The class whose body we are in (its closing brace sits at column 0).
+  let cls: string | undefined;
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line)) inClass = false;
+    if (/^\}/.test(line)) cls = undefined;
     for (const rule of JS_RULES) {
       const m = rule.re.exec(line);
       if (!m) continue;
       const exported = !!m[1];
       // A non-exported declaration only counts at column 0 (top level).
       if (!exported && /^\s/.test(line)) continue;
-      out.push({ name: group(m, 2).replace(/^["']|["']$/g, ""), kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class") inClass = true;
+      const name = group(m, 2).replace(/^["']|["']$/g, "");
+      out.push({ name, kind: rule.kind, line: lineNo, exported });
+      if (rule.kind === "class") cls = name;
       return;
     }
-    if (!inClass) return;
+    if (cls === undefined) return;
     const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false });
+    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
   });
 }
 
 function extractPython(lines: string[], out: CodeSymbol[]): void {
+  // The top-level class we are in, and the indent its members use (the first member fixes it).
+  let cls: string | undefined;
+  let memberIndent: string | undefined;
   eachLine(lines, out, (line, lineNo) => {
     const m = /^(\s*)(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)/.exec(line);
+    const indent = m ? group(m, 1) : (/^(\s*)\S/.exec(line)?.[1] ?? "");
+    // A statement at column 0 other than a decorator or a comment ends the class body.
+    if (indent === "" && /^[^\s@#)\]}]/.test(line) && !(m && group(m, 2) === "class")) { cls = undefined; memberIndent = undefined; }
     if (!m) return;
-    const indent = group(m, 1);
-    // Only the top level and one class level deep — a closure is not part of the map.
-    if (indent.length > 4 && !indent.startsWith("\t")) return;
     const name = group(m, 3);
-    const kind: SymbolKind = group(m, 2) === "class" ? "class" : indent.length > 0 ? "method" : "function";
-    out.push({ name, kind, line: lineNo, exported: !name.startsWith("_") });
+    if (group(m, 2) === "class") {
+      if (indent === "") { cls = name; memberIndent = undefined; out.push({ name, kind: "class", line: lineNo, exported: !name.startsWith("_") }); return; }
+      // A class one level inside a class.
+      if (cls !== undefined && (memberIndent === undefined || indent === memberIndent)) {
+        memberIndent ??= indent;
+        out.push({ name, kind: "class", line: lineNo, exported: !name.startsWith("_"), container: cls });
+      }
+      return;
+    }
+    if (indent === "") { out.push({ name, kind: "function", line: lineNo, exported: !name.startsWith("_") }); return; }
+    // An indented def is a method only directly in a top-level class; a closure (in a function, or in a method) is not part of the map.
+    if (cls === undefined) return;
+    memberIndent ??= indent;
+    if (indent === memberIndent) out.push({ name, kind: "method", line: lineNo, exported: !name.startsWith("_"), container: cls });
   });
 }
+
+/** The type name of a Go receiver: `(r *Repo[T])` → `Repo`. */
+const goReceiver = (receiver: string): string | undefined => /\(\s*(?:[A-Za-z_]\w*\s+)?\*?\s*([A-Za-z_]\w*)/.exec(receiver)?.[1];
 
 function extractGo(lines: string[], out: CodeSymbol[]): void {
   eachLine(lines, out, (line, lineNo) => {
     const fn = /^func\s+(\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(line);
     if (fn) {
       const name = group(fn, 2);
-      out.push({ name, kind: fn[1] ? "method" : "function", line: lineNo, exported: /^[A-Z]/.test(name) });
+      const container = fn[1] ? goReceiver(fn[1]) : undefined;
+      out.push({ name, kind: fn[1] ? "method" : "function", line: lineNo, exported: /^[A-Z]/.test(name), ...(container ? { container } : {}) });
       return;
     }
     const ty = /^type\s+([A-Za-z_]\w*)\s+(struct|interface)?/.exec(line);
@@ -180,16 +207,34 @@ function extractGo(lines: string[], out: CodeSymbol[]): void {
   });
 }
 
+/** The type an `impl` block is for: `impl<T> Trait for Foo<T> {` and `impl Foo {` are both `Foo`. */
+function rustImplTarget(line: string): string | undefined {
+  const m = /^\s*(?:unsafe\s+)?impl\b(?:\s*<[^>]*>)?\s+([^{]*)/.exec(line);
+  if (!m) return undefined;
+  const text = group(m, 1).replace(/\bwhere\b.*$/, "");
+  const target = text.includes(" for ") ? text.slice(text.indexOf(" for ") + 5) : text;
+  return /(?:[A-Za-z_]\w*::)*([A-Za-z_]\w*)/.exec(target.replace(/^[\s&]+(?:mut\s+|dyn\s+)?/, ""))?.[1];
+}
+
 function extractRust(lines: string[], out: CodeSymbol[]): void {
+  // The impl (or trait) block we are in; its closing brace sits at column 0.
+  let block: string | undefined;
   eachLine(lines, out, (line, lineNo) => {
+    if (/^\}/.test(line)) block = undefined;
+    const target = rustImplTarget(line);
+    if (target) { block = target; return; }
     const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line);
     if (!m) return;
     const word = group(m, 3);
+    const indented = group(m, 1).length > 0;
     const kind: SymbolKind =
-      word === "fn" ? (group(m, 1).length > 0 ? "method" : "function")
+      word === "fn" ? (indented ? "method" : "function")
         : word === "mod" ? "module"
           : (word as SymbolKind);
-    out.push({ name: group(m, 4), kind, line: lineNo, exported: !!m[2] });
+    const name = group(m, 4);
+    const container = kind === "method" ? block : undefined;
+    out.push({ name, kind, line: lineNo, exported: !!m[2], ...(container ? { container } : {}) });
+    if (word === "trait" && !indented) block = name;
   });
 }
 

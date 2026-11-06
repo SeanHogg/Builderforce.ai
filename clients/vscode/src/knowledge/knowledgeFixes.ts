@@ -20,14 +20,17 @@
  * Because the tree was clean, HEAD IS the state before, so nothing of the person's is lost.
  */
 
-import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { knipFixCommand } from "@builderforce/agent-tools";
 import { sourcePathOf } from "@builderforce/agent-tools/knowledge";
 import { runGit } from "@builderforce/agent-tools/node-git-history";
 import type { Finding } from "@seanhogg/builderforce-memory/knowledge";
+import { assertInsideRoot } from "./knowledgeFixPaths";
 import type { KnowledgeFixResult } from "./knowledgeProtocol";
+import { runShell } from "./knowledgeShell";
+import { fixText } from "./knowledgeFixText";
+import { snapshotFix, type FixSnapshot } from "./knowledgeFixUndo";
 
 /** The finding kinds a codemod exists for, and the knip fix types each runs. */
 const FIXABLE: Record<string, readonly ("exports" | "files")[]> = {
@@ -36,8 +39,9 @@ const FIXABLE: Record<string, readonly ("exports" | "files")[]> = {
 };
 
 const KNIP_TIMEOUT_MS = 10 * 60_000;
-const OUTPUT_CAP = 256 * 1024;
-const FIX_NOTE = "knip removes every unused export in each of these files, not only the one the finding names.";
+
+/** A git step that worked, or the reason it did not (git's own message). */
+export type GitResult = { ok: true } | { ok: false; reason: string };
 
 /** One changed path of `git status`: its two-letter code and root-relative path. */
 export interface StatusEntry { code: string; path: string }
@@ -47,14 +51,28 @@ export interface FixPorts {
   status(): Promise<StatusEntry[] | undefined>;
   /** True when the repository has a HEAD commit; false on any failure. */
   hasHead(): Promise<boolean>;
+  /** `git switch -c name`: the branch was created and checked out (changes carry over), or why not (the fix then applies in place and says so). */
+  createBranch?(name: string): Promise<GitResult>;
+  /** The branch HEAD is on; undefined when detached or git failed. */
+  currentBranch?(): Promise<string | undefined>;
+  /** `git switch branch`: back to a branch (undo returns the person to where they started). */
+  switchTo?(branch: string): Promise<GitResult>;
   /** Root-relative files with unsaved changes in an editor. */
   dirtyBuffers(): string[];
   /** Starts recording the person's saves under the root; `stop()` ends it and returns the root-relative paths saved. */
   watchSaves(): { stop(): string[] };
   /** Runs a shell command in the root; rejects when it could not run or failed. */
   run(command: string): Promise<void>;
-  /** `git checkout HEAD -- paths`; rejects on failure. */
+  /** `git --literal-pathspecs checkout HEAD -- paths`; rejects on failure or on a path that reaches outside the root. */
   restore(paths: string[]): Promise<void>;
+  /** The commit HEAD is at; undefined when git failed. */
+  headSha?(): Promise<string | undefined>;
+  /** Per path, the git blob sha of the file as it is now, or "missing" when there is no file. */
+  hashObjects?(paths: string[]): Promise<Record<string, string>>;
+  /** Which of the paths exist in HEAD (`git ls-tree`). */
+  inHead?(paths: string[]): Promise<Set<string>>;
+  /** Takes paths out of the index without touching the files. */
+  unstage?(paths: string[]): Promise<void>;
   /** Deletes files knip created; rejects on failure. */
   remove(paths: string[]): Promise<void>;
 }
@@ -91,34 +109,56 @@ export function knipRanOk(code: number | null, stdout: string, stderr: string): 
 const locks = new Map<string, Promise<unknown>>();
 
 /** Runs `work` after every earlier fix of the same root finished. */
-function serialized<T>(rootId: string, work: () => Promise<T>): Promise<T> {
+export function serialized<T>(rootId: string, work: () => Promise<T>): Promise<T> {
   const run = (locks.get(rootId) ?? Promise.resolve()).catch(() => undefined).then(work);
   locks.set(rootId, run);
   void run.finally(() => { if (locks.get(rootId) === run) locks.delete(rootId); }).catch(() => undefined);
   return run;
 }
 
-export function applyKnipFix(ports: FixPorts, rootId: string, finding: Finding): Promise<KnowledgeFixResult> {
+/** Applies the finding's codemod. `record` (when the host can undo) stores the snapshot taken under the lock and returns the id the result carries. */
+export function applyKnipFix(ports: FixPorts, rootId: string, finding: Finding, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
   const fixTypes = FIXABLE[finding.kind];
-  if (!fixTypes) return Promise.reject(new Error(`There is no automatic fix for "${finding.kind}".`));
+  if (!fixTypes) return Promise.reject(new Error(fixText.noAutomaticFix(finding.kind)));
   const wanted = new Set(finding.nodes.flatMap((ref) => {
     const path = sourcePathOf(ref, rootId);
     return path ? [path] : [];
   }));
-  if (wanted.size === 0) return Promise.reject(new Error("The finding names no file of this folder."));
-  return serialized(rootId, () => fix(ports, wanted, fixTypes));
+  if (wanted.size === 0) return Promise.reject(new Error(fixText.noFileOfFolder()));
+  return serialized(rootId, () => fix(ports, wanted, fixTypes, fixBranchName(finding, wanted, new Date()), record));
 }
 
-async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: readonly ("exports" | "files")[]): Promise<KnowledgeFixResult> {
-  if (!(await ports.hasHead())) throw new Error("This repository has no commit yet, so a fix cannot be undone safely. Make a first commit, then try again.");
+/**
+ * `fix/<kind>-<slug>-<yyyymmddhhmmss>-<hash>`: the kind, the first file's name, the time to the second
+ * and a hash of the finding id, so two fixes of one finding (or two findings on one file) never
+ * collide on a branch name. Pure.
+ */
+export function fixBranchName(finding: Pick<Finding, "id" | "kind">, wanted: ReadonlySet<string>, now: Date): string {
+  const first = [...wanted][0] ?? "";
+  const clean = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const slug = clean((first.split("/").pop() ?? "").replace(/\.[^.]*$/, "")).slice(0, 24);
+  let h = 5381;
+  for (const c of finding.id) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  const stamp = now.toISOString().replace(/\D/g, "").slice(0, 14);
+  return `fix/${clean(finding.kind)}-${slug ? slug + "-" : ""}${stamp}-${h.toString(36).padStart(6, "0").slice(0, 8)}`;
+}
+
+async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: readonly ("exports" | "files")[], branchName: string, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
+  if (!(await ports.hasHead())) throw new Error(fixText.noCommit());
   const before = await ports.status();
-  if (before === undefined) throw new Error("Git status could not be read, so nothing was changed.");
+  if (before === undefined) throw new Error(fixText.statusUnreadable());
   if (before.length > 0) {
-    throw new Error(`The work tree has changes (${before.slice(0, 3).map((e) => e.path).join(", ")}${before.length > 3 ? ", ..." : ""}). Commit or stash your changes first, then try again.`);
+    throw new Error(fixText.treeChanges(`${before.slice(0, 3).map((e) => e.path).join(", ")}${before.length > 3 ? ", ..." : ""}`));
   }
   const buffers = ports.dirtyBuffers();
-  if (buffers.length > 0) throw new Error(`Save or close the editors with unsaved changes first: ${buffers.slice(0, 3).join(", ")}.`);
+  if (buffers.length > 0) throw new Error(fixText.saveFirst(buffers.slice(0, 3).join(", ")));
 
+  // Branch first (the tree is clean, so nothing is carried that is not the fix). A failure applies in place AND is reported.
+  const origin = ports.createBranch ? await ports.currentBranch?.() : undefined;
+  const made = ports.createBranch ? await ports.createBranch(branchName) : undefined;
+  const branch = made?.ok ? branchName : undefined;
+  const branchError = made && !made.ok ? made.reason : undefined;
+  const leaveBranch = async (): Promise<void> => { if (branch && origin) await ports.switchTo?.(origin); };
   const watch = ports.watchSaves();
   let runError: unknown;
   let saved: string[] = [];
@@ -138,16 +178,22 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, fixTypes: reado
   }
   if (restoreError !== undefined) {
     const why = restoreError instanceof Error ? restoreError.message : String(restoreError);
-    throw new Error(`The fix could not be undone cleanly: ${why} Check the work tree with git status.`);
+    await leaveBranch().catch(() => undefined);
+    throw new Error(fixText.notUndoneCleanly(why));
   }
-  if (runError !== undefined) throw runError;
-  return { changed: outcome!.changed, ...(outcome!.conflicts.length > 0 ? { conflicts: outcome!.conflicts } : {}), note: FIX_NOTE };
+  if (runError !== undefined) {
+    await leaveBranch().catch(() => undefined);
+    throw runError;
+  }
+  const snapshot = record ? await snapshotFix(ports, outcome!.changed, branch ? origin : undefined) : undefined;
+  const fixId = snapshot && record ? record(snapshot) : undefined;
+  return { ...(branch ? { branch } : {}), ...(branchError ? { branchError } : {}), ...(fixId ? { fixId } : {}), changed: outcome!.changed, ...(outcome!.conflicts.length > 0 ? { conflicts: outcome!.conflicts } : {}), note: fixText.fixNote() };
 }
 
 /** After knip: put every stray change back (except what the person saved) and report what stayed. */
 async function settle(ports: FixPorts, wanted: ReadonlySet<string>, saved: ReadonlySet<string>): Promise<{ changed: string[]; conflicts: string[] }> {
   const after = await ports.status();
-  if (after === undefined) throw new Error("Git status could not be read after the fix.");
+  if (after === undefined) throw new Error(fixText.statusUnreadableAfter());
   const changed: string[] = [];
   const conflicts: string[] = [];
   const restore: string[] = [];
@@ -163,15 +209,27 @@ async function settle(ports: FixPorts, wanted: ReadonlySet<string>, saved: Reado
 }
 
 /** The git, file and shell ports of a folder; the editor-bound ones (`dirtyBuffers`, `watchSaves`) come from the caller. */
-export function nodeFixPorts(rootPath: string): Pick<FixPorts, "status" | "hasHead" | "run" | "restore" | "remove"> {
+export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "run" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage">> {
   const orThrow = async (args: string[]): Promise<string> => {
     const run = await runGit(rootPath, args);
-    if (run.stdout === undefined) throw new Error(`git ${args[0]} failed${run.stderr ? `: ${run.stderr.trim().slice(0, 300)}` : ""}`);
+    if (run.stdout === undefined) throw new Error(fixText.gitFailed(args[0] ?? "", run.stderr ? `: ${run.stderr.trim().slice(0, 300)}` : ""));
     return run.stdout;
   };
   return {
     async hasHead() {
       return (await runGit(rootPath, ["rev-parse", "--verify", "HEAD"])).stdout !== undefined;
+    },
+    async createBranch(name) {
+      const run = await runGit(rootPath, ["switch", "-c", name]);
+      return run.stdout !== undefined ? { ok: true } : { ok: false, reason: (run.stderr ?? "").trim().slice(0, 300) };
+    },
+    async currentBranch() {
+      const run = await runGit(rootPath, ["symbolic-ref", "--short", "-q", "HEAD"]);
+      return run.stdout?.trim() || undefined;
+    },
+    async switchTo(branch) {
+      const run = await runGit(rootPath, ["switch", branch]);
+      return run.stdout !== undefined ? { ok: true } : { ok: false, reason: (run.stderr ?? "").trim().slice(0, 300) };
     },
     async status() {
       const prefix = await runGit(rootPath, ["rev-parse", "--show-prefix"]);
@@ -179,34 +237,36 @@ export function nodeFixPorts(rootPath: string): Pick<FixPorts, "status" | "hasHe
       if (prefix.stdout === undefined || out.stdout === undefined) return undefined;
       return parseStatusZ(out.stdout, prefix.stdout.trim());
     },
-    run: (command) => runShell(command, rootPath),
-    restore: async (paths) => { await orThrow(["checkout", "HEAD", "--", ...paths]); },
-    remove: async (paths) => { for (const p of paths) await rm(join(rootPath, p), { force: true }); },
+    run: (command) => runShell(command, rootPath, { ok: knipRanOk, timeoutMs: KNIP_TIMEOUT_MS }),
+    // Literal pathspecs: a name like `app/[id]/page.tsx` or `a*.ts` is that file, never a glob.
+    async restore(paths) {
+      for (const p of paths) await assertInsideRoot(rootPath, p);
+      await orThrow(["--literal-pathspecs", "checkout", "HEAD", "--", ...paths]);
+    },
+    async remove(paths) {
+      for (const p of paths) await assertInsideRoot(rootPath, p);
+      for (const p of paths) await rm(join(rootPath, p), { force: true });
+    },
+    async headSha() {
+      const out = await runGit(rootPath, ["rev-parse", "--verify", "HEAD"]);
+      return out.stdout?.trim() || undefined;
+    },
+    async hashObjects(paths) {
+      const out: Record<string, string> = {};
+      for (const p of paths) {
+        await assertInsideRoot(rootPath, p);
+        const run = await runGit(rootPath, ["hash-object", "--", p]);
+        out[p] = run.stdout?.trim() || "missing";
+      }
+      return out;
+    },
+    async inHead(paths) {
+      const run = await runGit(rootPath, ["--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", ...paths]);
+      if (run.stdout === undefined) throw new Error(fixText.lsTreeFailed());
+      return new Set(run.stdout.split("\0").filter((x) => x !== ""));
+    },
+    async unstage(paths) {
+      await orThrow(["--literal-pathspecs", "rm", "-r", "-f", "--cached", "--ignore-unmatch", "--", ...paths]);
+    },
   };
-}
-
-/** Runs `command` through the shell; kills the whole process tree on timeout; rejects unless knip ran. */
-function runShell(command: string, cwd: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const windows = process.platform === "win32";
-    const child = spawn(command, { cwd, shell: true, windowsHide: true, detached: !windows, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    const keep = (text: string, chunk: Buffer): string => (text.length < OUTPUT_CAP ? text + chunk.toString("utf8") : text);
-    child.stdout.on("data", (c: Buffer) => { stdout = keep(stdout, c); });
-    child.stderr.on("data", (c: Buffer) => { stderr = keep(stderr, c); });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      if (windows && child.pid) spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
-      else if (child.pid) { try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); } }
-    }, KNIP_TIMEOUT_MS);
-    child.on("error", (error) => { clearTimeout(timer); reject(new Error(`knip could not run: ${error.message}`)); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (timedOut) reject(new Error(`knip did not finish within ${KNIP_TIMEOUT_MS / 60_000} minutes.`));
-      else if (knipRanOk(code, stdout, stderr)) resolve();
-      else reject(new Error(`knip could not run (exit ${code}): ${(stderr || stdout).trim().slice(-500)}`));
-    });
-  });
 }

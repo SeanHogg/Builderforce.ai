@@ -36229,8 +36229,37 @@
         "familyOnly": "仅 {family}",
         "clearFamily": "清除 {family} 筛选",
         "missingFiles": "服务器上缺少 {count} 个文件。",
+        "tooLarge": "{count} 个文件过大，无法存储。",
         "diagnose": "诊断",
         "controls": "场景控制"
+      },
+      "map": {
+        "wall": "HTTP 边界",
+        "describes": "描述",
+        "doc": "文档",
+        "deadEnd": "死胡同：没有任何东西读取它",
+        "reported": "已报告 ✓",
+        "noSymbolsNote": "此图中没有符号，因此包以下的层级显示文件。",
+        "world": "整张地图",
+        "drillReset": "地图已更改，因此视图已退出“{name}”。",
+        "moreStops": "还有 {count} 站",
+        "satelliteAria": "{name}，位于 {parent} 内",
+        "card": {
+          "close": "关闭",
+          "issueMore": "还有 {count} 项",
+          "goInside": "进入 ↓",
+          "unfold": "展开 {count}",
+          "fold": "收起",
+          "whoCalls": "谁调用它？",
+          "apiContract": "API 契约",
+          "patterns": "模式",
+          "noSymbols": "这里没有符号：更深处没有内容。",
+          "leaf": "不在此层级内",
+          "loading": "正在读取符号…"
+        },
+        "stats": { "issues": "问题", "complexity": "复杂度", "coverage": "覆盖率", "usage": "使用量" },
+        "bands": { "symbol": "类", "methods": "方法", "errors": "错误与测试", "leaves": "离开此层级", "body": "此函数", "callees": "它调用的内容" },
+        "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "LLM 提供商", "github": "GitHub API", "stripe": "支付", "mail": "电子邮件", "slack": "Slack", "oauth": "登录提供商" }
       },
       "rail": {
         "heading": "从入口出发的线路",
@@ -36290,6 +36319,29 @@
         "excludedTitle": "已排除的文件夹",
         "excludedNote": "这些文件夹永远不会被读取。",
         "barAria": "{label}：本地 {local}，服务器 {server}",
+        "deltaLoading": "正在读取提交…",
+        "parityTitle": "{local} / {server}",
+        "countPair": "{local} / {server}",
+        "parityAll": "服务器已包含全部。",
+        "parityMissing": "{count} 项尚未上传到服务器。",
+        "parityTooLarge": "其中 {count} 个因过大而无法存储。",
+        "deltaTitle": "上次审查以来的变更",
+        "deltaEmpty": "没有可显示的提交。",
+        "deltaSummary": "{count} 项尚未体现在图中",
+        "deltaPending": "待处理",
+        "deltaApplied": "已体现",
+        "deltaRow": "{sha} · {count} 个文件 · {when}",
+        "deltaRowAuthor": "{sha} · {author} · {count} 个文件 · {when}",
+        "actionSetUpV8": "设置 v8",
+        "actionTurnOn": "开启",
+        "actionGenerate": "生成",
+        "setUpV8Request": "为项目设置 v8 覆盖率：添加覆盖率脚本和配置，开启覆盖率运行测试，并报告生成的覆盖率文件。",
+        "turnOnRequest": "为项目开启运行时跟踪：为入口点添加跟踪，运行一次并报告跟踪的写入位置。",
+        "excludedNone": "没有被排除的文件夹。",
+        "excludedFolder": "{path}",
+        "diagnosticsTitle": "诊断",
+        "resend": "重新审查以重试被跳过的文件",
+        "resendNote": "为此文件夹重新开始整个审查，需要您先确认。",
         "refresh": "刷新"
       },
       "syncSteps": {
@@ -36299,6 +36351,18 @@
         "match": "服务器与本地一致",
         "analyse": "已收集数据源",
         "skipped": "无跳过项"
+      },
+      "syncStepDetails": {
+        "walk": "读取文件夹；忽略和排除的文件夹不会读取。",
+        "graph": "每个文件的导入、复杂度和模式。",
+        "upload": "将变更内容分小批发送到服务器。",
+        "match": "将文件、边和文档数量与服务器比对。",
+        "analyse": "覆盖率、历史、所有者和 OpenAPI（如有）。",
+        "skipped": "无法存储的文件会被列出，而不是丢弃。"
+      },
+      "unavailable": {
+        "notHere": "此处不可用",
+        "labelled": "{label}：此处不可用"
       },
       "syncStates": {
         "ok": "完成",
@@ -36344,7 +36408,23 @@
         "runWithValues": "带值运行",
         "promptTests": "请求编写测试",
         "promptText": "为 {file} 编写测试。它的复杂度为 {complexity}，行覆盖率为 {coverage}。请覆盖未测试的分支，运行测试并报告新的覆盖率。",
-        "noComplexity": "尚未测量复杂度。"
+        "noComplexity": "尚未测量复杂度。",
+        "shapeTitle": "测试构成",
+        "shapeNone": "图中没有测试文件，因此未测量构成。",
+        "shapeAria": "{unit} 个单元测试，{integration} 个集成测试，{e2e} 个端到端测试",
+        "shapeSegment": "{kind} {count}",
+        "unit": "单元",
+        "integration": "集成",
+        "e2e": "端到端",
+        "configTitle": "覆盖率的配置位置",
+        "configNone": "未找到包含代码的包。",
+        "configAll": "每个包都已配置覆盖率。",
+        "configNowhere": "没有任何包配置了覆盖率。",
+        "configOnly": "仅 {packages} 配置了覆盖率，其他位置未测量覆盖率。",
+        "applyV8": "应用：在 {count} 个包中启用 v8 覆盖率",
+        "applyV8Request": "在这 {count} 个包中设置 v8 覆盖率：{packages}。为每个包添加覆盖率配置和脚本，开启覆盖率运行测试并报告新的覆盖率。",
+        "quadrant": "复杂 · 未测试",
+        "namesMore": "{names} +{count}"
       },
       "patterns": {
         "notSetUpTitle": "模式未设置",
@@ -36365,6 +36445,12 @@
         "notSetUpTitle": "未找到端点",
         "notSetUpBody": "未找到路由注册。路由读取自 Hono 和 Express 的注册。",
         "kpiEndpoints": "端点",
+        "kpiParams": "参数",
+        "kpiCallers": "调用方",
+        "kpiTests": "测试文件",
+        "kpiContract": "契约",
+        "pickFile": "在地图上选择 {name}",
+        "paramWithNote": "{where} · {note}",
         "kpiUndocumented": "未文档化",
         "contractMissing": "此文件夹中没有 OpenAPI 契约，因此所有端点都未文档化。",
         "documented": "已文档化",
@@ -36379,41 +36465,205 @@
         "exportPostman": "导出 Postman 集合",
         "contractTests": "契约测试",
         "contractTestsText": "根据 OpenAPI 骨架为这些端点编写契约测试，运行并报告每项结果：{routes}。",
-        "groupAria": "{file}：{count} 个端点"
+        "groupAria": "{file}：{count} 个端点",
+
+        "groupInContract": "已在契约中（{count}）",
+
+        "groupUndocumented": "未记录（{count}）",
+
+        "selectEndpoint": "将 {route} 加入契约测试",
+
+        "selectedCount": "已为契约测试选择 {selected} / {total} 个端点",
+
+        "selectAtLeastOne": "请至少选择一个端点以生成契约测试。",
+
+        "detailParams": "参数",
+
+        "paramPath": "路径",
+
+        "paramQuery": "查询",
+
+        "paramBody": "请求体",
+
+        "paramBodyNote": "JSON 请求体；其结构未能从代码中提取。",
+
+        "noParams": "此路由没有参数。",
+
+        "detailTested": "已测试的响应",
+
+        "testedYes": "已测试 ✓",
+
+        "testedNo": "未测试 ✗",
+
+        "testedBy": "有测试文件引用了该处理函数：{names}",
+
+        "testedNone": "没有测试文件引用该处理函数。",
+
+        "detailCallers": "谁在调用它",
+
+        "callerFilesNone": "没有文件引用该处理函数。",
+
+        "sandboxTitle": "试一试 · 沙盒",
+
+        "baseUrl": "基础 URL",
+
+        "baseUrlInvalid": "请输入 http 或 https 地址，例如 http://localhost:3000。",
+
+        "baseUrlRemote": "这不是本地地址。请求将按所输入的地址发送。",
+
+        "paramValue": "{name} 的值",
+
+        "paramMissing": "请输入 {name} 的值。",
+
+        "bodyInvalid": "请求体不是有效的 JSON。",
+
+        "bodyLabel": "请求体（JSON）",
+
+        "send": "发送",
+
+        "sending": "发送中…",
+
+        "sendUnavailable": "发送功能仅在编辑器中可用。",
+
+        "sendFailed": "请求失败：{message}",
+
+        "resultStatus": "{status} · {ms} 毫秒",
+
+        "resultHeaders": "响应头",
+
+        "resultBody": "响应体",
+
+        "resultTruncated": "响应体已截短至 {count} 个字符。",
+
+        "resultEmpty": "响应没有正文。"
       },
       "resolve": {
         "empty": "在某个发现上选择“解决”，即可在此处处理。",
         "provenanceLabel": "来源",
-        "fixTitle": "确定性修复",
-        "fixIntro": "代码修改工具（codemod）可以修复此类发现。",
-        "applyFix": "应用修复",
-        "applying": "正在应用…",
-        "applied": "已应用到分支 {branch}。",
-        "appliedNoBranch": "已应用。",
-        "changedFiles": "已修改 {count} 个文件",
-        "failed": "无法应用该修复。",
-        "promptTitle": "交给智能体",
-        "promptIntro": "此类发现没有对应的 codemod，因此由智能体来完成。",
-        "prompt": "交给智能体处理",
-        "noComposer": "宿主没有可发送请求的编辑器。",
         "checksTitle": "检查",
         "checkFiles": "该发现涉及 {count} 个文件。",
         "checkStations": "它涉及 {count} 个站点。",
         "checkReview": "请重新审查该文件夹，以确认该发现已消失。",
-        "undoNote": "此处不提供撤销：请回退该分支以撤销更改。",
         "show": "显示"
       },
       "simulate": {
         "pathTitle": "要遍历的路径",
         "pathEmpty": "请先选择一条线路或一个站点；模拟会遍历其路径。",
         "valuesLabel": "要使用的值",
-        "valuesPlaceholder": "金额=100, 币种=EUR",
         "run": "请智能体运行",
         "requestText": "编写并运行一个测试，遍历此路径：{path}。使用这些值：{values}。报告每一步：调用了什么、返回了什么、在哪里失败。",
         "noValues": "未提供；请选择合理的值",
         "sent": "已发送给智能体。结果来自它的运行，在此之前不显示任何内容。",
         "noComposer": "宿主没有智能体编辑器，因此无法运行任何内容。",
-        "note": "模拟从不伪造运行。智能体会编写测试、运行并报告每一步。"
+        "note": "模拟从不伪造运行。智能体会编写测试、运行并报告每一步。",
+        "noRecorded": "宿主没有为此路径记录任何值，因此没有可编辑的内容。模拟仍会沿着各跳进行。",
+        "presets": "参数预设",
+        "presetRecorded": "已记录",
+        "colRecorded": "已记录",
+        "editAria": "编辑 {name}",
+        "stubsTitle": "桩接端口",
+        "stubsHint": "被桩接的站点会返回其已记录的值。",
+        "lineEnter": "进入 {name}",
+        "lineCall": "调用 {name}",
+        "lineReturn": "从 {name} 返回",
+        "unknownResult": "未知：某个输入已被编辑，只有真实运行才能给出结果",
+        "codeTitle": "路径中的步骤",
+        "noVars": "此步骤没有已知的值。",
+        "varsTitle": "变量",
+        "resultTitle": "结果",
+        "noResult": "此处没有记录的值。",
+        "stubbedNote": "此站点已被桩接：返回其已记录的值。",
+        "simulatedBanner": "这是模拟，并未执行：它使用已记录和已编辑的值沿路径的各跳走一遍。“请代理运行”才会进行真实运行。",
+        "saveTest": "另存为 {file}",
+        "saveTestText": "编写测试文件 {file}，驱动此路径：{path}。使用这些值：{values}。桩接这些端口：{stubs}。将其保存到项目的测试文件夹并运行。",
+        "noStubs": "无",
+        "origin": {
+          "recorded": "已记录",
+          "edited": "已编辑"
+        },
+        "startFrom": "起点",
+        "startEntry": "入口",
+        "startStop": "此站点"
+      },
+      "fix": {
+        "title": "修复",
+        "queue": "显示 {shown} 项中 {open} 项未处理 · 仓库共 {repo} 项",
+        "queueTitle": "修复队列",
+        "queueAria": "打开 {title}",
+        "queueState": {
+          "open": "未处理",
+          "applied": "已应用 · 检查中",
+          "resolved": "已解决"
+        },
+        "mode": {
+          "group": "修复方式",
+          "apply": "确定性修复",
+          "prompt": "提示",
+          "noCodemod": "此宿主上没有适用于这类发现的代码修改工具。"
+        },
+        "primary": {
+          "apply": "应用到分支 fix/…",
+          "prompt": "发送到输入框",
+          "checks": "运行检查",
+          "resolve": "标记为已解决",
+          "resolved": "已解决 ✓",
+          "sent": "已发送给代理",
+          "running": "运行中…"
+        },
+        "sendToAgent": "发送给代理",
+        "noComposer": "未连接代理输入框。",
+        "undo": "撤销",
+        "undoNoRecord": "此宿主没有保存这次修复的记录，因此无法撤销。",
+        "permNote": "以你的身份在分支 fix/… 上运行。撤销会还原你原来所在的分支；检查通过且你合并之前，不会有任何内容进入主分支。",
+        "previewTitle": "它会更改什么",
+        "previewFiles": "{count} 个文件",
+        "previewFromFiles": "此宿主无法预览具体行；以下是该发现涉及的文件。",
+        "promptTitle": "提示",
+        "promptNote": "发送到唯一的输入框，并附上此发现和四项检查。",
+        "checksTitle": "只有所有检查都通过才算已解决",
+        "checksList": "检查",
+        "check": {
+          "types": "对涉及的包做类型检查",
+          "tests": "针对性测试通过",
+          "rescan": "重新扫描：问题已消失",
+          "review": "代理审查：没有新的发现"
+        },
+        "checkStatus": {
+          "pending": "等待中",
+          "running": "运行中",
+          "pass": "通过",
+          "fail": "失败",
+          "skipped": "已跳过",
+          "error": "错误",
+          "agent": "已发送给代理"
+        },
+        "checkNoReport": "此检查没有给出结果，因此按错误计。",
+        "changedFiles": "已更改 {count} 个文件",
+        "appliedOn": "已应用到分支 {branch}。",
+        "branchError": "已就地应用：无法创建分支（{reason}）。",
+        "branchUnknown": "修复分支",
+        "requestApply": "在名为 fix/… 的新分支上修复此发现：{title}：{items}。完成更改，但不要合并。",
+        "requestChecks": "在 {branch} 上，对修复“{title}”（{items}）的更改做类型检查并运行针对性测试，然后报告每项结果。",
+        "requestResolve": "待 {branch} 通过检查后，将发现“{title}”（{items}）标记为已解决。",
+        "requestUndo": "撤销“{title}”（{items}）的修复：还原 {branch} 上的更改。",
+        "requestPrompt": "修复此发现：{title}：{items}。在名为 fix/… 的新分支上完成更改，对涉及的包做类型检查，运行针对性测试，重新扫描以确认该发现已消失，并审查更改是否引入新的发现。报告每项结果。不要合并。",
+        "requestReview": "审查在 {branch} 上修复“{title}”（{items}）的更改，并报告它引入的任何新发现。",
+        "beforeAfter": {
+          "group": "之前与之后",
+          "noBaseline": "此宿主没有可供对比的更早审查。"
+        },
+        "errors": {
+          "noRoot": "此发现不属于工作区中的任何文件夹。",
+          "noRecord": "没有可撤销的内容：宿主没有保存这次修复的记录。",
+          "unknown": "该步骤失败。"
+        },
+        "codemod": {
+          "unusedExport": "移除未使用的导出",
+          "unusedFile": "移除未使用的文件",
+          "unusedDependency": "移除未使用的依赖",
+          "splitByCommand": "按命令组拆分",
+          "extractClone": "提取共享代码"
+        }
       },
       "pinpoint": {
         "label": "截图",

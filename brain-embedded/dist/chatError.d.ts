@@ -70,7 +70,22 @@ type ChatErrorActionKind =
  * attachments and gave up. The words are KEPT (saved or waiting) and are read with the next message; the
  * banner says so in the person's language - the person does not send them again.
  */
- | 'continuation_timed_out';
+ | 'continuation_timed_out'
+/**
+ * The model the person SELECTED is not answering - it stayed silent or its connection broke
+ * ({@link ChatErrorAction.model} names it). The pin is respected, never swapped silently: the banner
+ * says so and offers "Choose model" (the composer's model menu).
+ */
+ | 'model_unresponsive'
+/**
+ * A provider the person's OWN account backs (Kimi Code, called directly from this machine) refused the credential
+ * ({@link ChatErrorAction.provider}, named for the person by {@link ChatErrorAction.label}). That is NOT a
+ * BuilderForce session problem - re-exchanging the BuilderForce token would fix nothing - so it is checked before
+ * the generic 401 and offers "Sign in to {label}" (the editor's provider connect), or Settings on the web.
+ */
+ | 'provider_sign_in';
+/** The `code` a transport gives a hosted runtime's credential refusal (see `localTransport`'s `mapError`). */
+declare const PROVIDER_AUTH_REQUIRED = "provider_auth_required";
 /** The code a bounded continuation step rejects with (`runStore/deadline.ts`) - never shown raw. */
 declare const CONTINUATION_TIMED_OUT = "continuation_timed_out";
 /** What a `platform_refused` verdict names: a policy capability, or `send` (an outbox's
@@ -105,6 +120,12 @@ declare const LOCAL_ENGINE_FAILURE_CODES: readonly ["bfi_engine_crashed", "page_
 type LocalEngineFailureCode = (typeof LOCAL_ENGINE_FAILURE_CODES)[number];
 interface ChatErrorAction {
     kind: ChatErrorActionKind;
+    /** For `model_unresponsive`: the model (ref) that is not answering. */
+    model?: string;
+    /** For `provider_sign_in`: the account provider to reconnect (registry `accountProvider`, e.g. `kimi`). */
+    provider?: string;
+    /** For `provider_sign_in`: the runtime's display name (e.g. `Kimi Code`). */
+    label?: string;
     /** For `local_engine_failed`: which engine failure it was. */
     engineCode?: LocalEngineFailureCode;
     /** For `platform_refused`: what the policy refused. */
@@ -132,6 +153,10 @@ declare class BrainRequestError extends Error {
     readonly unlock?: string;
     readonly requiredPlan?: string;
     readonly feature?: string;
+    /** Set with `code: provider_auth_required`: the account provider whose credential was refused. */
+    readonly provider?: string;
+    /** Set with `provider`: that runtime's display name. */
+    readonly providerLabel?: string;
     constructor(message: string, init: {
         status: number;
         code?: string;
@@ -139,6 +164,8 @@ declare class BrainRequestError extends Error {
         unlock?: string;
         requiredPlan?: string;
         feature?: string;
+        provider?: string;
+        providerLabel?: string;
     });
 }
 /**
@@ -152,4 +179,4 @@ declare function brainRequestError(status: number, body: unknown, statusText?: s
  */
 declare function chatErrorAction(err: unknown): ChatErrorAction | null;
 
-export { BrainRequestError, CONTINUATION_TIMED_OUT, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, type PlatformRefusedCapability, brainRequestError, chatErrorAction };
+export { BrainRequestError, CONTINUATION_TIMED_OUT, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, PROVIDER_AUTH_REQUIRED, type PlatformRefusedCapability, brainRequestError, chatErrorAction };

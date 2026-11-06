@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { CAMERAS } from './cameras';
-import { missingFilesOf, SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
+import { SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
+import { missingFilesOf } from './drawers/syncModel';
 import { lenses, model } from './testFixtures';
 import { useZoomHost, ZoomProvider, type ZoomApi } from './zoom';
 
@@ -104,6 +105,13 @@ describe('SceneOverlay', () => {
         expect(onDiagnose).toHaveBeenCalled();
     });
 
+    it('names the files too large to store with the real count, ahead of the missing files', () => {
+        render(<SceneOverlay {...overlayProps({ missingFiles: 23, tooLarge: 2 })} />);
+        const banner = screen.getByTestId('kg-sync-banner');
+        expect(within(banner).getByText(fillTemplate(L.surface.overlay.tooLarge, { count: 2 }))).toBeTruthy();
+        expect(banner.textContent).toContain(fillTemplate(L.surface.overlay.missingFiles, { count: 23 }));
+    });
+
     it('stacks in flow on a phone', () => {
         render(<SceneOverlay {...overlayProps({ narrow: true })} />);
         expect(screen.getByTestId('kg-scene-overlay').style.position).not.toBe('absolute');
@@ -117,5 +125,7 @@ describe('missingFilesOf', () => {
         expect(missingFilesOf({ ...base, server: { files: 8, docs: 0 } })).toBe(2);
         expect(missingFilesOf({ ...base, server: { files: 8, docs: 0 }, skipped: [{ path: 'a', reason: 'x' }] })).toBe(1);
         expect(missingFilesOf({ ...base, skipped: [] })).toBe(0);
+        // A folder the walk never reads shares the list but is not a missing file.
+        expect(missingFilesOf({ ...base, server: { files: 10, docs: 0 }, skipped: [{ path: 'v', reason: 'nested-checkout' }] })).toBe(0);
     });
 });

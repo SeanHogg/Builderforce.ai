@@ -681,6 +681,7 @@ export interface RunState {
 Contract changes go through WS1 only. Another workstream that needs a field files the request
 in its hand-off note and keeps working against a local type until WS1 merges the change.
 
+
 ### 4. Workstreams
 
 Workstreams run in parallel wherever the dependency graph allows. **File ownership is
@@ -941,6 +942,7 @@ tests. Each module:
     (§5.1).
   - Every §7 SDK row is covered.
 
+
 #### 5.2 Running this PRD from the BuilderForce VS Code extension
 
 The program can be driven from the BuilderForce chat in VS Code as well as from Claude Code.
@@ -1132,6 +1134,7 @@ the WS that owns each one writes it first (§5.1 step 2). The rows most at risk:
 | Stop kills the running tool; a steer interrupts a step; stop words in text | `policy/steering` + `ToolContext.signal` on every capability | on-prem `agent-loop.ts` (steer skips remaining calls), `bash-tools.exec.ts` (kill on abort), `auto-reply/reply/abort.ts` (`ABORT_TRIGGERS`) | on-prem `abort.test` + exec tests; WS8e tests; a stop conformance case on every adapter |
 | Default repo for git + shell | `agent-tools` resolver + adapter-built `RunTask.workspace` | `git-tools.ts` `inferRepoFromPath`, `ticketBranchTool.ts` `checkoutsUnder` | `git-repo-scope.test`, `ticketBranchReview.test` + WS8b cases |
 
+
 #### 8.2 The uniform outcome row (every run, every entry point)
 
 `entry_point`, `run id`, `steps`, `tool_calls`, `tool_errors`, `compactions`, `stall_recoveries`,
@@ -1155,6 +1158,7 @@ and compaction is unrecorded; WS6 closes those gaps.
 - 2,093 auth-401 model failovers.
 - The builderforce-memory Claude Code hook recalls entries marked `[absorbed→Evermind v511] … (content lost)`: the absorb step kept the key but dropped the body, so recall returns empty stubs. That is builderforce-memory's absorb path, not this program.
 
+
 ### 9. Out of scope
 
 - New capabilities, except the §6.10 efficiency items. Most of those port a capability that one
@@ -1162,6 +1166,8 @@ and compaction is unrecorded; WS6 closes those gaps.
   `read_file` `paths[]`, `model.preflight` and the read-only codemap consolidation.
 - UI redesign. The VS Code / web surfaces keep their UI; only the run underneath changes.
 - Changes to the board and governance behaviour itself (§6.9 retargets dispatch only).
+
+
 
 ## ✅ RESOLVED 2026-10-31 — PRD 38: everything finished, moved out of the spec (rules, model, API, hosts, views, WS1–WS6, decisions)
 
@@ -1983,6 +1989,7 @@ Idea-to-Real blog post, "Point it at a folder and see what it knows". It sits in
 Read** for docs (understand what you have) and **Make → Build** for code (judge the shape,
 not the lines).
 
+
 ### 8. Decisions (operator, 2026-10-28)
 
 1. **The canvas surface name** is `knowledge`.
@@ -1997,6 +2004,8 @@ Knowledge index decisions (taken as proposed):
 - the cloud embedder stays bge-m3;
 - `bf-index` gets the shared comparator only;
 - there are no per-symbol cards.
+
+
 
 ## ✅ RESOLVED 2026-10-30 — PRD 35 WS3/WS4/WS5: cloud, canvas and on-prem tickets run on the one agent; VS Code, web and Rovr chat hardened on the kernel (VS Code 2026.10.116 · api 2026.10.94 · frontend 2026.10.99 · agent-runtime 2026.10.23 · sdk 2026.10.2 · brain-embedded 2026.10.72 · brain-ui 2026.10.30 · Rovr 2026.10.34)
 
@@ -4068,6 +4077,7 @@ User: "why would there be a separate scenario?" The earlier pass left image-run 
 - **Cloud children recurse like the editor's.** A child may spawn while `depth < MAX_SUBAGENT_DEPTH` (3, now one constant in agent-tools that both surfaces read). A tree's tokens bill to its root (`rootExecutionId`). A rehearsal has no delegation capabilities, because a dry run must not start real runs.
 - **The engine reads one field,** `CloudRunDelegation {parent, runtime, spec?}` (`cloudRunDelegation.ts`).
 - Also closes the "Container / Actions images cannot fan out" Gap Register row: `spawn_agents` relays through the same op, and the clone-sync concern is covered by the branch-diff absorb and the sync note.
+
 
 ## ✅ RESOLVED 2026-10-11 — Cloud sub-agents run as their own durable runs; the editor's native chat approves a sub-agent's edits (agent-tools 2026.10.5 · api 2026.10.30 · VSIX 2026.10.20)
 

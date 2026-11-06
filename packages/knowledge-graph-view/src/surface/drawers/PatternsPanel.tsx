@@ -10,7 +10,7 @@ import { findingTitle } from '../../findingText';
 import { fillTemplate } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { button, card, chip, muted } from '../../styles';
-import { ProvenanceBadge } from '../ActPanel';
+import { ProvenanceBadge } from '../ui';
 import { findingProvenance } from '../scope';
 import { stationOfRef } from '../stations';
 import type { PanelProps } from '../registry';

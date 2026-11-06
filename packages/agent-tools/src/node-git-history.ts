@@ -50,11 +50,13 @@ export function runGit(cwd: string, args: string[]): Promise<GitRun> {
 const git = runGit;
 
 /** One commit of `git log`, with the root-relative paths it touched. */
-export interface RecentCommit { sha: string; at: string; title: string; paths: string[] }
+export interface RecentCommit { sha: string; at: string; title: string; paths: string[]; /** `%an`; absent when the log did not carry one. */ author?: string }
 
 const COMMIT_MARK = "@@@";
+/** Separates the author name from the subject (a unit separator: names and subjects may hold `|`). */
+const AUTHOR_END = "\u001f";
 
-/** `git log --format=@@@%H|%cI|%s --name-only` output as commits. Pure. */
+/** `git log --format=@@@%H|%cI|%an<US>%s --name-only` output as commits (a line with no author separator is the older `%H|%cI|%s`). Pure. */
 export function parseRecentCommits(log: string): RecentCommit[] {
   const commits: RecentCommit[] = [];
   let current: RecentCommit | undefined;
@@ -66,7 +68,13 @@ export function parseRecentCommits(log: string): RecentCommit[] {
       const first = body.indexOf("|");
       const second = body.indexOf("|", first + 1);
       if (first < 0 || second < 0) { current = undefined; continue; }
-      current = { sha: body.slice(0, first), at: body.slice(first + 1, second), title: body.slice(second + 1), paths: [] };
+      const rest = body.slice(second + 1);
+      const split = rest.indexOf(AUTHOR_END);
+      const author = split > 0 ? rest.slice(0, split).trim() : "";
+      current = {
+        sha: body.slice(0, first), at: body.slice(first + 1, second), title: split >= 0 ? rest.slice(split + 1) : rest, paths: [],
+        ...(author ? { author } : {}),
+      };
       commits.push(current);
       continue;
     }
@@ -81,7 +89,7 @@ export function parseRecentCommits(log: string): RecentCommit[] {
  * the reason through `onWarn` for a run that did not finish.
  */
 export async function recentCommits(rootDir: string, count: number, options: GitHistoryOptions = {}): Promise<RecentCommit[]> {
-  const run = await git(rootDir, ["log", `-${Math.max(1, Math.floor(count))}`, "--name-only", "--relative", `--format=${COMMIT_MARK}%H|%cI|%s`, "--", "."]);
+  const run = await git(rootDir, ["log", `-${Math.max(1, Math.floor(count))}`, "--name-only", "--relative", `--format=${COMMIT_MARK}%H|%cI|%an%x1f%s`, "--", "."]);
   if (run.stdout === undefined) {
     if (run.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history is missing.`);
     return [];

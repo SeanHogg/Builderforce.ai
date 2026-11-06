@@ -14,7 +14,7 @@ import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
 import { LAYER_ORDER, layerRank } from './layers';
 import { rollUpAreas, type Group } from './areaRollup';
-import { outlineView } from './outlineGraph';
+import { fileNodesOf, outlineView } from './outlineGraph';
 
 export interface Station {
     id: string;
@@ -168,7 +168,7 @@ export function quantileLevels(values: ReadonlyMap<string, number>): Map<string,
 export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}): StationModel {
     const index = nodeIndex(graph);
     // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
-    const files = outlineView(graph)?.files ?? graph.nodes.filter((n) => n.kind === 'file');
+    const files = fileNodesOf(graph);
     // Past MAX_STATIONS, areas fold into their parent directory so the map stays readable.
     const groups = splitEntry(rollUpAreas(baseGroups(files, index), (id) => index.get(id)?.label ?? tail(id)));
     const groupIds = new Set(groups.map((g) => g.id));

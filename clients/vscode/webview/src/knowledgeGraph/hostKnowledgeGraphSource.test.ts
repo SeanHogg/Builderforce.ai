@@ -15,7 +15,7 @@ const GRAPH: KnowledgeGraph = {
 };
 
 /** A scripted host: records every call; `run` posts progress then the report. */
-function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; silentRun?: boolean; failPlan?: boolean; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
+function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; silentRun?: boolean; failPlan?: boolean; failCheck?: string; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
   const calls: KnowledgeCall[] = [];
   const listeners = new Set<(e: KnowledgeEvent) => void>();
   const emit = (e: KnowledgeEvent) => { for (const l of [...listeners]) l(e); };
@@ -42,6 +42,9 @@ function fakeHost(opts: { cancel?: boolean; fail?: boolean; holdPlan?: boolean; 
           });
           return { started: true } as T;
         case 'factActions': return { canDelete: call.ref === 'fact:note:1' } as T;
+        case 'runFixCheck':
+          if (opts.failCheck === call.check) throw new Error('the host went away');
+          return { status: 'pass' } as T;
         default: return null as T;
       }
     },
@@ -251,5 +254,64 @@ describe('the editor knowledge source — the rest of the port', () => {
     expect(host.calls.at(-1)).toEqual({ op: 'lastSeen' });
     const broken: KnowledgeTransport = { call: () => Promise.reject(new Error('no host')), onEvent: () => () => undefined };
     expect(await createHostKnowledgeGraphSource(broken).lastSeen!()).toBeNull();
+  });
+});
+
+describe('the editor knowledge source — the staged fix steps', () => {
+  const finding = { id: 'f', kind: 'unused-file', pack: 'code', nodes: ['src:ws::a.ts'], severity: 'info', params: {} } as never;
+  const checksOf = (host: ReturnType<typeof fakeHost>) => host.calls.filter((c) => c.op === 'runFixCheck').map((c) => (c as { check: string }).check);
+
+  it('runs the three host checks one by one (the review is the agent\'s), reporting each as it starts and as it settles', async () => {
+    const host = fakeHost();
+    const seen: string[] = [];
+    const source = createHostKnowledgeGraphSource(host.t);
+    const results = await source.runFixChecks!({ finding, applied: { changed: ['a.ts'] } }, (u) => seen.push(`${u.id}:${u.status}`));
+    expect(checksOf(host)).toEqual(['types', 'tests', 'rescan']);
+    expect(seen).toEqual(['types:running', 'types:pass', 'tests:running', 'tests:pass', 'rescan:running', 'rescan:pass']);
+    expect(results.map((r) => r.id)).toEqual(['types', 'tests', 'rescan']);
+    expect(host.calls.filter((c) => c.op === 'runFixCheck').every((c) => (c as { finding?: unknown }).finding === finding)).toBe(true); // the re-scan needs the finding
+  });
+
+  it('a check that cannot run is reported as an error on it, keeps the results already received, and stops there', async () => {
+    const host = fakeHost({ failCheck: 'tests' });
+    const seen: Array<{ id: string; status: string; detail?: string | undefined }> = [];
+    const source = createHostKnowledgeGraphSource(host.t);
+    await expect(source.runFixChecks!({ finding, applied: { changed: [] } }, (u) => seen.push(u))).rejects.toThrow('the host went away');
+    expect(seen.map((u) => `${u.id}:${u.status}`)).toEqual(['types:running', 'types:pass', 'tests:running', 'tests:error']);
+    expect(seen.at(-1)!.detail).toBe('the host went away');
+    expect(checksOf(host)).toEqual(['types', 'tests']); // rescan never started
+  });
+
+  it('aborting the request cancels the running check in the extension, and stops starting new ones', async () => {
+    const host = fakeHost();
+    const control = new AbortController();
+    const source = createHostKnowledgeGraphSource(host.t);
+    const run = source.runFixChecks!({ finding, applied: { changed: [] }, signal: control.signal }, (u) => { if (u.id === 'types' && u.status === 'pass') control.abort(); });
+    await expect(run).rejects.toThrow('cancelled');
+    expect(host.calls.some((c) => c.op === 'cancelFixCheck' && (c as { rootId: string }).rootId === 'ws')).toBe(true);
+    expect(checksOf(host)).toEqual(['types']);
+  });
+
+  it('undoes by the fix id alone (never paths), and refuses a fix with no id or a finding that names no root, by code', async () => {
+    const host = fakeHost();
+    const source = createHostKnowledgeGraphSource(host.t);
+    await source.undoFix!({ finding, applied: { changed: ['a.ts'], fixId: 'fix-1' } });
+    expect(host.calls.at(-1)).toEqual({ op: 'undoFix', rootId: 'ws', fixId: 'fix-1' });
+    await expect(source.undoFix!({ finding, applied: { changed: ['a.ts'] } })).rejects.toMatchObject({ code: 'noRecord' });
+    await expect(source.undoFix!({ finding: { ...(finding as object), nodes: [] } as never, applied: { changed: [], fixId: 'x' } })).rejects.toMatchObject({ code: 'noRoot' });
+    await expect(source.applyFix!({ ...(finding as object), nodes: [] } as never)).rejects.toMatchObject({ code: 'noRoot' });
+  });
+
+  it('marks a finding resolved by recording a fact on its first file (the Add fact path), and previews through the host', async () => {
+    const host = fakeHost();
+    const source = createHostKnowledgeGraphSource(host.t);
+    await source.markResolved!(finding);
+    expect(host.calls.at(-1)).toEqual({ op: 'remember', rootId: 'ws', ref: 'src:ws::a.ts', content: 'Resolved: unused-file (f)' });
+    await source.previewFix!(finding);
+    expect(host.calls.at(-1)).toMatchObject({ op: 'previewFix', rootId: 'ws' });
+  });
+
+  it('lists exactly the kinds the knip codemod fixes', () => {
+    expect(createHostKnowledgeGraphSource(fakeHost().t).applyFixKinds).toEqual(['unused-export', 'unused-file']);
   });
 });

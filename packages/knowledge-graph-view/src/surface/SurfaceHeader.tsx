@@ -21,7 +21,7 @@ import type { SurfaceEnv } from './registry';
 import { StatusStrip } from './StatusStrip';
 import { answerFor, answerLine } from './questions';
 import { parityText, syncPill } from './syncPill';
-import { TimeSlider, type Commit } from './TimeSlider';
+import { TimeSlider, type HistoryRead } from './TimeSlider';
 import type { SurfaceModel } from './useSurface';
 
 export interface SurfaceHeaderProps {
@@ -46,7 +46,7 @@ export interface SurfaceHeaderProps {
     reviewCard: ReactNode;
     panel: string | null;
     onPanel(id: PanelId | null): void;
-    history: { commits: readonly Commit[]; total: number };
+    history: HistoryRead;
     pickedCommit: string | null;
     /** A commit (or Now = null) was picked; the root also switches the question to "What changed?". */
     onPickCommit(sha: string | null): void;

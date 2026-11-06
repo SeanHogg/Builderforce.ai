@@ -40,7 +40,10 @@ import { useSyncStatus } from './surface/syncPill';
 import { useZoomHost, ZoomProvider } from './surface/zoom';
 import { LinesPanel } from './surface/LinesPanel';
 import { PanelDrawer } from './surface/PanelDock';
+import { canApplyKind } from './surface/codemods';
+import { isResolved } from './surface/fix/fixFlow';
 import { PathStrip } from './surface/PathStrip';
+import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
 import { useHistory } from './surface/TimeSlider';
 import { Pill } from './surface/ui';
@@ -111,7 +114,8 @@ export function KnowledgeGraphView({
     const [picked, setPicked] = useState<string | null>(null);
     useEffect(() => setPicked(null), [kg.rootId]);
     const changed = useMemo(() => new Set(history.commits.find((c) => c.sha === picked)?.refs ?? []), [history, picked]);
-    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed });
+    const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? (refs: string[]) => source.symbolsOf!(kg.rootId!, refs) : undefined), [source, kg.rootId]);
+    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols });
     // The question follows the lens in effect: a requested lens the graph cannot show falls back, and the pills must say which one is on.
     const lensInEffect = lens.id, lensAsked = kg.requested.id, setQuestion = surface.setQuestion;
     useEffect(() => {
@@ -126,6 +130,9 @@ export function KnowledgeGraphView({
     const visible = useMemo(() => focusGraph(graph, compact && !showAll ? PHONE_FOCUS_NODES : MAX_DRAWN_NODES, [...kg.focus, ...(selected ? [selected] : [])]), [graph, compact, showAll, kg.focus, selected]);
     const drawn = useMemo(() => lensGraph(visible, lens), [visible, lens]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
+    const canApplyFor = useMemo(() => (source.applyFix ? (kind: string) => canApplyKind(source, kind) : false), [source]);
+    const resolvedFixes = useMemo(() => new Set(Object.values(surface.fixFlows).filter(isResolved).map((f) => f.findingId)), [surface.fixFlows]);
+    const routeLabels = useMemo(() => hopRouteLabels(surface.path, surface.stations.byId, index), [surface.path, surface.stations.byId, index]);
     const diagnosticsText = () => graphDiagnosticsText({
         status: kg.status, rootId: kg.rootId, graph: real, drawn: { nodes: drawn.nodes.length, edges: drawn.edges.length },
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
@@ -195,7 +202,7 @@ export function KnowledgeGraphView({
                         {hasLines && (
                             <PathStrip
                                 path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
-                                stations={surface.stations.byId} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone}
+                                stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone}
                             />
                         )}
                     </div>
@@ -203,7 +210,7 @@ export function KnowledgeGraphView({
                 {real && <ActPanel
                     graph={graph} findings={findings} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
-                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={!!source.applyFix} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
+                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
@@ -212,7 +219,11 @@ export function KnowledgeGraphView({
             {layout.phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel(false)}</Sheet>}
             <PanelDrawer
                 graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} renderPanel={renderPanel} source={source} rootId={kg.rootId ?? undefined}
-                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnosticsText={diagnosticsText} sync={sync} onCamera={setMode} cameras={cameras.map((c) => c.id)} onShow={show} onCompose={onCompose}
+                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnosticsText={diagnosticsText} sync={sync} history={history}
+                lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
+                revision={keepsBaseline ? { value: showingBefore ? 'before' : 'after', hasBefore: !!kg.baseline, onChange: setRevision } : undefined}
+                onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}
+                onCamera={setMode} cameras={cameras.map((c) => c.id)} onShow={show} onCompose={onCompose}
             />
             <NodeSheet
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}

@@ -9,10 +9,8 @@ import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { findingItems, findingTitle } from '../findingText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { PathModel } from './path';
+import { codemodOf } from './codemods';
 import { findingProvenance } from './scope';
-
-/** The finding kinds a deterministic codemod exists for (`source.applyFix`). */
-export const CODEMOD_KINDS: ReadonlySet<string> = new Set(['unused-export', 'unused-file']);
 
 /** Cards shown at most; the rest are in the findings list and the Fix queue. */
 export const MAX_CARDS = 3;
@@ -31,7 +29,8 @@ export function findingSource(f: Pick<Finding, 'kind'>): FindingSource {
 }
 
 /** 1..5 for the heat ramp of a card's numbered pin. */
-const LEVEL = { error: 5, warn: 3, info: 2 } as const;
+/** A finding severity on the heat ramp (1 to 5). */
+export const LEVEL = { error: 5, warn: 3, info: 2 } as const;
 const RANK = { error: 0, warn: 1, info: 2 } as const;
 
 export interface ActionCard {
@@ -43,12 +42,12 @@ export interface ActionCard {
     canApply: boolean;
 }
 
-/** The top cards: most severe first, then the widest, then by id (stable). `applicable` = the host's source has `applyFix`. */
-export function actionCards(findings: readonly Finding[], applicable: boolean, max = MAX_CARDS): ActionCard[] {
+/** The top cards: most severe first, then the widest, then by id (stable). `applicable` = the host's source has `applyFix`, or a per-kind test of what it can apply (`canApplyKind`). */
+export function actionCards(findings: readonly Finding[], applicable: boolean | ((kind: string) => boolean), max = MAX_CARDS): ActionCard[] {
     return [...findings]
         .sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.nodes.length - a.nodes.length || a.id.localeCompare(b.id))
         .slice(0, max)
-        .map((finding) => ({ finding, level: LEVEL[finding.severity], source: findingSource(finding), canApply: applicable && CODEMOD_KINDS.has(finding.kind) }));
+        .map((finding) => ({ finding, level: LEVEL[finding.severity], source: findingSource(finding), canApply: typeof applicable === 'function' ? applicable(finding.kind) : applicable && codemodOf(finding.kind)?.builtin === true }));
 }
 
 /** "This path is done when…": one checkable line per finding on the path, capped; `more` is how many were left off. */

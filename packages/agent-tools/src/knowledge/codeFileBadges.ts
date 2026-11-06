@@ -12,6 +12,7 @@ import { codeLanguageOf, maskSource } from './codeMask.js';
 import { basenameOf, CODE_BADGES } from './codeNodes.js';
 import { importSpecifiers, patternsBadge } from './codePatterns.js';
 import { routesBadge } from './codeRoutes.js';
+import { externalsBadge, runtimeSpecifiers } from './externalServices.js';
 
 /** Route registrations only exist in JS/TS-family sources. */
 const ROUTE_LANGUAGES: ReadonlySet<string> = new Set(['js']);
@@ -35,9 +36,12 @@ export function contentBadges(path: string, text: string, symbols: readonly Code
         const routes = routesBadge(text, path, code);
         if (routes) badges[CODE_BADGES.routes] = routes;
     }
+    const imports = importSpecifiers(code);
+    const externals = externalsBadge(runtimeSpecifiers(code));
+    if (externals) badges[CODE_BADGES.externals] = externals;
     const patterns = patternsBadge({
         path, base: baseNameOf(path), lines: text.split('\n').length,
-        exported: symbols.filter((s) => s.exported), imports: importSpecifiers(code), text: code,
+        exported: symbols.filter((s) => s.exported), imports, text: code,
         maxComplexity: complexity.max,
     });
     if (patterns) badges[CODE_BADGES.patterns] = patterns;
