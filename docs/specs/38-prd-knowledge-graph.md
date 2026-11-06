@@ -42,6 +42,126 @@ Memory 2026.10.40 is published and in use from VS Code 2026.10.131.
    - The server's source count equals the local count.
    - Pasting a screenshot of the review progress card filters to `ReviewProgress.tsx` → `labels.ts` → `useReviewRun.ts` → the review runner.
 
+### Predicted measures: deterministic ML over the graph (planned 2026-11-06, not started)
+
+The graph already holds what these formulas need: reference edges, file badges (complexity, coverage, churn, owner, clones, unused, layer verdicts) and git history. Each formula below is arithmetic that runs when the graph is built, not a model call. The result is stored as a node badge or an area value. Every prediction then also counts as an answer that skipped the model on the savings ledger.
+
+**Rules for every formula below:**
+- **Where it lives.** Formulas live in builderforce-memory under `packages/memory/src/knowledge/`, next to `importance.ts`, as pure functions with tests.
+- **When it runs.** They run inside `buildGraph`, so the cut graph and the outline carry the result.
+- **What the UI reads.** Builderforce only reads the result. The view never computes a prediction.
+- **Determinism.** The same graph and history give the same numbers. Fixed iterations and seeded order, as PageRank already does (`PAGERANK_DAMPING` 0.85, 40 iterations).
+- **Missing inputs.** When an input is missing (no git history, no coverage), the badge is absent. The channel then reads "Not set up", never a guess.
+- **Display.** Every number on screen that comes from a rate or a prediction shows its uncertainty (see P3).
+
+**What exists today:**
+- PageRank sets node importance (`knowledge/importance.ts`).
+- Retrieval uses BM25, cosine over HNSW, MMR and time decay (`retrieval/`).
+- Nothing predicts a measure yet.
+
+#### P1. Partitions from community detection (first)
+
+- **Formula.** Louvain modularity maximisation over the file reference graph:
+  - Q = (1/2m) Σᵢⱼ [Aᵢⱼ − kᵢkⱼ/2m] δ(cᵢ,cⱼ)
+  - Edge weight is the reference count. Order is seeded for determinism.
+  - Label propagation is the fallback above the outline cap.
+- **Predicts.** The partition of every file the packs could not place, plus a membership confidence: the share of a file's edge weight that falls inside its community.
+- **Uses.** It removes "No partition" on the map. It also gives station groupings by cohesion instead of by folder, which replaces the directory roll-up used when stations exceed the cap.
+- **Accept.** At most 5% of files in "No partition" on the `agentic` workspace. This is the open acceptance check above. Modularity Q is reported in the graph stats.
+
+#### P2. Defect-risk score
+
+- **Formula.** Logistic regression: P(defect) = 1 / (1 + e^−(β·x)).
+- **Features x:**
+  - churn, time-decayed with a half-life
+  - change entropy H = −Σ pₖ log pₖ over the file's share of each commit's changes (Hassan 2009)
+  - cyclomatic complexity
+  - coverage
+  - fan-in (references in)
+  - owner entropy
+  - clone-group membership
+- **Training labels.** Files touched by bug-fix commits, found by message and linked-issue heuristics, then traced to the commits that introduced the changed lines (SZZ).
+- **Fitting and fallback.**
+  - Coefficients are fitted per repository by gradient descent with L2 regularisation.
+  - Below 30 labelled fixes, use the published default coefficients and say so in the provenance badge.
+- **Uses.**
+  - It replaces the hand-weighted w1–w5 heat ramp with calibrated quintiles of P.
+  - It orders the "What is wrong?" answers and the Act cards.
+  - It feeds the Coverage drawer's "test this first".
+- **Accept.**
+  - On a held-out 20% of history, AUC ≥ 0.70 on the `agentic` workspace.
+  - Calibration error (ECE) ≤ 0.1.
+  - Both are reported in the Coverage drawer's provenance badge.
+
+#### P3. Honest rates: Beta–Binomial shrinkage and Wilson intervals
+
+- **Formula.** Every displayed rate of k successes in n trials uses the posterior mean (k + α)/(n + α + β), with the prior (α, β) fitted to the repository's own distribution (empirical Bayes). The Wilson score interval gives the range shown.
+- **Applies to:**
+  - coverage per station
+  - owner share
+  - tested-response share in the API drawer
+  - the Measure section's kill-condition metrics: the share of opens that act on a finding, and the `knowledge.ask` answer rate
+- **Uses.** A 1-of-1 never reads as 100%. Small samples render with "≈" and their range, which is the existing analytics-UI convention.
+- **Accept.**
+  - No rate on the surface renders without its n.
+  - Rates with n < 10 render as "≈ x% (a–b)".
+
+#### P4. Co-change association (impact prediction)
+
+- **Formula.** For files A and B over commits:
+  - support = P(A∧B)
+  - confidence = P(B|A)
+  - lift = P(A∧B) / (P(A)P(B))
+- **Thresholds and limits.**
+  - Kept pairs need support ≥ 3 commits and lift ≥ 2.
+  - Commits touching more than 50 files are excluded, because they are bulk changes.
+  - At most 8 partners per file.
+- **Predicts.** Which files a change to A will also need, including coupling that has no reference edge (hidden coupling).
+- **Uses.**
+  - "What changed?" shows the predicted, not-yet-touched partners.
+  - The staged fix flow's "Run checks" includes partners' tests.
+  - "This path is done when…" lists them.
+  - A new overlay channel shows hidden coupling.
+- **Accept.** On held-out commits, recall@8 ≥ 0.5 for files changed together with A.
+
+#### P5. Owner entropy and bus factor
+
+- **Formula.** H = −Σ pₐ log pₐ over each author's share of a file's changes, time-decayed. The bus factor is the smallest number of authors covering 50% of a station's changes.
+- **Uses.** The owner channel, a "single owner" risk in "What is wrong?", and a P2 feature.
+
+#### P6. Trend forecasting for cost and debt
+
+- **Formula.** Holt's linear exponential smoothing (level + trend) over:
+  - per-review model calls and spend
+  - re-review cost
+  - violation, clone-group and unused counts per project
+  - Least squares is the fallback below 6 points.
+- **Predicts.**
+  - Next-period values with a prediction interval.
+  - A pre-review estimate of model calls against the budget. The review of `agentic` planned 17,949 calls against 200; the estimate should flag that before the review starts.
+- **Uses.**
+  - The Measure section's headline ("debt goes down") becomes a forecast with a direction and a range.
+  - The review launcher warns when the estimate exceeds the budget.
+
+#### P7. Station transition probabilities (Simulate)
+
+- **Formula.** A first-order Markov chain over stations. P(j|i) comes from recorded run traces when present, otherwise from normalised reference weights.
+- **Uses.** Simulate and "Run to end" follow the most likely path and show the probability of each hop. Path strip hops show the probability next to the count.
+
+**Order.**
+1. P1, P2 and P3 come first: P1 closes an open acceptance check, P2 gives the main colour channel a meaning, and P3 makes every number trustworthy.
+2. P4 comes with the staged fix flow, which needs impact prediction.
+3. P5 rides along with P2, since it is one of P2's features.
+4. P6 and P7 follow.
+
+**Contract.**
+- New badge keys go into `OUTLINE_BADGE_KEYS` so the outline carries them: `risk`, `riskBand`, `ownerEntropy`, `community`, `communityConfidence`, `coChange` (top partner refs).
+- Area values carry `busFactor`, the shrunk coverage rate and its interval.
+- Graph stats carry `modularity`, `riskAuc` and `riskCalibration`.
+- Adding these is a memory minor release. Builderforce then bumps and moves the API cache key.
+
+**Not in scope.** Training neural models, any per-request model call, and sending repository history off the machine for fitting. Fitting runs where the review runs.
+
 ### The data pack (later)
 
 A pack for json, yaml and csv. It was left out of this release and has no date.

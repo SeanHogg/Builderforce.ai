@@ -78,6 +78,20 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 - **Knowledge review of `agentic` fails.** The linked client makes 3 requests per file on the plan-rpm bucket (~50,000 for this tree) and one 429 or 413 ends the review. Next: move to builderforce-memory 2026.10.36, use `batched` + `preloadExtracted`, add bulk routes and 429 retry, ship a VSIX ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)).
 - **PRD 38 residual items (docs sweep 2026-11-01).** Its Review Persistence section says `docs/knowledge/38-review-*.md`; the actual contract is the `--review-root` CLI flag plus `packages/agent-tools/src/knowledge/reviewRunner.ts` (which writes only `.review/`), and no caller passes a `knowledge/` root. Its Knowledge Client §3 table maps step kinds to statuses (triggered/awaiting_results/etc.) with no corresponding runtime code; either implement or strike. Its §4 asserts the knowledge graph has quote-level and learning-level nodes — only file-level nodes exist.
+- **Predicted measures over the knowledge graph (planned, not started).** The graph has the inputs, but nothing predicts a measure; only PageRank importance is computed. The plan is seven deterministic formulas, computed at build time in builderforce-memory and stored as badges:
+  - P1 Louvain partitions (closes the ≤5% "No partition" acceptance)
+  - P2 logistic defect risk (calibrated heat)
+  - P3 Beta–Binomial and Wilson intervals on every rate
+  - P4 co-change impact
+  - P5 owner entropy and bus factor
+  - P6 Holt cost and debt forecasts
+  - P7 Markov transitions for Simulate
+
+  P1–P3 come first ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)).
+- **Knowledge packs reach Canvas only from the editor ([PRD 40](./docs/specs/40-prd-knowledge-packs.md)).** The pack registry → retrieval port seam (`packages/agent-tools/src/knowledge/index/packRetrieval.ts`) is live in VS Code chat, the context pack and Synapse. The Canvas Evermind composer has no packs to list, and pack facts don't seed an Evermind, because the platform holds no packs. Next: a browser `PackRegistry` + `PackRetrievalPort` over the platform store, and seeding an Evermind from the selected packs' facts. *Blocker: operator decision PRD 40 OD-2 (platform pack store).*
+- **PRD 40 OD-1: embeddings inside a `.bfpack`.** v1 ships none; consumers re-embed by card hash. Decide whether a later format version adds an optional embeddings section tied to one embedding model. *Blocker: operator decision.*
+- **PRD 40 OD-2: platform pack store.** Upload, share to a project or tenant, and version packs, so Canvas can compose Everminds from packs the user never had locally. *Blocker: operator decision.*
+- **PRD 40 OD-3: pack provenance and trust badges.** Who reviewed, which model judged, under what policy, and how the UI shows it. The format has room for top-level fields; v1 specifies none. *Blocker: operator decision.*
 - **No run delta, and understanding needs `/review` ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md)).** Run change sets are recorded (`brainRunHostPorts.ts:381-401`) but nothing reads them. Indexing starts only from `/review`. Analyzers download via `npm exec` (offline fails). A signed-out project selection throws `NOT_SIGNED_IN`. `findingId` changes when a group's members change. Next: operator decisions in PRD 41 §12, then WS1 (offline closure) and WS2 (Opus-reviewed fact store). *Blocker: §12.1 analyzer distribution, §12.3 auto-index default.*
 - **Cloud run isolation (G1, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)).** `enableInternet = true` (`AgentContainerDO.ts:45`) with no egress allowlist or red-team. S5, S6, W2 and B2 are closed; re-audit the rest of the 50.
 - **Sandbox capacity.** `max_instances = 25` is shared with previews; when full, a run gets no sandbox rather than waiting.
