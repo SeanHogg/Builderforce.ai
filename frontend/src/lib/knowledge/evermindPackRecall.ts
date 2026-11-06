@@ -14,6 +14,7 @@ import { hitLine, withPacks } from '@builderforce/agent-tools/knowledge-index';
 import {
   browserPackRegistry, browserPackRetrieval, selectedPackRegistry, type PackClient,
 } from '@builderforce/knowledge-browser';
+import { recordedFailure } from '@/lib/reportError';
 
 /** Cards fetched from the selected packs for one question. */
 const PACK_RECALL_K = 6;
@@ -43,7 +44,7 @@ export function withEvermindPacks(base: Recaller, packs: { client: PackClient; s
   return async (query) => {
     const [memory, cards] = await Promise.all([
       base(query),
-      index.recall(query, { k: PACK_RECALL_K }).catch(() => undefined),
+      index.recall(query, { k: PACK_RECALL_K }).catch(recordedFailure('Recalling the selected knowledge packs', undefined)),
     ]);
     if (!cards || cards.hits.length === 0) return memory;
     const items = cards.hits.map((hit, i) => ({

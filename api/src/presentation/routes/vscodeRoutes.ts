@@ -8,6 +8,7 @@ import { listVscodeConnections, upsertVscodeConnection } from '../../application
 import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseOptionalBody, z } from './requestBody';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
@@ -41,7 +42,10 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
-      .catch(() => []);
+      .catch((error: unknown) => {
+        reportCaughtError(error, { source: 'presentation/routes/vscodeRoutes.ts', operation: 'GET /me displayName lookup' });
+        return [];
+      });
     return c.json({ userId, ...(who?.displayName ? { displayName: who.displayName } : {}) });
   });
 
