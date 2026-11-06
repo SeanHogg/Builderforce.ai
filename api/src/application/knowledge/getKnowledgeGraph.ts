@@ -9,7 +9,7 @@
  *   join        `buildCodeGraph` (memory's `buildGraph` + layer resolution) with the ONE pack list (`knowledgePacks`).
  *
  * Cached through `getOrSetCached` under
- *   kg:v4:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}
+ *   kg:v5:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}
  * New data changes the key — never a TTL invalidation. `scopeDigest` is the review digest
  * plus, for the linked repo, the commit sha (a new commit is new perception).
  *
@@ -59,7 +59,7 @@ export function clampMaxNodes(raw: number | undefined): number {
 export function knowledgeGraphCacheKey(parts: {
   tenantId: number; projectId: number; rootId: string; scopeDigest: string; version: string; focusHash: string; maxNodes: number;
 }): string {
-  return `kg:v4:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
+  return `kg:v5:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
 }
 
 const focusHashOf = (focus: readonly string[]): string =>

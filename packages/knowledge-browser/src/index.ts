@@ -6,7 +6,7 @@
  */
 
 export { createKnowledgeSource, type DirectoryProvider, type KnowledgeSourceOptions } from './knowledgeSource';
-export { clearLastSeenMemory } from './lastSeen';
+export { clearLastSeenMemory, claimLastSeenMemory, lastSeenIdentity } from './lastSeen';
 export type { PinpointHost } from './pinpoint';
 export { runReview, type RunReviewOptions, type WorkerFactory } from './reviewWorkerClient';
 export { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';

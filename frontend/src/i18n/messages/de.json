@@ -36193,6 +36193,57 @@
         "empty": "Wählen Sie eine Linie oder eine Station, um ihre Sequenz zu zeichnen.",
         "messageAria": "{from} an {to}: {label}"
       },
+      "overlay": {
+        "outTo": "↑ Hinaus zu {name}",
+        "fit": "Einpassen",
+        "lensSub": "war die Linse {lens}",
+        "familyOnly": "Nur {family}",
+        "clearFamily": "Filter {family} aufheben",
+        "missingFiles": "{count} Dateien fehlen auf dem Server.",
+        "diagnose": "Diagnose",
+        "controls": "Szenensteuerung"
+      },
+      "rail": {
+        "heading": "Linien von den Einstiegspunkten",
+        "legendHeading": "So liest sich das Bild jetzt",
+        "ownerSwatches": "Eine Farbe pro Eigentümer",
+        "legendEmpty": "Dem Bild ist nichts zugeordnet."
+      },
+      "act": {
+        "cardsTitle": "Zuerst beheben",
+        "noCards": "Hier gibt es nichts zu beheben.",
+        "apply": "Anwenden",
+        "prompt": "Auftrag",
+        "show": "Zeigen",
+        "cardAction": "{action}: {title}",
+        "sourceExact": "Exakt",
+        "sourceAnalyzer": "Analyse",
+        "sourceModel": "Modell",
+        "fixQueue": "Korrekturliste · {count}",
+        "keepTitle": "Diesen Lauf als Test behalten",
+        "keepBody": "Mache aus {path} einen Test, der fehlschlägt, wenn einer seiner Schritte bricht.",
+        "keepButton": "Test beauftragen",
+        "testRequest": "Schreibe einen Integrationstest, der den Pfad {path} durchläuft. Die Halte in Reihenfolge: {stops}. Prüfe, dass jeder Schritt weiterhin stattfindet und dass keiner dieser Befunde zurückkehrt: {checks}.",
+        "doneTitle": "Dieser Pfad ist fertig, wenn…",
+        "doneCheck": "{title} ist behoben in {items}",
+        "doneNone": "Auf diesem Pfad ist kein Befund offen.",
+        "doneMore": "+{count} weitere Prüfungen",
+        "detailsTitle": "Details",
+        "linkCoverage": "Abdeckung",
+        "linkApi": "API",
+        "moreFindings": "Alle Befunde"
+      },
+      "path": {
+        "title": "{line} · {entry}",
+        "reset": "Zurücksetzen",
+        "step": "Schritt",
+        "runToEnd": "Bis zum Ende",
+        "simulate": "Mit Werten simulieren",
+        "sequence": "Sequenz",
+        "noTests": "keine Tests",
+        "findings": "{count} Befunde",
+        "stops": "Halte"
+      },
       "sync": {
         "loading": "Synchronisierungsstatus wird gelesen …",
         "failed": "Der Synchronisierungsstatus konnte nicht gelesen werden.",
@@ -36359,11 +36410,64 @@
         "import": "Import"
       },
       "time": {
-        "label": "Verlauf",
+        "label": "Review",
         "aria": "Verlauf: Wählen Sie einen Commit, um die von ihm geänderten Stationen zu markieren",
         "now": "Jetzt",
         "commitAria": "{title}, {at}",
         "changed": "{count} Stationen in diesem Commit geändert"
+      },
+      "header": {
+        "statusLabel": "Synchronisierungsstatus",
+        "syncedAt": "Synchronisiert {time}",
+        "synced": "Synchronisiert",
+        "notSynced": "Nicht synchronisiert",
+        "updateFailed": "Aktualisierung fehlgeschlagen",
+        "reviewing": "Review läuft · {progress}",
+        "reviewPlan": "Review-Plan bereit",
+        "reviewFailed": "Review fehlgeschlagen",
+        "skippedPill": "{count} Dateien nicht gespeichert",
+        "parityBoth": "{count} Dateien hier und auf dem Server",
+        "parityDiffers": "{local} hier · {server} auf dem Server",
+        "parityLocal": "{local} Dateien hier · noch nicht auf dem Server",
+        "moreActions": "Weitere Aktionen",
+        "reReview": "Diesen Ordner erneut prüfen",
+        "scopeItem": "Ordner: {title}",
+        "overlaysNote": "Jede Kennzahl kann jeden Kanal steuern. Karte, System, Graph, Mindmap, Turm, Heat, Liste und Sequenz lesen dieselben Zuordnungen, ein Abdeckungsbalken kann also genauso gut ein Anti-Pattern-Balken sein.",
+        "rootsLabel": "Geprüfte Ordner"
+      },
+      "askSentence": {
+        "where": "wohin führt {name}?",
+        "wrong": "was stimmt bei {name} nicht?",
+        "untested": "was hat bei {name} keinen Test?",
+        "patterns": "welche Muster gibt es in {name}?",
+        "changed": "was hat sich seit dem Review geändert?",
+        "callers": "wer ruft {name} sonst noch auf?",
+        "copied": "welcher Code ist kopiert?",
+        "unused": "was wird nie aufgerufen?",
+        "claims": "was sagen die Dokumente, und stimmt das?",
+        "layers": "in welcher Schicht liegt jeder Teil?",
+        "knowledge": "was weiß das Gedächtnis über {name}?"
+      },
+      "answerMode": {
+        "where": "beantwortet als Pfad",
+        "wrong": "beantwortet als Probleme",
+        "untested": "gestrichelt = kein Test führt es aus",
+        "patterns": "beantwortet als Muster",
+        "changed": "beantwortet als Commits",
+        "callers": "beantwortet als Verknüpfungen",
+        "copied": "beantwortet als Klongruppen",
+        "unused": "beantwortet als ungenutzter Code",
+        "claims": "beantwortet als Aussagen",
+        "layers": "beantwortet als Schichten",
+        "knowledge": "beantwortet als Fakten"
+      },
+      "drawerSubtitle": {
+        "sync": "erst lokal, kleine Pakete, per Datei-Hash zusammengeführt",
+        "coverage": "Tests, Reichweite und Lücken im ganzen System",
+        "patterns": "Entwurfs-, Enterprise- und Anti-Muster nach Schicht",
+        "api": "was die Routen versprechen, was getestet ist, ausprobieren",
+        "resolve": "eine deterministische Korrektur oder ein Prompt, dann prüfen",
+        "simulate": "den Pfad mit echten Werten ausführen"
       }
     }
   }

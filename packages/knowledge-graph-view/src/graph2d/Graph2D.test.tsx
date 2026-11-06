@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import { LENSES } from '../lenses';
+import { ZoomProvider, type ZoomApi } from '../surface/zoom';
 import { codeFixture } from '../testing';
 import { Graph2D, LABELLED_NODES } from './Graph2D';
 
@@ -77,11 +78,28 @@ describe('Graph2D', () => {
         expect(container.querySelector('path[data-incident]')).toBeNull();
     });
 
-    it('offers zoom controls and dims nodes the lens does not highlight', async () => {
-        const { container } = mount({ lens: LENSES.duplication });
+    it('registers its zoom with the scene overlay (no buttons of its own) and dims nodes the lens does not highlight', async () => {
+        let api: ZoomApi | null = null;
+        const host = { register: (a: ZoomApi) => { api = a; }, unregister: (a: ZoomApi) => { if (api === a) api = null; } };
+        const { container } = render(
+            <ZoomProvider host={host}>
+                <div style={{ height: 400 }}>
+                    <Graph2D
+                        rootId="code" nodes={g.nodes} edges={g.edges} lens={LENSES.duplication} selected={null} onSelect={vi.fn()}
+                        planeLabel={(p) => p || L.partitionNone} labels={L} label={L.regionLabel}
+                    />
+                </div>
+            </ZoomProvider>,
+        );
         await ready(container);
-        expect(screen.getByRole('button', { name: L.zoomIn })).toBeTruthy();
-        expect(screen.getByRole('button', { name: L.zoomReset })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: L.zoomIn })).toBeNull();
+        expect(api).not.toBeNull();
+        const width = () => Number(container.querySelector('svg')!.getAttribute('viewBox')!.split(' ')[2]);
+        const fitted = width();
+        act(() => api!.zoomIn());
+        expect(width()).toBeLessThan(fitted);
+        act(() => api!.fit());
+        expect(width()).toBe(fitted);
         const opacities = [...container.querySelectorAll('circle[data-dot]')].map((c) => c.getAttribute('opacity'));
         expect(opacities).toContain('0.35');
         expect(opacities).toContain('1');

@@ -26,7 +26,7 @@ export function PatternsPanel({ graph, labels, surface, onShow, onCamera, camera
     if (matrix.families.length === 0 && matrix.antiTotal === 0) return <NotSetUp title={t.notSetUpTitle} body={t.notSetUpBody} />;
     const layerName = (layer: string) => s.layers[layer as keyof typeof s.layers] ?? s.layers.other;
     const light = (family: string, refs: string[]) => {
-        surface.setQuestion('patterns');
+        surface.setFamily(family); // asks the patterns question, narrowed to this family (the scene's "{family} only" chip clears it)
         onShow(refs);
         setActive({ family, stations: new Set(refs.flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size });
     };

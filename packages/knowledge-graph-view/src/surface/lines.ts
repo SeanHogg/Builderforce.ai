@@ -10,9 +10,10 @@
  * the use metric, then the name, then the id.
  */
 
-import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import type { KEdge, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
 import { layerRank, type Provenance } from './layers';
+import { outlineView } from './outlineGraph';
 import { stationOfRef, type Station, type StationModel } from './stations';
 
 export const MAX_LINES = 8;
@@ -63,9 +64,9 @@ function majorityVerdict(edge: Edge): Verdict {
     return (Object.keys(VERDICT_RANK) as Verdict[]).reduce((best, v) => (edge.tally[v] > edge.tally[best] || (edge.tally[v] === edge.tally[best] && VERDICT_RANK[v] < VERDICT_RANK[best]) ? v : best), 'allowed' as Verdict);
 }
 
-function stationEdges(graph: KnowledgeGraph, model: StationModel): Map<string, Map<string, Edge>> {
+function stationEdges(edges: readonly KEdge[], model: StationModel): Map<string, Map<string, Edge>> {
     const out = new Map<string, Map<string, Edge>>();
-    for (const e of graph.edges) {
+    for (const e of edges) {
         if (e.kind !== 'references') continue;
         const a = stationOfRef(model, e.from), b = stationOfRef(model, e.to);
         if (!a || !b || a === b) continue;
@@ -85,7 +86,8 @@ function terminusOf(station: Station | undefined, id: string): Terminus {
 }
 
 export function buildLines(graph: KnowledgeGraph, model: StationModel): LinesModel {
-    const edges = stationEdges(graph, model);
+    // A truncated graph's routes follow the outline's links (verdict codes decoded by the adapter), not the cut graph's edges.
+    const edges = stationEdges(outlineView(graph)?.edges ?? graph.edges, model);
     const entries = model.stations.filter((s) => s.entry);
     const lines: Line[] = [];
 

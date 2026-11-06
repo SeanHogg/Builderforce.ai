@@ -13,7 +13,7 @@ import { findingRequest } from '../findingText';
 import { labelFor, nodeIndex } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
-import { button, card, heading, muted, primaryButton, quietButton } from '../styles';
+import { card, heading, muted, primaryButton, quietButton } from '../styles';
 import type { KnowledgeGraphSource, PinpointResult } from '../types';
 import { pathOfStations } from './path';
 import { scopeFindings } from './scope';
@@ -34,8 +34,12 @@ export interface PinpointInputProps {
     onClear?: (() => void) | undefined;
     onSelect(ref: string): void;
     onCompose?: ((text: string) => void) | undefined;
-    /** The ask bar's own controls, which this wraps so a paste or a drop anywhere on the bar is caught. */
-    children: ReactNode;
+    /**
+     * The ask bar's own controls, which this wraps so a paste or a drop anywhere on the bar is caught.
+     * A function receives the screenshot button to place INSIDE the bar (null when the source cannot
+     * pinpoint); plain children get the button as a sibling.
+     */
+    children: ReactNode | ((picker: ReactNode) => ReactNode);
 }
 
 function Badge({ tone, text }: { tone: ThemeTone; text: string }) {
@@ -51,7 +55,7 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
     const [over, setOver] = useState(false);
     const { state, run, clear } = usePinpoint(source, rootId, (refs) => onMatches(refs));
     const index = useMemo(() => nodeIndex(graph), [graph]);
-    if (!source.pinpoint) return <>{children}</>;
+    if (!source.pinpoint) return <>{typeof children === 'function' ? children(null) : children}</>;
 
     const image = (list: FileList | null | undefined): File | undefined => (list ? [...list].find((f) => f.type.startsWith('image/')) : undefined);
     const onPaste = (e: ClipboardEvent) => {
@@ -73,25 +77,38 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
         onCompose?.(fillTemplate(t.diagnoseText, { description: result.description, path: path || t.noFindings, findings: findings || t.noFindings }));
     };
 
+    // The picker: a quiet icon button that sits inside the ask bar's right edge.
+    const picker = (
+        <>
+            <input
+                ref={files} type="file" accept="image/*" tabIndex={-1} aria-hidden="true" data-testid="kg-pinpoint-file" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) run(f); e.target.value = ''; }}
+            />
+            <button
+                type="button" data-testid="kg-pinpoint-button" title={t.hint} aria-label={t.button} onClick={() => files.current?.click()}
+                style={{ flex: 'none', width: 28, height: 28, padding: 0, border: 0, borderRadius: 7, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            >
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 }}>
+                    <path d="M2 5.5h2.2L5.4 3.5h5.2l1.2 2H14v7H2z" /><circle cx="8" cy="8.6" r="2.2" />
+                </svg>
+            </button>
+        </>
+    );
     return (
         <div
             data-testid="kg-pinpoint" onPaste={onPaste} onDrop={onDrop}
             onDragOver={(e) => { if (hasFiles(e)) { e.preventDefault(); setOver(true); } }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
-            // Basis min(100%, 360px): where the bar is narrower than that it takes its own row, so the result card wraps below it.
-            style={{ flex: '1 1 min(100%, 360px)', minWidth: 0, display: 'grid', gap: 8, borderRadius: 8, outline: over ? `2px dashed ${cssVar('accent')}` : 'none', outlineOffset: 2 }}
+            // The result card floats under the bar, so a pinpoint never grows the 56px header row.
+            style={{ position: 'relative', flex: '1 1 180px', minWidth: 0, display: 'flex', borderRadius: 10, outline: over ? `2px dashed ${cssVar('accent')}` : 'none', outlineOffset: 2 }}
         >
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
-                {children}
-                <input
-                    ref={files} type="file" accept="image/*" tabIndex={-1} aria-hidden="true" data-testid="kg-pinpoint-file" style={{ display: 'none' }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) run(f); e.target.value = ''; }}
-                />
-                <button type="button" style={button} title={t.hint} aria-label={t.button} onClick={() => files.current?.click()}>{t.button}</button>
-            </div>
-            {over && <p style={{ ...muted, margin: 0 }}>{t.dropHere}</p>}
+            {typeof children === 'function' ? children(picker) : <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, flex: 1 }}>{children}{picker}</div>}
+            {over && <p style={{ ...muted, margin: 0, position: 'absolute', top: '100%', left: 0, zIndex: 5 }}>{t.dropHere}</p>}
             {state.status !== 'idle' && (
-                <section aria-label={t.label} aria-live="polite" data-status={state.status} style={{ ...card, display: 'grid', gap: 8 }}>
+                <section
+                    aria-label={t.label} aria-live="polite" data-status={state.status}
+                    style={{ ...card, display: 'grid', gap: 8, position: 'absolute', top: '100%', insetInline: 0, marginTop: 6, zIndex: 5, maxHeight: '60vh', overflow: 'auto', background: cssVar('bg'), boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)' }}
+                >
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                         {'thumb' in state && state.thumb && <img src={state.thumb} alt={t.thumbAlt} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: `1px solid ${cssVar('border')}` }} />}
                         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 4 }}>

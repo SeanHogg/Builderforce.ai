@@ -1,79 +1,84 @@
 /**
- * The surface header: the reviewed folder, the spine (where you are), the ask bar (search
- * today; the pinpoint screenshot input joins it), the panel buttons, the overlay menu,
- * Before/After (when the host keeps a baseline) and the host's actions. The cameras, the
- * questions and the lenses are the centre controls (`surface/CameraBar.tsx`).
+ * The header row under the status strip (56px): the spine, the ask bar (flex), the Panels group
+ * and the Risk overlays menu. The ask bar is a 40px rounded search whose placeholder is the
+ * active question as a sentence, with the answer mode as a mono note on its right and the
+ * screenshot picker inside it. On a narrow container the row stacks: spine, then a full-width
+ * 44px ask bar, then the Panels group scrolling sideways (the overlays move to the status strip).
+ * The cameras, the questions and the lenses are the centre controls (`surface/SceneOverlay.tsx`).
  */
 
-import { useState, type ReactNode } from 'react';
-import type { KnowledgeGraphLabels } from './labels';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { cssVar } from './scene/themeColors';
-import { chip, input } from './styles';
-import type { KnowledgeScopeSummary } from './types';
-
-/** `tabs` when the lenses ARE the host panel's views; the same row as a `tablist`. */
-export type LensControl = 'chips' | 'tabs';
-export type Revision = 'after' | 'before';
+import { MONO, muted } from './styles';
+import type { QuestionId } from './surface/questions';
 
 export interface ToolbarProps {
     labels: KnowledgeGraphLabels;
-    scopes: KnowledgeScopeSummary[];
-    rootId: string | null;
-    onRoot(rootId: string): void;
     onSearch(q: string): void;
+    /** The active question: its sentence is the ask bar's placeholder, its answer mode the note. */
+    question: QuestionId;
+    /** What `{name}` is in the sentence: the station, the line or the folder. */
+    askName: string;
+    /** The question's answer in words (`answerLine`): "3 stations", "No station matches.", "Not set up…". Shown beside the answer mode; empty ⇒ absent. */
+    answer?: string | undefined;
+    narrow: boolean;
     /** The drill path. */
     spine?: ReactNode;
-    /** The panel registry's buttons. */
+    /** The Panels group. */
     panels?: ReactNode;
-    /** The overlay popover. */
+    /** The overlay menu (wide containers; a narrow one has it in the status strip). */
     overlays?: ReactNode;
-    /** The time slider. */
-    time?: ReactNode;
-    /** Wraps the search form so the pinpoint input catches a paste or a drop anywhere on the ask bar. */
-    askWrap?: ((form: ReactNode) => ReactNode) | undefined;
+    /**
+     * Wraps the ask bar so the pinpoint input catches a paste or a drop anywhere on it and puts
+     * its screenshot button inside: it calls `bar` with that button.
+     */
+    askWrap?: ((bar: (picker: ReactNode) => ReactNode) => ReactNode) | undefined;
     /** Opens the lines as a sheet where the left panel has collapsed. */
     linesToggle?: ReactNode;
-    actions?: ReactNode;
-    /** Present when the host keeps a baseline: which graph is drawn, and whether "before" exists. */
-    revision?: { value: Revision; hasBefore: boolean; onChange(r: Revision): void };
 }
 
-export function Toolbar({ labels, scopes, rootId, onRoot, onSearch, spine, panels, overlays, time, askWrap, linesToggle, actions, revision }: ToolbarProps) {
+const searchIcon = (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ flex: 'none', fill: 'none', stroke: cssVar('muted'), strokeWidth: 1.6 }}>
+        <circle cx="7" cy="7" r="5" /><path d="M11 11l4 4" />
+    </svg>
+);
+
+export function Toolbar({ labels, onSearch, question, askName, answer, narrow, spine, panels, overlays, askWrap, linesToggle }: ToolbarProps) {
     const [q, setQ] = useState('');
-    const search = (
-        <form role="search" onSubmit={(e) => { e.preventDefault(); onSearch(q); }} style={{ display: 'flex', flex: '1 1 180px', minWidth: 0 }}>
+    const s = labels.surface;
+    const bar = (picker: ReactNode) => (
+        <form
+            role="search" onSubmit={(e) => { e.preventDefault(); onSearch(q); }}
+            style={{
+                flex: '1 1 180px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, boxSizing: 'border-box', height: narrow ? 44 : 40, padding: '0 6px 0 12px',
+                borderRadius: 10, border: `1px solid ${cssVar('border')}`, background: cssVar('bg'),
+            }}
+        >
+            {searchIcon}
             <input
-                type="search" aria-label={labels.searchLabel} placeholder={labels.searchPlaceholder} value={q}
-                onChange={(e) => setQ(e.target.value)} style={{ ...input, flex: 1 }}
+                type="search" aria-label={labels.searchLabel} placeholder={fillTemplate(s.askSentence[question], { name: askName })} value={q}
+                onChange={(e) => setQ(e.target.value)}
+                style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: cssVar('text'), font: 'inherit', fontSize: narrow ? 14 : 13 }}
             />
+            {answer && <span data-testid="kg-answer" role="status" style={{ ...muted, fontFamily: MONO, fontSize: 11, padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', flex: '0 1 auto', whiteSpace: narrow ? 'normal' : 'nowrap' }}>{answer}</span>}
+            {!narrow && <span data-testid="kg-answer-mode" style={{ ...muted, fontFamily: MONO, fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '0 1 auto' }}>{s.answerMode[question]}</span>}
+            {picker}
         </form>
     );
+    const ask = askWrap ? askWrap(bar) : bar(null);
+    const row: CSSProperties = narrow
+        ? { display: 'grid', gap: 10, padding: '10px 12px' }
+        : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minHeight: 56, padding: '8px 16px' };
     return (
-        <div style={{ display: 'grid', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${cssVar('border')}` }}>
+        <div style={{ ...row, boxSizing: 'border-box', flex: 'none', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
             {spine}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                {scopes.length > 1 && (
-                    <select aria-label={labels.scopeLabel} value={rootId ?? ''} onChange={(e) => onRoot(e.target.value)} style={{ ...input, maxWidth: 220 }}>
-                        {scopes.map((s) => <option key={s.rootId} value={s.rootId}>{s.title}</option>)}
-                    </select>
-                )}
-                {linesToggle}
-                {(askWrap ?? ((form: ReactNode) => form))(search)}
-                {panels}
-                {overlays}
-                {time}
-                {revision && (
-                    <div role="group" aria-label={labels.revisionLabel} style={{ display: 'flex', gap: 4 }}>
-                        <button type="button" aria-pressed={revision.value === 'before'} disabled={!revision.hasBefore} style={{ ...chip(revision.value === 'before'), ...(revision.hasBefore ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }} onClick={() => revision.onChange('before')}>
-                            {labels.compareBefore}
-                        </button>
-                        <button type="button" aria-pressed={revision.value === 'after'} style={chip(revision.value === 'after')} onClick={() => revision.onChange('after')}>
-                            {labels.compareAfter}
-                        </button>
-                    </div>
-                )}
-                {actions}
-            </div>
+            {ask}
+            {narrow ? (
+                (panels || linesToggle) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', maxWidth: '100%' }}>{linesToggle}{panels}</div>
+            ) : (
+                <>{linesToggle}{panels}{overlays}</>
+            )}
         </div>
     );
 }

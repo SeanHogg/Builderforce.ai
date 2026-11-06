@@ -1,92 +1,69 @@
 /**
- * The centre controls: the camera switcher (from the camera registry), the question chips
- * with a More menu for the rest, the answer line, and the lens row — the lenses stay (they
- * are the questions' ids and a host may ask for them as tabs), a compact scroller beneath.
+ * The camera bar: the segmented *View* group (the cameras from the registry, minus those marked
+ * `switcher: false` such as Sequence, which the path strip owns) and, at the far end, "↑ Out to …"
+ * (while a station is open), + , − and Fit. The zoom buttons call the api the ACTIVE camera
+ * registered (`zoom.tsx`); with none registered (the 3D tower) they are disabled.
  */
 
-import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
-import type { LensDef } from '../lenses';
 import { cssVar } from '../scene/themeColors';
-import { chip, muted } from '../styles';
-import type { LensId, ViewMode } from '../types';
-import type { LensControl } from '../Toolbar';
-import { MORE_QUESTIONS, PRIMARY_QUESTIONS, type QuestionDef, type QuestionId } from './questions';
+import { CONTROL } from '../styles';
+import type { ViewMode } from '../types';
 import type { CameraDef } from './registry';
-import type { Station } from './stations';
+import { Segmented } from './ui';
+import type { ZoomApi } from './zoom';
 
 export interface CameraBarProps {
     labels: KnowledgeGraphLabels;
     cameras: readonly CameraDef[];
     mode: ViewMode;
     onMode(mode: ViewMode): void;
-    stations: readonly Station[];
-    question: QuestionId;
-    onQuestion(id: QuestionId): void;
-    /** How many stations answer the question; null = every station does. */
-    litCount: number | null;
-    lenses: LensDef[];
-    lens: LensId;
-    onLens(id: LensId): void;
-    lensControl?: LensControl | undefined;
+    /** The level above the open station ("the line"); present ⇒ the "↑ Out to …" button shows. */
+    outTo?: string | null | undefined;
+    onOut?: (() => void) | undefined;
+    /** The active camera's zoom; null/absent ⇒ +, − and Fit are disabled. */
+    zoom?: ZoomApi | null | undefined;
+    /** The View group scrolls sideways instead of wrapping (a phone). */
+    scroll?: boolean | undefined;
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, stations, question, onQuestion, litCount, lenses, lens, onLens, lensControl = 'chips' }: CameraBarProps) {
-    const s = labels.surface;
-    const [more, setMore] = useState(false);
-    const tabs = lensControl === 'tabs';
-    const scroller = { display: 'flex', gap: 6, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 } as const;
-    const current = [...PRIMARY_QUESTIONS, ...MORE_QUESTIONS].find((q) => q.id === question);
-    const missing = current?.status(stations) === 'not-set-up';
-    const pick = (q: QuestionDef) => { setMore(false); onQuestion(q.id); };
-    const moreActive = MORE_QUESTIONS.some((q) => q.id === question);
+const zoomButton: CSSProperties = {
+    height: CONTROL, minWidth: CONTROL, padding: '0 10px', borderRadius: 8, cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 600,
+    border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), pointerEvents: 'auto',
+};
 
-    const lensItems = lenses.map((l) => (
-        <button
-            key={l.id} type="button" role={tabs ? 'tab' : undefined} aria-selected={tabs ? l.id === lens : undefined}
-            aria-pressed={tabs ? undefined : l.id === lens} title={labels.lensHints[l.id]} onClick={() => onLens(l.id)}
-            style={{ ...chip(l.id === lens), scrollSnapAlign: 'start' }}
-        >
-            {labels.lenses[l.id]}
-        </button>
-    ));
-
+function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: ZoomApi | null | undefined }) {
+    const off = !zoom;
+    const style: CSSProperties = { ...zoomButton, ...(off ? { opacity: 0.5, cursor: 'default' } : null) };
     return (
-        <div style={{ display: 'grid', gap: 6, padding: '8px 12px' }}>
-            <div role="group" aria-label={labels.viewModesLabel} style={{ ...scroller, gap: 4 }}>
-                {cameras.map((c) => (
-                    <button key={c.id} type="button" aria-pressed={mode === c.id} style={chip(mode === c.id)} onClick={() => onMode(c.id)}>{labels[c.labelKey]}</button>
-                ))}
-            </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                <div role="group" aria-label={s.questionsLabel} style={{ ...scroller, flex: 1, minWidth: 0 }}>
-                    {PRIMARY_QUESTIONS.map((q) => (
-                        <button key={q.id} type="button" data-question={q.id} aria-pressed={q.id === question} style={chip(q.id === question)} onClick={() => pick(q)}>
-                            {s.questions[q.id]}
-                        </button>
-                    ))}
+        <div role="group" aria-label={labels.zoomLabel} style={{ display: 'inline-flex', gap: 4 }}>
+            <button type="button" disabled={off} aria-label={labels.zoomIn} title={labels.zoomIn} style={style} onClick={() => zoom?.zoomIn()}>+</button>
+            <button type="button" disabled={off} aria-label={labels.zoomOut} title={labels.zoomOut} style={style} onClick={() => zoom?.zoomOut()}>−</button>
+            <button type="button" disabled={off} aria-label={labels.zoomReset} title={labels.zoomReset} style={style} onClick={() => zoom?.fit()}>{labels.surface.overlay.fit}</button>
+        </div>
+    );
+}
+
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, scroll = false }: CameraBarProps) {
+    return (
+        <div style={{ display: 'grid', gap: 6, padding: '8px 12px', pointerEvents: 'none' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: scroll ? 'nowrap' : 'wrap' }}>
+                <div style={{ minWidth: 0, maxWidth: '100%', pointerEvents: 'auto', ...(scroll ? { overflowX: 'auto' } : null) }}>
+                    <Segmented
+                        label={labels.viewModesLabel}
+                        value={mode}
+                        items={cameras.filter((c) => c.switcher !== false).map((c) => ({ id: c.id, label: labels[c.labelKey] }))}
+                        onChange={(id) => onMode(id as ViewMode)}
+                    />
                 </div>
-                <div style={{ position: 'relative', flex: 'none' }} onKeyDown={(e) => { if (e.key === 'Escape' && more) { e.stopPropagation(); setMore(false); } }}>
-                    <button type="button" aria-expanded={more} style={chip(moreActive)} onClick={() => setMore((v) => !v)}>
-                        {moreActive ? s.questions[question] : s.moreQuestions}
-                    </button>
-                    {more && (
-                        <div role="group" aria-label={s.moreQuestions} style={{ position: 'absolute', insetInlineEnd: 0, top: '100%', marginTop: 6, zIndex: 4, display: 'grid', gap: 2, padding: 6, minWidth: 240, background: cssVar('bg'), border: `1px solid ${cssVar('border')}`, borderRadius: 12 }}>
-                            {MORE_QUESTIONS.map((q) => (
-                                <button key={q.id} type="button" data-question={q.id} aria-pressed={q.id === question} style={{ ...chip(q.id === question), borderRadius: 8, justifyContent: 'flex-start', border: 'none' }} onClick={() => pick(q)}>
-                                    {s.questions[q.id]}
-                                </button>
-                            ))}
-                        </div>
+                <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none' }}>
+                    {outTo && onOut && (
+                        <button type="button" data-out style={zoomButton} onClick={onOut}>{fillTemplate(labels.surface.overlay.outTo, { name: outTo })}</button>
                     )}
+                    <ZoomButtons labels={labels} zoom={zoom} />
                 </div>
             </div>
-            <p aria-live="polite" data-testid="kg-answer" style={{ ...muted, margin: 0 }}>
-                {missing ? s.answerNotSetUp : litCount === null ? '' : litCount === 0 ? s.answerNone : fillTemplate(s.answerCount, { count: litCount })}
-            </p>
-            {tabs
-                ? <div role="tablist" aria-label={labels.lensesLabel} style={scroller}>{lensItems}</div>
-                : <nav aria-label={labels.lensesLabel} style={scroller}>{lensItems}</nav>}
         </div>
     );
 }

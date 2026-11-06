@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { FIXTURE_PLAN, FIXTURE_REPORT, docsFixture, fixtureSource, openList } from './testing';
+import { pressMore } from './testMenu';
 import type { KnowledgeReviewEvent, ReviewControl, ReviewEstimate, ReviewRequest } from './types';
 
 
@@ -43,7 +44,7 @@ function scripted(opts: ScriptOptions = {}) {
 async function startReview(source: ReturnType<typeof scripted>['source']) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
   await openList({ screen, fireEvent });
-  fireEvent.click(screen.getByRole('button', { name: L.reviewFolder }));
+  await pressMore({ screen, fireEvent }, L.reviewFolder); // "Review a folder" lives in the header's ⋯ menu
 }
 
 describe('review confirm chip', () => {

@@ -9,6 +9,7 @@
  */
 
 import type { ReactNode } from 'react';
+import type { ReviewProgress as ReviewProgressEvent } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './labels';
 import { packLabel } from './names';
@@ -28,6 +29,11 @@ export interface ReviewProgressProps {
 
 const formatCost = (usd: number): string =>
     new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: usd < 1 ? 2 : 0 }).format(usd);
+
+/** The running line: "{phase} · {done} of {total}", or the planning words before the first progress arrives. The card and the status pill both say it. */
+export function reviewProgressText(labels: KnowledgeGraphLabels, p: ReviewProgressEvent | undefined): string {
+    return p ? fillTemplate(labels.reviewProgress, { phase: labels.phases[p.phase], done: p.done, total: p.total }) : labels.reviewPlanning;
+}
 
 export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgressProps) {
     const s = run.state;
@@ -74,9 +80,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
         const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : undefined;
         return shell(
             <>
-                <p style={{ margin: 0, fontSize: 13 }}>
-                    {p ? fillTemplate(labels.reviewProgress, { phase: labels.phases[p.phase], done: p.done, total: p.total }) : labels.reviewPlanning}
-                </p>
+                <p style={{ margin: 0, fontSize: 13 }}>{reviewProgressText(labels, p)}</p>
                 <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} style={{ height: 6, borderRadius: 999, background: cssVar('border') }}>
                     <div style={{ height: '100%', width: `${pct ?? 5}%`, borderRadius: 999, background: cssVar('accent') }} />
                 </div>

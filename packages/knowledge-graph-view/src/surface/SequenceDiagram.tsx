@@ -8,28 +8,42 @@
 
 import { useId, useMemo } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../copyText';
-import { fillTemplate } from '../labels';
-import { edgeKindLabel } from '../names';
+import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { button, muted } from '../styles';
-import type { PathHop } from './path';
+import type { PathHop, PathModel } from './path';
 import type { SceneProps } from './registry';
-import { sequenceOf, toSequenceMermaid } from './sequenceModel';
+import { sequenceOf } from './sequenceModel';
+import { hopText, pathMermaid } from './sequenceText';
 
 const COL_W = 150;
 const HEAD_H = 40;
 const ROW_H = 40;
 const ARROW_TONES: readonly ThemeTone[] = ['edge', 'accent', 'violation'];
 
+/** The Sequence camera: the surface's path, step and stepping. */
 export function SequenceDiagram({ labels, surface }: SceneProps) {
+    return <SequenceView path={surface.path} step={surface.step} onStep={surface.setStep} labels={labels} />;
+}
+
+export interface SequenceViewProps {
+    path: PathModel;
+    step: number;
+    onStep(n: number): void;
+    labels: KnowledgeGraphLabels;
+    /** False where the host draws its own *Copy as Mermaid* (the path strip). Default true. */
+    copy?: boolean;
+}
+
+/** The diagram itself, free of the surface: the Sequence camera and the path strip's Sequence toggle both draw it. */
+export function SequenceView({ path, step, onStep: setStep, labels, copy = true }: SequenceViewProps) {
     const s = labels.surface;
-    const { path, step, setStep } = surface;
     // Arrowheads are markers of an explicit token each; the id is per instance, so two diagrams on a page never share one.
     const uid = useId().replace(/:/g, '');
     const seq = useMemo(() => sequenceOf(path), [path]);
     const copier = useCopyText();
-    const say = (hop: PathHop) => (hop.count === 0 ? s.noDirectReference : fillTemplate(s.pathHop, { kind: edgeKindLabel(labels, hop.kind), count: hop.count }));
-    const mermaid = useMemo(() => toSequenceMermaid(seq, say), [seq, labels]); // eslint-disable-line react-hooks/exhaustive-deps
+    const say = (hop: PathHop) => hopText(labels, hop);
+    const mermaid = useMemo(() => pathMermaid(path, labels), [path, labels]);
     if (seq.lifelines.length < 2) return <p style={{ ...muted, padding: 12 }}>{s.sequence.empty}</p>;
 
     const width = seq.lifelines.length * COL_W;
@@ -40,11 +54,11 @@ export function SequenceDiagram({ labels, surface }: SceneProps) {
     return (
         <div data-testid="kg-sequence" style={{ display: 'grid', gap: 8, padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" style={button} onClick={() => void copier.copy(mermaid)}>{labels.copyMermaid}</button>
-                <CopiedNote status={copier.status} labels={labels} />
+                {copy && <button type="button" style={button} onClick={() => void copier.copy(mermaid)}>{labels.copyMermaid}</button>}
+                {copy && <CopiedNote status={copier.status} labels={labels} />}
                 <span style={muted}>{fillTemplate(s.sequence.description, { stops: seq.lifelines.length, messages: seq.messages.length })}</span>
             </div>
-            <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />
+            {copy && <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />}
             <div style={{ overflowX: 'auto' }}>
                 <svg role="group" aria-label={labels.regionLabel} width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', color: cssVar('text') }}>
                     <defs>

@@ -141,6 +141,6 @@ describe('CanvasKnowledgeSurface', () => {
 
 /** The view opens on the 2D graph; these tests read the list (its text alternative), so open it first. */
 async function openList(): Promise<HTMLElement> {
-  fireEvent.click(await screen.findByRole('button', { name: 'List' }));
+  fireEvent.click(await screen.findByRole('radio', { name: 'List' })); // the View group is a segmented radio group
   return screen.findByTestId('kg-list');
 }

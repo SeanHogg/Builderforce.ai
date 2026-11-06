@@ -47,7 +47,6 @@ export function CodeAuditVisualizer({ analysis, openSource }: { analysis: CodeAn
         source={source}
         labels={labels}
         lenses={AUDIT_LENSES}
-        lensControl="tabs"
         {...(onOpenSource ? { onOpenSource } : {})}
       />
     </section>

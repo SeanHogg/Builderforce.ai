@@ -42,7 +42,10 @@ export function App() {
   const [services, setServices] = useState<PanelServices | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    createPanelServices().then(setServices, () => setFailed(true));
+    let made: PanelServices | null = null;
+    let live = true;
+    createPanelServices().then((s) => { made = s; if (live) setServices(s); else s.dispose(); }, () => setFailed(true));
+    return () => { live = false; made?.dispose(); };
   }, []);
   if (failed) return <p className="rovr-empty" role="alert">{t('startFailed')}</p>;
   if (!services) return <p className="rovr-empty">{t('loading')}</p>;

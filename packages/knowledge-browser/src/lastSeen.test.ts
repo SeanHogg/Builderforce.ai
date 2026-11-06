@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { LAST_SEEN_MAX_GRAPHS, clearLastSeenMemory, lastSeenMemory } from './lastSeen';
+import { LAST_SEEN_MAX_GRAPHS, claimLastSeenMemory, clearLastSeenMemory, lastSeenIdentity, lastSeenMemory } from './lastSeen';
 
 const graph = (rootId: string): KnowledgeGraph => ({
   scope: { rootId, packs: ['code'], digest: 'd' }, nodes: [], edges: [], findings: [],
@@ -33,5 +33,30 @@ describe('lastSeenMemory', () => {
     m.loaded('r3', graph('r3'), false);
     expect((await m.read())?.rootId).toBe('r3');
     expect(await lastSeenMemory(9003).read()).toBeNull();
+  });
+});
+
+describe('claimLastSeenMemory', () => {
+  const seen = async () => (await lastSeenMemory(9100).read()) !== null;
+  const remember = () => lastSeenMemory(9100).loaded('r', graph('r'), false);
+
+  it('names the identity by workspace and person, and none when either is missing', () => {
+    expect(lastSeenIdentity('u1', 7)).toBe('7:u1');
+    expect(lastSeenIdentity(null, 7)).toBeNull();
+    expect(lastSeenIdentity('u1', undefined)).toBeNull();
+  });
+
+  it('keeps the memory for the same identity, and clears it on sign-out or another workspace or person', async () => {
+    claimLastSeenMemory(null);
+    claimLastSeenMemory('7:u1');
+    remember();
+    claimLastSeenMemory('7:u1');
+    expect(await seen()).toBe(true);
+    claimLastSeenMemory(null); // sign-out
+    expect(await seen()).toBe(false);
+    claimLastSeenMemory('7:u1');
+    remember();
+    claimLastSeenMemory('8:u1'); // workspace switch
+    expect(await seen()).toBe(false);
   });
 });

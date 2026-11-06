@@ -1,6 +1,6 @@
 /**
  * knowledgeVersion — the per-project version token every cached knowledge graph keys on
- * (PRD 38 §4.8: `kg:v4:…:${knowledgeVersion}:…`).
+ * (PRD 38 §4.8: `kg:v5:…:${knowledgeVersion}:…`).
  *
  * It IS the project's fact-store version token (`projectFactsStore.projectFactsVersion`),
  * not a second store. Every fact write in the platform — the facts routes, the governed

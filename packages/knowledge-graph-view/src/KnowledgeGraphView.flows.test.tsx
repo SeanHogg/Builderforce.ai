@@ -8,6 +8,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { packLabel } from './names';
 import { PHONE_FOCUS_NODES } from './graphModel';
 import { codeFixture, docsFixture, fixtureSource, openList } from './testing';
+import { pressMore } from './testMenu';
 import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
 
 
@@ -96,7 +97,7 @@ describe('search beyond the loaded graph', () => {
     expect(load).toHaveBeenLastCalledWith('docs', { focus: [hidden.ref] });
 
     search('slow');
-    fireEvent.click(screen.getByRole('button', { name: L.reviewFolder }));
+    await pressMore({ screen, fireEvent }, L.reviewFolder); // the launcher lives in the header's ⋯ menu
     fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
     await screen.findByText(L.reviewDoneTitle);
     await waitFor(() => expect(load).toHaveBeenLastCalledWith('docs', undefined));

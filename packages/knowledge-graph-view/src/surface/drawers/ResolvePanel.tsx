@@ -11,14 +11,12 @@ import { findingRequest, findingTitle } from '../../findingText';
 import { nodeIndex } from '../../graphModel';
 import { fillTemplate } from '../../labels';
 import { button, card, heading, muted, primaryButton } from '../../styles';
+import { CODEMOD_KINDS } from '../actModel';
 import { ProvenanceBadge } from '../ActPanel';
 import { findingProvenance } from '../scope';
 import { stationOfRef } from '../stations';
 import type { PanelProps } from '../registry';
 import { Section } from './ui';
-
-/** The finding kinds a deterministic codemod exists for. */
-export const CODEMOD_KINDS: ReadonlySet<string> = new Set(['unused-export', 'unused-file']);
 
 type Applied = { state: 'idle' } | { state: 'applying' } | { state: 'done'; branch?: string; changed: string[] } | { state: 'failed' };
 

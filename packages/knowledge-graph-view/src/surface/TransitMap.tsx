@@ -12,6 +12,8 @@ import { useMemo, useRef } from 'react';
 import { useContainerWidth } from '../environment';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
+import { usePanZoom } from '../usePanZoom';
+import { usePanZoomRegistration } from './zoom';
 import type { LinesModel } from './lines';
 import { lineTone, segmentUntested, type OverlayModel } from './overlays';
 import type { Station, StationModel } from './stations';
@@ -56,6 +58,10 @@ export function TransitMap(p: TransitMapProps) {
     const hostRef = useRef<HTMLDivElement>(null);
     const width = useContainerWidth(hostRef);
     const layout = useMemo(() => layoutTransit(stations.stations, lines.lines, width), [stations.stations, lines.lines, width]);
+    // Zoom is the viewBox only (the scene overlay's +, − and Fit): no wheel or drag hook, so the page still scrolls over the map.
+    const fitted = useMemo(() => ({ x: 0, y: 0, w: layout.width, h: layout.height }), [layout.width, layout.height]);
+    const zoom = usePanZoom(fitted, layout);
+    usePanZoomRegistration(zoom);
     const lineById = useMemo(() => new Map(lines.lines.map((l) => [l.id, l] as const)), [lines.lines]);
     const dim = (...ids: string[]) => lit !== null && !ids.every((id) => lit.has(id));
     const layerName = (layer: string) => s.layers[layer as keyof typeof s.layers] ?? s.layers.other;
@@ -66,7 +72,7 @@ export function TransitMap(p: TransitMapProps) {
     return (
         <div ref={hostRef} data-testid="kg-transit" style={{ position: 'relative', width: '100%', overflow: 'auto' }}>
             <svg
-                role="group" aria-label={p.label} width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`}
+                role="group" aria-label={p.label} width={layout.width} height={layout.height} viewBox={zoom.viewBox ?? `0 0 ${layout.width} ${layout.height}`}
                 style={{ display: 'block', maxWidth: '100%', color: cssVar('text') }}
             >
                 <desc>{fillTemplate(s.mapDescription, { lines: lines.lines.length, stations: layout.drawn.length })}</desc>

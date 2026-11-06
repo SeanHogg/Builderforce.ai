@@ -9,7 +9,13 @@ import { fileRefOf, stationOfRef, type Station, type StationModel } from './stat
 import type { Line } from './lines';
 
 export interface PathStop { id: string; name: string; layer?: string }
-export interface PathHop { kind: string; count: number; verdict?: string }
+export interface PathHop {
+    kind: string;
+    count: number;
+    verdict?: string;
+    /** What travels over the hop (a payload, a route), when the edge carries it; drawn after the kind on the path strip. */
+    detail?: string;
+}
 export interface PathModel { stops: PathStop[]; hops: PathHop[] }
 
 export const EMPTY_PATH: PathModel = { stops: [], hops: [] };

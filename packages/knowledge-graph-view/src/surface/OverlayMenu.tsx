@@ -1,16 +1,17 @@
 /**
- * The overlay popover: four presets and, per channel, the metric it shows. Every view reads
- * the same bindings, so a preset recolours the map and the tower alike. A metric whose data
- * has not been collected stays selectable but is marked "Not set up", and the channel then
- * draws neutral instead of inventing a value.
+ * "Risk overlays ▾": the overlay popover (a `Menu` in dialog mode, 560px wide, 92vw at most) with
+ * four presets and, per channel, the metric it shows. Every view reads the same bindings, so a
+ * preset recolours the map and the tower alike. A metric whose data has not been collected stays
+ * selectable but is marked "Not set up", and the channel then draws neutral instead of inventing
+ * a value. On a narrow container the trigger is the short "Risk ▾" and the panel spans the width.
  */
 
-import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
-import { cssVar } from '../scene/themeColors';
-import { chip, heading, muted } from '../styles';
+import { muted } from '../styles';
 import { CHANNELS, METRICS, metricStatus, PRESET_ORDER, type ChannelId, type MetricId, type PresetId } from './overlays';
 import type { Station } from './stations';
+import { Menu, Pill, pillStyle } from './ui';
 
 export interface OverlayMenuProps {
     labels: KnowledgeGraphLabels;
@@ -20,63 +21,56 @@ export interface OverlayMenuProps {
     onPreset(id: PresetId): void;
     onChannel(channel: ChannelId, metric: MetricId): void;
     onPins(on: boolean): void;
+    /** The container is phone-narrow: short trigger, full-width panel. */
+    narrow?: boolean;
 }
 
-const small = (active: boolean) => ({ ...chip(active), minHeight: 32, padding: '0 10px', fontSize: 12 });
+const WIDE: CSSProperties = { width: 'min(560px, 92vw)', gap: 9, padding: '12px 14px' };
+// Fixed to the container's edges so a trigger mid-strip cannot push the panel off screen.
+const NARROW: CSSProperties = { position: 'fixed', top: 'auto', insetInlineStart: 12, insetInlineEnd: 12, width: 'auto', gap: 9, padding: '12px 14px' };
 
-export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onChannel, onPins }: OverlayMenuProps) {
+const SMALL: CSSProperties = { height: 26, padding: '0 8px', fontSize: 11 };
+const rowLabel: CSSProperties = { fontSize: 12, fontWeight: 600, color: 'inherit' };
+
+export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onChannel, onPins, narrow = false }: OverlayMenuProps) {
     const s = labels.surface;
-    const [open, setOpen] = useState(false);
+    const trigger = narrow ? `${s.presets[preset]} ▾` : `${fillTemplate(s.presetLabel, { preset: s.presets[preset] })} ▾`;
     return (
-        <div style={{ position: 'relative' }} onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}>
-            <button type="button" aria-expanded={open} aria-controls="kg-overlay-menu" style={chip(open)} onClick={() => setOpen((v) => !v)}>
-                {fillTemplate(s.presetLabel, { preset: s.presets[preset] })}
-            </button>
-            {open && (
-                <div
-                    id="kg-overlay-menu" role="group" aria-label={s.overlaysTitle} data-testid="kg-overlay-menu"
-                    style={{
-                        position: 'absolute', insetInlineEnd: 0, top: '100%', marginTop: 6, zIndex: 4, width: 'min(340px, 92vw)', display: 'grid', gap: 10, padding: 12,
-                        background: cssVar('bg'), border: `1px solid ${cssVar('border')}`, borderRadius: 12, boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)',
-                    }}
-                >
-                    <h3 style={heading}>{s.overlaysTitle}</h3>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {PRESET_ORDER.map((id) => (
-                            <button key={id} type="button" aria-pressed={preset === id} style={small(preset === id)} onClick={() => onPreset(id)}>{s.presets[id]}</button>
-                        ))}
-                        <span style={{ ...small(preset === 'custom'), display: 'inline-flex', alignItems: 'center', opacity: preset === 'custom' ? 1 : 0.5 }} aria-hidden={preset !== 'custom'}>
-                            {s.presets.custom}
-                        </span>
-                    </div>
-                    {CHANNELS.map((channel) => (
-                        <div key={channel.id} role="group" aria-label={s.channels[channel.id]} style={{ display: 'grid', gap: 4 }}>
-                            <span style={muted}>{s.channels[channel.id]}</span>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                {METRICS.filter((m) => channel.allows(m)).map((m) => {
-                                    const missing = metricStatus(m, stations) === 'not-set-up';
-                                    return (
-                                        <button
-                                            key={m} type="button" aria-pressed={bindings[channel.id] === m} data-metric={m}
-                                            title={missing ? s.notSetUp : undefined} style={{ ...small(bindings[channel.id] === m), opacity: missing ? 0.7 : 1 }}
-                                            onClick={() => onChannel(channel.id, m)}
-                                        >
-                                            {s.metricNames[m]}{missing ? ` · ${s.notSetUp}` : ''}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
+        <Menu trigger={trigger} label={s.overlaysTitle} title={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} panelStyle={narrow ? NARROW : WIDE}>
+            <div data-testid="kg-overlay-menu" style={{ display: 'grid', gap: 9 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {PRESET_ORDER.map((id) => (
+                        <Pill key={id} on={preset === id} onClick={() => onPreset(id)}>{s.presets[id]}</Pill>
                     ))}
-                    <div role="group" aria-label={s.channels.pins} style={{ display: 'grid', gap: 4 }}>
-                        <span style={muted}>{s.channels.pins}</span>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                            <button type="button" aria-pressed={bindings.pins === 'on'} style={small(bindings.pins === 'on')} onClick={() => onPins(true)}>{s.on}</button>
-                            <button type="button" aria-pressed={bindings.pins === 'off'} style={small(bindings.pins === 'off')} onClick={() => onPins(false)}>{s.off}</button>
+                    <span aria-hidden={preset !== 'custom'} style={{ ...pillStyle(preset === 'custom'), display: 'inline-flex', alignItems: 'center', cursor: 'default', opacity: preset === 'custom' ? 1 : 0.5 }}>{s.presets.custom}</span>
+                </div>
+                <p style={{ ...muted, margin: 0, fontSize: 11, lineHeight: '15px' }}>{labels.surface.header.overlaysNote}</p>
+                {CHANNELS.map((channel) => (
+                    <div key={channel.id} role="group" aria-label={s.channels[channel.id]} style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '96px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
+                        <span style={{ ...muted, ...rowLabel }}>{s.channels[channel.id]}</span>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {METRICS.filter((m) => channel.allows(m)).map((m) => {
+                                const missing = metricStatus(m, stations) === 'not-set-up';
+                                return (
+                                    <Pill
+                                        key={m} on={bindings[channel.id] === m} data-metric={m} title={missing ? s.notSetUp : undefined}
+                                        style={{ ...SMALL, opacity: missing ? 0.7 : 1 }} onClick={() => onChannel(channel.id, m)}
+                                    >
+                                        {s.metricNames[m]}{missing ? ` · ${s.notSetUp}` : ''}
+                                    </Pill>
+                                );
+                            })}
                         </div>
+                    </div>
+                ))}
+                <div role="group" aria-label={s.channels.pins} style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '96px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
+                    <span style={{ ...muted, ...rowLabel }}>{s.channels.pins}</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                        <Pill on={bindings.pins === 'on'} style={SMALL} onClick={() => onPins(true)}>{s.on}</Pill>
+                        <Pill on={bindings.pins === 'off'} style={SMALL} onClick={() => onPins(false)}>{s.off}</Pill>
                     </div>
                 </div>
-            )}
-        </div>
+            </div>
+        </Menu>
     );
 }

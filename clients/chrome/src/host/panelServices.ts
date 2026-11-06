@@ -13,6 +13,7 @@ import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { createApiClient, createAuthenticatedFetch, type ApiClient, type AuthenticatedFetch } from '../api/apiClient';
 import { portRequest } from '../api/requestPorts';
 import { bindPendingWordsOwner } from './pendingWordsOwner';
+import { bindLastSeenOwner } from './lastSeenOwner';
 import { createSession, type Session } from '../auth/session';
 import { BFI_WASM_FILE, BFI_WORKER_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
 import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from '../inference/connectedAccount';
@@ -77,6 +78,8 @@ export interface PanelServices {
   addTask(chatId: number, title: string, description: string): Promise<LocalTask>;
   /** Probe the on-device runtimes now (Settings → Refresh). */
   probeLocal(): Promise<LocalRuntimeProbe[]>;
+  /** Releases what the panel bound to the session (the last-seen owner's subscription). Called when the panel unmounts. */
+  dispose(): void;
   /** The side panel's in-page engines and their model store (the picker's downloads). */
   pageEngines: PageEngineSet;
   /** The workspace's Kimi account, called from this browser (Settings → Model, the Connect card). */
@@ -224,6 +227,8 @@ export async function createPanelServices(): Promise<PanelServices> {
   });
   // Words not yet saved are journaled on this device for the signed-in workspace only, and gone with the sign-in.
   bindPendingWordsOwner(session);
+  // The knowledge view's in-memory last-seen graphs likewise belong to the signed-in workspace.
+  const unbindLastSeen = bindLastSeenOwner(session);
   const modelFallback = createModelFallbackChannel();
   const stream = createRovrStream({
     baseUrl,
@@ -367,6 +372,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     modelFallback,
     sendRuntime,
     reportError,
+    dispose: () => { unbindLastSeen(); },
   };
 }
 

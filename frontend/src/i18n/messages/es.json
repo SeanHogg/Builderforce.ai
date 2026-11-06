@@ -36193,6 +36193,57 @@
         "empty": "Elige una línea o una estación para dibujar su secuencia.",
         "messageAria": "{from} a {to}: {label}"
       },
+      "overlay": {
+        "outTo": "↑ Salir a {name}",
+        "fit": "Ajustar",
+        "lensSub": "era la lente {lens}",
+        "familyOnly": "Solo {family}",
+        "clearFamily": "Quitar el filtro {family}",
+        "missingFiles": "Faltan {count} archivos en el servidor.",
+        "diagnose": "Diagnosticar",
+        "controls": "Controles de la escena"
+      },
+      "rail": {
+        "heading": "Líneas desde los puntos de entrada",
+        "legendHeading": "Cómo se lee la imagen ahora",
+        "ownerSwatches": "Un color por responsable",
+        "legendEmpty": "No hay nada asignado a la imagen."
+      },
+      "act": {
+        "cardsTitle": "Corregir primero",
+        "noCards": "Aquí no hay nada que corregir.",
+        "apply": "Aplicar",
+        "prompt": "Pedir",
+        "show": "Mostrar",
+        "cardAction": "{action}: {title}",
+        "sourceExact": "Exacto",
+        "sourceAnalyzer": "Analizador",
+        "sourceModel": "Modelo",
+        "fixQueue": "Cola de correcciones · {count}",
+        "keepTitle": "Conservar esta ejecución como prueba",
+        "keepBody": "Convierte {path} en una prueba que falle cuando se rompa uno de sus saltos.",
+        "keepButton": "Pedir una prueba",
+        "testRequest": "Escribe una prueba de integración que recorra la ruta {path}. Las paradas, en orden: {stops}. Comprueba que cada salto sigue ocurriendo y que no vuelve ninguno de estos hallazgos: {checks}.",
+        "doneTitle": "Esta ruta está terminada cuando…",
+        "doneCheck": "{title} está resuelto en {items}",
+        "doneNone": "No hay ningún hallazgo abierto en esta ruta.",
+        "doneMore": "+{count} comprobaciones más",
+        "detailsTitle": "Detalles",
+        "linkCoverage": "Cobertura",
+        "linkApi": "API",
+        "moreFindings": "Todos los hallazgos"
+      },
+      "path": {
+        "title": "{line} · {entry}",
+        "reset": "Reiniciar",
+        "step": "Paso",
+        "runToEnd": "Ejecutar hasta el final",
+        "simulate": "Simular con valores",
+        "sequence": "Secuencia",
+        "noTests": "sin pruebas",
+        "findings": "{count} hallazgos",
+        "stops": "Paradas"
+      },
       "sync": {
         "loading": "Leyendo el estado de sincronización…",
         "failed": "No se pudo leer el estado de sincronización.",
@@ -36359,11 +36410,64 @@
         "import": "Importación"
       },
       "time": {
-        "label": "Historial",
+        "label": "Revisión",
         "aria": "Historial: elige un commit para marcar las estaciones que cambió",
         "now": "Ahora",
         "commitAria": "{title}, {at}",
         "changed": "{count} estaciones cambiaron en este commit"
+      },
+      "header": {
+        "statusLabel": "Estado de sincronización",
+        "syncedAt": "Sincronizado {time}",
+        "synced": "Sincronizado",
+        "notSynced": "Sin sincronizar",
+        "updateFailed": "No se pudo actualizar",
+        "reviewing": "Revisando · {progress}",
+        "reviewPlan": "Plan de revisión listo",
+        "reviewFailed": "La revisión falló",
+        "skippedPill": "{count} archivos sin guardar",
+        "parityBoth": "{count} archivos aquí y en el servidor",
+        "parityDiffers": "{local} aquí · {server} en el servidor",
+        "parityLocal": "{local} archivos aquí · aún no están en el servidor",
+        "moreActions": "Más acciones",
+        "reReview": "Revisar de nuevo esta carpeta",
+        "scopeItem": "Carpeta: {title}",
+        "overlaysNote": "Cualquier métrica puede controlar cualquier canal. Mapa, Sistema, Grafo, Mapa mental, Torre, Calor, Lista y Secuencia leen los mismos enlaces, así que una barra de cobertura puede ser igualmente una barra de antipatrones.",
+        "rootsLabel": "Carpetas revisadas"
+      },
+      "askSentence": {
+        "where": "¿adónde va {name}?",
+        "wrong": "¿qué falla en {name}?",
+        "untested": "¿qué no tiene pruebas en {name}?",
+        "patterns": "¿qué patrones hay en {name}?",
+        "changed": "¿qué cambió desde la revisión?",
+        "callers": "¿quién más llama a {name}?",
+        "copied": "¿qué código está copiado?",
+        "unused": "¿qué nunca se llama?",
+        "claims": "¿qué dicen los documentos y es cierto?",
+        "layers": "¿en qué capa está cada parte?",
+        "knowledge": "¿qué sabe la memoria sobre {name}?"
+      },
+      "answerMode": {
+        "where": "respondido como un recorrido",
+        "wrong": "respondido como incidencias",
+        "untested": "guiones = ninguna prueba lo ejecuta",
+        "patterns": "respondido como patrones",
+        "changed": "respondido como commits",
+        "callers": "respondido como enlaces",
+        "copied": "respondido como grupos de clones",
+        "unused": "respondido como código sin uso",
+        "claims": "respondido como afirmaciones",
+        "layers": "respondido como capas",
+        "knowledge": "respondido como hechos"
+      },
+      "drawerSubtitle": {
+        "sync": "primero lo local, lotes pequeños, unidos por hash de archivo",
+        "coverage": "pruebas, alcance y huecos en todo el sistema",
+        "patterns": "patrones de diseño, empresariales y antipatrones por capa",
+        "api": "lo que prometen las rutas, lo que se prueba, pruébalo",
+        "resolve": "una corrección determinista o un prompt, y luego verificar",
+        "simulate": "ejecuta el recorrido con valores reales"
       }
     }
   }

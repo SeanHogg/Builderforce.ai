@@ -13,6 +13,7 @@ import type { KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowle
 import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
 import { LAYER_ORDER, layerRank } from './layers';
+import { outlineView } from './outlineGraph';
 
 export interface Station {
     id: string;
@@ -164,7 +165,8 @@ export function quantileLevels(values: ReadonlyMap<string, number>): Map<string,
 
 export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}): StationModel {
     const index = nodeIndex(graph);
-    const files = graph.nodes.filter((n) => n.kind === 'file');
+    // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
+    const files = outlineView(graph)?.files ?? graph.nodes.filter((n) => n.kind === 'file');
     const groups = splitEntry(baseGroups(files, index));
     const stationOf = new Map<string, string>();
     for (const g of groups) for (const n of g.nodes) stationOf.set(n.ref, g.id);

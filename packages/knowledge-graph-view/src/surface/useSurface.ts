@@ -21,6 +21,8 @@ export interface SurfaceModel {
     overlay: OverlayModel;
     preset: PresetId | 'custom';
     question: QuestionId;
+    /** The pattern family the patterns question is narrowed to ("Behavioural only"); null = every family. */
+    family: string | null;
     /** The line the path strip and the line list show: the chosen one, else the first. */
     line: Line | null;
     /** True once the person picked a line (the Act scope follows only an explicit pick). */
@@ -42,7 +44,10 @@ export interface SurfaceModel {
     setPreset(id: PresetId): void;
     setChannel(channel: ChannelId, metric: MetricId): void;
     setPins(on: boolean): void;
+    /** Asking any question other than patterns drops the family filter. */
     setQuestion(id: QuestionId): void;
+    /** Narrows the patterns question to one family (null clears it). */
+    setFamily(family: string | null): void;
     selectLine(id: string | null): void;
     selectStation(id: string | null): void;
     setStep(n: number): void;
@@ -66,6 +71,7 @@ const MAX_PINS = 12;
 export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGraph | null, opts: SurfaceOptions = {}): SurfaceModel {
     const [bindings, setBindings] = useState<Bindings>(PRESETS.risk);
     const [question, setQuestionId] = useState<QuestionId>(opts.question ?? 'where');
+    const [family, setFamilyId] = useState<string | null>(null);
     const [lineId, setLineId] = useState<string | null>(null);
     const [stationId, setStationId] = useState<string | null>(null);
     const [step, setStepIndex] = useState(0);
@@ -87,7 +93,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const chosen = lines.lines.find((l) => l.id === lineId) ?? null;
     const line = chosen ?? lines.lines[0] ?? null;
     const station = stationId ? stations.byId.get(stationId) ?? null : null;
-    const context = useMemo<QuestionContext>(() => ({ lines, line, selected: station }), [lines, line, station]);
+    const context = useMemo<QuestionContext>(() => ({ lines, line, selected: station, family }), [lines, line, station, family]);
     const focus = opts.focus;
     const lit = useMemo(() => {
         const shown = new Set((focus ?? []).flatMap((ref) => stationOfRef(stations, ref) ?? []));
@@ -110,7 +116,8 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
 
     const scope = useMemo(() => (station ? new Set([station.id]) : chosen ? new Set(chosen.stops) : null), [station, chosen]);
 
-    const setQuestion = useCallback((id: QuestionId) => { setQuestionId(id); }, []);
+    const setQuestion = useCallback((id: QuestionId) => { setQuestionId(id); if (id !== 'patterns') setFamilyId(null); }, []);
+    const setFamily = useCallback((f: string | null) => { setFamilyId(f); if (f) setQuestionId('patterns'); }, []);
     const setStep = useCallback((n: number) => {
         setStepIndex(n);
         const stop = path.stops[n];
@@ -126,11 +133,11 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     }, [path]);
 
     return {
-        stations, lines, overlay, preset: presetOf(bindings), question, line, lineChosen: chosen !== null, station, step, path, lit,
+        stations, lines, overlay, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
         context, pins, scope, pinned, panel, resolving,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),
         setPins: (on) => setBindings((b) => ({ ...b, pins: on ? 'on' : 'off' })),
-        setQuestion, selectLine, selectStation, setStep, pinPath, openPanel: setPanel, resolve,
+        setQuestion, setFamily, selectLine, selectStation, setStep, pinPath, openPanel: setPanel, resolve,
     };
 }

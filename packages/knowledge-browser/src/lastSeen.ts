@@ -5,7 +5,7 @@
  * recreated per mount), keyed by project and root; nothing is persisted. At most
  * {@link LAST_SEEN_MAX_GRAPHS} graphs are kept (least recently used out), so a long session over many
  * projects stays bounded. Nothing in this package signals a sign-out or tenant switch, so a host that
- * host that can detect one should call {@link clearLastSeenMemory} there (none is wired yet).
+ * can detect one calls {@link claimLastSeenMemory} there (the web: the knowledge surface; Rovr: its session).
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
@@ -26,6 +26,25 @@ export function clearLastSeenMemory(): void {
   graphs.clear();
   lastRoot.clear();
   scopesOf.clear();
+}
+
+let owner: string | null = null;
+
+/**
+ * Claims the memory for an identity (`null` = nobody signed in). Another person, another workspace
+ * or a sign-out clears what the previous identity left, so one person's last graph is never painted
+ * for the next. Claiming for the identity that already owns it changes nothing. THE one copy: the
+ * web and Rovr both call it.
+ */
+export function claimLastSeenMemory(identity: string | null): void {
+  if (identity === owner) return;
+  if (owner !== null) clearLastSeenMemory();
+  owner = identity;
+}
+
+/** The identity key of a session: the person within the workspace; null when either is missing. */
+export function lastSeenIdentity(user: string | number | null | undefined, tenant: string | number | null | undefined): string | null {
+  return user !== null && user !== undefined && tenant !== null && tenant !== undefined ? `${tenant}:${user}` : null;
 }
 
 export interface LastSeenMemory {

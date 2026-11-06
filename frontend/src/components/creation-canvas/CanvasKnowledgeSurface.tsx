@@ -8,13 +8,14 @@ import { useTranslations } from 'next-intl';
 import { KnowledgeGraphView, type KnowledgePanelRenderProps } from '@builderforce/knowledge-graph-view';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { createKnowledgeSource } from '@builderforce/knowledge-browser';
+import { claimLastSeenMemory, createKnowledgeSource, lastSeenIdentity } from '@builderforce/knowledge-browser';
 import { createWebKnowledgeClient } from '@/lib/knowledge/webKnowledgeClient';
 import { webDirectoryProviders } from '@/lib/knowledge/webDirectoryProviders';
 import { reportKnowledgeDegraded } from '@/lib/knowledge/webHost';
 import { webPinpointHost } from '@/lib/knowledge/webPinpoint';
 import { knowledgeIntentFromQuery } from '@builderforce/agent-tools/prefetch';
 import { useKnowledgeGraphLabels } from '@/lib/knowledge/labels';
+import { useOptionalAuth } from '@/lib/AuthContext';
 import styles from './styles/surfaces.module.css';
 
 /**
@@ -46,7 +47,12 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
   // launcher) — read once: the view takes it as its initial state.
   const [intent] = useState(() => knowledgeIntentFromQuery(typeof window === 'undefined' ? '' : window.location.search));
 
+  // The last-seen graphs are module-level: a sign-out or a workspace switch must not leave one person's graph for the next.
+  const auth = useOptionalAuth();
+  const identity = lastSeenIdentity(auth?.user?.id, auth?.tenant?.id);
+
   const source = useMemo(() => {
+    claimLastSeenMemory(identity);
     if (projectId === null) return null;
     const client = createWebKnowledgeClient(projectId);
     return createKnowledgeSource({
@@ -57,7 +63,7 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
       onDegraded: reportKnowledgeDegraded,
       pinpoint: webPinpointHost,
     });
-  }, [projectId, workspaceTitle]);
+  }, [projectId, workspaceTitle, identity]);
 
   const renderPanel = useCallback(({ open, title, onClose, children }: KnowledgePanelRenderProps): ReactNode => (
     <SlideOutPanel open={open} onClose={onClose} title={title}>{children}</SlideOutPanel>

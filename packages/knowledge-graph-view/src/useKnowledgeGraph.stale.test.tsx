@@ -322,7 +322,8 @@ describe('KnowledgeGraphView: no loading gate', () => {
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={p.source} /></div>);
         expect(screen.getByRole('region', { name: L.regionLabel })).toBeTruthy();
         expect(screen.getByRole('search')).toBeTruthy();
-        expect(screen.getByRole('status').textContent).toBe(L.loading);
+        // The inline loading status, beside the strip's own sync pill (a status too, "Not synced" until a folder is open).
+        expect(screen.getAllByRole('status').map((el) => el.textContent)).toContain(L.loading);
     });
 
     it('paints the last-seen graph at once and offers Retry inline when the refresh fails', async () => {

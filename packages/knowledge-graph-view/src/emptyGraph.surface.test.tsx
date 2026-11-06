@@ -8,7 +8,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES } from './lenses';
 import { ViewSurface } from './ViewSurface';
 import { CAMERAS } from './surface/cameras';
-import { PanelDock } from './surface/PanelDock';
+import { PanelDrawer, PanelToggle } from './surface/PanelDock';
 import { PANELS } from './surface/panels';
 import { useSurface } from './surface/useSurface';
 import type { KnowledgeGraphSource } from './types';
@@ -20,8 +20,8 @@ const pending = (): KnowledgeGraphSource => ({ scopes: () => new Promise(() => u
 describe('the surface over no graph', () => {
     it('cycles every camera the frame offers without crashing', () => {
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={pending()} /></div>);
-        const group = screen.getByRole('group', { name: L.viewModesLabel });
-        const buttons = within(group).getAllByRole('button');
+        const group = screen.getByRole('radiogroup', { name: L.viewModesLabel });
+        const buttons = within(group).getAllByRole('radio');
         expect(buttons.length).toBeGreaterThan(0);
         for (const b of buttons) fireEvent.click(b);
         expect(screen.getByRole('region', { name: L.regionLabel })).toBeTruthy();
@@ -43,11 +43,13 @@ describe('the surface over no graph', () => {
     it('opens every panel of the dock over an empty graph', () => {
         function Harness() {
             const surface = useSurface(EMPTY_GRAPH, null);
+            const env = { webgl: false, reducedMotion: true, hasLines: true, compact: false, hasSync: true };
+            const panels = PANELS.map((p) => ({ ...p, available: () => true }));
             return (
-                <PanelDock
-                    graph={EMPTY_GRAPH} env={{ webgl: false, reducedMotion: true, hasLines: true, compact: false, hasSync: true }} labels={L} surface={surface}
-                    panels={PANELS.map((p) => ({ ...p, available: () => true }))} onShow={vi.fn()} source={pending()}
-                />
+                <>
+                    <PanelToggle graph={EMPTY_GRAPH} env={env} labels={L} panel={surface.panel} onPanel={surface.openPanel} panels={panels} ids={PANELS.map((p) => p.id)} />
+                    <PanelDrawer graph={EMPTY_GRAPH} env={env} labels={L} surface={surface} panel={surface.panel} onPanel={surface.openPanel} panels={panels} onShow={vi.fn()} source={pending()} />
+                </>
             );
         }
         render(<Harness />);

@@ -5,7 +5,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
+import { lensesFor } from './lenses';
 import { expandAllFindings, fixtureSource, surfaceFixture } from './testing';
+import { lensIsPicked, pickLens } from './testPicks';
 
 vi.mock('./scene/GraphScene', () => ({ default: () => <div data-testid="kg-scene" /> }));
 afterEach(() => vi.restoreAllMocks());
@@ -14,28 +16,34 @@ async function mount(graph: KnowledgeGraph = surfaceFixture(), props: Partial<Pa
     render(<div style={{ height: 700 }}><KnowledgeGraphView source={fixtureSource([graph])} {...props} /></div>);
     await screen.findByTestId('kg-transit');
 }
-const cameras = () => within(screen.getByRole('group', { name: L.viewModesLabel }));
+const deps = { fireEvent };
+const cameras = () => within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
 const station = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}, `) });
 const aside = () => document.querySelector(`aside[aria-label="${L.findingsTitle}"]`) as HTMLElement;
 
 describe('the surface', () => {
     it('opens on the transit map when the graph has entry points, with the cameras in registry order', async () => {
         await mount();
-        expect(cameras().getByRole('button', { name: L.viewTransit }).getAttribute('aria-pressed')).toBe('true');
-        expect([...screen.getByRole('group', { name: L.viewModesLabel }).querySelectorAll('button')].map((b) => b.textContent))
-            .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewHeat, L.viewSequence, L.viewList]);
+        expect(cameras().getByRole('radio', { name: L.viewTransit }).getAttribute('aria-checked')).toBe('true');
+        // Sequence is no longer a camera button: the path strip's Sequence toggle draws it.
+        expect([...screen.getByRole('radiogroup', { name: L.viewModesLabel }).querySelectorAll('button')].map((b) => b.textContent))
+            .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewHeat, L.viewList]);
         expect(screen.getByTestId('kg-path')).toBeTruthy();
         expect(screen.getByTestId('kg-surface-legend')).toBeTruthy();
     });
 
     it('keeps every old lens reachable and opens a requested lens', async () => {
         await mount(surfaceFixture(), { initialLens: 'unused' });
-        const nav = within(screen.getByRole('navigation', { name: L.lensesLabel }));
-        expect(nav.getByRole('button', { name: L.lenses.unused }).getAttribute('aria-pressed')).toBe('true');
-        fireEvent.click(nav.getByRole('button', { name: L.lenses.duplication }));
-        expect(nav.getByRole('button', { name: L.lenses.duplication }).getAttribute('aria-pressed')).toBe('true');
+        expect(lensIsPicked(deps, L, 'unused')).toBe(true);
+        pickLens(deps, L, 'duplication');
+        expect(lensIsPicked(deps, L, 'duplication')).toBe(true);
         // The lens pick lights the question that owns it (under More, so the More button carries its name).
         expect(screen.getByRole('button', { name: L.surface.questions.copied })).toBeTruthy();
+        // Every lens the graph offers (Compare has no question) is reachable and does what its old chip did.
+        for (const lens of lensesFor(surfaceFixture())) {
+            pickLens(deps, L, lens.id);
+            expect(lensIsPicked(deps, L, lens.id), lens.id).toBe(true);
+        }
     });
 
     it('seeds the question from the initial lens', async () => {
@@ -100,9 +108,8 @@ describe('the surface', () => {
     it('a question opens its lens, and says how many stations answer', async () => {
         await mount();
         fireEvent.click(screen.getByRole('button', { name: L.surface.moreQuestions }));
-        fireEvent.click(screen.getByRole('button', { name: L.surface.questions.copied }));
-        const nav = within(screen.getByRole('navigation', { name: L.lensesLabel }));
-        expect(nav.getByRole('button', { name: L.lenses.duplication }).getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(`^${L.surface.questions.copied}`) }));
+        expect(lensIsPicked(deps, L, 'duplication')).toBe(true);
         expect(screen.getByTestId('kg-answer').textContent).toBe('1 stations');
     });
 
@@ -143,10 +150,10 @@ describe('the surface', () => {
 
     it('switches cameras and keeps the selection', async () => {
         await mount();
-        fireEvent.click(cameras().getByRole('button', { name: L.viewGraph }));
+        fireEvent.click(cameras().getByRole('radio', { name: L.viewGraph }));
         await waitFor(() => expect(document.querySelector('[data-testid="kg-graph2d"] [data-id]')).not.toBeNull());
         expect(screen.queryByTestId('kg-transit')).toBeNull();
-        fireEvent.click(cameras().getByRole('button', { name: L.viewTransit }));
+        fireEvent.click(cameras().getByRole('radio', { name: L.viewTransit }));
         expect(await screen.findByTestId('kg-transit')).toBeTruthy();
     });
 

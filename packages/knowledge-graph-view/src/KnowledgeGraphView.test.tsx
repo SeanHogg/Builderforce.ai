@@ -5,6 +5,7 @@ import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES, lensesFor } from './lenses';
 import { codeFixture, docsFixture, fixtureSource, mixedFixture, openList } from './testing';
+import { lensIsPicked, openDetails, pickLens } from './testPicks';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 
 // jsdom has no WebGL, so the view stays on the list; the 3D chunk is never requested.
@@ -14,12 +15,13 @@ vi.mock('./scene/GraphScene', () => ({ default: () => null }));
 async function mount(graphs: KnowledgeGraph[], props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
     const source = fixtureSource(graphs);
     const utils = render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} {...props} /></div>);
-    if (graphs.length > 0) await openList({ screen, fireEvent });
+    if (graphs.length > 0) { await openList({ screen, fireEvent }); openDetails({ fireEvent }); }
     return { source, ...utils };
 }
 
-const lensButton = (id: keyof typeof LENSES) =>
-    within(screen.getByRole('navigation', { name: L.lensesLabel })).getByRole('button', { name: L.lenses[id] });
+// The lens row is gone: a lens is picked through its question pill or the More questions menu.
+const deps = { fireEvent };
+const pick = (id: keyof typeof LENSES) => pickLens(deps, L, id);
 
 describe('KnowledgeGraphView', () => {
     it.each([
@@ -31,8 +33,8 @@ describe('KnowledgeGraphView', () => {
         const offered = lensesFor(graph);
         expect(offered.length).toBeGreaterThan(0);
         for (const lens of offered) {
-            fireEvent.click(lensButton(lens.id));
-            expect(lensButton(lens.id).getAttribute('aria-pressed')).toBe('true');
+            pick(lens.id);
+            expect(lensIsPicked(deps, L, lens.id)).toBe(true);
             expect(screen.getByText(L.lensHints[lens.id])).toBeTruthy();
         }
     });
@@ -45,10 +47,10 @@ describe('KnowledgeGraphView', () => {
 
     it('shows the partition matrix on Partitions and before/after on Compare', async () => {
         await mount([codeFixture()]);
-        fireEvent.click(lensButton('partitions'));
+        pick('partitions');
         expect(screen.getByRole('table')).toBeTruthy();
         expect(document.querySelector('[data-verdict="upward"]')).toBeTruthy();
-        fireEvent.click(lensButton('compare'));
+        pick('compare');
         expect(screen.getByText(L.compareEmpty)).toBeTruthy();
     });
 

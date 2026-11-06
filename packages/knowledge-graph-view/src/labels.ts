@@ -119,6 +119,19 @@ export interface SurfaceLabels {
     heat: Record<'description' | 'cellAria' | 'legend' | 'empty', string>;
     /** The Sequence camera: `{stops}`, `{messages}`; `{from}`, `{to}`, `{label}`. */
     sequence: Record<'description' | 'empty' | 'messageAria', string>;
+    /** The scene overlay: `{name}` the level above; `{lens}`; `{family}`; `{count}` files missing on the server. */
+    overlay: Record<'outTo' | 'fit' | 'lensSub' | 'familyOnly' | 'clearFamily' | 'missingFiles' | 'diagnose' | 'controls', string>;
+    /** The left rail: its heading, and the legend heading with its owner swatch note. */
+    rail: Record<'heading' | 'legendHeading' | 'ownerSwatches' | 'legendEmpty', string>;
+    /** The Act rail. `{action}`, `{title}`, `{count}`, `{path}`, `{stops}`, `{checks}`, `{items}`. */
+    act: Record<
+        'cardsTitle' | 'noCards' | 'apply' | 'prompt' | 'show' | 'cardAction' | 'sourceExact' | 'sourceAnalyzer' | 'sourceModel' | 'fixQueue'
+        | 'keepTitle' | 'keepBody' | 'keepButton' | 'testRequest' | 'doneTitle' | 'doneCheck' | 'doneNone' | 'doneMore' | 'detailsTitle'
+        | 'linkCoverage' | 'linkApi' | 'moreFindings',
+        string
+    >;
+    /** The path strip. `{line}`, `{entry}`, `{count}`. */
+    path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'findings' | 'stops', string>;
     sync: Record<
         'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
         | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria',
@@ -164,6 +177,18 @@ export interface SurfaceLabels {
     pinpointProvenance: Record<'vision' | 'exact' | 'catalog' | 'import', string>;
     /** `{title}`, `{at}`, `{count}`. */
     time: Record<'label' | 'aria' | 'now' | 'commitAria' | 'changed', string>;
+    /** The header: the status strip (`{time}`, `{progress}`, `{count}`, `{local}`, `{server}`), the overflow menu (`{title}`) and the overlay sentence. */
+    header: Record<
+        'statusLabel' | 'syncedAt' | 'synced' | 'notSynced' | 'updateFailed' | 'reviewing' | 'reviewPlan' | 'reviewFailed' | 'skippedPill'
+        | 'parityBoth' | 'parityDiffers' | 'parityLocal' | 'moreActions' | 'reReview' | 'scopeItem' | 'overlaysNote' | 'rootsLabel',
+        string
+    >;
+    /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
+    askSentence: Record<QuestionId, string>;
+    /** The ask bar's note per question: how it is answered. */
+    answerMode: Record<QuestionId, string>;
+    /** A drawer's subtitle, by panel id. */
+    drawerSubtitle: Record<'sync' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate', string>;
 }
 
 export interface KnowledgeGraphLabels {
@@ -654,6 +679,57 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
             empty: 'Pick a line or a station to draw its sequence.',
             messageAria: '{from} to {to}: {label}',
         },
+        overlay: {
+            outTo: '↑ Out to {name}',
+            fit: 'Fit',
+            lensSub: 'was the {lens} lens',
+            familyOnly: '{family} only',
+            clearFamily: 'Clear the {family} filter',
+            missingFiles: '{count} files are missing on the server.',
+            diagnose: 'Diagnose',
+            controls: 'Scene controls',
+        },
+        rail: {
+            heading: 'Lines from the entry points',
+            legendHeading: 'Reading the picture now',
+            ownerSwatches: 'One colour per owner',
+            legendEmpty: 'Nothing is bound to the picture.',
+        },
+        act: {
+            cardsTitle: 'Fix these first',
+            noCards: 'Nothing to fix here.',
+            apply: 'Apply',
+            prompt: 'Prompt',
+            show: 'Show',
+            cardAction: '{action}: {title}',
+            sourceExact: 'Exact',
+            sourceAnalyzer: 'Analyzer',
+            sourceModel: 'Model',
+            fixQueue: 'Fix queue · {count}',
+            keepTitle: 'Keep this run as a test',
+            keepBody: 'Turn {path} into a test that fails when one of its hops breaks.',
+            keepButton: 'Prompt a test',
+            testRequest: 'Write an integration test that drives the path {path}. The stops, in order: {stops}. Assert that every hop still happens and that none of these findings comes back: {checks}.',
+            doneTitle: 'This path is done when…',
+            doneCheck: '{title} is resolved in {items}',
+            doneNone: 'No finding is open on this path.',
+            doneMore: '+{count} more checks',
+            detailsTitle: 'Details',
+            linkCoverage: 'Coverage',
+            linkApi: 'API',
+            moreFindings: 'All findings',
+        },
+        path: {
+            title: '{line} · {entry}',
+            reset: 'Reset',
+            step: 'Step',
+            runToEnd: 'Run to end',
+            simulate: 'Simulate with values',
+            sequence: 'Sequence',
+            noTests: 'no tests',
+            findings: '{count} findings',
+            stops: 'Stops',
+        },
         sync: {
             loading: 'Reading the sync status…',
             failed: 'The sync status could not be read.',
@@ -791,11 +867,45 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
         },
         pinpointProvenance: { vision: 'Vision', exact: 'Exact match', catalog: 'Catalog key', import: 'Import' },
         time: {
-            label: 'History',
+            label: 'Review',
             aria: 'History: pick a commit to mark the stations it changed',
             now: 'Now',
             commitAria: '{title}, {at}',
             changed: '{count} stations changed in this commit',
+        },
+        header: {
+            statusLabel: 'Sync status',
+            syncedAt: 'Synced {time}',
+            synced: 'Synced',
+            notSynced: 'Not synced',
+            updateFailed: 'Couldn’t update',
+            reviewing: 'Reviewing · {progress}',
+            reviewPlan: 'Review plan ready',
+            reviewFailed: 'Review failed',
+            skippedPill: '{count} files not stored',
+            parityBoth: '{count} files here and on the server',
+            parityDiffers: '{local} here · {server} on the server',
+            parityLocal: '{local} files here · not on the server',
+            moreActions: 'More actions',
+            reReview: 'Re-review this folder',
+            scopeItem: 'Folder: {title}',
+            overlaysNote: 'Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.',
+            rootsLabel: 'Reviewed folders',
+        },
+        askSentence: {
+            where: 'where does {name} go?', wrong: 'what is wrong on {name}?', untested: 'what has no test on {name}?', patterns: 'which patterns are in {name}?',
+            changed: 'what changed since the review?', callers: 'who else calls {name}?', copied: 'what code is copied?', unused: 'what is never called?',
+            claims: 'what do the docs say, and is it true?', layers: 'which layer is each part in?', knowledge: 'what does memory know about {name}?',
+        },
+        answerMode: {
+            where: 'answered as a path', wrong: 'answered as issues', untested: 'dashed = no test runs it', patterns: 'answered as patterns',
+            changed: 'answered as commits', callers: 'answered as links', copied: 'answered as clone groups', unused: 'answered as unused code',
+            claims: 'answered as claims', layers: 'answered as layers', knowledge: 'answered as facts',
+        },
+        drawerSubtitle: {
+            sync: 'local first, small batches, merged by file hash', coverage: 'tests, reach and gaps across the system',
+            patterns: 'design, enterprise and anti-patterns by layer', api: 'what the routes promise, what is tested, try it',
+            resolve: 'a deterministic fix or a prompt, then verify', simulate: 'run the path with real values',
         },
     },
 };

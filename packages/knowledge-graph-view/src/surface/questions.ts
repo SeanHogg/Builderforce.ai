@@ -6,6 +6,8 @@
  * through this table.
  */
 
+import type { KnowledgeGraphLabels } from '../labels';
+import { fillTemplate } from '../template';
 import type { LensId } from '../types';
 import type { Line, LinesModel } from './lines';
 import { metricStatus, type MetricStatus } from './overlays';
@@ -22,6 +24,8 @@ export interface QuestionContext {
     line: Line | null;
     /** The selected station, if any. */
     selected: Station | null;
+    /** The pattern family the patterns question is narrowed to ("Behavioural only"), if any. */
+    family?: string | null;
 }
 
 export interface QuestionDef {
@@ -39,6 +43,8 @@ export interface QuestionDef {
 }
 
 const ready = (): MetricStatus => 'ready';
+/** Ready once any station carries the reading; a graph no file carries it in has never been analysed for it. */
+const carried = (pick: (s: Station) => number) => (stations: readonly Station[]): MetricStatus => (stations.some((s) => pick(s) > 0) ? 'ready' : 'not-set-up');
 const linesOf = (ctx: QuestionContext, id: string): string[] => ctx.lines.lines.filter((l) => l.stops.includes(id)).map((l) => l.id);
 const count = (key: NoteKey, value: number) => (value > 0 ? { key, value } : null);
 
@@ -60,7 +66,7 @@ export const QUESTIONS: readonly QuestionDef[] = [
         id: 'patterns', primary: true,
         note: (s) => (s.patterns.length ? { key: 'patterns', value: s.patterns.join(' · ') } : null),
         status: (stations) => (stations.some((s) => s.patterns.length > 0) ? 'ready' : 'not-set-up'),
-        matches: (s) => s.patterns.length > 0,
+        matches: (s, ctx) => s.patterns.length > 0 && (!ctx.family || s.patterns.includes(ctx.family)),
     },
     {
         id: 'changed', lens: 'live', primary: true, status: ready,
@@ -77,15 +83,15 @@ export const QUESTIONS: readonly QuestionDef[] = [
         },
     },
     {
-        id: 'copied', lens: 'duplication', primary: false, status: ready,
+        id: 'copied', lens: 'duplication', primary: false, status: carried((s) => s.dup),
         note: (s) => count('copied', s.dup), matches: (s) => s.dup > 0,
     },
     {
-        id: 'unused', lens: 'unused', primary: false, status: ready,
+        id: 'unused', lens: 'unused', primary: false, status: carried((s) => s.unused),
         note: (s) => count('unused', s.unused), matches: (s) => s.unused > 0,
     },
     {
-        id: 'claims', lens: 'claims', primary: false, status: ready,
+        id: 'claims', lens: 'claims', primary: false, status: carried((s) => s.claims),
         note: (s) => count('claims', s.claims), matches: (s) => s.claims > 0,
     },
     {
@@ -93,7 +99,7 @@ export const QUESTIONS: readonly QuestionDef[] = [
         note: (s) => (s.layer ? { key: 'layers', value: s.layer } : null), matches: () => true,
     },
     {
-        id: 'knowledge', lens: 'knowledge', primary: false, status: ready,
+        id: 'knowledge', lens: 'knowledge', primary: false, status: carried((s) => s.facts),
         note: (s) => count('knowledge', s.facts), matches: (s) => s.facts > 0,
     },
 ];
@@ -116,4 +122,29 @@ export function litStations(id: QuestionId, stations: readonly Station[], ctx: Q
     // A question whose data was never collected has no answer to light: it dims nothing (the answer line says "not set up").
     if (q.id === 'layers' || (q.id === 'where' && !ctx.line) || q.status(stations) === 'not-set-up') return null;
     return new Set(stations.filter((s) => q.matches(s, ctx)).map((s) => s.id));
+}
+
+/** What a question answers: its data is not there, nothing matches, N stations do, or every station does. */
+export type Answer = { kind: 'not-set-up' } | { kind: 'none' } | { kind: 'count'; count: number } | { kind: 'all' };
+
+/**
+ * The ONE reading of a question's answer, for the ask bar's note and the scene alike. Pure:
+ * `surface.lit` is what the surface lights (`null` = every station), so a search or a pinpoint
+ * that focused refs is answered as the stations it lit.
+ */
+export function answerFor(question: QuestionId, surface: { stations: { stations: readonly Station[] }; lit: ReadonlySet<string> | null }): Answer {
+    if (questionDef(question).status(surface.stations.stations) === 'not-set-up') return { kind: 'not-set-up' };
+    if (surface.lit === null) return { kind: 'all' };
+    return surface.lit.size === 0 ? { kind: 'none' } : { kind: 'count', count: surface.lit.size };
+}
+
+/** The answer in words ("No station matches", "Not set up…", "{n} stations"); empty when every station answers. */
+export function answerLine(answer: Answer, labels: KnowledgeGraphLabels): string {
+    const s = labels.surface;
+    switch (answer.kind) {
+        case 'not-set-up': return s.answerNotSetUp;
+        case 'none': return s.answerNone;
+        case 'count': return fillTemplate(s.answerCount, { count: answer.count });
+        default: return '';
+    }
 }

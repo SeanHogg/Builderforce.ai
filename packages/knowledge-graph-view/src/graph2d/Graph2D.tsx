@@ -19,7 +19,7 @@ import { usePanZoom } from '../usePanZoom';
 import { useRoving } from '../useRoving';
 import { HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
-import { ZoomControls } from '../ZoomControls';
+import { usePanZoomRegistration } from '../surface/zoom';
 import { kindLabel } from '../names';
 import { groupEdges } from '../scene/buffers';
 import { cssVar } from '../scene/themeColors';
@@ -136,6 +136,7 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
     const layout = useIdleValue(() => layout2d(rootId, nodes, edges), [rootId, nodes, edges]);
     const base = useMemo(() => (layout ? fitView(layout, size.width, size.height) : null), [layout, size.width, size.height]);
     const pan = usePanZoom(base, layout);
+    usePanZoomRegistration(pan); // the scene overlay's +, − and Fit drive this view
     const roving = useRoving();
     const { perPx, font } = useSvgScale(pan.view, size);
     const ordered = useMemo(() => [...nodes].sort(byImportance), [nodes]);
@@ -190,7 +191,6 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
                         {ringAt && <circle data-focus="true" cx={ringAt[0]} cy={ringAt[1]} r={nodeRadius(1) + 8 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray="4 3" pointerEvents="none" />}
                         <Captions ordered={ordered} layout={layout} named={named} selected={selected} font={font} />
                     </svg>
-                    <ZoomControls pan={pan} labels={labels} />
                 </>
             )}
         </div>

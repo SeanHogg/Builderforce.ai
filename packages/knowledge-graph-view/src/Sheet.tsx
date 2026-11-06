@@ -7,7 +7,7 @@
 
 import type { ReactNode } from 'react';
 import { cssVar } from './scene/themeColors';
-import { heading, quietButton } from './styles';
+import { heading, muted, quietButton } from './styles';
 import type { KnowledgePanelRenderer } from './types';
 
 export interface SheetProps {
@@ -17,9 +17,13 @@ export interface SheetProps {
     onClose(): void;
     compact: boolean;
     children: ReactNode;
+    /** A muted line beside the title (a drawer says what it is for). */
+    subtitle?: string | undefined;
+    /** The docked width in px (default 380); never wider than the container. */
+    width?: number | undefined;
 }
 
-export function Sheet({ open, title, closeLabel, onClose, compact, children }: SheetProps) {
+export function Sheet({ open, title, closeLabel, onClose, compact, children, subtitle, width = 380 }: SheetProps) {
     if (!open) return null;
     return (
         <aside
@@ -33,11 +37,14 @@ export function Sheet({ open, title, closeLabel, onClose, compact, children }: S
                 boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)',
                 ...(compact
                     ? { left: 0, right: 0, bottom: 0, maxHeight: '70%', borderRadius: '14px 14px 0 0' }
-                    : { top: 0, right: 0, bottom: 0, width: 'min(380px, 100%)', borderRadius: '12px 0 0 12px' }),
+                    : { top: 0, right: 0, bottom: 0, width: `min(${width}px, 100%)`, borderRadius: '12px 0 0 12px' }),
             }}
         >
             <header style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px 8px 16px', borderBottom: `1px solid ${cssVar('border')}` }}>
-                <h2 style={{ ...heading, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h2>
+                <h2 style={{ ...heading, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {title}
+                    {subtitle ? <span style={{ ...muted, fontWeight: 400, marginInlineStart: 10 }}>{subtitle}</span> : null}
+                </h2>
                 <button type="button" onClick={onClose} aria-label={closeLabel} title={closeLabel} style={{ ...quietButton, padding: 0, borderColor: 'transparent' }}>
                     <span aria-hidden="true">×</span>
                 </button>
@@ -50,6 +57,10 @@ export function Sheet({ open, title, closeLabel, onClose, compact, children }: S
 /** The host's panel when it gave one, else {@link Sheet}. */
 export function Panel(props: SheetProps & { render?: KnowledgePanelRenderer | undefined }) {
     const { render, ...sheet } = props;
-    if (render) return <>{render({ open: sheet.open, title: sheet.title, onClose: sheet.onClose, children: sheet.children })}</>;
+    if (render) {
+        // The host's panel has a title only, so the subtitle leads the body.
+        const body = sheet.subtitle ? <><p style={{ ...muted, margin: 0 }}>{sheet.subtitle}</p>{sheet.children}</> : sheet.children;
+        return <>{render({ open: sheet.open, title: sheet.title, onClose: sheet.onClose, children: body })}</>;
+    }
     return <Sheet {...sheet} />;
 }

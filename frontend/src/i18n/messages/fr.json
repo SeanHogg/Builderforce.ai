@@ -36193,6 +36193,57 @@
         "empty": "Choisissez une ligne ou une station pour dessiner sa séquence.",
         "messageAria": "{from} vers {to} : {label}"
       },
+      "overlay": {
+        "outTo": "↑ Sortir vers {name}",
+        "fit": "Ajuster",
+        "lensSub": "était la lentille {lens}",
+        "familyOnly": "{family} uniquement",
+        "clearFamily": "Retirer le filtre {family}",
+        "missingFiles": "{count} fichiers manquent sur le serveur.",
+        "diagnose": "Diagnostiquer",
+        "controls": "Commandes de la scène"
+      },
+      "rail": {
+        "heading": "Lignes depuis les points d'entrée",
+        "legendHeading": "Comment lire l'image maintenant",
+        "ownerSwatches": "Une couleur par responsable",
+        "legendEmpty": "Rien n'est associé à l'image."
+      },
+      "act": {
+        "cardsTitle": "À corriger d'abord",
+        "noCards": "Rien à corriger ici.",
+        "apply": "Appliquer",
+        "prompt": "Demander",
+        "show": "Afficher",
+        "cardAction": "{action} : {title}",
+        "sourceExact": "Exact",
+        "sourceAnalyzer": "Analyseur",
+        "sourceModel": "Modèle",
+        "fixQueue": "File de corrections · {count}",
+        "keepTitle": "Garder cette exécution comme test",
+        "keepBody": "Transformez {path} en un test qui échoue quand l'un de ses sauts casse.",
+        "keepButton": "Demander un test",
+        "testRequest": "Écris un test d'intégration qui parcourt le chemin {path}. Les arrêts, dans l'ordre : {stops}. Vérifie que chaque saut a toujours lieu et qu'aucun de ces constats ne revient : {checks}.",
+        "doneTitle": "Ce chemin est terminé quand…",
+        "doneCheck": "{title} est résolu dans {items}",
+        "doneNone": "Aucun constat n'est ouvert sur ce chemin.",
+        "doneMore": "+{count} vérifications de plus",
+        "detailsTitle": "Détails",
+        "linkCoverage": "Couverture",
+        "linkApi": "API",
+        "moreFindings": "Tous les constats"
+      },
+      "path": {
+        "title": "{line} · {entry}",
+        "reset": "Réinitialiser",
+        "step": "Pas",
+        "runToEnd": "Aller jusqu'au bout",
+        "simulate": "Simuler avec des valeurs",
+        "sequence": "Séquence",
+        "noTests": "sans tests",
+        "findings": "{count} constats",
+        "stops": "Arrêts"
+      },
       "sync": {
         "loading": "Lecture de l’état de synchronisation…",
         "failed": "L’état de synchronisation n’a pas pu être lu.",
@@ -36359,11 +36410,64 @@
         "import": "Import"
       },
       "time": {
-        "label": "Historique",
+        "label": "Revue",
         "aria": "Historique : choisissez un commit pour marquer les stations qu’il a modifiées",
         "now": "Maintenant",
         "commitAria": "{title}, {at}",
         "changed": "{count} stations modifiées dans ce commit"
+      },
+      "header": {
+        "statusLabel": "État de la synchronisation",
+        "syncedAt": "Synchronisé {time}",
+        "synced": "Synchronisé",
+        "notSynced": "Non synchronisé",
+        "updateFailed": "Mise à jour impossible",
+        "reviewing": "Revue en cours · {progress}",
+        "reviewPlan": "Plan de revue prêt",
+        "reviewFailed": "La revue a échoué",
+        "skippedPill": "{count} fichiers non enregistrés",
+        "parityBoth": "{count} fichiers ici et sur le serveur",
+        "parityDiffers": "{local} ici · {server} sur le serveur",
+        "parityLocal": "{local} fichiers ici · pas encore sur le serveur",
+        "moreActions": "Autres actions",
+        "reReview": "Relancer la revue de ce dossier",
+        "scopeItem": "Dossier : {title}",
+        "overlaysNote": "N’importe quelle métrique peut piloter n’importe quel canal. Carte, Système, Graphe, Carte mentale, Tour, Chaleur, Liste et Séquence lisent les mêmes liaisons : une barre de couverture peut tout aussi bien être une barre d’anti-patterns.",
+        "rootsLabel": "Dossiers revus"
+      },
+      "askSentence": {
+        "where": "où va {name} ?",
+        "wrong": "qu’est-ce qui ne va pas sur {name} ?",
+        "untested": "qu’est-ce qui n’a pas de test sur {name} ?",
+        "patterns": "quels patterns y a-t-il dans {name} ?",
+        "changed": "qu’est-ce qui a changé depuis la revue ?",
+        "callers": "qui d’autre appelle {name} ?",
+        "copied": "quel code est copié ?",
+        "unused": "qu’est-ce qui n’est jamais appelé ?",
+        "claims": "que disent les documents, et est-ce vrai ?",
+        "layers": "dans quelle couche se trouve chaque partie ?",
+        "knowledge": "que sait la mémoire sur {name} ?"
+      },
+      "answerMode": {
+        "where": "répondu sous forme de chemin",
+        "wrong": "répondu sous forme de problèmes",
+        "untested": "pointillés = aucun test ne l’exécute",
+        "patterns": "répondu sous forme de patterns",
+        "changed": "répondu sous forme de commits",
+        "callers": "répondu sous forme de liens",
+        "copied": "répondu sous forme de groupes de clones",
+        "unused": "répondu sous forme de code inutilisé",
+        "claims": "répondu sous forme d’affirmations",
+        "layers": "répondu sous forme de couches",
+        "knowledge": "répondu sous forme de faits"
+      },
+      "drawerSubtitle": {
+        "sync": "local d’abord, petits lots, fusionnés par empreinte de fichier",
+        "coverage": "tests, portée et lacunes dans tout le système",
+        "patterns": "patterns de conception, d’entreprise et anti-patterns par couche",
+        "api": "ce que promettent les routes, ce qui est testé, essayez",
+        "resolve": "un correctif déterministe ou un prompt, puis vérifier",
+        "simulate": "exécuter le chemin avec des valeurs réelles"
       }
     }
   }

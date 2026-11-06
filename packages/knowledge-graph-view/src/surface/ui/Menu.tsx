@@ -29,7 +29,16 @@ interface MenuBase {
     /** Open towards the start edge instead of the end edge. */
     alignStart?: boolean;
     panelStyle?: CSSProperties;
+    /** `pill` (default) is the compact toggle look; `accent` is the 40px accent-soft button with an accent border (Risk overlays). */
+    variant?: 'pill' | 'accent';
+    /** Arrive open. An items menu moves focus to its entry item, so the first enabled (or selected) action is focused. */
+    defaultOpen?: boolean;
 }
+
+const accentStyle = (open: boolean): CSSProperties => ({
+    height: 40, padding: '0 12px', borderRadius: 10, cursor: 'pointer', flex: 'none', font: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+    border: `1px solid ${cssVar('accent')}`, background: open ? cssVar('accent') : cssVar('accentSoft'), color: open ? cssVar('onAccent') : cssVar('text'),
+});
 
 export type MenuProps = MenuBase & (
     | { items: readonly MenuItem[]; onSelect(id: string): void; children?: undefined }
@@ -50,7 +59,7 @@ const itemStyle = (selected: boolean, disabled: boolean): CSSProperties => ({
 
 export function Menu(props: MenuProps) {
     const { trigger, label, active = false, title, alignStart = false, panelStyle } = props;
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(props.defaultOpen === true);
     const root = useRef<HTMLDivElement>(null);
     const button = useRef<HTMLButtonElement>(null);
     const id = useId();
@@ -111,7 +120,7 @@ export function Menu(props: MenuProps) {
         <div ref={root} style={{ position: 'relative', flex: 'none' }} onKeyDown={onKeyDown} onBlur={onBlur}>
             <button
                 ref={button} type="button" title={title} aria-haspopup={props.items ? 'menu' : 'dialog'} aria-expanded={open} aria-controls={open ? panelId : undefined}
-                style={pillStyle(active || open)} onClick={() => setOpen((v) => !v)}
+                style={props.variant === 'accent' ? accentStyle(open) : pillStyle(active || open)} onClick={() => setOpen((v) => !v)}
             >
                 {trigger}
             </button>

@@ -12,6 +12,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES, LENS_ORDER } from './lenses';
 import type { LensDef } from './lenses';
 import { codeFixture, docsFixture, expandAllFindings, fixtureSource, mixedFixture } from './testing';
+import { openDetails, pickCamera, pickLens } from './testPicks';
 import type { LensId } from './types';
 
 interface SceneProps { nodes: KNode[]; edges: KEdge[]; lens: LensDef }
@@ -35,13 +36,15 @@ const MOUNT_WAIT = { timeout: 10_000 };
 async function mount3D(graph: KnowledgeGraph, props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([graph])} {...props} /></div>);
   // The view opens on the 2D graph: 3D is one chip away.
-  fireEvent.click(await screen.findByRole('button', { name: L.view3d }, MOUNT_WAIT));
+  fireEvent.click(await screen.findByRole('radio', { name: L.view3d }, MOUNT_WAIT));
   await waitFor(() => expect(scene.props).not.toBeNull(), MOUNT_WAIT);
+  openDetails(deps); // the legend, the notes and the matrix sit in the Act rail's Details section, collapsed until opened
 }
 
-const lensButton = (id: LensId) => within(screen.getByRole('navigation', { name: L.lensesLabel })).getByRole('button', { name: L.lenses[id] });
+// The lens row is gone: a lens is picked through its question pill or the More questions menu.
+const deps = { fireEvent };
 async function pick(id: LensId) {
-  fireEvent.click(lensButton(id));
+  pickLens(deps, L, id);
   await waitFor(() => expect(scene.props!.lens.id).toBe(id), MOUNT_WAIT);
 }
 const labelled = (label: string) => scene.props!.nodes.find((n) => n.label === label)!;
@@ -149,7 +152,7 @@ describe('legend and lens notes', () => {
     await mount3D(codeFixture(), { initialLens: 'claims' });
     expect(screen.getByText(L.lensNotApplicable)).toBeTruthy();
     expect(scene.props!.lens.id).toBe('structure');
-    expect(lensButton('structure').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(L.lensHints.structure)).toBeTruthy(); // the Lens panel names the lens in effect (no lens row to mark it)
   });
 
   it('shows no such note for a lens that applies', async () => {
@@ -177,10 +180,10 @@ describe('list fallback parity', () => {
     for (const id of ['structure', 'claims', 'live'] as const) {
       await pick(id);
       const drawn = scene.props!.nodes.map((n) => n.label).sort();
-      fireEvent.click(screen.getByRole('button', { name: L.viewList }));
+      pickCamera(deps, L.viewList);
       const rows = [...screen.getByTestId('kg-list').querySelectorAll('button[aria-pressed]')];
       expect(rows.map((r) => r.querySelectorAll('span')[1]!.textContent).sort(), id).toEqual(drawn);
-      fireEvent.click(screen.getByRole('button', { name: L.view3d }));
+      pickCamera(deps, L.view3d);
       await waitFor(() => expect(screen.getByTestId('kg-scene')).toBeTruthy(), MOUNT_WAIT);
     }
   });
@@ -188,7 +191,7 @@ describe('list fallback parity', () => {
   it('lists every finding of the graph, as the scene\'s lenses together do', async () => {
     const graph = mixedFixture();
     await mount3D(graph);
-    fireEvent.click(screen.getByRole('button', { name: L.viewList }));
+    pickCamera(deps, L.viewList);
     expandAllFindings({ fireEvent }, screen.getByTestId('kg-list'));
     const shown = [...screen.getByTestId('kg-list').querySelectorAll('[data-finding]')].map((el) => el.getAttribute('data-finding')).sort();
     expect(shown).toEqual(graph.findings.map((f) => f.kind).sort());

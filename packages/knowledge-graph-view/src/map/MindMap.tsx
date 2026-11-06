@@ -15,7 +15,7 @@ import { usePanZoom } from '../usePanZoom';
 import { useRoving } from '../useRoving';
 import { HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
-import { ZoomControls } from '../ZoomControls';
+import { usePanZoomRegistration } from '../surface/zoom';
 import { kindLabel } from '../names';
 import { cssVar } from '../scene/themeColors';
 import { mindMap, type MindMap as MindMapModel, type PlacedBranch } from './mindMapModel';
@@ -98,6 +98,7 @@ export function MindMap({ nodes, findings, rootTitle, selected, onSelect, onShow
     const map = useIdleValue(() => mindMap(nodes, findings), [nodes, findings]);
     const base = useMemo(() => (map ? fitView(map, size.width, size.height) : null), [map, size.width, size.height]);
     const pan = usePanZoom(base, map);
+    usePanZoomRegistration(pan); // the scene overlay's +, − and Fit drive this view
     const roving = useRoving();
     const { perPx, font } = useSvgScale(pan.view, size);
     const byId = useMemo(() => new Map((map?.branches ?? []).map((b) => [b.id, b] as const)), [map]);
@@ -142,7 +143,6 @@ export function MindMap({ nodes, findings, rootTitle, selected, onSelect, onShow
                         />
                         {ringAt && <circle data-focus="true" cx={ringAt.x} cy={ringAt.y} r={RADIUS[ringAt.kind] + 8 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray="4 3" pointerEvents="none" />}
                     </svg>
-                    <ZoomControls pan={pan} labels={labels} />
                 </>
             )}
         </div>

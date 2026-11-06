@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** The surface's parts, one by one: the transit map, path strip, lines panel, Act panel, overlay menu, panel dock and the registries. */
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
@@ -10,7 +11,7 @@ import { LinesPanel } from './LinesPanel';
 import { buildLines } from './lines';
 import { OverlayMenu } from './OverlayMenu';
 import { makeOverlay, PRESETS } from './overlays';
-import { PanelDock } from './PanelDock';
+import { PanelDrawer, PanelToggle } from './PanelDock';
 import { pathOfLine } from './path';
 import { PathStrip } from './PathStrip';
 import { PANELS } from './panels';
@@ -173,7 +174,7 @@ describe('OverlayMenu', () => {
     const open = () => {
         const p = { onPreset: vi.fn(), onChannel: vi.fn(), onPins: vi.fn() };
         render(<OverlayMenu labels={L} stations={model.stations} bindings={PRESETS.risk} preset="risk" {...p} />);
-        fireEvent.click(screen.getByRole('button', { name: fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk }) }));
+        fireEvent.click(screen.getByRole('button', { name: `${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾` }));
         return p;
     };
 
@@ -201,6 +202,17 @@ describe('OverlayMenu', () => {
         fireEvent.keyDown(screen.getByTestId('kg-overlay-menu'), { key: 'Escape' });
         expect(screen.queryByTestId('kg-overlay-menu')).toBeNull();
     });
+
+    it('explains that any metric can drive any channel, in a dialog', () => {
+        open();
+        expect(screen.getByRole('dialog', { name: L.surface.overlaysTitle })).toBeTruthy();
+        expect(screen.getByText(L.surface.header.overlaysNote)).toBeTruthy();
+    });
+
+    it('on a narrow container the trigger is the short preset name', () => {
+        render(<OverlayMenu labels={L} stations={model.stations} bindings={PRESETS.risk} preset="risk" onPreset={vi.fn()} onChannel={vi.fn()} onPins={vi.fn()} narrow />);
+        expect(screen.getByRole('button', { name: `${L.surface.presets.risk} ▾` })).toBeTruthy();
+    });
 });
 
 describe('registries', () => {
@@ -212,23 +224,42 @@ describe('registries', () => {
         expect(ids({ webgl: true })).toContain('3d');
     });
 
-    it('holds the six drawers, and a dock with no panel available draws nothing', () => {
+    it('holds the six drawers, and a toggle with no panel available draws nothing', () => {
         expect(PANELS.map((p) => p.id)).toEqual(['sync', 'coverage', 'patterns', 'api', 'resolve', 'simulate']);
-        const surface = {} as never;
-        const { container } = render(<PanelDock graph={graph} env={env} labels={L} surface={surface} onShow={vi.fn()} panels={[]} />);
+        const { container } = render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={[]} />);
         expect(container.innerHTML).toBe('');
     });
 
-    it('draws a button and a drawer for each available panel row', () => {
+    it('the header shows Coverage, Patterns, API, Sync in that order; Resolve and Simulate have no button', () => {
+        const all = PANELS.map((p) => ({ ...p, available: () => true }));
+        render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={all} />);
+        const names = within(screen.getByRole('group', { name: L.surface.panelsLabel })).getAllByRole('button').map((b) => b.textContent);
+        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelSync]);
+    });
+
+    it('draws a button and a controlled drawer (with its subtitle) for each available panel row', () => {
         const Body = () => <p>panel body</p>;
         const panels: PanelDef[] = [
-            { id: 'cov', labelKey: 'viewList', component: Body, available: () => true },
+            { id: 'sync', labelKey: 'viewList', component: Body, available: () => true },
             { id: 'hidden', labelKey: 'viewGraph', component: Body, available: () => false },
         ];
-        render(<PanelDock graph={graph} env={env} labels={L} surface={{} as never} onShow={vi.fn()} panels={panels} />);
+        function Harness() {
+            const [panel, setPanel] = useState<string | null>(null);
+            return (
+                <>
+                    <PanelToggle graph={graph} env={env} labels={L} panel={panel} onPanel={setPanel} panels={panels} ids={['sync', 'hidden']} />
+                    <PanelDrawer graph={graph} env={env} labels={L} surface={{} as never} panel={panel} onPanel={setPanel} onShow={vi.fn()} panels={panels} />
+                </>
+            );
+        }
+        render(<Harness />);
         expect(screen.queryByRole('button', { name: L.viewGraph })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: L.viewList }));
         expect(screen.getByText('panel body')).toBeTruthy();
         expect(screen.getByRole('dialog')).toBeTruthy();
+        expect(screen.getByText(L.surface.drawerSubtitle.sync)).toBeTruthy();
+        // Pressing the open panel's button closes the drawer again.
+        fireEvent.click(screen.getByRole('button', { name: L.viewList }));
+        expect(screen.queryByRole('dialog')).toBeNull();
     });
 });

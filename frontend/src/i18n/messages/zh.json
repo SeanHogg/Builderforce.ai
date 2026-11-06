@@ -36193,6 +36193,57 @@
         "empty": "选择一条线路或一个站点以绘制其时序。",
         "messageAria": "{from} 到 {to}：{label}"
       },
+      "overlay": {
+        "outTo": "↑ 返回 {name}",
+        "fit": "适应",
+        "lensSub": "原为{lens}视角",
+        "familyOnly": "仅 {family}",
+        "clearFamily": "清除 {family} 筛选",
+        "missingFiles": "服务器上缺少 {count} 个文件。",
+        "diagnose": "诊断",
+        "controls": "场景控制"
+      },
+      "rail": {
+        "heading": "从入口出发的线路",
+        "legendHeading": "现在如何读这幅图",
+        "ownerSwatches": "每位负责人一种颜色",
+        "legendEmpty": "图上没有绑定任何内容。"
+      },
+      "act": {
+        "cardsTitle": "优先修复",
+        "noCards": "这里没有需要修复的内容。",
+        "apply": "应用",
+        "prompt": "交给智能体",
+        "show": "显示",
+        "cardAction": "{action}：{title}",
+        "sourceExact": "精确",
+        "sourceAnalyzer": "分析器",
+        "sourceModel": "模型",
+        "fixQueue": "修复队列 · {count}",
+        "keepTitle": "将这次运行保留为测试",
+        "keepBody": "把 {path} 变成一个测试，只要其中某一跳断开就会失败。",
+        "keepButton": "请求编写测试",
+        "testRequest": "编写一个集成测试来走通路径 {path}。依次经过的站点：{stops}。断言每一跳仍然发生，并且以下发现不会再次出现：{checks}。",
+        "doneTitle": "当满足以下条件时，这条路径才算完成…",
+        "doneCheck": "{title} 已在 {items} 中解决",
+        "doneNone": "这条路径上没有未解决的发现。",
+        "doneMore": "另有 {count} 项检查",
+        "detailsTitle": "详情",
+        "linkCoverage": "覆盖率",
+        "linkApi": "API",
+        "moreFindings": "全部发现"
+      },
+      "path": {
+        "title": "{line} · {entry}",
+        "reset": "重置",
+        "step": "单步",
+        "runToEnd": "运行到末尾",
+        "simulate": "用输入值模拟",
+        "sequence": "时序图",
+        "noTests": "无测试",
+        "findings": "{count} 项发现",
+        "stops": "站点"
+      },
       "sync": {
         "loading": "正在读取同步状态…",
         "failed": "无法读取同步状态。",
@@ -36359,11 +36410,64 @@
         "import": "导入"
       },
       "time": {
-        "label": "历史",
+        "label": "评审",
         "aria": "历史：选择一个提交，标出它修改的站点",
         "now": "现在",
         "commitAria": "{title}，{at}",
         "changed": "此提交修改了 {count} 个站点"
+      },
+      "header": {
+        "statusLabel": "同步状态",
+        "syncedAt": "已同步 {time}",
+        "synced": "已同步",
+        "notSynced": "未同步",
+        "updateFailed": "无法更新",
+        "reviewing": "评审中 · {progress}",
+        "reviewPlan": "评审计划已就绪",
+        "reviewFailed": "评审失败",
+        "skippedPill": "{count} 个文件未存储",
+        "parityBoth": "{count} 个文件，本地与服务器一致",
+        "parityDiffers": "本地 {local} 个 · 服务器 {server} 个",
+        "parityLocal": "本地 {local} 个文件 · 尚未上传到服务器",
+        "moreActions": "更多操作",
+        "reReview": "重新评审此文件夹",
+        "scopeItem": "文件夹：{title}",
+        "overlaysNote": "任何指标都可以驱动任何通道。地图、系统、图、思维导图、塔、热力、列表和时序都读取同一组绑定，因此覆盖率条同样可以是反模式条。",
+        "rootsLabel": "已评审的文件夹"
+      },
+      "askSentence": {
+        "where": "{name} 通向哪里？",
+        "wrong": "{name} 上有什么问题？",
+        "untested": "{name} 上哪些没有测试？",
+        "patterns": "{name} 中有哪些模式？",
+        "changed": "评审之后改了什么？",
+        "callers": "还有谁调用 {name}？",
+        "copied": "哪些代码是复制的？",
+        "unused": "哪些代码从未被调用？",
+        "claims": "文档是怎么说的，是真的吗？",
+        "layers": "每个部分属于哪一层？",
+        "knowledge": "记忆对 {name} 了解什么？"
+      },
+      "answerMode": {
+        "where": "以路径回答",
+        "wrong": "以问题回答",
+        "untested": "虚线 = 没有测试覆盖",
+        "patterns": "以模式回答",
+        "changed": "以提交回答",
+        "callers": "以链接回答",
+        "copied": "以克隆组回答",
+        "unused": "以未使用代码回答",
+        "claims": "以声明回答",
+        "layers": "以分层回答",
+        "knowledge": "以事实回答"
+      },
+      "drawerSubtitle": {
+        "sync": "本地优先，小批量，按文件哈希合并",
+        "coverage": "整个系统的测试、触达与缺口",
+        "patterns": "按层划分的设计、企业与反模式",
+        "api": "路由的承诺、已测试的内容，以及试用",
+        "resolve": "确定性修复或提示，然后验证",
+        "simulate": "用真实值运行该路径"
       }
     }
   }

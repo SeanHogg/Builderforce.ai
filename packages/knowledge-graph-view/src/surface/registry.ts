@@ -51,6 +51,8 @@ export interface CameraDef {
     labelKey: StringLabelKey;
     component: ComponentType<SceneProps>;
     available(graph: KnowledgeGraph, env: SurfaceEnv): boolean;
+    /** False = no button in the scene overlay's View group (the camera is drawn by something else, e.g. the path strip). Default true. */
+    switcher?: boolean;
 }
 
 /** What a drawer is handed. */

@@ -6,6 +6,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { codeFixture, fixtureSource, mixedFixture } from './testing';
+import { lensIsPicked, openDetails as openDetailsOf } from './testPicks';
 
 vi.mock('./scene/GraphScene', () => ({ default: () => <div data-testid="kg-scene" /> }));
 afterEach(() => vi.restoreAllMocks());
@@ -15,24 +16,26 @@ async function mount(graph: KnowledgeGraph = codeFixture()) {
     // A cheap DOM wait: a role query over the whole view can outlast the idle layout's timer.
     await waitFor(() => expect(document.querySelector('[data-testid="kg-graph2d"] [data-id]')).not.toBeNull());
 }
-const modes = () => within(screen.getByRole('group', { name: L.viewModesLabel }));
+// The View group is a segmented radio group; Insights and the Lens panel sit in the Act rail's collapsed Details section (in the DOM, hidden).
+const modes = () => within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
 const insights = () => within(screen.getByTestId('kg-insights'));
+const openDetails = () => openDetailsOf({ fireEvent });
 
 describe('view modes', () => {
     it('opens on the 2D graph, not the list, when there is no WebGL', async () => {
         await mount();
         expect(screen.queryByTestId('kg-list')).toBeNull();
         expect(screen.getAllByRole('button', { name: /, File$/ }).length).toBeGreaterThan(0);
-        expect(modes().getByRole('button', { name: L.viewGraph }).getAttribute('aria-pressed')).toBe('true');
-        expect(modes().queryByRole('button', { name: L.view3d })).toBeNull();
-        expect(modes().getByRole('button', { name: L.viewMap })).toBeTruthy();
-        expect(modes().getByRole('button', { name: L.viewList })).toBeTruthy();
+        expect(modes().getByRole('radio', { name: L.viewGraph }).getAttribute('aria-checked')).toBe('true');
+        expect(modes().queryByRole('radio', { name: L.view3d })).toBeNull();
+        expect(modes().getByRole('radio', { name: L.viewMap })).toBeTruthy();
+        expect(modes().getByRole('radio', { name: L.viewList })).toBeTruthy();
     });
 
     it('shows the insights aside in every mode, with the lens panel', async () => {
         await mount();
         for (const name of [L.viewGraph, L.viewMap, L.viewList]) {
-            fireEvent.click(modes().getByRole('button', { name }));
+            fireEvent.click(modes().getByRole('radio', { name }));
             expect(screen.getByTestId('kg-insights'), name).toBeTruthy();
             expect(screen.getByText(L.lensHints.structure), name).toBeTruthy();
         }
@@ -41,7 +44,7 @@ describe('view modes', () => {
 
     it('draws the folder mind map', async () => {
         await mount();
-        fireEvent.click(modes().getByRole('button', { name: L.viewMap }));
+        fireEvent.click(modes().getByRole('radio', { name: L.viewMap }));
         expect(await screen.findByTestId('kg-map')).toBeTruthy();
         expect(screen.queryByTestId('kg-graph2d')).toBeNull();
     });
@@ -51,7 +54,7 @@ describe('view modes', () => {
         vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => undefined, removeEventListener: () => undefined }));
         try {
             await mount();
-            fireEvent.click(await modes().findByRole('button', { name: L.view3d }));
+            fireEvent.click(await modes().findByRole('radio', { name: L.view3d }));
             expect(await screen.findByTestId('kg-scene')).toBeTruthy();
             expect(screen.getByTestId('kg-insights')).toBeTruthy();
         } finally {
@@ -63,10 +66,10 @@ describe('view modes', () => {
 describe('insights', () => {
     it('shows the metric tiles and opens the lens that explains one', async () => {
         await mount(mixedFixture());
+        openDetails();
         const tile = insights().getByText(L.metrics.cycles!).closest('button')!;
         fireEvent.click(tile);
-        const nav = within(screen.getByRole('navigation', { name: L.lensesLabel }));
-        await waitFor(() => expect(nav.getByRole('button', { name: L.lenses.partitions }).getAttribute('aria-pressed')).toBe('true'));
+        await waitFor(() => expect(lensIsPicked({ fireEvent }, L, 'partitions')).toBe(true));
     });
 
     it('draws no tile for something the graph has none of', async () => {
@@ -77,6 +80,7 @@ describe('insights', () => {
 
     it('draws the charts and focuses a bar\'s nodes', async () => {
         await mount();
+        openDetails();
         const bar = insights().getByRole('button', { name: `${L.legend.file}: 6` });
         fireEvent.click(bar);
         await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());

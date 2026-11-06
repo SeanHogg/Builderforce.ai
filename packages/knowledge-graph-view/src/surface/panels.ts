@@ -13,7 +13,15 @@ import { SimulatePanel } from './drawers/SimulatePanel';
 import { SyncPanel } from './drawers/SyncPanel';
 import type { PanelDef } from './registry';
 
-export const PANELS: readonly PanelDef[] = [
+export type PanelId = 'sync' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate';
+
+/**
+ * The panels that have a button in the header's "Panels" group, in order. Resolve and Simulate
+ * stay in the registry (the Act rail and the path strip open them with `openPanel`).
+ */
+export const HEADER_PANELS: readonly PanelId[] = ['coverage', 'patterns', 'api', 'sync'];
+
+export const PANELS: readonly (PanelDef & { id: PanelId })[] = [
     { id: 'sync', labelKey: 'panelSync', component: SyncPanel, available: (_graph, env) => env.hasSync === true },
     { id: 'coverage', labelKey: 'panelCoverage', component: CoveragePanel, available: (graph) => graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },
     { id: 'patterns', labelKey: 'panelPatterns', component: PatternsPanel, available: (graph) => graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },

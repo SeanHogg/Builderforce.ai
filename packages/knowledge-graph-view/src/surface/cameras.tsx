@@ -4,7 +4,7 @@
  * `ViewMode`; `ViewSurface` and the switcher read this array and know no camera by name.
  */
 
-import { lazy, Suspense, useMemo } from 'react';
+import { lazy, Suspense, useMemo, type ComponentType } from 'react';
 import { fillTemplate } from '../labels';
 import { Graph2D } from '../graph2d/Graph2D';
 import { ListFallback } from '../ListFallback';
@@ -18,6 +18,19 @@ import { HeatGrid } from './HeatGrid';
 import { SequenceDiagram } from './SequenceDiagram';
 import { SystemTiers } from './SystemTiers';
 import { TransitMap } from './TransitMap';
+import { ScaleZoom } from './zoom';
+
+/**
+ * The cameras made of HTML (System, Heat, Sequence, List) register their zoom through CSS scale;
+ * the SVG ones (Map, Graph, Mind map) register their viewBox pan/zoom themselves. The 3D tower
+ * registers none (its orbit controls own the wheel), so the overlay disables +, − and Fit there.
+ * Wrapped once at module level, so a camera keeps its identity (and its state) across renders.
+ */
+function scaled(Camera: ComponentType<SceneProps>): ComponentType<SceneProps> {
+    function Scaled(p: SceneProps) { return <ScaleZoom><Camera {...p} /></ScaleZoom>; }
+    Scaled.displayName = `Scaled(${Camera.displayName ?? Camera.name})`;
+    return Scaled;
+}
 
 const GraphScene = lazy(() => import('../scene/GraphScene'));
 
@@ -93,13 +106,22 @@ function TransitCamera({ surface, labels, reducedMotion }: SceneProps) {
     );
 }
 
+const SystemCamera = scaled(SystemTiers);
+const HeatCamera = scaled(HeatGrid);
+const SequenceCamera = scaled(SequenceDiagram);
+const ListScaled = scaled(ListCamera);
+
+/**
+ * `switcher: false` keeps a camera registered (the path strip's Sequence toggle draws it, a host
+ * may still ask for it by id) without a button in the scene overlay's View group.
+ */
 export const CAMERAS: readonly CameraDef[] = [
     { id: 'transit', labelKey: 'viewTransit', component: TransitCamera, available: (_graph, env) => env.hasLines },
-    { id: 'system', labelKey: 'viewSystem', component: SystemTiers, available: () => true },
+    { id: 'system', labelKey: 'viewSystem', component: SystemCamera, available: () => true },
     { id: 'graph', labelKey: 'viewGraph', component: GraphCamera, available: () => true },
     { id: 'map', labelKey: 'viewMap', component: MindCamera, available: () => true },
     { id: '3d', labelKey: 'view3d', component: TowerCamera, available: (_graph, env) => env.webgl },
-    { id: 'heat', labelKey: 'viewHeat', component: HeatGrid, available: () => true },
-    { id: 'sequence', labelKey: 'viewSequence', component: SequenceDiagram, available: (_graph, env) => env.hasLines },
-    { id: 'list', labelKey: 'viewList', component: ListCamera, available: () => true },
+    { id: 'heat', labelKey: 'viewHeat', component: HeatCamera, available: () => true },
+    { id: 'sequence', labelKey: 'viewSequence', component: SequenceCamera, available: (_graph, env) => env.hasLines, switcher: false },
+    { id: 'list', labelKey: 'viewList', component: ListScaled, available: () => true },
 ];
