@@ -56,11 +56,7 @@ export type KnowledgeCall =
   | { op: "syncStatus"; rootId: string }
   | { op: "applyFix"; rootId: string; finding: Finding }
   // The API drawer's sandbox Send: the extension performs it (no webview CORS), localhost / dev origins only.
-  | { op: "tryRequest"; req: KnowledgeTryRequest };
 
-/** The view's `TryRequest` / `TryResponse`, restated for the host (it cannot import that package). */
-export interface KnowledgeTryRequest { method: string; url: string; headers?: Record<string, string>; body?: string }
-export interface KnowledgeTryResponse { status: number; headers: Record<string, string>; body: string; ms: number }
 
 /** The view's `PinpointResult` is this shape: the matching core's own result type. */
 export type KnowledgePinpointResult = PinpointMatchResult;
