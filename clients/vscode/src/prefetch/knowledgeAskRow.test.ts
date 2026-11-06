@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("vscode", () => ({}));
 
 import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
-import { localSnapshotStore, type DirectorySource, type JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
+import { localSnapshotStore, type JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
 import { buildStoredGraph, reviewPacks, runKnowledgeReview } from "@builderforce/agent-tools/knowledge";
 import { defineRegistry, runGate, type PrefetchPort } from "@builderforce/prefetch";
 import { OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND } from "@builderforce/agent-tools/prefetch";
@@ -12,6 +12,9 @@ import { configureHostKnowledgeIndex, getHostKnowledgeIndex, workspaceKnowledgeI
 import { KNOWLEDGE_ASK_ROWS, knowledgeAskExecutors } from "./knowledgeAskRow";
 import { knowledgeRootId } from "../knowledge/knowledgeRoots";
 import { VSCODE_PREFETCH_REGISTRY } from "./executors";
+import { configureLoadedPacks, loadedPackRegistry } from "../knowledge/packs/loadedPackRegistry";
+import { indexPack } from "../knowledge/packs/packIndexing";
+import { LEASE_DOCS, docsSource, leasePack, memoryMemento } from "../knowledge/packs/packFixture.test-util";
 
 const ROOT = path.resolve("/tmp/kx-ask-repo");
 const fn = (name: string) => ({ name, kind: "function" as const, line: 1, exported: true });
@@ -67,20 +70,7 @@ describe("knowledge.ask in the editor's gate", () => {
 });
 
 describe("knowledge.ask over a REVIEWED root (the index filled by its review, not only symbol files)", () => {
-  const DOCS: Record<string, string> = {
-    "lease.md": ["# Lease", "", "## Termination", "", "Either party may terminate the lease with 30 days notice.", ""].join("\n"),
-    "policy.md": ["# Policy", "", "Rent is paid monthly.", ""].join("\n"),
-  };
-  const source = (): DirectorySource => ({
-    rootId: knowledgeRootId(ROOT),
-    title: "docs",
-    async *list() {
-      for (const [p, text] of Object.entries(DOCS)) yield { path: p, hash: `h:${p}:${text.length}`, size: text.length };
-    },
-    async read(p) {
-      return { id: p, tenantId: "docs", title: p, content: { kind: "text", text: DOCS[p] ?? "", mediaType: "text/markdown" } };
-    },
-  });
+  const source = () => docsSource(knowledgeRootId(ROOT), LEASE_DOCS);
   const judgement: JudgementPort = {
     async judge(req) {
       return {
@@ -114,5 +104,47 @@ describe("knowledge.ask over a REVIEWED root (the index filled by its review, no
     expect((out?.data as { hits: number }).hits).toBeGreaterThan(0);
     expect(out?.chips?.[0]).toMatchObject({ labelKey: OPEN_IN_GRAPH_LABEL_KEY, command: OPEN_KNOWLEDGE_GRAPH_COMMAND });
     expect((out?.chips?.[0]?.args as { focus: string[] }).focus.some((f) => f.includes("lease.md"))).toBe(true);
+  });
+});
+
+describe("knowledge.ask over a LOADED PACK (a root no workspace folder holds)", () => {
+  const ask = (root: string) => knowledgeAskExecutors(() => root)["knowledge.ask"]!.run("what does the lease say about termination", new AbortController().signal);
+
+  afterEach(() => configureLoadedPacks(memoryMemento()));
+
+  it("answers from a pack indexed under a foreign root id, with a folder open and with none", async () => {
+    configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
+    configureLoadedPacks(memoryMemento());
+    const pack = await leasePack();
+    expect(await ask(ROOT)).toBeUndefined();
+
+    await indexPack(pack);
+    await loadedPackRegistry().remember(pack.name, { path: "/packs/lease.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
+
+    for (const root of [ROOT, ""]) {
+      const out = await ask(root);
+      expect(out?.text).toContain("lease.md");
+      expect(out?.context).toContain("lease.md");
+      // The termination SECTION's content reaches the model, not just the file's name.
+      expect(out?.context).toContain("30 days notice");
+      expect((out?.chips?.[0]?.args as { focus: string[] }).focus).toContain(`src:${pack.rootId}::lease.md#lease/termination`);
+    }
+  });
+
+  it("a pack that is indexed but no longer registered is not consulted", async () => {
+    configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
+    configureLoadedPacks(memoryMemento());
+    await indexPack(await leasePack());
+    expect(await ask("")).toBeUndefined();
+  });
+
+  it("a registered pack stays silent on a question its content has nothing to say about", async () => {
+    configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
+    configureLoadedPacks(memoryMemento());
+    const pack = await leasePack();
+    await indexPack(pack);
+    await loadedPackRegistry().remember(pack.name, { path: "/packs/lease.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
+    const unrelated = await knowledgeAskExecutors(() => "")["knowledge.ask"]!.run("where is the zzqx handled", new AbortController().signal);
+    expect(unrelated).toBeUndefined();
   });
 });

@@ -23,9 +23,11 @@ import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
 import { rootSyncStatus } from "./knowledgeSync";
+import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { subscribeLiveGraph } from "./knowledgeLive";
+import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
 import { linkedKnowledgeClient, loadGraph, log, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 
 /** Search hits the view shows at most. */
@@ -70,6 +72,7 @@ export class KnowledgeBridge implements vscode.Disposable {
 
   /** One call's answer (the caller responds with it, or with the error). */
   async handle(call: KnowledgeCall): Promise<unknown> {
+    assertWritable(call, this.lastRoot);
     switch (call.op) {
       case "scopes": return (this.lastScopes = await this.scopes());
       case "lastSeen": return readLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey());
@@ -77,7 +80,8 @@ export class KnowledgeBridge implements vscode.Disposable {
         this.lastRoot = call.rootId;
         const query: GraphQuery = { ...(call.focus ? { focus: call.focus } : {}), ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) };
         this.loadedBy.set(call.rootId, query);
-        const graph = await loadGraph(this.secrets, call.rootId, query);
+        const pack = readOnlyPack(call.rootId);
+        const graph = pack ? await packRootGraph(pack, query) : await loadGraph(this.secrets, call.rootId, query);
         this.rights.loaded(call.rootId, graph?.scope.digest);
         // Only a FULL load is what the next open paints first (a focus load is a partial picture).
         if (graph && !call.focus) void this.rememberLastSeen(call.rootId, graph);
@@ -108,6 +112,7 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
       case "syncStatus": return rootSyncStatus(this.secrets, this.rootOf(call.rootId));
       case "applyFix": return this.applyFix(call.rootId, call.finding);
+      case "tryRequest": return tryRequestOf(call.req);
     }
   }
 
@@ -150,7 +155,8 @@ export class KnowledgeBridge implements vscode.Disposable {
         const root = rootById(rootId, workspaceFolders());
         return root ? (await openRoot(this.secrets, root).store.scopes()).filter((s) => s.rootId === rootId) : [];
       }))).flat();
-    return rows.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
+    const listed = rows.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
+    return [...listed, ...packScopeRows()];
   }
 
   private targets(): KnowledgeTargetRow[] {

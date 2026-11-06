@@ -12,6 +12,7 @@
  * commit of the linked repo is a new key.
  */
 import type { StoredFact } from '@seanhogg/builderforce-memory/knowledge';
+import { isPackRootId } from '@builderforce/agent-tools';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { GRAPH_KV_TTL_SECONDS, currentPerception, sourcePathsOf, type KnowledgeGraphDeps } from './getKnowledgeGraph';
 import type { KnowledgeScope } from './knowledgePorts';
@@ -26,9 +27,17 @@ export function knowledgeFactsCacheKey(parts: { tenantId: number; projectId: num
   return `kf:v1:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}`;
 }
 
-export async function listKnowledgeScopes(deps: ListDeps): Promise<KnowledgeScope[]> {
+/** A root as the scopes list shows it: an uploaded portable pack, or a reviewed folder. */
+export type KnowledgeScopeKind = 'pack' | 'review';
+export type KnowledgeScopeListing = KnowledgeScope & { kind: KnowledgeScopeKind };
+
+/** `kind` is COMPUTED from the root id's host segment (never stored): `pack:` ⇒ pack. */
+export const scopeKindOf = (rootId: string): KnowledgeScopeKind => (isPackRootId(rootId) ? 'pack' : 'review');
+
+export async function listKnowledgeScopes(deps: ListDeps): Promise<KnowledgeScopeListing[]> {
   const key = knowledgeScopesCacheKey(deps.tenantId, deps.projectId, await deps.version());
-  return getOrSetCached(deps.cacheEnv, key, () => deps.store.scopes(), { kvTtlSeconds: GRAPH_KV_TTL_SECONDS });
+  const scopes = await getOrSetCached(deps.cacheEnv, key, () => deps.store.scopes(), { kvTtlSeconds: GRAPH_KV_TTL_SECONDS });
+  return scopes.map((s) => ({ ...s, kind: scopeKindOf(s.rootId) }));
 }
 
 /** The root's stored facts (`createdBy` + `origin` as recorded); null for an unknown root. */

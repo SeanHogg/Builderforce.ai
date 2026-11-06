@@ -40,7 +40,7 @@ export {
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
 export { fileManifest, manifestFileName, migratingRootFiles, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
-export { folderIdOf, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
+export { PACK_ROOT_HOST, folderIdOf, isPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
 export {
     canDeleteFact, factRightsCache,
     type FactAuthor, type FactRightsCache, type FactViewer, type FactsListing,
@@ -61,10 +61,12 @@ export {
     type FileEditPorts, type KnownKeysCache, type FileEditResult, type WatchFileEditsArgs,
 } from './fileEdits.js';
 export { claimSimilarity, type SimilarIndex } from './claimSimilarity.js';
+export { provenanceLine, type PackProvenanceParts, type ProvenanceLine } from './packProvenance.js';
 export {
-    mergePacks, packFromSnapshot, parsePack, serializePack,
-    type PackFromSnapshotArgs, type PortableKnowledgePack,
+    mergePacks, packFromSnapshot, parsePack, rebasePackRoot, serializePack,
+    type PackFromSnapshotArgs, type PackProvenance, type PortableKnowledgePack,
 } from './portablePack.js';
+export { mergePacksWithCards, packFromStore, packGraph, reviewHasWork, type PackFromStoreArgs, type PackGraphQuery } from './packGraph.js';
 export { buildCodeGraph } from './codeGraph.js';
 export { LAYER_IDS, isDefaultLayers, type LayerId, type LayerRule } from './codeLayers.js';
 export { coverageSourceState, type CoverageRoot, type CoverageSkip, type CoverageSourceState } from './codeCoverage.js';

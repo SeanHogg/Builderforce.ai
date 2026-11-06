@@ -32,11 +32,11 @@ function deps(version: string): KnowledgeGraphDeps {
       scopes: vi.fn(async () => []), scope: vi.fn(async () => ({ rootId: ROOT, title: 'Root', packs: ['docs'], lastDigest: 'd1' })),
       facts: vi.fn(async () => []), relations: vi.fn(async () => []), upsertRelations: vi.fn(async () => 0), upsertScope: vi.fn(async () => undefined),
       markRelationsStale: vi.fn(async () => 0), deleteRelationsOf: vi.fn(async () => 0), deleteScope: vi.fn(async () => true), factSources: vi.fn(async () => new Map<string, string>()),
-      deleteFactsBySource: vi.fn(async () => []), deleteRelationsUnder: vi.fn(async () => 0), factAuthor: vi.fn(async () => null),
+      deleteFactsBySource: vi.fn(async () => ({ keys: [], relations: 0 })), humanRelationKeys: vi.fn(async () => new Set<string>()), deleteRelationsUnder: vi.fn(async () => 0), factAuthor: vi.fn(async () => null),
     },
     extracted: {
       get: vi.fn(async () => undefined), put: vi.fn(async () => undefined), setSource: vi.fn(async () => undefined),
-      rootExtracted: vi.fn(async () => extracted), snapshotReview: vi.fn(async () => undefined), reviewExtracted: vi.fn(async () => null),
+      rootExtracted: vi.fn(async () => extracted), deleteRootSources: vi.fn(async () => 0), snapshotReview: vi.fn(async () => undefined), reviewExtracted: vi.fn(async () => null),
     },
     analysis: { put: vi.fn(), clear: vi.fn(), latest: vi.fn(async () => null) },
     repo: { linked: async () => null },

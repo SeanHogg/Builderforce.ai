@@ -52,8 +52,23 @@ export interface GraphQuery {
 
 /** A reviewed root as the API lists it: memory's record plus the digest of the review
  *  before the last one (Compare's baseline), when there has been one. */
+/** Who reviewed an uploaded pack and how (PRD 40, OD-3); each part is optional. */
+export interface PackScopeProvenance {
+  reviewedBy?: string;
+  judgeModel?: string;
+  policy?: string;
+  reviewedAt?: string;
+  /** The person who uploaded the pack — set by the server, read-only for a client. */
+  uploadedBy?: string;
+}
+
 export interface KnowledgeScopeRecord extends ScopeRecord {
+  /** A pack scope's provenance, when the pack carried any (absent on a reviewed root). */
+  provenance?: PackScopeProvenance;
   previousDigest?: string;
+  /** `pack` = an uploaded portable knowledge pack, `review` = a reviewed folder. Computed by
+   *  the server from the root id (`isPackRootId`); absent from an older server (= `review`). */
+  kind?: 'pack' | 'review';
 }
 
 /** An upload the client skipped instead of throwing; nothing is dropped without a trace. */
@@ -100,6 +115,8 @@ export interface KnowledgeClient {
   putExtracted(hash: string, extracted: Extracted[]): Promise<void>;
   /** DELETE …/facts/:key — author or project admin only; also removes the fact's relations. */
   deleteFact(key: string): Promise<void>;
+  /** DELETE …/knowledge/scopes/:rootId — removes an UPLOADED PACK root (the server refuses a reviewed one with 400). */
+  deleteRoot(rootId: string): Promise<void>;
 }
 
 export class KnowledgeApiError extends Error {

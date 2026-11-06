@@ -16,10 +16,12 @@ import { setSymbolGrammarDir } from "./workspaceSymbols";
 import { setLocalResearchPort } from "./localResearch/researchPort";
 import { editorResearchPort } from "./localResearch/editorResearchPort";
 import { activateKnowledgeIndex } from "./knowledge/index/activateKnowledgeIndex";
+import { activateLoadedPacks } from "./knowledge/packs/activateLoadedPacks";
 
 export function activateLocalLevers(context: vscode.ExtensionContext): void {
   setHostInstallId(vscode.env.machineId);
   setSymbolGrammarDir(path.join(context.extensionPath, "out", "tree-sitter"));
   setLocalResearchPort(editorResearchPort());
   context.subscriptions.push(...activateKnowledgeIndex());
+  activateLoadedPacks(context.globalState);
 }

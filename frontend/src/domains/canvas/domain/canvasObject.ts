@@ -51,6 +51,8 @@ export type CanvasObjectData = {
    * pixels. Absent means it sits on whichever layer the graph puts it on.
    */
   depthOffset?: number;
+  /** An Evermind: the root ids (`pack:…`) of the uploaded knowledge packs it retrieves from (PRD 40). */
+  knowledgePacks?: string[];
 };
 
 /**

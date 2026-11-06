@@ -14,5 +14,6 @@ export {
   type KnowledgeFetch,
   type KnowledgeScopeRecord,
   type KnowledgeViewer,
+  type PackScopeProvenance,
   type SkippedUpload,
 } from './types.js';

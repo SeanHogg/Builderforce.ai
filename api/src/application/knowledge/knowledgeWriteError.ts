@@ -4,7 +4,7 @@
  * uploads can raise it without loading the writer.
  */
 export class KnowledgeWriteError extends Error {
-  constructor(readonly status: 400 | 413, readonly code: string, message: string) {
+  constructor(readonly status: 400 | 403 | 413, readonly code: string, message: string) {
     super(message);
     this.name = 'KnowledgeWriteError';
   }

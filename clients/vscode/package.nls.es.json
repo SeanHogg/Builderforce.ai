@@ -13,6 +13,8 @@
   "command.loadKnowledgePack": "BuilderForce: Cargar paquete de conocimiento",
   "command.exportKnowledgePack": "BuilderForce: Exportar paquete de conocimiento",
   "command.updateKnowledgePack": "BuilderForce: Actualizar paquete de conocimiento",
+  "command.uploadKnowledgePack": "BuilderForce: Subir paquete de conocimiento",
+  "command.removeUploadedKnowledgePack": "BuilderForce: Quitar paquete de conocimiento subido",
   "command.refreshInsights": "BuilderForce: Actualizar análisis",
   "command.refreshEvermind": "BuilderForce: Actualizar Evermind",
   "command.signIn": "BuilderForce: Iniciar sesión",

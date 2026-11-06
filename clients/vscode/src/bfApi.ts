@@ -26,6 +26,7 @@ export {
   canManageActiveWorkspace,
   createWorkspace,
   getCurrentUserId,
+  getCurrentUserName,
   getCurrentWorkspace,
   listWorkspaces,
 } from "./bfApi/workspace";

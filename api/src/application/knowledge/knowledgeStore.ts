@@ -13,7 +13,7 @@
  */
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { eq, gt, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
-import { type NodeRef, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { factRef, type NodeRef, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { knowledgeScopes, projectFactRelations, projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -28,6 +28,8 @@ export const MAX_SCOPE_FACTS = 5_000;
 export const MAX_SCOPE_RELATIONS = 20_000;
 /** Refs bound per `IN (…)` list. */
 const IN_CHUNK = 500;
+/** Rows one provenance delete removes per statement. */
+const DELETE_CHUNK = 1_000;
 
 type FactOriginColumn = 'model' | 'human' | 'agent' | null;
 
@@ -44,6 +46,7 @@ function toScopeRecord(row: typeof knowledgeScopes.$inferSelect): KnowledgeScope
     ...(row.lastDigest ? { lastDigest: row.lastDigest } : {}),
     ...(row.previousDigest ? { previousDigest: row.previousDigest } : {}),
     ...(row.lastReviewedAt ? { lastReviewedAt: row.lastReviewedAt.toISOString() } : {}),
+    ...(row.provenance ? { provenance: row.provenance } : {}),
   };
 }
 
@@ -70,7 +73,7 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
   const scoped = (table: typeof knowledgeScopes | typeof projectFactRelations | typeof projectFacts, tenant: number, ...conds: Array<SQL | undefined>) =>
     scopedToTenant(table, tenant, eq(table.projectId, projectId), ...conds);
 
-  return {
+  const store: KnowledgeStorePort = {
     async scopes() {
       const rows = await db.select().from(knowledgeScopes).where(scoped(knowledgeScopes, tenantId)).orderBy(knowledgeScopes.rootId);
       return rows.map(toScopeRecord);
@@ -174,11 +177,14 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
         tenantId, projectId, rootId: scope.rootId, title: scope.title?.slice(0, 255) || scope.rootId.slice(0, 255), packs: [...scope.packs],
         lastDigest: scope.lastDigest ?? null,
         lastReviewedAt: scope.lastReviewedAt ? new Date(scope.lastReviewedAt) : null,
+        provenance: scope.provenance ?? null,
       };
       await db.insert(knowledgeScopes).values(values).onConflictDoUpdate({
         target: [knowledgeScopes.tenantId, knowledgeScopes.projectId, knowledgeScopes.rootId],
         set: {
           title: values.title, packs: values.packs,
+          // Only a scope write that states provenance (a pack upload) replaces it; a review's write leaves it.
+          ...(scope.provenance ? { provenance: scope.provenance } : {}),
           // A scope write without a digest (an aborted review) keeps the last good one. A NEW
           // digest moves the stored one to `previous_digest` — Compare's baseline; the same
           // digest again (a re-sent final chunk) leaves both as they are.
@@ -221,6 +227,81 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
       return removed;
     },
 
+    async deleteScope(rootId) {
+      const rows = await db.delete(knowledgeScopes)
+        .where(scoped(knowledgeScopes, tenantId, eq(knowledgeScopes.rootId, rootId)))
+        .returning({ id: knowledgeScopes.id });
+      return rows.length > 0;
+    },
+
+    async factSources(keys) {
+      const out = new Map<string, string>();
+      const distinct = [...new Set(keys.map((k) => k.trim().slice(0, 255)))];
+      for (let i = 0; i < distinct.length; i += IN_CHUNK) {
+        const rows = await db.select({ key: projectFacts.key, source: projectFacts.source }).from(projectFacts)
+          .where(scoped(projectFacts, tenantId, inArray(projectFacts.key, distinct.slice(i, i + IN_CHUNK))));
+        for (const r of rows) out.set(r.key, r.source);
+      }
+      return out;
+    },
+
+    async deleteFactsBySource(source) {
+      const deleted: string[] = [];
+      let relations = 0;
+      for (;;) {
+        // Bounded batches by id: one unbounded DELETE could hold a pack's every fact in one statement.
+        const batch = await db.select({ id: projectFacts.id, key: projectFacts.key }).from(projectFacts)
+          .where(scoped(projectFacts, tenantId, eq(projectFacts.source, source)))
+          .limit(DELETE_CHUNK);
+        if (batch.length === 0) break;
+        // This batch's relations go BEFORE its facts: a failure between the two leaves facts
+        // (still selected by source on the retry), never a relation pointing at a deleted fact.
+        relations += await store.deleteRelationsOf(batch.map((r) => factRef(r.key)));
+        const rows = await db.delete(projectFacts)
+          .where(scoped(projectFacts, tenantId, inArray(projectFacts.id, batch.map((r) => r.id))))
+          .returning({ key: projectFacts.key });
+        deleted.push(...rows.map((r) => r.key));
+        if (batch.length < DELETE_CHUNK) break;
+      }
+      return { keys: deleted, relations };
+    },
+
+    async humanRelationKeys(rows) {
+      const out = new Set<string>();
+      const froms = [...new Set(rows.map((r) => r.from))];
+      const wanted = new Set(rows.map((r) => `${r.from}\u0000${r.to}\u0000${r.kind}`));
+      for (let i = 0; i < froms.length; i += IN_CHUNK) {
+        const found = await db.select({ from: projectFactRelations.fromRef, to: projectFactRelations.toRef, kind: projectFactRelations.kind })
+          .from(projectFactRelations)
+          .where(scoped(projectFactRelations, tenantId, eq(projectFactRelations.origin, 'human'), inArray(projectFactRelations.fromRef, froms.slice(i, i + IN_CHUNK))));
+        for (const r of found) {
+          const key = `${r.from}\u0000${r.to}\u0000${r.kind}`;
+          if (wanted.has(key)) out.add(key);
+        }
+      }
+      return out;
+    },
+
+    async deleteRelationsUnder(rootId) {
+      const prefix = `${escapeLike(`src:${rootId}::`)}%`;
+      let removed = 0;
+      for (;;) {
+        const ids = await db.select({ id: projectFactRelations.id }).from(projectFactRelations)
+          .where(scoped(projectFactRelations, tenantId, or(
+            sql`${projectFactRelations.fromRef} LIKE ${prefix}`,
+            sql`${projectFactRelations.toRef} LIKE ${prefix}`,
+          )))
+          .limit(DELETE_CHUNK);
+        if (ids.length === 0) break;
+        const rows = await db.delete(projectFactRelations)
+          .where(scoped(projectFactRelations, tenantId, inArray(projectFactRelations.id, ids.map((r) => r.id))))
+          .returning({ id: projectFactRelations.id });
+        removed += rows.length;
+        if (ids.length < DELETE_CHUNK) break;
+      }
+      return removed;
+    },
+
     async factAuthor(key) {
       const [row] = await db.select({ createdBy: projectFacts.createdBy }).from(projectFacts)
         .where(scoped(projectFacts, tenantId, eq(projectFacts.key, key.trim().slice(0, 255))))
@@ -228,4 +309,5 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
       return row ? row.createdBy ?? null : undefined;
     },
   };
+  return store;
 }

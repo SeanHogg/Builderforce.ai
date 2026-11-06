@@ -4,6 +4,7 @@
  * `/api/projects`, on-prem agents with their host key under `/api/agent/projects`.
  *
  *   GET  /:projectId/knowledge/scopes                       reviewed roots (cached)
+ *   DELETE /:projectId/knowledge/scopes/:rootId             removes an uploaded pack root (`pack:` only)
  *   GET  /:projectId/knowledge/facts?root=                  the root's stored facts with author +
  *                                                           origin (cached), and the viewer
  *   GET  /:projectId/knowledge-graph?root=&focus=&maxNodes=&at=
@@ -28,12 +29,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
 import { personOf } from '../middleware/personOf';
+import { isPackRootId } from '@builderforce/agent-tools';
+import { authorizePackManage } from '../../application/knowledge/packAccess';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { projectInTenantCached } from '../../application/project/projectOwnership';
 import { knowledgePortsFor, type KnowledgePorts } from '../../application/knowledge/knowledgeComposition';
 import { getKnowledgeGraph } from '../../application/knowledge/getKnowledgeGraph';
 import { listKnowledgeFacts, listKnowledgeScopes } from '../../application/knowledge/listKnowledge';
+import { deleteKnowledgeRoot } from '../../application/knowledge/deleteKnowledgeRoot';
 import { factViewer } from '../../application/knowledge/deleteKnowledgeFact';
 import { searchKnowledge } from '../../application/knowledge/knowledgeIndexPort';
 import { writeKnowledge } from '../../application/knowledge/writeKnowledge';
@@ -90,7 +94,15 @@ const zRelation = z.object({
   sourceHash: z.string().max(64).optional(),
   staleAt: z.string().datetime().nullable().optional(),
 });
+/** An uploaded pack's provenance (PRD 40, OD-3): optional strings, each ≤ 255 chars. */
+const zProvenance = z.object({
+  reviewedBy: z.string().max(255).optional(),
+  judgeModel: z.string().max(255).optional(),
+  policy: z.string().max(255).optional(),
+  reviewedAt: z.string().max(255).optional(),
+});
 const zScope = z.object({
+  provenance: zProvenance.optional(),
   rootId: z.string().min(1).max(512),
   title: z.string().max(255).default(''),
   packs: z.array(z.string().min(1).max(64)).max(16),
@@ -98,6 +110,8 @@ const zScope = z.object({
   lastReviewedAt: z.string().datetime().optional(),
 });
 const WriteBody = z.object({
+  /** The root every row of this chunk belongs to (a pack upload sends it on each chunk). */
+  root: z.string().min(1).max(512).optional(),
   scope: zScope.optional(),
   facts: z.array(zFact).default([]),
   relations: z.array(zRelation).default([]),
@@ -181,6 +195,19 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
 
   router.get('/:projectId/knowledge/scopes', (c) => withPorts(c, async (p) => json({ scopes: await listKnowledgeScopes(p.graph) })));
 
+  /** Removes an UPLOADED PACK root (PRD 40); a reviewed root is refused (400). */
+  router.delete('/:projectId/knowledge/scopes/:rootId', (c) => withPorts(c, async (p) => {
+    const rootId = c.req.param('rootId');
+    // Destructive for every member: the person who uploaded the pack, a manager or a superadmin
+    // (`packAccess`) — never a host key or machine token.
+    if (isPackRootId(rootId)) {
+      const access = await authorizePackManage(p.env, p.store, { userId: person(c), role: (c.get('role') as string | undefined) ?? null }, rootId);
+      if (!access.ok) return json({ error: access.error }, access.status);
+    }
+    const result = await deleteKnowledgeRoot({ env: p.env, graph: p.graph }, rootId);
+    return result.ok ? json(result) : json({ error: result.error }, result.status);
+  }));
+
   router.get('/:projectId/knowledge/facts', (c) => withPorts(c, async (p) => {
     const rootId = c.req.query('root')?.trim();
     if (!rootId) return json({ error: 'root is required' }, 400);
@@ -211,7 +238,7 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     const body = await parseBody(c, WriteBody);
     try {
       const result = await writeKnowledge(
-        { env: p.env, db: p.db, tenantId: p.tenantId, projectId: p.projectId, store: p.store, blobs: p.extracted, userId: person(c) },
+        { env: p.env, db: p.db, tenantId: p.tenantId, projectId: p.projectId, store: p.store, blobs: p.extracted, userId: person(c), actorRole: (c.get('role') as string | undefined) ?? null },
         body as unknown as Parameters<typeof writeKnowledge>[1],
       );
       return json({ ok: true, ...result });

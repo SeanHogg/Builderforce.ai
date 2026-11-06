@@ -36,6 +36,8 @@ describe('createKnowledgeClient', () => {
     });
     expect(sizes).toEqual([MAX_WRITE_ROWS, MAX_WRITE_ROWS, 50]);
     expect(seen.map((s) => 'scope' in (s.body as object))).toEqual([false, false, true]);
+    // The root rides every chunk (the server stamps and fences a pack upload by it).
+    expect(seen.map((s) => (s.body as { root?: string }).root)).toEqual(Array(3).fill((seen[2]!.body as { scope: { rootId: string } }).scope.rootId));
   });
 
   it('sends a scope-only write as one call', async () => {
@@ -108,6 +110,12 @@ describe('createKnowledgeClient', () => {
       'GET /api/projects/2/knowledge/search?root=r&q=billing&k=5',
       'DELETE /api/projects/2/facts/claim%3Aa%20b',
     ]);
+  });
+
+  it('removes an uploaded pack root on its scope route', async () => {
+    const { fetch, seen } = fakeFetch(() => json({ ok: true }));
+    await createKnowledgeClient({ fetch, projectId: 2 }).deleteRoot('pack:my docs');
+    expect(seen.map((s) => `${s.method} ${s.path}`)).toEqual(['DELETE /api/projects/2/knowledge/scopes/pack%3Amy%20docs']);
   });
 
   it('puts every route under the basePath it is given (the agent-host door on-prem)', async () => {

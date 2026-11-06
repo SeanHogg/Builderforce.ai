@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { filesManifestKey, srcRef, type Extracted } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import {
-  fileManifest, localKnowledgeStore, manifestFileName, selectKnowledgeStore, snapshotFileName, uploadLocalSnapshot,
+  fileManifest, localKnowledgeStore, manifestFileName, pushSnapshot, selectKnowledgeStore, snapshotFileName, uploadLocalSnapshot,
   type KnowledgeFiles, type UploadMarks,
 } from "./knowledgeStores";
 
@@ -88,6 +88,32 @@ describe("linking uploads the local snapshot", () => {
     expect(store.write).toHaveBeenCalledTimes(1);
     // Linked to ANOTHER project: uploaded there too.
     expect(await uploadLocalSnapshot({ rootId: ROOT, files, client, projectId: 8, marks: m })).not.toBeNull();
+  });
+
+  it("pushSnapshot writes a pack's sources, then its facts and relations with the scope, reporting progress", async () => {
+    const root = "pack:docs";
+    const ref = srcRef(root, "a.md");
+    const ex: Extracted = { sourceRef: ref, sourceHash: "h1", nodes: [], edges: [], keys: [] };
+    const { client, store, putExtracted } = fakeClient();
+    const progress = vi.fn();
+    const out = await pushSnapshot({
+      rootId: root,
+      snapshot: {
+        scopes: [{ rootId: root, title: "Docs", packs: [] }],
+        extracted: { h1: [ex] },
+        facts: { [root]: [{ key: "claim:1", content: "c", source: "knowledge-review", importance: 0.5, origin: "model", fileAnchors: [{ path: "a.md" }] }] },
+        relations: { [root]: [] },
+      },
+      current: [{ ref, hash: "h1" }, { ref: srcRef(root, "missing.md"), hash: "h9" }],
+      client,
+      onProgress: progress,
+    });
+    expect(out).toEqual({ sources: 1, facts: 1, relations: 0 });
+    expect(putExtracted).toHaveBeenCalledWith("h1", [ex]);
+    expect(store.markStale).toHaveBeenCalledWith({ rootId: root }, ref, "h1");
+    expect(store.write).toHaveBeenCalledWith(expect.objectContaining({ scope: expect.objectContaining({ rootId: root, title: "Docs" }) }));
+    // Every source processed is counted, so the last call reaches the total even past a skipped one.
+    expect(progress.mock.calls).toEqual([[1, 2], [2, 2]]);
   });
 
   it("uploads nothing for a root never reviewed locally", async () => {

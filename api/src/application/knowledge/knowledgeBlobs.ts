@@ -177,6 +177,23 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
       return extractedOf(env.UPLOADS, rootId, await listSources(env.UPLOADS, keys.sources(rootId)), true);
     },
 
+    async deleteRootSources(rootId) {
+      if (!env.UPLOADS) return 0;
+      const b = env.UPLOADS;
+      let removed = 0;
+      for (;;) {
+        // Always the FIRST page: what was listed is deleted, so the next listing starts past it
+        // without leaning on a cursor across deletes.
+        const page = await b.list({ prefix: keys.sources(rootId), limit: LIST_PAGE });
+        if (page.objects.length === 0) break;
+        await b.delete(page.objects.map((o) => o.key));
+        removed += page.objects.length;
+        if (!page.truncated) break;
+      }
+      await b.delete(keys.bundle(rootId));
+      return removed;
+    },
+
     async snapshotReview(rootId, digest) {
       const b = bucket();
       const key = keys.review(rootId, digest);
@@ -235,6 +252,10 @@ export function r2AnalysisSnapshots(env: Pick<Env, 'UPLOADS'>, tenantId: number,
       if (!env.UPLOADS) throw new Error('knowledge storage (R2) is not configured');
       await writeJson(env.UPLOADS, keys.analysis(rootId, sha), snapshot);
       await writeJson(env.UPLOADS, keys.latestAnalysis(rootId), { sha });
+    },
+    async clear(rootId) {
+      // The pointer is what `latest` follows; the sha-keyed blobs are immutable and unreachable without it.
+      if (env.UPLOADS) await env.UPLOADS.delete(keys.latestAnalysis(rootId));
     },
     async latest(rootId) {
       if (!env.UPLOADS) return null;

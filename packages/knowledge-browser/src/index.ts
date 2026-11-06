@@ -25,8 +25,9 @@ export {
   type FsDirectoryHandleLike, type FsFileHandleLike, type FsFileLike,
 } from './fsAccessDirectorySource';
 export { knowledgeGraphLabels, catalogReader, KNOWLEDGE_GRAPH_NAMESPACE } from './labels';
+export { browserPackRegistry, browserPackRetrieval, selectedPackRegistry, type PackClient } from './browserPacks';
 export {
   BROWSER_KNOWLEDGE_REGISTRY, BROWSER_PREFETCH_CALIBRATION_KEY, createBrowserKnowledgePrefetchPort, knowledgeChipIntent,
-  localStorageCalibration, newestReviewedRoot,
+  focusRoot, localStorageCalibration, newestReviewedRoot,
   type BrowserKnowledgePrefetchOptions, type CalibrationStore, type KnowledgeChipIntent,
 } from './prefetchPort';

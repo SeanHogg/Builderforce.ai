@@ -7,6 +7,19 @@ import { authed } from "./transport";
 // the "assigned to me" task filter doesn't refetch. `null` = resolved-but-unavailable
 // (older API); undefined = not yet fetched. Cleared on sign-out via clearJwt.
 let currentUserId: string | null | undefined;
+/** Who the signed-in human is by name (the same `/me` answer), for provenance on what they review. */
+let currentUserName: string | null | undefined;
+
+async function loadIdentity(secrets: vscode.SecretStorage): Promise<void> {
+  try {
+    const r = await authed<{ userId?: string; displayName?: string; email?: string }>(secrets, "/api/vscode/me");
+    currentUserId = r?.userId ?? null;
+    currentUserName = r?.displayName || r?.email || null;
+  } catch {
+    currentUserId = null;
+    currentUserName = null;
+  }
+}
 
 /**
  * The signed-in user's id — for the "Assigned to me" task filter. Cached; returns
@@ -14,14 +27,14 @@ let currentUserId: string | null | undefined;
  * degrade the filter to a no-op rather than hide everything.
  */
 export async function getCurrentUserId(secrets: vscode.SecretStorage): Promise<string | null> {
-  if (currentUserId !== undefined) return currentUserId;
-  try {
-    const r = await authed<{ userId?: string }>(secrets, "/api/vscode/me");
-    currentUserId = r?.userId ?? null;
-  } catch {
-    currentUserId = null;
-  }
-  return currentUserId;
+  if (currentUserId === undefined) await loadIdentity(secrets);
+  return currentUserId ?? null;
+}
+
+/** The signed-in user's display name, else email; null when signed out or the API predates it. Cached with the id. */
+export async function getCurrentUserName(secrets: vscode.SecretStorage): Promise<string | null> {
+  if (currentUserName === undefined) await loadIdentity(secrets);
+  return currentUserName ?? null;
 }
 
 // The active workspace's {id, name}, cached until the workspace changes / sign-out.
@@ -30,7 +43,7 @@ let workspaceCache: { id: number; name: string } | undefined;
 // Dropped on a workspace switch and on sign-out; the user id only on sign-out.
 onSessionChange((change) => {
   workspaceCache = undefined;
-  if (change === "reset") currentUserId = undefined;
+  if (change === "reset") { currentUserId = undefined; currentUserName = undefined; }
 });
 
 /**

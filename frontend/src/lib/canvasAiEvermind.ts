@@ -3,6 +3,7 @@ import {
   type BrainTraceEvent,
   type EvermindRecallResult,
 } from '@seanhogg/builderforce-brain-embedded';
+import { learnedItems } from '@/lib/knowledge/packItems';
 
 /**
  * Evermind on a Creation Canvas turn: recall before the first request, learn from the
@@ -54,7 +55,8 @@ export async function learnFromCanvasAnswer(
     const learned = await evermind.learn(text, prompt);
     if (learned.ok) {
       onTrace?.({ ts: new Date().toISOString(), category: 'learn', label: 'evermind.learn', result: { version: recalled.version, queued: learned.queued ?? true } });
-      const reconciled = countReconciledMemories(recalled.items, text);
+      // Knowledge-pack cards are reference data, not learnings: they never count as reconciled.
+      const reconciled = countReconciledMemories(learnedItems(recalled.items), text);
       if (reconciled) onTrace?.({ ts: new Date().toISOString(), category: 'reconcile', label: 'evermind.reconcile', result: { count: reconciled, version: recalled.version } });
     }
   } catch { /* Evermind learning is best-effort and must not fail the canvas turn. */ }

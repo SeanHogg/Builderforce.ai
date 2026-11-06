@@ -31,8 +31,11 @@ import {
   KNOWLEDGE_PREFETCH_ROWS, KNOWLEDGE_REVIEW_DIR, knowledgePrefetchExecutors, openInGraphChip,
   reviewInViewExecutor, type KnowledgeRowsHost,
 } from '@builderforce/agent-tools/prefetch';
-import { KNOWLEDGE_ASK, KNOWLEDGE_ASK_ROW, knowledgeAskExecutor, searchRecall } from '@builderforce/agent-tools/knowledge-index';
+import {
+  KNOWLEDGE_ASK, KNOWLEDGE_ASK_ROW, knowledgeAskExecutor, searchRecall, withPacks,
+} from '@builderforce/agent-tools/knowledge-index';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
+import { browserPackRegistry, browserPackRetrieval } from './browserPacks';
 
 export { knowledgeChipIntent, type KnowledgeChipIntent } from '@builderforce/agent-tools/prefetch';
 
@@ -71,9 +74,19 @@ export interface BrowserKnowledgePrefetchOptions {
   calibration?: CalibrationStore;
 }
 
-/** The root a browser question is about: the project's most recently reviewed one. */
+/** The root a browser question is about: the project's most recently reviewed one (an uploaded pack is not a reviewed folder). */
 export function newestReviewedRoot(scopes: readonly KnowledgeScopeRecord[]): KnowledgeScopeRecord | undefined {
-  return [...scopes].sort((a, b) => (b.lastReviewedAt ?? '').localeCompare(a.lastReviewedAt ?? ''))[0];
+  return scopes.filter((s) => s.kind !== 'pack').sort((a, b) => (b.lastReviewedAt ?? '').localeCompare(a.lastReviewedAt ?? ''))[0];
+}
+
+/**
+ * THE root a browser question or `/graph` is about: the newest reviewed root, else — a project
+ * that only has uploaded packs — the newest pack. One rule for `/graph` and `knowledge.ask`'s
+ * primary, so they cannot drift apart.
+ */
+export function focusRoot(scopes: readonly KnowledgeScopeRecord[]): KnowledgeScopeRecord | undefined {
+  return newestReviewedRoot(scopes)
+    ?? [...scopes].filter((s) => s.kind === 'pack').sort((a, b) => (b.lastReviewedAt ?? '').localeCompare(a.lastReviewedAt ?? ''))[0];
 }
 
 /** The rows a browser host runs: the shared knowledge rows and `knowledge.ask`. */
@@ -82,7 +95,7 @@ export const BROWSER_KNOWLEDGE_REGISTRY = defineRegistry([...KNOWLEDGE_PREFETCH_
 export function createBrowserKnowledgePrefetchPort(opts: BrowserKnowledgePrefetchOptions): PrefetchPort {
   const { client } = opts;
   const read = (): CalibrationState => deserializeCalibration(opts.calibration?.read());
-  const newest = async () => newestReviewedRoot(await client.scopes());
+  const newest = async () => focusRoot(await client.scopes());
 
   // `/graph`: the shared executor over a host that shows a graph with a chip. A browser
   // host never opens a folder here (`/review` is the in-view executor below).
@@ -103,12 +116,21 @@ export function createBrowserKnowledgePrefetchPort(opts: BrowserKnowledgePrefetc
 
   const ask = knowledgeAskExecutor({
     async index() {
-      const root = await newest();
-      if (!root) return undefined;
-      return searchRecall({
-        search: (q, k) => client.search(root.rootId, q, k),
-        graph: (focus) => client.graph(root.rootId, { focus }),
-      });
+      // ONE scopes read serves both the newest reviewed root and the pack registry.
+      const scopes = await client.scopes();
+      const root = focusRoot(scopes);
+      // The root already answered as the primary is not asked a second time as a pack.
+      const packs = browserPackRegistry({ scopes: async () => scopes });
+      const registry = { list: async () => (await packs.list()).filter((e) => e.rootId !== root?.rootId) };
+      if (!root && (await registry.list()).length === 0) return undefined;
+      const primary = root
+        ? searchRecall({
+          search: (q, k) => client.search(root.rootId, q, k),
+          graph: (focus) => client.graph(root.rootId, { focus }),
+        })
+        : undefined;
+      // The project's uploaded packs answer beside the reviewed root (alone when there is none).
+      return withPacks(primary, registry, browserPackRetrieval(client));
     },
   });
 

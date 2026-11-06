@@ -13,6 +13,8 @@
   "command.loadKnowledgePack": "BuilderForce：加载知识包",
   "command.exportKnowledgePack": "BuilderForce：导出知识包",
   "command.updateKnowledgePack": "BuilderForce：更新知识包",
+  "command.uploadKnowledgePack": "BuilderForce：上传知识包",
+  "command.removeUploadedKnowledgePack": "BuilderForce：移除已上传的知识包",
   "command.refreshInsights": "BuilderForce：刷新洞察",
   "command.refreshEvermind": "BuilderForce：刷新 Evermind",
   "command.signIn": "BuilderForce：登录",

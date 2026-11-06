@@ -20,6 +20,11 @@ function store(authors: Record<string, string | null>): KnowledgeStorePort {
     scopes: vi.fn(async () => []), scope: vi.fn(async () => null), facts: vi.fn(async () => []), relations: vi.fn(async () => []),
     upsertRelations: vi.fn(async (rows: readonly StoredRelation[]) => rows.length),
     upsertScope: vi.fn(async () => undefined), markRelationsStale: vi.fn(async () => 0), deleteRelationsOf: vi.fn(async () => 0),
+    deleteScope: vi.fn(async () => true),
+    factSources: vi.fn(async () => new Map<string, string>()),
+    deleteFactsBySource: vi.fn(async () => ({ keys: [], relations: 0 })),
+    humanRelationKeys: vi.fn(async () => new Set<string>()),
+    deleteRelationsUnder: vi.fn(async () => 0),
     // `undefined` = no such fact; null = no recorded author; string = the person who wrote it.
     factAuthor: vi.fn(async (key: string) => (key in authors ? authors[key] : undefined)),
   };

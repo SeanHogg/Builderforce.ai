@@ -11,6 +11,8 @@ import { projectMemoryHooks, setRunServedBy } from '@seanhogg/builderforce-brain
 import { apiRequest } from '@/lib/apiClient';
 import { canvasRunKey } from './canvasRunKey';
 import { teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
+import { createWebKnowledgeClient } from '@/lib/knowledge/webKnowledgeClient';
+import { selectedPacksForProject, withEvermindPacks } from '@/lib/knowledge/evermindPackRecall';
 import { safeTraceJson } from '../canvasArtifactExport';
 import type { CreationFlowNode } from '../CreationNode';
 import type { UseCanvasBrainTurnDeps } from '../hooks/useCanvasBrainTurn';
@@ -182,7 +184,11 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     // grounds it; contribution still happens.
     ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
       // The Brain's one server-backed recall (same route, same contract, never throws).
-      recall: projectMemoryHooks(evermindProjectId, apiRequest).recall,
+      // …with the cards of the knowledge packs the board's Evermind selected merged in (PRD 40).
+      recall: withEvermindPacks(projectMemoryHooks(evermindProjectId, apiRequest).recall, {
+        client: createWebKnowledgeClient(evermindProjectId),
+        selected: selectedPacksForProject(nodes, evermindProjectId),
+      }),
       learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
     } } : {}),
     onTrace: (event) => {

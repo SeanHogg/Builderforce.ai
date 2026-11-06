@@ -65,7 +65,8 @@ function movedRootString(value: string, from: string, to: string): string {
     return out;
 }
 
-function moveRoot(value: unknown, from: string, to: string, field?: string): unknown {
+/** A JSON value with root `from` moved to `to` everywhere it names the root (refs, root-id fields, record keys); prose is left alone. Also how a portable pack is re-keyed (`rebasePackRoot`). */
+export function moveRoot(value: unknown, from: string, to: string, field?: string): unknown {
     if (typeof value === 'string') return field && PROSE_FIELDS.has(field) ? value : movedRootString(value, from, to);
     if (Array.isArray(value)) return value.map((v) => moveRoot(v, from, to, field));
     if (value && typeof value === 'object') {

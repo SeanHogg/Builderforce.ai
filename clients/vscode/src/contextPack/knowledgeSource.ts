@@ -13,11 +13,12 @@
 import {
   knowledgeSubject,
   renderKnowledgeContext,
-  type HostKnowledgeIndexCore,
+  type RecallingIndex,
   type Recall,
 } from "@builderforce/agent-tools/knowledge-index";
 import type { PreSearchResult } from "@builderforce/agent-tools";
 import { workspaceKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
+import { withLoadedPacks } from "../knowledge/packs/packIndexing";
 import { withinMs } from "./withinMs";
 
 /** Hits the part carries — a pointer list, not a dump. */
@@ -31,15 +32,16 @@ export interface KnowledgeRecall {
 export interface KnowledgeRecallOptions {
   /** The run's Stop: no part once it fires. */
   signal?: AbortSignal;
-  /** The workspace's index; default the editor's (`hostKnowledgeIndex.ts`). */
-  index?: (root: string) => HostKnowledgeIndexCore;
+  /** The workspace's own index (the loaded packs are merged in); default the editor's (`hostKnowledgeIndex.ts`). */
+  index?: (root: string) => RecallingIndex;
 }
 
 /** The index's recall for `request`, or undefined when there is none within `deadlineMs` (or on Stop). */
 export function knowledgeRecall(root: string, request: string, deadlineMs: number, opts: KnowledgeRecallOptions = {}): Promise<KnowledgeRecall | undefined> {
-  if (!root || !request.trim() || opts.signal?.aborted) return Promise.resolve(undefined);
+  if (!request.trim() || opts.signal?.aborted) return Promise.resolve(undefined);
   const query = knowledgeSubject(request) ?? request.trim();
-  const work = (opts.index ?? workspaceKnowledgeIndex)(root)
+  // No folder open is no workspace index, not no knowledge: the loaded packs still answer.
+  const work = withLoadedPacks(root ? (opts.index ?? workspaceKnowledgeIndex)(root) : undefined)
     .recall(query, { k: KNOWLEDGE_PART_HITS })
     .then((recall): KnowledgeRecall | undefined => (recall.hits.length ? { query, recall } : undefined))
     .catch(() => undefined);

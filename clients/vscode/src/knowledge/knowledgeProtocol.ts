@@ -54,7 +54,13 @@ export type KnowledgeCall =
   | { op: "pinpoint"; rootId: string; image: string }
   | { op: "history"; rootId: string }
   | { op: "syncStatus"; rootId: string }
-  | { op: "applyFix"; rootId: string; finding: Finding };
+  | { op: "applyFix"; rootId: string; finding: Finding }
+  // The API drawer's sandbox Send: the extension performs it (no webview CORS), localhost / dev origins only.
+  | { op: "tryRequest"; req: KnowledgeTryRequest };
+
+/** The view's `TryRequest` / `TryResponse`, restated for the host (it cannot import that package). */
+export interface KnowledgeTryRequest { method: string; url: string; headers?: Record<string, string>; body?: string }
+export interface KnowledgeTryResponse { status: number; headers: Record<string, string>; body: string; ms: number }
 
 /** The view's `PinpointResult` is this shape: the matching core's own result type. */
 export type KnowledgePinpointResult = PinpointMatchResult;
@@ -104,6 +110,10 @@ export interface KnowledgeScopeRow {
   title: string;
   packs: string[];
   lastReviewedAt?: string;
+  /** A loaded knowledge pack (PRD 40): browsable, never reviewed or written. */
+  readOnly?: true;
+  /** The pack's name, when the row is one. */
+  pack?: string;
 }
 
 export interface KnowledgeTargetRow {

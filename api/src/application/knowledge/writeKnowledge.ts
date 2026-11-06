@@ -38,13 +38,16 @@
  * A `model` relation touching a source (`src:`) must name the `sourceHash` it was judged
  * from (400 `missing_source_hash`): without it nothing could ever mark the edge stale.
  */
-import { clampClaim, type NodeRef, type ScopeRecord, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { clampClaim, type NodeRef, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { isPackRootId } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { upsertProjectFact } from '../llm/projectFactsWrite';
 import type { FactOriginCost } from '../llm/projectFactsStore';
-import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
+import type { ExtractedCachePort, KnowledgeScopeWrite, KnowledgeStorePort } from './knowledgePorts';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
+import { authorizePackUpload } from './packAccess';
+import { ensurePackScope, fencePackRelations } from './packWriteFence';
 import { KnowledgeWriteError } from './knowledgeWriteError';
 import { isCodemapKey } from '../llm/projectFactsCodemap';
 
@@ -66,7 +69,14 @@ export interface KnowledgeStaleMark {
 }
 
 export interface KnowledgeWriteInput {
-  scope?: ScopeRecord;
+  /**
+   * The root these rows belong to, on EVERY chunk of a write (the scope rides the last chunk
+   * only). For a pack root (`isPackRootId`) the server records the root as each fact's
+   * `source` — the provenance a pack's removal deletes by — and never overwrites a fact the
+   * pack does not own.
+   */
+  root?: string;
+  scope?: KnowledgeScopeWrite;
   facts?: readonly KnowledgeFactInput[];
   relations?: readonly StoredRelation[];
   stale?: readonly KnowledgeStaleMark[];
@@ -82,6 +92,8 @@ export interface WriteKnowledgeDeps {
   /** The person writing (a JWT's user), or null for an agent host / machine token. Decides
    *  which origins the call may write, and is recorded as a human fact's author. */
   userId: string | null;
+  /** The writer's tenant role: decides who may upload a pack (developer or above) and replace one (uploader / manager). */
+  actorRole?: string | null;
   /**
    * The single-fact facts route keeps its long-standing semantics: provenance from the
    * chat/execution, and the single-subject anchor sweep (a fact about one file corrects an
@@ -95,6 +107,10 @@ export interface KnowledgeWriteResult {
   /** Keys of machine facts skipped because a person authored the fact already (absent when none). */
   factsSkipped?: string[];
   relationsWritten: number;
+  /** Pack writes only: relations dropped because the pack owns neither end, or a person's edge stands (absent when none). */
+  relationsSkipped?: string[];
+  /** Pack writes only: stale marks dropped because their source is not under the pack's root (absent when none). */
+  staleSkipped?: number;
   staleMarked: number;
 }
 
@@ -106,6 +122,12 @@ export function originAllowed(origin: WrittenOrigin, userId: string | null): boo
   if (origin === 'agent') return userId == null;
   return origin === 'model';
 }
+
+/** The pack root a write belongs to, if any. */
+const packRootOf = (input: KnowledgeWriteInput): string | undefined => {
+  const root = input.root ?? input.scope?.rootId;
+  return root && isPackRootId(root) ? root : undefined;
+};
 
 function assertWritable(input: KnowledgeWriteInput, userId: string | null): void {
   const rows = (input.facts?.length ?? 0) + (input.relations?.length ?? 0) + (input.stale?.length ?? 0);
@@ -119,6 +141,13 @@ function assertWritable(input: KnowledgeWriteInput, userId: string | null): void
   const unhashed = (input.relations ?? []).find((r) => r.origin === 'model' && !r.sourceHash && (r.from.startsWith('src:') || r.to.startsWith('src:')));
   if (unhashed) {
     throw new KnowledgeWriteError(400, 'missing_source_hash', `a model relation on a source (${unhashed.from} → ${unhashed.to}) must name the sourceHash it was judged from`);
+  }
+  if (input.root && input.scope && input.scope.rootId !== input.root) {
+    throw new KnowledgeWriteError(400, 'root_mismatch', `the scope names ${input.scope.rootId}, not the write's root ${input.root}`);
+  }
+  // A pack root's id is a fact `source` only when the server stamps it; nobody else may claim it.
+  if (!packRootOf(input) && (input.facts ?? []).some((f) => f.source && isPackRootId(f.source))) {
+    throw new KnowledgeWriteError(400, 'reserved_source', 'a fact source naming an uploaded pack is written only by that pack’s upload');
   }
   const claimed = [...(input.facts ?? []), ...(input.relations ?? [])]
     .map((x) => x.origin)
@@ -135,8 +164,26 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
   const result: KnowledgeWriteResult = { factsWritten: 0, relationsWritten: 0, staleMarked: 0 };
   const defaultOrigin: StoredFact['origin'] = userId ? 'human' : 'agent';
 
+  const packRoot = packRootOf(input);
+  if (packRoot) {
+    const access = await authorizePackUpload(env, store, { userId, role: deps.actorRole ?? null }, packRoot);
+    if (!access.ok) throw new KnowledgeWriteError(access.status, 'forbidden', access.error);
+  }
+  // A pack never overwrites a fact it does not own (its key may equal a person's or agent's fact):
+  // removing the pack deletes by `source`, so an overwritten foreign fact would be destroyed with it.
+  const owners = packRoot ? await store.factSources((input.facts ?? []).map((f) => f.key)) : undefined;
+
+  /** Pack writes: the fact keys the pack owns (stored under it already, or written by this call). */
+  const ownedKeys = new Set<string>();
+  for (const [key, source] of owners ?? []) if (source === packRoot) ownedKeys.add(key);
+
   try {
+    if (packRoot) await ensurePackScope(store, packRoot, userId, input.scope);
     for (const f of input.facts ?? []) {
+      if (packRoot && owners!.has(f.key.trim()) && owners!.get(f.key.trim()) !== packRoot) {
+        (result.factsSkipped ??= []).push(f.key);
+        continue;
+      }
       const origin = f.origin ?? defaultOrigin;
       // A machine writes over a person's fact only to merge a code map, and then as a guest:
       // the fact keeps its origin and author.
@@ -150,7 +197,7 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
       }
       const ok = await upsertProjectFact(env, db, tenantId, projectId, f.key,
         // A model's claim quotes a bounded number of lines and characters — never a file body (§5.2).
-        origin === 'model' ? clampClaim(f.content) : f.content, f.source || 'knowledge', {
+        origin === 'model' ? clampClaim(f.content) : f.content, packRoot ?? (f.source || 'knowledge'), {
         ...(f.expiresAt !== undefined ? { expiresAt: f.expiresAt } : {}),
         ...(f.importance != null ? { importance: f.importance } : {}),
         ...(f.fileAnchors?.length ? { fileAnchors: f.fileAnchors } : {}),
@@ -161,18 +208,39 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
         ...(deps.legacyFact?.originExecutionId != null ? { originExecutionId: deps.legacyFact.originExecutionId } : {}),
         ...(deps.legacyFact?.origin ? { origin: deps.legacyFact.origin } : {}),
       });
-      if (ok) result.factsWritten += 1;
+      if (ok) {
+        result.factsWritten += 1;
+        ownedKeys.add(f.key.trim());
+      }
     }
 
-    result.relationsWritten = await store.upsertRelations(input.relations ?? [], userId);
+    let relations = input.relations ?? [];
+    if (packRoot) {
+      const fenced = await fencePackRelations(store, packRoot, ownedKeys, relations);
+      relations = fenced.keep;
+      if (fenced.skipped.length > 0) result.relationsSkipped = fenced.skipped;
+    }
+    result.relationsWritten = await store.upsertRelations(relations, userId);
 
-    for (const mark of input.stale ?? []) {
+    let stale = input.stale ?? [];
+    if (packRoot) {
+      const prefix = `src:${packRoot}::`;
+      const own = stale.filter((m) => m.sourceRef.startsWith(prefix));
+      if (own.length < stale.length) result.staleSkipped = stale.length - own.length;
+      stale = own;
+    }
+    for (const mark of stale) {
       result.staleMarked += await store.markRelationsStale(mark.sourceRef, mark.currentHash);
       await blobs.setSource(mark.sourceRef, mark.currentHash);
     }
 
     if (input.scope?.lastDigest) await blobs.snapshotReview(input.scope.rootId, input.scope.lastDigest);
-    if (input.scope) await store.upsertScope(input.scope);
+    if (input.scope) {
+      // Provenance describes an UPLOADED PACK; a reviewed root's scope never takes it.
+      const { provenance, ...rest } = input.scope;
+      // The uploader is the SERVER's word (the authenticated person), whatever the client sent.
+      await store.upsertScope(packRoot ? { ...rest, provenance: { ...(provenance ?? {}), uploadedBy: userId! } } : rest);
+    }
   } finally {
     // One bump for the whole call — also when it failed part-way, since what landed before
     // the failure must not be hidden behind a cached graph.

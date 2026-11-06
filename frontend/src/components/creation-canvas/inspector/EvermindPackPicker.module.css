@@ -1,0 +1,17 @@
+.picker { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--canvas-line); border-radius: var(--radius-lg); background: var(--canvas-panel-muted); }
+.title { margin: 0; color: var(--canvas-ink); font-size: 12px; font-weight: 700; }
+.hint { margin: 0; color: var(--canvas-muted); font-size: 11px; line-height: 1.55; }
+.list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.packRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.packMeta { color: var(--canvas-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.pack {
+  display: grid; gap: 4px; width: 100%; min-width: 0;
+  padding: 8px 10px; border: 1px solid var(--canvas-line); border-radius: var(--radius-md);
+  background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; font-size: 12px; text-align: start; cursor: pointer;
+}
+.pack:focus-visible { outline: 2px solid var(--canvas-accent); outline-offset: 2px; }
+.pack[aria-pressed='true'] { border-color: var(--canvas-accent); background: color-mix(in srgb, var(--canvas-accent) 12%, var(--canvas-panel)); }
+.packName { min-width: 0; overflow-wrap: anywhere; font-weight: 650; }
+.packState { flex: none; color: var(--canvas-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.pack[aria-pressed='true'] .packState { color: var(--canvas-accent); }
+.summary { margin: 0; color: var(--canvas-muted); font-size: 10px; }

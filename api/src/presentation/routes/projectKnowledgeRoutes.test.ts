@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   putAnalysis: vi.fn(async () => undefined),
   upsertRelations: vi.fn(async (rows: unknown[]) => rows.length),
   scopes: vi.fn(async () => []),
+  deleteRoot: vi.fn(),
+  role: { value: 'developer' as string },
+  /** The stored scope of the pack under test (null = none yet). */
+  scopeRow: { value: null as null | { rootId: string; title: string; packs: string[]; provenance?: { uploadedBy?: string } } },
   facts: vi.fn(),
   superadmin: vi.fn(async () => false),
   upsertFact: vi.fn(async () => true),
@@ -24,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../middleware/authMiddleware', () => ({
-  authMiddleware: async (c: any, next: any) => { c.set('tenantId', TENANT); c.set('userId', 'u1'); c.set('role', TenantRole.DEVELOPER); await next(); },
+  authMiddleware: async (c: any, next: any) => { c.set('tenantId', TENANT); c.set('userId', 'u1'); c.set('role', mocks.role.value); await next(); },
 }));
 vi.mock('../../application/project/projectOwnership', () => ({ projectInTenantCached: mocks.owned }));
 vi.mock('../../application/knowledge/knowledgeComposition', () => ({ knowledgePortsFor: mocks.ports }));
@@ -34,6 +38,7 @@ vi.mock('../../application/knowledge/knowledgePerception', async (importOriginal
   putAnalysisSnapshot: mocks.putAnalysis,
 }));
 vi.mock('../../application/knowledge/listKnowledge', () => ({ listKnowledgeScopes: mocks.scopes, listKnowledgeFacts: mocks.facts }));
+vi.mock('../../application/knowledge/deleteKnowledgeRoot', () => ({ deleteKnowledgeRoot: mocks.deleteRoot }));
 vi.mock('../../application/knowledge/judgeCostEstimate', () => ({ judgeCostFor: mocks.judgeCost }));
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
 vi.mock('../../application/llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsertFact, deleteProjectFact: vi.fn() }));
@@ -74,9 +79,16 @@ const post = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'a
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.owned.mockResolvedValue(true);
+  mocks.role.value = TenantRole.DEVELOPER;
+  mocks.scopeRow.value = null;
+  mocks.superadmin.mockResolvedValue(false);
   mocks.ports.mockImplementation((_env: unknown, _db: unknown, tenantId: number, projectId: number) => ({
     env: {}, db, tenantId, projectId,
-    store: { upsertRelations: mocks.upsertRelations, scopes: vi.fn(async () => []), factAuthor: vi.fn(async () => undefined) },
+    store: {
+      upsertRelations: mocks.upsertRelations, scopes: vi.fn(async () => []), factAuthor: vi.fn(async () => undefined),
+      scope: vi.fn(async () => mocks.scopeRow.value), upsertScope: vi.fn(async () => undefined),
+      factSources: vi.fn(async () => new Map()), humanRelationKeys: vi.fn(async () => new Set()),
+    },
     extracted: { setSource: vi.fn(), snapshotReview: vi.fn() },
     graph: { repo: { linked: async () => ({ rootId: 'cloud:r1:' }) } },
     index: {},
@@ -99,6 +111,85 @@ describe('project knowledge routes', () => {
     const res = await routes().request('/42/knowledge/scopes', {}, {});
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ scopes: [] });
+  });
+
+  it('removes an uploaded pack root, passing the decoded root id to the use case', async () => {
+    mocks.deleteRoot.mockResolvedValue({ ok: true, facts: 2, relations: 1, sources: 3 });
+    const res = await routes().request(`/42/knowledge/scopes/${encodeURIComponent('pack:my-docs')}`, { method: 'DELETE' }, {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, facts: 2 });
+    expect(mocks.deleteRoot).toHaveBeenCalledWith(expect.anything(), 'pack:my-docs');
+  });
+
+  it('answers the use case’s refusal of a reviewed root with 400', async () => {
+    mocks.deleteRoot.mockResolvedValue({ ok: false, status: 400, error: 'only an uploaded knowledge pack can be removed' });
+    const res = await routes().request(`/42/knowledge/scopes/${encodeURIComponent('web:folder-1')}`, { method: 'DELETE' }, {});
+    expect(res.status).toBe(400);
+  });
+
+  describe('who may remove or replace a pack (uploader, manager, superadmin)', () => {
+    const pack = (uploadedBy: string) => ({ rootId: 'pack:x', title: 'x', packs: [], provenance: { uploadedBy } });
+    const remove = (r = routes()) => r.request('/42/knowledge/scopes/pack%3Ax', { method: 'DELETE' }, {});
+    const upload = (r = routes()) => r.request('/42/knowledge/write', post({ root: 'pack:x', facts: [], relations: [] }), {});
+    beforeEach(() => mocks.deleteRoot.mockResolvedValue({ ok: true, facts: 0, relations: 0, sources: 0 }));
+
+    it('lets the uploader remove and replace their own pack', async () => {
+      mocks.scopeRow.value = pack('u1');
+      expect((await remove()).status).toBe(200);
+      expect((await upload()).status).toBe(200);
+    });
+
+    it('refuses another developer, touching nothing', async () => {
+      mocks.scopeRow.value = pack('someone-else');
+      expect((await remove()).status).toBe(403);
+      expect((await upload()).status).toBe(403);
+      expect(mocks.deleteRoot).not.toHaveBeenCalled();
+    });
+
+    it('lets a manager remove and replace', async () => {
+      mocks.role.value = TenantRole.MANAGER;
+      mocks.scopeRow.value = pack('someone-else');
+      expect((await remove()).status).toBe(200);
+      expect((await upload()).status).toBe(200);
+    });
+
+    it('lets a superadmin remove and replace', async () => {
+      mocks.superadmin.mockResolvedValue(true);
+      mocks.scopeRow.value = pack('someone-else');
+      expect((await remove()).status).toBe(200);
+      expect((await upload()).status).toBe(200);
+    });
+
+    it.each([TenantRole.VIEWER, TenantRole.CONTRIBUTOR])('refuses a %s: remove (not the uploader) and upload', async (role) => {
+      mocks.role.value = role;
+      mocks.scopeRow.value = pack('someone-else');
+      expect((await remove()).status).toBe(403);
+      mocks.scopeRow.value = null;
+      expect((await upload()).status).toBe(403);
+    });
+
+    it('refuses the host-key door (no person) for remove and upload', async () => {
+      expect((await remove(hostRoutes())).status).toBe(403);
+      expect((await upload(hostRoutes())).status).toBe(403);
+      expect(mocks.deleteRoot).not.toHaveBeenCalled();
+    });
+
+    it('lets a developer upload a brand-new pack', async () => {
+      expect((await upload()).status).toBe(200);
+    });
+  });
+
+  it('refuses a root removal for a project outside the tenant', async () => {
+    mocks.owned.mockResolvedValue(false);
+    const res = await routes().request('/42/knowledge/scopes/pack%3Ax', { method: 'DELETE' }, {});
+    expect(res.status).toBe(404);
+    expect(mocks.deleteRoot).not.toHaveBeenCalled();
+  });
+
+  it('refuses a scope provenance string over 255 chars with 400', async () => {
+    const scope = { rootId: 'pack:x-1', title: 'x', packs: [], provenance: { reviewedBy: 'a'.repeat(256) } };
+    const res = await appWithErrors().request('/42/knowledge/write', post({ scope }), {});
+    expect(res.status).toBe(400);
   });
 
   it('answers a write of more than 500 rows with 413', async () => {

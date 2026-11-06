@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { HostKnowledgeIndexCore, Recall } from "@builderforce/agent-tools/knowledge-index";
+import { configureHostKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
+import { configureLoadedPacks, loadedPackRegistry } from "../knowledge/packs/loadedPackRegistry";
+import { leasePack, memoryMemento } from "../knowledge/packs/packFixture.test-util";
+import { indexPack } from "../knowledge/packs/packIndexing";
 import { KNOWLEDGE_PART_HITS, knowledgePart, knowledgeRecall, preSearchPaths } from "./knowledgeSource";
 
 const ROOT = "/ws/repo";
@@ -64,5 +68,30 @@ describe("context pack — the knowledge part", () => {
     const block = knowledgePart(await knowledgeRecall(ROOT, "billing", 1_000, { index: fakeIndex(many) }), new Set());
     expect(block.split("\n").filter((l) => l.startsWith("- ")).length).toBe(KNOWLEDGE_PART_HITS);
     expect(block).not.toMatch(/system prompt|<run-state>/i);
+  });
+});
+
+describe("context pack — a loaded knowledge pack", () => {
+  afterEach(() => {
+    configureLoadedPacks(memoryMemento());
+    configureHostKnowledgeIndex({ workspaceRoots: () => [] });
+  });
+
+  it("surfaces a pack indexed under a foreign root id, with a folder open and with none", async () => {
+    configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
+    configureLoadedPacks(memoryMemento());
+    const pack = await leasePack();
+    await indexPack(pack);
+    await loadedPackRegistry().remember(pack.name, { path: "/packs/lease.bfpack", rootId: pack.rootId, title: pack.title, loadedAt: pack.createdAt });
+
+    for (const root of [ROOT, ""]) {
+      const k = await knowledgeRecall(root, "what does the lease say about termination", 1_000, { index: fakeIndex({ ...RECALL, hits: [] }) });
+      const block = knowledgePart(k, new Set());
+      expect(block).toContain("## Knowledge index");
+      expect(block).toContain("lease.md");
+      expect(block).toContain("30 days notice"); // the termination section's own words
+    }
+    // Registered, but nothing in it answers this: no pack hit reaches the part.
+    expect(knowledgePart(await knowledgeRecall("", "where is the zzqx handled", 1_000), new Set())).toBe("");
   });
 });

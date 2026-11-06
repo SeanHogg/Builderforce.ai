@@ -28,6 +28,7 @@ import {
   type KnowledgeIndexRegistry,
   type SymbolFile,
 } from "@builderforce/agent-tools/knowledge-index";
+import { rootRelOf } from "@builderforce/agent-tools/knowledge";
 import type { EmbedderPort } from "@seanhogg/builderforce-memory/knowledge";
 import { knowledgeRootId } from "../knowledgeRoots";
 import { workspaceSymbolIndex } from "../../workspaceSymbols";
@@ -69,11 +70,27 @@ let registry: KnowledgeIndexRegistry = build({ workspaceRoots: () => [] });
 /** Activation (and tests): the workspace folders, the fs and, optionally, the other ports. Drops loaded indexes. */
 export function configureHostKnowledgeIndex(config: EditorKnowledgeIndexConfig): void {
   registry = build(config);
+  workspaceRoots = config.workspaceRoots;
+}
+
+let workspaceRoots: () => readonly string[] = () => [];
+
+/**
+ * Whether an open workspace folder holds `rootId` (the folder itself or a folder reviewed
+ * inside it). Such a root's index belongs to that folder's own review; nothing else may fill it.
+ */
+export function ownsKnowledgeRoot(rootId: string): boolean {
+  return workspaceRoots().some((folder) => rootRelOf(knowledgeRootId(folder), rootId) !== undefined);
 }
 
 /** The index of `rootId` — the pinned seam. */
 export function getHostKnowledgeIndex(rootId: string): Promise<HostKnowledgeIndex> {
   return Promise.resolve(registry.get(rootId));
+}
+
+/** The index of `rootId` with its recall — what the loaded packs' retrieval port reads. */
+export function hostKnowledgeIndexCore(rootId: string): HostKnowledgeIndexCore {
+  return registry.get(rootId);
 }
 
 /** The workspace folder's own index (seeded from the code pack) — the context pack and `knowledge.ask` read it. */

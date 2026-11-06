@@ -46,6 +46,11 @@ function fakeStore(over: Partial<KnowledgeStorePort> = {}): KnowledgeStorePort {
     upsertScope: vi.fn(async () => undefined),
     markRelationsStale: vi.fn(async () => 2),
     deleteRelationsOf: vi.fn(async () => 3),
+    deleteScope: vi.fn(async () => true),
+    factSources: vi.fn(async () => new Map<string, string>()),
+    deleteFactsBySource: vi.fn(async () => ({ keys: [], relations: 0 })),
+    humanRelationKeys: vi.fn(async () => new Set<string>()),
+    deleteRelationsUnder: vi.fn(async () => 0),
     factAuthor: vi.fn(async () => null),
     ...over,
   };
@@ -57,6 +62,7 @@ function fakeBlobs(): ExtractedCachePort {
     put: vi.fn(async () => undefined),
     setSource: vi.fn(async () => undefined),
     rootExtracted: vi.fn(async () => [extractedA]),
+    deleteRootSources: vi.fn(async () => 0),
     snapshotReview: vi.fn(async () => undefined),
     reviewExtracted: vi.fn(async (_root: string, digest: string) => (digest === 'd0' ? [extractedOld] : null)),
   };
@@ -69,7 +75,7 @@ describe('getKnowledgeGraph', () => {
   const deps = (): KnowledgeGraphDeps & { extracted: ExtractedCachePort } => ({
     cacheEnv: undefined, tenantId: 4, projectId: 9,
     store: fakeStore(), extracted: fakeBlobs(),
-    analysis: { put: vi.fn(), latest: vi.fn(async () => null) },
+    analysis: { put: vi.fn(), clear: vi.fn(), latest: vi.fn(async () => null) },
     repo: { linked: async () => null },
     version: async () => version,
   });
@@ -216,7 +222,7 @@ describe('listKnowledge', () => {
   const deps = (store = fakeStore()): KnowledgeGraphDeps & { extracted: ExtractedCachePort } => ({
     cacheEnv: undefined, tenantId: 5, projectId: 11,
     store, extracted: fakeBlobs(),
-    analysis: { put: vi.fn(), latest: vi.fn(async () => null) },
+    analysis: { put: vi.fn(), clear: vi.fn(), latest: vi.fn(async () => null) },
     repo: { linked: async () => null },
     version: async () => version,
   });

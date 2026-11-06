@@ -84,26 +84,52 @@ export async function uploadLocalSnapshot(args: {
   } catch {
     return null;
   }
-  const scope: ScopeRecord = snapshot.scopes?.find((s) => s.rootId === rootId) ?? { rootId, title: rootId, packs: [] };
   const manifest = fileManifest(files, manifestFileName(rootId));
-  const extracted = snapshot.extracted ?? {};
   const current = [
     ...((await manifest.get(filesManifestKey(rootId))) ?? []).map((f) => ({ ref: srcRef(rootId, f.id) as string, hash: f.hash })),
     ...((await manifest.get(analysisManifestKey(rootId))) ?? []).map((r) => ({ ref: r.id, hash: r.hash })),
   ];
+  const result = await pushSnapshot({ rootId, snapshot, current, client });
+  await args.marks.set(rootId, args.projectId);
+  return result;
+}
 
+/**
+ * THE writer of one root's snapshot to the linked project — the review's upload and a
+ * portable pack's upload both go through it: each `current` source's extracted output and
+ * hash, then the facts and relations (the client chunks ≤ 500 rows per call, the scope on
+ * the last chunk). Every upsert is on the platform's unique key (facts by key, relations by
+ * triple, extracted by hash), so pushing the same snapshot again changes nothing.
+ */
+export async function pushSnapshot(args: {
+  rootId: string;
+  snapshot: Partial<KnowledgeSnapshot>;
+  /** The sources to upload: a source ref and the content hash its extracted output is stored under. */
+  current: ReadonlyArray<{ ref: string; hash: string }>;
+  client: KnowledgeClient;
+  /** Called after each source is uploaded (done, total). */
+  onProgress?(done: number, total: number): void;
+}): Promise<UploadResult> {
+  const { rootId, snapshot, client } = args;
+  const scope: ScopeRecord = snapshot.scopes?.find((s) => s.rootId === rootId) ?? { rootId, title: rootId, packs: [] };
+  const extracted = snapshot.extracted ?? {};
   let sources = 0;
-  for (const { ref, hash } of current) {
+  // Progress counts every source PROCESSED (an entry with no extracted output is passed over),
+  // so it always reaches `total`; `sources` counts only those uploaded.
+  let processed = 0;
+  for (const { ref, hash } of args.current) {
+    processed += 1;
     const entry: Extracted | undefined = extracted[hash]?.find((e) => e.sourceRef === ref);
-    if (!entry) continue;
-    await client.putExtracted(hash, [entry]);
-    // Records the source's current hash on the platform (the graph lists the root by it).
-    if (isSourceHash(hash)) await client.store.markStale({ rootId }, entry.sourceRef, hash);
-    sources += 1;
+    if (entry) {
+      await client.putExtracted(hash, [entry]);
+      // Records the source's current hash on the platform (the graph lists the root by it).
+      if (isSourceHash(hash)) await client.store.markStale({ rootId }, entry.sourceRef, hash);
+      sources += 1;
+    }
+    args.onProgress?.(processed, args.current.length);
   }
   const facts = snapshot.facts?.[rootId] ?? [];
   const relations = snapshot.relations?.[rootId] ?? [];
   await client.store.write({ scope, facts, relations });
-  await args.marks.set(rootId, args.projectId);
   return { sources, facts: facts.length, relations: relations.length };
 }

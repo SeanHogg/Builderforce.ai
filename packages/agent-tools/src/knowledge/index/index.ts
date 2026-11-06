@@ -29,4 +29,8 @@ export {
 export {
     KNOWLEDGE_ASK, KNOWLEDGE_ASK_BUDGET_MS, KNOWLEDGE_ASK_ROW, knowledgeAskExecutor, knowledgeSubject, type KnowledgeAskHost,
 } from './knowledgeAsk.js';
+export {
+    mergeRecalls, packRetrievalPort, withPacks,
+    type KnowledgePackEntry, type PackRegistry, type PackRetrievalPort, type PackRetrievalPorts, type RecallingIndex,
+} from './packRetrieval.js';
 export { NEIGHBOUR_SCORE_SHARE, searchRecall, type SearchRecallPorts } from './searchRecall.js';

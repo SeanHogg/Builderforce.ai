@@ -39,7 +39,7 @@ import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
 import { createDirectorySource, type HashCache } from "./vscodeDirectorySource";
 import { fileManifest, manifestFileName, selectKnowledgeStore, type KnowledgeFiles } from "./knowledgeStores";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
-import { editorJudgement } from "./knowledgeJudgement";
+import { editorJudgement, type TrackedJudgement } from "./knowledgeJudgement";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 
 /** Hashes remembered across reviews, so a re-review re-hashes only what changed on disk. */
@@ -176,6 +176,8 @@ export interface RootReview {
   open: OpenRoot;
   plan(force?: boolean): Promise<PlanDetail>;
   run(opts: KnowledgeReviewOptions): Promise<ReviewReport>;
+  /** The model(s) that actually judged during this review's runs, e.g. "local/ollama/qwen3"; undefined when no judgement ran or the judge names no model. */
+  judgeModel(): Promise<string | undefined>;
 }
 
 /** Listeners told when a root's knowledge changed (a review finished): the live graph re-reads. */
@@ -207,6 +209,10 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): 
       recorder.finish();
       for (const cb of changedListeners) cb(root.rootId);
       return report;
+    },
+    async judgeModel() {
+      const judgement = (await portsOnce()).judgement as Partial<TrackedJudgement> | undefined;
+      return judgement?.modelsUsed?.().join(", ") || undefined;
     },
   };
 }

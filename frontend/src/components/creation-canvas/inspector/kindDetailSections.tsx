@@ -429,8 +429,8 @@ export const KIND_DETAIL_SECTIONS: Record<string, (props: KindSectionProps) => J
   ),
   voice: ({ node, persistence, onChange }) => <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />,
   email: ({ data, editable, persistence, onChange }) => <CanvasEmailComposer data={data} editable={editable} persistence={persistence} onChange={onChange} />,
-  evermind: ({ node, persistence, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind }) => (
-    <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />
+  evermind: ({ node, persistence, onChange, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind }) => (
+    <EvermindInspector node={node} persistence={persistence} onChange={onChange} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />
   ),
   pitch: ({ node, editable, onChange }) => <PitchInspector node={node} editable={editable} onChange={onChange} />,
 };

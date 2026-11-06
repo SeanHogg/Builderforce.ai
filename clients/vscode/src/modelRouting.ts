@@ -388,7 +388,12 @@ export async function routeComplete(
  * the shared non-streaming completion) with no cloud to fall over to. Gated on local
  * models being enabled, not on local-first (a routing choice for unpinned turns).
  */
-export async function completeOnDevice(messages: readonly ChatMessage[], signal?: AbortSignal): Promise<string> {
+export async function completeOnDevice(
+  messages: readonly ChatMessage[],
+  signal?: AbortSignal,
+  /** Told the local model ref that served the completion (a review records which model judged). */
+  onServed?: (modelRef: string) => void,
+): Promise<string> {
   return completeLocalFirst({
     probes: await probeOnDeviceRuntimes(getLocalModelsConfig()),
     messages: textOnly(messages),
@@ -396,7 +401,10 @@ export async function completeOnDevice(messages: readonly ChatMessage[], signal?
     noModel: NO_LOCAL_MODEL,
     fetch: hostPageEngines.fetch(),
     ...(signal ? { signal } : {}),
-    onAttempt: logLocalFirstAttempt,
+    onAttempt: (record) => {
+      logLocalFirstAttempt(record);
+      if (onServed && record.outcome === "served" && record.attempt.kind === "local") onServed(record.attempt.ref);
+    },
   });
 }
 

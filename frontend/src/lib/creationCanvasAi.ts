@@ -22,6 +22,7 @@ import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemProm
 import { CanvasRunAbortedError } from '@/lib/canvasAiErrors';
 import { composeTurnTail, documentShortfallAnswer } from '@/lib/canvasAiTurnTail';
 import { learnFromCanvasAnswer, recallCanvasMemory } from '@/lib/canvasAiEvermind';
+import { formatPackBlock, learnedItems, packItems } from '@/lib/knowledge/packItems';
 import type { CanvasAiOptions, CanvasRun } from '@/lib/canvasAiRun';
 import { canvasRunPolicy, canvasRunPorts, canvasRunTask } from '@/lib/canvasRunPorts';
 
@@ -97,7 +98,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   const actions = [...options.canvasActions, ...mcpActions, ...researchActions, ...careerActions];
   const byName = new Map(actions.map((action) => [action.name, action]));
   const recalled = await recallCanvasMemory(options.evermind, options.prompt, options.onTrace);
-  const memoryBlock = recalled?.seeded ? formatEvermindMemoryBlock(recalled.items) : '';
+  // Learned memories (only once seeded) and the knowledge-pack cards are TWO labelled blocks:
+  // the memory block's header names the project's self-learning model, which the cards are not.
+  const memoryBlock = [
+    recalled?.seeded ? formatEvermindMemoryBlock(learnedItems(recalled.items)) : '',
+    formatPackBlock(packItems(recalled?.items ?? [])),
+  ].filter(Boolean).join('\n\n');
   const messages = canvasSystemMessages({
     prompt: options.prompt,
     canvasSnapshot: options.canvasSnapshot,

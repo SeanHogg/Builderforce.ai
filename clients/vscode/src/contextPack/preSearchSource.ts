@@ -41,7 +41,9 @@ export interface PreSearchBlockOptions {
  *  `deadlineMs` (the pack's own deadline, `CONTEXT_PACK_DEADLINE_MS`). At the deadline
  *  (or on Stop) every ripgrep the pre-search started is killed — none outlives the pack. */
 export async function preSearchBlock(root: string, request: string, deadlineMs: number, opts: PreSearchBlockOptions = {}): Promise<string> {
-  if (!root || !request.trim()) return "";
+  if (!request.trim()) return "";
+  // No folder open: nothing to search, but a loaded knowledge pack still has its part (`knowledgeSource.ts`).
+  if (!root) return knowledgePart(await knowledgeRecall("", request, deadlineMs, opts.signal ? { signal: opts.signal } : {}), new Set());
   // Aborted the moment the race settles — at the deadline at the latest — or on Stop.
   const stop = new AbortController();
   const onStop = () => stop.abort(opts.signal?.reason);

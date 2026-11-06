@@ -181,6 +181,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
       const chunk = chunks[i]!;
       const last = i === chunks.length - 1;
       await call('/knowledge/write', send('POST', {
+        // The root rides EVERY chunk (the scope only the last): it is what a pack upload is
+        // stamped and fenced by on the server.
+        ...(batch.scope ? { root: batch.scope.rootId } : {}),
         ...(last && batch.scope ? { scope: batch.scope } : {}),
         facts: chunk.filter((r) => r.t === 'fact').map((r) => r.v),
         relations: chunk.filter((r) => r.t === 'relation').map((r) => r.v),
@@ -331,6 +334,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
     putExtracted,
     async deleteFact(key: string) {
       await call(`/facts/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    },
+    async deleteRoot(rootId: string) {
+      await call(`/knowledge/scopes/${encodeURIComponent(rootId)}`, { method: 'DELETE' });
     },
   };
 }

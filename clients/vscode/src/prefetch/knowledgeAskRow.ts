@@ -11,16 +11,18 @@
 import { KNOWLEDGE_ASK, KNOWLEDGE_ASK_ROW, knowledgeAskExecutor } from "@builderforce/agent-tools/knowledge-index";
 import type { PrefetchAction, PrefetchExecutors } from "@builderforce/prefetch";
 import { workspaceKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
+import { withLoadedPacks } from "../knowledge/packs/packIndexing";
 
 /** The row, ahead of the shared ones in the editor's registry. */
 export const KNOWLEDGE_ASK_ROWS: readonly PrefetchAction[] = [KNOWLEDGE_ASK_ROW];
 
-/** Its executor over the open folder's index; `ownWords` stands in for a request that inlines references. */
+/** Its executor over the open folder's index and the loaded packs; `ownWords` stands in for a request that inlines references. */
 export function knowledgeAskExecutors(root: () => string, ownWords?: string): PrefetchExecutors {
   const ask = knowledgeAskExecutor({
+    // The open folder's index with the loaded packs merged in; a loaded pack answers with no folder open.
     index: async () => {
       const r = root();
-      return r ? workspaceKnowledgeIndex(r) : undefined;
+      return withLoadedPacks(r ? workspaceKnowledgeIndex(r) : undefined);
     },
   });
   return { [KNOWLEDGE_ASK]: { run: (request, signal) => ask.run(ownWords ?? request, signal) } };

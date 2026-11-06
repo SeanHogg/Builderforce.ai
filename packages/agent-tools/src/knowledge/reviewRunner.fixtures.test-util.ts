@@ -14,10 +14,10 @@ const DOCS: Record<string, string> = {
     'policy.md': '# Policy\n\nRent is paid monthly.\n\n## Deposits\n\nDeposits are returned within 14 days.\n',
 };
 
-export function memorySource(files: Record<string, string>): DirectorySource {
+export function memorySource(files: Record<string, string>, rootId = 'docs'): DirectorySource {
     return {
-        rootId: 'docs',
-        title: 'docs',
+        rootId,
+        title: rootId,
         async *list() {
             for (const [path, text] of Object.entries(files)) yield { path, hash: `h:${path}:${text.length}`, size: text.length };
         },

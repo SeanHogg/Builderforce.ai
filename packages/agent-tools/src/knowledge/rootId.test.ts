@@ -1,5 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { folderIdOf, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf } from './rootId.js';
+import { folderIdOf, isPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf } from './rootId.js';
+
+describe('packRootIdFor / isPackRootId — an uploaded pack is a root on the `pack` host', () => {
+    it('slugs the name and adds a short stable hash, into a parseable root id', () => {
+        expect(packRootIdFor('My Docs Pack!')).toMatch(/^pack:my-docs-pack-[0-9a-f]{8}$/);
+        expect(packRootIdFor('  ')).toMatch(/^pack:pack-[0-9a-f]{8}$/);
+        expect(packRootIdFor('a::b')).toMatch(/^pack:a-b-[0-9a-f]{8}$/);
+        expect(packRootIdFor('My Docs Pack!')).toBe(packRootIdFor('My Docs Pack!'));
+        const root = packRootIdFor('x');
+        expect(rootIdOfSourceRef(`src:${root}::a.md`)).toBe(root);
+    });
+
+    it('keeps packs that slug alike, or share a name, apart by where they came from', () => {
+        expect(packRootIdFor('Docs!')).not.toBe(packRootIdFor('docs'));
+        expect(packRootIdFor('docs', 'vscode:github.com/acme/a')).not.toBe(packRootIdFor('docs', 'vscode:github.com/acme/b'));
+        expect(packRootIdFor('docs', 'vscode:github.com/acme/a')).toBe(packRootIdFor('docs', 'vscode:github.com/acme/a'));
+    });
+
+    it('always fits the 64-char `project_facts.source` column', () => {
+        expect(packRootIdFor('n'.repeat(300), 'o'.repeat(300)).length).toBeLessThanOrEqual(64);
+    });
+
+    it('recognises pack roots only', () => {
+        expect(isPackRootId(packRootIdFor('docs'))).toBe(true);
+        expect(isPackRootId('pack:')).toBe(false);
+        expect(isPackRootId('vscode:github.com/acme/app')).toBe(false);
+        expect(isPackRootId('web:pack:x')).toBe(false);
+    });
+});
 
 describe('rootIdFor — `${host}:${repoId or folder id}:${path}` (PRD 38 §4.2)', () => {
     it('keeps two same-named folders of different repositories apart', () => {

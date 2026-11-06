@@ -36,6 +36,29 @@ export function rootIdFor({ host, repoId, folderId, path }: RootIdParts): string
     return rel ? `${host}:${id}:${rel}` : `${host}:${id}`;
 }
 
+/** The root-id host of an uploaded portable knowledge pack (PRD 40, OD-2). */
+export const PACK_ROOT_HOST = 'pack';
+/** Slug + hash sized so a pack id (`pack:` + slug + `-` + hash = 63) fits `project_facts.source` (64), which records a pack fact's root. */
+const PACK_SLUG_CHARS = 49;
+const PACK_HASH_CHARS = 8;
+
+/**
+ * The root id an uploaded pack is stored under: `pack:<slug of its name>`. THE one place the
+ * shape is made — a pack is a knowledge root marked by its host segment, never by a table.
+ */
+export function packRootIdFor(name: string, origin?: string): string {
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, PACK_SLUG_CHARS);
+    // `${slug}-${hash}`: two packs named alike (or slugging alike) keep apart by the hash of
+    // where they came from — the pack's ORIGINAL root id when the caller has one, else the name.
+    const hash = sha256Hex(origin ?? name.trim()).slice(0, PACK_HASH_CHARS);
+    return rootIdFor({ host: PACK_ROOT_HOST, folderId: `${slug || 'pack'}-${hash}` });
+}
+
+/** Whether `rootId` is an uploaded pack's root ({@link packRootIdFor}) rather than a reviewed folder. */
+export function isPackRootId(rootId: string): boolean {
+    return rootId.startsWith(`${PACK_ROOT_HOST}:`) && rootId.length > PACK_ROOT_HOST.length + 1;
+}
+
 /**
  * The root-relative path of a source ref, given the root it belongs to. Prefix-aware, so it
  * holds for any root id a client sends — even one ending in ':' that a first-`::` split

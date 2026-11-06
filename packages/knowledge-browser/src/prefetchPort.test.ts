@@ -83,6 +83,51 @@ describe('the browser knowledge PrefetchPort', () => {
     expect(client.search).not.toHaveBeenCalled();
   });
 
+  describe('with uploaded knowledge packs', () => {
+    const PACK = 'pack:handbook';
+    const packScope = { rootId: PACK, title: 'Handbook', packs: [], kind: 'pack' as const, lastReviewedAt: '2026-11-01T00:00:00Z' };
+    const reviewed = { rootId: ROOT, title: 'contracts', packs: ['docs'], lastReviewedAt: '2026-10-20T00:00:00Z' };
+    const searchByRoot = (root: string) => (root === PACK
+      ? [{ id: `src:${PACK}::policy.md`, score: 0.9, tier: 'lexical' as const }]
+      : [{ id: `src:${ROOT}::lease.md`, score: 0.5, tier: 'lexical' as const }]);
+
+    it('lets a pack root\'s hit reach the knowledge.ask context beside the reviewed root\'s', async () => {
+      const client = fakeClient({ scopes: vi.fn(async () => [reviewed, packScope]), search: vi.fn(async (root: string) => searchByRoot(root)) });
+      const out = await createBrowserKnowledgePrefetchPort({ client }).executors[KNOWLEDGE_ASK]!.run('what is the policy on termination?', signal);
+      expect(client.search).toHaveBeenCalledWith(ROOT, expect.any(String), 8);
+      expect(client.search).toHaveBeenCalledWith(PACK, expect.any(String), 8);
+      expect(out?.text).toContain('policy.md');
+      expect(out?.text).toContain('lease.md');
+    });
+
+    it('opens /graph on the newest pack when no folder has been reviewed, and on the reviewed root when there is one', async () => {
+      const onlyPacks = fakeClient({ scopes: vi.fn(async () => [packScope, { ...packScope, rootId: 'pack:older', title: 'Older', lastReviewedAt: '2026-01-01T00:00:00Z' }]) });
+      const out = await createBrowserKnowledgePrefetchPort({ client: onlyPacks }).executors[KNOWLEDGE_GRAPH]!.run('/graph', signal);
+      expect(out?.chips).toEqual([{ labelKey: 'prefetch.chip.openInGraph', command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { rootId: PACK, focus: [] } }]);
+      expect(out?.text).toContain('Handbook');
+
+      const both = fakeClient({ scopes: vi.fn(async () => [reviewed, packScope]) });
+      const winner = await createBrowserKnowledgePrefetchPort({ client: both }).executors[KNOWLEDGE_GRAPH]!.run('/graph', signal);
+      expect(winner?.chips?.[0]?.args).toMatchObject({ rootId: ROOT });
+    });
+
+    it('answers from the packs alone when no folder has been reviewed', async () => {
+      const client = fakeClient({ scopes: vi.fn(async () => [packScope]), search: vi.fn(async (root: string) => searchByRoot(root)) });
+      const out = await createBrowserKnowledgePrefetchPort({ client }).executors[KNOWLEDGE_ASK]!.run('what is the policy on termination?', signal);
+      expect(out?.text).toContain('policy.md');
+      expect(client.search).not.toHaveBeenCalledWith(ROOT, expect.anything(), expect.anything());
+    });
+
+    it('leaves the answer unchanged when the project has no packs', async () => {
+      const client = fakeClient();
+      const out = await createBrowserKnowledgePrefetchPort({ client }).executors[KNOWLEDGE_ASK]!.run('what does the lease say about termination?', signal);
+      expect(client.search).toHaveBeenCalledTimes(1);
+      expect(out?.text).toContain('`lease.md`');
+      expect(out?.text).toContain('Termination');
+      expect(out?.data).toMatchObject({ digest: 'd1', hits: 1 });
+    });
+  });
+
   it('learns through the host calibration store', () => {
     let kept: string | undefined;
     const store: CalibrationStore = { read: () => kept, write: (s) => { kept = s; } };

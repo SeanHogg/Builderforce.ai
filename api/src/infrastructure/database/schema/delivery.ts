@@ -859,6 +859,8 @@ export const knowledgeScopes = pgTable('knowledge_scopes', {
   /** The digest before `lastDigest` — Compare's stored baseline (migration 1279). */
   previousDigest: varchar('previous_digest', { length: 64 }),
   lastReviewedAt: timestamp('last_reviewed_at'),
+  /** An uploaded pack's `{ reviewedBy?, judgeModel?, policy?, reviewedAt? }` (migration 1294, PRD 40 OD-3); pack roots only. */
+  provenance:     jsonb('provenance').$type<{ reviewedBy?: string; judgeModel?: string; policy?: string; reviewedAt?: string }>(),
 }, (t) => [
   unique('uq_knowledge_scope').on(t.tenantId, t.projectId, t.rootId),
 ]);
