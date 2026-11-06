@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-11-06 — Model-call failures name the real destination; a failing pick asks for another model; Kimi sign-in launches itself (VSIX 2026.10.132)
+
+- **The misleading error.** On a `local/kimi-code/k3` pick, the editor calls `api.kimi.ai/coding/v1` directly. A request with no response headers within 240s still said "the gateway sent nothing", and it carried the bare `k3`. That created a phantom `k3: 0 turns · 2 failed` row in triage.
+  - Provider destinations now read like "Kimi Code (api.kimi.ai) sent no response for 240s". The gateway wording is unchanged.
+  - Errors from a pinned local target are rethrown under the full ref.
+- **Full failure detail.**
+  - `StreamInterruptedError.detail` (`brain-embedded/src/streamFailureDetail.ts`) records: phase (headers or body), destination, elapsed time, request bytes, message and tool counts, bytes received, and per-request credential state.
+  - It is stored on the `llm.complete` failure step (`runPolicyTraces.ts`) and printed under "Failed step:" in triage (`brainTriage.ts`).
+  - It is also logged to the BuilderForce output channel as `[llm] <ref> failed: … — …` (`clients/vscode/src/llmFailureLog.ts`).
+- **A failing pick asks for another model.**
+  - `chatErrorAction` → `model_unresponsive`, only for a model the person pinned and only on silence or a dropped connection. In-band provider errors keep their own message.
+  - The banner says "<model> isn't responding. Choose another model" and its button opens the existing `/` model menu. This applies on web, VS Code and Rovr.
+  - The pin is never switched silently.
+- **Kimi auth.**
+  - **Credential file.** The CLI reader picks the live login with the latest `expires_at` across all `~/.kimi-code/credentials/*.json`. The CLI now writes `kimi-code-env-<hash>.json`, next to a stale `kimi-code.json` whose grant is dead. A refresh writes back to the same file. A CLI token Kimi refuses is skipped for the session, and the editor falls through to the workspace connection.
+  - **Sign-in launch.** A turn with no usable Kimi credential goes straight into the device sign-in (browser plus code), with no toast. A cancel is remembered for the session, and sign-ins are single-flight.
+  - **401s.** A Kimi 401 maps to `provider_sign_in` ("Kimi Code needs you to sign in again", with a sign-in button) instead of the BuilderForce `auth` re-exchange.
+- **Root cause of the stall itself — still open** (see ROADMAP › Local-first, "Kimi Code `k3` sends no response headers").
+  - The live probe found that Kimi holds headers until the first token.
+  - A ~75K-token prompt with 67 tools answered in 11–27s, so this is not reproducible by size.
+
 ## ✅ RESOLVED 2026-11-06 — PRD 40 portable knowledge packs: chat, Synapse, Canvas and the platform pack store (VS Code NEXT)
 
 - **§ The format (v1).**
