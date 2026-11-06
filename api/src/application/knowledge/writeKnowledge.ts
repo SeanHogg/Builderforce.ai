@@ -39,7 +39,7 @@
  * from (400 `missing_source_hash`): without it nothing could ever mark the edge stale.
  */
 import { clampClaim, type NodeRef, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
-import { isPackRootId } from '@builderforce/agent-tools';
+import { isPackRootId, isWellFormedPackRootId } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { upsertProjectFact } from '../llm/projectFactsWrite';
@@ -144,6 +144,10 @@ function assertWritable(input: KnowledgeWriteInput, userId: string | null): void
   }
   if (input.root && input.scope && input.scope.rootId !== input.root) {
     throw new KnowledgeWriteError(400, 'root_mismatch', `the scope names ${input.scope.rootId}, not the write's root ${input.root}`);
+  }
+  const packRoot = packRootOf(input);
+  if (packRoot && !isWellFormedPackRootId(packRoot)) {
+    throw new KnowledgeWriteError(400, 'invalid_pack_root', 'a pack root id is `pack:<slug>-<8 hex>` as the uploader derives it (at most 63 characters)');
   }
   // A pack root's id is a fact `source` only when the server stamps it; nobody else may claim it.
   if (!packRootOf(input) && (input.facts ?? []).some((f) => f.source && isPackRootId(f.source))) {

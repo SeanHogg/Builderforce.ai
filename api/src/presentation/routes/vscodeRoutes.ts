@@ -33,16 +33,16 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   // GET /api/vscode/me — the signed-in user's id, so the editor can filter the task
   // tree to "assigned to me" (compared against tasks.assignedUserId). The editor's key
   // is bound to a tenant but the exchanged JWT still carries the human's userId.
-  // `displayName` / `email` ride along (additive) so the editor can name who reviewed a knowledge pack.
+  // `displayName` rides along (additive) so the editor can name who reviewed a knowledge pack. Never the email.
   router.get('/me', async (c) => {
     const userId = c.get('userId') as string;
     const [who] = await db
-      .select({ displayName: users.displayName, email: users.email })
+      .select({ displayName: users.displayName })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
       .catch(() => []);
-    return c.json({ userId, ...(who?.displayName ? { displayName: who.displayName } : {}), ...(who?.email ? { email: who.email } : {}) });
+    return c.json({ userId, ...(who?.displayName ? { displayName: who.displayName } : {}) });
   });
 
   // GET/POST /api/vscode/tenants — legacy aliases of GET/POST /api/tenants (the

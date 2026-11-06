@@ -29,7 +29,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
 import { personOf } from '../middleware/personOf';
-import { isPackRootId } from '@builderforce/agent-tools';
+import { isPackRootId, isWellFormedPackRootId } from '@builderforce/agent-tools';
 import { authorizePackManage } from '../../application/knowledge/packAccess';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
@@ -201,6 +201,7 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     // Destructive for every member: the person who uploaded the pack, a manager or a superadmin
     // (`packAccess`) — never a host key or machine token.
     if (isPackRootId(rootId)) {
+      if (!isWellFormedPackRootId(rootId)) return json({ error: 'not a well-formed pack root id', code: 'invalid_pack_root' }, 400);
       const access = await authorizePackManage(p.env, p.store, { userId: person(c), role: (c.get('role') as string | undefined) ?? null }, rootId);
       if (!access.ok) return json({ error: access.error }, access.status);
     }

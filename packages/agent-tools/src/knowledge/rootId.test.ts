@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderIdOf, isPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf } from './rootId.js';
+import { folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf } from './rootId.js';
 
 describe('packRootIdFor / isPackRootId — an uploaded pack is a root on the `pack` host', () => {
     it('slugs the name and adds a short stable hash, into a parseable root id', () => {
@@ -15,6 +15,18 @@ describe('packRootIdFor / isPackRootId — an uploaded pack is a root on the `pa
         expect(packRootIdFor('Docs!')).not.toBe(packRootIdFor('docs'));
         expect(packRootIdFor('docs', 'vscode:github.com/acme/a')).not.toBe(packRootIdFor('docs', 'vscode:github.com/acme/b'));
         expect(packRootIdFor('docs', 'vscode:github.com/acme/a')).toBe(packRootIdFor('docs', 'vscode:github.com/acme/a'));
+    });
+
+    it('every id packRootIdFor produces is well-formed; a hand-made long or odd root is not', () => {
+        for (const name of ['My Docs Pack!', '  ', 'a::b', 'ünï.cödé', '.-x-.', 'n'.repeat(300), 'Docs/Handbook v2']) {
+            expect(isWellFormedPackRootId(packRootIdFor(name))).toBe(true);
+            expect(isWellFormedPackRootId(packRootIdFor(name, 'vscode:github.com/acme/app'))).toBe(true);
+        }
+        expect(isWellFormedPackRootId(`pack:${'x'.repeat(200)}-1a2b3c4d`)).toBe(false);
+        expect(isWellFormedPackRootId('pack:docs')).toBe(false);
+        expect(isWellFormedPackRootId('pack:Docs-1a2b3c4d')).toBe(false);
+        expect(isWellFormedPackRootId('pack:docs-1a2b3c4d:extra')).toBe(false);
+        expect(isWellFormedPackRootId('web:docs-1a2b3c4d')).toBe(false);
     });
 
     it('always fits the 64-char `project_facts.source` column', () => {

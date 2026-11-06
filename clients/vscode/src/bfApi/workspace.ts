@@ -12,9 +12,10 @@ let currentUserName: string | null | undefined;
 
 async function loadIdentity(secrets: vscode.SecretStorage): Promise<void> {
   try {
-    const r = await authed<{ userId?: string; displayName?: string; email?: string }>(secrets, "/api/vscode/me");
+    const r = await authed<{ userId?: string; displayName?: string }>(secrets, "/api/vscode/me");
     currentUserId = r?.userId ?? null;
-    currentUserName = r?.displayName || r?.email || null;
+    // The display name only: an email is never written into a pack a person shares.
+    currentUserName = r?.displayName || null;
   } catch {
     currentUserId = null;
     currentUserName = null;
@@ -31,7 +32,7 @@ export async function getCurrentUserId(secrets: vscode.SecretStorage): Promise<s
   return currentUserId ?? null;
 }
 
-/** The signed-in user's display name, else email; null when signed out or the API predates it. Cached with the id. */
+/** The signed-in user's display name (never the email); null when signed out, unnamed, or the API predates it. Cached with the id. */
 export async function getCurrentUserName(secrets: vscode.SecretStorage): Promise<string | null> {
   if (currentUserName === undefined) await loadIdentity(secrets);
   return currentUserName ?? null;

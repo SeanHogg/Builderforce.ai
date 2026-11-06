@@ -54,6 +54,14 @@ export function packRootIdFor(name: string, origin?: string): string {
     return rootIdFor({ host: PACK_ROOT_HOST, folderId: `${slug || 'pack'}-${hash}` });
 }
 
+/** The exact shape {@link packRootIdFor} produces: `pack:` + a slug of 1–49 `[a-z0-9._-]` + `-` + 8 hex (63 chars at most). */
+const WELL_FORMED_PACK_ROOT = /^pack:[a-z0-9._-]{1,49}-[0-9a-f]{8}$/;
+
+/** Whether `rootId` has the shape {@link packRootIdFor} makes — what the server admits as a pack root (a longer or odd id cannot fit `project_facts.source`). */
+export function isWellFormedPackRootId(rootId: string): boolean {
+    return WELL_FORMED_PACK_ROOT.test(rootId);
+}
+
 /** Whether `rootId` is an uploaded pack's root ({@link packRootIdFor}) rather than a reviewed folder. */
 export function isPackRootId(rootId: string): boolean {
     return rootId.startsWith(`${PACK_ROOT_HOST}:`) && rootId.length > PACK_ROOT_HOST.length + 1;

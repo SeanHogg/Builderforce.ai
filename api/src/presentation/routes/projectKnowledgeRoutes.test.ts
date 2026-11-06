@@ -115,10 +115,10 @@ describe('project knowledge routes', () => {
 
   it('removes an uploaded pack root, passing the decoded root id to the use case', async () => {
     mocks.deleteRoot.mockResolvedValue({ ok: true, facts: 2, relations: 1, sources: 3 });
-    const res = await routes().request(`/42/knowledge/scopes/${encodeURIComponent('pack:my-docs')}`, { method: 'DELETE' }, {});
+    const res = await routes().request(`/42/knowledge/scopes/${encodeURIComponent('pack:my-docs-1a2b3c4d')}`, { method: 'DELETE' }, {});
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, facts: 2 });
-    expect(mocks.deleteRoot).toHaveBeenCalledWith(expect.anything(), 'pack:my-docs');
+    expect(mocks.deleteRoot).toHaveBeenCalledWith(expect.anything(), 'pack:my-docs-1a2b3c4d');
   });
 
   it('answers the use case’s refusal of a reviewed root with 400', async () => {
@@ -128,9 +128,9 @@ describe('project knowledge routes', () => {
   });
 
   describe('who may remove or replace a pack (uploader, manager, superadmin)', () => {
-    const pack = (uploadedBy: string) => ({ rootId: 'pack:x', title: 'x', packs: [], provenance: { uploadedBy } });
-    const remove = (r = routes()) => r.request('/42/knowledge/scopes/pack%3Ax', { method: 'DELETE' }, {});
-    const upload = (r = routes()) => r.request('/42/knowledge/write', post({ root: 'pack:x', facts: [], relations: [] }), {});
+    const pack = (uploadedBy: string) => ({ rootId: 'pack:x-1a2b3c4d', title: 'x', packs: [], provenance: { uploadedBy } });
+    const remove = (r = routes()) => r.request('/42/knowledge/scopes/pack%3Ax-1a2b3c4d', { method: 'DELETE' }, {});
+    const upload = (r = routes()) => r.request('/42/knowledge/write', post({ root: 'pack:x-1a2b3c4d', facts: [], relations: [] }), {});
     beforeEach(() => mocks.deleteRoot.mockResolvedValue({ ok: true, facts: 0, relations: 0, sources: 0 }));
 
     it('lets the uploader remove and replace their own pack', async () => {
@@ -181,8 +181,19 @@ describe('project knowledge routes', () => {
 
   it('refuses a root removal for a project outside the tenant', async () => {
     mocks.owned.mockResolvedValue(false);
-    const res = await routes().request('/42/knowledge/scopes/pack%3Ax', { method: 'DELETE' }, {});
+    const res = await routes().request('/42/knowledge/scopes/pack%3Ax-1a2b3c4d', { method: 'DELETE' }, {});
     expect(res.status).toBe(404);
+    expect(mocks.deleteRoot).not.toHaveBeenCalled();
+  });
+
+  it('refuses a hand-made, malformed pack root (too long, no hash) on remove and on write with 400 invalid_pack_root', async () => {
+    const long = `pack:${'x'.repeat(200)}`;
+    const del = await routes().request(`/42/knowledge/scopes/${encodeURIComponent(long)}`, { method: 'DELETE' }, {});
+    expect(del.status).toBe(400);
+    expect(await del.json()).toMatchObject({ code: 'invalid_pack_root' });
+    const write = await routes().request('/42/knowledge/write', post({ root: long, facts: [] }), {});
+    expect(write.status).toBe(400);
+    expect(await write.json()).toMatchObject({ code: 'invalid_pack_root' });
     expect(mocks.deleteRoot).not.toHaveBeenCalled();
   });
 

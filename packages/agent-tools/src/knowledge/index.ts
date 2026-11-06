@@ -40,7 +40,7 @@ export {
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
 export { fileManifest, manifestFileName, migratingRootFiles, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
-export { PACK_ROOT_HOST, folderIdOf, isPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
+export { PACK_ROOT_HOST, folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
 export {
     canDeleteFact, factRightsCache,
     type FactAuthor, type FactRightsCache, type FactViewer, type FactsListing,

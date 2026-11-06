@@ -10,7 +10,7 @@
  */
 
 import * as vscode from "vscode";
-import { isPackRootId, packRootIdFor, rebasePackRoot, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
+import { isWellFormedPackRootId, packRootIdFor, rebasePackRoot, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
 import { KnowledgeApiError } from "@builderforce/knowledge-client";
 import { pushSnapshot } from "../knowledgeStores";
 import { loadedPackRegistry } from "./loadedPackRegistry";
@@ -49,7 +49,7 @@ const sourcesOf = (pack: PortableKnowledgePack): Array<{ ref: string; hash: stri
  * A pack already on a `pack:` root keeps it, so a pack that was downloaded back re-uploads in place.
  */
 export function packForUpload(pack: PortableKnowledgePack): PortableKnowledgePack {
-  const rootId = isPackRootId(pack.rootId) ? pack.rootId : packRootIdFor(pack.name, pack.rootId);
+  const rootId = isWellFormedPackRootId(pack.rootId) ? pack.rootId : packRootIdFor(pack.name, pack.rootId);
   const rebased = rebasePackRoot(pack, rootId);
   const known = rebased.snapshot.scopes.find((s) => s.rootId === rebased.rootId);
   // The pack's provenance (OD-3) rides its scope; the server keeps it for pack roots only.
