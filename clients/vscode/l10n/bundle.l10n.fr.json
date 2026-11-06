@@ -1123,5 +1123,14 @@
   "Send only reaches localhost and the origins listed in the builderforce.knowledge.devOrigins setting.": "L'envoi n'atteint que localhost et les origines listées dans le réglage builderforce.knowledge.devOrigins.",
   "The server did not answer in time.": "Le serveur n'a pas répondu à temps.",
   "That request method cannot be sent from here.": "Cette méthode de requête ne peut pas être envoyée d'ici.",
-  "That is not a valid address.": "Ce n'est pas une adresse valide."
+  "That is not a valid address.": "Ce n'est pas une adresse valide.",
+  "A previous BuilderForce run in this chat was interrupted when VS Code restarted.{0}": "Une exécution précédente de BuilderForce dans cette conversation a été interrompue au redémarrage de VS Code.{0}",
+  " Its last step was safe to resume; ask again and the work continues.": " Sa dernière étape pouvait être reprise sans risque ; redemandez et le travail continue.",
+  " Re-ask and the work resumes from where it stopped.": " Redemandez et le travail reprend là où il s'était arrêté.",
+  "Durable dead letter": "Lettre morte durable",
+  "Repair a dead letter": "Réparer une lettre morte",
+  "Put one durable dead letter back on the queue. Nothing is sent.": "Remet une lettre morte durable dans la file d'attente. Rien n'est envoyé.",
+  "Could not export dead letters: {0}": "Impossible d'exporter les lettres mortes : {0}",
+  "BuilderForce Visualization": "Visualisation BuilderForce",
+  "BuilderForce": "BuilderForce"
 }

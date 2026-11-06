@@ -1123,5 +1123,14 @@
   "Send only reaches localhost and the origins listed in the builderforce.knowledge.devOrigins setting.": "发送只能到达 localhost 以及 builderforce.knowledge.devOrigins 设置中列出的来源。",
   "The server did not answer in time.": "服务器未及时响应。",
   "That request method cannot be sent from here.": "无法从此处发送该请求方法。",
-  "That is not a valid address.": "这不是有效的地址。"
+  "That is not a valid address.": "这不是有效的地址。",
+  "A previous BuilderForce run in this chat was interrupted when VS Code restarted.{0}": "此聊天中之前的 BuilderForce 运行因 VS Code 重启而中断。{0}",
+  " Its last step was safe to resume; ask again and the work continues.": "其最后一步可以安全恢复；再次提问即可继续工作。",
+  " Re-ask and the work resumes from where it stopped.": "再次提问，工作将从停止处继续。",
+  "Durable dead letter": "持久死信",
+  "Repair a dead letter": "修复死信",
+  "Put one durable dead letter back on the queue. Nothing is sent.": "将一条持久死信放回队列。不会发送任何内容。",
+  "Could not export dead letters: {0}": "无法导出死信：{0}",
+  "BuilderForce Visualization": "BuilderForce 可视化",
+  "BuilderForce": "BuilderForce"
 }

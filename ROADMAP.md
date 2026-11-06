@@ -86,7 +86,6 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
   - P7 Markov transitions for Simulate
 
   P2 shows Part D's results on the map. P1 comes first ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)).
-- **45 VS Code strings are missing from the l10n bundles (found 2026-11-06).** `vscode.l10n.t` keys in `clients/vscode/src/extension.ts`, `chatParticipant.ts`, `visualizationPanel.ts` and `workspaceSession.ts` are absent from `clients/vscode/l10n/bundle.l10n*.json`, so those messages show English in de/es/fr/zh-cn. In progress: add them to all five bundles with real translations.
 - **No run delta, and understanding needs `/review` ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md)).** Run change sets are recorded (`brainRunHostPorts.ts:381-401`) but nothing reads them. Indexing starts only from `/review`. Analyzers download via `npm exec` (offline fails). A signed-out project selection throws `NOT_SIGNED_IN`. `findingId` changes when a group's members change. Operator decisions taken 2026-11-06 (PRD 41 §12). Next: WS1 (offline closure) and WS2 (SQLite fact store in `.builderforce/cache/`, Opus-reviewed).
 - **Cloud run isolation (G1, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)).** `enableInternet = true` (`AgentContainerDO.ts:45`) with no egress allowlist or red-team. S5, S6, W2 and B2 are closed; re-audit the rest of the 50.
 - **Sandbox capacity.** `max_instances = 25` is shared with previews; when full, a run gets no sandbox rather than waiting.

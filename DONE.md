@@ -39,6 +39,13 @@
   - Upload no longer overwrites any fact it doesn't own.
   - Pack ids are collision-resistant: a slug plus a short hash.
 - **PRD 40 has no open decisions.**
+- **Unrelated l10n gap found and closed in the same pass.** 9 `vscode.l10n.t` keys (45 bundle entries) were missing from `clients/vscode/l10n/bundle.l10n*.json`. They are now translated in all five bundles:
+  - the interrupted-run notice in `chatParticipant.ts`;
+  - the dead-letter commands in `extension.ts`;
+  - "BuilderForce Visualization" in `visualizationPanel.ts`;
+  - "BuilderForce" in `workspaceSession.ts`.
+
+  The checker reports 0 missing keys across `clients/vscode/src`.
 
 ## ✅ RESOLVED 2026-11-05 — Knowledge visualizer Option B+: transit map, questions, overlays, panels, and screenshot pinpoint (VS Code 2026.10.130 · memory 2026.10.40, published 2026-11-05 and in use from VS Code 2026.10.131)
 
