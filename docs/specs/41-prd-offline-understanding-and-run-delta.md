@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Design for review. No code started. This document is the end state to build against; get review before any workstream starts. |
+| Status | Design, reviewed by Opus 2026-11-06 with all findings applied. No code started. This document is the end state to build against. |
 | Owner | Agents program. Model roles are in CLAUDE.md. |
 | Roadmap | `ROADMAP.md` › Make › Cloud and IDE agent runs, and › Local-first. Builds on [PRD 38](./38-prd-knowledge-graph.md) (the knowledge graph), [PRD 40](./40-prd-knowledge-packs.md) (portable packs), the [offline-first review](../design/vsix-offline-first-architecture-review.md) (G01–G27), the [deterministic knowledge index](../design/deterministic-knowledge-index.md) and [deterministic prefetch](../design/deterministic-prefetch.md). |
 | Date | 2026-11-06 |
@@ -76,8 +76,8 @@ Facts checked on 2026-11-06. `BM` is `builderforce-memory/packages/memory/src/kn
 | Judge skip: a judged section is skipped when its text hash is unchanged | `BM/review.ts:200` | Built |
 | Review digest is sha256 of `{rootId, packs, files}` | `BM/review.ts:287` | Built |
 | Only judge and compare call a model. The code pack has no judgement. | `BM/judge.ts:2`, `AT/knowledge/codePack.ts:14` | Built |
-| Code-pack analyzers: dependency-cruiser 16.10.4, jscpd 4.0.5, knip 5.30.0 and the repo-map file graph | `AT/codeAnalysisTool.ts:9-11`, `AT/knowledge/codeAnalyzers.ts:29-38` | Built. They are **downloaded via `npm exec --yes` on first use** (`codeAnalysisTool.ts:62`), whole-repo, and a failure is swallowed (`BM/review.ts:242-257`). |
-| Findings: cycle, clone-group, near-duplicate, partition-violation, unpartitioned, stale, plus unused-file, unused-export and unused-dependency for code | `BM/findings.ts:78-146`, `AT/knowledge/codeFindings.ts:28-52` | Built |
+| Code-pack analyzers: dependency-cruiser 16.10.4, jscpd 4.0.5, knip 5.30.0 and the repo-map file graph | `AT/codeAnalysisTool.ts:9-11`, `AT/knowledge/codeAnalyzers.ts:29-38` | Built. They are **downloaded via `npm exec --yes` on first use**: the command strings are in `ANALYZERS` at `codeAnalysisTool.ts:9-11`, and dependency-cruiser and knip also pin `typescript@5.6.3`. They run whole-repo, and a failure is swallowed (`BM/review.ts:242-257`). |
+| Findings: cycle, clone-group, near-duplicate, partition-violation, unpartitioned, stale, plus unused-file, unused-export and unused-dependency for code | `BM/findings.ts:78-146`, `AT/knowledge/codeFindings.ts:28-52` | Built. **`unusedCodeRule` emits one repo-wide finding per kind**, with an id hashed over every file that has unused items, so it has no per-item identity (fixed in C3). |
 | Five code layers (entry, presentation, application, domain, infrastructure) | `AT/knowledge/codeLayers.ts:1-26` | Built |
 | Per-file badges: cyclomatic complexity, routes, patterns. These are regex over masked source. | `AT/knowledge/codeComplexity.ts`, `codeRoutes.ts`, `codePatterns.ts` | Built |
 | Root signals: coverage (reads lcov or istanbul only), CODEOWNERS, entry points, churn and history | `AT/knowledge/codeCoverage.ts`, `codeOwners.ts`, `codeEntryPoints.ts`, `codeRootSignals.ts` | Built |
@@ -117,7 +117,7 @@ Facts checked on 2026-11-06. `BM` is `builderforce-memory/packages/memory/src/kn
 
 | Path | What it does | Problem |
 |---|---|---|
-| `VS/codebaseScan.ts` | Walks the workspace and writes `.builderforce/{context.yaml, project-map.md, architecture.md, README.md, memory/, scan.json}`, plus one `routeComplete` overview (`:278-294`) | One `versionToken` over the whole workspace (`:155-165`), so any edit invalidates everything. The LLM overview is the only non-deterministic part. `maybeScan` returns early when there is no key and the route needs sign-in (`VS/extension.ts:1691`). |
+| `VS/codebaseScan.ts` | Walks the workspace and writes `.builderforce/{context.yaml, project-map.md, architecture.md, README.md, memory/, scan.json}`, plus one `routeComplete` overview (`:278-294`) | One `versionToken` over the whole workspace (`:155-165`), so any edit invalidates everything. The LLM overview is the only non-deterministic part. `maybeScan` returns early twice: when no local or specific model is available (`VS/extension.ts:1686-1690`), and when there is no key and the route needs sign-in (`:1691`). |
 | `packages/repo-map` | Regex facts plus a file graph, serialized for the R2 cache | A second extractor beside the knowledge code pack. It runs in Workers, where there is no parser. |
 | Knowledge review (code pack) | The canonical, incremental pipeline in §3.1 | Starts only from `/review` (`VS/knowledge/knowledgeCommands.ts:86`) |
 
@@ -126,10 +126,22 @@ Facts checked on 2026-11-06. `BM` is `builderforce-memory/packages/memory/src/kn
 | Gap | Where |
 |---|---|
 | A selected project persisted while signed out makes every knowledge call throw `NOT_SIGNED_IN`. "Linked" means a project was selected; it does not mean signed in. | `VS/knowledge/knowledgeService.ts:64-75`, `VS/projectState.ts:20-21` |
-| Analyzers download from npm on first use and fail with no network | `AT/codeAnalysisTool.ts:62` |
+| Analyzers download from npm on first use and fail with no network | `AT/codeAnalysisTool.ts:9-11` |
 | The `work`, `inbox`, `health` and `evermind` views are hidden until sign-in | `clients/vscode/package.json:100,105,114,120` |
-| The workspace scan is skipped with no key | `VS/extension.ts:1691` |
-| `installRunChangeSets.ts` and `runChangeSetRecorder.ts` have no references. Their "not referenced" comments are stale against `brainRunHostPorts`. | `VS/installRunChangeSets.ts:4-5`, `VS/runChangeSetRecorder.ts:15-16` |
+| The workspace scan is skipped with no model, and again with no key | `VS/extension.ts:1686-1691` |
+| `installRunChangeSets.ts` (and its `installRunChangeSets.test.ts`) and `runChangeSetRecorder.ts` have no production references. Their "not referenced" comments are stale against `brainRunHostPorts`. | `VS/installRunChangeSets.ts:4-5`, `VS/runChangeSetRecorder.ts:15-16` |
+
+### 3.7 Primitives this PRD must reuse (found in review)
+
+| Primitive | Where | Reused by |
+|---|---|---|
+| SQLite system of record (G03): runtime `node:sqlite` load, `busy_timeout`, refuses corrupt files | `VS/localRecordTransaction.ts`; `agent-runtime/src/memory/sqlite.ts` (`requireNodeSqlite`) | B4 fact-store adapter |
+| Durable file write | `packages/local-first/src/durableWrite.ts:38` (`writeDurably`) | B4 objects, C1 pre-images |
+| Classical ML catalog: logistic, linear, kNN, EWMA, robust-z, anomaly composite, isolation forest, GBM, naive Bayes, k-means | `builderforce-memory/packages/memory-engine/src/ml/classical/*` | Part D (D13) |
+| ML task catalog, including a run anomaly task | `builderforce-memory/packages/memory-engine/src/ml/tasks/{run_anomaly,local_success,experience}.ts` | D2.5, D5, D14 |
+| Other copies of model maths to migrate | `packages/difficulty-router/src/head.ts` (logistic head), `packages/pipeline-route/src/score.ts`, `wilsonInterval` in `api/src/domain/replay/prescriptions/impact.ts`, the seeded layout RNG in `packages/knowledge-graph-view` `layout3d.ts`, `packages/prefetch/src/calibrate.ts`, the learned-routing sampler (`exploration.ts`) | D13 |
+| Default vector space: bge-m3, 1024 dimensions, with a resumable keyset backfill sweep | `api/migrations/1256_memory_embedding_1024.sql`, `MEMORY_VECTOR_SPACES` (`memoryEmbeddingBackfill.ts:14-18`) | C14 |
+| Reporting line: `dev_teams.manager_id` → contributors | `api/src/infrastructure/database/schema/canvas.ts:850` | D14 |
 
 ---
 
@@ -169,8 +181,10 @@ on the next granted sync, and it never throws `NOT_SIGNED_IN` into a review.
 
 dependency-cruiser, jscpd and knip move from `npm exec --yes` to **pinned, packaged
 dependencies** of the VSIX, run in-process or as bundled CLIs from the extension's install
-directory. Versions stay pinned in one place, `codeAnalysisTool.ts`, and are reported in each
-analysis record so comparability (C9) can check them.
+directory. The bundle includes the `typescript@5.6.3` that dependency-cruiser and knip pin.
+Versions stay pinned in one place, `codeAnalysisTool.ts`, and are reported in each analysis
+record so comparability (C9) can check them. WS1 measures the VSIX size before and after and
+records it in the release notes.
 
 Bundling was decided on 2026-11-06 (§12.1). If a bundled analyzer fails to start:
 - that analyzer's findings are `not_measured`, with the reason `analyzer-unavailable`;
@@ -178,8 +192,9 @@ Bundling was decided on 2026-11-06 (§12.1). If a bundled analyzer fails to star
 
 ### A4. The scan never needs a key
 
-`maybeScan` always runs the deterministic part. Only the optional narrative needs a model
-route (§B9). With no route, the overview section is omitted and marked
+`maybeScan` always runs the deterministic part. Both early returns go: the no-model one at
+`extension.ts:1686-1690` and the no-key one at `:1691`. Only the optional narrative needs a
+model route (§B9). With no route, the overview section is omitted and marked
 `overview: { status: 'skipped', reason: 'no-model-route' }`.
 
 ### A5. The visualizer's network touches are all optional
@@ -226,8 +241,16 @@ Understanding is a **build system over facts**, in the sense of *Build Systems �
   pure and cached by key. This already exists (§3.1).
 - **Cross-file queries** derive facts such as `resolveImports`, `fileGraph`, `layers` and
   `findings`. Their inputs are the *fact hashes* of the files they read, not the file hashes.
-- **Early cutoff.** If an edit changes a file's bytes but not its `FileFacts` hash (a comment,
-  whitespace, a body edit that keeps imports and symbols), no cross-file query reruns.
+- **Early cutoff.** If an edit changes a file's bytes but not its *structural* facts hash, no
+  structural cross-file query reruns. A comment or whitespace edit is the typical case.
+  - `FileFacts` is split into fact kinds, each with its own hash:
+    - `structure`: symbols, imports, exports;
+    - `body`: calls, complexity, `testFacts`, def-use and loop facts;
+    - `content`: the normalized bytes themselves.
+  - A rule's `reads` names the kinds it consumes. A body edit still reruns `body`-reading rules
+    such as `io-in-loop` and taint.
+  - Rules that need raw text declare `reads: ['content']`. Examples are gitleaks over hunks,
+    TODO counts and snippet-hash anchors. Cutoff never applies to them.
 - **Verifying traces.** Each derived result stores the hashes of the inputs it read. It is
   valid while those hashes are current. No dirty flags propagate through the store, so the
   store can be thrown away and rebuilt to the same bytes.
@@ -236,14 +259,24 @@ Understanding is a **build system over facts**, in the sense of *Build Systems �
 
 Planning today hashes every file (329 s for 16.7k files). That cost goes:
 
+0. **Content identity is EOL-normalized.**
+   - The content hash is sha256 over the file's bytes with CRLF and lone CR converted to LF,
+     for files detected as text. Binary files are hashed raw.
+   - So a Windows `core.autocrlf` checkout and a Linux checkout of the same commit hash
+     identically. The cross-OS digest, pre-image hashes and the oracle all rely on this.
+   - The normalization rule is part of `EXTRACTOR_VERSION`.
 1. **Stat manifest.** `(path, size, mtimeNs, ino/fileId)` per file, persisted with the plan
-   manifest. A file whose stat tuple is unchanged reuses its stored hash without being read.
+   manifest. Stats are read with `bigint: true`, because Windows file ids and nanosecond
+   mtimes lose precision as JS numbers. A file whose stat tuple is unchanged reuses its stored
+   hash without being read.
 2. **Racy-file rule** (from git's index): if a file's `mtime` is within 2 s of the manifest's
    write time, it is re-hashed on the next plan, whatever its stat says.
 3. **Git fast path.** In a git repo, `git ls-files -s` plus `git status --porcelain=v2 -z`
-   give blob ids for tracked, clean files without reading them. A blob id is stored as an
-   alternate key (`git:<sha1>`) beside the sha256 content hash, so the cache is shared across
-   branches and clones.
+   identify tracked files that are clean against the index.
+   - A blob id (`git:<sha1>`) is stored as a **lookup hint** beside the sha256 content hash,
+     so a clean file at a blob the cache already knows reuses its facts without being read.
+   - It is never an identity. Under autocrlf, working-tree bytes differ from blob bytes, so
+     facts are always keyed by the normalized sha256 from step 0.
 4. **Directory Merkle hashes.** A directory's hash is sha256 over its sorted
    `(name, kind, childHash)`. An unchanged directory hash skips the whole subtree, and two
    roots compare in O(changed).
@@ -252,6 +285,15 @@ Planning today hashes every file (329 s for 16.7k files). That cost goes:
    **reconciling plan** (steps 1–4) that catches whatever was missed.
 
 **Target:** a warm plan of the `agentic` tree in under 3 s; a cold plan in git under 30 s.
+
+**Roots.**
+- **Multi-root workspaces:** each workspace folder is its own `rootId` with its own store
+  under that folder's `.builderforce/cache/`.
+- **Monorepos:** one root per workspace folder, not per package.
+- **Large roots:** a root over `MAX_LISTED_FILES` (20,000, `fsDirectorySource.ts:65`) is
+  planned in full by the B2 stat path, because the cap exists for the old hash-every-file
+  plan. The cap moves to L3 analyzer scope, where truncation marks the analysis
+  `not_comparable` (C9).
 
 ### B3. Extraction: one extractor per language, tree-sitter in Node hosts
 
@@ -265,6 +307,13 @@ Planning today hashes every file (329 s for 16.7k files). That cost goes:
 - **Incremental parse.** Within an editing session, the extension keeps tree-sitter trees for
   open documents and applies `tree.edit()` on each change, so re-extracting a typed-in file
   costs only the edited region.
+- **Grammar versions.** `EXTRACTOR_VERSION` is a composite: the extractor code version plus
+  each tree-sitter grammar's package version and the EOL rule. A grammar bump re-extracts only
+  files of that language.
+- **Threading.** Parsing in the background worker thread uses the WASM build of tree-sitter
+  (`web-tree-sitter`), because native addons are not safe to load per worker. The main thread
+  keeps the native addon for open-document incremental parses. The two builds of one grammar
+  version must produce identical facts; the B8 oracle checks this.
 - `FileFacts` gains the following fields. Every array is sorted and every field is
   canonical-serialized:
   - `exports` (name, kind, signature hash);
@@ -278,7 +327,20 @@ Planning today hashes every file (329 s for 16.7k files). That cost goes:
 ### B4. Fact store: content-addressed segments
 
 The single snapshot JSON (`.builderforce/knowledge/<root>.json`) is rewritten on flush, which
-does not suit continuous indexing. The store becomes:
+does not suit continuous indexing.
+
+**Port and adapter.**
+- memory `/knowledge` is Worker-safe and pure ("no I/O"), so it gains only a
+  **`FactStorePort`**: `getObject`, `putObject`, `manifest` read and write in one transaction,
+  `derived` get and put, and `canonicalDump()`.
+- The Node adapter lives in the VSIX and the on-prem host, **on the existing G03 SQLite store**
+  (`VS/localRecordTransaction.ts`, `requireNodeSqlite`). WS2 wires G03 rather than opening a
+  second SQLite path.
+- The Worker host keeps its R2 and KV adapter behind the same port.
+- Every `/knowledge` contract change ships as a builderforce-memory publish plus a pin bump in
+  the same workstream.
+
+On disk, the store becomes:
 
 ```
 <workspace>/.builderforce/cache/knowledge/<rootId>/
@@ -288,7 +350,11 @@ does not suit continuous indexing. The store becomes:
   snapshot.json                  # the PRD 38 KnowledgeSnapshot, now a projection rebuilt from the above
 ```
 
-- Writes use the existing `atomicWrite` and `renameDurably` (`packages/local-first`).
+- Object writes use the existing `writeDurably` (`packages/local-first/src/durableWrite.ts:38`).
+- **Migration.** The `.builderforce/knowledge/<stem>.*` layout is shared with the knowledge
+  index and the on-prem host (`knowledgeStores.ts:24-25`). WS2 migrates all three readers:
+  - On first open, the old snapshot is imported into the new store and renamed `*.migrated`.
+  - The link-upload path (`uploadLocalSnapshot`) reads the projection from the new store.
 - Objects are write-once, so a crash leaves at worst an unreferenced object, which a sweep
   removes.
 - The `KnowledgeSnapshot` and PRD 40 portable pack formats do not change. Both are
@@ -302,16 +368,19 @@ does not suit continuous indexing. The store becomes:
     - TS server and ESLint watchers;
     - our own `FileSystemWatcher`, which would create a feedback loop.
   - So the extension, on first index:
-    - writes `.builderforce/cache/` into `.gitignore`. It appends only, and asks once if
-      `.gitignore` is tracked and dirty;
+    - writes `.builderforce/cache/.gitignore` containing `*`, the way `.pytest_cache` does.
+      The repo's own `.gitignore` is never touched;
     - contributes `configurationDefaults` for `files.watcherExclude` and `search.exclude` on
       `**/.builderforce/cache/**`;
     - has its own watcher ignore the path.
   - The benefit: the cache survives moving or renaming the folder and is easy to inspect or
     delete. `.builderforce/` outside `cache/` keeps the human-facing outputs (B9).
 - **SQLite from the start** (decided 2026-11-06). `engines.vscode` rises to `^1.101.0`, which
-  closes the G03 engine-floor blocker. `index.sqlite` uses `node:sqlite` with WAL and a busy
-  timeout instead of the 30-second lock steal. `objects/` stays file-based.
+  closes the G03 engine-floor blocker. `index.sqlite` is opened through the G03 store, with
+  WAL and its busy timeout instead of the 30-second lock steal. `objects/` stays file-based.
+- **Sweeps.** A generation-based mark-and-sweep removes unreferenced objects. It runs when
+  idle, and only for objects not referenced by the current manifest generation, any
+  generation pinned by an open run (C1) or any delta younger than its retention.
 - This is a storage format, so its review goes to an Opus subagent.
 
 ### B5. Derived knowledge as rules (Datalog-style)
@@ -329,8 +398,11 @@ interface FactRule {
 ```
 
 - **`file` rules** recompute only for changed files.
-- **`neighbourhood` rules** (for example "a route lost its guard") recompute for the changed
-  files plus their 1-hop graph neighbours.
+- **`neighbourhood` rules** recompute for the changed files plus their graph neighbours up to
+  the rule's declared `hops` (default 1, maximum 2, matching the C2 impact set).
+  - Entry-point rules such as "a route lost its guard" declare `hops: 2` and also read the
+    route's **guard chain**: router, middleware and wrapper files resolved from the route
+    registration, which may be further away than 2 import hops.
 - **`global` rules** (cycles, unused exports) recompute when any input fact of their kind
   changed. A cycle is found with Tarjan's strongly-connected-components algorithm over the
   sorted node order, so the result is deterministic.
@@ -364,6 +436,13 @@ model.
 - Budget: one worker thread, 50 ms slices, yielding when the person types.
 - The work is cancelable, and it pauses when the window loses focus for more than 10 minutes.
 - On battery, levels L3 and L4 wait until the device is charging or the person asks.
+  - The extension host has no power API, so the host asks the OS through one small
+    `powerSource` port, cached for 5 minutes:
+    - Windows: `GetSystemPowerStatus`, via `powershell -NoProfile` querying
+      `Win32_Battery`;
+    - macOS: `pmset -g batt`;
+    - Linux: `/sys/class/power_supply/*/online`.
+  - If the source is unknown, L3 runs only when idle for 2 minutes or more.
 
 ### B7. Analyzers: whole-repo tools under incremental discipline
 
@@ -383,8 +462,13 @@ The three external analyzers are not incremental, so each gets a strategy:
 
 1. Paths are POSIX, normalized and NFC, then sorted bytewise. Every array in every artifact
    is sorted by a declared key.
-2. Canonical JSON uses sorted keys, with no floats in identities (scores are quantized as in
-   the [knowledge index](../design/deterministic-knowledge-index.md)).
+2. Canonical JSON uses sorted keys. **Every number that enters an identity, digest or cache
+   key is quantized first.**
+   - Quantization means a fixed decimal step per field, serialized as an integer of that step.
+   - This applies to PageRank and centrality, the blast-radius score, the Maintainability Index,
+     every `MetricDelta` value and every statistic.
+   - It follows the [knowledge index](../design/deterministic-knowledge-index.md) convention.
+   - The step is declared in the field's schema.
 3. Every cache key includes extractor, rule and tool versions. Wall-clock time and mtime never
    appear in an output. mtime is only a hint to skip hashing (B2).
 4. Each computation runs against one manifest generation. A result built from mixed
@@ -393,10 +477,15 @@ The three external analyzers are not incremental, so each gets a strategy:
    PageRank-style centrality uses power iteration with a fixed iteration cap and tolerance
    over sorted nodes.
 6. **The oracle test.** For a fixture repo and random sequences of edits, renames and deletes
-   (property-based, seeded), the following three must be byte-identical:
+   (property-based, seeded), the **canonical dump** of the store must be byte-identical across:
    - the store after the incremental updates;
    - a from-scratch build;
-   - a from-scratch build on a second OS in CI.
+   - a from-scratch build on a second OS in CI, with the fixture checked out with autocrlf on
+     Windows.
+
+   The dump (`FactStorePort.canonicalDump()`) is sorted canonical JSON of the manifest,
+   derived rows and referenced objects. SQLite page layout, freelists and WAL never take part.
+   Analyzer outputs are included.
 
    This test gates every workstream in Part B.
 
@@ -439,6 +528,9 @@ whole-repo analyzers it needs a tree. Resolution, cheapest first:
 
 1. **Extract cache by `beforeHash`.** The background indexer normally already holds facts for
    every file at its pre-run hash, so per-file rules need no content.
+   - Today `beforeHash` is size plus mtime for files over 256 KB (`runChangeBaseline.ts:21`).
+     The baseline switches to the B2 normalized sha256 for every file, taken from the stat
+     manifest without re-reading unchanged files, so this step can hit for large files too.
 2. **Git.** For files clean at baseline, `git show <baseCommit>:<path>`.
 3. **Baseline pre-images.** At run start, the baseline captures the *bytes* of every file
    dirty at that moment into the content-addressed store (`objects/`).
@@ -459,9 +551,22 @@ not depend on intercepting writes.
 file in the run's working set. In a non-git root, the baseline captures the whole working
 set, up to the same caps, and the rest becomes `not_comparable`.
 
-**Renames.** Paths are mapped before diffing using git's rename detection
-(`git diff -M50% --name-status`) or, without git, content-hash equality plus a token-set
-similarity of at least 0.5.
+**Edge cases.**
+
+| Case | Handling |
+|---|---|
+| Untracked files at baseline | Treated as dirty, so a pre-image is captured |
+| Ignored files | Outside the working set. If the run touched one, it is listed as `changed-ignored` and its findings are `not_comparable`. |
+| Submodules | Opaque: only the commit-pointer change is reported (`submodule-moved`, info) |
+| LFS pointers | Compared as pointers; content is not fetched |
+| Agent ran `git checkout`, `rebase` or `commit` mid-run | Before stays pinned to `baseCommit` plus pre-images. After is the working tree at finalization. The run's own commits are part of after. A `HEAD` that moved to an unrelated branch makes the whole delta `not_comparable` (`head-switched`). |
+| Concurrent human edits or parallel runs on the same tree | Only files whose change-set `attribution` is `run-authored` or `run-modified-existing` enter the delta. Others are listed as "changed outside this run" and excluded from verdicts. |
+
+**Renames.** One in-house matcher runs everywhere, git or not, so the digest never depends on
+the git version or `diff.renameLimit`:
+1. Exact normalized-hash equality.
+2. Otherwise a token-set Jaccard of at least 0.5 over normalized tokens.
+3. Candidate pairs are matched greedily by descending similarity, then by ascending path.
 
 ### C2. Impact set
 
@@ -491,13 +596,21 @@ interface FindingIdentity {
 **Lineage matching** is deterministic:
 1. Exact `id` match: `persisting`.
 2. Same `anchor`: `changed`, with a sub-kind of `grew`, `shrank` or `moved`.
-3. Same `kind`, with a member-set Jaccard of at least 0.5. Pairs are matched greedily by
-   descending Jaccard, then ascending ids: `changed`.
+3. Same `kind` **and the same anchor kind** (symbol, route, package or file), with **two or
+   more members on both sides** and a member-set Jaccard of at least 0.5: `changed`.
+   - Pairs are matched greedily by descending Jaccard, then by ascending id.
+   - Single-member findings never match by rule 3, so two unrelated findings in one file are
+     never "changed".
 4. Remainder: `introduced` (after only) or `resolved` (before only), subject to C9.
+
+**Per-item findings first.** `unusedCodeRule` (`AT/knowledge/codeFindings.ts:28-52`) today
+emits one repo-wide finding per kind. It is split into one finding per unused file, export or
+dependency, anchored on that item, before lineage can work. This is in WS6.
 
 The jscpd and knip issue ids in `AT/codeAnalysis.ts:36-47` adopt the same `anchor` scheme,
 so the web analysis compare and the knowledge compare share one identity. Their two
-implementations collapse into one in the memory package.
+implementations collapse into one in the memory package, and the `CodeAnalysisSnapshot`
+types move with `compareAnalysis` into memory `comparability.ts`.
 
 ### C4. The delta contract
 
@@ -524,7 +637,7 @@ interface MetricDelta {
   before: number | null; after: number | null;   // null = not measured on that side
   unit: string; betterWhen: 'lower' | 'higher';
   threshold: { warn: number; error: number; kind: 'abs' | 'pct' };
-  significance?: { method: 'mann-whitney' | 'none'; p?: number; ci?: [number, number] };
+  significance?: { method: 'wilcoxon-signed-rank' | 'sprt-sign' | 'none'; p?: number; ci?: [number, number] };
 }
 
 interface DimensionResult {
@@ -664,7 +777,9 @@ the dynamic tier is opt-in or policy-triggered.
 `.builderforce/delta.json → benchmarks` or detected vitest `bench` files.
 - **Interleaved A/B (ABAB…) runs** of before and after builds, at least 10 samples each, after
   warm-up.
-- **Mann–Whitney U** with a Hodges–Lehmann shift estimate and a bootstrap 95% CI.
+- Interleaving makes the samples **pairs**, so the test is the **Wilcoxon signed-rank test** on
+  the pair differences. The effect is the paired Hodges–Lehmann estimate (the median of the
+  Walsh averages) with a seeded paired-bootstrap 95% CI.
 - A change is reported only when p < 0.01 *and* the CI excludes the threshold (default ±5%).
   Otherwise the result is `same (within noise)`.
 - Where the OS allows (`perf stat` on Linux), **instruction counts** are preferred over wall
@@ -858,33 +973,48 @@ paragraph, cached by `digest`. Rules:
 - **Sync.** `run-delta` is synced as a mirror record through the G15–G18 protocol with a
   named importer, `importMirrorRecord`. There is no generic payload writer.
 - **Server persistence.** This is a storage-format decision, so it gets an Opus review and
-  the expand/contract migration rule. The proposed shape is one `run_deltas` row per run
-  (digest, headline, dimension verdicts as columns) plus `run_delta_findings` rows (anchor,
-  dimension, rule, severity, lineage), so trends query without JSON scans (3NF). Evidence
-  stays a blob in R2, keyed by digest. *Decided 2026-11-06: tables, with vectors.*
-- **Vectors** (decided 2026-11-06). These follow the existing pgvector convention from
-  migration `1134_memory_semantic_recall.sql`:
-  - a `vector(1536)` column;
+  the expand/contract migration rule. The shape is 3NF, with dimensions as rows because they
+  are registry data (principle 5):
+
+  | Table | One row per | Columns |
+  |---|---|---|
+  | `run_deltas` | run | `run_id`, `digest`, `headline`, `blast_band`, `delta_version`, `created_at` |
+  | `run_delta_dimensions` | run × dimension | `run_id`, `dimension_id`, `verdict`, `introduced`, `resolved`, `changed` |
+  | `run_delta_findings` | finding in a delta | `run_id`, `anchor`, `dimension_id`, `rule_id`, `rule_version`, `severity`, `lineage`, `confidence`, plus the embedding columns below |
+
+  A new dimension is a registry row, never a migration. Evidence stays a blob in R2, keyed by
+  digest. *Decided 2026-11-06: tables, with vectors.*
+- **Vectors** (decided 2026-11-06). These follow the **current** pgvector convention, migration
+  `1256_memory_embedding_1024.sql` and `MEMORY_VECTOR_SPACES`
+  (`memoryEmbeddingBackfill.ts:14-18`), not the legacy 1536 space of 1134:
+  - the default bge-m3 1024-dimension space;
   - `embedding_model` and `embedded_at` columns;
   - an HNSW index with `vector_cosine_ops`;
-  - a partial "unembedded" index for the backfill sweep.
+  - a partial "unembedded" index;
+  - the resumable keyset backfill sweep.
+- **`run_delta_findings.embedding`** embeds the finding's canonical card text: rule, anchor,
+  normalized snippet and evidence summary. It is used for similar findings across runs and
+  repos, duplicate-finding collapse, and retrieving past fixes for *Fix with agent*.
+  - A write never fails for lack of a vector.
+  - The read filters on `embedding_model`.
+  - The table is registered as one more space and row in `MEMORY_VECTOR_SPACES` and its sweep.
+    The sweep is not copied.
+  - Locally, the same cards go through the deterministic knowledge index, so offline similarity
+    works without the server.
+- **Run features are not a vector column.** A fixed-width `vector(k)` would break on every
+  feature-schema change. `RunFeatures` are owned by the run-outcome context (D1) as rows of
+  `run_features(run_id, feature_schema_version, values real[])`.
+  - k-NN (D10.2) and the anomaly score (D2.5) run per repo over at most a few thousand rows.
+  - They are computed in the application layer through the read-through cache, keyed by
+    `(repo, schema version, latest run)`.
+  - Euclidean distance on standardized values. No ANN index is needed at that scale.
+- **Retention.**
+  - `run_deltas`, `run_delta_dimensions` and `run_delta_findings`: 2 years.
+  - R2 evidence: 1 year.
+  - `run_features` and labels: kept while consent holds.
+  - Person-score audit rows: 2 years.
 
-  Two columns are added:
-
-  | Column | Content | Used by |
-  |---|---|---|
-  | `run_delta_findings.embedding` | Embedding of the finding's canonical card text (rule, anchor, normalized snippet, evidence summary), through the ONE pinned embedding module (`api/src/application/memory/memoryEmbedding.ts`) | "Similar findings across runs and repos", duplicate-finding collapse, retrieving past fixes for *Fix with agent* |
-  | `run_deltas.features` | `vector(k)` of the standardized `RunFeatures` (D1). This is numeric, not a text embedding, and is versioned by `feature_schema_version`. | k-NN similar runs (D10.2) and the anomaly score (D2.5) as an index query instead of a scan |
-
-  Rules for both columns:
-  - A write never fails for lack of a vector; the backfill sweep fills it later.
-  - The ANN read filters on `embedding_model` or `feature_schema_version`, so vectors from two
-    spaces are never compared.
-  - The backfill sweep is **generalized**, not copied: one sweep over a registry of
-    `(table, column, composer)` rows. Today's `agent_memory` and `project_facts` sweeps
-    become rows in it.
-  - Locally, the same cards go through the deterministic knowledge index (int8 codes, exact
-    tie-break), so offline similarity works without the server.
+  All of these are registered in `sweptTables.ts` in WS11 and WS16.
 
 ---
 
@@ -938,8 +1068,15 @@ Every model in this part learns from outcomes, and outcomes cannot be reconstruc
 So labels start recording in the same workstream that ships the delta (WS7), before any model
 exists.
 
-**Features are frozen at run end.** A `RunFeatures` vector (versioned schema) is stored with
-the delta:
+**One owner.** Run features and outcome labels belong to one bounded context, **run
+outcomes**:
+- Locally: the `run-outcome` record.
+- On the server: the `run_features` and `run_outcome_labels` tables.
+- The delta references them by `runId`, and the training store reads them.
+- Nothing else keeps a copy.
+
+**Features are frozen at run end.** A `RunFeatures` vector (versioned schema) is written to
+that record:
 - **Size:** lines added and deleted, files touched.
 - **Spread:** change entropy (D2.1).
 - **Structure:**
@@ -949,7 +1086,8 @@ the delta:
   - cross-partition edges changed.
 - **History:**
   - churn over 90 days of the touched files;
-  - count of past follow-up fixes in those files;
+  - count of past follow-up fixes in those files, read **as of run end** (labels finalized
+    before `finalizedAt` only, so the feature never sees the future);
   - age of the touched code.
 - **Delta:**
   - introduced, resolved and changed counts per dimension;
@@ -965,7 +1103,7 @@ the delta:
 - **People** (decided 2026-11-06): requester, approver, reviewer and agent ids, plus
   experience features. Experience means prior runs in the repo, prior changes to the touched
   files, and tenure in the repo.
-  - These are stored with the features, under the access rules of D15.
+  - These are stored with the features, under the access rules of D14.
   - The trained artifact contains no code, no paths and no person ids: only aggregate
     experience values.
 
@@ -974,7 +1112,7 @@ the delta:
 | Label | How it is derived | Window |
 |---|---|---|
 | `reverted` | A later commit reverts the run's commit, or more than 50% of the run's added lines are deleted | 30 days |
-| `followup-fix` | **SZZ** (Śliwerski, Zimmermann, Zeller):<br>1. For each later *fix* change, blame the lines it modifies at its parent.<br>2. A fix is a bug-type ticket, a commit message matching the fix registry, or a run started from a delta finding's *Fix with agent*.<br>3. Lines whose facts-hash did not change (comments, whitespace) are ignored, using B1 early cutoff.<br>4. Blamed lines map back to the run through `runCommitMarker` and the run's change set. | 30 days |
+| `followup-fix` | **SZZ** (Śliwerski, Zimmermann, Zeller):<br>1. For each later *fix* change, blame the lines it modifies at its parent.<br>2. A fix is a bug-type ticket, a commit message matching the fix registry, or a run started from a delta finding's *Fix with agent*.<br>3. Lines whose facts-hash did not change (comments, whitespace) are ignored, using B1 early cutoff.<br>4. Blamed lines map back to the run through **per-run commit attribution**:<br>• when a commit includes content whose normalized hash equals a run's `afterHash` for that path, the run's change set records `{commitSha, path}`;<br>• the VSIX records this at commit time through the git extension API;<br>• the cloud runtime records it at `cloudFinalize`.<br>`runCommitMarker` is per task and cloud-only (`cloudFinalize.ts:219`), so it is not used. Making it per run is the separately logged defect in ROADMAP (branch residue), and WS16 closes both. | 30 days |
 | `ci-red-after-merge` | The first CI run on the merged commit fails in a job touching the changed area | 7 days |
 | `review-rejected` | PR review (PRD 23) requests changes on the run's PR | until the PR closes |
 | `finding-actioned` / `finding-marked-wrong` / `finding-waived` | Panel actions (C11) | immediate |
@@ -1018,9 +1156,12 @@ D = |A + I − 1|
 
 **D2.4 Capture–recapture estimate of undetected problems.** For a **detector pair**
 registered as covering the same scope and finding kinds:
-- taint-lite × Semgrep (security);
-- knip × the `unused-export` rule;
-- jscpd × `near-duplicate`.
+- taint-lite × Semgrep (security), with both mapped to the C3 anchor scheme;
+- jscpd (token clones) × `near-duplicate` (vector similarity).
+
+A pair qualifies only if the two detectors use **different methods**. knip × `unused-export`
+is excluded, because both compute the same definition and their overlap says nothing about
+what is missed.
 
 Let `n₁` and `n₂` be the findings each reports, and `m` those both report, matched by anchor.
 The Chapman bias-corrected estimator:
@@ -1035,16 +1176,15 @@ undetected ≈ N̂ − (n₁ + n₂ − m)
 - It is always labelled ≈, because the two detectors are rarely truly independent, and the
   estimate is biased low when they share blind spots.
 
-**D2.5 Run anomaly score.** The Mahalanobis distance of the run's standardized `RunFeatures`
-from the repo's past runs:
-
-```
-d² = (x − μ)ᵀ Σ̂⁻¹ (x − μ)
-```
-
-- `Σ̂` is the Ledoit–Wolf shrinkage covariance, which stays stable with few runs.
-- A run is flagged "unusual for this project" when `d² > χ²₀.₉₉(k)`, with *k* the number of
-  features.
+**D2.5 Run anomaly score.** This **extends memory-engine's existing `ml/tasks/run_anomaly`
+task** and its `anomaly_composite` (robust-z plus EWMA) over the run's `RunFeatures`. It is
+not a new implementation.
+- The composite gains a Mahalanobis term for correlated features:
+  `d² = (x − μ)ᵀ Σ̂⁻¹ (x − μ)`, with `Σ̂` the Ledoit–Wolf shrinkage covariance, computed on
+  log-transformed count features.
+- **Threshold.** The flag fires when the score exceeds the repo's own **empirical 99th
+  percentile** of past scores, computed leave-one-out. The χ² quantile is not used, because
+  skewed count features with *k* close to *n* break its normality assumption.
 - The top contributing features explain the flag.
 - It needs at least 30 past runs.
 
@@ -1056,6 +1196,8 @@ Each rule *r* has precision `θᵣ ~ Beta(α₀, β₀)`.
   start for a new rule or a new repo.
 - **Votes.** `finding-actioned` or `finding-waived` counts as a true positive (TP);
   `finding-marked-wrong` counts as a false positive (FP).
+  - Votes are counted **once per finding lineage, per voter**: the latest vote wins.
+  - A persisting finding shown in ten runs is one observation, not ten.
 - **Posterior:**
 
   ```
@@ -1065,8 +1207,7 @@ Each rule *r* has precision `θᵣ ~ Beta(α₀, β₀)`.
 - **Demote** to `info` when the upper 90% credible bound falls below 0.6. **Restore** when the
   lower bound rises above 0.8.
 - The bounds come from the regularized incomplete beta inverse, computed deterministically.
-- This replaces §10's fixed "20% for 2 weeks" rule. A rule with 3 votes no longer moves; a
-  rule with 300 moves as soon as the evidence says so.
+- A rule with 3 votes does not move. A rule with 300 moves as soon as the evidence says so.
 - Per-repo posteriors shrink toward the global one, so one noisy repo cannot demote a rule
   everywhere.
 
@@ -1096,20 +1237,30 @@ P(followup-fix ∨ reverted | x) = σ(wᵀz + b),   z = (x − μ) / s   (stored
 loss = −Σ [yᵢ log pᵢ + (1 − yᵢ) log(1 − pᵢ)] · cᵢ + λ‖w‖²
 ```
 
-- `cᵢ` is the inverse class-frequency weight.
+- `cᵢ` is the inverse class-frequency weight. Class weighting distorts probabilities, so **D4
+  calibration is mandatory after every fit**, on a held-out window. Only calibrated
+  probabilities are shown or used.
+- The fit **extends memory-engine `ml/classical/logistic.ts`**, adding L2, class weights and
+  IRLS where missing. It is registered as a memory-engine `ml/tasks` entry, `run_risk`, per
+  the rule that the ML task catalog lives in builderforce-memory.
 - The fit is Newton/IRLS with a fixed iteration cap. λ is chosen by **rolling-origin
   cross-validation**: train on the past and validate on the next month, with no random
   splits, so the future never leaks into training.
 
 **D5.2 Explanations.** The contributions `wⱼ zⱼ`, the top 3 rendered as reasons, for example
 "spread across 9 files (entropy 0.92)" or "touches 2 entry points".
+- **Person and experience features are never rendered** as a reason on the run card. They
+  still count in the probability.
+- People-related information appears only on D14 surfaces, under D14's access rules.
 
 **D5.3 Replacing blast radius `v1`.** The model replaces C10 `v1` as the risk band only when,
 on a hold-out of at least 500 final-labelled runs, it beats `v1` on all three of:
 - PR-AUC;
 - Brier score;
-- **effort-aware recall**: the share of bad runs caught when reviewing the riskiest 20% of
-  changed lines (Popt).
+- **effort-aware recall at 20%**: the share of bad runs caught when reviewing the riskiest
+  runs that together hold 20% of changed lines.
+- **Popt** is also reported: the normalized area between the model's effort-recall curve and
+  the optimal and worst curves (Kamei et al.). It is not used in the gate.
 
 Until then, `v1` stays and the model's output is shown only as a secondary "predicted risk".
 
@@ -1200,13 +1351,21 @@ over run index *t*:
 - `learned-routing` already does bandit selection for models. Both use the one sampler in
   the builderforce-memory `stats` module.
 
-**D9.2 Sequential testing for benchmarks** (Wald's SPRT).
-- Hypotheses: `H₀: shift ≤ 0` against `H₁: shift ≥ δ` (δ = the metric's warn threshold).
-- α = 0.01, β = 0.05.
-- Boundaries `A = (1 − β)/α` and `B = β/(1 − α)` on the likelihood ratio.
-- Minimum 5 and maximum 30 interleaved sample pairs.
-- When stopped early, the SPRT decision is reported, not a fixed-sample Mann–Whitney p-value,
-  which would be invalid after optional stopping. At the maximum, C6.2 reporting applies.
+**D9.2 Sequential testing for benchmarks: a sign-test SPRT.** This avoids assuming a
+distribution for timings.
+- For each interleaved pair, `sᵢ = 1` if after is slower than before by more than δ/2, else
+  `sᵢ = 0`. Pairs within ±δ/2 are dropped as ties. δ is the metric's warn threshold.
+- Hypotheses on `π = P(sᵢ = 1)`: `H₀: π = 0.5` against `H₁: π = π₁` (default 0.75). This is a
+  simple-versus-simple Bernoulli SPRT with the exact likelihood ratio
+  `Λₙ = Π (π₁/0.5)^{sᵢ} ((1−π₁)/0.5)^{1−sᵢ}`.
+- α = 0.01, β = 0.05. Wald boundaries are `A = (1 − β)/α` and `B = β/(1 − α)`. The same test
+  runs mirrored for improvements.
+- Minimum 5 and maximum 30 pairs. **Truncation at 30 makes the realized error rates differ
+  from α and β.** The realized rates for these boundaries and this cap are computed once by
+  seeded simulation and recorded in the metric registry next to the thresholds.
+- When stopped early, the SPRT decision is reported with `method: 'sprt-sign'`, not a
+  fixed-sample p-value, which would be invalid after optional stopping. At the cap, C6.2
+  reporting (Wilcoxon signed-rank) applies.
 
 ### D10. What to look at first
 
@@ -1252,7 +1411,7 @@ view. All strings are localized, and the theme and 360 px rules apply as in C11.
 - **Kill switch.** Per model, in the registry.
 - **Audit.** Every prediction is logged with its model version and `inputDigest`, so any shown
   prediction can be replayed.
-- **People.** People are scored only through D15, never as a side output of another model.
+- **People.** People are scored only through D14, never as a side output of another model.
   The person-score view shows only risk-adjusted, shrunk and interval-bounded figures, never
   raw counts as a league table.
 
@@ -1264,34 +1423,53 @@ builderforce-memory already owns the deterministic retrieval maths (BM25, MMR, d
 knowledge graph's PageRank, and every Builderforce package that needs these already depends on
 it. Graph-level predictions (PRD 38 › Predicted measures) call this module at graph build.
 
-The module is pure and deterministic: seeded PRNG (xoshiro128**), fixed iteration caps,
-quantized outputs. It holds:
+**Reuse first.** builderforce-memory's `memory-engine` already has the classical ML catalog in
+`ml/classical`: logistic, linear, kNN, EWMA, robust-z, anomaly composite, isolation forest,
+GBM, naive Bayes and k-means. Its task catalog in `ml/tasks` already includes `run_anomaly`,
+`local_success` and `experience`. So:
+- The `stats` module holds **only what that catalog lacks**. It imports, and never
+  re-implements, the `ml/classical` primitives.
+- Where `ml/classical` needs more (L2, class weights or IRLS in `logistic.ts`; a Mahalanobis
+  term in `anomaly_composite.ts`), it is extended in place.
+- Part D's *models* are registered as `ml/tasks` entries (`run_risk`, `case_mix`,
+  `finding_rank`, `check_scheduler`). The run anomaly score extends the existing `run_anomaly`.
 
-- **Distributions:** sigmoid; logit; Beta posterior and quantile (regularized incomplete beta
-  inverse); χ² quantile.
-- **Fitting:** logistic regression (IRLS with L2, class weights); Bayesian logistic with a
-  Laplace posterior; Platt scaling; isotonic regression (PAV).
-- **Non-parametric tests:** Mann–Whitney U and Hodges–Lehmann (moved here from C6.2); seeded
-  bootstrap CI; SPRT.
-- **Time series:** EWMA; CUSUM; Bayesian online change-point detection.
-- **Multivariate:** Mahalanobis with Ledoit–Wolf shrinkage; PSI.
+The module is pure and deterministic: seeded PRNG (xoshiro128**), fixed iteration caps,
+quantized outputs. **New in `stats`:**
+
+- **Distributions:** Beta posterior and quantile (regularized incomplete beta inverse); Gamma
+  quantile; exact Poisson (Garwood) interval.
+- **Fitting:** Bayesian logistic with a Laplace posterior; Platt scaling; isotonic regression
+  (PAV).
+- **Tests:** Wilcoxon signed-rank and paired Hodges–Lehmann; seeded (paired) bootstrap CI;
+  sign-test SPRT.
+- **Time series:** CUSUM; Bayesian online change-point detection. EWMA is reused from
+  `ml/classical`.
+- **Multivariate:** Ledoit–Wolf shrinkage; PSI.
 - **Information theory:** Shannon entropy.
 - **Estimators:** Chapman / Lincoln–Petersen; Kaplan–Meier with Greenwood variance;
-  Goel–Okumoto MLE.
-- **Scores:** Brier; ECE; PR-AUC; NDCG; Popt.
+  Goel–Okumoto MLE; Gamma–Poisson empirical Bayes.
+- **Scores:** Brier; ECE; PR-AUC; NDCG; Popt; effort-aware recall.
 - **Policies:** Thompson sampling.
 
-Before WS15 starts, existing implementations must be found and **migrated, not
-duplicated**, at minimum `packages/prefetch/src/calibrate.ts` and the sampler in
-`packages/learned-routing`.
+**Migrate, then delete, every existing copy** in the same workstream, with their tests run
+unchanged:
+- `packages/prefetch/src/calibrate.ts`;
+- the learned-routing Thompson sampler (`exploration.ts`);
+- `packages/difficulty-router/src/head.ts` (a logistic head, which moves onto
+  `ml/classical/logistic`);
+- `packages/pipeline-route/src/score.ts`, where it duplicates a primitive;
+- `wilsonInterval` in `api/src/domain/replay/prescriptions/impact.ts`;
+- the seeded layout RNG in `packages/knowledge-graph-view` `layout3d.ts`, which moves onto the
+  shared PRNG.
 
-### D15. People scores for managers
+### D14. People scores for managers
 
 *Decided 2026-11-06: managers need people scored.* This covers humans and agents alike.
 An agent is a first-class worker here: the manager is an agent, and agents are hired and
 unhired. The section defines how scoring is done fairly enough to act on.
 
-**D15.1 Attribution.** Every run records its roles:
+**D14.1 Attribution.** Every run records its roles:
 - `requester`: who started it;
 - `approvers`;
 - `reviewer` (PRD 23);
@@ -1302,7 +1480,7 @@ Each outcome label (D1) and each delta finding is attributed to every role on th
 a score is always reported **per role**. Being the approver of a reverted run is a different
 fact from being its requester.
 
-**D15.2 Measures** per person or agent, per role, per period (rolling 90 days):
+**D14.2 Measures** per person or agent, per role, per period (rolling 90 days):
 
 | Measure | Definition |
 |---|---|
@@ -1315,7 +1493,7 @@ fact from being its requester.
 | Fix effectiveness | Share of *Fix with agent* runs whose finding is resolved in the next delta |
 | Approval accuracy (approvers) | Share of approved runs not later `reverted` or `followup-fix` |
 
-**D15.3 Risk adjustment: observed ÷ expected.** Raw rates punish whoever takes the hard
+**D14.3 Risk adjustment: observed ÷ expected.** Raw rates punish whoever takes the hard
 work. Each rate is **indirectly standardized**, the method used for hospital standardized
 mortality ratios:
 
@@ -1324,61 +1502,92 @@ E = Σ_{runs of p} P̂(outcome | case-mix features)       O = observed count
 SR = O / E          95% CI: exact Poisson (Garwood) on O, divided by E
 ```
 
-- The **case-mix model** is a separate logistic model of the same form as D5. It uses only
-  *change* features: size, entropy, centrality, entry points, churn, layer and dimension
-  flags.
-- It deliberately **excludes person and experience features**. Otherwise it would explain
-  away the very person effect being measured.
+- The **case-mix model** (`ml/tasks/case_mix`) is a separate logistic model of the same form
+  as D5. It uses every factor **outside the scored person's control in their role**:
+  - *change* features: size, entropy, centrality, entry points, churn, layer and dimension
+    flags;
+  - for human roles, also the **executing agent and model tier**. A requester or approver is
+    not penalized for an agent's quality.
+- It deliberately **excludes the scored person's own identity and experience features**.
+  Otherwise it would explain away the very person effect being measured.
+- It is trained in WS22 from the WS16 labels. It does not wait for the D5 gate.
 - The D5 risk model may use experience features for prediction. The two models are
   different by design.
 
-**D15.4 Shrinkage.** Small samples are pulled toward the team. The rate posterior is
+**D14.4 Shrinkage.** Small samples are pulled toward the team. The rate posterior is
 Gamma–Poisson (empirical Bayes):
 
 ```
-λ_p | data ~ Gamma(α₀ + O, β₀ + E)        shown: posterior mean of λ_p and its 90% interval
+λ_p | data ~ Gamma(α₀ + O, β₀ + E)        shown: posterior mean of λ_p and its 95% interval
 ```
 
 - The prior comes from everyone in the same tenant and role.
-- A person with 3 runs therefore shows close to the team average, with a wide interval,
-  rather than an extreme rate.
-- Below 20 final-labelled runs in the window: `insufficient-data`.
+- **Minimum sample.** Below 20 final-labelled runs in the window, the score is
+  `insufficient-data` and is not shown.
+- **Shrinkage still matters above the minimum.** A person with 25 runs is pulled toward the
+  team average in proportion to their small expected count, rather than showing an extreme
+  rate.
+- **One interval rule.** The posterior interval is 95%, matching the inner funnel limit. The
+  99.8% funnel limit is used only to call a point "outside limits".
 
-**D15.5 Presentation.**
+**D14.5 Presentation.**
 - **Funnel plot** (Spiegelhalter, 2005): standardized ratio against expected volume, with
   95% and 99.8% control limits. Only points outside the limits are called out.
 - A ranked table is never the default view. When a table is shown, it is sorted by the
   posterior, with the interval drawn, and an "outside limits" flag.
 - Every score links to the runs behind it and their deltas, so a manager can see *why*.
 - The trend per person uses the D7 control charts: is this person's ratio drifting?
-- Surface: the manager **accountability tab**, extended rather than duplicated, for human
-  managers and for the manager agent's coaching and stall-triage loop.
+- **Surface.** A **People** view on the team (`dev_teams`) page, which is the only
+  manager-to-reports structure. It is not the ticket "Sign-off & Accountability" tab
+  (`AccountabilityTab.tsx`), which is per ticket. The manager agent reads the same scores
+  through an application port for its coaching and stall-triage loop.
 - The manager agent may use agent scores to route work and to coach. It may not act on a
   *human's* score automatically.
 
-**D15.6 Access and audit.**
-- Visibility uses the RBAC role gates (`resolveMembership`, `RoleGate`):
+**D14.6 Access and audit.**
+- **Reporting line.** Today's only reporting line is `dev_teams.manager_id` → contributors
+  (`schema/canvas.ts:850`).
+  - WS22 adds one application-layer policy, `mayViewPersonScore(viewer, subject)`.
+  - It resolves a contributor to the user and agent identities that runs record. Where that
+    mapping is missing, WS22 adds it as an id reference, not a copied table.
+  - The server enforces the policy in the route. The frontend `RoleGate` only disables the UI.
+  - `resolveMembership` (private in `gatewayAccess.ts:128`) is not reused for this; it answers
+    a different question.
+- **Who sees what:**
   - a person sees their own scores;
-  - a manager sees their reports;
+  - a manager sees their team's contributors;
   - a tenant admin sees everyone in the tenant;
   - superadmin sees nothing cross-tenant without the existing audited cross-tenant scope.
 - Every view of another person's score is audit-logged (viewer, subject, time).
-- A tenant setting can disable **human** scoring per tenant, for example where a works
-  council or local law requires it. Agent scoring cannot be disabled.
+- **Human scoring is off by default for enterprise plans** and on by default for others.
+  - A tenant admin can switch it on or off.
+  - Enabling it on an enterprise tenant shows a DPIA notice: lawful basis, purpose limited to
+    coaching and capacity, and the works-council consultation the tenant owns.
+  - Agent scoring cannot be disabled.
+- **Data-subject rights.**
+  - A person can export their own scores, inputs and the audit rows about them (access).
+  - On erasure, their person scores and person-feature values are deleted. Their identity in
+    run roles is pseudonymized, so aggregate models are not invalidated. Audit rows keep the
+    pseudonym.
 - No automatic consequence follows from a human score: no blocking, no reassignment and no
   notification to others.
 
-**D15.7 Done-checks.**
+**D14.7 Done-checks.**
 - [ ] A person with 3 runs shows `insufficient-data`. A person with 25 runs, all
       high-risk, does not come out worse than the team on raw size alone (a case-mix test).
-- [ ] Removing every person and experience feature from the case-mix model is enforced by a
-      unit test on its feature schema.
+- [ ] An approver whose runs all used a weak agent and model tier is not flagged when the
+      agent is the cause (a case-mix test).
+- [ ] A unit test on the case-mix feature schema enforces that it contains none of the scored
+      person's identity or experience features.
+- [ ] Erasure: after the person's erasure request, their scores and person features are gone
+      and their run roles are pseudonymized.
+- [ ] An enterprise tenant has human scoring off by default.
 - [ ] A manager cannot see a non-report's score (an RBAC test), and each view writes an
       audit row.
 - [ ] With the tenant setting off, every human-score endpoint returns 404 for that tenant.
       Agent scores are unaffected.
 
-### D14. Adoption order
+### D15. Adoption order
 
 | Phase | Ships | Needs |
 |---|---|---|
@@ -1387,6 +1596,7 @@ Gamma–Poisson (empirical Bayes):
 | P3 | D5 risk model, survival view, D10.2 similar runs | At least 500 final-labelled runs (global) |
 | P4 | D9 scheduling, D10.1 ranking | WS12 (the optional tier exists) and click data |
 | P5 | D6 naturalness, D8 reliability growth | A logprob-capable local model; at least 10 runs per dimension |
+| P2–P3 | D14 people scores: case-mix model, then views | WS16 labels; at least 20 final-labelled runs per scored person |
 
 ---
 
@@ -1396,7 +1606,8 @@ Gamma–Poisson (empirical Bayes):
 |---|---|---|
 | `FileFacts` v3 (`exports`, `calls`, `entryPoints`, `capabilityImports`, `testFacts`) | memory `/knowledge` (types), agent-tools (extractors) | Extended; `EXTRACTOR_VERSION = 3` |
 | Stat manifest, Merkle directory hashes, git blob alternate keys | memory `/knowledge` `plan` | New |
-| Segment fact store (`objects/` + `index.sqlite` for manifest and derived) | memory `/knowledge` stores + VSIX `knowledgeStores.ts` | Replaces the single snapshot file as the system of record. The snapshot becomes a projection. |
+| `FactStorePort` (objects, manifest transaction, derived, `canonicalDump`) | memory `/knowledge` (port only; stays Worker-safe) | New |
+| Node fact-store adapter (`objects/` + `index.sqlite`) | VSIX and on-prem, on the G03 store (`localRecordTransaction.ts`) | Replaces the single snapshot file as the system of record. The snapshot becomes a projection. |
 | `FactRule` (scope, reads, version) | memory `/knowledge` | Formalizes `findings.ts` and `codeFindings.ts` |
 | `FindingIdentity` (`anchor`, `members`), lineage matcher | memory `/knowledge` | New. jscpd and knip ids migrate to it. |
 | `comparability.ts` | memory `/knowledge` | Merges `compareAnalysis` and the baseline `comparable` |
@@ -1408,20 +1619,27 @@ Gamma–Poisson (empirical Bayes):
 | Capability visibility hook and context keys | `clients/vscode` + `packages/local-first` capability matrix | New. Replaces `signedIn` gating where it is not account-only. |
 | `Prediction`, `RunFeatures` (versioned schema), `RunOutcomeLabel`, model artifact format | `packages/run-delta/src/predict/*` | New (Part D) |
 | `run-outcome` local entity type | `packages/local-first` records | New union member |
-| Statistics primitives | builderforce-memory `stats` module (`@seanhogg/builderforce-memory/stats`) | New module, no new package. Absorbs `prefetch/calibrate.ts` and the learned-routing sampler. |
-| Verdict/predict layering guard | `scripts/check-run-delta-layers.mjs` | New |
+| Statistics primitives | builderforce-memory `stats` module (`@seanhogg/builderforce-memory/stats`) on top of memory-engine `ml/classical` | New module, no new package. Holds only what `ml/classical` lacks, and absorbs the copies listed in D13. |
+| Part D models | memory-engine `ml/tasks`: `run_risk`, `case_mix`, `finding_rank`, `check_scheduler`; `run_anomaly` extended | New task entries |
+| Server tables | `run_deltas`, `run_delta_dimensions`, `run_delta_findings` (+ embedding in the 1024 space), `run_features`, `run_outcome_labels`, `person_score_views` (audit) | New, expand migrations, registered in `sweptTables.ts` |
+| Verdict/predict layering guard | `scripts/check-run-delta-layers.mjs`, wired into `pnpm run check` and CI (WS15) | New |
+| `signedIn` allowlist guard | `clients/vscode/scripts/check-signed-in-when.mjs`, wired into the VSIX check and CI (WS1) | New |
+| Telemetry events | `delta.computed`, `delta.card_opened`, `delta.finding_action`, `index.level_ready`, `index.plan_ms`, `offline.session` (counted locally, sent with the next granted sync batch), `prediction.shown`, `person_score.viewed`; emitted through the existing entry-point-attributed telemetry, `surface` per host | New event names. The owner is the workstream that ships each emitter. |
 
 ## 5. Code map
 
 ```
 builderforce-memory/packages/memory/src/knowledge/
   plan.ts                 + stat manifest, racy rule, Merkle dirs, git blob keys
-  stores/segmentStore.ts  NEW  content-addressed objects + manifest + derived
+  stores/factStorePort.ts NEW  port only (objects, manifest txn, derived, canonicalDump); no I/O here
   rules/factRule.ts       NEW  FactRule contract + incremental evaluator (trace + early cutoff)
   findings.ts             → rules/*.ts (one rule per file), findingIdentity.ts NEW
   lineage.ts              NEW  deterministic lineage matcher
   comparability.ts        NEW  (absorbs Builderforce agent-tools codeAnalysis.compareAnalysis)
   review.ts               analyzer failure recorded, never swallowed; level reporting
+builderforce-memory/packages/memory/src/stats/          NEW  only what ml/classical lacks (D13)
+builderforce-memory/packages/memory-engine/src/ml/classical/   logistic.ts (+L2, weights, IRLS), anomaly_composite.ts (+Mahalanobis)
+builderforce-memory/packages/memory-engine/src/ml/tasks/       + run_risk, case_mix, finding_rank, check_scheduler; run_anomaly extended
 
 Builderforce.ai/packages/
   run-delta/              NEW  pure: computeRunDelta, dimensions/, registry/, headline.ts, blastRadius.ts, sarifExport.ts
@@ -1433,25 +1651,32 @@ Builderforce.ai/packages/
   run-delta/src/predict/           NEW  features.ts, labels/ (szz.ts, revert.ts, ci.ts, review.ts), risk.ts, survival.ts,
                                         captureRecapture.ts, anomaly.ts, rulePrecision.ts, naturalness.ts, ranking.ts,
                                         similarRuns.ts, scheduler.ts, trends.ts, reliabilityGrowth.ts, models/ (artifacts)
-  stats/                  NEW  pure maths (D13); prefetch/calibrate.ts and learned-routing sampler migrate here
+  (no packages/stats — the maths is in builderforce-memory, D13; prefetch calibrate.ts, learned-routing exploration.ts,
+   difficulty-router head.ts, pipeline-route score.ts, knowledge-graph-view layout3d RNG migrate there)
+  sarif/ registered in scripts/check-source-package-graph.mjs aliasing for api and agent-tools
 
 Builderforce.ai/clients/vscode/src/
   knowledge/backgroundIndexer.ts   NEW  watcher + reconcile + priority scheduler (B2, B6)
   knowledge/knowledgeService.ts    linked = selected ∧ session ∧ synchronize (A2)
-  knowledge/knowledgeStores.ts     segment store at .builderforce/cache/ + index.sqlite (B4)
+  knowledge/factStoreAdapter.ts    NEW  FactStorePort on localRecordTransaction (G03) at .builderforce/cache/ (B4)
+  knowledge/knowledgeStores.ts     reads through the port; one-time import of .builderforce/knowledge/*.json (B4 migration)
+  power/powerSource.ts             NEW  OS power-source query, cached (B6)
   package.json                     engines.vscode ^1.101.0; configurationDefaults watcher/search excludes
   runDelta/runDeltaHost.ts         NEW  DeltaPorts over the fact store, pre-images, before-tree export
   runChangeBaseline.ts             + dirty pre-image capture (C1.3)
   brainRunHostPorts.ts             finalize → computeRunDelta → card
   codebaseScan.ts                  → projection of the fact store (B9); scan.json + versionToken deleted
   capabilityContext.ts             NEW  capability → context keys (A1)
-  installRunChangeSets.ts, runChangeSetRecorder.ts   DELETE (zero references, verified first)
+  installRunChangeSets.ts (+ installRunChangeSets.test.ts), runChangeSetRecorder.ts   DELETE (zero production references, verified first)
+  l10n/bundle.l10n.*.json, package.nls.*.json   VSIX strings for new commands/settings, all locales (plus webview labels.ts catalogs)
 
 Builderforce.ai/api/
   src/domain/security/scanReportParsers.ts   SARIF parsing moves to packages/sarif
   run delta persistence + importer            (WS11, Opus-reviewed)
   run outcome labels: SZZ/revert/CI/review label jobs over the ops DB (WS16, Opus-reviewed)
   scripts/train-run-models.cjs               offline training driver → digest-named model artifacts (WS18)
+  application/people/mayViewPersonScore.ts   the ONE person-score visibility policy (WS22)
+  application/maintenance/sweptTables.ts     + retention rows for the new tables (WS11, WS16, WS22)
 ```
 
 No module in this map may grow past about 400 lines. Dimensions, rules and adapters are one
@@ -1496,27 +1721,27 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 
 | WS | Scope | Depends on | Review |
 |---|---|---|---|
-| WS1 | **Offline closure** (A1–A5): capability hook and context keys; linked-means-granted; bundled analyzers, with the size decision first; scan without key; visualizer capability-first checks; delete the two unreferenced change-set files | Decision §12.1, §12.4 | Sonnet |
-| WS2 | **Change detection + segment store** (B2, B4) in memory: stat manifest, racy rule, Merkle, git keys, segment store, snapshot as projection, migration of existing `.builderforce/knowledge/*.json`. Publish memory; bump the VSIX pin. | — | **Opus** (storage format) |
-| WS3 | **Background indexer** (B6): watcher, reconcile, priority scheduler, levels, budgets, pause rules, level status to the visualizer | WS2 | Sonnet |
-| WS4 | **Extraction v3 + rules** (B3, B5): tree-sitter queries for complexity, routes, entry points, capability imports, test facts; `FactRule` evaluator; the existing findings ported to rules; the determinism oracle test (B8.6) | WS2 | Sonnet |
+| WS1 | **Offline closure** (A1–A5): capability hook and context keys plus the `signedIn` allowlist guard; linked-means-granted; bundled analyzers (with `typescript@5.6.3`, size measured before and after); both `maybeScan` early returns removed; visualizer capability-first checks; `engines.vscode ^1.101.0`; delete the two unreferenced change-set files and the test; VSIX l10n bundles | — (runs in parallel with WS2) | Sonnet |
+| WS2 | **Change detection + fact store** (B2, B4): EOL-normalized hashing, BigInt stat manifest, racy rule, Merkle, git blob hints and multi-root (memory `plan`); `FactStorePort` in memory; the Node adapter on the G03 `localRecordTransaction` store (wires G03); `.builderforce/cache/.gitignore`, watcher and search excludes; the object sweep; migration of `.builderforce/knowledge/*` for the VSIX, knowledge index, on-prem and `uploadLocalSnapshot`; `canonicalDump`. Publish memory and bump the pin. | — | **Opus** (storage format) |
+| WS3 | **Background indexer** (B6): watcher, reconcile, priority scheduler, levels, budgets, pause rules, the `powerSource` port, level status to the visualizer, `index.*` telemetry | WS2 | Sonnet |
+| WS4 | **Extraction v3 + rules** (B3, B5): tree-sitter queries for complexity, routes, entry points and guard chains, capability imports, test facts; fact kinds (`structure`, `body`, `content`); composite `EXTRACTOR_VERSION` including grammar versions; WASM parser in the worker; `FactRule` evaluator with `reads` and `hops`; the existing findings ported to rules; the determinism oracle over `canonicalDump` (B8.6), including an autocrlf fixture | WS2 | Sonnet |
 | WS5 | **Consolidation** (B9): codebaseScan as a projection; repo-map `FileFacts` convergence; VSIX stops importing the repo-map extract. Existing tests run unchanged. | WS3, WS4 | Sonnet |
-| WS6 | **Finding identity v2, lineage, comparability** (C3, C9), with jscpd and knip ids migrated and the VSIX baseline `comparable` | WS4 | **Opus** (cross-package) |
-| WS7 | **run-delta core** (C1, C2, C4, C10): before resolution, pre-images, before-tree export, impact set, verdicts, headline, blast radius, digest property test | WS6 | **Opus** (cross-package, storage) |
-| WS8 | **Security dimension** (C5): entry-point facts, guard, source, sink and sanitizer registries, taint-lite, capability delta, osv and gitleaks adapters, config rules, STRIDE template | WS7 | **Opus** (security) |
-| WS9 | **Performance, -ilities and quality dimensions** (C6.1, C7, C8.1–C8.3), as one Sonnet brief per dimension | WS7 | Sonnet |
+| WS6 | **Finding identity v2, lineage, comparability** (C3, C9): `unusedCodeRule` split per item; anchor-kind and minimum-member rule; jscpd and knip ids migrated; `compareAnalysis` plus `CodeAnalysisSnapshot` types moved to memory; the VSIX baseline `comparable` | WS4 | **Opus** (cross-package) |
+| WS7 | **run-delta core** (C1, C2, C4, C10): full-sha256 baseline, pre-images, before-tree export, edge cases, the in-house rename matcher, attribution filter, impact set, verdicts, headline, blast radius, quantized digest property test; **the autonomous-run block policy (§12.5)**; `delta.computed` telemetry | WS6 | **Opus** (cross-package, storage) |
+| WS8 | **Security dimension** (C5): guard, source, sink and sanitizer registries, taint-lite, capability delta, osv and gitleaks adapters, config rules, STRIDE template; the `guard-removed` block wired into the WS7 policy | WS7, and WS4 entry-point and guard-chain facts | **Opus** (security) |
+| WS9 | **Performance, -ilities and quality dimensions** (C6.1, C7, C8.1–C8.3), as one Sonnet brief per dimension; the C8.2 integrity block wired into the WS7 policy | WS7, and WS4 `testFacts` | Sonnet |
 | WS10 | **Presentation** (C11): card, panel, history and trend, on VSIX and web; localization in all catalogs; both themes; 360 px | WS7 | Sonnet |
-| WS11 | **SARIF package** (C12), plus persistence and sync (C14): the `run-delta` record, the mirror importer, the `run_deltas` and `run_delta_findings` expand migration | WS7; G15–G18 | **Opus** (migration, storage) |
-| WS12 | **Optional dynamic tier** (C6.2, C8.4): benchmark runner, statistics, diff coverage, Stryker incremental, delta policy for autonomous runs | WS9 | Sonnet |
+| WS11 | **SARIF package** (C12), registered in `check-source-package-graph`, with an adapter from `NormalizedFinding` to `DeltaFinding`; plus persistence and sync (C14): the `run-delta` record, the mirror importer, the `run_deltas`, `run_delta_dimensions` and `run_delta_findings` expand migration, the 1024-space embedding registered in `MEMORY_VECTOR_SPACES`, and `sweptTables` retention | WS7; G15–G18 | **Opus** (migration, storage) |
+| WS12 | **Optional dynamic tier** (C6.2, C8.4): benchmark runner, Wilcoxon signed-rank statistics, diff coverage, Stryker incremental | WS9 | Sonnet |
 | WS13 | **Packaged offline acceptance** (A6) and cloud-run delta (C14) | WS1–WS10 | Sonnet |
-| WS15 | **builderforce-memory `stats` module and deterministic statistics** (D13, D2, D0 guard). Migrate `prefetch/calibrate.ts` and the learned-routing sampler; their tests run unchanged. | WS7 | Sonnet |
-| WS16 | **Labels pipeline** (D1): `RunFeatures` frozen at run end, the `run-outcome` record, SZZ/revert/CI/review labellers, censoring, the leakage guard, consent-scoped training store. **Starts with WS7.** | WS7, WS11 | **Opus** (storage, privacy, cross-package) |
+| WS15 | **builderforce-memory `stats` module and deterministic statistics** (D13, D2, D0 guard): only what `ml/classical` lacks; `ml/classical` extended in place; migrate and delete every copy listed in D13, with their tests unchanged; `check-run-delta-layers` wired into `pnpm run check` and CI | — (pure maths, in parallel) | Sonnet |
+| WS16 | **Labels pipeline** (D1): the run-outcomes context as one owner; `RunFeatures` frozen at run end; per-run commit attribution (VSIX git API, `cloudFinalize`), closing the per-task `runCommitMarker` defect; SZZ, revert, CI and review labellers; censoring; point-in-time features and the leakage guard; consent-scoped training store. Local records start with WS7; the server tables follow WS11. | WS7 (server half: WS11) | **Opus** (storage, privacy, cross-package) |
 | WS17 | **Rule precision, calibration, process control and reliability growth** (D3, D4, D7, D8) | WS15, WS16 | Sonnet |
 | WS18 | **Run risk model** (D5): training driver, rolling-origin validation, artifact format, quantized inference, the replace-`v1` gate, Kaplan–Meier view, model cards and drift (D12) | WS16 with at least 500 final labels | **Opus** (model governance, storage) |
 | WS19 | **Naturalness** (D6), on the prefetch logprob seam | WS15 | Sonnet |
 | WS20 | **Thompson scheduling and SPRT** (D9) | WS12, WS15 | Sonnet |
 | WS21 | **Ranking and similar runs** (D10), plus the card's Predicted block (D11), localized | WS10, WS16 | Sonnet |
-| WS22 | **People scores** (D15): role attribution, case-mix model, Gamma–Poisson shrinkage, funnel plot and table in the accountability tab, RBAC, audit and the tenant setting. Localized; both themes; 360 px. | WS16, WS18 (case-mix model) | **Opus** (auth/RBAC, privacy) |
+| WS22 | **People scores** (D14): role attribution; the contributor-to-identity mapping; `mayViewPersonScore`; the `case_mix` model (its own, not WS18's); Gamma–Poisson shrinkage; funnel plot and table on the team People view; audit; enterprise default-off with the DPIA notice; access, export and erasure; `person_score.viewed` telemetry. Localized; both themes; 360 px. | WS16 | **Opus** (auth/RBAC, privacy) |
 | WS14 | **Ship.** This is a new capability, so: a `release_notes` row (category `new`); an Idea-to-Real blog post on the template in `frontend/src/content/blog/run-your-app-on-the-canvas.md`, placing the delta in the **Measure** act of the arc (proof that a run made things better, not just different); DONE.md moves by section number. | WS10, WS13 | Session model |
 
 Version bumps and ROADMAP/DONE entries stay with the session model.
@@ -1537,8 +1762,13 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 - [ ] Saving one file in a 16k-file tree: p95 under 200 ms to updated L1/L2 facts for that
       file. Global rules are skipped when the read fact kinds did not change (asserted by a
       trace test).
-- [ ] Determinism oracle (B8.6): incremental equals scratch equals the second OS, byte for
-      byte, over 500 seeded edit sequences.
+- [ ] Determinism oracle (B8.6): the `canonicalDump` of the incremental store equals the
+      scratch build and equals a second OS (Windows with autocrlf), byte for byte, over 500
+      seeded edit sequences.
+- [ ] A body-only edit reruns `body`-reading rules (for example `io-in-loop`) and skips
+      `structure`-only rules (a trace test).
+- [ ] The repo's own `.gitignore` is untouched, and `.builderforce/cache/.gitignore` contains
+      `*`.
 - [ ] `scan.json` and its version token are gone. `codebaseScan` tests pass unchanged against
       the projection.
 - [ ] An analyzer failure shows as `not_measured` with a reason, never as zero findings.
@@ -1644,7 +1874,7 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 |---|---|
 | Bundled analyzers inflate the VSIX | Measure the size delta in WS1. Bundle only the analyzers' production dependencies, tree-shaken, and lazy-load them at L3. |
 | The cache in the repo directory loads watchers and git | `.gitignore` entry, `configurationDefaults` for `files.watcherExclude` and `search.exclude`, own watcher ignore (B4) |
-| People scores are unfair or misused | D15: case-mix standardization, shrinkage, intervals and funnel limits, RBAC with audit, the tenant switch, no automatic consequences for humans |
+| People scores are unfair or misused | D14: case-mix standardization, shrinkage, intervals and funnel limits, RBAC with audit, the tenant switch, no automatic consequences for humans |
 | Heuristic security and performance rules cause noise, and people stop reading the card | `confidence: heuristic` with ≈; per-rule precision metric with automatic demotion; waivers persist |
 | Pre-image capture of large dirty trees costs disk | Caps (1 MB per file, 50 MB per run); retention until the delta is final plus 14 days; content-addressed dedupe |
 | Background indexing slows typing (see the open slow-typing gap) | Worker thread, 50 ms slices, yield on keystroke, render-count test on the composer before WS3 ships |
@@ -1658,8 +1888,8 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 
 ## 12. Operator decisions (taken 2026-11-06)
 
-1. **Analyzer distribution: bundle** dependency-cruiser, jscpd and knip in the VSIX. The
-   analyzer-pack download in A3 is dropped.
+1. **Analyzer distribution: bundle** dependency-cruiser, jscpd and knip in the VSIX, with the
+   TypeScript version they pin. There is no download fallback.
 2. **Fact store location: the repo directory**, `.builderforce/cache/`, with the gitignore,
    watcher and search exclusions in B4. VS Code's `storageUri` has no I/O advantage; its only
    gain was keeping watcher load away, and the exclusions provide that.
@@ -1674,12 +1904,13 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
 8. **Cross-tenant training:** opt-in. Default off for enterprise plans, on for free plans,
    stated in the privacy terms.
 9. **People are scored** (managers need it). Person and experience features are allowed in
-   the D5 risk model, and D15 defines the fair scoring method:
+   the D5 risk model, and D14 defines the fair scoring method:
    - risk-adjusted;
    - shrunk toward the team;
    - shown with intervals;
    - RBAC with audit;
-   - a tenant switch for human scoring;
+   - a tenant switch for human scoring, off by default for enterprise plans, after review;
+   - data-subject access and erasure;
    - no automatic consequences for humans.
 10. **Label windows:** 30 days for `followup-fix` and `reverted`, 7 days for CI.
 
@@ -1702,7 +1933,8 @@ No decisions remain open. A new one found during implementation is added here.
 - Robert C. Martin's package metrics (Ca, Ce, instability, abstractness).
 - Change coupling and hotspots — Tornhill, *Your Code as a Crime Scene*; Gall et al. on
   logical coupling.
-- Mann–Whitney U, Hodges–Lehmann estimator, bootstrap CIs for benchmark comparison.
+- Wilcoxon signed-rank test, paired Hodges–Lehmann estimator, paired bootstrap CIs for
+  interleaved benchmark comparison.
 - Mutation testing (StrykerJS incremental mode).
 - SARIF 2.1.0 (OASIS): `baselineState`, `partialFingerprints`.
 - Just-in-time defect prediction — Kamei et al. (IEEE TSE 2013); McIntosh and Kamei (TSE 2018);
