@@ -1909,7 +1909,8 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
    - shrunk toward the team;
    - shown with intervals;
    - RBAC with audit;
-   - a tenant switch for human scoring, off by default for enterprise plans, after review;
+   - a tenant switch for human scoring, off by default for enterprise plans (EU and
+     works-council alignment, confirmed by the operator 2026-11-06);
    - data-subject access and erasure;
    - no automatic consequences for humans.
 10. **Label windows:** 30 days for `followup-fix` and `reverted`, 7 days for CI.
