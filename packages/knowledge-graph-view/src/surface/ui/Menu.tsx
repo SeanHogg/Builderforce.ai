@@ -4,7 +4,7 @@
  * keys, optional muted sub-line) or `children` for free content (role=dialog, e.g. the overlay form).
  */
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { cssVar } from '../../scene/themeColors';
 import { muted } from '../../styles';
 import { pillStyle } from './Pill';
@@ -33,6 +33,12 @@ interface MenuBase {
     variant?: 'pill' | 'accent';
     /** Arrive open. An items menu moves focus to its entry item, so the first enabled (or selected) action is focused. */
     defaultOpen?: boolean;
+    /**
+     * What the panel is positioned against: its `trigger` (default) or the nearest positioned ancestor
+     * (`container`, e.g. the status strip, for a panel that should span it). Always absolute, never fixed,
+     * so it works inside a docked host.
+     */
+    anchor?: 'trigger' | 'container';
 }
 
 const accentStyle = (open: boolean): CSSProperties => ({
@@ -45,8 +51,10 @@ export type MenuProps = MenuBase & (
     | { children: ReactNode | ((close: () => void) => ReactNode); items?: undefined; onSelect?: undefined }
 );
 
-const panel = (alignStart: boolean): CSSProperties => ({
-    position: 'absolute', [alignStart ? 'insetInlineStart' : 'insetInlineEnd']: 0, top: '100%', marginTop: 6, zIndex: 4,
+const panel = (alignStart: boolean, up: boolean): CSSProperties => ({
+    position: 'absolute', [alignStart ? 'insetInlineStart' : 'insetInlineEnd']: 0, zIndex: 4,
+    ...(up ? { bottom: '100%', marginBottom: 6 } : { top: '100%', marginTop: 6 }),
+    maxWidth: 'calc(100vw - 16px)',
     display: 'grid', gap: 2, padding: 6, minWidth: 220, background: cssVar('bg'), border: `1px solid ${cssVar('border')}`,
     borderRadius: 10, boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)',
 });
@@ -115,9 +123,25 @@ export function Menu(props: MenuProps) {
         if (open && e.relatedTarget && !root.current?.contains(e.relatedTarget as Node)) close(false);
     };
 
+    // Flip: if the panel would leave the viewport on the side it opens towards, open towards the other (measured once it is open).
+    const panelEl = useRef<HTMLDivElement>(null);
+    const [flip, setFlip] = useState({ x: false, y: false });
+    useLayoutEffect(() => {
+        if (!open) { setFlip({ x: false, y: false }); return; }
+        const el = panelEl.current, trigger = button.current;
+        if (!el || !trigger) return;
+        const r = el.getBoundingClientRect(), t = trigger.getBoundingClientRect();
+        const vw = window.innerWidth, vh = window.innerHeight;
+        if (r.width === 0 && r.height === 0) return; // not laid out (a test DOM)
+        const x = alignStart ? r.right > vw : r.left < 0;
+        const y = r.bottom > vh && t.top > vh - t.bottom;
+        if (x || y) setFlip({ x, y });
+    }, [open, alignStart]);
+
     const panelId = `${id}-menu`;
+    const container = props.anchor === 'container';
     return (
-        <div ref={root} style={{ position: 'relative', flex: 'none' }} onKeyDown={onKeyDown} onBlur={onBlur}>
+        <div ref={root} style={{ position: container ? 'static' : 'relative', flex: 'none' }} onKeyDown={onKeyDown} onBlur={onBlur}>
             <button
                 ref={button} type="button" title={title} aria-haspopup={props.items ? 'menu' : 'dialog'} aria-expanded={open} aria-controls={open ? panelId : undefined}
                 style={props.variant === 'accent' ? accentStyle(open) : pillStyle(active || open)} onClick={() => setOpen((v) => !v)}
@@ -125,7 +149,7 @@ export function Menu(props: MenuProps) {
                 {trigger}
             </button>
             {open && (
-                <div id={panelId} role={props.items ? 'menu' : 'dialog'} aria-label={label} style={{ ...panel(alignStart), ...panelStyle }}>
+                <div ref={panelEl} id={panelId} role={props.items ? 'menu' : 'dialog'} aria-label={label} style={{ ...panel(flip.x ? !alignStart : alignStart, flip.y), ...panelStyle }}>
                     {props.items
                         ? props.items.map((item) => (
                             <button

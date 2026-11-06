@@ -10,14 +10,13 @@
 import { useState, type ReactNode } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../copyText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
-import { edgeKindLabel } from '../names';
 import { cssVar } from '../scene/themeColors';
 import { CONTROL, MONO, muted } from '../styles';
 import { Pill, pillStyle, QuietButton } from './ui';
 import type { PathModel } from './path';
 import { stationNote } from './pathNotes';
 import { SequenceView } from './SequenceDiagram';
-import { pathMermaid } from './sequenceText';
+import { hopText, pathMermaid } from './sequenceText';
 import type { Station } from './stations';
 
 /** The strip's fixed height on desktop. */
@@ -28,10 +27,10 @@ export interface PathStripProps {
     step: number;
     labels: KnowledgeGraphLabels;
     onStep(n: number): void;
-    /** The line's name; absent ⇒ the title is just "Path". */
-    lineName?: string | null | undefined;
-    /** Where the line enters (its first route, else the entry station): `entryLabel(graph, station)`. */
-    entry?: string | null | undefined;
+    /** The strip's title ("Web line · GET /users"), made by the root; absent ⇒ "Path". */
+    pathTitle?: string | null | undefined;
+    /** Switches the scene to the full-size Sequence camera; the Enlarge control shows only while the Sequence toggle is on. */
+    onEnlarge?: (() => void) | undefined;
     /** The stations by id, for each stop's note. Absent ⇒ no notes. */
     stations?: ReadonlyMap<string, Station> | undefined;
     /** Opens a drawer by PANELS id; *Simulate with values* is offered only with it. */
@@ -49,13 +48,13 @@ function Action({ disabled, children, ...rest }: { disabled?: boolean; children:
     return <button type="button" disabled={disabled} {...rest} style={{ ...actionStyle, ...(disabled ? { opacity: 0.5, cursor: 'default' } : null) }}>{children}</button>;
 }
 
-export function PathStrip({ path, step, labels, onStep, lineName, entry, stations, onOpenPanel, narrow = false }: PathStripProps) {
+export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, narrow = false }: PathStripProps) {
     const s = labels.surface;
     const [sequence, setSequence] = useState(false);
     const copier = useCopyText();
     const last = path.stops.length - 1;
     const at = Math.min(Math.max(step, 0), Math.max(last, 0));
-    const title = lineName ? fillTemplate(s.path.title, { line: fillTemplate(s.lineName, { name: lineName }), entry: entry ?? path.stops[0]?.name ?? '' }) : s.pathTitle;
+    const title = pathTitle || s.pathTitle;
     const mermaid = pathMermaid(path, labels);
     const ctl = { height: `calc(${CONTROL} - 4px)`, padding: '0 10px', fontWeight: 600 } as const;
 
@@ -77,6 +76,7 @@ export function PathStrip({ path, step, labels, onStep, lineName, entry, station
                         <Action disabled={at >= last} onClick={() => onStep(last)}>{s.path.runToEnd}</Action>
                         {onOpenPanel && <Action onClick={() => onOpenPanel('simulate')}>{s.path.simulate}</Action>}
                         <Pill style={ctl} on={sequence} onClick={() => setSequence((v) => !v)}>{s.path.sequence}</Pill>
+                        {sequence && onEnlarge && <Action onClick={onEnlarge}>{s.path.enlarge}</Action>}
                         <QuietButton onClick={() => void copier.copy(mermaid)}>{labels.copyMermaid}</QuietButton>
                         <CopiedNote status={copier.status} labels={labels} />
                         <span aria-live="polite" style={{ ...muted, fontFamily: MONO }}>{fillTemplate(s.pathStep, { n: at + 1, total: path.stops.length })}</span>
@@ -97,8 +97,8 @@ export function PathStrip({ path, step, labels, onStep, lineName, entry, station
                                 return (
                                     <li key={stop.id} style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'flex-start' : 'center', gap: 6, flex: 'none' }}>
                                         {hop && (
-                                            <span style={{ ...muted, fontFamily: MONO, fontSize: 11, color: cssVar(bad ? 'violation' : 'muted') }} data-hop={hop.verdict ?? 'ok'}>
-                                                {narrow ? '↓ ' : ''}{fillTemplate(s.pathHop, { kind: edgeKindLabel(labels, hop.kind), count: hop.count })}
+                                            <span style={{ ...muted, fontFamily: MONO, fontSize: 11, color: cssVar(bad ? 'violation' : 'muted') }} data-hop={hop.verdict ?? 'ok'} data-cycle={hop.cycle || undefined}>
+                                                {narrow ? '↓ ' : ''}{hop.cycle && <span aria-hidden="true" data-cycle-mark>⟲ </span>}{hopText(labels, hop)}
                                                 {hop.detail ? ` · ${hop.detail}` : ''}
                                                 {hop.verdict === 'skips' ? ` · ${labels.traceSkips}` : hop.verdict === 'upward' ? ` · ${labels.traceUpward}` : ''}
                                             </span>

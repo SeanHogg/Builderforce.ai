@@ -5,7 +5,7 @@
  * channel whose data is not set up draws a neutral cell, never a zero.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { fillTemplate } from '../labels';
 import { cssVar } from '../scene/themeColors';
 import { muted, heading } from '../styles';
@@ -17,17 +17,30 @@ import { buildTiers } from './tiers';
 /** The cell's width from the marker radius the overlay gives (5 + 2 x level, or the neutral size). */
 export const cellWidth = (size: number): number => 64 + (size - NEUTRAL_SIZE) * 10;
 
+/** Cells drawn at once; "N more" reveals the next page, so a huge repo never mounts thousands of buttons. */
+export const HEAT_CELL_CAP = 200;
+
 export function HeatGrid({ labels, surface }: SceneProps) {
     const s = labels.surface;
     const { stations, overlay, lit } = surface;
-    const tiers = useMemo(() => buildTiers(stations.stations), [stations]);
+    const [limit, setLimit] = useState(HEAT_CELL_CAP);
+    const allTiers = useMemo(() => buildTiers(stations.stations), [stations]);
+    const { tiers, hidden } = useMemo(() => {
+        let budget = limit;
+        const visible = allTiers.map((tier) => {
+            const cells = tier.stations.slice(0, Math.max(0, budget));
+            budget -= cells.length;
+            return { ...tier, stations: cells };
+        }).filter((tier) => tier.stations.length > 0);
+        return { tiers: visible, hidden: Math.max(0, stations.stations.length - (limit - budget)) };
+    }, [allTiers, limit, stations]);
     const layerName = (layer: string) => s.layers[layer as keyof typeof s.layers] ?? s.layers.other;
     if (stations.stations.length === 0) return <p style={{ ...muted, padding: 12 }}>{s.heat.empty}</p>;
     const b = overlay.bindings;
 
     return (
         <div data-testid="kg-heat" role="group" aria-label={labels.regionLabel} style={{ display: 'grid', gap: 12, padding: 12 }}>
-            <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.heat.description, { layers: tiers.length, components: stations.stations.length })}</p>
+            <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.heat.description, { layers: allTiers.length, components: stations.stations.length })}</p>
             <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.heat.legend, { size: s.metricNames[b.size], colour: s.metricNames[b.colour], bar: s.metricNames[b.ring] })}</p>
             {tiers.map((tier) => (
                 <section key={tier.layer} aria-label={layerName(tier.layer)} data-tier={tier.layer} style={{ display: 'grid', gap: 6 }}>
@@ -57,6 +70,11 @@ export function HeatGrid({ labels, surface }: SceneProps) {
                     </div>
                 </section>
             ))}
+            {hidden > 0 && (
+                <button type="button" data-heat-more onClick={() => setLimit((n) => n + HEAT_CELL_CAP)} style={{ ...muted, justifySelf: 'start', font: 'inherit', fontSize: 12, cursor: 'pointer', background: 'transparent', border: `1px solid ${cssVar('border')}`, borderRadius: 8, padding: '6px 10px' }}>
+                    {fillTemplate(s.heat.showMore, { count: hidden })}
+                </button>
+            )}
         </div>
     );
 }

@@ -34,11 +34,17 @@ export interface QuestionBarProps {
 
 const LENS_PREFIX = 'lens:';
 
+/** The picked lens when it has no question of its own (Compare) and is on offer; null otherwise. */
+export function lensOnlyOf(lenses: readonly LensDef[] | undefined, lens: LensId | undefined): LensId | null {
+    return lens !== undefined && questionForLens(lens) === undefined && lenses?.some((l) => l.id === lens) === true ? lens : null;
+}
+
 /** The More menu: the secondary questions, then every lens that has no question. */
 export function moreItems(labels: KnowledgeGraphLabels, question: QuestionId, lenses: readonly LensDef[] | undefined, lens: LensId | undefined): MenuItem[] {
     const sub = (id: LensId) => fillTemplate(labels.surface.overlay.lensSub, { lens: labels.lenses[id] });
+    const lensOnly = lensOnlyOf(lenses, lens);
     const items: MenuItem[] = MORE_QUESTIONS.map((q) => ({
-        id: q.id, label: labels.surface.questions[q.id], selected: q.id === question, ...(q.lens ? { sub: sub(q.lens) } : {}),
+        id: q.id, label: labels.surface.questions[q.id], selected: lensOnly === null && q.id === question, ...(q.lens ? { sub: sub(q.lens) } : {}),
     }));
     for (const l of lenses ?? []) {
         if (questionForLens(l.id)) continue;
@@ -50,7 +56,10 @@ export function moreItems(labels: KnowledgeGraphLabels, question: QuestionId, le
 export function QuestionBar({ labels, stations, question, onQuestion, lenses, lens, onLens, family, onClearFamily, scroll = false }: QuestionBarProps) {
     const s = labels.surface;
     const items = moreItems(labels, question, lenses, lens);
-    const moreActive = MORE_QUESTIONS.some((q) => q.id === question);
+    // A lens with no question (Compare) is a More item of its own; while it is the active pick no pill is lit, and the trigger names it.
+    const lensOnly = lensOnlyOf(lenses, lens);
+    const moreActive = lensOnly !== null || MORE_QUESTIONS.some((q) => q.id === question);
+    const moreName = lensOnly !== null ? labels.lenses[lensOnly] : s.questions[question];
     const status = (id: QuestionId) => [...PRIMARY_QUESTIONS, ...MORE_QUESTIONS].find((q) => q.id === id)?.status(stations);
     const hint = (id: QuestionId, lensId: LensId | undefined) => [
         lensId && lenses?.some((l) => l.id === lensId) ? fillTemplate(s.overlay.lensSub, { lens: labels.lenses[lensId] }) : '',
@@ -69,7 +78,7 @@ export function QuestionBar({ labels, stations, question, onQuestion, lenses, le
             >
                 {PRIMARY_QUESTIONS.map((q) => (
                     <Pill
-                        key={q.id} data-question={q.id} on={q.id === question} title={hint(q.id, q.lens)}
+                        key={q.id} data-question={q.id} on={lensOnly === null && q.id === question} title={hint(q.id, q.lens)}
                         style={{ scrollSnapAlign: 'start', ...(status(q.id) === 'not-set-up' ? { borderStyle: 'dashed' } : null) }}
                         onClick={() => onQuestion(q.id)}
                     >
@@ -79,7 +88,7 @@ export function QuestionBar({ labels, stations, question, onQuestion, lenses, le
             </div>
             <Menu
                 label={s.moreQuestions} active={moreActive} items={items} onSelect={pick} panelStyle={{ minWidth: 300, maxWidth: 'calc(100vw - 24px)' }}
-                trigger={<>{moreActive ? s.questions[question] : s.moreQuestions}<span aria-hidden="true"> ▾</span></>}
+                trigger={<>{moreActive ? moreName : s.moreQuestions}<span aria-hidden="true"> ▾</span></>}
             />
             {family && (
                 <button

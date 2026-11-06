@@ -13,7 +13,8 @@ import { sequenceOf, toSequenceMermaid } from './sequenceModel';
 /** A hop in words: the edge kind and how many references make it, or that there is none. */
 export function hopText(labels: KnowledgeGraphLabels, hop: PathHop): string {
     const s = labels.surface;
-    return hop.count === 0 ? s.noDirectReference : fillTemplate(s.pathHop, { kind: edgeKindLabel(labels, hop.kind), count: hop.count });
+    const words = hop.count === 0 ? s.noDirectReference : fillTemplate(s.pathHop, { kind: edgeKindLabel(labels, hop.kind), count: hop.count });
+    return hop.cycle ? `${words} · ${s.cycleHop}` : words;
 }
 
 /** The Mermaid sequence diagram of a path, exactly what the Sequence camera draws. */

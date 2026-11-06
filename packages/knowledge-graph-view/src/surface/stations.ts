@@ -13,6 +13,7 @@ import type { KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowle
 import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
 import { LAYER_ORDER, layerRank } from './layers';
+import { rollUpAreas, type Group } from './areaRollup';
 import { outlineView } from './outlineGraph';
 
 export interface Station {
@@ -53,6 +54,8 @@ export interface StationModel {
     byId: Map<string, Station>;
     /** File ref → station id (also an area ref and the claims and facts about a file). Sections and symbols resolve through {@link stationOfRef}. */
     stationOf: Map<string, string>;
+    /** Set when the outline itself was capped: the map shows `shown` of about `total` files. */
+    capped?: { shown: number; total: number };
 }
 
 export interface StationOptions {
@@ -89,7 +92,6 @@ const tail = (ref: string): string => {
     return path.slice(path.lastIndexOf('/') + 1) || path;
 };
 
-interface Group { id: string; name: string; kind: Station['kind']; nodes: KNode[] }
 
 function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>): Map<string, Group> {
     const groups = new Map<string, Group>();
@@ -167,14 +169,16 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     const index = nodeIndex(graph);
     // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
     const files = outlineView(graph)?.files ?? graph.nodes.filter((n) => n.kind === 'file');
-    const groups = splitEntry(baseGroups(files, index));
+    // Past MAX_STATIONS, areas fold into their parent directory so the map stays readable.
+    const groups = splitEntry(rollUpAreas(baseGroups(files, index), (id) => index.get(id)?.label ?? tail(id)));
+    const groupIds = new Set(groups.map((g) => g.id));
     const stationOf = new Map<string, string>();
     for (const g of groups) for (const n of g.nodes) stationOf.set(n.ref, g.id);
     const lookup = (ref: string) => stationOf.get(ref) ?? stationOf.get(fileRefOf(ref));
 
     // Refs that are not files still belong somewhere: an area is its own station; a claim or fact stands where the file it is about does.
     const elsewhere = new Map<string, string>();
-    for (const n of graph.nodes) if (n.kind === 'area' && groups.some((g) => g.id === n.ref)) elsewhere.set(n.ref, n.ref);
+    for (const n of graph.nodes) if (n.kind === 'area' && groupIds.has(n.ref)) elsewhere.set(n.ref, n.ref);
     for (const e of graph.edges) {
         if (e.kind !== 'about' && e.kind !== 'mentions') continue;
         for (const [judged, source] of [[e.from, e.to], [e.to, e.from]] as const) {
@@ -245,7 +249,8 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         const station: Station = {
             id: g.id, name: g.name, kind: g.kind,
             entry: g.nodes.some((n) => n.partition === 'entry'),
-            refs: g.nodes.map((n) => n.ref).sort(cmp), files: g.nodes.length,
+            // Most important first: Show focuses the first 200 and selects the first.
+            refs: [...g.nodes].sort((a, b) => b.importance - a.importance || cmp(a.ref, b.ref)).map((n) => n.ref), files: g.nodes.length,
             anti: antiLevel(score.get(g.id) ?? 0), findingIds: found.get(g.id) ?? [],
             use: maxUse > 0 ? r.importance / maxUse : 0,
             changed: g.nodes.some(nodeChanged),
@@ -264,7 +269,11 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     }).sort((a, b) => b.use - a.use || cmp(a.name, b.name) || cmp(a.id, b.id));
 
     for (const [ref, station] of elsewhere) stationOf.set(ref, station);
-    return { stations, byId: new Map(stations.map((s) => [s.id, s] as const)), stationOf };
+    const view = outlineView(graph);
+    return {
+        stations, byId: new Map(stations.map((s) => [s.id, s] as const)), stationOf,
+        ...(view?.capped ? { capped: { shown: view.shown, total: view.total } } : {}),
+    };
 }
 
 /** File refs whose source differs from the baseline's (or that the baseline lacks). */

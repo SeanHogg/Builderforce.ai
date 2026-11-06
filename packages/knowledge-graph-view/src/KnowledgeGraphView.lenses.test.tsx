@@ -12,7 +12,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES, LENS_ORDER } from './lenses';
 import type { LensDef } from './lenses';
 import { codeFixture, docsFixture, expandAllFindings, fixtureSource, mixedFixture } from './testing';
-import { openDetails, pickCamera, pickLens } from './testPicks';
+import { lensIsPicked, openDetails, pickCamera, pickLens } from './testPicks';
 import type { LensId } from './types';
 
 interface SceneProps { nodes: KNode[]; edges: KEdge[]; lens: LensDef }
@@ -152,7 +152,8 @@ describe('legend and lens notes', () => {
     await mount3D(codeFixture(), { initialLens: 'claims' });
     expect(screen.getByText(L.lensNotApplicable)).toBeTruthy();
     expect(scene.props!.lens.id).toBe('structure');
-    expect(screen.getByText(L.lensHints.structure)).toBeTruthy(); // the Lens panel names the lens in effect (no lens row to mark it)
+    expect(lensIsPicked(deps, L, 'structure')).toBe(true); // the question that owns the lens in effect is the lit pill
+    expect(screen.getByText(L.lensHints.structure)).toBeTruthy();
   });
 
   it('shows no such note for a lens that applies', async () => {

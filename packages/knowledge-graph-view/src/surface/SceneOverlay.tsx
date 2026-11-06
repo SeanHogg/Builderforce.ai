@@ -56,6 +56,8 @@ export interface SceneOverlayProps {
     drawn: number;
     total: number;
     onShowAll(): void;
+    /** `surface.stations.capped`: the map shows only part of the files. */
+    capped?: { shown: number; total: number } | undefined;
     // The error banner: files the server does not have. Absent or 0 ⇒ no banner.
     missingFiles?: number | null | undefined;
     /** Opens the Sync drawer (`surface.openPanel('sync')`). */
@@ -116,7 +118,7 @@ export function SceneOverlay(p: SceneOverlayProps) {
                 <Card style={{ display: 'inline-block', maxWidth: narrow ? '100%' : 360, padding: '6px 10px', ...muted, pointerEvents: 'auto', background: cssVar('panel') }}>
                     <span data-testid="kg-scale-note">
                         <ScaleLine
-                            labels={labels} stats={p.stats} truncated={p.truncated} compact={p.compact} showAll={p.showAll} drawn={p.drawn} total={p.total} onShowAll={p.onShowAll}
+                            labels={labels} stats={p.stats} truncated={p.truncated} compact={p.compact} showAll={p.showAll} drawn={p.drawn} total={p.total} onShowAll={p.onShowAll} capped={p.capped}
                         />
                     </span>
                 </Card>

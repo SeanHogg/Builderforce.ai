@@ -15,6 +15,7 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { card, heading, muted, primaryButton, quietButton } from '../styles';
 import type { KnowledgeGraphSource, PinpointResult } from '../types';
+import { mapEdges } from './outlineGraph';
 import { pathOfStations } from './path';
 import { scopeFindings } from './scope';
 import { stationOfRef, type StationModel } from './stations';
@@ -71,7 +72,7 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
     };
     const diagnose = (result: PinpointResult) => {
         const refs = result.matches.map((m) => m.ref);
-        const path = pathOfStations(refs, stations, graph.edges).stops.map((s) => s.name).join(' → ');
+        const path = pathOfStations(refs, stations, mapEdges(graph)).stops.map((s) => s.name).join(' → ');
         const onPath = new Set(refs.flatMap((r) => stationOfRef(stations, r) ?? []));
         const findings = scopeFindings(graph.findings, stations, onPath).map((f) => findingRequest(f, labels, index)).join(' ');
         onCompose?.(fillTemplate(t.diagnoseText, { description: result.description, path: path || t.noFindings, findings: findings || t.noFindings }));

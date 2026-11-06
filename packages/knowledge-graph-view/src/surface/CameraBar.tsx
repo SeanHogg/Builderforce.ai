@@ -57,6 +57,8 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, s
                         onChange={(id) => onMode(id as ViewMode)}
                     />
                 </div>
+                {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
+                {mode === 'sequence' && <button type="button" data-back-to-map style={zoomButton} onClick={() => onMode('transit')}>{labels.surface.sequence.backToMap}</button>}
                 <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none' }}>
                     {outTo && onOut && (
                         <button type="button" data-out style={zoomButton} onClick={onOut}>{fillTemplate(labels.surface.overlay.outTo, { name: outTo })}</button>

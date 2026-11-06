@@ -13,7 +13,7 @@
 import type { KEdge, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
 import { layerRank, type Provenance } from './layers';
-import { outlineView } from './outlineGraph';
+import { mapEdges } from './outlineGraph';
 import { stationOfRef, type Station, type StationModel } from './stations';
 
 export const MAX_LINES = 8;
@@ -28,6 +28,8 @@ export interface LineHop {
     count: number;
     /** The worst layer verdict among them, when the pack gave any. */
     verdict?: Verdict;
+    /** Part of a dependency cycle: drawn with a non-colour mark. */
+    cycle?: boolean;
 }
 
 export interface Terminus {
@@ -57,7 +59,7 @@ export interface LinesModel {
 const VERDICT_RANK: Record<Verdict, number> = { allowed: 0, same: 0, skips: 1, upward: 2 };
 const EXTERNAL = /adapter|client|provider|gateway|http|\bapi\b|sdk|github|stripe|oauth|webhook|llm|mail|slack/i;
 
-interface Edge { to: string; count: number; /** The worst verdict, for display on the hop. */ verdict?: Verdict; /** References per verdict (no verdict counts as allowed): the majority decides whether a line follows the hop. */ tally: Record<Verdict, number> }
+interface Edge { to: string; count: number; /** Any aggregated reference is a cycle, or the stations reference each other. */ cycle?: boolean; /** The worst verdict, for display on the hop. */ verdict?: Verdict; /** References per verdict (no verdict counts as allowed): the majority decides whether a line follows the hop. */ tally: Record<Verdict, number> }
 
 /** The verdict most of a hop's file-level references carry; a tie reads as the milder one. */
 function majorityVerdict(edge: Edge): Verdict {
@@ -75,8 +77,11 @@ function stationEdges(edges: readonly KEdge[], model: StationModel): Map<string,
         edge.count += 1;
         edge.tally[e.verdict ?? 'allowed'] += 1;
         if (e.verdict && (!edge.verdict || VERDICT_RANK[e.verdict] > VERDICT_RANK[edge.verdict])) edge.verdict = e.verdict;
+        if (e.cycle) edge.cycle = true;
         row.set(b, edge);
     }
+    // Stations that reference each other are a cycle at the station level too.
+    for (const [a, row] of out) for (const [b, edge] of row) if (out.get(b)?.has(a)) edge.cycle = true;
     return out;
 }
 
@@ -87,7 +92,7 @@ function terminusOf(station: Station | undefined, id: string): Terminus {
 
 export function buildLines(graph: KnowledgeGraph, model: StationModel): LinesModel {
     // A truncated graph's routes follow the outline's links (verdict codes decoded by the adapter), not the cut graph's edges.
-    const edges = stationEdges(outlineView(graph)?.edges ?? graph.edges, model);
+    const edges = stationEdges(mapEdges(graph), model);
     const entries = model.stations.filter((s) => s.entry);
     const lines: Line[] = [];
 
@@ -108,7 +113,7 @@ export function buildLines(graph: KnowledgeGraph, model: StationModel): LinesMod
                     || cmp(model.byId.get(a.to)?.name ?? '', model.byId.get(b.to)?.name ?? '')
                     || cmp(a.to, b.to))[0];
             if (!next) break;
-            hops.push({ from: stops[stops.length - 1]!, to: next.to, count: next.count, ...(next.verdict ? { verdict: next.verdict } : {}) });
+            hops.push({ from: stops[stops.length - 1]!, to: next.to, count: next.count, ...(next.verdict ? { verdict: next.verdict } : {}), ...(next.cycle ? { cycle: true } : {}) });
             stops.push(next.to);
             seen.add(next.to);
         }

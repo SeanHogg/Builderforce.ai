@@ -7,14 +7,14 @@
  * where a deterministic fix exists and the host can apply it, Prompt, Show, and where the
  * finding came from: exact / analyzer / model); the Fix queue link; "Keep this run as a test"
  * for a selected path; the full findings list (grouped, lazy, multiselect Fix with agent); a
- * collapsed "Details" section holding the Insights and Lens panels (children); and the footer
+ * "Details" section (open by default, collapsible) holding the Insights and Lens panels (children); and the footer
  * "This path is done when…" with one checkable line per finding on the path.
  *
  * Apply goes through the Resolve drawer (`onResolve`), which is where the codemod runs. Nothing
  * here calls a model: Prompt and Keep-as-test put FIXED requests in the host's composer.
  */
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { FindingsPanel } from '../FindingsPanel';
 import { findingDetail, findingItems, findingRequest, findingTitle } from '../findingText';
@@ -29,26 +29,19 @@ import { frac, metricStatus, type MetricId } from './overlays';
 import type { PathModel } from './path';
 import { findingProvenance } from './scope';
 import type { Station } from './stations';
-import { Card, pillStyle } from './ui';
+import { Card, Chip, pillStyle } from './ui';
 
 const PROVENANCE_TONE: Record<Provenance, ThemeTone> = { deterministic: 'agrees', heuristic: 'cycle', runtime: 'accent' };
 const SOURCE_TONE: Record<FindingSource, ThemeTone> = { exact: 'agrees', analyzer: 'accent', model: 'cycle' };
 
 export function ProvenanceBadge({ provenance, labels }: { provenance: Provenance; labels: KnowledgeGraphLabels }) {
-    const tone = cssVar(PROVENANCE_TONE[provenance]);
-    return (
-        <span data-provenance={provenance} style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${tone}`, color: tone }}>
-            {labels.surface.provenance[provenance]}
-        </span>
-    );
+    return <Chip tone={PROVENANCE_TONE[provenance]} data-provenance={provenance}>{labels.surface.provenance[provenance]}</Chip>;
 }
 
 /** Where a card's finding comes from: exact / analyzer / model. */
 export function SourceChip({ source, labels }: { source: FindingSource; labels: KnowledgeGraphLabels }) {
-    const tone = cssVar(SOURCE_TONE[source]);
     const t = labels.surface.act;
-    const word = source === 'exact' ? t.sourceExact : source === 'analyzer' ? t.sourceAnalyzer : t.sourceModel;
-    return <span data-source={source} style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${tone}`, color: tone }}>{word}</span>;
+    return <Chip tone={SOURCE_TONE[source]} data-source={source}>{source === 'exact' ? t.sourceExact : source === 'analyzer' ? t.sourceAnalyzer : t.sourceModel}</Chip>;
 }
 
 export interface ActPanelProps {
@@ -140,7 +133,9 @@ export function ActPanel(p: ActPanelProps) {
     const { labels, station, path } = p;
     const s = labels.surface;
     const t = s.act;
-    const [details, setDetails] = useState(false);
+    // Open by default (insights everywhere); the person can collapse it.
+    const [details, setDetails] = useState(true);
+    const detailsId = useId();
     const index = useMemo(() => nodeIndex(p.graph), [p.graph]);
     const cards = useMemo(() => actionCards(p.findings, p.canApply === true), [p.findings, p.canApply]);
     const hasPath = !!path && path.stops.length > 0;
@@ -211,12 +206,12 @@ export function ActPanel(p: ActPanelProps) {
             {p.children && (
                 <section aria-label={t.detailsTitle} style={{ display: 'grid', gap: 8 }}>
                     <button
-                        type="button" aria-expanded={details} aria-controls="kg-act-details" data-testid="kg-act-details-toggle"
+                        type="button" aria-expanded={details} aria-controls={detailsId} data-testid="kg-act-details-toggle"
                         style={{ ...small, width: '100%', justifyContent: 'space-between', display: 'flex', alignItems: 'center', fontWeight: 700 }} onClick={() => setDetails((v) => !v)}
                     >
                         <span>{t.detailsTitle}</span><span aria-hidden="true">{details ? '▾' : '▸'}</span>
                     </button>
-                    <div id="kg-act-details" hidden={!details} style={{ display: details ? 'grid' : 'none', gap: 12 }}>{p.children}</div>
+                    <div id={detailsId} hidden={!details} style={{ display: details ? 'grid' : 'none', gap: 12 }}>{p.children}</div>
                 </section>
             )}
 

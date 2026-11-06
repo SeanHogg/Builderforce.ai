@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { MONO, muted } from '../styles';
+import { CONTROL, MONO, muted } from '../styles';
 import type { KnowledgeGraphSource } from '../types';
 import { QuietButton } from './ui';
 
@@ -76,7 +76,7 @@ export function TimeSlider({ commits, capped, picked, labels, onPick, changedSta
                             <button
                                 type="button" data-commit={c.sha} aria-pressed={on} title={`${c.title} · ${c.at}`}
                                 aria-label={fillTemplate(t.commitAria, { title: c.title, at: c.at })} onClick={() => onPick(on ? null : c.sha)}
-                                style={{ width: 20, height: 28, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+                                style={{ width: `calc(${CONTROL} - 8px)`, height: CONTROL, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
                             >
                                 <span aria-hidden="true" style={{ width: 12, height: 12, boxSizing: 'border-box', borderRadius: 999, border: `2px solid ${cssVar(lit ? 'accent' : 'border')}`, background: cssVar(on ? 'accent' : 'panel') }} />
                             </button>

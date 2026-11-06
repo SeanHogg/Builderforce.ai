@@ -10,7 +10,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
 import type { Revision } from '../revision';
 import { Toolbar } from '../Toolbar';
-import type { KnowledgeGraphSource, ReviewRequest, SyncStatus } from '../types';
+import type { KnowledgeGraphSource, ReviewRequest, ReviewTarget, SyncStatus } from '../types';
 import type { KnowledgeGraphState } from '../useKnowledgeGraph';
 import { OverflowMenu } from './OverflowMenu';
 import { OverlayMenu } from './OverlayMenu';
@@ -35,6 +35,10 @@ export interface SurfaceHeaderProps {
     surface: SurfaceModel;
     env: SurfaceEnv;
     narrow: boolean;
+    /** The Panels group is one "Panels ▾" menu (`layoutOf(width).panelsMenu`). */
+    panelsMenu: boolean;
+    /** The host's review places, read ONCE by the root (`useReviewTargets`). */
+    targets: readonly ReviewTarget[];
     /** The host's sync status, read ONCE by the root (`useSyncStatus`) and shared with the scene's missing-files banner. */
     sync: SyncStatus | null;
     spine: ReactNode;
@@ -86,14 +90,14 @@ export function SurfaceHeader(p: SurfaceHeaderProps) {
                     <OverflowMenu
                         source={source} labels={labels} rootId={hasGraph ? kg.rootId : null} canReview={hasGraph || kg.status === 'load-failed' || kg.status === 'error'}
                         reviewStatus={kg.review.state.status} onReview={(req: ReviewRequest) => kg.review.start(req)} revision={p.revision}
-                        diagnosticsText={p.diagnosticsText} scopes={kg.scopes} onRoot={kg.selectRoot} openReview={p.openReview}
+                        diagnosticsText={p.diagnosticsText} targets={p.targets} openReview={p.openReview}
                     />
                 )}
             />
             <Toolbar
                 labels={labels} narrow={narrow} onSearch={p.onSearch} question={surface.question} askName={p.askName} answer={answerLine(answerFor(surface.question, surface), labels)}
                 spine={p.spine} linesToggle={p.linesToggle} overlays={overlays}
-                panels={<PanelToggle graph={graph} env={env} labels={labels} panel={p.panel} onPanel={p.onPanel} />}
+                panels={<PanelToggle graph={graph} env={env} labels={labels} panel={p.panel} onPanel={p.onPanel} collapsed={p.panelsMenu && !narrow} />}
                 askWrap={(bar) => (
                     <PinpointInput
                         source={source} rootId={kg.rootId} graph={graph} stations={surface.stations} labels={labels} onSelect={p.onSelect} onCompose={p.onCompose}

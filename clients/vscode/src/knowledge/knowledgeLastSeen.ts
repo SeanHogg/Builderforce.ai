@@ -15,8 +15,8 @@ import { join } from "node:path";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeScopeRow } from "./knowledgeProtocol";
 
-/** A graph whose JSON is larger than this is not remembered (the read must stay fast). */
-export const LAST_SEEN_MAX_BYTES = 8 * 1024 * 1024;
+/** A graph whose JSON is larger than this is not remembered (the read must stay fast). Room for a 20k-file outline. */
+export const LAST_SEEN_MAX_BYTES = 24 * 1024 * 1024;
 
 export interface LastSeenRecord {
   scopes: KnowledgeScopeRow[];

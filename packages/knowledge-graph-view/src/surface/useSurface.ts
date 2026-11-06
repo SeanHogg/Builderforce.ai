@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { buildLines, type Line, type LinesModel } from './lines';
 import { makeOverlay, PRESETS, presetOf, setChannel, type Bindings, type ChannelId, type MetricId, type OverlayModel, type PresetId } from './overlays';
+import { mapEdges } from './outlineGraph';
 import { pathOfLine, pathOfStations, type PathModel } from './path';
 import { litStations, type QuestionContext, type QuestionId } from './questions';
 import { buildStations, changedRefs, stationOfRef, type Station, type StationModel } from './stations';
@@ -100,7 +101,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
         return shown.size > 0 ? shown : litStations(question, stations.stations, context);
     }, [question, stations, context, focus]);
     const path = useMemo(
-        () => (pinned ? pathOfStations(pinned, stations, graph?.edges ?? []) : pathOfLine(line, stations.byId)),
+        () => (pinned ? pathOfStations(pinned, stations, graph ? mapEdges(graph) : []) : pathOfLine(line, stations.byId)),
         [pinned, line, stations, graph],
     );
 

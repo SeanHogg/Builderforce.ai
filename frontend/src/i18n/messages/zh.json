@@ -12335,6 +12335,9 @@
     "engineDetached": "设备上的模型在完成前停止了。请重新发送以重试。",
     "modelKeepsCrashing": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
     "continuationTimedOut": "这花了太长时间。你的消息已保留，将与你的下一条消息一起被读取。",
+    "modelUnresponsive": "{model} 没有响应。请选择其他模型以继续。",
+    "chooseAnotherModel": "选择模型",
+    "providerSignIn": "{label} 需要你重新登录。请在 设置 ▸ 模型提供商 中重新连接。",
     "manageLocalModels": "管理设备上的模型",
     "platformRefusedMode": "“仅本地”会让此次运行留在本设备上，因此无法连接 BuilderForce。请在 / 菜单的“模型”中切换到混合模式以允许连接。",
     "platformRefusedSync": "账户同步已关闭，因此无法保存到你的账户。请在平台设置中开启同步，或继续在本地工作。",
@@ -20707,6 +20710,16 @@
       "title": "需要：{needs}",
       "summary": "还差 {count} 步"
     }
+  },
+  "evermindPacks": {
+    "title": "知识包",
+    "hint": "选择此 Evermind 在回答时检索的已上传知识包。",
+    "loading": "正在加载知识包…",
+    "failed": "无法加载知识包。",
+    "empty": "此项目尚未上传任何知识包。请在 VS Code 中运行“BuilderForce：上传知识包”来添加。",
+    "select": "使用",
+    "selected": "使用中",
+    "summary": "已使用 {count}/{total} 个知识包"
   },
   "creationCanvas": {
     "costToBuild": "构建成本",
@@ -35806,7 +35819,6 @@
     "searchLabel": "搜索图谱",
     "searchPlaceholder": "搜索文件、章节、事实…",
     "searchNoHits": "没有与“{query}”匹配的内容。",
-    "lensesLabel": "视角",
     "lenses": {
       "structure": "结构",
       "partitions": "分区",
@@ -36186,12 +36198,22 @@
         "description": "热力网格：{layers} 层，{components} 个组件。选择单元格查看详情。",
         "cellAria": "{name}，{files} 个文件",
         "legend": "单元格大小：{size} · 颜色：{colour} · 条形：{bar}",
-        "empty": "没有可绘制的组件。"
+        "empty": "没有可绘制的组件。",
+        "showMore": "再显示 {count} 个"
       },
+      "cycleHop": "循环依赖",
+      "mapShows": "地图显示 {total} 个文件中的 {shown} 个",
       "sequence": {
         "description": "包含 {stops} 个站点和 {messages} 条消息的时序。",
         "empty": "选择一条线路或一个站点以绘制其时序。",
-        "messageAria": "{from} 到 {to}：{label}"
+        "messageAria": "{from} 到 {to}：{label}",
+        "backToMap": "返回地图"
+      },
+      "pillStates": {
+        "synced": "已同步",
+        "syncing": "同步中",
+        "error": "错误",
+        "idle": "未同步"
       },
       "overlay": {
         "outTo": "↑ 返回 {name}",
@@ -36230,8 +36252,7 @@
         "doneMore": "另有 {count} 项检查",
         "detailsTitle": "详情",
         "linkCoverage": "覆盖率",
-        "linkApi": "API",
-        "moreFindings": "全部发现"
+        "linkApi": "API"
       },
       "path": {
         "title": "{line} · {entry}",
@@ -36242,7 +36263,8 @@
         "sequence": "时序图",
         "noTests": "无测试",
         "findings": "{count} 项发现",
-        "stops": "站点"
+        "stops": "站点",
+        "enlarge": "放大"
       },
       "sync": {
         "loading": "正在读取同步状态…",
@@ -36260,7 +36282,8 @@
         "sourcesTitle": "数据源",
         "excludedTitle": "已排除的文件夹",
         "excludedNote": "这些文件夹永远不会被读取。",
-        "barAria": "{label}：本地 {local}，服务器 {server}"
+        "barAria": "{label}：本地 {local}，服务器 {server}",
+        "refresh": "刷新"
       },
       "syncSteps": {
         "walk": "已遍历文件",
@@ -36431,7 +36454,6 @@
         "parityLocal": "本地 {local} 个文件 · 尚未上传到服务器",
         "moreActions": "更多操作",
         "reReview": "重新评审此文件夹",
-        "scopeItem": "文件夹：{title}",
         "overlaysNote": "任何指标都可以驱动任何通道。地图、系统、图、思维导图、塔、热力、列表和时序都读取同一组绑定，因此覆盖率条同样可以是反模式条。",
         "rootsLabel": "已评审的文件夹"
       },

@@ -37,6 +37,8 @@ export interface KnowledgeGraphState {
     setLens(id: LensId): void;
     select(ref: string | null): void;
     setFocus(refs: string[]): void;
+    /** Focus the refs and, when some are not in the loaded graph, load around them (search and Show both use this). */
+    focusRefs(refs: string[]): void;
     search(q: string): Promise<void>;
     reload(): void;
 }
@@ -283,6 +285,15 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         if (wanted) setLensId(wanted);
     }, [shown, generation, lensId, allowed, hostChoseLens]);
 
+    // ONE way to focus refs (search, Show): the loaded graph is only the top of a large one, so a ref
+    // outside it is brought in by loading around those refs.
+    const focusRefs = useCallback((refs: string[]) => {
+        setFocus(refs);
+        if (held || !shown) return;
+        const loadedRefs = new Set<string>(shown.nodes.map((n) => n.ref));
+        if (refs.some((r) => !loadedRefs.has(r))) setLoadFocus(refs);
+    }, [shown, held]);
+
     const search = useCallback(async (q: string) => {
         const seq = ++searchSeq.current;
         setQuery(q);
@@ -292,13 +303,9 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         setHits(found);
         if (found.length === 0) return;
         const refs = found.map((h) => h.ref);
-        setFocus(refs);
-        // The API searches everything; the loaded graph is only the top of a large one. A hit
-        // outside it is brought in by loading around those refs.
-        const loadedRefs = new Set<string>(shown.nodes.map((n) => n.ref));
-        if (!held && refs.some((r) => !loadedRefs.has(r))) setLoadFocus(refs);
+        focusRefs(refs);
         setSelected(refs[0]!);
-    }, [shown, source, held]);
+    }, [shown, source, focusRefs]);
 
     const selectRoot = useCallback((id: string) => {
         searchSeq.current += 1;
@@ -316,14 +323,14 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             scopes: [{ rootId: heldRoot, title: held.title ?? heldRoot, packs: held.graph.scope.packs }],
             rootId: heldRoot, graph: held.graph, baseline: held.baseline ?? null, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
             stale: false, refreshFailed: false,
-            selectRoot: () => undefined, setLens: setLensId, select: setSelected, setFocus, search,
+            selectRoot: () => undefined, setLens: setLensId, select: setSelected, setFocus, focusRefs, search,
             reload: () => setGeneration((n) => n + 1),
         };
     }
     return {
         status, scopes, rootId, graph, baseline, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
         stale, refreshFailed,
-        selectRoot, setLens: setLensId, select: setSelected, setFocus, search,
+        selectRoot, setLens: setLensId, select: setSelected, setFocus, focusRefs, search,
         reload: () => setGeneration((n) => n + 1),
     };
 }

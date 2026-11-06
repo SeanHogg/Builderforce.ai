@@ -32,12 +32,14 @@ export interface SurfaceStateProps {
     review: ReactNode;
     reviewStatus: ReviewState['status'];
     start: Parameters<typeof ReviewLauncher>[0]['start'];
+    /** The host's review places, read once by the root. */
+    targets: Parameters<typeof ReviewLauncher>[0]['targets'];
     openReview?: boolean | undefined;
     onRetry(): void;
 }
 
 /** The screen for a status that has no graph yet, or null when there is one to draw. */
-export function SurfaceState({ status, labels, source, review, reviewStatus, start, openReview, onRetry }: SurfaceStateProps): ReactNode {
+export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onRetry }: SurfaceStateProps): ReactNode {
     if (status === 'error') {
         return (
             <div role="alert" style={{ padding: 24, display: 'grid', gap: 10, justifyItems: 'start' }}>
@@ -65,7 +67,7 @@ export function SurfaceState({ status, labels, source, review, reviewStatus, sta
                 <>
                     <h2 style={heading}>{labels.emptyTitle}</h2>
                     <p style={{ ...muted, margin: 0, fontSize: 13 }}>{labels.emptyBody}</p>
-                    <ReviewLauncher source={source} labels={labels} start={start} defaultOpen={!!openReview} status={reviewStatus} />
+                    <ReviewLauncher source={source} labels={labels} targets={targets} start={start} defaultOpen={!!openReview} status={reviewStatus} />
                 </>
             ) : <p role="status" style={muted}>{labels.loading}</p>}
             {review}

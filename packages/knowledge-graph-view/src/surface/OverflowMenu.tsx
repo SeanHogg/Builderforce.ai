@@ -1,13 +1,13 @@
 /**
  * The status strip's "⋯ More actions" menu: Review a folder / Re-review (the launcher's own
  * actions), Before / After when the host keeps a baseline, Copy diagnostics (with its "Copied"
- * note) and, when there are several reviewed folders, the folder picker. The review confirm
- * flow is unchanged: a press starts a review and the plan card asks before anything is written.
+ * note). The folder picker is NOT here: the spine's root crumb is its one place. The review
+ * confirm flow is unchanged: a press starts a review and the plan card asks before anything is written.
  */
 
-import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import type { KnowledgeGraphLabels } from '../labels';
 import { CopiedNote, useCopyText } from '../copyText';
-import { reviewActions, reviewBusy, useReviewTargets } from '../ReviewLauncher';
+import { reviewActions, reviewBusy } from '../ReviewLauncher';
 import type { Revision } from '../revision';
 import type { KnowledgeGraphSource, ReviewRequest, ReviewTarget } from '../types';
 import type { ReviewState } from '../useReviewRun';
@@ -25,16 +25,13 @@ export interface OverflowMenuProps {
     /** Present when the host keeps a baseline: which graph is drawn, and whether "before" exists. */
     revision?: { value: Revision; hasBefore: boolean; onChange(r: Revision): void } | undefined;
     diagnosticsText(): string;
-    scopes: readonly KnowledgeScopeSummary[];
-    onRoot(rootId: string): void;
+    /** The places the host can review (`useReviewTargets`, read ONCE by the root and shared with the empty state's launcher). */
+    targets: readonly ReviewTarget[];
     /** Arrive on the review action (a host's "Choose a folder to review" chip): the menu opens focused on it. */
     openReview?: boolean | undefined;
 }
 
-const ROOT = 'root:';
-
-export function OverflowMenu({ source, labels, rootId, canReview, reviewStatus, onReview, revision, diagnosticsText, scopes, onRoot, openReview }: OverflowMenuProps) {
-    const targets = useReviewTargets(source);
+export function OverflowMenu({ source, labels, rootId, canReview, reviewStatus, onReview, revision, diagnosticsText, targets, openReview }: OverflowMenuProps) {
     const copier = useCopyText();
     const h = labels.surface.header;
     const review = reviewActions({ source, labels, targets, busy: reviewBusy(reviewStatus), rootId });
@@ -46,13 +43,11 @@ export function OverflowMenu({ source, labels, rootId, canReview, reviewStatus, 
             { id: 'rev:after', label: labels.compareAfter, sub: labels.revisionLabel, selected: revision.value === 'after' },
         ] : []),
         { id: 'copy', label: labels.copyDiagnostics },
-        ...(scopes.length > 1 ? scopes.map((s) => ({ id: `${ROOT}${s.rootId}`, label: fillTemplate(h.scopeItem, { title: s.title }), selected: s.rootId === rootId })) : []),
     ];
 
     const onSelect = (id: string) => {
         if (id === 'copy') { void copier.copy(diagnosticsText()); return; }
         if (id === 'rev:before' || id === 'rev:after') { revision?.onChange(id === 'rev:before' ? 'before' : 'after'); return; }
-        if (id.startsWith(ROOT)) { onRoot(id.slice(ROOT.length)); return; }
         const req = review.request(id);
         if (req) onReview(req);
     };

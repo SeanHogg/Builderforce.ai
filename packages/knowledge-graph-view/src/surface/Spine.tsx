@@ -7,7 +7,7 @@
 import type { CSSProperties } from 'react';
 import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { MONO } from '../styles';
+import { CONTROL, MONO } from '../styles';
 import type { KnowledgeScopeSummary } from '../types';
 import type { SpineItem } from './path';
 import { Menu } from './ui';
@@ -27,39 +27,42 @@ export interface SpineProps {
 }
 
 const crumb = (current: boolean, mono: boolean): CSSProperties => ({
-    minHeight: 28, padding: '0 8px', borderRadius: 7, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
+    minHeight: CONTROL, padding: '0 8px', borderRadius: 7, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
     fontSize: mono ? 11.5 : 12.5, fontWeight: 600, fontFamily: mono ? MONO : 'inherit',
     color: cssVar('text'), background: current ? cssVar('accentSoft') : 'transparent',
     border: `1px solid ${current ? cssVar('accent') : 'transparent'}`,
 });
 
 export function Spine({ items, labels, onPick, roots }: SpineProps) {
-    // A scrolling list would clip the roots menu's popover, so with several roots the crumbs wrap instead of scroll.
-    const menu = roots !== undefined && roots.scopes.length > 1;
+    // One line that shrinks (min-width 0): the crumbs scroll sideways. The root crumb, which may be a menu whose popover a
+    // scroller would clip, sits OUTSIDE the scrolling list; the crumbs after it scroll.
+    const several = roots !== undefined && roots.scopes.length > 1;
+    const li = (item: SpineItem, i: number) => {
+        const current = i === items.length - 1;
+        const menu = several && item.kind === 'root';
+        return (
+            <li key={`${item.kind}:${item.id ?? ''}`} style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none' }}>
+                {i > 0 && <span aria-hidden="true" style={{ color: cssVar('muted') }}>›</span>}
+                {menu ? (
+                    <Menu
+                        trigger={`${item.label} ▾`} label={labels.surface.header.rootsLabel} alignStart active={current}
+                        items={roots.scopes.map((s) => ({ id: s.rootId, label: s.title, selected: s.rootId === roots.rootId }))}
+                        onSelect={(id) => { if (id === roots.rootId) onPick(item); else roots.onRoot(id); }}
+                    />
+                ) : (
+                    <button type="button" aria-current={current ? 'location' : undefined} onClick={() => onPick(item)} style={crumb(current, item.kind === 'file' || item.kind === 'symbol')}>
+                        {item.label}
+                    </button>
+                )}
+            </li>
+        );
+    };
+    const list: CSSProperties = { listStyle: 'none', margin: 0, padding: 0, display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 };
+    const head = several && items[0]?.kind === 'root';
     return (
-        <nav aria-label={labels.surface.spineLabel} data-testid="kg-spine" style={{ minWidth: 0, flex: '0 1 auto' }}>
-            <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', alignItems: 'center', gap: 2, ...(menu ? { flexWrap: 'wrap' } : { overflowX: 'auto' }) }}>
-                {items.map((item, i) => {
-                    const current = i === items.length - 1;
-                    const several = item.kind === 'root' && roots !== undefined && roots.scopes.length > 1;
-                    return (
-                        <li key={`${item.kind}:${item.id ?? ''}`} style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none' }}>
-                            {i > 0 && <span aria-hidden="true" style={{ color: cssVar('muted') }}>›</span>}
-                            {several ? (
-                                <Menu
-                                    trigger={`${item.label} ▾`} label={labels.surface.header.rootsLabel} alignStart active={current}
-                                    items={roots.scopes.map((s) => ({ id: s.rootId, label: s.title, selected: s.rootId === roots.rootId }))}
-                                    onSelect={(id) => { if (id === roots.rootId) onPick(item); else roots.onRoot(id); }}
-                                />
-                            ) : (
-                                <button type="button" aria-current={current ? 'location' : undefined} onClick={() => onPick(item)} style={crumb(current, item.kind === 'file' || item.kind === 'symbol')}>
-                                    {item.label}
-                                </button>
-                            )}
-                        </li>
-                    );
-                })}
-            </ol>
+        <nav aria-label={labels.surface.spineLabel} data-testid="kg-spine" style={{ minWidth: 0, flex: '0 1 auto', display: 'flex', alignItems: 'center' }}>
+            {head && <ol style={{ ...list, flex: 'none' }}>{li(items[0]!, 0)}</ol>}
+            <ol style={{ ...list, overflowX: 'auto', scrollbarWidth: 'none' }}>{items.map((item, i) => (head && i === 0 ? null : li(item, i)))}</ol>
         </nav>
     );
 }

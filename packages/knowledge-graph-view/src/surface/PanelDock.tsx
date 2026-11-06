@@ -12,7 +12,8 @@ import { Panel } from '../Sheet';
 import type { KnowledgeGraphSource, KnowledgePanelRenderer, ViewMode } from '../types';
 import { HEADER_PANELS, PANELS, type PanelId } from './panels';
 import type { PanelDef, SurfaceEnv } from './registry';
-import { Segmented } from './ui';
+import type { SyncRead } from './syncPill';
+import { Menu, Segmented } from './ui';
 import type { SurfaceModel } from './useSurface';
 
 /** The panels of the registry that are available for this graph. */
@@ -30,15 +31,25 @@ export interface PanelToggleProps {
     panels?: readonly PanelDef[];
     /** The ids that get a button, in order (default: the header's four). */
     ids?: readonly string[];
+    /** Too little room for the group (see `layout.ts`): it becomes one "Panels ▾" menu, same panels, same open state. */
+    collapsed?: boolean;
 }
 
-export function PanelToggle({ graph, env, labels, panel, onPanel, panels = PANELS, ids = HEADER_PANELS }: PanelToggleProps) {
+export function PanelToggle({ graph, env, labels, panel, onPanel, panels = PANELS, ids = HEADER_PANELS, collapsed = false }: PanelToggleProps) {
     const available = availablePanels(graph, env, panels);
     const items = ids.flatMap((id) => {
         const def = available.find((p) => p.id === id);
         return def ? [{ id: def.id, label: labels[def.labelKey] }] : [];
     });
     if (items.length === 0) return null;
+    if (collapsed) {
+        return (
+            <Menu
+                label={labels.surface.panelsLabel} active={items.some((i) => i.id === panel)} trigger={<>{labels.surface.panelsLabel}<span aria-hidden="true"> ▾</span></>}
+                items={items.map((i) => ({ ...i, selected: i.id === panel }))} onSelect={(id) => onPanel(id === panel ? null : (id as PanelId))}
+            />
+        );
+    }
     return (
         <Segmented
             mode="toggle" label={labels.surface.panelsLabel} items={items} value={items.some((i) => i.id === panel) ? panel : null}
@@ -60,6 +71,8 @@ export interface PanelDrawerProps {
     rootTitle?: string | undefined;
     onChanged?: (() => void) | undefined;
     diagnosticsText?: (() => string) | undefined;
+    /** The root's ONE sync read (`useSyncStatus`), handed to the Sync drawer. */
+    sync?: SyncRead | undefined;
     onCamera?: ((mode: ViewMode) => void) | undefined;
     cameras?: readonly ViewMode[] | undefined;
     onShow(refs: string[]): void;
@@ -69,14 +82,14 @@ export interface PanelDrawerProps {
 }
 
 export function PanelDrawer({
-    graph, env, labels, surface, panel, onPanel, renderPanel, source, rootId, rootTitle, onChanged, diagnosticsText, onCamera, cameras, onShow, onCompose, panels = PANELS,
+    graph, env, labels, surface, panel, onPanel, renderPanel, source, rootId, rootTitle, onChanged, diagnosticsText, sync, onCamera, cameras, onShow, onCompose, panels = PANELS,
 }: PanelDrawerProps) {
     const open = availablePanels(graph, env, panels).find((p) => p.id === panel) ?? null;
     const Body = open?.component;
     const subtitle = open ? (labels.surface.drawerSubtitle as Record<string, string | undefined>)[open.id] : undefined;
     return (
         <Panel render={renderPanel} open={!!open} compact={env.compact} closeLabel={labels.close} title={open ? labels[open.labelKey] : ''} subtitle={subtitle} width={500} onClose={() => onPanel(null)}>
-            {Body && <Body graph={graph} source={source} rootId={rootId} rootTitle={rootTitle} onChanged={onChanged} diagnosticsText={diagnosticsText} onCamera={onCamera} cameras={cameras} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} onClose={() => onPanel(null)} />}
+            {Body && <Body graph={graph} source={source} rootId={rootId} rootTitle={rootTitle} onChanged={onChanged} diagnosticsText={diagnosticsText} sync={sync?.status} syncFailed={sync?.failed} onRefreshSync={sync?.refresh} onCamera={onCamera} cameras={cameras} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} onClose={() => onPanel(null)} />}
         </Panel>
     );
 }

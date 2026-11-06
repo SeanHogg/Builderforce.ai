@@ -6,7 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../../labels';
 import { surfaceFixture } from '../../testing';
-import type { KnowledgeGraphSource } from '../../types';
+import type { KnowledgeGraphSource, SyncStatus } from '../../types';
 import type { PanelProps } from '../registry';
 import { useSurface, type SurfaceModel } from '../useSurface';
 import { ApiPanel } from './ApiPanel';
@@ -33,14 +33,13 @@ function mount(Panel: ComponentType<PanelProps>, over: Partial<PanelProps> & { g
 
 describe('SyncPanel', () => {
     const counts = { files: 10, edges: 20, docs: 2 };
-    const source = (over: Partial<KnowledgeGraphSource> = {}): KnowledgeGraphSource => ({
-        scopes: async () => [], load: async () => null,
-        syncStatus: async () => ({
-            local: counts, server: { ...counts, files: 8 }, skipped: [{ path: 'big.bin', bytes: 3 * 1024 * 1024, reason: 'too large' }],
-            sources: [{ id: 'code', state: 'collected' }, { id: 'coverage', state: 'absent', note: 'no lcov' }],
-        }),
-        ...over,
-    });
+    const full: SyncStatus = {
+        local: counts, server: { ...counts, files: 8 }, skipped: [{ path: 'big.bin', bytes: 3 * 1024 * 1024, reason: 'too large' }],
+        sources: [{ id: 'code', state: 'collected' }, { id: 'coverage', state: 'absent', note: 'no lcov' }],
+    };
+    // The drawer fetches nothing: the root's ONE read (`useSyncStatus`) is handed in as `sync`.
+    const source = (over: Partial<KnowledgeGraphSource> = {}): KnowledgeGraphSource => ({ scopes: async () => [], load: async () => null, syncStatus: async () => full, ...over });
+    const withSync = (status: SyncStatus | null, over: Partial<PanelProps> = {}) => mount(SyncPanel, { source: source(), rootId: 'sys', sync: status, ...over });
 
     it('draws nothing when the source cannot report its status', () => {
         mount(SyncPanel, { source: { scopes: async () => [], load: async () => null }, rootId: 'sys' });
@@ -48,7 +47,7 @@ describe('SyncPanel', () => {
     });
 
     it('shows the pipeline, local against server, the skipped files with reasons, and the sources with their state', async () => {
-        mount(SyncPanel, { source: source(), rootId: 'sys', diagnosticsText: () => 'DIAG' });
+        withSync(full, { diagnosticsText: () => 'DIAG' });
         await screen.findByTestId('kg-sync');
         expect(document.querySelector('[data-step="match"]')!.getAttribute('data-state')).toBe('attention');
         expect(document.querySelectorAll('[data-step]')).toHaveLength(6);
@@ -60,14 +59,13 @@ describe('SyncPanel', () => {
     });
 
     it('says when nothing is uploaded yet, and when the read fails', async () => {
-        const server = { local: counts, skipped: [], sources: [] };
-        mount(SyncPanel, { source: source({ syncStatus: async () => server }), rootId: 'sys' });
+        withSync({ local: counts, skipped: [], sources: [] });
         await screen.findByText(L.surface.sync.notUploaded);
         expect(screen.getByText(L.surface.sync.skippedNone)).toBeTruthy();
     });
 
     it('says "not measured" for edges a linked folder never counted, and draws no bar for them', async () => {
-        mount(SyncPanel, { source: source({ syncStatus: async () => ({ local: { files: 4, docs: 1 }, skipped: [], sources: [] }) }), rootId: 'sys' });
+        withSync({ local: { files: 4, docs: 1 }, skipped: [], sources: [] });
         await screen.findByTestId('kg-sync');
         const edges = document.querySelector('[data-count="edges"]')!;
         expect(edges.getAttribute('data-measured')).toBe('false');
@@ -76,14 +74,14 @@ describe('SyncPanel', () => {
     });
 
     it('says "unknown" when no review recorded the skipped files, never "nothing skipped"', async () => {
-        mount(SyncPanel, { source: source({ syncStatus: async () => ({ local: counts, sources: [] }) }), rootId: 'sys' });
+        withSync({ local: counts, sources: [] });
         expect((await screen.findByTestId('kg-sync-skipped-unknown')).textContent).toBe(L.surface.sync.skippedUnknown);
         expect(screen.queryByText(L.surface.sync.skippedNone)).toBeNull();
     });
 
     it('lists a skipped file with its reason in words, and no size when none was measured', async () => {
         const skipped = [{ path: 'huge.sql', reason: 'too-large' }, { path: 'a.bin', bytes: 2048, reason: 'unreadable' }];
-        mount(SyncPanel, { source: source({ syncStatus: async () => ({ local: counts, skipped, sources: [] }) }), rootId: 'sys' });
+        withSync({ local: counts, skipped, sources: [] });
         const list = await screen.findByTestId('kg-sync-skipped');
         expect(list.textContent).toContain(`huge.sql · ${L.surface.skipReasons.tooLarge}`);
         expect(list.textContent).not.toContain('0 B');
@@ -91,19 +89,33 @@ describe('SyncPanel', () => {
     });
 
     it('notes a truncated graph', async () => {
-        mount(SyncPanel, { source: source({ syncStatus: async () => ({ local: { ...counts, truncated: true }, skipped: [], sources: [] }) }), rootId: 'sys' });
+        withSync({ local: { ...counts, truncated: true }, skipped: [], sources: [] });
         expect((await screen.findByTestId('kg-sync-truncated')).textContent).toBe(L.surface.sync.truncatedNote);
     });
 
-    it('reports a failed read', async () => {
-        mount(SyncPanel, { source: source({ syncStatus: async () => { throw new Error('x'); } }), rootId: 'sys' });
+    it('reports a failed read, and is loading until the root\'s read arrives', async () => {
+        withSync(null, { syncFailed: true });
         expect((await screen.findByRole('alert')).textContent).toBe(L.surface.sync.failed);
+    });
+
+    it('says it is loading while the root\'s read is on the way, and fetches nothing itself', () => {
+        const read = vi.fn(async () => full);
+        mount(SyncPanel, { source: source({ syncStatus: read }), rootId: 'sys', sync: null });
+        expect(screen.getByRole('status').textContent).toBe(L.surface.sync.loading);
+        expect(read).not.toHaveBeenCalled();
+    });
+
+    it('refreshes through the root\'s hook', () => {
+        const onRefreshSync = vi.fn();
+        withSync(full, { onRefreshSync });
+        fireEvent.click(screen.getByRole('button', { name: L.surface.sync.refresh }));
+        expect(onRefreshSync).toHaveBeenCalled();
     });
 
     it('copies the diagnostics text it was given', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.assign(navigator, { clipboard: { writeText } });
-        mount(SyncPanel, { source: source(), rootId: 'sys', diagnosticsText: () => 'DIAG' });
+        withSync(full, { diagnosticsText: () => 'DIAG' });
         fireEvent.click(await screen.findByRole('button', { name: L.copyDiagnostics }));
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('DIAG'));
     });

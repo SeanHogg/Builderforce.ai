@@ -69,7 +69,8 @@ export function Toolbar({ labels, onSearch, question, askName, answer, narrow, s
     const ask = askWrap ? askWrap(bar) : bar(null);
     const row: CSSProperties = narrow
         ? { display: 'grid', gap: 10, padding: '10px 12px' }
-        : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minHeight: 56, padding: '8px 16px' };
+        // One 56px line from COMPACT_WIDTH up: the spine and the ask bar shrink (min-width 0), the Panels group is a menu below 900px.
+        : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', height: 56, padding: '0 16px' };
     return (
         <div style={{ ...row, boxSizing: 'border-box', flex: 'none', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
             {spine}

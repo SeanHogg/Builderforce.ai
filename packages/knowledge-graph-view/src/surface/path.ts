@@ -13,6 +13,8 @@ export interface PathHop {
     kind: string;
     count: number;
     verdict?: string;
+    /** Part of a dependency cycle: marked with a glyph and the cycle label, never by colour alone. */
+    cycle?: boolean;
     /** What travels over the hop (a payload, a route), when the edge carries it; drawn after the kind on the path strip. */
     detail?: string;
 }
@@ -26,7 +28,7 @@ export function pathOfLine(line: Line | null, byId: ReadonlyMap<string, Station>
         const s = byId.get(id);
         return s ? [{ id, name: s.name, ...(s.layer ? { layer: s.layer } : {}) }] : [];
     });
-    return { stops, hops: line.hops.map((h) => ({ kind: 'references', count: h.count, ...(h.verdict ? { verdict: h.verdict } : {}) })) };
+    return { stops, hops: line.hops.map((h) => ({ kind: 'references', count: h.count, ...(h.verdict ? { verdict: h.verdict } : {}), ...(h.cycle ? { cycle: true } : {}) })) };
 }
 
 /**

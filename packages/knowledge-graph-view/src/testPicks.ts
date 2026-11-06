@@ -40,7 +40,7 @@ const menu = () => document.querySelector<HTMLElement>('[role="menu"]');
 
 /** The More questions trigger: it reads "More questions", or the picked question's name while one under it is active. */
 function moreTrigger(labels: KnowledgeGraphLabels): HTMLElement {
-    const names = new Set<string>([labels.surface.moreQuestions, ...Object.values(labels.surface.questions)]);
+    const names = new Set<string>([labels.surface.moreQuestions, ...Object.values(labels.surface.questions), ...Object.values(labels.lenses)]);
     const found = all('button[aria-haspopup="menu"]').find((b) => names.has((b.textContent ?? '').replace(/\s*▾$/, '').trim()));
     if (!found) throw new Error('the More questions menu is not on screen');
     return found;

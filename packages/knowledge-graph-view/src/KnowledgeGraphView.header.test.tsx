@@ -34,6 +34,8 @@ async function mount(source: KnowledgeGraphSource) {
     await screen.findByTestId('kg-transit');
 }
 const strip = () => within(screen.getByTestId('kg-status-strip'));
+// The pill's name is its text followed by the state in words ("Review plan ready Syncing"): match on how it starts.
+const startsWith = (text: string) => (name: string) => name.startsWith(text);
 const askBox = () => screen.getByRole('searchbox', { name: L.searchLabel }) as HTMLInputElement;
 
 describe('the sync pill and the parity line', () => {
@@ -47,7 +49,7 @@ describe('the sync pill and the parity line', () => {
     it('shows both counts when the server differs, and an error pill when files were skipped', async () => {
         await mount(sourceOf({ syncStatus: async () => sync({ server: { files: 100, docs: 0 }, skipped: [{ path: 'big.bin', reason: 'too-large' }] }) }));
         expect((await screen.findByTestId('kg-parity')).textContent).toBe(fillTemplate(h.parityDiffers, { local: '120', server: '100' }));
-        const pill = await strip().findByRole('button', { name: fillTemplate(h.skippedPill, { count: 1 }) });
+        const pill = await strip().findByRole('button', { name: startsWith(fillTemplate(h.skippedPill, { count: 1 })) });
         expect(pill.getAttribute('data-state')).toBe('error');
     });
 
@@ -71,9 +73,9 @@ describe('the review in the strip', () => {
         await mount(sourceOf());
         await pressMore(deps, L.reviewFolder);
         const card = await screen.findByTestId('kg-review-card');
-        expect(strip().getByRole('button', { name: h.reviewPlan })).toBeTruthy();
+        expect(strip().getByRole('button', { name: startsWith(h.reviewPlan) })).toBeTruthy();
         fireEvent.click(within(card).getByRole('button', { name: L.reviewConfirm }));
-        await waitFor(() => expect(strip().queryByRole('button', { name: h.reviewPlan })).toBeNull());
+        await waitFor(() => expect(strip().queryByRole('button', { name: startsWith(h.reviewPlan) })).toBeNull());
         expect(screen.queryByText(L.reviewPlanning)).toBeNull(); // no duplicate "Walking the folder…" pill
     });
 
@@ -81,9 +83,9 @@ describe('the review in the strip', () => {
         await mount(sourceOf());
         await pressMore(deps, L.reviewFolder);
         await screen.findByTestId('kg-review-card');
-        fireEvent.click(strip().getByRole('button', { name: h.reviewPlan }));
+        fireEvent.click(strip().getByRole('button', { name: startsWith(h.reviewPlan) }));
         expect(screen.queryByTestId('kg-review-card')).toBeNull();
-        fireEvent.click(strip().getByRole('button', { name: h.reviewPlan }));
+        fireEvent.click(strip().getByRole('button', { name: startsWith(h.reviewPlan) }));
         expect(screen.getByTestId('kg-review-card')).toBeTruthy();
     });
 });
@@ -138,11 +140,11 @@ describe('the ⋯ menu', () => {
         expect(await screen.findByText(L.copied)).toBeTruthy();
     });
 
-    it('holds the folder picker when there are several reviewed folders', async () => {
+    it('does not hold the folder picker, even with several reviewed folders (the spine root crumb is its one place)', async () => {
         const second = { ...surfaceFixture('other') };
         await mount(sourceOf({}, [surfaceFixture(), second]));
         const menu = await openMore(deps);
-        expect(within(menu).getByRole('menuitem', { name: fillTemplate(h.scopeItem, { title: 'other' }) })).toBeTruthy();
+        expect(within(menu).queryByRole('menuitem', { name: /other/ })).toBeNull();
     });
 });
 

@@ -18,6 +18,9 @@ export interface StatusDotProps {
     stateLabel?: string;
     title?: string;
     onClick?(): void;
+    /** The button opens a card: its expanded state and the card's id (a plain status has neither). */
+    expanded?: boolean;
+    controls?: string;
 }
 
 const TONE: Record<StatusState, ThemeTone> = { synced: 'agrees', syncing: 'accent', error: 'violation', idle: 'unused' };
@@ -27,13 +30,16 @@ const base: CSSProperties = {
     border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'), font: 'inherit', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
 };
 
-export function StatusDot({ state, label, stateLabel, title, onClick }: StatusDotProps) {
+export function StatusDot({ state, label, stateLabel, title, onClick, expanded, controls }: StatusDotProps) {
     const name = stateLabel ? `${label} ${stateLabel}` : undefined;
     const dot =<span aria-hidden="true" style={{ ...swatch(cssVar(TONE[state])), opacity: state === 'syncing' ? 0.65 : 1 }} />;
     const text = <>{label}{stateLabel ? <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>{` ${stateLabel}`}</span> : null}</>;
     if (onClick) {
         return (
-            <button type="button" data-state={state} title={title} aria-label={name} style={{ ...base, cursor: 'pointer', position: 'relative' }} onClick={onClick}>
+            <button
+                type="button" data-state={state} title={title} aria-label={name} aria-expanded={expanded} aria-controls={expanded ? controls : undefined}
+                style={{ ...base, cursor: 'pointer', position: 'relative' }} onClick={onClick}
+            >
                 {dot}{text}
             </button>
         );

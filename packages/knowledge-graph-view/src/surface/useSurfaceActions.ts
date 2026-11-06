@@ -32,12 +32,13 @@ export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel
     };
     return {
         select,
-        show: (refs) => { kg.setFocus(refs); if (refs[0]) select(refs[0]); },
+        show: (refs) => { kg.focusRefs(refs); if (refs[0]) select(refs[0]); },
         pickLens: (id) => { kg.setLens(id); const q = questionForLens(id); if (q) surface.setQuestion(q); },
         pickQuestion: (id) => {
             if (kg.focus.length > 0) kg.setFocus([]);
             surface.setQuestion(id);
-            const wanted = questionDef(id).lens;
+            // A question with no lens of its own (Wrong, Untested, Patterns) still leaves a lens-only pick (Compare): the question is the active pick now.
+            const wanted = questionDef(id).lens ?? (questionForLens(kg.lens.id) === undefined ? 'structure' as const : undefined);
             if (wanted && kg.lenses.some((l) => l.id === wanted)) kg.setLens(wanted);
         },
         pinpointed: (refs) => { kg.setFocus(refs); surface.pinPath(refs); surface.setQuestion('wrong'); },

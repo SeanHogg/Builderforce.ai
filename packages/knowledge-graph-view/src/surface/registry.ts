@@ -10,7 +10,7 @@ import type { ComponentType } from 'react';
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels, StringLabelKey } from '../labels';
 import type { LensDef } from '../lenses';
-import type { FindingEvidence, KnowledgeGraphSource, SourceLocation, ViewMode } from '../types';
+import type { FindingEvidence, KnowledgeGraphSource, SourceLocation, SyncStatus, ViewMode } from '../types';
 import type { SurfaceModel } from './useSurface';
 
 /** What a row's `available` rule may depend on. */
@@ -67,6 +67,12 @@ export interface PanelProps {
     onChanged?: (() => void) | undefined;
     /** The *Copy diagnostics* text of the view, for the Sync drawer. */
     diagnosticsText?: (() => string) | undefined;
+    /** The host's sync status, read ONCE by the root (`useSyncStatus`); the Sync drawer draws it and fetches nothing. */
+    sync?: SyncStatus | null | undefined;
+    /** That read failed. */
+    syncFailed?: boolean | undefined;
+    /** Reads again through the same hook. */
+    onRefreshSync?: (() => void) | undefined;
     labels: KnowledgeGraphLabels;
     surface: SurfaceModel;
     onShow(refs: string[]): void;

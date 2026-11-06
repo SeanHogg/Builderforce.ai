@@ -12335,6 +12335,9 @@
     "engineDetached": "Le modèle sur cet appareil s’est arrêté avant d’avoir terminé. Renvoyez le message pour réessayer.",
     "modelKeepsCrashing": "Ce modèle plante sans cesse sur cet appareil. Supprimez-le ou essayez un autre modèle.",
     "continuationTimedOut": "Cela a pris trop de temps. Votre message est conservé et sera lu avec votre prochain message.",
+    "modelUnresponsive": "{model} ne répond pas. Choisissez un autre modèle pour continuer.",
+    "chooseAnotherModel": "Choisir un modèle",
+    "providerSignIn": "{label} vous demande de vous reconnecter. Reconnectez-le dans Paramètres ▸ Fournisseurs de modèles.",
     "manageLocalModels": "Gérer les modèles sur l’appareil",
     "platformRefusedMode": "Local uniquement garde cette exécution sur cet appareil : elle n’a donc pas pu joindre BuilderForce. Passez en Hybride dans le menu /, sous Modèle, pour l’autoriser.",
     "platformRefusedSync": "La synchronisation du compte est désactivée : ceci n’a donc pas pu être enregistré dans votre compte. Activez la synchronisation dans les paramètres de la plateforme, ou continuez en local.",
@@ -20707,6 +20710,16 @@
       "title": "Nécessite : {needs}",
       "summary": "{count, plural, one {encore # étape} other {encore # étapes}}"
     }
+  },
+  "evermindPacks": {
+    "title": "Packs de connaissances",
+    "hint": "Choisissez les packs de connaissances téléversés dans lesquels cet Evermind puise pour répondre.",
+    "loading": "Chargement des packs de connaissances…",
+    "failed": "Impossible de charger les packs de connaissances.",
+    "empty": "Aucun pack de connaissances n’a encore été téléversé dans ce projet. Dans VS Code, exécutez « BuilderForce : Téléverser un pack de connaissances » pour en ajouter un.",
+    "select": "Utiliser",
+    "selected": "Utilisé",
+    "summary": "{count} pack(s) sur {total} utilisé(s)"
   },
   "creationCanvas": {
     "costToBuild": "Coût de construction",
@@ -35806,7 +35819,6 @@
     "searchLabel": "Rechercher dans le graphe",
     "searchPlaceholder": "Rechercher des fichiers, sections, faits…",
     "searchNoHits": "Aucun résultat pour « {query} ».",
-    "lensesLabel": "Prismes",
     "lenses": {
       "structure": "Structure",
       "partitions": "Partitions",
@@ -36186,12 +36198,22 @@
         "description": "Grille de chaleur : {layers} couches, {components} composants. Sélectionnez une cellule pour voir ses détails.",
         "cellAria": "{name}, {files} fichiers",
         "legend": "Taille de cellule : {size} · Couleur : {colour} · Barre : {bar}",
-        "empty": "Aucun composant à dessiner."
+        "empty": "Aucun composant à dessiner.",
+        "showMore": "Afficher {count} de plus"
       },
+      "cycleHop": "Dépendance cyclique",
+      "mapShows": "La carte montre {shown} fichiers sur {total}",
       "sequence": {
         "description": "Séquence de {stops} arrêts et {messages} messages.",
         "empty": "Choisissez une ligne ou une station pour dessiner sa séquence.",
-        "messageAria": "{from} vers {to} : {label}"
+        "messageAria": "{from} vers {to} : {label}",
+        "backToMap": "Retour à la carte"
+      },
+      "pillStates": {
+        "synced": "Synchronisé",
+        "syncing": "Synchronisation en cours",
+        "error": "Erreur",
+        "idle": "Non synchronisé"
       },
       "overlay": {
         "outTo": "↑ Sortir vers {name}",
@@ -36230,8 +36252,7 @@
         "doneMore": "+{count} vérifications de plus",
         "detailsTitle": "Détails",
         "linkCoverage": "Couverture",
-        "linkApi": "API",
-        "moreFindings": "Tous les constats"
+        "linkApi": "API"
       },
       "path": {
         "title": "{line} · {entry}",
@@ -36242,7 +36263,8 @@
         "sequence": "Séquence",
         "noTests": "sans tests",
         "findings": "{count} constats",
-        "stops": "Arrêts"
+        "stops": "Arrêts",
+        "enlarge": "Agrandir"
       },
       "sync": {
         "loading": "Lecture de l’état de synchronisation…",
@@ -36260,7 +36282,8 @@
         "sourcesTitle": "Sources de données",
         "excludedTitle": "Dossiers exclus",
         "excludedNote": "Ces dossiers ne sont jamais lus.",
-        "barAria": "{label} : local {local}, serveur {server}"
+        "barAria": "{label} : local {local}, serveur {server}",
+        "refresh": "Actualiser"
       },
       "syncSteps": {
         "walk": "Fichiers parcourus",
@@ -36431,7 +36454,6 @@
         "parityLocal": "{local} fichiers ici · pas encore sur le serveur",
         "moreActions": "Autres actions",
         "reReview": "Relancer la revue de ce dossier",
-        "scopeItem": "Dossier : {title}",
         "overlaysNote": "N’importe quelle métrique peut piloter n’importe quel canal. Carte, Système, Graphe, Carte mentale, Tour, Chaleur, Liste et Séquence lisent les mêmes liaisons : une barre de couverture peut tout aussi bien être une barre d’anti-patterns.",
         "rootsLabel": "Dossiers revus"
       },

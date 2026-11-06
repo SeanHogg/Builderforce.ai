@@ -26,8 +26,9 @@ export interface OverlayMenuProps {
 }
 
 const WIDE: CSSProperties = { width: 'min(560px, 92vw)', gap: 9, padding: '12px 14px' };
-// Fixed to the container's edges so a trigger mid-strip cannot push the panel off screen.
-const NARROW: CSSProperties = { position: 'fixed', top: 'auto', insetInlineStart: 12, insetInlineEnd: 12, width: 'auto', gap: 9, padding: '12px 14px' };
+// Absolute against the status strip (the menu's `anchor="container"`), spanning it, so a trigger mid-strip cannot push the
+// panel off screen and the panel still works inside a docked host (nothing is fixed to the viewport).
+const NARROW: CSSProperties = { insetInlineStart: 12, insetInlineEnd: 12, width: 'auto', maxWidth: 'none', gap: 9, padding: '12px 14px' };
 
 const SMALL: CSSProperties = { height: 26, padding: '0 8px', fontSize: 11 };
 const rowLabel: CSSProperties = { fontSize: 12, fontWeight: 600, color: 'inherit' };
@@ -36,7 +37,7 @@ export function OverlayMenu({ labels, stations, bindings, preset, onPreset, onCh
     const s = labels.surface;
     const trigger = narrow ? `${s.presets[preset]} ▾` : `${fillTemplate(s.presetLabel, { preset: s.presets[preset] })} ▾`;
     return (
-        <Menu trigger={trigger} label={s.overlaysTitle} title={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} panelStyle={narrow ? NARROW : WIDE}>
+        <Menu trigger={trigger} label={s.overlaysTitle} title={s.overlaysTitle} active variant={narrow ? 'pill' : 'accent'} anchor={narrow ? 'container' : 'trigger'} panelStyle={narrow ? NARROW : WIDE}>
             <div data-testid="kg-overlay-menu" style={{ display: 'grid', gap: 9 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {PRESET_ORDER.map((id) => (

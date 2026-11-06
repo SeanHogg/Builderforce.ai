@@ -21,7 +21,7 @@
  */
 import {
   DEFAULT_MAX_NODES, MAX_NODES_CAP, factRef, pathOfRef, sha256Hex,
-  type Extracted, type KnowledgeGraph, type NodeRef,
+  type Extracted, type GraphOutline, type KnowledgeGraph, type NodeRef,
 } from '@seanhogg/builderforce-memory/knowledge';
 import { analysisToExtracted, buildCodeGraph, knowledgePacks, repoGraphToExtracted, sourcePathOf, type CodeAnalysisSnapshot } from '@builderforce/agent-tools';
 import { getOrSetCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
@@ -48,6 +48,8 @@ export interface KnowledgeGraphQuery {
   maxNodes?: number;
   /** A past review digest of the root: build from that review's snapshot. */
   at?: string;
+  /** Attach the full-graph outline of a truncated graph (default true). Search reads cards, not the outline, and passes false. */
+  outline?: boolean;
 }
 
 /** `maxNodes` as the graph will honour it: default 400, capped at 2000. */
@@ -60,6 +62,15 @@ export function knowledgeGraphCacheKey(parts: {
   tenantId: number; projectId: number; rootId: string; scopeDigest: string; version: string; focusHash: string; maxNodes: number;
 }): string {
   return `kg:v5:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}:${parts.focusHash}:${parts.maxNodes}`;
+}
+
+/**
+ * The outline of the FULL graph does not depend on focus or maxNodes, so it is cached once per
+ * (root, scope digest, knowledge version) and attached on read; every focus variant of the graph
+ * shares this one copy instead of carrying its own.
+ */
+export function knowledgeOutlineCacheKey(parts: { tenantId: number; projectId: number; rootId: string; scopeDigest: string; version: string }): string {
+  return `kg-outline:v1:${parts.tenantId}:${parts.projectId}:${parts.rootId}:${parts.scopeDigest}:${parts.version}`;
 }
 
 const focusHashOf = (focus: readonly string[]): string =>
@@ -133,12 +144,15 @@ async function cachedBuild(
 ): Promise<KnowledgeGraph | null> {
   const focus = (q.focus ?? []).filter(Boolean);
   const maxNodes = clampMaxNodes(q.maxNodes);
+  const version = await deps.version();
   const key = knowledgeGraphCacheKey({
     tenantId: deps.tenantId, projectId: deps.projectId, rootId: q.rootId, scopeDigest,
-    version: await deps.version(), focusHash: focusHashOf(focus), maxNodes,
+    version, focusHash: focusHashOf(focus), maxNodes,
   });
 
-  return getOrSetCached(deps.cacheEnv, key, async (): Promise<KnowledgeGraph | null> => {
+  // One build per call, shared by the graph and the outline loaders (whichever misses).
+  let built: Promise<KnowledgeGraph | null> | undefined;
+  const build = (): Promise<KnowledgeGraph | null> => (built ??= (async () => {
     const extracted = await perceive();
     if (!extracted) return null;
     const facts = await deps.store.facts(sourcePathsOf(extracted, q.rootId));
@@ -147,5 +161,20 @@ async function cachedBuild(
       { rootId: q.rootId, extracted, facts, relations, packs: knowledgePacks() },
       { maxNodes, focus: focus as NodeRef[] },
     );
+  })());
+
+  // The graph is cached WITHOUT its outline; the outline is cached once per root and attached on read.
+  const graph = await getOrSetCached(deps.cacheEnv, key, async (): Promise<KnowledgeGraph | null> => {
+    const full = await build();
+    if (!full) return null;
+    const { outline: _outline, ...slim } = full;
+    return slim;
   }, { kvTtlSeconds: GRAPH_KV_TTL_SECONDS });
+  if (!graph || q.outline === false || !graph.stats.truncated) return graph;
+
+  const outlineKey = knowledgeOutlineCacheKey({ tenantId: deps.tenantId, projectId: deps.projectId, rootId: q.rootId, scopeDigest, version });
+  const outline = await getOrSetCached(deps.cacheEnv, outlineKey, async (): Promise<GraphOutline | null> => (await build())?.outline ?? null, {
+    kvTtlSeconds: GRAPH_KV_TTL_SECONDS,
+  });
+  return outline ? { ...graph, outline } : graph;
 }

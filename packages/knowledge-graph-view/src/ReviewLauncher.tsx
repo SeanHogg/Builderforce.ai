@@ -66,6 +66,8 @@ export function reviewActions(args: {
 export interface ReviewLauncherProps {
     source: KnowledgeGraphSource;
     labels: KnowledgeGraphLabels;
+    /** The host's review places (`useReviewTargets`, read once by the root and shared with the ⋯ menu). */
+    targets: readonly ReviewTarget[];
     start(req: ReviewRequest): void;
     primary?: boolean;
     /** Arrive on it: its targets shown and the button focused (a host's "Choose a folder to review" chip). */
@@ -74,8 +76,7 @@ export interface ReviewLauncherProps {
     status?: ReviewState['status'];
 }
 
-export function ReviewLauncher({ source, labels, start, primary = true, defaultOpen = false, status }: ReviewLauncherProps) {
-    const targets = useReviewTargets(source);
+export function ReviewLauncher({ source, labels, targets, start, primary = true, defaultOpen = false, status }: ReviewLauncherProps) {
     const [open, setOpen] = useState(defaultOpen);
     const buttonRef = useRef<HTMLButtonElement>(null);
     // Focus only: the picker itself still needs the person's own press (a gesture).

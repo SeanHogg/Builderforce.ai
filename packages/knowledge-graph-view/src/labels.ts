@@ -116,9 +116,15 @@ export interface SurfaceLabels {
     /** The System camera: `{tiers}`, `{components}`; a component's name `{name}`, `{files}`, `{findings}`. */
     system: Record<'description' | 'componentAria' | 'antiBar' | 'data' | 'dataEmpty' | 'empty', string>;
     /** The Heat camera: `{layers}`, `{components}`; `{name}`, `{files}`; the legend `{size}`, `{colour}`, `{bar}`. */
-    heat: Record<'description' | 'cellAria' | 'legend' | 'empty', string>;
+    heat: Record<'description' | 'cellAria' | 'legend' | 'empty' | 'showMore', string>;
+    /** The mark on a hop that is part of a dependency cycle (map and path strip; never colour alone). */
+    cycleHop: string;
+    /** The scale note when the map shows only part of the files: `{shown}`, `{total}`. */
+    mapShows: string;
     /** The Sequence camera: `{stops}`, `{messages}`; `{from}`, `{to}`, `{label}`. */
-    sequence: Record<'description' | 'empty' | 'messageAria', string>;
+    sequence: Record<'description' | 'empty' | 'messageAria' | 'backToMap', string>;
+    /** The sync pill's state in words, read after its text (never colour alone). */
+    pillStates: Record<'synced' | 'syncing' | 'error' | 'idle', string>;
     /** The scene overlay: `{name}` the level above; `{lens}`; `{family}`; `{count}` files missing on the server. */
     overlay: Record<'outTo' | 'fit' | 'lensSub' | 'familyOnly' | 'clearFamily' | 'missingFiles' | 'diagnose' | 'controls', string>;
     /** The left rail: its heading, and the legend heading with its owner swatch note. */
@@ -127,14 +133,14 @@ export interface SurfaceLabels {
     act: Record<
         'cardsTitle' | 'noCards' | 'apply' | 'prompt' | 'show' | 'cardAction' | 'sourceExact' | 'sourceAnalyzer' | 'sourceModel' | 'fixQueue'
         | 'keepTitle' | 'keepBody' | 'keepButton' | 'testRequest' | 'doneTitle' | 'doneCheck' | 'doneNone' | 'doneMore' | 'detailsTitle'
-        | 'linkCoverage' | 'linkApi' | 'moreFindings',
+        | 'linkCoverage' | 'linkApi',
         string
     >;
     /** The path strip. `{line}`, `{entry}`, `{count}`. */
-    path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'findings' | 'stops', string>;
+    path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'findings' | 'stops' | 'enlarge', string>;
     sync: Record<
         'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
-        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria',
+        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh',
         string
     >;
     syncSteps: Record<'walk' | 'graph' | 'upload' | 'match' | 'analyse' | 'skipped', string>;
@@ -180,7 +186,7 @@ export interface SurfaceLabels {
     /** The header: the status strip (`{time}`, `{progress}`, `{count}`, `{local}`, `{server}`), the overflow menu (`{title}`) and the overlay sentence. */
     header: Record<
         'statusLabel' | 'syncedAt' | 'synced' | 'notSynced' | 'updateFailed' | 'reviewing' | 'reviewPlan' | 'reviewFailed' | 'skippedPill'
-        | 'parityBoth' | 'parityDiffers' | 'parityLocal' | 'moreActions' | 'reReview' | 'scopeItem' | 'overlaysNote' | 'rootsLabel',
+        | 'parityBoth' | 'parityDiffers' | 'parityLocal' | 'moreActions' | 'reReview' | 'overlaysNote' | 'rootsLabel',
         string
     >;
     /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
@@ -214,7 +220,6 @@ export interface KnowledgeGraphLabels {
     searchLabel: string;
     searchPlaceholder: string;
     searchNoHits: string;
-    lensesLabel: string;
     lenses: Record<LensId, string>;
     lensHints: Record<LensId, string>;
     lensNotApplicable: string;
@@ -403,7 +408,6 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     searchLabel: 'Search the graph',
     searchPlaceholder: 'Search files, sections, facts…',
     searchNoHits: 'Nothing matches “{query}”.',
-    lensesLabel: 'Lenses',
     lenses: {
         structure: 'Structure', partitions: 'Partitions', duplication: 'Duplication', claims: 'Claims', links: 'Links',
         unused: 'Unused', knowledge: 'Knowledge', live: 'Live', compare: 'Compare',
@@ -673,12 +677,17 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
             cellAria: '{name}, {files} files',
             legend: 'Cell size: {size} · Colour: {colour} · Bar: {bar}',
             empty: 'There are no components to draw.',
+            showMore: 'Show {count} more',
         },
+        cycleHop: 'Dependency cycle',
+        mapShows: 'Map shows {shown} of {total} files',
         sequence: {
             description: 'Sequence of {stops} stops and {messages} messages.',
             empty: 'Pick a line or a station to draw its sequence.',
             messageAria: '{from} to {to}: {label}',
+            backToMap: 'Back to map',
         },
+        pillStates: { synced: 'Synced', syncing: 'Syncing', error: 'Error', idle: 'Not synced' },
         overlay: {
             outTo: '↑ Out to {name}',
             fit: 'Fit',
@@ -717,7 +726,6 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
             detailsTitle: 'Details',
             linkCoverage: 'Coverage',
             linkApi: 'API',
-            moreFindings: 'All findings',
         },
         path: {
             title: '{line} · {entry}',
@@ -729,6 +737,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
             noTests: 'no tests',
             findings: '{count} findings',
             stops: 'Stops',
+            enlarge: 'Enlarge',
         },
         sync: {
             loading: 'Reading the sync status…',
@@ -751,6 +760,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
             excludedTitle: 'Excluded folders',
             excludedNote: 'These folders are never read.',
             barAria: '{label}: local {local}, server {server}',
+            refresh: 'Refresh',
         },
         syncSteps: { walk: 'Files walked', graph: 'Graph built', upload: 'Uploaded', match: 'Server matches local', analyse: 'Sources collected', skipped: 'Nothing skipped' },
         syncStates: { ok: 'Done', pending: 'Waiting', attention: 'Needs attention' },
@@ -888,7 +898,6 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
             parityLocal: '{local} files here · not on the server',
             moreActions: 'More actions',
             reReview: 'Re-review this folder',
-            scopeItem: 'Folder: {title}',
             overlaysNote: 'Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.',
             rootsLabel: 'Reviewed folders',
         },

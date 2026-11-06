@@ -49,6 +49,8 @@ export default {
     // testing-library unmounts between tests only when `afterEach` is global.
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
-    testTimeout: 30_000,
+    // The whole-view flows run role queries over 2000-node lists with the Act rail's Details (Insights charts) open; alone they take
+    // 15-25s, and under the parallel suite that passed 30s.
+    testTimeout: 60_000,
   },
 };

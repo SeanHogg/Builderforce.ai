@@ -119,7 +119,7 @@ export async function searchKnowledge(
   q: { rootId: string; query: string; k: number },
 ): Promise<KnowledgeSearchResult | null> {
   // The widest graph the server builds: search reaches every node it renders and more.
-  const graph = await getKnowledgeGraph(deps.graph, { rootId: q.rootId, maxNodes: Number.MAX_SAFE_INTEGER });
+  const graph = await getKnowledgeGraph(deps.graph, { rootId: q.rootId, maxNodes: Number.MAX_SAFE_INTEGER, outline: false });
   if (!graph) return null;
   const index = await deps.index.load(
     { namespace: `${deps.graph.tenantId}/${deps.graph.projectId}`, rootId: q.rootId, digest: graph.scope.digest },

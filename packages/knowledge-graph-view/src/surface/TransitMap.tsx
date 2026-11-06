@@ -39,6 +39,8 @@ export interface TransitMapProps {
     onSelectStation(id: string): void;
     onSelectLine(id: string): void;
     label: string;
+    /** The title and aria-label of a cycle hop's mark; absent ⇒ the catalog's `surface.cycleHop`. */
+    cycleLabel?: string;
 }
 
 function TerminusIcon({ kind, at, color }: { kind: 'data' | 'external' | 'end'; at: Point; color: string }) {
@@ -92,13 +94,23 @@ export function TransitMap(p: TransitMapProps) {
                     const untested = from && to ? segmentUntested(from, to) === true : false;
                     const off = dim(r.from, r.to);
                     const color = cssVar(lineTone(line.colourIndex));
+                    // A cycle is marked by shape (dashes and a glyph), never by colour alone.
+                    const cycle = line.hops[r.index]?.cycle === true;
+                    const a = layout.positions.get(r.from), b = layout.positions.get(r.to);
+                    const cycleLabel = p.cycleLabel ?? s.cycleHop;
                     return (
-                        <g key={`${r.lineId}:${r.index}`} opacity={off ? 0.22 : 1} data-line={r.lineId} data-untested={untested || undefined}>
+                        <g key={`${r.lineId}:${r.index}`} opacity={off ? 0.22 : 1} data-line={r.lineId} data-untested={untested || undefined} data-cycle={cycle || undefined}>
                             <path d={r.d} fill="none" stroke={cssVar('bg')} strokeWidth={w + 4} strokeLinecap="round" strokeLinejoin="round" />
                             <path
                                 d={r.d} fill="none" stroke={color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round"
-                                strokeDasharray={untested ? '9 7' : undefined} style={{ cursor: 'pointer' }} onClick={() => p.onSelectLine(r.lineId)}
+                                strokeDasharray={untested ? '9 7' : cycle ? '3 5' : undefined} style={{ cursor: 'pointer' }} onClick={() => p.onSelectLine(r.lineId)}
                             />
+                            {cycle && a && b && (
+                                <g role="img" aria-label={cycleLabel} data-cycle-mark>
+                                    <title>{cycleLabel}</title>
+                                    <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 + 4} textAnchor="middle" fontSize={14} fontWeight={700} fill={cssVar('text')} {...halo}>⟲</text>
+                                </g>
+                            )}
                             {!reducedMotion && !off && !untested && r.lineId === p.lineId && (
                                 <path d={r.d} fill="none" stroke={cssVar('bg')} strokeWidth={2} strokeLinecap="round" strokeDasharray="2 14" opacity={0.75} pointerEvents="none">
                                     <animate attributeName="stroke-dashoffset" from="16" to="0" dur="1.2s" repeatCount="indefinite" />

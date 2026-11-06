@@ -17,12 +17,15 @@ export interface ScaleLineProps {
     drawn: number;
     total: number;
     onShowAll(): void;
+    /** The station model's cap (`StationModel.capped`): the map shows `shown` of `total` files. */
+    capped?: { shown: number; total: number } | undefined;
 }
 
-export function ScaleLine({ labels, stats, truncated, compact, showAll, drawn, total, onShowAll }: ScaleLineProps) {
+export function ScaleLine({ labels, stats, truncated, compact, showAll, drawn, total, onShowAll, capped }: ScaleLineProps) {
     return (
         <>
             {fillTemplate(labels.statsLine, stats)}
+            {capped && <> · <span data-testid="kg-map-capped">{fillTemplate(labels.surface.mapShows, capped)}</span></>}
             {truncated && <> · {compact && !showAll ? fillTemplate(labels.focusedNote, { count: drawn }) : labels.truncatedNote}</>}
             {compact && !showAll && drawn < total && (
                 <> <button type="button" style={{ ...quietButton, minHeight: 40 }} onClick={onShowAll}>{labels.showAll}</button></>

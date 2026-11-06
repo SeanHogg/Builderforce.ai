@@ -7,12 +7,10 @@
  * report its status.
  */
 
-import { useEffect, useState } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../../copyText';
 import { fillTemplate } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { button, card, muted } from '../../styles';
-import type { SyncStatus } from '../../types';
 import type { PanelProps } from '../registry';
 import { SkippedItems } from '../../SkippedList';
 import { COUNTS, pipelineSteps, serverShare, type StepState } from './syncModel';
@@ -22,31 +20,21 @@ const STATE_TONE: Record<StepState, ThemeTone> = { ok: 'agrees', pending: 'muted
 const SOURCE_TONE = { collected: 'agrees', estimated: 'cycle', absent: 'muted' } as const satisfies Record<string, ThemeTone>;
 const EXCLUDED = ['nested', 'worktrees', 'local', 'vendored'] as const;
 
-type Load = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; status: SyncStatus };
-
-export function SyncPanel({ labels, source, rootId, diagnosticsText }: PanelProps) {
+/**
+ * The status is the root's ONE read (`PanelProps.sync`, from `useSyncStatus`): this drawer does not
+ * fetch. Refresh asks that same hook to read again.
+ */
+export function SyncPanel({ labels, source, sync: status, syncFailed, onRefreshSync, diagnosticsText }: PanelProps) {
     const t = labels.surface.sync, s = labels.surface;
-    const [load, setLoad] = useState<Load>({ state: 'loading' });
     const copier = useCopyText();
-    const read = source?.syncStatus;
-    useEffect(() => {
-        if (!read || !rootId) return;
-        let live = true;
-        setLoad({ state: 'loading' });
-        read.call(source, rootId).then(
-            (status) => { if (live) setLoad({ state: 'ready', status }); },
-            () => { if (live) setLoad({ state: 'failed' }); },
-        );
-        return () => { live = false; };
-    }, [read, source, rootId]);
-    if (!read) return null;
-    if (load.state === 'loading') return <p role="status" style={{ ...muted, margin: 0 }}>{t.loading}</p>;
-    if (load.state === 'failed') return <p role="alert" style={{ margin: 0 }}>{t.failed}</p>;
+    if (!source?.syncStatus) return null;
+    if (syncFailed) return <p role="alert" style={{ margin: 0 }}>{t.failed}</p>;
+    if (!status) return <p role="status" style={{ ...muted, margin: 0 }}>{t.loading}</p>;
 
-    const { status } = load;
     const diagnostics = diagnosticsText?.();
     return (
         <div data-testid="kg-sync" style={{ display: 'grid', gap: 16 }}>
+            {onRefreshSync && <div><button type="button" style={button} onClick={onRefreshSync}>{t.refresh}</button></div>}
             <Section title={t.pipelineTitle}>
                 <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
                     {pipelineSteps(status).map((step) => (

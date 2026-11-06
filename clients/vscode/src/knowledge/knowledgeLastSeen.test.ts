@@ -58,7 +58,7 @@ describe("knowledgeLastSeen", () => {
     expect((await readdir(join(dir, "knowledge-last-seen"))).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
-  it("skips a graph larger than 8 MB", async () => {
+  it("skips a graph larger than 24 MB", async () => {
     const big = record("r1");
     big.graph = graph("r1", "x".repeat(LAST_SEEN_MAX_BYTES + 1));
     expect(await writeLastSeen(dir, "k", big)).toBe(false);
