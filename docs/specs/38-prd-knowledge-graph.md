@@ -46,13 +46,17 @@ Memory 2026.10.40 is published and in use from VS Code 2026.10.131.
 
 The graph already holds what these formulas need: reference edges, file badges (complexity, coverage, churn, owner, clones, unused, layer verdicts) and git history. Each formula below is arithmetic that runs when the graph is built, not a model call. The result is stored as a node badge or an area value. Every prediction then also counts as an answer that skipped the model on the savings ledger.
 
+**Who owns what.**
+- The shared maths and the per-file predictions belong to [PRD 41 › Part D](./41-prd-offline-understanding-and-run-delta.md). That covers change entropy, defect risk, Beta–Binomial rates, calibration, the labels pipeline and trends, and the formulas live in its builderforce-memory `stats` module (D13). There is no separate package.
+- This section owns only the graph and map formulas (P1, P4, P7) and the badges the map shows from Part D's results. It does not restate Part D.
+
 **Rules for every formula below:**
-- **Where it lives.** Formulas live in builderforce-memory under `packages/memory/src/knowledge/`, next to `importance.ts`, as pure functions with tests.
+- **Where it lives.** Graph formulas live in builderforce-memory under `packages/memory/src/knowledge/`, next to `importance.ts`, as pure functions with tests. They call the `stats` module for any shared primitive.
 - **When it runs.** They run inside `buildGraph`, so the cut graph and the outline carry the result.
 - **What the UI reads.** Builderforce only reads the result. The view never computes a prediction.
 - **Determinism.** The same graph and history give the same numbers. Fixed iterations and seeded order, as PageRank already does (`PAGERANK_DAMPING` 0.85, 40 iterations).
 - **Missing inputs.** When an input is missing (no git history, no coverage), the badge is absent. The channel then reads "Not set up", never a guess.
-- **Display.** Every number on screen that comes from a rate or a prediction shows its uncertainty (see P3).
+- **Display.** Every number on screen that comes from a rate or a prediction shows its n and its interval, using Part D's shrunk rates (D3, D11). A 1-of-1 never reads as 100%, and a sample under 10 renders as "≈ x% (a–b)".
 
 **What exists today:**
 - PageRank sets node importance (`knowledge/importance.ts`).
@@ -69,42 +73,19 @@ The graph already holds what these formulas need: reference edges, file badges (
 - **Uses.** It removes "No partition" on the map. It also gives station groupings by cohesion instead of by folder, which replaces the directory roll-up used when stations exceed the cap.
 - **Accept.** At most 5% of files in "No partition" on the `agentic` workspace. This is the open acceptance check above. Modularity Q is reported in the graph stats.
 
-#### P2. Defect-risk score
+#### P2. The map shows PRD 41's predictions as badges
 
-- **Formula.** Logistic regression: P(defect) = 1 / (1 + e^−(β·x)).
-- **Features x:**
-  - churn, time-decayed with a half-life
-  - change entropy H = −Σ pₖ log pₖ over the file's share of each commit's changes (Hassan 2009)
-  - cyclomatic complexity
-  - coverage
-  - fan-in (references in)
-  - owner entropy
-  - clone-group membership
-- **Training labels.** Files touched by bug-fix commits, found by message and linked-issue heuristics, then traced to the commits that introduced the changed lines (SZZ).
-- **Fitting and fallback.**
-  - Coefficients are fitted per repository by gradient descent with L2 regularisation.
-  - Below 30 labelled fixes, use the published default coefficients and say so in the provenance badge.
-- **Uses.**
-  - It replaces the hand-weighted w1–w5 heat ramp with calibrated quintiles of P.
-  - It orders the "What is wrong?" answers and the Act cards.
-  - It feeds the Coverage drawer's "test this first".
-- **Accept.**
-  - On a held-out 20% of history, AUC ≥ 0.70 on the `agentic` workspace.
-  - Calibration error (ECE) ≤ 0.1.
-  - Both are reported in the Coverage drawer's provenance badge.
+PRD 41 Part D computes these. This section only puts them on files and stations and says where the map shows them.
 
-#### P3. Honest rates: Beta–Binomial shrinkage and Wilson intervals
+| Part D result | Badge or area value | Where the map shows it |
+|---|---|---|
+| D5 defect risk (calibrated) | `risk`, `riskBand` | Calibrated quintiles of risk replace the hand-weighted w1–w5 heat ramp. Risk orders "What is wrong?" and the Act cards, and feeds the Coverage drawer's "test this first". |
+| D2.1 change entropy and owner entropy, D15 | `ownerEntropy`, area `busFactor` | The owner channel, plus a "single owner" risk in "What is wrong?". The bus factor is the smallest number of authors covering 50% of a station's changes. |
+| D3 shrunk rates | area coverage rate and its interval | Shown on stations, the Coverage drawer, the API drawer's tested-response share, and the Measure section's kill-condition metrics. |
+| D7, D8 trends and reliability growth | per-project series | The Measure headline ("debt goes down") reads as a forecast with a direction and a range. |
+| D9 cost estimate | pre-review model-call estimate | The review launcher warns before starting when the estimate exceeds the budget. The `agentic` review planned 17,949 calls against 200. |
 
-- **Formula.** Every displayed rate of k successes in n trials uses the posterior mean (k + α)/(n + α + β), with the prior (α, β) fitted to the repository's own distribution (empirical Bayes). The Wilson score interval gives the range shown.
-- **Applies to:**
-  - coverage per station
-  - owner share
-  - tested-response share in the API drawer
-  - the Measure section's kill-condition metrics: the share of opens that act on a finding, and the `knowledge.ask` answer rate
-- **Uses.** A 1-of-1 never reads as 100%. Small samples render with "≈" and their range, which is the existing analytics-UI convention.
-- **Accept.**
-  - No rate on the surface renders without its n.
-  - Rates with n < 10 render as "≈ x% (a–b)".
+**Accept.** Every badge is absent when Part D has no result for that file, and the channel then reads "Not set up". The thresholds that decide whether a model is good enough (AUC, ECE) are PRD 41's.
 
 #### P4. Co-change association (impact prediction)
 
@@ -124,40 +105,21 @@ The graph already holds what these formulas need: reference edges, file badges (
   - A new overlay channel shows hidden coupling.
 - **Accept.** On held-out commits, recall@8 ≥ 0.5 for files changed together with A.
 
-#### P5. Owner entropy and bus factor
-
-- **Formula.** H = −Σ pₐ log pₐ over each author's share of a file's changes, time-decayed. The bus factor is the smallest number of authors covering 50% of a station's changes.
-- **Uses.** The owner channel, a "single owner" risk in "What is wrong?", and a P2 feature.
-
-#### P6. Trend forecasting for cost and debt
-
-- **Formula.** Holt's linear exponential smoothing (level + trend) over:
-  - per-review model calls and spend
-  - re-review cost
-  - violation, clone-group and unused counts per project
-  - Least squares is the fallback below 6 points.
-- **Predicts.**
-  - Next-period values with a prediction interval.
-  - A pre-review estimate of model calls against the budget. The review of `agentic` planned 17,949 calls against 200; the estimate should flag that before the review starts.
-- **Uses.**
-  - The Measure section's headline ("debt goes down") becomes a forecast with a direction and a range.
-  - The review launcher warns when the estimate exceeds the budget.
-
 #### P7. Station transition probabilities (Simulate)
 
 - **Formula.** A first-order Markov chain over stations. P(j|i) comes from recorded run traces when present, otherwise from normalised reference weights.
 - **Uses.** Simulate and "Run to end" follow the most likely path and show the probability of each hop. Path strip hops show the probability next to the count.
 
 **Order.**
-1. P1, P2 and P3 come first: P1 closes an open acceptance check, P2 gives the main colour channel a meaning, and P3 makes every number trustworthy.
-2. P4 comes with the staged fix flow, which needs impact prediction.
-3. P5 rides along with P2, since it is one of P2's features.
-4. P6 and P7 follow.
+1. P1 comes first, because it closes an open acceptance check.
+2. P2's badges land as each PRD 41 Part D result ships, following that PRD's adoption order (D14).
+3. P4 comes with the staged fix flow, which needs impact prediction.
+4. P7 follows.
 
 **Contract.**
 - New badge keys go into `OUTLINE_BADGE_KEYS` so the outline carries them: `risk`, `riskBand`, `ownerEntropy`, `community`, `communityConfidence`, `coChange` (top partner refs).
 - Area values carry `busFactor`, the shrunk coverage rate and its interval.
-- Graph stats carry `modularity`, `riskAuc` and `riskCalibration`.
+- Graph stats carry `modularity`. The risk model's scores (AUC, ECE) are recorded under PRD 41 D12.
 - Adding these is a memory minor release. Builderforce then bumps and moves the API cache key.
 
 **Not in scope.** Training neural models, any per-request model call, and sending repository history off the machine for fitting. Fitting runs where the review runs.

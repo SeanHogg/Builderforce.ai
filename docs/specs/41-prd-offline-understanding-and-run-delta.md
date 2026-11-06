@@ -1084,7 +1084,7 @@ Quality is tracked with:
 Every model is recalibrated when its ECE exceeds 0.05 on the trailing 30 days.
 
 `packages/prefetch/src/calibrate.ts` already calibrates the prefetch gate. It moves into
-`packages/stats` (D13), and prefetch imports it from there. The two do not keep separate
+the builderforce-memory `stats` module (D13), and prefetch imports it from there. The two do not keep separate
 copies.
 
 ### D5. Run risk: just-in-time defect prediction
@@ -1198,7 +1198,7 @@ over run index *t*:
 - **Record:** the delta stores it as `scheduledBy: {policy, p, seed}`.
 - Policy-mandated checks always run (C11.4).
 - `learned-routing` already does bandit selection for models. Both use the one sampler in
-  `packages/stats`.
+  the builderforce-memory `stats` module.
 
 **D9.2 Sequential testing for benchmarks** (Wald's SPRT).
 - Hypotheses: `H₀: shift ≤ 0` against `H₁: shift ≥ δ` (δ = the metric's warn threshold).
@@ -1256,10 +1256,16 @@ view. All strings are localized, and the theme and 360 px rules apply as in C11.
   The person-score view shows only risk-adjusted, shrunk and interval-bounded figures, never
   raw counts as a league table.
 
-### D13. `packages/stats`: one home for the maths
+### D13. One home for the maths: the builderforce-memory `stats` module
 
-A new pure, source-only package. It is deterministic: seeded PRNG (xoshiro128**),
-fixed iteration caps, quantized outputs. It holds:
+*Decided 2026-11-06: no new package.* The maths lives in builderforce-memory as a `stats` module
+(`packages/memory/src/stats/`, exported as the `@seanhogg/builderforce-memory/stats` subpath).
+builderforce-memory already owns the deterministic retrieval maths (BM25, MMR, decay) and the
+knowledge graph's PageRank, and every Builderforce package that needs these already depends on
+it. Graph-level predictions (PRD 38 › Predicted measures) call this module at graph build.
+
+The module is pure and deterministic: seeded PRNG (xoshiro128**), fixed iteration caps,
+quantized outputs. It holds:
 
 - **Distributions:** sigmoid; logit; Beta posterior and quantile (regularized incomplete beta
   inverse); χ² quantile.
@@ -1402,7 +1408,7 @@ Gamma–Poisson (empirical Bayes):
 | Capability visibility hook and context keys | `clients/vscode` + `packages/local-first` capability matrix | New. Replaces `signedIn` gating where it is not account-only. |
 | `Prediction`, `RunFeatures` (versioned schema), `RunOutcomeLabel`, model artifact format | `packages/run-delta/src/predict/*` | New (Part D) |
 | `run-outcome` local entity type | `packages/local-first` records | New union member |
-| Statistics primitives | `packages/stats` (new, pure, source-only) | New. Absorbs `prefetch/calibrate.ts` and the learned-routing sampler. |
+| Statistics primitives | builderforce-memory `stats` module (`@seanhogg/builderforce-memory/stats`) | New module, no new package. Absorbs `prefetch/calibrate.ts` and the learned-routing sampler. |
 | Verdict/predict layering guard | `scripts/check-run-delta-layers.mjs` | New |
 
 ## 5. Code map
@@ -1503,7 +1509,7 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 | WS11 | **SARIF package** (C12), plus persistence and sync (C14): the `run-delta` record, the mirror importer, the `run_deltas` and `run_delta_findings` expand migration | WS7; G15–G18 | **Opus** (migration, storage) |
 | WS12 | **Optional dynamic tier** (C6.2, C8.4): benchmark runner, statistics, diff coverage, Stryker incremental, delta policy for autonomous runs | WS9 | Sonnet |
 | WS13 | **Packaged offline acceptance** (A6) and cloud-run delta (C14) | WS1–WS10 | Sonnet |
-| WS15 | **`packages/stats` and deterministic statistics** (D13, D2, D0 guard). Migrate `prefetch/calibrate.ts` and the learned-routing sampler; their tests run unchanged. | WS7 | Sonnet |
+| WS15 | **builderforce-memory `stats` module and deterministic statistics** (D13, D2, D0 guard). Migrate `prefetch/calibrate.ts` and the learned-routing sampler; their tests run unchanged. | WS7 | Sonnet |
 | WS16 | **Labels pipeline** (D1): `RunFeatures` frozen at run end, the `run-outcome` record, SZZ/revert/CI/review labellers, censoring, the leakage guard, consent-scoped training store. **Starts with WS7.** | WS7, WS11 | **Opus** (storage, privacy, cross-package) |
 | WS17 | **Rule precision, calibration, process control and reliability growth** (D3, D4, D7, D8) | WS15, WS16 | Sonnet |
 | WS18 | **Run risk model** (D5): training driver, rolling-origin validation, artifact format, quantized inference, the replace-`v1` gate, Kaplan–Meier view, model cards and drift (D12) | WS16 with at least 500 final labels | **Opus** (model governance, storage) |
@@ -1572,7 +1578,7 @@ Version bumps and ROADMAP/DONE entries stay with the session model.
       precision is demoted, and its per-repo posterior shrinks toward the global one.
 - [ ] Risk model replaces `v1` only when it passes the D5.3 gate. The gate result is
       recorded in the model card.
-- [ ] `prefetch/calibrate.ts` and the learned-routing sampler import from `packages/stats`.
+- [ ] `prefetch/calibrate.ts` and the learned-routing sampler import from `@seanhogg/builderforce-memory/stats`.
       No second implementation remains (grep check). Their existing tests pass unchanged.
 - [ ] The SPRT stops early on a fixture with a 20% regression, and runs to the maximum on a
       no-change fixture.
