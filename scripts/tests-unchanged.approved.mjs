@@ -56,6 +56,13 @@ export const APPROVED_PERMANENT = [
     reason: "evaluateFinishGates over module mocks no longer exists in the cloud; the gates take ports.",
     approvedBy: APPROVED_BY,
   },
+  {
+    file: 'brain-embedded/src/browserEngine.test.ts',
+    blob: 'f355d8ae9b4e3c57865a88e13af43ee45abb2426',
+    changed: "The model label is 'Gemini Nano (Chrome)' (was 'Gemini Nano'); 'never offers a model that would have to download first' becomes 'reports a not-ready model as a downloadable/downloading row'; the fallback window and resolved model read builtInModelIdentity().",
+    reason: "PRD 42 A1: the built-in browser model is named per vendor (Gemini Nano (Chrome) / Phi-4-mini (Edge)), and a downloadable or downloading model is reported as a state row instead of null (unavailable is still null). The old assertions describe the superseded behaviour.",
+    approvedBy: APPROVED_BY,
+  },
 ];
 
 /**

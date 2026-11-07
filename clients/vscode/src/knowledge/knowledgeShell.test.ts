@@ -38,7 +38,7 @@ describe("output handling", () => {
 describe("runShell", () => {
   it("reports a command that ran and failed with its exit code and the cleaned tail, capped at 2 KB", async () => {
     const cwd = await temp();
-    const script = "process.stdout.write('a'.repeat(200000) + '\\u001b[31mTAIL-MARK\\u001b[0m'); process.exit(4)";
+    const script = "process.stdout.write('a'.repeat(200000) + '\\u001b[31mTAIL-MARK\\u001b[0m'); process.exitCode = 4;";
     await writeFile(join(cwd, "noisy.js"), script);
     const err = await runShell("node noisy.js", cwd, { ok: zero, label: "check" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ShellFailure);

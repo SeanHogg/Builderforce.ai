@@ -987,9 +987,11 @@ jobs:
         working-directory: frontend
         env:
           # Vercel's artifact collection exceeded Node's default ~4 GiB heap
-          # after building the 90-route frontend. The hosted runner has enough
-          # memory for a 6 GiB old-space ceiling.
-          NODE_OPTIONS: --max-old-space-size=6144
+          # after building the 90-route frontend, and 6 GiB was later exceeded too
+          # ("Reached heap limit", `vercel build`). This job runs a single Node
+          # process tree on a public-repo ubuntu-latest runner (16 GiB), so a
+          # 12 GiB old-space ceiling leaves headroom for the OS and Next's workers.
+          NODE_OPTIONS: --max-old-space-size=12288
           NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
           # verify-frontend lints and type-checks; see next.config.js.
           NEXT_SKIP_BUILD_CHECKS: '1'
