@@ -221,7 +221,9 @@ describe("the inference mode is decided by the seam", () => {
     expect(routing).toContain("const inferenceMode = currentInferenceMode();");
     expect(routing).toContain("inferenceMode }, request)");
     // Hybrid tries the connected accounts this editor calls itself (Kimi) before the gateway.
-    expect(routing).toContain('if (inferenceMode === "hybrid") return { ...route, accounts: () => editorAccounts(secrets).hybridAccounts() };');
+    // (the accounts lambda is now ONE const, shared with "use my connected accounts" below)
+    expect(routing).toContain("editorAccounts(secrets).hybridAccounts()");
+    expect(routing).toContain('if (inferenceMode === "hybrid" || (route.routingMode === "byo_pool" && inferenceMode !== "local-only")) return { ...route, accounts };');
     const readers = sourceFiles()
       .filter(({ text }) => text.includes('"inferenceMode"'))
       .map(({ name }) => name);

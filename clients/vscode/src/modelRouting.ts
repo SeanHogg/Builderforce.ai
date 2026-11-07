@@ -113,8 +113,10 @@ export interface ModelRoute {
    */
   pickUnavailable?: { model: string; detail: string };
   /**
-   * Hybrid: the connected accounts this editor calls itself (Kimi), read per Auto call and
-   * tried after this device and before the gateway (`createHostModelStream`).
+   * The connected accounts this editor calls itself (Kimi), read per call: in Hybrid Auto,
+   * tried after this device and before the gateway; for "use my connected accounts"
+   * (`byo_pool`, Hybrid or Specific), tried first, then the gateway's BYO pool
+   * (`createHostModelStream`). Never set for Local only.
    */
   accounts?: () => Promise<readonly LocalFirstAccount[]>;
 }
@@ -143,7 +145,10 @@ export interface RouteRequest {
 export async function resolveModelRoute(secrets: vscode.SecretStorage, request: RouteRequest = {}): Promise<ModelRoute> {
   const inferenceMode = currentInferenceMode();
   const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode }, request);
-  if (inferenceMode === "hybrid") return { ...route, accounts: () => editorAccounts(secrets).hybridAccounts() };
+  // The accounts this editor calls itself (Kimi): tried in Hybrid Auto, and for "use my connected accounts"
+  // (`byo_pool`) in Hybrid and Specific — never Local only. The shared stream owns the rule; this only supplies them.
+  const accounts = (): Promise<readonly LocalFirstAccount[]> => editorAccounts(secrets).hybridAccounts();
+  if (inferenceMode === "hybrid" || (route.routingMode === "byo_pool" && inferenceMode !== "local-only")) return { ...route, accounts };
   return route.inferenceMode === "local-only" && !route.local && !route.localFirst ? onDeviceOnly(route, request) : route;
 }
 

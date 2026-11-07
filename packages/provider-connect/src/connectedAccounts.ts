@@ -58,8 +58,10 @@ export interface ConnectedAccounts {
    *  null for any other ref. */
   pinFor(ref: string): Promise<(AccountEndpointOutcome & { model: string }) | null>;
   /**
-   * The connected accounts Hybrid tries after this device and before the cloud, each on its
-   * lead model (the tenant's order, position 0). Never prompts: an account that is not
+   * The connected accounts this host calls itself: Hybrid tries them after this device and
+   * before the cloud, and "use my connected accounts" (`byo_pool`, Hybrid or Specific)
+   * tries them before the gateway's BYO pool — each on its lead model (the tenant's
+   * order, position 0). Never prompts: an account that is not
    * connected is simply absent — asked of the gateway once per session, so an unconnected
    * workspace costs no round trip per call.
    */

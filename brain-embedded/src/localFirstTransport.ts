@@ -32,6 +32,7 @@ import {
   type LocalFirstAccount,
   type LocalFirstAttempt,
   type LocalFirstAttemptRecord,
+  type LocalFirstRunResult,
   type LocalFirstWorkload,
   type LocalRuntimeId,
   type LocalRuntimeProbe,
@@ -338,9 +339,28 @@ export function localFirstWorkload(call: {
  * outright, and so does an explicit "use my connected accounts" (`byo_pool`); only "let
  * the gateway route" may be served on this device first. The ONE statement of the rule:
  * the editor's route and the web app's stream both read it.
+ *
+ * Device runtimes stay out of `byo_pool` here. The pool's one exception is not a device
+ * model: the connected ACCOUNTS a host calls itself (Kimi) are tried before the gateway's
+ * pool, with no probes (see {@link createLocalFirstStream}).
  */
-export function localFirstApplies(call: { model?: string; routingMode?: 'auto' | 'byo_pool' }): boolean {
-  return !call.model && (call.routingMode ?? 'auto') === 'auto';
+export function localFirstApplies(call: { model?: string; routingMode?: 'auto' | 'byo_pool'; role?: string }): boolean {
+  // A UTILITY call (the summary stamps it) is mechanical compaction, not the person's
+  // turn: the device may take it first whatever model the conversation is pinned to
+  // (PRD 42 · C2). Everything else keeps the rule above.
+  return call.role === UTILITY_ROLE || (!call.model && (call.routingMode ?? 'auto') === 'auto');
+}
+
+/** The `role` a silent utility completion (a summary) carries on its request. */
+export const UTILITY_ROLE = 'utility';
+
+/**
+ * Whether a call is "use my connected accounts": the BYO pool with no model named. The ONE
+ * statement of it — the stream and the host's routing step both read it; with accounts the
+ * pool is those first, then the gateway's pool.
+ */
+export function isAccountPoolCall(call: { model?: string; routingMode?: 'auto' | 'byo_pool' }): boolean {
+  return !call.model && call.routingMode === 'byo_pool';
 }
 
 /** What {@link createLocalFirstStream} needs from its host. */
@@ -348,7 +368,8 @@ export interface LocalFirstStreamInput {
   /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
   probes: readonly LocalRuntimeProbe[];
   /** Connected accounts this host calls itself (Kimi), tried after the device and before
-   *  the cloud — Hybrid only (`createHostModelStream`). */
+   *  the cloud — Hybrid Auto, and "use my connected accounts" (`byo_pool`, device excluded)
+   *  in Hybrid and Specific (`createHostModelStream`). */
   accounts?: readonly LocalFirstAccount[];
   /** The gateway stream, or null when signed out (local-only). */
   cloud: StreamFn | null;
@@ -409,6 +430,32 @@ function committingHandlers(handlers: StreamHandlers, commit: () => void, served
   };
 }
 
+/**
+ * The account pool's final error, honest about the accounts that were tried first: when
+ * the gateway's strict BYO leg then fails with its own `BrainRequestError` ("no provider is
+ * connected on this workspace"), the person is also told which account failed and why.
+ * Status, code and the rest of the error's fields are preserved; any other error is
+ * returned as it came (a Stop, a transport failure).
+ */
+function withFailedAccounts(e: unknown, failed: readonly LocalFirstAttemptRecord[]): unknown {
+  if (!(e instanceof BrainRequestError) || failed.length === 0) return e;
+  const prefix = failed
+    .map((r) => `${r.attempt.kind === 'local' ? r.attempt.ref : 'account'} could not take this turn (${r.detail ?? r.outcome}). `)
+    .join('');
+  const out = new BrainRequestError(prefix + e.message, {
+    status: e.status,
+    ...(e.code ? { code: e.code } : {}),
+    ...(e.reason ? { reason: e.reason } : {}),
+    ...(e.unlock ? { unlock: e.unlock } : {}),
+    ...(e.requiredPlan ? { requiredPlan: e.requiredPlan } : {}),
+    ...(e.feature ? { feature: e.feature } : {}),
+    ...(e.provider ? { provider: e.provider } : {}),
+    ...(e.providerLabel ? { providerLabel: e.providerLabel } : {}),
+  });
+  if (e.stack) out.stack = e.stack;
+  return out;
+}
+
 /** An answer counts only when it says something or calls something. */
 const answered = (r: StreamChatResult): boolean => r.text.trim().length > 0 || r.toolCalls.length > 0;
 
@@ -434,7 +481,13 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // run-policy failover, a coder re-ask) to that model's local runtime when probed,
     // else the gateway; an explicit `byo_pool` to the gateway. Never to whichever local
     // model the plan would have tried first.
-    if (!localFirstApplies(opts)) {
+    //
+    // The ONE exception is the account pool: "use my connected accounts" (`byo_pool`, no
+    // model) with accounts this host calls itself (Kimi) tries THOSE first, then the
+    // gateway's pool (the call keeps `routingMode: 'byo_pool'`, so the gateway stays strict).
+    // Device runtimes are never part of it (`probes: []`) and neither is the free pool.
+    const accountPool = isAccountPoolCall(opts) && !!input.accounts?.length;
+    if (!localFirstApplies(opts) && !accountPool) {
       if (!opts.model || !isLocalModelRef(opts.model)) {
         if (!input.cloud) throw new Error(input.noModel ?? NOT_SIGNED_IN);
         return input.cloud(opts, handlers);
@@ -449,24 +502,42 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // From here the call names no model (a local ref no probe serves cannot be sent
     // anywhere by name, so it is dropped): the plan routes it.
     const routed: Omit<StreamChatOptions, 'transport'> = opts.model ? { ...opts, model: undefined } : opts;
+    const probes = accountPool ? [] : input.probes;
+    const failedAccounts: LocalFirstAttemptRecord[] = [];
     const planned = localFirstPlan({
-      probes: input.probes,
+      probes,
       ...(input.accounts?.length ? { accounts: input.accounts } : {}),
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null,
     });
     const plan = input.gate ? await input.gate(planned, routed) : planned;
     if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
-    const { result, attempts } = await runLocalFirst(
-      plan,
-      async (attempt, commit) => {
-        if (attempt.kind === 'cloud') return input.cloud!(routed, committingHandlers(handlers, commit));
-        const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
-        const messages = await fittedFor(attempt, routed, input.fit, input.probes);
-        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages, false);
-      },
-      { signal: opts.signal, accept: answered, ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}) },
-    );
+    const onAttempt = (record: LocalFirstAttemptRecord): void => {
+      if (accountPool && record.outcome !== 'served' && record.attempt.kind === 'local') failedAccounts.push(record);
+      input.onAttempt?.(record);
+    };
+    // Only an error the CLOUD attempt threw is re-worded with the accounts that failed first;
+    // an account's own final error already says why it failed.
+    let cloudStarted = false;
+    let ran: LocalFirstRunResult<StreamChatResult>;
+    try {
+      ran = await runLocalFirst(
+        plan,
+        async (attempt, commit) => {
+          if (attempt.kind === 'cloud') {
+            cloudStarted = true;
+            return input.cloud!(routed, committingHandlers(handlers, commit));
+          }
+          const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
+          const messages = await fittedFor(attempt, routed, input.fit, probes);
+          return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages, false);
+        },
+        { signal: opts.signal, accept: answered, onAttempt },
+      );
+    } catch (e) {
+      throw accountPool && cloudStarted ? withFailedAccounts(e, failedAccounts) : e;
+    }
+    const { result, attempts } = ran;
     const summaries: LocalFirstAttemptSummary[] = attempts.map(summarizeLocalFirstAttempt);
     return { ...result, localFirst: summaries };
   };

@@ -48,7 +48,9 @@
  *    run, so the turn goes straight to Auto.
  *  - **Specific with a pick:** exactly that route, hard-pinned (`modelStrict`) — no local
  *    attempt and no fallback. "Use my connected accounts" (`routingMode: 'byo_pool'`) is
- *    a pick of the BYO pool: exactly the pool, at the gateway.
+ *    a pick of the person's ACCOUNTS, in Hybrid too: the ones this host calls itself
+ *    (`accounts` — Kimi) first, then the gateway's BYO pool, which stays strict. Never a
+ *    device runtime and never the free pool; with no host accounts, exactly the pool.
  *  - **Specific with no pick:** fails `no_specific_model` — never a silent Hybrid.
  *
  * When no model can serve a turn, the error says WHY: `not_signed_in` only for a person
@@ -70,7 +72,9 @@ import { createHandoffFit } from './windowFit/packForModel';
 import {
   createLocalFirstStream,
   createLocalStream,
+  isAccountPoolCall,
   type LocalAttemptFit,
+  type LocalFirstStreamInput,
   type LocalFetch,
 } from './localFirstTransport';
 import { pageRuntimePin, remapBuiltInPin } from './pageEngines/pageRuntimePin';
@@ -108,8 +112,9 @@ export interface HostModelStreamInput {
   /** The runtimes to try local-first, probed WITH capabilities; absent = gateway only. */
   probes?: () => Promise<readonly LocalRuntimeProbe[]>;
   /**
-   * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call — never
-   * prompting; an account that is not connected is simply absent. Absent = none (the web
+   * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call and per
+   * "use my connected accounts" call (Hybrid or Specific) — never prompting; an account
+   * that is not connected is simply absent. Absent = none (the web
    * app, which cannot reach Kimi).
    */
   accounts?: () => Promise<readonly LocalFirstAccount[]>;
@@ -216,6 +221,26 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     const signedIn = !localOnly && (input.signedIn ? await input.signedIn() : cloud !== null);
     const noModel = localOnly || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
 
+    /** The connected accounts this host calls itself, read per call; none when unreadable or unlent. */
+    const readAccounts = async (): Promise<readonly LocalFirstAccount[]> =>
+      input.accounts ? input.accounts().catch(accountsUnavailable) : [];
+    /** The one local-first stream assembly — Auto's, and the account pool's (no probes, no predictor). */
+    const localFirst = (
+      probes: readonly LocalRuntimeProbe[],
+      accounts: readonly LocalFirstAccount[],
+      onAttempt: ((record: LocalFirstAttemptRecord) => void) | undefined = input.onAttempt,
+      gate?: LocalFirstStreamInput['gate'],
+    ): StreamFn => createLocalFirstStream({
+      probes,
+      ...(accounts.length > 0 ? { accounts } : {}),
+      cloud,
+      fit,
+      noModel,
+      ...(input.fetch ? { fetch: input.fetch } : {}),
+      ...(onAttempt ? { onAttempt } : {}),
+      ...(gate ? { gate } : {}),
+    });
+
     /** Auto: local first (when anything is probed), then the gateway. */
     const auto = async (call: CallOpts, h: StreamHandlers): Promise<StreamChatResult> => {
       const localRef = call.model;
@@ -228,7 +253,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       }
       const probes = input.probes ? await input.probes() : [];
       // Hybrid only: Local only never leaves the device, and Specific makes no Auto attempt.
-      const accounts = mode === 'hybrid' && input.accounts ? await input.accounts().catch(accountsUnavailable) : [];
+      const accounts = mode === 'hybrid' ? await readAccounts() : [];
       if (probes.length === 0 && accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call, h);
@@ -251,16 +276,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
             input.onAttempt?.(record);
           }
         : undefined;
-      const stream = createLocalFirstStream({
-        probes,
-        ...(accounts.length > 0 ? { accounts } : {}),
-        cloud,
-        fit,
-        noModel,
-        ...(input.fetch ? { fetch: input.fetch } : {}),
-        ...(onAttempt ? { onAttempt } : {}),
-        ...(learned ? { gate: learned.gate } : {}),
-      });
+      const stream = localFirst(probes, accounts, onAttempt, learned?.gate);
       if (!learned) return stream(call, h);
       try {
         const result = await stream(call, h);
@@ -276,7 +292,13 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     // as it stands — a local ref it names runs where it runs, anything else local first.
     const strict = mode === 'specific';
     if (!pick) {
-      // Specific on the BYO pool: exactly the pool, at the gateway — never this device.
+      // "Use my connected accounts" (Hybrid and Specific): the person's ACCOUNTS — those this
+      // host calls itself (Kimi) first, then the gateway's BYO pool (still strict). Never a
+      // device runtime and never the free pool, so no probes and no local-success predictor.
+      if (isAccountPoolCall(opts)) {
+        const accounts = await readAccounts();
+        if (accounts.length > 0) return localFirst([], accounts)(opts, handlers);
+      }
       if (strict) {
         if (!cloud) throw new Error(noModel);
         return cloud(opts, handlers);
