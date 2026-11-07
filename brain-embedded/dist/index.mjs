@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-YXMOUTG4.mjs";
+} from "./chunk-MBWCVKGI.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -11020,7 +11020,9 @@ function builtInModelIdentity(nav = defaultNavigator()) {
 }
 
 // src/pageEngines/pageRuntimePin.ts
-function remapBuiltInPin(ref, pin, current = builtInModelIdentity().model) {
+function remapBuiltInPin(ref, pin, identity = typeof navigator === "undefined" ? void 0 : builtInModelIdentity()) {
+  if (!identity || identity.vendor === "unknown") return null;
+  const current = identity.model;
   const parsed = parseLocalModelRef(ref);
   if (!parsed || !localRuntime(parsed.provider).labelFromProbe || parsed.model === current) return null;
   return { ref: formatLocalModelRef(parsed.provider, current), pin: { ...pin, model: current } };
@@ -28669,7 +28671,10 @@ function withReadyPageModels(options, rows) {
     ...options,
     local: [
       ...options.local ?? [],
-      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localModelLabel(row, row.runtime) }))
+      ...ready.map((row) => {
+        const named = localModelLabel(row, row.runtime);
+        return { id: row.ref, label: row.label, runtime: named === row.label ? localRuntime(row.runtime).label : named };
+      })
     ]
   };
 }

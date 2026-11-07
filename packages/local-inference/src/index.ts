@@ -61,7 +61,6 @@ export {
   isServableLocalModel,
   localModelLabel,
   probeLocalRuntimes,
-  probedModels,
   type FetchLike,
   type LocalModel,
   type LocalProbeOptions,

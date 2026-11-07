@@ -18,7 +18,7 @@ import {
   type LocalEndpoint,
   type LocalRuntimeId,
 } from '@builderforce/local-inference';
-import { builtInModelIdentity } from '../builtInAi/identity';
+import { builtInModelIdentity, type BuiltInModelIdentity } from '../builtInAi/identity';
 
 export interface PageRuntimePin {
   provider: LocalRuntimeId;
@@ -50,4 +50,10 @@ export function remapBuiltInPin<P extends { model: string }>(
 
 /** The pin when `ref` names a model on a PAGE runtime; null for anything else (a gateway
  *  id, an HTTP runtime's model, nothing). */
-export function pageRuntimePin(ref: string | undefined): PageRuntimePin |
+export function pageRuntimePin(ref: string | undefined): PageRuntimePin | null {
+  const pin = parseLocalModelRef(ref);
+  if (!pin) return null;
+  const runtime = localRuntime(pin.provider);
+  if (runtime.reach !== 'page' || !runtime.defaultBaseUrl) return null;
+  return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
+}

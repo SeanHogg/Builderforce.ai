@@ -270,7 +270,11 @@ export function withReadyPageModels(options: ChatModelOptions, rows: readonly Lo
     ...options,
     local: [
       ...(options.local ?? []),
-      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localModelLabel(row, row.runtime) })),
+      ...ready.map((row) => {
+        // A one-model runtime's display name IS the row's label; show the generic runtime name instead so the row does not read twice.
+        const named = localModelLabel(row, row.runtime);
+        return { id: row.ref, label: row.label, runtime: named === row.label ? localRuntime(row.runtime).label : named };
+      }),
     ],
   };
 }

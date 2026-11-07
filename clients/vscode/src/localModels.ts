@@ -27,6 +27,7 @@
 import {
   createLocalRuntimeProber,
   formatLocalModelRef,
+  isServableLocalModel,
   localRuntime,
   matchLocalChatEndpoint,
   probeLocalRuntimes,
@@ -93,7 +94,7 @@ export async function listLocalModels(config: LocalModelsConfig, fetchImpl: Fetc
         label: entry.displayName,
       }))
     : [];
-  return [...probes.flatMap((p) => p.models), ...kimi];
+  return [...probes.flatMap((p) => p.models.filter(isServableLocalModel)), ...kimi];
 }
 
 /**

@@ -335,11 +335,6 @@ export async function probeLocalRuntimes(
   }));
 }
 
-/** Every model across a probe, in registry order. */
-export function probedModels(probes: readonly LocalRuntimeProbe[]): LocalModel[] {
-  return probes.flatMap((p) => p.models);
-}
-
 /**
  * A memoizing prober — the shape a per-turn router wants. Probing on every turn would
  * add a localhost round trip (plus a capability card per model) to each one, and the

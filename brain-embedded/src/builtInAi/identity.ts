@@ -78,6 +78,7 @@ function vendorFromUserAgentData(brands: NonNullable<NavigatorUserAgentDataLike[
   return 'unknown';
 }
 
+// Opera and other Chromium forks on this UA fallback read as chrome; acceptable because Chromium sends userAgentData on secure contexts.
 function vendorFromUserAgent(nav: NavigatorLike): BuiltInAiVendor | undefined {
   const ua = nav.userAgent;
   if (!ua) return undefined;

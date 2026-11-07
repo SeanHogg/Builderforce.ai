@@ -127,6 +127,14 @@ describe('createHostModelStream', () => {
       expect(result.resolvedModel).toBe('local/browser/phi-4-mini');
     });
 
+    it('does not remap when the vendor is unknown', async () => {
+      asBrowser('Brave');
+      const { result, sent, onFallback } = await run('local/browser/gemini-nano');
+      expect(onFallback).not.toHaveBeenCalled();
+      expect(sent).toEqual(['gemini-nano']);
+      expect(result.resolvedModel).toBe('local/browser/gemini-nano');
+    });
+
     it('reports nothing when the pin already names this browser\'s model', async () => {
       asBrowser('Google Chrome');
       const { result, sent, onFallback } = await run('local/browser/gemini-nano');
