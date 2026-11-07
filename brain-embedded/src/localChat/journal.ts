@@ -107,9 +107,16 @@ function importPayload(record: LocalRecord, mapping: ServerMapping | undefined):
 /**
  * Replace a bound row's pending events with ONE import of its current state (nothing,
  * when the row is deleted). Used by every bound write the server has not imported, and
- * by the sync pass that binds a long-offline chat's history.
+ * by the sync pass that binds a long-offline chat's history (and the work — projects and
+ * tickets — written beside it, `workSync.ts`). `waitsOn` names further imports this one
+ * must follow (a ticket's project / parent ticket), as `importKey`s.
  */
-export async function queueImport(tx: LocalFirstTransaction, record: LocalRecord, chatClientId?: string): Promise<void> {
+export async function queueImport(
+  tx: LocalFirstTransaction,
+  record: LocalRecord,
+  chatClientId?: string,
+  waitsOn: readonly string[] = [],
+): Promise<void> {
   await dropPending(tx, record);
   if (record.deletedAt) return;
   const mapping = await tx.mapping(record.entityType, record.id, record.destination);
@@ -120,7 +127,7 @@ export async function queueImport(tx: LocalFirstTransaction, record: LocalRecord
     operation: 'import',
     schemaVersion: record.schemaVersion,
     occurredAt: record.occurredAt,
-    dependsOn: chatClientId && record.entityType !== 'chat' ? [importKey('chat', chatClientId)] : [],
+    dependsOn: [...(chatClientId && record.entityType !== 'chat' ? [importKey('chat', chatClientId)] : []), ...waitsOn],
     destination: record.destination,
     payload: importPayload(record, mapping),
   });

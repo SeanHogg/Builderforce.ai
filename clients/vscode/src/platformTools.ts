@@ -61,6 +61,12 @@ export interface PlatformChatIdentity {
   localChatId: unknown;
   /** The server chat this local chat is bound to; `null` = not bound yet. */
   serverChatId: number | null;
+  /**
+   * The chat's LOCAL entity id (the client UUID its store row and sync mapping use).
+   * Not sent to the relay: a locally written ticket stamps it so sync can link the
+   * chat to the ticket (`localDomainToolRouting.ts`).
+   */
+  clientChatId?: string;
 }
 
 /**

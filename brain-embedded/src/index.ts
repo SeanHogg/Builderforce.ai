@@ -31,6 +31,8 @@ export { DEFAULT_ROUTE_THRESHOLD, summarizeRouteRuns } from '@builderforce/pipel
 export { prefetchConfirmOf, type PrefetchConfirm, type PrefetchResult } from '@builderforce/prefetch';
 export type { RouteReport, RouteRunRecord, ScoreBin } from '@builderforce/pipeline-route';
 export { bindChatHistoryForSync } from './localChat/chatSync';
+export { bindWorkForSync } from './localChat/workSync';
+export { isImported, journalWrite } from './localChat/journal';
 
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.

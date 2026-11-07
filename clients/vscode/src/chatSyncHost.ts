@@ -10,6 +10,11 @@
  * go to the account once, as imports the server deduplicates on retry, and the sync
  * receipts write the chats' server mappings — the same binding the panel reads.
  *
+ * The same pass carries the WORK the agent filed locally (`bindWorkForSync`): projects and
+ * tickets are written to the device store with no API call, and go up here as one batched
+ * push (the coordinator sends up to 100 events / 512 KB per request), tickets after the
+ * chat they were created in, which they link to on the server.
+ *
  * Triggered by a change of the policy, a write to the store that left events pending,
  * and a slow heartbeat that retries what the server held back (`dependency_pending`).
  * Single-flight: a trigger during a pass runs one more pass after it, never two at once.
@@ -22,12 +27,13 @@ import {
   createHttpSyncTransport,
   type LocalFirstChange,
 } from "@builderforce/local-first";
-import { bindChatHistoryForSync } from "@seanhogg/builderforce-brain-embedded";
+import { bindChatHistoryForSync, bindWorkForSync } from "@seanhogg/builderforce-brain-embedded";
 import { getTenantJwt } from "./bfApi";
 import { chatAccountDestination, invalidateServerChatSpend } from "./chatAccount";
 import { getBaseUrl } from "./gateway";
 import { hostLog } from "./hostLog";
 import { installSyncCoordinator } from "./installSyncCoordinator";
+import { drainSync } from "./syncDrain";
 import { localBrainApplication } from "./localFirstStore";
 import { platformFetch, platformPolicy } from "./platformPolicy";
 
@@ -35,8 +41,12 @@ import { platformFetch, platformPolicy } from "./platformPolicy";
 const HEARTBEAT_MS = 5 * 60_000;
 /** Writes arrive in bursts (a turn's messages, its usage rows); one pass covers them. */
 const DEBOUNCE_MS = 2_000;
-/** The entity types this slice of sync owns. */
-const CHAT_SLICE: ReadonlySet<string> = new Set(["chat", "message", "usage"]);
+/**
+ * The entity types this sync pass moves out of the unbound partition: the chat history
+ * (`bindChatHistoryForSync`) and the work filed beside it — projects and tickets, which
+ * the agent writes locally and this pass carries up in one batch (`bindWorkForSync`).
+ */
+const SYNC_SLICE: ReadonlySet<string> = new Set(["chat", "message", "usage", "project", "ticket"]);
 
 export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable {
   const local = localBrainApplication(ctx);
@@ -67,8 +77,18 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
       lease,
     });
     if (!installed.installed || !installed.started) return;
+    // Chats first: a ticket's import waits on the import of the chat it was created in.
     await bindChatHistoryForSync(local.store, local.deviceId, destination);
-    await installed.coordinator.synchronize(destination);
+    await bindWorkForSync(local.store, local.deviceId, destination);
+    // One synchronize pushes one batch; drain so a big program of tickets goes up in this pass.
+    await drainSync({
+      round: () => installed.coordinator.synchronize(destination),
+      pending: () => local.store.read(async (tx) => {
+        let count = 0;
+        await tx.scanPending(() => { count += 1; }, destination);
+        return count;
+      }),
+    });
     // A receipt moved usage onto the platform: re-read its figure rather than serve the
     // cached one, which the device's own estimate no longer covers for those rows.
     invalidateServerChatSpend();
@@ -104,8 +124,9 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
   };
 
   // A write that left nothing to send (a pull's cursor, a receipt) triggers nothing — so
-  // the sync's own writes cannot loop it. Unbound rows count only for the chat slice: the
-  // pass moves those, while other offline records wait for their own binding. The commit's
+  // the sync's own writes cannot loop it. Unbound rows count only for the sync slice (chats
+  // and the work beside them): the pass moves those, while other offline records wait for
+  // their own binding. The commit's
   // change hint says whether the pending queue moved at all (an unknown change counts as
   // yes); only then is the queue scanned — without cloning an event.
   const onStoreChange = (change?: LocalFirstChange): void => {
@@ -117,7 +138,7 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
       let pending = false;
       await tx.scanPending(() => { pending = true; return SCAN_STOP; }, destination);
       if (!pending) {
-        await tx.scanPending((event) => { if (CHAT_SLICE.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
+        await tx.scanPending((event) => { if (SYNC_SLICE.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
       }
       return pending;
     })

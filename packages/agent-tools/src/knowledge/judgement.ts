@@ -116,7 +116,7 @@ export function fallbackJudgement(ports: ReadonlyArray<JudgementPort>): Judgemen
             throw last;
         },
     };
-}/** After the timer fires the real call is aborted; the wrapper waits this long for it to end before it gives up on it (a port that ignores its signal). */
+}/** After the timer fires the real call is aborted; the wrapper waits up to this long (never more than the timeout itself) for it to end before it gives up on it (a port that ignores its signal). */
 export const JUDGEMENT_ABORT_GRACE_MS = 10_000;
 
 /** Thrown for a request that did not settle in time: a failed call (the section stays UNJUDGED and owed), never an answer. */
@@ -141,7 +141,7 @@ export function judgementWithTimeout(port: JudgementPort, ms: number = DEFAULT_J
             if (req.signal?.aborted) relay(); else req.signal?.addEventListener("abort", relay, { once: true });
             const real = port.judge({ ...req, signal: own.signal });
             const giveUp = new Promise<"gave-up">((resolve) => {
-                const t = setTimeout(() => { own.abort(new JudgementTimeout(ms)); const g = setTimeout(() => resolve("gave-up"), JUDGEMENT_ABORT_GRACE_MS); (g as { unref?: () => void }).unref?.(); }, ms);
+                const t = setTimeout(() => { own.abort(new JudgementTimeout(ms)); const g = setTimeout(() => resolve("gave-up"), Math.min(JUDGEMENT_ABORT_GRACE_MS, ms)); (g as { unref?: () => void }).unref?.(); }, ms);
                 void real.then(() => clearTimeout(t), () => clearTimeout(t));
             });
             try {

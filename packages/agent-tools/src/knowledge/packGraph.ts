@@ -10,11 +10,11 @@
 
 import {
     compareStr, filesManifestKey, localSnapshotStore, toCards,
-    type IndexDoc, type KnowledgeGraph, type KnowledgePack, type KnowledgeSnapshot, type KnowledgeStore, type PlanDetail,
+    type IndexDoc, type KnowledgeGraph, type KnowledgePack, type KnowledgeStore, type PlanDetail,
 } from '@seanhogg/builderforce-memory/knowledge';
 import { InMemoryIngestManifest, type IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import { currentFileHashes } from './fileEdits.js';
-import { mergePacks, packFromSnapshot, type PackProvenance, type PortableKnowledgePack } from './portablePack.js';
+import { mergePacks, packFromSnapshot, type PackProvenance, type PackSnapshot, type PortableKnowledgePack } from './portablePack.js';
 import { analysisManifestKey, buildStoredGraph, reviewPacks } from './reviewRunner.js';
 import { ROOT_OUTPUT_HASH_PREFIX } from './codeNodes.js';
 import { sourcePathOf } from './rootId.js';
@@ -26,7 +26,7 @@ export interface PackFromStoreArgs {
     store: KnowledgeStore;
     manifest: IngestManifest;
     /** The root's extracted cache (keyed by content hash); the store does not expose it as a whole. */
-    extracted: KnowledgeSnapshot['extracted'];
+    extracted: PackSnapshot['extracted'];
     /** The packs the root's graph is built with; default the review's own list. */
     packs?: KnowledgePack[];
     /** ISO clock. */
@@ -77,7 +77,7 @@ export async function packFromStore(args: PackFromStoreArgs): Promise<PortableKn
     const [scopes, facts, relations, live] = await Promise.all([
         store.scopes(), store.facts({ rootId }), store.relations({ rootId }), liveHashes(args.manifest, rootId),
     ]);
-    const snapshot: KnowledgeSnapshot = {
+    const snapshot: PackSnapshot = {
         version: 1,
         scopes: scopes.filter((s) => s.rootId === rootId),
         facts: { [rootId]: facts },

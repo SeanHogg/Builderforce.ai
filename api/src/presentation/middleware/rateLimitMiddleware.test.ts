@@ -11,7 +11,7 @@ vi.mock('../../application/tenant/tenantPlanSnapshot', () => ({
   resolveTenantEffectivePlan: (...a: unknown[]) => resolveTenantEffectivePlan(...a),
 }));
 
-import { isBoardMutation, isBoardMutationMcpCall, rateLimitMiddleware } from './rateLimitMiddleware';
+import { isBoardMutation, isBoardMutationJsonRpc, isBoardMutationMcpCall, rateLimitMiddleware } from './rateLimitMiddleware';
 
 /** A stand-in DO namespace that records the bucket key and limit each check carried.
  *  `allowed` may deny one key while allowing another, so the two windows can be
@@ -252,6 +252,31 @@ describe('MCP relay board-write tools spend the board bucket', () => {
     expect(isBoardMutationMcpCall({ extensionId: 'some-server', tool: 'tasks.create' })).toBe(false);
     expect(isBoardMutationMcpCall(null)).toBe(false);
     expect(isBoardMutationMcpCall('tasks.create')).toBe(false);
+  });
+
+  it('classifies a JSON-RPC tools/call by its advertised name, singly or in a batch', () => {
+    const call = (name: string) => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } });
+    expect(isBoardMutationJsonRpc(call('builtin_tasks_create'))).toBe(true);
+    expect(isBoardMutationJsonRpc(call('builtin_chats_link_ticket'))).toBe(true);
+    expect(isBoardMutationJsonRpc([call('builtin_tasks_list'), call('builtin_tasks_update')])).toBe(true);
+    expect(isBoardMutationJsonRpc(call('builtin_tasks_list'))).toBe(false);
+    expect(isBoardMutationJsonRpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).toBe(false);
+    expect(isBoardMutationJsonRpc({ method: 'tools/call', params: null })).toBe(false);
+    expect(isBoardMutationJsonRpc(null)).toBe(false);
+  });
+
+  it('charges a /mcp tools/call of a board-write tool to the board bucket and leaves the body readable', async () => {
+    const { ns, calls } = fakeLimiter();
+    resolveBearerTenantId.mockResolvedValue(41);
+    resolveTenantEffectivePlan.mockResolvedValue('free');
+    const a = new Hono();
+    a.use('*', rateLimitMiddleware as never);
+    a.post('/mcp', async (c) => c.json(await c.req.json()));
+    const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'builtin_tasks_create', arguments: {} } };
+    const res = await a.request('/mcp', post('/mcp', body), { TENANT_RATE_LIMITER: ns });
+    expect(await res.json()).toEqual(body);
+    expect(calls[0]).toMatchObject({ limit: 1200 });
+    expect(calls[0]?.key).toContain('board');
   });
 
   it('charges a tasks.create relay call to the 4x board bucket and leaves the body readable', async () => {

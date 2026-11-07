@@ -30,7 +30,6 @@ import type { ToolDef } from "./fileTools";
  */
 export const SERVER_TWIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   "builtin_tasks_create", // → ticket-create
-  "builtin_tasks_update", // → ticket-update / ticket-move / ticket-archive
   "builtin_chats_link_ticket", // → ticket-create stamps the creating chat itself
 ]);
 
@@ -110,7 +109,8 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
   },
   {
     name: "ticket-update",
-    description: "Patch a ticket on this device; the change syncs to the account in the background (batched).",
+    description:
+      "Patch a ticket created on this device (local id); the change syncs to the account in the background (batched). For a ticket that exists only on the server (numeric id) use builtin_tasks_update.",
     parameters: {
       type: "object",
       properties: {
@@ -126,7 +126,8 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
   },
   {
     name: "ticket-move",
-    description: "Change the status of a ticket on this device; the change syncs to the account in the background (batched).",
+    description:
+      "Change the status of a ticket created on this device (local id); the change syncs to the account in the background (batched). For a ticket that exists only on the server (numeric id) use builtin_tasks_update.",
     parameters: {
       type: "object",
       properties: {

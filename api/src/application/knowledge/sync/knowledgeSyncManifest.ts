@@ -1,40 +1,40 @@
 /**
- * knowledgeSyncManifest — the server's half of delta-finding (PRD 41 A11 rule 2). The three questions a
- * client asks before it builds a pack, each answered from the server's own rows by the codec's shared
- * `manifestTree`, so both sides cut a root the same way:
+ * knowledgeSyncManifest — the server's half of delta-finding (PRD 41 A11 rules 2 and 4b). The three questions a
+ * client asks before it builds a pack:
  *
  *   manifest   GET  …/sync/manifest?root=     the root digest and the 4,096 bucket digests (BFKP `BKT`)
  *   leaves     POST …/sync/manifest           the leaves of the buckets asked for (BFKP `LEAF`)
  *   have       POST …/sync/have               which content hashes the project already holds (a bitmap)
  *
- * The frame's `baseGeneration` carries the server generation the answer was read at, so a client
- * can tell, when it sends its pack, whether the server moved in between (then the pack gets a 409).
+ * The tree is built from `knowledge_sync_leaves` ONLY — the digests the client computed for the rows this root
+ * synced, read in pages with no cap. It never reads `project_facts` or the relation table: those are shared by every
+ * root of the project, a display cap would truncate them, and the fact writer normalises them, so a digest taken from
+ * them would never converge with the client's.
+ *
+ * The frame's `baseGeneration` carries the generation the answer was read at, so a client can tell, when it sends
+ * its pack, whether the server moved in between (then the pack gets a 409).
  */
 import {
-  encodePack, manifestTree, rootLeaves, MANIFEST_BUCKETS, ZERO_DIGEST, type ManifestLeaf, type ManifestTree, type RootRows,
+  encodePack, manifestTree, MANIFEST_BUCKETS, type ManifestLeaf, type ManifestTree,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
-import type { KnowledgeStorePort } from '../knowledgePorts';
 import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { decodeGuarded } from './decodeGuarded';
 import { KnowledgeSyncError, MAX_HAVE_HASHES, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
 
 export interface ManifestDeps {
-  store: Pick<KnowledgeStorePort, 'facts' | 'relations'>;
   sync: KnowledgeSyncPort;
+  ledger: KnowledgeLedgerPort;
 }
 
-/** The rows of the root as the server holds them. */
-export async function serverRootRows(deps: ManifestDeps, rootId: string, ledger?: KnowledgeLedgerPort): Promise<RootRows> {
-  const files = await deps.sync.sources(rootId, ledger);
-  const paths = new Set(files.map((f) => f.path));
-  const facts = await deps.store.facts(paths);
-  const relations = await deps.store.relations(rootId, new Set(facts.map((f) => `fact:${f.key}`)));
-  return { files, facts, relations };
+/** The root's manifest tree, from its leaves. Pass a transaction's `ledger` to read inside it. */
+export async function serverTree(deps: Pick<ManifestDeps, 'ledger'>, rootId: string, ledger?: KnowledgeLedgerPort): Promise<ManifestTree> {
+  const leaves = await (ledger ?? deps.ledger).leaves.all(rootId);
+  return manifestTree(leaves.map((l) => ({ key: l.key, digest: l.digest })));
 }
 
 export async function serverManifest(deps: ManifestDeps, rootId: string, ledger?: KnowledgeLedgerPort): Promise<{ state: SyncState; tree: ManifestTree }> {
-  const [state, rows] = await Promise.all([deps.sync.state(rootId), serverRootRows(deps, rootId, ledger)]);
-  return { state, tree: manifestTree(rootLeaves(rootId, rows)) };
+  const [state, tree] = await Promise.all([deps.sync.state(rootId, ledger), serverTree(deps, rootId, ledger)]);
+  return { state, tree };
 }
 
 /** GET manifest: the root digest (as `targetDigest`) and the bucket digests. */
@@ -43,7 +43,7 @@ export async function manifestSummary(deps: ManifestDeps, rootId: string): Promi
   return encodePack({ rootId, baseGeneration: state.generation, targetDigest: tree.root, buckets: tree.buckets });
 }
 
-/** POST manifest: the leaves of the requested buckets. The request is a BFKP frame whose `hashes` are not used; bucket ids ride in `leaves` keys as `b:<id>`. */
+/** POST manifest: the leaves of the requested buckets. */
 export async function manifestLeaves(deps: ManifestDeps, rootId: string, bucketIds: readonly number[]): Promise<Uint8Array> {
   for (const b of bucketIds) {
     if (!Number.isInteger(b) || b < 0 || b >= MANIFEST_BUCKETS) throw new KnowledgeSyncError(422, 'bad_pack', `bucket ${b} is out of range`);
@@ -75,4 +75,3 @@ export async function haveBitmap(deps: Pick<ManifestDeps, 'sync'>, body: Uint8Ar
   return out;
 }
 
-export { ZERO_DIGEST };

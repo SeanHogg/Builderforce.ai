@@ -11,8 +11,12 @@
  *
  *   • No network. `bfApi`, the gateway and `fetch` are NOT imported and nothing here
  *     reads them — a local write cannot become an API round trip by accident. The
- *     file imports only the shared record/journal contracts from
- *     `@builderforce/local-first`; `localWorkRepository.test.ts` asserts that.
+ *     file imports the shared record/journal contracts from `@builderforce/local-first`
+ *     and the chat journal's update rule (`journalWrite`, below) from brain-embedded;
+ *     `localWorkRepository.test.ts` asserts it reaches no network.
+ *   • An update of a row the server has ALREADY imported (a sync mapping exists) is
+ *     journaled against the server's version, replacing an older pending update —
+ *     `journalWrite`, the rule the chat rows use.
  *   • Identity is DATA, not a live lookup. The destination comes from an argument:
  *     this module never asks who is signed in, never reads `projectState`'s selected
  *     project, and never fills in a tenant from a settings value. With no account
@@ -53,6 +57,7 @@
  *      lives in the web app and this slice may not edit it.
  */
 
+import { isImported, journalWrite } from "@seanhogg/builderforce-brain-embedded";
 import {
   UNBOUND_DESTINATION,
   destinationKey,
@@ -345,6 +350,16 @@ export function createLocalWorkRepository(options: LocalWorkRepositoryOptions) {
     // The store owns the optimistic-concurrency rule: a stale expectedVersion here
     // fails the whole transaction with ENTITY_VERSION_CONFLICT and writes nothing.
     await tx.put(next, current.version);
+    // A row the SERVER has already imported is updated against the version the server
+    // holds (its sync mapping), not the local counter — and a newer write supersedes an
+    // older pending one. That is the chat journal's rule (`journalWrite`), used as is.
+    if (!bind && next.destination.kind === "bound") {
+      const mapping = await tx.mapping(next.entityType, next.id, next.destination);
+      if (isImported(mapping)) {
+        await journalWrite(tx, next, operation, { key: eventId(next.entityType as "project" | "ticket", next.id, next.version) });
+        return next;
+      }
+    }
     await tx.append({
       eventId: eventId(next.entityType as "project" | "ticket", next.id, next.version),
       clientEntityId: next.id,

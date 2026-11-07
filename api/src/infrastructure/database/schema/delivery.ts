@@ -896,6 +896,33 @@ export const knowledgeSources = pgTable('knowledge_sources', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.sourceId], name: 'pk_knowledge_sources' }),
+  index('idx_knowledge_sources_hash').on(t.tenantId, t.projectId, t.hash),
+]);
+
+// The leaf digests of the rows a root synced (migration 1301, PRD 41 A11 rule 4b): the ONLY input of the server's
+// manifest tree, written in the pack transaction. Never read from project_facts, which every root of a project shares.
+export const knowledgeSyncLeaves = pgTable('knowledge_sync_leaves', {
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  rootId:    varchar('root_id', { length: 512 }).notNull(),
+  leafKey:   text('leaf_key').notNull(),
+  digest:    varchar('digest', { length: 160 }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.leafKey], name: 'pk_knowledge_sync_leaves' }),
+  index('idx_knowledge_sync_leaves_key').on(t.tenantId, t.projectId, t.leafKey),
+]);
+
+// A root's acknowledged sync state (migration 1301): advanced by a conditional UPDATE inside the pack transaction,
+// so concurrent packs have one winner. Replaces the `sync.json` object.
+export const knowledgeSyncRoots = pgTable('knowledge_sync_roots', {
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  rootId:     varchar('root_id', { length: 512 }).notNull(),
+  generation: integer('generation').notNull().default(0),
+  digest:     varchar('digest', { length: 64 }).notNull().default(''),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.projectId, t.rootId], name: 'pk_knowledge_sync_roots' }),
 ]);
 
 

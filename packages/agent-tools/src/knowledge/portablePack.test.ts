@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hashText } from '@seanhogg/builderforce-memory/ingest';
-import type { IndexDoc, KnowledgeSnapshot, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import type { IndexDoc, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import type { PackSnapshot } from './portablePack.js';
 import {
     mergePacks, packFromSnapshot, parsePack, rebasePackRoot, serializePack, type PortableKnowledgePack,
 } from './portablePack.js';
@@ -15,7 +16,7 @@ function relation(from: string, to: string, kind: string, weight = 1): StoredRel
     return { from: from as StoredRelation['from'], to: to as StoredRelation['to'], kind, weight, origin: 'model' };
 }
 
-function snapshot(partial: Partial<KnowledgeSnapshot> = {}): KnowledgeSnapshot {
+function snapshot(partial: Partial<PackSnapshot> = {}): PackSnapshot {
     return {
         version: 1,
         scopes: [{ rootId: 'root-1', title: 'Root One', packs: ['docs'] }],
@@ -43,7 +44,7 @@ describe('portable knowledge pack', () => {
             snapshot: snapshot({
                 facts: { 'root-1': [fact('a'), fact('b')] },
                 relations: { 'root-1': [relation('src:root-1::a.md', 'src:root-1::b.md', 'mentions')] },
-                extracted: { 'hash-1': [{ sourceRef: 'src:root-1::a.md' as KnowledgeSnapshot['extracted'][string][number]['sourceRef'], sourceHash: 'hash-1', nodes: [], edges: [], keys: [] }] },
+                extracted: { 'hash-1': [{ sourceRef: 'src:root-1::a.md' as PackSnapshot['extracted'][string][number]['sourceRef'], sourceHash: 'hash-1', nodes: [], edges: [], keys: [] }] },
             }),
             cards: [{ id: 'src:root-1::a.md', text: 'a card', keys: ['a.md'] }],
         });
@@ -106,8 +107,8 @@ describe('portable knowledge pack', () => {
 
     it('merge dedupes extracted by hash, fresh winning, and merges scopes by rootId', () => {
         const ext = (hash: string, count: number) => ({
-            sourceRef: `src:root-1::${hash}.md` as KnowledgeSnapshot['extracted'][string][number]['sourceRef'],
-            sourceHash: hash, nodes: new Array(count) as KnowledgeSnapshot['extracted'][string][number]['nodes'], edges: [], keys: [],
+            sourceRef: `src:root-1::${hash}.md` as PackSnapshot['extracted'][string][number]['sourceRef'],
+            sourceHash: hash, nodes: new Array(count) as PackSnapshot['extracted'][string][number]['nodes'], edges: [], keys: [],
         });
         const base = pack({ snapshot: snapshot({ extracted: { 'h-1': [ext('h-1', 1)], 'h-2': [ext('h-2', 1)] } }) });
         const fresh = pack({
@@ -125,7 +126,7 @@ describe('portable knowledge pack', () => {
 
     it('merge drops a file\'s older extracted record when fresh re-extracted it at a new hash', () => {
         const ext = (hash: string, file: string) => ({
-            sourceRef: `src:root-1::${file}` as KnowledgeSnapshot['extracted'][string][number]['sourceRef'],
+            sourceRef: `src:root-1::${file}` as PackSnapshot['extracted'][string][number]['sourceRef'],
             sourceHash: hash, nodes: [], edges: [], keys: [],
         });
         const base = pack({ snapshot: snapshot({ extracted: { old: [ext('old', 'a.md')], keep: [ext('keep', 'b.md')] } }) });
@@ -166,7 +167,7 @@ describe('portable knowledge pack', () => {
             nodes: [{ ref: ref(root, 'a.md'), kind: 'file', label: 'a.md', pack: 'docs', partition: 'doc', tier: 'T', hash: 'h-a' }],
             edges: [{ from: ref(root, 'a.md#s'), to: ref(root, 'a.md'), kind: 'about', weight: 1 }],
             keys: [{ ref: ref(root, 'a.md'), key: 'a.md' }],
-        }) as unknown as KnowledgeSnapshot['extracted'][string][number];
+        }) as unknown as PackSnapshot['extracted'][string][number];
         const old = () => pack({
             rootId: OLD,
             snapshot: snapshot({
@@ -263,7 +264,7 @@ describe('portable knowledge pack', () => {
 
     describe('mirror (Update): the pack follows the folder', () => {
         const ext = (file: string) => ({
-            sourceRef: `src:root-1::${file}` as KnowledgeSnapshot['extracted'][string][number]['sourceRef'],
+            sourceRef: `src:root-1::${file}` as PackSnapshot['extracted'][string][number]['sourceRef'],
             sourceHash: `h-${file}`, nodes: [], edges: [], keys: [],
         });
         const anchored = (key: string, ...paths: string[]) => ({ ...fact(key), fileAnchors: paths.map((path) => ({ path })) }) as StoredFact;

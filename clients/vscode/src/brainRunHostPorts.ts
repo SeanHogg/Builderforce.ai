@@ -29,8 +29,7 @@ import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChan
 import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
-import { classifyLocalDomainTool, type LocalDomainToolName } from "./localDomainTools";
-import { platformPolicy } from "./platformPolicy";
+import { routeToLocalDomainTools } from "./localDomainToolRouting";
 import type { ToolDef } from "./fileTools";
 import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
 import type { LocalModelsConfig } from "./localModels";
@@ -75,172 +74,27 @@ function installHostDomainTools(ctx: vscode.ExtensionContext, store: LocalFirstS
 }
 
 /**
- * The ONE call on the tool-dispatch path. A denial writes the local repository
- * and queues the store's sync event; it never reaches bfApi.
+ * The ONE call on the tool-dispatch path. It writes the local repository and queues
+ * the store's sync event; it never reaches bfApi.
  */
 function runInstalledDomainTool(ctx: vscode.ExtensionContext, request: DomainToolRequest) {
   return installLocalDomainTools(ctx).execute(request);
 }
 
 /**
- * Only names the landed library actually implements. `memory-recall` is
- * deliberately absent: `classifyLocalDomainTool` answers "unknown" for it, so
- * advertising it would offer the model a tool that always throws
- * `unknown_domain_tool`. Adding one means adding its repository write first.
+ * Project and ticket tools are the installed adapter ALWAYS — signed in or not, sync
+ * granted or not (`localDomainToolRouting.ts` says why): the write lands on this
+ * device and the batched sync carries it to the account. `chatClientId` is the run's
+ * local chat, stamped onto a created ticket.
  */
-const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"> & {
-  name: LocalDomainToolName;
-})[] = [
-  {
-    name: "project-create",
-    description:
-      "Create a project in the local repository when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Project name." },
-        key: { type: "string", description: "Optional stable project key." },
-        status: { type: "string", description: "Optional project status." },
-      },
-      required: ["name"],
-    },
-    mutating: true,
-  },
-  {
-    name: "project-update",
-    description:
-      "Patch a locally stored project when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Local project id to patch." },
-        name: { type: "string", description: "New project name." },
-        key: { type: "string", description: "New stable project key." },
-        status: { type: "string", description: "New project status." },
-      },
-      required: ["id"],
-    },
-    mutating: true,
-  },
-  {
-    name: "project-archive",
-    description:
-      "Archive a locally stored project when the platform is denied. Writes a local tombstone and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: { id: { type: "string", description: "Local project id to archive." } },
-      required: ["id"],
-    },
-    mutating: true,
-  },
-  {
-    name: "ticket-create",
-    description:
-      "Create a ticket in the local repository when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: {
-        projectId: { type: "string", description: "Local project id the ticket belongs to." },
-        title: { type: "string", description: "Ticket title." },
-        description: { type: "string", description: "Optional ticket description." },
-        status: { type: "string", description: "Optional ticket status." },
-        priority: { type: "string", description: "Optional ticket priority." },
-        parentTicketId: { type: "string", description: "Optional local parent ticket id." },
-      },
-      required: ["projectId", "title"],
-    },
-    mutating: true,
-  },
-  {
-    name: "ticket-update",
-    description:
-      "Patch a locally stored ticket when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Local ticket id to patch." },
-        title: { type: "string", description: "New ticket title." },
-        description: { type: "string", description: "New ticket description." },
-        priority: { type: "string", description: "New ticket priority." },
-        assignedUserId: { type: "string", description: "New assignee." },
-      },
-      required: ["id"],
-    },
-    mutating: true,
-  },
-  {
-    name: "ticket-move",
-    description:
-      "Change the status of a locally stored ticket when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Local ticket id to move." },
-        status: { type: "string", description: "New ticket status." },
-      },
-      required: ["id", "status"],
-    },
-    mutating: true,
-  },
-  {
-    name: "ticket-archive",
-    description:
-      "Archive or restore a locally stored ticket when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Local ticket id to archive." },
-        archived: { type: "boolean", description: "False restores an archived ticket." },
-      },
-      required: ["id"],
-    },
-    mutating: true,
-  },
-  {
-    name: "ticket-delete",
-    description:
-      "Delete a locally stored ticket when the platform is denied. Writes a local tombstone and queues the store's sync event. Does not call the platform.",
-    parameters: {
-      type: "object",
-      properties: { id: { type: "string", description: "Local ticket id to delete." } },
-      required: ["id"],
-    },
-    mutating: true,
-  },
-];
-
-/**
- * When synchronize is denied, a supported domain tool is the installed adapter:
- * it writes `store` and the create journal event is the sync handoff. An allowed
- * platform keeps the catalog executor. A non-domain tool is never replaced.
- */
-function routeDeniedDomainTools(
+function routeDomainToolsLocal(
   ctx: vscode.ExtensionContext,
   store: LocalFirstStore,
   tools: readonly ToolDef[],
+  chatClientId?: string,
 ): readonly ToolDef[] {
   installHostDomainTools(ctx, store);
-  if (domainToolPolicyAllows()) return tools;
-  const localExecute = (name: LocalDomainToolName): ToolDef["execute"] => async (args) => {
-    const request: DomainToolRequest = {
-      tool: name,
-      args,
-    };
-    const outcome = await runInstalledDomainTool(ctx, request);
-    return JSON.stringify(outcome);
-  };
-  // A catalog entry is a domain tool only if the landed classifier says so; a
-  // name that merely looks like one is never repointed at the local writer.
-  const routed = tools.map((tool) =>
-    classifyLocalDomainTool(tool.name) === "local"
-      ? { ...tool, remote: false, execute: localExecute(tool.name as LocalDomainToolName) }
-      : tool,
-  );
-  const present = new Set(routed.map((tool) => tool.name));
-  const added = LOCAL_DOMAIN_TOOL_SPECS.filter((spec) => !present.has(spec.name)).map(
-    (spec): ToolDef => ({ ...spec, execute: localExecute(spec.name) }),
-  );
-  return added.length === 0 ? routed : [...routed, ...added];
+  return routeToLocalDomainTools(tools, (request) => runInstalledDomainTool(ctx, request), chatClientId);
 }
 
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
@@ -274,7 +128,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
       const catalog = opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
-      return routeDeniedDomainTools(ctx, local.store, catalog);
+      return routeDomainToolsLocal(ctx, local.store, catalog, opts.chatIdentity?.clientChatId);
     },
     workspaceRoot,
     stream: streamForRoute,

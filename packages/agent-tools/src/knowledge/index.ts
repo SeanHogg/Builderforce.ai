@@ -74,7 +74,7 @@ export { claimSimilarity, type SimilarIndex } from './claimSimilarity.js';
 export { provenanceLine, type PackProvenanceParts, type ProvenanceLine } from './packProvenance.js';
 export {
     mergePacks, packFromSnapshot, parsePack, rebasePackRoot, serializePack,
-    type PackFromSnapshotArgs, type PackProvenance, type PortableKnowledgePack,
+    type PackFromSnapshotArgs, type PackProvenance, type PackSnapshot, type PortableKnowledgePack,
 } from './portablePack.js';
 export { mergePacksWithCards, packFromStore, packGraph, reviewHasWork, type PackFromStoreArgs, type PackGraphQuery } from './packGraph.js';
 export { buildCodeGraph } from './codeGraph.js';

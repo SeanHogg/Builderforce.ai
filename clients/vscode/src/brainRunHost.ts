@@ -251,7 +251,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // A sub-agent shares its owner's chat: it runs in the owner's Brain chat, so it
     // is threaded the SAME chat identity and translates `chatId` args through it too.
     const opts: { memory: boolean; audit?: { auditId: string; runId: string }; chatIdentity?: PlatformChatIdentity } =
-      { memory: p.evermind, ...(p.audit ? { audit: p.audit } : {}), ...(identity ? { chatIdentity: { localChatId: chatId, serverChatId: identity.serverChatId } } : {}) };
+      { memory: p.evermind, ...(p.audit ? { audit: p.audit } : {}), ...(identity ? { chatIdentity: { localChatId: chatId, serverChatId: identity.serverChatId, ...(identity.clientChatId ? { clientChatId: identity.clientChatId } : {}) } } : {}) };
     const defs = await ports.tools(projectId, children, () => runAbortSignal(key), opts);
     broadcast({ type: "run.tools", chatId: key, count: defs.length });
     const native = createNativeRunTool({

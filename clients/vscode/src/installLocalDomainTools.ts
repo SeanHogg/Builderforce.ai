@@ -3,12 +3,13 @@
  * (`localDomainTools.ts`, 8a59bb818).
  *
  * This is not a second writer. `createLocalDomainToolsWithRepository` builds the
- * G05 repository and the G06 tool set. A denial writes that repository and
+ * G05 repository and the G06 tool set. A write goes to that repository and
  * queues the journal event the transaction appended. It does not call the
  * platform client.
  *
  * The run host (the file named in prose only, never imported) installs this on its
- * tool-dispatch path and routes a denied domain tool through it — see
+ * tool-dispatch path and routes every project/ticket tool through it, whatever the
+ * sync policy (`localDomainToolRouting.ts`) — see
  * `HOST_DOMAIN_TOOL_LINE`. The library is idempotent per host context and reuses
  * the device id the host already holds. This module stays free of `vscode` and of
  * any host import, so the host file is the only place that binds the two.

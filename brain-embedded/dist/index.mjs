@@ -4355,7 +4355,7 @@ function importPayload(record3, mapping) {
   const serverId = Number(mapping.serverId);
   return Number.isSafeInteger(serverId) && serverId > 0 ? { ...record3.payload, serverId } : record3.payload;
 }
-async function queueImport(tx, record3, chatClientId) {
+async function queueImport(tx, record3, chatClientId, waitsOn = []) {
   await dropPending(tx, record3);
   if (record3.deletedAt) return;
   const mapping = await tx.mapping(record3.entityType, record3.id, record3.destination);
@@ -4366,7 +4366,7 @@ async function queueImport(tx, record3, chatClientId) {
     operation: "import",
     schemaVersion: record3.schemaVersion,
     occurredAt: record3.occurredAt,
-    dependsOn: chatClientId && record3.entityType !== "chat" ? [importKey("chat", chatClientId)] : [],
+    dependsOn: [...chatClientId && record3.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn],
     destination: record3.destination,
     payload: importPayload(record3, mapping)
   });

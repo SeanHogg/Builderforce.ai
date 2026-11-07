@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** The Run drawer (PRD 41 A8): phases, lanes that update live, the step feed and its filter, failures with Retry, history, Stop. */
+import { stationName } from '../stationName';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
@@ -110,10 +111,10 @@ describe('the Run panel', () => {
         }));
         const rows = within(screen.getByTestId('kg-run-slowest')).getAllByRole('listitem');
         expect(rows).toHaveLength(5);
-        expect(within(rows[0]!).getByText('f2.ts')).toBeTruthy();
+        expect(within(rows[0]!).getByText(stationName('src/f2.ts'))).toBeTruthy();
         expect(within(rows[0]!).getByText(t.reasons.timeout)).toBeTruthy();
         expect(within(rows[0]!).getByTestId('kg-run-slowest-parts').textContent).toContain('lookup');
-        expect(within(rows[1]!).getByText('f3.ts')).toBeTruthy();
+        expect(within(rows[1]!).getByText(stationName('src/f3.ts'))).toBeTruthy();
     });
 
     it('shows one lane per worker of the current phase and follows the run live', () => {

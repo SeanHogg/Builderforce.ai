@@ -245,7 +245,7 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
       return removed;
     },
 
-    async deleteRelationRows(rows) {
+    async deleteRelationRows(rows, only) {
       let removed = 0;
       const TUPLES = 100;
       for (let i = 0; i < rows.length; i += TUPLES) {
@@ -254,11 +254,37 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
           .where(scoped(
             projectFactRelations, tenantId,
             sql`(${projectFactRelations.fromRef}, ${projectFactRelations.toRef}, ${projectFactRelations.kind}) IN (${sql.join(tuples, sql`, `)})`,
+            // A pack's tombstone names a MODEL leaf: an edge a person has since made their own stays.
+            only?.origin ? eq(projectFactRelations.origin, only.origin) : undefined,
           ))
           .returning({ id: projectFactRelations.id });
         removed += gone.length;
       }
       return removed;
+    },
+
+    async deleteFactsByKeys(keys, actor) {
+      const deleted: string[] = [];
+      const distinct = [...new Set(keys.map((k) => k.trim().slice(0, 255)))];
+      for (let i = 0; i < distinct.length; i += IN_CHUNK) {
+        const batch = distinct.slice(i, i + IN_CHUNK);
+        // The author rule, in SQL: an authorless fact, the actor's own, or any fact for an admin.
+        const mayDelete = or(
+          isNull(projectFacts.createdBy),
+          actor.userId ? eq(projectFacts.createdBy, actor.userId) : undefined,
+          actor.admin ? sql`true` : undefined,
+        )!;
+        const allowed = await db.select({ key: projectFacts.key }).from(projectFacts)
+          .where(scoped(projectFacts, tenantId, inArray(projectFacts.key, batch), mayDelete));
+        if (allowed.length === 0) continue;
+        const allowedKeys = allowed.map((r) => r.key);
+        await store.deleteRelationsOf(allowedKeys.map((k) => factRef(k)));
+        const gone = await db.delete(projectFacts)
+          .where(scoped(projectFacts, tenantId, inArray(projectFacts.key, allowedKeys), mayDelete))
+          .returning({ key: projectFacts.key });
+        deleted.push(...gone.map((r) => r.key));
+      }
+      return deleted;
     },
 
     async deleteScope(rootId) {

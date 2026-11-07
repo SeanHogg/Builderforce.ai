@@ -27,7 +27,7 @@ const ENTRY_NAMES: ReadonlySet<string> = new Set([
 
 /** The signals pass 2 orders by: entry badges and manifest names, inbound references from the mapped graph, files changed since the last review. */
 export function judgeSignalsOf(
-    graph: KnowledgeGraph | null, rootId: string, plan: PlanDetail | undefined,
+    graph: KnowledgeGraph | null, plan: PlanDetail | undefined,
 ): JudgeSignals {
     const entryPaths = new Set<string>();
     const inbound = new Map<string, number>();
@@ -97,7 +97,7 @@ export function mergeReports(mapped: ReviewReport, judged: ReviewReport, took: R
 export const JUDGE_INDEX_EVERY = 100;
 
 export async function runJudgePass(d: JudgePassDeps): Promise<ReviewReport> {
-    const { ports, mapped } = d;
+    const { mapped } = d;
     const budget = Math.max(0, Math.floor(d.opts.judgeFiles ?? 0));
     if (budget === 0 || mapped.awaitingJudge.length === 0 || d.opts.signal?.aborted) return mapped;
 
@@ -120,7 +120,7 @@ async function judgeAll(d: JudgePassDeps, opts: KnowledgeReviewOptions, budget: 
 
     // `opts.plan` is the plan pass 1 ran on: its manifest hashes are the LAST review's, which is what "recently changed" compares against.
     const plan = opts.plan ? await refreshPlan(opts.plan, ports.manifest) : await d.freshPlan();
-    const ordered = orderForJudging(mapped.awaitingJudge, judgeSignalsOf(d.graph, mapped.rootId, opts.plan ?? plan));
+    const ordered = orderForJudging(mapped.awaitingJudge, judgeSignalsOf(d.graph, opts.plan ?? plan));
     const only = ordered.slice(0, budget);
     // Judging alone: no analyzers, no coverage / history / owner reads (the map pass did them), only the parsers.
     const { analyzers: _analyzers, history: _history, rootFiles: _rootFiles, ...judgingPorts } = ports;

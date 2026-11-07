@@ -1,58 +1,86 @@
 /**
- * knowledgeSyncBlobs — pack sync's state, staging and bundle writes in the knowledge domain's own R2 store
- * (PRD 41 A11).
+ * knowledgeSyncBlobs — pack sync's staging, bundle writes and generation reads over the knowledge domain's own
+ * stores (PRD 41 A11).
  *
- *   knowledge/{t}/{p}/{root}/sync.json                       { generation, digest } — the acknowledged state
- *   knowledge/{t}/{p}/sync-stage/{syncId}/{part:06}          one EARLIER part of a multi-part pack; custom
- *                                                            metadata `at` (epoch ms) is its expiry clock (1 h)
- *   knowledge/{t}/extracted-bundles/{digest}                 a pack's extracted bodies, one object (knowledgeBundles.ts)
+ *   knowledge/{t}/sync-stage/{p}/{actor}/{syncId}/{part:06}   one EARLIER part of a multi-part pack; custom metadata
+ *                                                             `at` (epoch ms) is its expiry clock (1 h). Under the
+ *                                                             tenant, beside the numeric project folders, so no root
+ *                                                             name can collide with it; keyed by the actor, so
+ *                                                             one person's `syncId` is never another's.
+ *   knowledge/{t}/extracted-bundles/{digest}                  a pack's extracted bodies, one object (knowledgeBundles.ts)
+ *   knowledge_sync_roots (Postgres)                           the generation and digest; an older `sync.json` object
+ *                                                             is copied into it on first read and deleted
  *
  * Object writes per sync: one per earlier part (the last part rides the request that applies the pack), ONE bundle,
- * and `sync.json` (plus one immutable review snapshot when the scope records a new digest).
+ * and one immutable review snapshot when the scope records a new digest.
  */
 import type { Env } from '../../../env';
 import type { Bundle } from '../knowledgeBundles';
 import { knowledgeBlobKeys, listRootSources } from '../knowledgeBlobs';
 import type { KnowledgeLedgerPort } from '../knowledgeLedger';
-import { STAGE_TTL_MS, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
+import { KnowledgeSyncError, STAGE_TTL_MS, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
 
 const seg = (s: string): string => encodeURIComponent(s);
+const HEAD_CONCURRENCY = 8;
+const DELETE_BATCH = 1000;
 
 export function r2KnowledgeSync(
-  env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, ledger?: KnowledgeLedgerPort, now: () => number = Date.now,
+  env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, ledger: KnowledgeLedgerPort, now: () => number = Date.now,
 ): KnowledgeSyncPort {
   const keys = knowledgeBlobKeys(tenantId, projectId);
-  const base = `knowledge/${tenantId}/${projectId}`;
-  const stateKey = (rootId: string): string => `${base}/${seg(rootId)}/sync.json`;
-  const stagePrefix = (syncId: string): string => `${base}/sync-stage/${seg(syncId)}/`;
+  const legacyStateKey = (rootId: string): string => `knowledge/${tenantId}/${projectId}/${seg(rootId)}/sync.json`;
+  const stageRoot = `knowledge/${tenantId}/sync-stage/${projectId}/`;
+  const stagePrefix = (actor: string, syncId: string): string => `${stageRoot}${seg(actor)}/${seg(syncId)}/`;
+  const partKey = (actor: string, syncId: string, part: number): string => `${stagePrefix(actor, syncId)}${String(part).padStart(6, '0')}`;
   const bucket = (): R2Bucket => {
     if (!env.UPLOADS) throw new Error('knowledge storage (R2) is not configured');
     return env.UPLOADS;
   };
 
-  return {
-    async state(rootId) {
-      if (!env.UPLOADS) return { generation: 0, digest: '' };
-      const obj = await env.UPLOADS.get(stateKey(rootId));
-      if (!obj) return { generation: 0, digest: '' };
-      try {
-        const s = (await obj.json()) as Partial<SyncState>;
-        return { generation: Number.isSafeInteger(s.generation) ? s.generation! : 0, digest: typeof s.digest === 'string' ? s.digest : '' };
-      } catch {
-        return { generation: 0, digest: '' };
-      }
-    },
+  /** The `sync.json` an older version wrote: copied into the roots table, then deleted. */
+  async function migrateLegacyState(rootId: string, over: KnowledgeLedgerPort): Promise<SyncState | null> {
+    if (!env.UPLOADS) return null;
+    const obj = await env.UPLOADS.get(legacyStateKey(rootId));
+    if (!obj) return null;
+    let state: SyncState = { generation: 0, digest: '' };
+    try {
+      const s = (await obj.json()) as Partial<SyncState>;
+      state = { generation: Number.isSafeInteger(s.generation) ? s.generation! : 0, digest: typeof s.digest === 'string' ? s.digest : '' };
+    } catch { /* an unreadable object is generation 0 */ }
+    if (state.generation > 0) await over.roots.seed(rootId, state);
+    await env.UPLOADS.delete(legacyStateKey(rootId));
+    return state;
+  }
 
-    async saveState(rootId, state) {
-      await bucket().put(stateKey(rootId), JSON.stringify(state), { httpMetadata: { contentType: 'application/json' } });
+  return {
+    async state(rootId, over) {
+      const l = over ?? ledger;
+      const row = await l.roots.get(rootId);
+      if (row) return row;
+      return (await migrateLegacyState(rootId, l)) ?? { generation: 0, digest: '' };
     },
 
     sources: (rootId, over) => listRootSources(env.UPLOADS, over ?? ledger, tenantId, projectId, rootId),
 
     async heldBodies(hashes, over) {
-      const index = (over ?? ledger)?.index;
-      if (!index || hashes.length === 0) return new Map();
-      return new Map((await index.locate(hashes)).map((l) => [l.hash, l.sourceRefs] as const));
+      const l = over ?? ledger;
+      if (hashes.length === 0) return new Map();
+      const locs = await l.index.locate(hashes);
+      // A row whose bundle object is gone must not be claimed: check each DISTINCT bundle once (not each hash).
+      const distinct = [...new Set(locs.map((x) => x.bundleKey))];
+      const gone = new Set<string>();
+      if (env.UPLOADS && distinct.length > 0) {
+        let next = 0;
+        const lane = async (): Promise<void> => {
+          while (next < distinct.length) {
+            const key = distinct[next++]!;
+            if (!(await env.UPLOADS!.head(key))) gone.add(key);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(HEAD_CONCURRENCY, distinct.length) }, lane));
+        if (gone.size > 0) await l.index.dropBundles([...gone]).catch(() => undefined);
+      }
+      return new Map(locs.filter((x) => !gone.has(x.bundleKey)).map((x) => [x.hash, x.sourceRefs] as const));
     },
 
     async putBundle(bundle: Bundle) {
@@ -68,39 +96,51 @@ export function r2KnowledgeSync(
       await b.put(key, JSON.stringify(sorted), { httpMetadata: { contentType: 'application/json' } });
     },
 
-    async stagePart(syncId, part, bytes) {
-      await bucket().put(`${stagePrefix(syncId)}${String(part).padStart(6, '0')}`, bytes, { customMetadata: { at: String(now()) } });
+    async stagePart(actor, syncId, part, bytes) {
+      await bucket().put(partKey(actor, syncId, part), bytes, { customMetadata: { at: String(now()) } });
     },
 
-    async stagedParts(syncId, parts) {
+    async stagedParts(actor, syncId, parts, maxBytes) {
       const b = bucket();
       const out: Uint8Array[] = [];
+      let total = 0;
       for (let i = 0; i < parts; i++) {
-        const obj = await b.get(`${stagePrefix(syncId)}${String(i).padStart(6, '0')}`);
+        const obj = await b.get(partKey(actor, syncId, i));
         if (!obj) return null;
         const at = Number(obj.customMetadata?.['at']);
         if (!Number.isFinite(at) || now() - at > STAGE_TTL_MS) return null;
+        // Summed as they load: a pack past the cap is refused before anything is joined.
+        total += obj.size;
+        if (total > maxBytes) throw new KnowledgeSyncError(413, 'pack_too_large', `the parts of this pack add up past ${maxBytes} bytes`);
         out.push(new Uint8Array(await obj.arrayBuffer()));
       }
       return out;
     },
 
-    async dropStaged(syncId) {
+    async dropStaged(actor, syncId) {
       const b = bucket();
-      const page = await b.list({ prefix: stagePrefix(syncId), limit: 1000 });
+      const page = await b.list({ prefix: stagePrefix(actor, syncId), limit: 1000 });
       if (page.objects.length > 0) await b.delete(page.objects.map((o) => o.key));
     },
 
     async sweepStaged() {
       if (!env.UPLOADS) return;
-      const options: R2ListOptions & { include?: Array<'customMetadata'> } = { prefix: `${base}/sync-stage/`, limit: 100, include: ['customMetadata'] };
+      const options: R2ListOptions & { include?: Array<'customMetadata'> } = { prefix: stageRoot, limit: 100, include: ['customMetadata'] };
       const page = await env.UPLOADS.list(options);
       const old = page.objects.filter((o) => now() - Number(o.customMetadata?.['at'] ?? 0) > STAGE_TTL_MS).map((o) => o.key);
       if (old.length > 0) await env.UPLOADS.delete(old);
     },
 
+    async deleteLegacySources(rootId, sourceIds) {
+      if (!env.UPLOADS) return;
+      const all = sourceIds.map((id) => keys.source(rootId, id));
+      for (let i = 0; i < all.length; i += DELETE_BATCH) await env.UPLOADS.delete(all.slice(i, i + DELETE_BATCH));
+    },
+
     async clearRoot(rootId) {
-      if (env.UPLOADS) await env.UPLOADS.delete(stateKey(rootId));
+      await ledger.leaves.clear(rootId);
+      await ledger.roots.clear(rootId);
+      if (env.UPLOADS) await env.UPLOADS.delete(legacyStateKey(rootId));
     },
   };
 }

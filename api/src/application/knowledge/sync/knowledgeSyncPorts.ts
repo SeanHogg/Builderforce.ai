@@ -13,9 +13,11 @@ export interface SyncState {
 }
 
 export interface KnowledgeSyncPort {
-  /** The root's acknowledged state; `{ generation: 0, digest: '' }` when never synced. */
-  state(rootId: string): Promise<SyncState>;
-  saveState(rootId: string, state: SyncState): Promise<void>;
+  /**
+   * The root's acknowledged state; `{ generation: 0, digest: '' }` when it has no row. A `sync.json` object left by
+   * an older version is copied into the row on first read, then deleted.
+   */
+  state(rootId: string, ledger?: KnowledgeLedgerPort): Promise<SyncState>;
   /**
    * The root's current sources (path and the hash their extracted output is keyed under): the ledger rows over
    * the legacy objects. Pass `ledger` to read inside a transaction.
@@ -23,27 +25,33 @@ export interface KnowledgeSyncPort {
   sources(rootId: string, ledger?: KnowledgeLedgerPort): Promise<Array<{ path: string; hash: string }>>;
   /**
    * The extracted bodies the project already holds among `hashes` (under ANY root), each with the `sourceRef`s its
-   * entries name. ONE index query for any number of hashes, never an object read per hash.
+   * entries name. ONE index query for any number of hashes, never an object read per hash. A row whose bundle
+   * object is gone is not held (and is dropped), so a have-check never claims a body it cannot serve.
    */
   heldBodies(hashes: readonly string[], ledger?: KnowledgeLedgerPort): Promise<Map<string, string[]>>;
   /** Writes a pack's bodies as ONE content-addressed bundle object (the pack's only body write). */
   putBundle(bundle: Bundle): Promise<void>;
   /** Records a review's source list as the immutable snapshot of `digest` (written once per digest). */
   snapshotReview(rootId: string, digest: string, sources: ReadonlyArray<{ path: string; hash: string }>): Promise<void>;
-  /** Parks one part of a multi-part pack until the last arrives. */
-  stagePart(syncId: string, part: number, bytes: Uint8Array): Promise<void>;
-  /** The parts staged under `syncId`, in order, when exactly `0..parts-1` are present and none expired; else null. */
-  stagedParts(syncId: string, parts: number): Promise<Uint8Array[] | null>;
-  dropStaged(syncId: string): Promise<void>;
+  /** Parks one earlier part of a multi-part pack until the last arrives. Keyed by the actor, so one person's `syncId` is not another's. */
+  stagePart(actor: string, syncId: string, part: number, bytes: Uint8Array): Promise<void>;
+  /**
+   * The first `parts` parts staged under `syncId`, in order, when all are present and none expired; else null.
+   * Throws {@link KnowledgeSyncError} (413) as soon as the parts add up past `maxBytes`, before they are joined.
+   */
+  stagedParts(actor: string, syncId: string, parts: number, maxBytes: number): Promise<Uint8Array[] | null>;
+  dropStaged(actor: string, syncId: string): Promise<void>;
   /** Deletes staged parts older than the expiry (one hour). Best effort. */
   sweepStaged(): Promise<void>;
-  /** Forgets the root's sync state (the root was deleted). */
+  /** Deletes the legacy per-source objects of removed sources (at most 1,000 keys per call). */
+  deleteLegacySources(rootId: string, sourceIds: readonly string[]): Promise<void>;
+  /** Forgets the root's sync state, leaves and `sync.json` (the root was deleted). */
   clearRoot(rootId: string): Promise<void>;
 }
 
 /** A pack the caller got wrong or cannot be applied: the route answers `status` with `{ error, code }`. */
 export class KnowledgeSyncError extends Error {
-  constructor(readonly status: 400 | 409 | 413 | 422, readonly code: string, message: string, readonly detail?: Record<string, unknown>) {
+  constructor(readonly status: 400 | 403 | 409 | 413 | 422, readonly code: string, message: string, readonly detail?: Record<string, unknown>) {
     super(message);
     this.name = 'KnowledgeSyncError';
   }
@@ -51,8 +59,10 @@ export class KnowledgeSyncError extends Error {
 
 /** Largest compressed request body (one part). */
 export const MAX_SYNC_BODY_BYTES = 8 * 1024 * 1024;
-/** Most parts a pack may be split into (64 MB decoded / compressed worst case stays well inside). */
-export const MAX_SYNC_PARTS = 64;
+/** Most parts a pack may be split into: 8 x 8 MB is the whole 64 MB the decoder will inflate. */
+export const MAX_SYNC_PARTS = 8;
+/** The parts of one pack may add up to at most this (checked while they load, before they are joined). */
+export const MAX_PACK_BYTES = 64 * 1024 * 1024;
 /** Hashes one `have` request may ask about: it is ONE index query, so the bound is the request body, not the database. */
 export const MAX_HAVE_HASHES = 50_000;
 /** Parts and `syncId`s expire after this. */

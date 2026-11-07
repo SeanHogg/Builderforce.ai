@@ -25,6 +25,13 @@ import {
     type StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
 
+/**
+ * The snapshot a pack carries: memory's `KnowledgeSnapshot` with the extract cache EXPLICIT. A store keeps its cache beside the snapshot
+ * now (memory's `extractedLog`), so the snapshot type makes `extracted` optional; a pack file still embeds its extracted map (the format is
+ * unchanged), and a pack is built from `store.extractedEntries()`, never from a snapshot's own key.
+ */
+export type PackSnapshot = Required<KnowledgeSnapshot>;
+
 /** One portable knowledge pack — the payload of a `.bfpack` file. */
 export interface PortableKnowledgePack {
     version: 1;
@@ -35,7 +42,7 @@ export interface PortableKnowledgePack {
     rootId: string;
     title: string;
     /** Scopes + facts + relations + extracted cache. */
-    snapshot: KnowledgeSnapshot;
+    snapshot: PackSnapshot;
     /** Retrieval cards (the LLM-agnostic layer); absent = the consumer rebuilds them. */
     cards?: IndexDoc[];
     /** Who reviewed the pack's knowledge and with what; absent on packs that recorded none. */
@@ -58,7 +65,7 @@ export interface PackFromSnapshotArgs {
     name: string;
     rootId: string;
     title: string;
-    snapshot: KnowledgeSnapshot;
+    snapshot: PackSnapshot;
     cards?: IndexDoc[];
     provenance?: PackProvenance;
     /** ISO clock. Default `new Date().toISOString()`. */
@@ -146,7 +153,7 @@ export function parsePack(text: string): PortableKnowledgePack {
     for (const field of ['name', 'createdAt', 'rootId', 'title'] as const) {
         if (typeof pack[field] !== 'string' || pack[field] === '') fail(`missing required string field "${field}"`);
     }
-    const snapshot = pack.snapshot as Partial<KnowledgeSnapshot> | undefined;
+    const snapshot = pack.snapshot as Partial<PackSnapshot> | undefined;
     if (!snapshot || typeof snapshot !== 'object') fail('missing required snapshot');
     if (!Array.isArray(snapshot.scopes)) fail('snapshot.scopes must be an array');
     const facts = recordOf(snapshot.facts, 'facts');
@@ -226,14 +233,14 @@ export function mergePacks(
 ): PortableKnowledgePack {
     const now = opts.now ?? (() => new Date().toISOString());
 
-    const scopes = new Map<string, KnowledgeSnapshot['scopes'][number]>();
+    const scopes = new Map<string, PackSnapshot['scopes'][number]>();
     for (const scope of [...base.snapshot.scopes, ...fresh.snapshot.scopes]) scopes.set(scope.rootId, scope);
 
     // Fresh wins per hash; and a file re-extracted at a NEW hash supersedes its older records (the cache is not a history).
     const freshHashOf = new Map<string, string>();
     for (const [hash, list] of Object.entries(fresh.snapshot.extracted)) for (const e of list) freshHashOf.set(e.sourceRef, hash);
     const gone = opts.mirror && freshHashOf.size > 0 ? deletedPaths(base, freshHashOf) : new Set<string>();
-    const extracted: Record<string, KnowledgeSnapshot['extracted'][string]> = {};
+    const extracted: Record<string, PackSnapshot['extracted'][string]> = {};
     for (const [hash, list] of Object.entries(base.snapshot.extracted)) {
         const kept = list.filter((e) => (freshHashOf.get(e.sourceRef) ?? hash) === hash && !gone.has(pathOfRef(e.sourceRef) ?? '\u0000'));
         if (kept.length) extracted[hash] = kept;

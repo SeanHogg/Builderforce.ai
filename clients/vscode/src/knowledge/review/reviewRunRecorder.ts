@@ -22,7 +22,8 @@ export { RUN_POST_INTERVAL_MS };
  * memory keeps the list, pass 2 needs it.
  */
 export const onTheWireReport = (report: ReviewReport): ReviewReport => ({
-  ...report, failures: [], awaitingJudge: [], awaitingJudgeCount: report.awaitingJudgeCount ?? report.awaitingJudge.length,
+  // A record kept before A10 (or a hand-built one) has no list: its count is then 0.
+  ...report, failures: [], awaitingJudge: [], awaitingJudgeCount: report.awaitingJudgeCount ?? report.awaitingJudge?.length ?? 0,
 });
 
 /** A stable id for a run: its start time and a random tail (file-name safe). */

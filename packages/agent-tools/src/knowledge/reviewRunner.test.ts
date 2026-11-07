@@ -44,7 +44,8 @@ describe('the shared review runner', () => {
 
     it('does not stall on a judgement that never resolves: the section stays unjudged and the review finishes', async () => {
         // A completion that hangs forever (a stalled engine) previously left the whole review
-        // stuck at the `judge` phase. The per-request timeout treats it as unjudged instead.
+        // stuck at the `judge` phase. The per-request timeout aborts the call and treats the section as unjudged — and, since
+        // PRD 41 A10 rule 9, owed: a timeout is not a judgement, so it is never recorded as judged and a later run retries it.
         const hung: JudgementPort = { judge: () => new Promise(() => undefined) };
         const phases: ReviewProgress['phase'][] = [];
         const report = await runKnowledgeReview(ports(hung), {
@@ -52,9 +53,9 @@ describe('the shared review runner', () => {
             onProgress: (e) => phases.push(e.phase),
         });
         expect(report.aborted).toBe(false);
-        // The timed-out requests resolve empty, so the review finishes instead of hanging; the
-        // affected sections yield no claims (memory counts an answered-but-empty call as judged).
-        expect(report.judged).toBeGreaterThan(0);
+        // The timed-out requests fail (they used to resolve empty, which memory counted as judged and never retried).
+        expect(report.judged).toBe(0);
+        expect(report.failures.some((f) => f.phase === 'judge' && /timeout/.test(f.reason))).toBe(true);
         expect(phases).toContain('judge');
         expect(phases.at(-1)).toBe('done');
     });

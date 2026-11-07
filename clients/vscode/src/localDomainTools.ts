@@ -20,10 +20,9 @@
  *     (`createLocalWorkRepository`, or the `localWorkManagement` adapter another
  *     slice owns) and a test passes a fake. Nothing here constructs a store or
  *     reads global state.
- *   • Deny is the DEFAULT. `platformPolicy` is optional; omitting it — or an
- *     `allows()` that throws, or returns anything but `true` — denies. G01 makes
- *     "denied unless explicitly granted" the product default and this keeps it
- *     at the tool boundary as well.
+ *   • Local is the DEFAULT. `platformPolicy` is optional; omitting it — or an
+ *     `allows()` that throws, or returns anything but `true` — keeps the write local.
+ *     The editor host omits it entirely.
  *   • A server MCP tool, cloud execution, meeting join and remote session read are
  *     CONNECTED-ONLY: refused with a code, never queued as offline history, and
  *     never silently substituted with a local write (G06's "classify the rest").
@@ -33,8 +32,8 @@
  *     the write and hands it to the injected queue. It never authors a second,
  *     looser copy of the event, and a crash between the write and the enqueue
  *     still leaves the event pending in the store.
- *   • Activation does not call this. Composition into the tool catalog and the run
- *     host belongs to `extension.ts`, which this slice may not edit, so the module
+ *   • Activation does not call this. Composition into the tool catalog is the run
+ *     host's (`brainRunHostPorts.ts` → `localDomainToolRouting.ts`), so the module
  *     imports nothing from `vscode` and stays testable headlessly.
  *
  * Statuses come from `LOCAL_TICKET_STATUSES` (the `task_status` enum copy that

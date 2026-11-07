@@ -357,7 +357,13 @@ describe('the entity catalog', () => {
     //  - `knowledge_extracted_index` is a LOCATOR (hash → byte range of a bundle object); no title, no status.
     //  - `knowledge_sources` is the current source list of a root, written only by the pack-sync transaction;
     //    a hand edit would be a false statement about what a review saw.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(52);
+    //
+    // Ceiling moved 52 → 54 (2026-11-07) with pack sync's manifest (1301, PRD 41 A11 rule 4b), adjudicated:
+    //  - `knowledge_sync_leaves` is the client-computed digest of each row a root synced: written only by the pack
+    //    transaction; a hand edit would make the server's manifest lie about what the root holds.
+    //  - `knowledge_sync_roots` is a root's generation counter, advanced by a conditional UPDATE so concurrent packs
+    //    have one winner; a generic PATCH of `generation` would break that.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(54);
   });
 
   it('declares nothing that no migration creates', () => {

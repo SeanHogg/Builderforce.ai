@@ -205,7 +205,8 @@ export interface RootReview {
 
 /** `builderforce.knowledge.judgeBudgetFiles` (PRD 41 A10): files judged per run after the map is complete; default 500, never negative. */
 const judgeBudgetFiles = (): number => {
-  const n = Math.floor(Number(vscode.workspace.getConfiguration("builderforce").get<number>("knowledge.judgeBudgetFiles", 500)));
+  // A host without configuration (a test double) gets the default.
+  const n = Math.floor(Number(vscode.workspace.getConfiguration?.("builderforce")?.get<number>("knowledge.judgeBudgetFiles", 500) ?? 500));
   return Number.isFinite(n) && n >= 0 ? n : 500;
 };
 

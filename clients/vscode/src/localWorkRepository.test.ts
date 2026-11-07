@@ -223,6 +223,27 @@ describe("localWorkRepository", () => {
     ).rejects.toMatchObject({ code: "ticket_not_found" });
   });
 
+  it("updates an already-imported ticket against the server's version and keeps one pending update", async () => {
+    const store = createMemoryLocalFirstStore();
+    const bound = { kind: "bound", accountId: "acct-1", tenantId: "tenant-a" } as const;
+    const repo = createLocalWorkRepository({ store, deviceId: "device-1", destination: bound });
+    const project = await repo.createProject({ name: "Board" });
+    const ticket = await repo.createTicket({ projectId: project.id, title: "Original" });
+    // The sync receipt: the server imported the ticket and holds version 5 of it.
+    await store.transact(async (tx) => {
+      await tx.acknowledge((await tx.pending()).map((event) => event.eventId));
+      await tx.putMapping({ destination: bound, entityType: "ticket", clientEntityId: ticket.id, serverId: "77", serverVersion: 5 });
+    });
+
+    await repo.updateTicket(ticket.id, { title: "First edit" });
+    await repo.changeTicketStatus(ticket.id, "done");
+    const pending = (await store.read((tx) => tx.pending())).filter((event) => event.clientEntityId === ticket.id);
+    // Both edits are based on what the server holds, and only the newest is still pending.
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ operation: "update", baseVersion: 5 });
+    expect(pending[0]?.payload).toMatchObject({ title: "First edit", status: "done" });
+  });
+
   it("persists taskType and the creating chat, and an old record without them still reads", async () => {
     const { repo } = harness();
     const project = await repo.createProject({ name: "Board" });

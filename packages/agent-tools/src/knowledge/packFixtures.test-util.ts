@@ -4,7 +4,7 @@
  * store, then packed with `packFromStore`.
  */
 
-import { localSnapshotStore, type KnowledgeSnapshot, type KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
+import { localSnapshotStore, type Extracted, type KnowledgeStore, type LocalSnapshotStore } from '@seanhogg/builderforce-memory/knowledge';
 import { InMemoryIngestManifest, type IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import { packFromStore } from './packGraph.js';
 import type { PortableKnowledgePack } from './portablePack.js';
@@ -23,7 +23,7 @@ export interface ReviewedDocs {
     pack: PortableKnowledgePack;
     store: KnowledgeStore;
     manifest: IngestManifest;
-    extracted: KnowledgeSnapshot['extracted'];
+    extracted: Record<string, Extracted[]>;
 }
 
 /** Reviews `files` as root `rootId` (no judgement) and packs the result. */
@@ -32,7 +32,8 @@ export async function reviewedDocs(files: Record<string, string> = PACK_DOCS, ro
     const store = localSnapshotStore({ read: async () => snapshot, write: async (s) => { snapshot = s; } });
     const manifest = new InMemoryIngestManifest();
     await runKnowledgeReview({ source: memorySource(files, rootId), store, manifest });
-    const extracted = (JSON.parse(snapshot ?? '{}') as Partial<KnowledgeSnapshot>).extracted ?? {};
+    // The cache is read through the store (a store may keep it beside its snapshot), never from the snapshot's own key.
+    const extracted = await (store as LocalSnapshotStore).extractedEntries();
     const pack = await packFromStore({ name: rootId, rootId, title: rootId, store, manifest, extracted, now: PACK_CLOCK });
     return { pack, store, manifest, extracted };
 }

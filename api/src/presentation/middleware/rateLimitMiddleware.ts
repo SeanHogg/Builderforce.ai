@@ -18,8 +18,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * `application/ratelimit/tenantBuckets.ts`.
  *
  * A board write that arrives through the MCP relay (`POST /llm/v1/mcp/call` naming
- * tasks.create / tasks.update / chats.link_ticket …) is classified by the tool in the
- * body, not the path — see MCP_CALL_ROUTE.
+ * tasks.create / tasks.update / chats.link_ticket …), or a JSON-RPC `tools/call` on
+ * `/mcp` naming the same tool, is classified by the tool in the body, not the path —
+ * see MCP_CALL_ROUTE.
  *
  * Returns HTTP 429 with Retry-After header when the limit is exceeded.
  *
@@ -35,7 +36,7 @@ import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import {
   BOARD_RPM_MULTIPLIER, RPM_LIMITS, boardBucketKey, resolvePlanRpm, tenantBucketKey,
 } from '../../application/ratelimit/tenantBuckets';
-import { BUILTIN_EXTENSION_ID } from '../../application/llm/toolNaming';
+import { BUILTIN_EXTENSION_ID, advertisedName } from '../../application/llm/toolNaming';
 import { resolveBearerTenantId } from '../routes/llmRoutes';
 
 /** Requests the limiter never counts or blocks AT THE DOOR. Persisting a chat turn is
@@ -139,14 +140,37 @@ export function isBoardMutationMcpCall(body: unknown): boolean {
   return extensionId === BUILTIN_EXTENSION_ID && typeof tool === 'string' && BOARD_MUTATION_MCP_TOOLS.has(tool);
 }
 
+/** The remote MCP server (`POST /mcp`, JSON-RPC) — it names tools by their flat advertised name. */
+const MCP_JSONRPC_ROUTE = /^\/mcp\/?$/;
+
+/** The same set, spelled as the JSON-RPC route's `params.name` (`builtin_tasks_create`). Derived, never a second list. */
+const BOARD_MUTATION_ADVERTISED_NAMES: ReadonlySet<string> = new Set([...BOARD_MUTATION_MCP_TOOLS].map(advertisedName));
+
 /**
- * The relay call route and its body, when this request is one. `c.req.json()` is cached
- * by Hono, so reading it here leaves the body intact for the route's own parse.
+ * Whether a JSON-RPC body (one request or a batch) holds a `tools/call` of a board-write
+ * builtin tool. One such call in a batch charges the whole POST to the board bucket.
+ */
+export function isBoardMutationJsonRpc(body: unknown): boolean {
+  const requests = Array.isArray(body) ? body : [body];
+  return requests.some((request) => {
+    if (!request || typeof request !== 'object') return false;
+    const { method, params } = request as { method?: unknown; params?: { name?: unknown } | null };
+    return method === 'tools/call' && typeof params?.name === 'string' && BOARD_MUTATION_ADVERTISED_NAMES.has(params.name);
+  });
+}
+
+/**
+ * The tool-call routes and their bodies, when this request is one (the relay `/v1/mcp/call`
+ * or the JSON-RPC `/mcp`). `c.req.json()` is cached by Hono, so reading it here leaves
+ * the body intact for the route's own parse.
  */
 async function isBoardMutationRelayCall(c: Parameters<MiddlewareHandler>[0]): Promise<boolean> {
-  if (c.req.method.toUpperCase() !== 'POST' || !MCP_CALL_ROUTE.test(c.req.path)) return false;
+  if (c.req.method.toUpperCase() !== 'POST') return false;
+  const relay = MCP_CALL_ROUTE.test(c.req.path);
+  if (!relay && !MCP_JSONRPC_ROUTE.test(c.req.path)) return false;
   try {
-    return isBoardMutationMcpCall(await c.req.json());
+    const body = await c.req.json();
+    return relay ? isBoardMutationMcpCall(body) : isBoardMutationJsonRpc(body);
   } catch {
     return false; // not JSON — the route answers its own 400
   }

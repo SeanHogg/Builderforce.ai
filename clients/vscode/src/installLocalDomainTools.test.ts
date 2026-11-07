@@ -157,22 +157,25 @@ describe("the run host installs the local domain tools", () => {
     expect(source).toContain(HOST_DOMAIN_TOOL_LINE);
   });
 
-  it("routes denied domain tools through the adapter from the catalog seam", () => {
+  it("routes domain tools through the adapter from the catalog seam, whatever the sync policy", () => {
     const source = readFileSync(new URL(HOST_FILE, import.meta.url), "utf8");
     // The tool list the run actually executes is wrapped, not merely built.
-    expect(source).toMatch(/routeDeniedDomainTools\(\s*ctx\s*,\s*local\.store\s*,\s*catalog\s*\)/);
-    expect(source).toMatch(/function routeDeniedDomainTools/);
-    // A denial is decided by the platform policy, not by tool absence.
-    expect(source).toMatch(/platformPolicy\(\)\.allows\(\s*"synchronize"\s*\)/);
+    expect(source).toMatch(/routeDomainToolsLocal\(\s*ctx\s*,\s*local\.store\s*,\s*catalog\s*,/);
+    expect(source).toMatch(/function routeDomainToolsLocal/);
+    // Local is unconditional in the editor: no platform policy decides it, and the
+    // adapter is never given a platform caller.
+    expect(source).not.toMatch(/platformPolicy|allows\(\s*"synchronize"\s*\)/);
+    expect(source).not.toMatch(/platformTool|policyAllows/);
     // Only a name the landed classifier calls "local" is repointed at the writer.
-    expect(source).toMatch(/classifyLocalDomainTool\(\s*tool\.name\s*\)\s*===\s*"local"/);
+    const routing = readFileSync(new URL("./localDomainToolRouting.ts", import.meta.url), "utf8");
+    expect(routing).toMatch(/classifyLocalDomainTool\(\s*tool\.name\s*\)\s*===\s*"local"/);
   });
 
   it("advertises only tool names the landed library actually implements", () => {
-    const source = readFileSync(new URL(HOST_FILE, import.meta.url), "utf8");
+    const source = readFileSync(new URL("./localDomainToolRouting.ts", import.meta.url), "utf8");
     const block = source.slice(
-      source.indexOf("const LOCAL_DOMAIN_TOOL_SPECS"),
-      source.indexOf("/**\n * When synchronize is denied"),
+      source.indexOf("export const LOCAL_DOMAIN_TOOL_SPECS"),
+      source.indexOf("/** The tools whose request is stamped"),
     );
     expect(block).not.toBe("");
     const advertised = [...block.matchAll(/name:\s*"([^"]+)"/g)].map((match) => match[1]);
