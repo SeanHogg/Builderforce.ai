@@ -18,6 +18,7 @@ import {
     type JudgeSignals, type KnowledgeGraph, type PlanDetail, type ReviewArgs, type ReviewProgress, type ReviewReport, type ReviewStep,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeReviewOptions, KnowledgeReviewPorts } from './reviewRunner.js';
+import type { RunHandoff } from './reviewRunLock.js';
 
 /** Manifest-like files that open a folder: judged first. */
 const ENTRY_NAMES: ReadonlySet<string> = new Set([
@@ -57,6 +58,8 @@ export interface JudgePassDeps {
     /** The mapped graph pass 1's index step built; null when there is no index port. */
     graph: KnowledgeGraph | null;
     tell(p: ReviewProgress): void;
+    /** Gives the root's lock back before judging; a new review of the root stops this pass. */
+    handoff: RunHandoff;
     /** A fresh plan, for a run that was not handed a confirmed one. */
     freshPlan(): Promise<PlanDetail>;
     directoryArgs(
@@ -94,9 +97,26 @@ export function mergeReports(mapped: ReviewReport, judged: ReviewReport, took: R
 export const JUDGE_INDEX_EVERY = 100;
 
 export async function runJudgePass(d: JudgePassDeps): Promise<ReviewReport> {
-    const { ports, opts, mapped } = d;
-    const budget = Math.max(0, Math.floor(opts.judgeFiles ?? 0));
-    if (budget === 0 || mapped.awaitingJudge.length === 0 || opts.signal?.aborted) return mapped;
+    const { ports, mapped } = d;
+    const budget = Math.max(0, Math.floor(d.opts.judgeFiles ?? 0));
+    if (budget === 0 || mapped.awaitingJudge.length === 0 || d.opts.signal?.aborted) return mapped;
+
+    // Background work: the root's lock goes back now, and a new review of the root stops this pass (its unjudged files stay owed).
+    const stop = new AbortController();
+    const relay = (): void => stop.abort();
+    d.opts.signal?.addEventListener('abort', relay, { once: true });
+    d.handoff.judging(relay);
+    d.handoff.release();
+    const opts: KnowledgeReviewOptions = { ...d.opts, signal: stop.signal };
+    try {
+        return await judgeAll(d, opts, budget);
+    } finally {
+        d.opts.signal?.removeEventListener('abort', relay);
+    }
+}
+
+async function judgeAll(d: JudgePassDeps, opts: KnowledgeReviewOptions, budget: number): Promise<ReviewReport> {
+    const { ports, mapped } = d;
 
     // `opts.plan` is the plan pass 1 ran on: its manifest hashes are the LAST review's, which is what "recently changed" compares against.
     const plan = opts.plan ? await refreshPlan(opts.plan, ports.manifest) : await d.freshPlan();

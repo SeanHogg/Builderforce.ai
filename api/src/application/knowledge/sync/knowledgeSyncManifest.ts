@@ -14,6 +14,7 @@ import {
   encodePack, manifestTree, rootLeaves, MANIFEST_BUCKETS, ZERO_DIGEST, type ManifestLeaf, type ManifestTree, type RootRows,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { KnowledgeStorePort } from '../knowledgePorts';
+import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { decodeGuarded } from './decodeGuarded';
 import { KnowledgeSyncError, MAX_HAVE_HASHES, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
 
@@ -23,16 +24,16 @@ export interface ManifestDeps {
 }
 
 /** The rows of the root as the server holds them. */
-export async function serverRootRows(deps: ManifestDeps, rootId: string): Promise<RootRows> {
-  const files = await deps.sync.sources(rootId);
+export async function serverRootRows(deps: ManifestDeps, rootId: string, ledger?: KnowledgeLedgerPort): Promise<RootRows> {
+  const files = await deps.sync.sources(rootId, ledger);
   const paths = new Set(files.map((f) => f.path));
   const facts = await deps.store.facts(paths);
   const relations = await deps.store.relations(rootId, new Set(facts.map((f) => `fact:${f.key}`)));
   return { files, facts, relations };
 }
 
-export async function serverManifest(deps: ManifestDeps, rootId: string): Promise<{ state: SyncState; tree: ManifestTree }> {
-  const [state, rows] = await Promise.all([deps.sync.state(rootId), serverRootRows(deps, rootId)]);
+export async function serverManifest(deps: ManifestDeps, rootId: string, ledger?: KnowledgeLedgerPort): Promise<{ state: SyncState; tree: ManifestTree }> {
+  const [state, rows] = await Promise.all([deps.sync.state(rootId), serverRootRows(deps, rootId, ledger)]);
   return { state, tree: manifestTree(rootLeaves(rootId, rows)) };
 }
 
@@ -67,9 +68,10 @@ export async function haveBitmap(deps: Pick<ManifestDeps, 'sync'>, body: Uint8Ar
   const pack = await decodeGuarded(body);
   const hashes = pack.hashes ?? [];
   if (hashes.length > MAX_HAVE_HASHES) throw new KnowledgeSyncError(413, 'too_many_hashes', `a have request names at most ${MAX_HAVE_HASHES} hashes`);
-  const held = await deps.sync.hasExtracted(hashes);
+  // ONE index query for every hash asked about.
+  const held = await deps.sync.heldBodies(hashes);
   const out = new Uint8Array(Math.ceil(hashes.length / 8));
-  held.forEach((yes, i) => { if (yes) out[i >> 3]! |= 1 << (i & 7); });
+  hashes.forEach((h, i) => { if (held.has(h)) out[i >> 3]! |= 1 << (i & 7); });
   return out;
 }
 

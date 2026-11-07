@@ -35,7 +35,7 @@ import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
 import { noteGraphReads } from './graphReads.js';
 import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
-import { serialisedByKey } from './serialisedByKey.js';
+import { runPreemptingJudge, type RunHandoff } from './reviewRunLock.js';
 import { readSystems, recordSystems } from './systemsRecord.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
@@ -118,11 +118,7 @@ export interface KnowledgeReviewOptions {
     judgeConcurrency?: number;
     /** Most model calls in flight across the review. Absent ⇒ memory's default. */
     maxModelCalls?: number;
-    /**
-     * Two passes (PRD 41 A10): given, pass 1 reads, extracts, writes and indexes every owed file with NO model call (the map is
-     * complete, phase `mapped`), then pass 2 judges up to this many files in priority order. Unjudged files stay owed. 0 = map only.
-     * Absent ⇒ one pass, as before.
-     */
+    /** Two passes (PRD 41 A10): pass 1 maps with no model call (phase `mapped`), pass 2 judges up to this many files in priority order; the rest stay owed. 0 = map only. Absent = one pass. */
     judgeFiles?: number;
     /** The pool reads files itself (see memory's `ReviewArgs.deferRead`). */
     deferRead?: boolean;
@@ -203,10 +199,10 @@ export async function planKnowledgeReview(ports: KnowledgeReviewPorts, opts: Pic
  * A run queued behind another for the same root sees its abort signal only once it starts.
  */
 export function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions = {}): Promise<ReviewReport> {
-    return serialisedByKey(ports.source.rootId, () => reviewOnce(ports, opts));
+    return runPreemptingJudge(ports.source.rootId, (handoff) => reviewOnce(ports, opts, handoff));
 }
 
-async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions): Promise<ReviewReport> {
+async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, handoff: RunHandoff): Promise<ReviewReport> {
     // With an index to feed, `done` is memory's last word but not the run's: it waits for the `index` phase.
     const held: { done?: ReviewProgress } = {};
     const progress: KnowledgeReviewOptions['onProgress'] = (ports.index || opts.judgeFiles !== undefined) && opts.onProgress
@@ -221,7 +217,7 @@ async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOpti
             listener.failure ??= { error };
         }
     };
-    const outcome: { report: ReviewReport } | { failure: { error: unknown } } = await reviewAndIndex(ports, opts, progress, tell).then(
+    const outcome: { report: ReviewReport } | { failure: { error: unknown } } = await reviewAndIndex(ports, opts, progress, tell, handoff).then(
         (report) => ({ report }),
         (error: unknown) => ({ failure: { error } }),
     );
@@ -241,10 +237,13 @@ const directoryArgsOf = (
 
 async function reviewAndIndex(
     ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],
-    tell: (p: ReviewProgress) => void,
+    tell: (p: ReviewProgress) => void, handoff: RunHandoff,
 ): Promise<ReviewReport> {
     const twoPass = opts.judgeFiles !== undefined && !!ports.judgement;
-    const report = await reviewDirectory(directoryArgsOf(ports, opts, progress, twoPass ? { mechanical: true } : {}));
+    // Two passes share ONE plan: its manifest hashes are the last review's (what pass 2's "recent" compares against), and neither pass walks again.
+    const plan = opts.plan ?? (twoPass ? await planKnowledgeReviewDetail(ports, opts.force ? { force: true } : {}) : undefined);
+    const passOpts: KnowledgeReviewOptions = plan ? { ...opts, plan } : opts;
+    const report = await reviewDirectory(directoryArgsOf(ports, passOpts, progress, twoPass ? { mechanical: true } : {}));
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);
     // The root's systems (PRD 41 A9): detected from what this review saw, kept with it for the graph build.
@@ -257,8 +256,8 @@ async function reviewAndIndex(
     const graph = await indexReviewed(ports, report.rootId, tell);
     if (!twoPass || report.aborted) return report;
     // The map is complete: say so, then judge in the background of the same run (PRD 41 A10).
-    tell({ phase: 'mapped', done: report.extracted, total: report.extracted });
-    return runJudgePass({ ports, opts, mapped: report, graph, tell, directoryArgs: directoryArgsOf, indexReviewed, freshPlan: () => planKnowledgeReviewDetail(ports) });
+    tell({ phase: 'mapped', done: report.awaitingJudge.length, total: report.awaitingJudge.length });
+    return runJudgePass({ ports, opts: passOpts, mapped: report, graph, tell, handoff, directoryArgs: directoryArgsOf, indexReviewed, freshPlan: () => planKnowledgeReviewDetail(ports) });
 }
 
 /**

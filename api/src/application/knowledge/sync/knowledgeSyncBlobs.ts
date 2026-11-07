@@ -1,21 +1,26 @@
 /**
- * knowledgeSyncBlobs — pack sync's state and staging in the knowledge domain's own R2 store (PRD 41 A11).
+ * knowledgeSyncBlobs — pack sync's state, staging and bundle writes in the knowledge domain's own R2 store
+ * (PRD 41 A11).
  *
  *   knowledge/{t}/{p}/{root}/sync.json                       { generation, digest } — the acknowledged state
- *   knowledge/{t}/{p}/sync-stage/{syncId}/{part:06}          one part of a multi-part pack; custom metadata
- *                                                            `at` (epoch ms) is its expiry clock (1 h)
+ *   knowledge/{t}/{p}/sync-stage/{syncId}/{part:06}          one EARLIER part of a multi-part pack; custom
+ *                                                            metadata `at` (epoch ms) is its expiry clock (1 h)
+ *   knowledge/{t}/extracted-bundles/{digest}                 a pack's extracted bodies, one object (knowledgeBundles.ts)
  *
- * No table, no migration: the knowledge blobs already live here (see `knowledgeBlobs.ts`).
+ * Object writes per sync: one per earlier part (the last part rides the request that applies the pack), ONE bundle,
+ * and `sync.json` (plus one immutable review snapshot when the scope records a new digest).
  */
 import type { Env } from '../../../env';
-import { knowledgeBlobKeys, listSources } from '../knowledgeBlobs';
+import type { Bundle } from '../knowledgeBundles';
+import { knowledgeBlobKeys, listRootSources } from '../knowledgeBlobs';
+import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { STAGE_TTL_MS, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
 
 const seg = (s: string): string => encodeURIComponent(s);
-const HEAD_CONCURRENCY = 16;
-const SWEEP_PAGE = 100;
 
-export function r2KnowledgeSync(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, now: () => number = Date.now): KnowledgeSyncPort {
+export function r2KnowledgeSync(
+  env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, ledger?: KnowledgeLedgerPort, now: () => number = Date.now,
+): KnowledgeSyncPort {
   const keys = knowledgeBlobKeys(tenantId, projectId);
   const base = `knowledge/${tenantId}/${projectId}`;
   const stateKey = (rootId: string): string => `${base}/${seg(rootId)}/sync.json`;
@@ -42,23 +47,25 @@ export function r2KnowledgeSync(env: Pick<Env, 'UPLOADS'>, tenantId: number, pro
       await bucket().put(stateKey(rootId), JSON.stringify(state), { httpMetadata: { contentType: 'application/json' } });
     },
 
-    async sources(rootId) {
-      if (!env.UPLOADS) return [];
-      return listSources(env.UPLOADS, keys.sources(rootId));
+    sources: (rootId, over) => listRootSources(env.UPLOADS, over ?? ledger, tenantId, projectId, rootId),
+
+    async heldBodies(hashes, over) {
+      const index = (over ?? ledger)?.index;
+      if (!index || hashes.length === 0) return new Map();
+      return new Map((await index.locate(hashes)).map((l) => [l.hash, l.sourceRefs] as const));
     },
 
-    async hasExtracted(hashes) {
+    async putBundle(bundle: Bundle) {
+      await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
+    },
+
+    async snapshotReview(rootId, digest, sources) {
       const b = bucket();
-      const out: boolean[] = new Array(hashes.length).fill(false);
-      let next = 0;
-      const lane = async (): Promise<void> => {
-        while (next < hashes.length) {
-          const i = next++;
-          out[i] = (await b.head(keys.extracted(hashes[i]!))) != null;
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(HEAD_CONCURRENCY, hashes.length) }, lane));
-      return out;
+      const key = keys.review(rootId, digest);
+      // Immutable per digest: a digest names exactly these sources, so a second writer has nothing to add.
+      if (await b.head(key)) return;
+      const sorted = [...sources].sort((a, c) => (a.path < c.path ? -1 : a.path > c.path ? 1 : a.hash < c.hash ? -1 : a.hash > c.hash ? 1 : 0));
+      await b.put(key, JSON.stringify(sorted), { httpMetadata: { contentType: 'application/json' } });
     },
 
     async stagePart(syncId, part, bytes) {
@@ -86,7 +93,7 @@ export function r2KnowledgeSync(env: Pick<Env, 'UPLOADS'>, tenantId: number, pro
 
     async sweepStaged() {
       if (!env.UPLOADS) return;
-      const options: R2ListOptions & { include?: Array<'customMetadata'> } = { prefix: `${base}/sync-stage/`, limit: SWEEP_PAGE, include: ['customMetadata'] };
+      const options: R2ListOptions & { include?: Array<'customMetadata'> } = { prefix: `${base}/sync-stage/`, limit: 100, include: ['customMetadata'] };
       const page = await env.UPLOADS.list(options);
       const old = page.objects.filter((o) => now() - Number(o.customMetadata?.['at'] ?? 0) > STAGE_TTL_MS).map((o) => o.key);
       if (old.length > 0) await env.UPLOADS.delete(old);

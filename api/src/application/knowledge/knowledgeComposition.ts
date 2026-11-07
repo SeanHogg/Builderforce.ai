@@ -14,6 +14,7 @@ import { cloudRepoGraphPort } from './knowledgeRepoGraph';
 import { knowledgeVersion } from './knowledgeVersion';
 import { knowledgeWritePortsFor } from './knowledgeWritePorts';
 import { r2KnowledgeSync } from './sync/knowledgeSyncBlobs';
+import { drizzleLedger } from './knowledgeLedger';
 import type { KnowledgeSyncPort } from './sync/knowledgeSyncPorts';
 
 export interface KnowledgePorts {
@@ -32,7 +33,7 @@ export interface KnowledgePorts {
 export function knowledgePortsFor(env: Env, db: Db, tenantId: number, projectId: number): KnowledgePorts {
   const { store, extracted } = knowledgeWritePortsFor(env, db, tenantId, projectId);
   return {
-    env, db, tenantId, projectId, store, extracted, sync: r2KnowledgeSync(env, tenantId, projectId),
+    env, db, tenantId, projectId, store, extracted, sync: r2KnowledgeSync(env, tenantId, projectId, drizzleLedger(db, tenantId, projectId)),
     graph: {
       cacheEnv: env, tenantId, projectId, store, extracted,
       analysis: r2AnalysisSnapshots(env, tenantId, projectId),

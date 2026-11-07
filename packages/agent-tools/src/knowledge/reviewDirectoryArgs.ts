@@ -24,8 +24,8 @@ export function directoryArgs(
         ...(ports.similar ? { similar: ports.similar } : {}),
         ...(opts.plan ? { plan: opts.plan } : {}),
         ...(opts.force ? { force: true } : {}),
-        // Two-pass: the file budget bounds judging, not the call count (unless the caller set one).
-        budget: { modelCalls: opts.modelCalls ?? (opts.judgeFiles !== undefined ? Number.POSITIVE_INFINITY : defaultModelCalls), ms: Number.POSITIVE_INFINITY },
+        // The model-call ceiling stays with a file budget too: judging is bounded by files AND by calls.
+        budget: { modelCalls: opts.modelCalls ?? defaultModelCalls, ms: Number.POSITIVE_INFINITY },
         ...(opts.signal ? { signal: opts.signal } : {}),
         ...(progress ? { onProgress: progress } : {}),
         ...(opts.onStep ? { onStep: opts.onStep } : {}),

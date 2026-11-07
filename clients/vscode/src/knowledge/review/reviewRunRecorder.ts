@@ -60,7 +60,12 @@ export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
   emit();
   return {
     get run() { return run; },
-    progress(progress) { run = applyRunEvent(run, { type: "progress", progress }, Date.now()); emit(); },
+    progress(progress) {
+      run = applyRunEvent(run, { type: "progress", progress }, Date.now());
+      // The map is complete: `total` is the files owed model judgement, which the live "waiting" count counts down from (PRD 41 A10).
+      if (progress.phase === "mapped") run = { ...run, awaitingJudgeTotal: progress.total };
+      emit();
+    },
     step(step) { run = applyRunEvent(run, { type: "step", step }, Date.now()); emit(); },
     close(outcome, report, replica) {
       // Nothing posts the closed run before the host has kept it and flushes. The report never carries the failures: `run.failures` holds the list.
