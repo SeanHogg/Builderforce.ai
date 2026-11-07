@@ -14,6 +14,7 @@ import type {
   KnowledgeStore,
   ScopeRecord,
   StoredFact,
+  StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 /** `fetch`-compatible; `path` is API-relative (e.g. `/api/projects/12/knowledge/scopes`). */
@@ -123,6 +124,8 @@ export interface KnowledgeClient {
   search(rootId: string, q: string, k?: number): Promise<IndexHit[]>;
   /** PUT …/code-analysis/:sha */
   putAnalysis(sha: string, snapshot: AnalysisSnapshotPayload): Promise<void>;
+  /** POST …/knowledge/write of rows only (≤ 500), stamped with the root but carrying no scope: one chunk of a replica write. */
+  writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
   /** PUT …/knowledge/extracted/:hash */
   putExtracted(hash: string, extracted: Extracted[]): Promise<void>;
   /** DELETE …/facts/:key — author or project admin only; also removes the fact's relations. */
@@ -132,7 +135,8 @@ export interface KnowledgeClient {
 }
 
 export class KnowledgeApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  /** `retryAfterMs`: the server's `Retry-After` on a 429, uncapped (the replica pump waits it out). */
+  constructor(readonly status: number, readonly code: string, message: string, readonly retryAfterMs?: number | undefined) {
     super(message);
     this.name = 'KnowledgeApiError';
   }

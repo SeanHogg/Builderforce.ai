@@ -13,7 +13,8 @@ export type CountedWord =
     | 'familyLights' | 'checkFile' | 'checkStation' | 'issueAt' | 'notLayered' | 'branchFiles' | 'packFiles'
     | 'sectionUnjudged' | 'fixBatch' | 'findingCollapsed' | 'topNodes' | 'modelCalls' | 'endpointsCapped' | 'commitsCapped'
     | 'moreChecks' | 'fileEndpoints' | 'filesPlotted' | 'applyV8' | 'applyV8Request' | 'entryPointsOmitted' | 'interchange'
-    | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'moreStations' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'moreStops' | 'antiTip';
+    | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'moreStations' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'moreStops' | 'antiTip'
+    | 'replicaQueued' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep';
 
 export interface MapLabels {
     /** `{files}`, `{layer}`. */
@@ -129,6 +130,11 @@ export const MAP_DEFAULTS: MapLabels = {
         fileMissingOne: '{count} file is missing on the server.', fileMissingOther: '{count} files are missing on the server.',
         fileTooLargeOne: '{count} file was too large to store.', fileTooLargeOther: '{count} files were too large to store.',
         fileNotStoredOne: '{count} file not stored', fileNotStoredOther: '{count} files not stored',
+        replicaQueuedOne: '{count} change waiting to send', replicaQueuedOther: '{count} changes waiting to send',
+        replicaFailedOne: '{count} change could not be sent', replicaFailedOther: '{count} changes could not be sent',
+        runFailureOne: '{count} file failed', runFailureOther: '{count} files failed',
+        runRetryAllOne: 'Retry {count} file', runRetryAllOther: 'Retry all {count} files',
+        runStepOne: 'Last step', runStepOther: 'Last {count} steps',
         fileBothOne: '{count} file here and on the server', fileBothOther: '{count} files here and on the server',
         fileChangedOne: '{count} file changed', fileChangedOther: '{count} files changed',
         fileSkippedOne: '{count} file was not stored.', fileSkippedOther: '{count} files were not stored.',

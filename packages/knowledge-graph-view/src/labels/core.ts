@@ -20,6 +20,12 @@ export interface CoreLabels {
     /** A review EXISTS (a scope) but its graph could not be loaded — not the same as never reviewed. */
     loadFailedTitle: string;
     loadFailedBody: string;
+    /** This machine holds no review of the root (PRD 41 A7); the server's copy is offered beside Review when the host can. */
+    notHereTitle: string;
+    notHereBody: string;
+    /** The same, without the server sentence: not linked, or the project cannot be reached right now. */
+    notHereBodyLocal: string;
+    useServerCopy: string;
     reviewFolder: string;
     reviewTargetsLabel: string;
     targets: Record<ReviewTarget['kind'], string>;
@@ -45,6 +51,7 @@ export interface CoreLabels {
     viewHeat: string;
     viewSequence: string;
     panelSync: string;
+    panelRun: string;
     panelCoverage: string;
     panelPatterns: string;
     panelApi: string;
@@ -186,7 +193,7 @@ export interface CoreLabels {
     /** The always-available capture: copies the view + run state for a bug/improvement report. */
     copyDiagnostics: string;
     reviewProgress: string;
-    phases: Record<'plan' | 'extract' | 'resolve' | 'judge' | 'write' | 'index' | 'done', string>;
+    phases: Record<'plan' | 'extract' | 'resolve' | 'judge' | 'compare' | 'write' | 'index' | 'done', string>;
 }
 
 export const CORE_DEFAULTS: CoreLabels = {
@@ -202,6 +209,10 @@ emptyTitle: 'No folder reviewed yet',
 emptyBody: 'Point it at a folder of code or documents. It reads every file once, builds a graph of what the folder says and how it connects, and remembers it, so questions are answered without reading the files again.',
 loadFailedTitle: 'The review didn’t finish saving',
 loadFailedBody: 'This folder has a review, but its graph could not be loaded — the review may have been cut short. Retry the load, or review the folder again to rebuild it.',
+notHereTitle: 'Not reviewed on this machine',
+notHereBody: 'This folder has no review here yet, so there is nothing to draw. Review it on this machine, or reuse what the project already holds so unchanged files are not read again.',
+notHereBodyLocal: 'This folder has no review here yet, so there is nothing to draw. Review it on this machine.',
+useServerCopy: 'Use the server’s copy',
 reviewFolder: 'Review a folder',
 reviewTargetsLabel: 'What to review',
 targets: { workspace: 'This workspace’s files', upload: 'A folder on this device', drive: 'A connected drive', folder: 'A folder' },
@@ -242,6 +253,7 @@ viewSystem: 'System',
 viewHeat: 'Heat',
 viewSequence: 'Sequence',
 panelSync: 'Sync',
+panelRun: 'Review run',
 panelCoverage: 'Coverage',
 panelPatterns: 'Patterns',
 panelApi: 'API',
@@ -387,6 +399,6 @@ reviewCopyDetails: 'Copy details',
 copyDiagnostics: 'Copy diagnostics',
 reviewProgress: '{phase} · {done} of {total}',
 phases: {
-    plan: 'Planning', extract: 'Reading', resolve: 'Resolving', judge: 'Judging', write: 'Writing', index: 'Indexing', done: 'Done',
+    plan: 'Planning', extract: 'Reading', resolve: 'Resolving', judge: 'Judging', compare: 'Comparing', write: 'Writing', index: 'Indexing', done: 'Done',
 },
 };

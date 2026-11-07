@@ -7,7 +7,11 @@ export interface SyncLabels {
     pillStates: Record<'synced' | 'syncing' | 'error' | 'idle' | 'partial' | 'serverOnly', string>;
     sync: Record<
         'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
-        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh' | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate'  | 'setUpV8Request' | 'turnOnRequest' | 'excludedNone' | 'excludedFolder' | 'diagnosticsTitle' | 'resend' | 'resendNote' | 'deltaLoading' | 'parityTitle' | 'countPair' | 'parityAll' | 'parityMissing',
+        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh' | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate'  | 'setUpV8Request' | 'turnOnRequest' | 'excludedNone' | 'excludedFolder' | 'diagnosticsTitle' | 'resend' | 'resendNote' | 'deltaLoading' | 'parityTitle' | 'countPair' | 'parityAll' | 'parityMissing'
+        | 'replicaTitle' | 'replicaIdle' | 'replicaSending' | 'replicaWaiting' | 'replicaWhy429' | 'replicaWhyNetwork' | 'replicaWhyServer' | 'replicaFailedRow' | 'replicaLastSync'
+        | 'replicaPausedAuth' | 'replicaPausedUnreachable' | 'replicaPausedProject' | 'replicaSkippedRow'
+        | 'replicaOpWrite' | 'replicaOpScope' | 'replicaOpExtracted' | 'replicaOpStale' | 'replicaOpAnalysis'
+        | 'replicaReasonAuth' | 'replicaReasonBadRequest' | 'replicaReasonTooLarge' | 'replicaReasonRate' | 'replicaReasonServer' | 'replicaReasonNetwork' | 'replicaReasonOther',
         string
     >;
     syncSteps: Record<'walk' | 'graph' | 'upload' | 'match' | 'analyse' | 'skipped', string>;
@@ -65,6 +69,31 @@ export const SYNC_DEFAULTS: SyncLabels = {
         countPair: '{local} / {server}',
         parityAll: 'The server has all of them.',
         parityMissing: '{count} not on the server yet.',
+        replicaTitle: 'Sending to the project',
+        replicaIdle: 'Everything this machine reviewed has been sent.',
+        replicaSending: 'Sending…',
+        replicaWaiting: 'Waiting: {reason}. Trying again in {seconds} s.',
+        replicaWhy429: 'the server is rate limiting requests',
+        replicaWhyNetwork: 'the server cannot be reached',
+        replicaWhyServer: 'the server answered with an error',
+        replicaFailedRow: '{op}: {reason}',
+        replicaLastSync: 'Last sent {time}.',
+        replicaPausedAuth: 'Paused: sign in again to continue sending.',
+        replicaPausedUnreachable: 'Paused: the server cannot be reached.',
+        replicaPausedProject: 'Paused: this workspace is linked to another project.',
+        replicaSkippedRow: '{op}: too large to store',
+        replicaOpWrite: 'Facts and relations',
+        replicaOpScope: 'Review summary',
+        replicaOpExtracted: 'File contents',
+        replicaOpStale: 'Change marker',
+        replicaOpAnalysis: 'Code analysis',
+        replicaReasonAuth: 'not allowed or signed out',
+        replicaReasonBadRequest: 'the server refused it',
+        replicaReasonTooLarge: 'too large to store',
+        replicaReasonRate: 'rate limited',
+        replicaReasonServer: 'server error',
+        replicaReasonNetwork: 'not reachable',
+        replicaReasonOther: 'unexpected error',
         refresh: 'Refresh',
     },
     syncSteps: { walk: 'Files walked', graph: 'Graph built', upload: 'Uploaded', match: 'Server matches local', analyse: 'Sources collected', skipped: 'Nothing skipped' },

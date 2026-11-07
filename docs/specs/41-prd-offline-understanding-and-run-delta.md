@@ -246,6 +246,77 @@ The cause was that the production API had not deployed the outline release. The 
 - With the API pinned to an older build, the map is unchanged.
 - A review that hits a 429 on every sync request finishes, and the map opens.
 
+**Design (end state, 2026-11-07).** The code map was traced on 2026-11-07. The root cause is a single fork: `selectKnowledgeStore` (`clients/vscode/src/knowledge/knowledgeStores.ts`) returns the server store **or** the local store, never both. `loadGraph` and `rootSyncStatus` branch on the same `linkedKnowledgeClient`.
+
+1. **`replicatedKnowledgeStore(local, replica, queue)`** lives in `packages/agent-tools/src/knowledge/`. It replaces the fork. Every workspace review uses it, linked or not; unlinked passes no replica.
+   - Reads and writes go to `local` (memory's `localSnapshotStore`, `batched()` as today).
+   - Every write is also appended to a **replica queue**. The queue is persisted beside the snapshot as `.builderforce/knowledge/<root>.replica.json`, holding ops and content hashes, never file bodies twice.
+   - A **replica pump** drains the queue:
+     - It uses the existing batched client calls: `write` in chunks of 500 rows, the bulk extracted routes, and `putAnalysis`.
+     - It retries 429 with `Retry-After` and backoff, with no cap on attempts; the queue simply waits.
+     - It drops 413 as `skipped`, as today.
+   - Pump failures never reach the review. They surface as the replica state on the Sync drawer: `queued`, `sending`, `waiting (429, retry in Ns)` or `failed (reason)`.
+   - `uploadLocalSnapshot` / `pushSnapshot` become the pump's first-sync case. There is one upload path, not two.
+2. **Drawing.**
+   - `loadGraph` always builds from the local projection (`buildStoredGraph`, the same `buildCodeGraph` with cut and outline as memory computes them, bundled in the VSIX). `client.graph` is called only by the Sync drawer's server column.
+   - With no local projection, the view shows **Not reviewed on this machine**, with the actions **Review** and, when online, **Use the server's copy**.
+3. **Use the server's copy** is not a second import path. It is a local review run with a **server read-through**: before extracting a file, the extractor asks `preloadExtracted` (the bulk route) for the file's content hash and uses the server's `Extracted` when it is there. Unchanged files therefore cost one bulk read and no model call. Offline, the same review runs without the read-through.
+4. **Sync status.**
+   - Local counts come from the local projection (`graphCounts` of the local graph). Server counts come from `client.graph` when it is reachable.
+   - The replica state is a third row.
+5. **Diagnostics.** These print `map source: local projection` and the replica state. A `server` map source no longer exists in the editor.
+
+### A8. A review is a run you can watch, and it runs in parallel
+
+**Why.** On 2026-11-07 the operator pressed **Re-review this folder** on `agentic` (3,581 files). The view showed only a pill reading "Updating…". The code reasons:
+- **Work is sequential.** Only file read and extract run 8 wide (`prefetchOrdered`, `DEFAULT_REVIEW_CONCURRENCY = 8`). Judging and writing go one file at a time on the extension host's thread.
+- **One failure ends everything.** One file whose extraction throws ends the whole run.
+- **Nothing to drill into.** There is no run record, so a person cannot tell a slow run from a stuck one.
+
+**Rule.**
+1. **A review is a run with an id, a record and a view.**
+   - `ReviewRun` holds:
+     - `id`, `root`, `kind` (`review` | `re-review` | `seed`), `startedAt` and `endedAt`;
+     - `phases[]`, each with `phase`, `startedAt`, `endedAt`, `done` and `total`;
+     - `lanes[]`, one per worker: `id`, the current `path`, `done` and `busyMs`;
+     - `steps`: a ring of the last 200 `{ path, phase, ms, outcome: ok | cached | skipped | failed, reason? }`;
+     - `failures[]`, with path, phase and reason, all kept;
+     - `replica`, the queue state from A7;
+     - `outcome`, plus the `ReviewReport`.
+   - The host persists the last 20 runs per root to `.builderforce/knowledge/runs/<runId>.json`.
+   - Live updates ride the existing `KNOWLEDGE_EVENT` stream as `run` events, throttled to at most 10 per second.
+2. **The view.**
+   - **Review**, **Re-review**, the sync pill while reviewing, and the "Updating…" state all open the **Run panel**. It is a `SlideOutPanel`, not a modal. It shows:
+     - a phase timeline (plan → extract → judge → write → index → done), with the done/total and rate per phase and an ETA from the measured rate;
+     - one live lane per worker, showing the file it is on;
+     - a step feed that can be filtered to failures;
+     - the failures, each with **Retry**;
+     - the replica state;
+     - **Stop**.
+   - **History** lists the past runs per root. Opening one shows the same panel, frozen.
+   - Text is localized in all five catalogs. The panel works in both themes and at 360 px.
+3. **Parallelism.**
+   - **Extraction runs in a `worker_threads` pool** in the extension host. The pool is `min(availableParallelism() - 1, 8)` workers, at least 1. Extraction is CPU-bound parsing, and memory's extractors are pure.
+   - The pool is a port in memory: `ReviewArgs.extractPool?: (job) => Promise<Extracted>`. The default runs in-thread, so the web and tests are unchanged.
+   - **Judging runs N-wide.** N defaults to 4. The provider's rate-limit headroom is enforced by ONE shared model-call limiter across all files (default 6 calls in flight). It halves on a rate limit and grows by 1 after 20 successes (AIMD), so a width of 4 never multiplies provider load.
+   - **One symbol rule on both paths.** An index hit uses the editor's symbol index (the main thread puts those symbols in the job); an index miss uses the regex extractor on both paths (memory's `symbolsOf` is synchronous and tree-sitter loads asynchronously) — so a pool never changes what is stored.
+   - **A pool that cannot start falls back to in-thread** for the rest of the session, and the panel says so. A machine with 2 cores or fewer runs no pool.
+   - **Writes stay ordered.** A single writer consumes results in plan order, so the snapshot stays deterministic (B-part guarantee: equal input gives equal bytes).
+   - Same-hash files stay serialized (`hashTail`).
+4. **No single failure ends a run.**
+   - An extraction that throws becomes a `failed` step and a `failures[]` entry. Its prior knowledge and manifest hash are kept, as read errors are today, and it is retried on the next review or by **Retry**. Retry marks the failed files owed, then runs the normal plan → estimate → confirm flow. It is offered only on a root's latest run, and never while that root is under review.
+   - Only abort, or a store write failure on the **local** store, ends a run.
+5. **Cancellation.** **Stop** aborts all lanes. In-flight worker jobs are terminated, completed work is kept, and the run is recorded as `stopped`.
+
+**Accept.**
+- **Re-review on 3,581 files.**
+  - The Run panel opens within 200 ms.
+  - Lanes show more than one file in flight on a machine with 4 or more cores.
+  - The extract phase finishes at least 2.5× faster than the single-thread baseline. This is measured by `ReviewReport.durationMs` per phase on the fixture repo in CI.
+- **A poisoned fixture file** (an extractor that throws) produces one `failed` step, and the run finishes `done`.
+- **The snapshot bytes** after a parallel review equal those after a sequential one (`concurrency: 1`).
+- **Stop** during extract ends the run as `stopped` within 1 s, and a follow-up review resumes from the kept work.
+
 ### A6. Packaged acceptance (extends G27)
 
 The packaged VSIX is tested in a VS Code instance whose network namespace (Linux CI) or
@@ -1779,6 +1850,7 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 | WS20 | **Thompson scheduling and SPRT** (D9) | WS12, WS15 | Sonnet |
 | WS21 | **Ranking and similar runs** (D10), plus the card's Predicted block (D11), localized | WS10, WS16 | Sonnet |
 | WS22 | **People scores** (D14): role attribution; the contributor-to-identity mapping; `mayViewPersonScore`; the `case_mix` model (its own, not WS18's); Gamma–Poisson shrinkage; funnel plot and table on the team People view; audit; enterprise default-off with the DPIA notice; access, export and erasure; `person_score.viewed` telemetry. Localized; both themes; 360 px. | WS16 | **Opus** (auth/RBAC, privacy) |
+| WS23 | **Review run view and parallel review** (A8): memory — per-file extraction failure is a step not a fatal error, `extractPool` port, N-wide judging with one ordered writer, `onStep` events, byte-equal parallel vs sequential test; host — `worker_threads` extract pool (its own esbuild worker entry), `ReviewRun` recorder and `runs/` persistence, `run` events, Retry; view — Run panel (`SlideOutPanel`), history, localized, both themes, 360 px | — (ships with WS14) | Sonnet; Opus review (concurrency, storage) |
 | WS14 | **Ship.** This is a new capability, so: a `release_notes` row (category `new`); an Idea-to-Real blog post on the template in `frontend/src/content/blog/run-your-app-on-the-canvas.md`, placing the delta in the **Measure** act of the arc (proof that a run made things better, not just different); DONE.md moves by section number. | WS10, WS13 | Session model |
 
 Version bumps and ROADMAP/DONE entries stay with the session model.

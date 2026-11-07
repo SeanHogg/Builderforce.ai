@@ -16,14 +16,13 @@
 
 import {
     DEFAULT_REVIEW_MODEL_CALLS, planDetail, reviewDirectory, srcRef,
-    type AnalyzerPort, type DirectorySource, type Extracted, type JudgementPort, type KnowledgeGraph,
+    type AnalyzerPort, type DirectorySource, type Extracted, type ExtractPool, type JudgementPort, type ReviewStep, type KnowledgeGraph,
     type KnowledgePack, type KnowledgeStore, type LiveOverlay, type NodeRef, type PartitionRegistry, type PlanDetail, type ReviewPlan,
     type ReviewProgress, type ReviewReport, type SimilarPair,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import type { CapabilityProvider } from '../capabilities.js';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
-import { extractSymbols, type CodeSymbol } from '../symbols.js';
 import { codeAnalyzers } from './codeAnalyzers.js';
 import type { SymbolSource } from './codePack.js';
 import { readEntryPaths } from './codeEntryPoints.js';
@@ -104,6 +103,16 @@ export interface KnowledgeReviewOptions {
     judgementTimeoutMs?: number;
     signal?: AbortSignal;
     onProgress?(p: ReviewProgress): void;
+    /** One event per file per phase (PRD 41 A8), for a host's run record. */
+    onStep?(step: ReviewStep): void;
+    /** Extracts changed files off the host's thread (a `worker_threads` pool). Absent ⇒ in-thread, as before. */
+    extractPool?: ExtractPool;
+    /** Files read and extracted ahead of judging; with a pool, the pool's width. Absent ⇒ memory's default. */
+    concurrency?: number;
+    /** Files judged at once. Absent ⇒ memory's default. */
+    judgeConcurrency?: number;
+    /** Most model calls in flight across the review. Absent ⇒ memory's default. */
+    maxModelCalls?: number;
 }
 
 /** The analyzers, recording which root-level outputs the last run produced (for {@link buildStoredGraph}). */
@@ -228,6 +237,11 @@ async function reviewAndIndex(
         budget: { modelCalls: opts.modelCalls ?? KNOWLEDGE_REVIEW_MODEL_CALLS, ms: Number.POSITIVE_INFINITY },
         ...(opts.signal ? { signal: opts.signal } : {}),
         ...(progress ? { onProgress: progress } : {}),
+        ...(opts.onStep ? { onStep: opts.onStep } : {}),
+        ...(opts.extractPool ? { extractPool: opts.extractPool } : {}),
+        ...(opts.concurrency !== undefined ? { concurrency: opts.concurrency } : {}),
+        ...(opts.judgeConcurrency !== undefined ? { judgeConcurrency: opts.judgeConcurrency } : {}),
+        ...(opts.maxModelCalls !== undefined ? { maxModelCalls: opts.maxModelCalls } : {}),
     });
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);
@@ -310,17 +324,6 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
             ...(args.focus?.length ? { focus: args.focus as NodeRef[] } : {}),
         },
     );
-}
-
-/**
- * A SYNC symbol lookup over a warm index's files (`WorkspaceSymbolIndex.filesUnder()`),
- * falling back to the regex extractor for a file the index has not seen. `prefix` maps a
- * reviewed sub-folder's paths onto the index's workspace-relative ones.
- */
-export function indexedSymbolSource(files: ReadonlyArray<{ path: string; symbols: readonly CodeSymbol[] }>, prefix = ''): SymbolSource {
-    const byPath = new Map(files.map((f) => [f.path.replace(/\\/g, '/'), f.symbols] as const));
-    const base = prefix.replace(/\\/g, '/').replace(/^\.?\/+|\/+$/g, '');
-    return (path, content) => byPath.get(base ? `${base}/${path}` : path) ?? extractSymbols(path, content);
 }
 
 /**

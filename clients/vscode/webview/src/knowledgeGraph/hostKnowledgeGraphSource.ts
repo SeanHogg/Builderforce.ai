@@ -24,12 +24,13 @@ import { blobDataUrl, checkPinpointImage, rootIdOfSourceRef } from '@builderforc
 import { FixStepError, HOST_CHECK_IDS, ReviewFailure } from '@builderforce/knowledge-graph-view';
 import type { FixCheckResult } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, PinpointResult,
+  KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, NotReviewedHere, PinpointResult,
   ReviewControl, ReviewRequest, ReviewTarget, SymbolRecord, SyncStatus, TryRequest, TryResponse,
 } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgePlanReply, KnowledgeTargetRow,
 } from '../../../src/knowledge/knowledgeProtocol';
+import { hostReviewRuns } from './hostReviewRuns';
 
 export interface KnowledgeTransport {
   call<T>(call: KnowledgeCall): Promise<T>;
@@ -176,7 +177,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
 
   return {
     scopes: () => t.call<KnowledgeScopeSummary[]>({ op: 'scopes' }),
-    load: (rootId, q) => t.call<KnowledgeGraph | null>({
+    // A root with no review on this machine answers `{ notReviewedHere }` (PRD 41 A7), which the view says plainly.
+    load: (rootId, q) => t.call<KnowledgeGraph | NotReviewedHere | null>({
       op: 'load', rootId, ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}),
     }),
     // The extension keeps the last full load on disk; any failure is "nothing remembered".
@@ -186,6 +188,7 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
       return rows.map((r) => ({ id: r.id, kind: r.kind, ...(r.title ? { title: r.title } : {}) }));
     },
     review: (req, ctl) => review(req, ctl),
+    runs: hostReviewRuns(t),
     search: (rootId, q) => t.call<KnowledgeSearchHit[]>({ op: 'search', rootId, q }),
     subscribeLive(rootId, cb) {
       const stream = nextStream('live');
@@ -217,6 +220,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         return { commits: out.commits.map((c) => ({ sha: c.sha, title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
     },
     syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
+    // The extension builds every graph from the local store, linked or not (PRD 41 A7).
+    mapSource: 'local',
     applyFix(finding: Finding): Promise<KnowledgeFixResult> {
       try { return t.call<KnowledgeFixResult>({ op: 'applyFix', rootId: rootOfFinding(finding), finding }); } catch (error) { return Promise.reject(error); }
     },

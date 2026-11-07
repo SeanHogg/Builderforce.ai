@@ -28,7 +28,7 @@
 
 import type { ReactNode } from 'react';
 import type {
-    Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
+    Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport, ReviewRun as MemoryReviewRun,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
@@ -51,11 +51,73 @@ export type PinpointResult = {
     matches: { ref: string; why: string; provenance: 'exact' | 'catalog' | 'import' }[];
 };
 
+/**
+ * The queue of a linked root's writes still owed to the project (PRD 41 A7), as the host reports it
+ * (restated from agent-tools' `ReplicaState`: the view never imports a host package).
+ */
+export type ReplicaState = {
+    queued: number;
+    sending: boolean;
+    /** Epoch ms the host retries at, while it waits out a rate limit or an outage. */
+    waitingUntil?: number;
+    /** Why it waits: `429`, `network`, or a server status. */
+    waitingFor?: string;
+    /** Why it stopped with work left: signed out, the server unreachable, or the queue moved to another project. */
+    paused?: 'auth' | 'unreachable' | 'project';
+    pausedStatus?: number;
+    skipped: number;
+    /** What was skipped, by op kind. */
+    skippedOps?: { op: string; key?: string }[];
+    failed: { op: string; reason: string; status?: number }[];
+    /** ISO time of the last write that reached the project. */
+    lastSyncAt?: string;
+};
+
+/**
+ * A review run as the host records it (PRD 41 A8): memory's `ReviewRun` (phases, lanes, the last steps, every
+ * failure, the outcome and report) plus where the replica queue stood when it ended.
+ */
+export type StoredReviewRun = Omit<MemoryReviewRun, 'outcome'> & {
+    /** `interrupted` is the host's word for a run left `running` by a window that closed. */
+    outcome?: MemoryReviewRun['outcome'] | 'interrupted';
+    replica?: ReplicaState;
+    /** Why parallel extraction was unavailable (the run extracted on one thread). */
+    poolDown?: string;
+    /** On a live event `failures` holds only the latest; this is how many there are in all (`runs.get` returns every one). */
+    failureCount?: number;
+};
+
+/** A run without its steps, lanes and failures: what the history list needs. */
+export type ReviewRunSummary = Omit<StoredReviewRun, 'steps' | 'lanes' | 'failures'> & { failureCount: number };
+
+/** The host's review runs (PRD 41 A8): the Run panel's live record, its history and Stop. (Retry is a review request: `ReviewRequest.retry`.) */
+export interface ReviewRunsPort {
+    /** Every run record the host posts while a review runs, newest state last. Returns the unsubscribe. */
+    subscribe(cb: (run: StoredReviewRun) => void): () => void;
+    /** The root's recent runs, newest first. */
+    list(rootId: string): Promise<ReviewRunSummary[]>;
+    /** One whole run, every failure included; null when the host no longer holds it. */
+    get(runId: string): Promise<StoredReviewRun | null>;
+    /** Stops a running run by its id. */
+    stop(runId: string): Promise<void>;
+}
+
+/**
+ * `load`'s answer when the host holds no review of the root on THIS machine (PRD 41 A7): the view says
+ * "Not reviewed on this machine" and offers Review, plus the server's copy when `canSeed`.
+ */
+export type NotReviewedHere = { notReviewedHere: { canSeed: boolean } };
+
+export const isNotReviewedHere = (value: unknown): value is NotReviewedHere =>
+    typeof value === 'object' && value !== null && 'notReviewedHere' in value;
+
 /** Where the host's sync of a reviewed root stands: local against server, what was skipped, which sources exist. */
 export type SyncStatus = {
     /** `edges` absent ⇒ not measured (a linked folder); `truncated` ⇒ the graph was cut short. */
     local: { files: number; edges?: number; docs: number; truncated?: boolean };
     server?: { files: number; edges?: number; docs: number; truncated?: boolean };
+    /** The replica queue: what is still to send to the project. Absent ⇒ the root is not linked. */
+    replica?: ReplicaState;
     /** Absent ⇒ unknown: no review recorded what it skipped (never read as "nothing skipped"). `bytes` absent ⇒ not measured. */
     skipped?: { path: string; bytes?: number; reason: string }[];
     sources: { id: 'code' | 'docs' | 'coverage' | 'usage' | 'traces' | 'openapi' | 'history' | 'owners'; state: 'collected' | 'estimated' | 'absent'; note?: string }[];
@@ -66,6 +128,9 @@ export interface KnowledgeScopeSummary {
     title: string;
     packs: string[];
     lastReviewedAt?: string;
+    /** The root has no local tree on this machine: the host draws it from the server's graph, read-only. */
+    serverOnly?: boolean;
+    readOnly?: boolean;
 }
 
 export interface KnowledgeSearchHit {
@@ -91,6 +156,10 @@ export interface ReviewRequest {
     pick?: boolean;
     /** Ignore the manifest: plan every file as changed (*Re-review all*). */
     force?: boolean;
+    /** "Use the server's copy": a local review that reads the project's extracted output first, so unchanged files cost no model call. */
+    seed?: boolean;
+    /** Retry (PRD 41 A8): these files failed before; the host owes them a review again, then the normal plan and confirm. */
+    retry?: string[];
 }
 
 export interface ReviewEstimate {
@@ -124,11 +193,13 @@ export interface FactActions {
 
 export interface KnowledgeGraphSource {
     scopes(): Promise<KnowledgeScopeSummary[]>;
-    load(rootId: string, opts?: { focus?: string[]; maxNodes?: number }): Promise<KnowledgeGraph | null>;
+    load(rootId: string, opts?: { focus?: string[]; maxNodes?: number }): Promise<KnowledgeGraph | NotReviewedHere | null>;
     /** Where this host can review. Absent or empty ⇒ `review({ pick: true })` only. */
     targets?(): Promise<ReviewTarget[]>;
     /** plan → confirm → run. Call it synchronously inside the user gesture (see the header). */
     review?(req: ReviewRequest, ctl: ReviewControl): AsyncIterable<KnowledgeReviewEvent>;
+    /** The review as a watchable run (PRD 41 A8). Absent ⇒ no Run panel. (A sibling of `review`, which is the plan/confirm/run function.) */
+    runs?: ReviewRunsPort;
     search?(rootId: string, q: string): Promise<KnowledgeSearchHit[]>;
     subscribeLive?(rootId: string, cb: (g: KnowledgeGraph) => void): () => void;
     rememberFact?(fact: { content: string; ref: string; rootId: string }): Promise<void>;
@@ -156,6 +227,8 @@ export interface KnowledgeGraphSource {
     history?(rootId: string): Promise<{ commits: Commit[] }>;
     /** Local against server counts, skipped files and data sources. Absent ⇒ no Sync panel. */
     syncStatus?(rootId: string): Promise<SyncStatus>;
+    /** Where this host builds the graph it hands `load`: its own store (`local`, an editor: PRD 41 A7) or the platform (`server`). Named in the copied diagnostics; a server map in an editor is a defect they flag. Absent ⇒ not said. */
+    mapSource?: 'local' | 'server';
     /** A deterministic codemod for a finding (unused-export, unused-file). Absent ⇒ Resolve prompts the agent. */
     applyFix?(finding: Finding): Promise<AppliedFix>;
     /**

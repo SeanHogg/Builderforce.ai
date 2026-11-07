@@ -241,8 +241,8 @@ describe('registries', () => {
         expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', 'sequence', 'list']);
     });
 
-    it('holds the six drawers, and a toggle with no panel available draws nothing', () => {
-        expect(PANELS.map((p) => p.id)).toEqual(['sync', 'coverage', 'patterns', 'api', 'resolve', 'simulate']);
+    it('holds the seven drawers (the Run drawer sits after Sync, with no header button), and a toggle with no panel available draws nothing', () => {
+        expect(PANELS.map((p) => p.id)).toEqual(['sync', 'run', 'coverage', 'patterns', 'api', 'resolve', 'simulate']);
         const { container } = render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={[]} />);
         expect(container.innerHTML).toBe('');
     });

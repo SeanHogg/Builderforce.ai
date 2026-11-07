@@ -15,7 +15,7 @@ import { TYPE } from './ui/type';
 import { SurfaceState, type SurfaceStateProps } from './SurfaceStates';
 
 export function SceneState(props: SurfaceStateProps) {
-    const pending = props.status !== 'empty' && props.status !== 'error' && props.status !== 'load-failed';
+    const pending = props.status !== 'empty' && props.status !== 'error' && props.status !== 'load-failed' && props.status !== 'not-here';
     if (pending) {
         return (
             <div style={{ position: 'absolute', inset: 0, padding: 16 }}>

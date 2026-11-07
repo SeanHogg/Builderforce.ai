@@ -17,8 +17,8 @@
  * Types only, plus the frame names: no `vscode`, no React.
  */
 
-import type { PinpointMatchResult } from "@builderforce/agent-tools/knowledge";
-import type { Finding, KnowledgeGraph, ReviewPlan, ReviewProgress, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
+import type { PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
+import type { Finding, KnowledgeGraph, ReviewPlan, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
@@ -30,7 +30,18 @@ export interface KnowledgeReviewRequest {
   target?: string;
   pick?: boolean;
   force?: boolean;
+  /** "Use the server's copy": a local review with a server read-through (PRD 41 A7). */
+  seed?: boolean;
+  /** Retry (PRD 41 A8): these files failed before; they are owed a review again, then the normal plan and confirm. */
+  retry?: string[];
 }
+
+/**
+ * `load`'s answer when this machine holds no review of the root (PRD 41 A7): the view says "Not
+ * reviewed on this machine" and offers Review, plus the server's copy when `canSeed` (linked and
+ * allowed to reach the project). Restated by the view package as `NotReviewedHere`.
+ */
+export interface KnowledgeNotReviewedHere { notReviewedHere: { canSeed: boolean } }
 
 export type KnowledgeCall =
   | { op: "scopes" }
@@ -67,7 +78,32 @@ export type KnowledgeCall =
   // The host treats `fileRefs` as untrusted (validated, capped and path-checked in knowledgeSymbols.ts).
   // If `untrustedWorkspaces` is ever declared `limited` in package.json, gate `symbols`, `history` and `pinpoint`
   // (they read the workspace's files or run git in it) on `vscode.workspace.isTrusted`, as the fix flow does.
-  | { op: "symbols"; rootId: string; fileRefs: string[] };
+  | { op: "symbols"; rootId: string; fileRefs: string[] }
+  // The review's run record (PRD 41 A8): a root's recent runs (light), one whole run, and Stop by run id.
+  // A retry of failed files is not an op: it is a normal review request (`KnowledgeReviewRequest.retry`).
+  | { op: "runs"; rootId: string }
+  | { op: "runRecord"; runId: string }
+  | { op: "stopRun"; runId: string };
+
+/** How a run ended; `interrupted` is the host's own word for a record left `running` by a window that closed. */
+export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupted";
+
+/**
+ * A review run as the host records it: memory's {@link ReviewRun} plus where the replica queue stood
+ * when it ended (linked roots), whether parallel extraction was down, and, on a live `run` event, the
+ * count of all failures when `failures` holds only the latest (`runRecord` returns them all).
+ * The view restates this as `StoredReviewRun`.
+ */
+export type KnowledgeStoredRun = Omit<ReviewRun, "outcome"> & {
+  outcome?: KnowledgeRunOutcome;
+  replica?: ReplicaState;
+  /** Why the extraction pool was unavailable (the run extracted on one thread); absent ⇒ it was not. */
+  poolDown?: string;
+  failureCount?: number;
+};
+
+/** A run without its steps, lanes and failures: what the history list needs. */
+export type KnowledgeRunSummary = Omit<KnowledgeStoredRun, "steps" | "lanes" | "failures"> & { failureCount: number };
 
 /** One definition, as the view's `SymbolRecord` (restated: the host cannot import that package). */
 export interface KnowledgeSymbolRecord { ref: string; name: string; kind: string; parent: string; line: number; exported: boolean }
@@ -98,6 +134,8 @@ export interface KnowledgeSyncSkipped { path: string; bytes?: number; reason: st
 export interface KnowledgeSyncStatus {
   local: KnowledgeSyncCounts;
   server?: KnowledgeSyncCounts;
+  /** The replica queue's state (PRD 41 A7); present when the root is linked. */
+  replica?: ReplicaState;
   /** Absent when no review has recorded a list: "unknown", not "none". */
   skipped?: KnowledgeSyncSkipped[];
   sources: {
@@ -137,6 +175,8 @@ export interface KnowledgeScopeRow {
   lastReviewedAt?: string;
   /** A loaded knowledge pack (PRD 40): browsable, never reviewed or written. */
   readOnly?: true;
+  /** Listed from the project, held by no folder here: drawn from the server's graph, read-only (PRD 41 A7 rule 3). */
+  serverOnly?: true;
   /** The pack's name, when the row is one. */
   pack?: string;
 }
@@ -164,6 +204,8 @@ export interface KnowledgeEventFrame {
 export type KnowledgeEvent =
   | { stream: string; type: "planned"; reply: KnowledgePlanReply }
   | { stream: string; type: "progress"; progress: ReviewProgress }
+  // The run record of the review on this stream, at most 10 a second; the last one is always sent.
+  | { stream: string; type: "run"; run: KnowledgeStoredRun }
   | { stream: string; type: "done"; rootId: string; report: ReviewReport; skipped?: KnowledgeSyncSkipped[] }
   // `error` is the reason shown to the person; the rest is the diagnostic detail the view's
   // *Copy details* carries (the stack, the extension build, the folder) — all logged host-side too.

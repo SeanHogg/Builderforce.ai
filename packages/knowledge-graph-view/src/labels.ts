@@ -14,6 +14,7 @@ import { HEADER_DEFAULTS, type HeaderLabels } from './labels/surface.header';
 import { MAP_DEFAULTS, type MapLabels } from './labels/surface.map';
 import { ACT_DEFAULTS, type ActLabels } from './labels/surface.act';
 import { SYNC_DEFAULTS, type SyncLabels } from './labels/surface.sync';
+import { RUN_DEFAULTS, type RunLabels } from './labels/surface.run';
 import { COVERAGE_DEFAULTS, type CoverageLabels } from './labels/surface.coverage';
 import { PATTERNS_DEFAULTS, type PatternsLabels } from './labels/surface.patterns';
 import { API_DEFAULTS, type ApiLabels } from './labels/surface.api';
@@ -29,7 +30,7 @@ export type { FindingKindLabels };
 export type StringLabelKey = { [K in keyof KnowledgeGraphLabels]: KnowledgeGraphLabels[K] extends string ? K : never }[keyof KnowledgeGraphLabels];
 
 /** The words of the transit-map surface: the per-area modules under `labels/`, composed. */
-export interface SurfaceLabels extends HeaderLabels, MapLabels, ActLabels, SyncLabels, CoverageLabels, PatternsLabels, ApiLabels, ResolveLabels, FixLabels, ExplainLabels {}
+export interface SurfaceLabels extends HeaderLabels, MapLabels, ActLabels, SyncLabels, RunLabels, CoverageLabels, PatternsLabels, ApiLabels, ResolveLabels, FixLabels, ExplainLabels {}
 
 export interface KnowledgeGraphLabels extends CoreLabels {
     surface: SurfaceLabels;
@@ -40,6 +41,7 @@ const SURFACE_DEFAULTS: SurfaceLabels = {
     ...MAP_DEFAULTS,
     ...ACT_DEFAULTS,
     ...SYNC_DEFAULTS,
+    ...RUN_DEFAULTS,
     ...COVERAGE_DEFAULTS,
     ...PATTERNS_DEFAULTS,
     ...API_DEFAULTS,

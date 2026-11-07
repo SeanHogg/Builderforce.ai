@@ -18,13 +18,19 @@ import { logLine } from "../errorReporter";
 import { logReviewFailure } from "./knowledgeFailureLog";
 import type { KnowledgeEvent, KnowledgeReviewRequest } from "./knowledgeProtocol";
 import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
-import { reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
+import { log, reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
 import { reviewRecords } from "./knowledgeSyncStatus";
+import { duringReview, isRootReviewing, replicaStatusOf } from "./knowledgeReplica";
+import { extractPoolDown } from "./review/extractPoolHost";
+import { markOwed } from "./review/retryOwed";
+import { stopRunById, trackRun } from "./review/reviewRuns";
 
 interface Session {
   review: RootReview;
   plan: PlanDetail;
   force: boolean;
+  /** "Use the server's copy": names the run's kind. */
+  seed?: boolean;
   abort?: AbortController;
   /** The phase last reported, for the failure log. */
   lastPhase?: string;
@@ -84,10 +90,24 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
         event = { stream, type: "planned", reply: { cancelled: true } };
       } else {
         const force = !!req.force;
-        const review = reviewRoot(this.secrets, root);
-        const plan = await review.plan(force);
+        let plan: PlanDetail;
+        const review = reviewRoot(this.secrets, root, { seed: !!req.seed });
+        if (req.retry?.length) {
+          // Retry (PRD 41 A8): the failed files are owed a review, then it is the normal plan and confirm. Never while one is running.
+          // The check and the hold are one synchronous step, so no review (this panel's, a pre-fetch, a pack review, a closed
+          // panel's) starts between them; the owed marks and the plan are written inside the hold.
+          if (isRootReviewing(root.rootId)) throw new Error(vscode.l10n.t("A review of this folder is already running."));
+          const retry = req.retry;
+          const rootId = root.rootId;
+          plan = await duringReview(rootId, review.open.files, undefined, async () => {
+            await markOwed(review.open.manifest, rootId, retry);
+            return review.plan(force);
+          });
+        } else {
+          plan = await review.plan(force);
+        }
         const reviewId = `review-${++nextReview}`;
-        if (!this.disposed) this.sessions.set(reviewId, { review, plan, force });
+        if (!this.disposed) this.sessions.set(reviewId, { review, plan, force, seed: !!req.seed });
         event = { stream, type: "planned", reply: { reviewId, rootId: root.rootId, plan: plan.plan } };
       }
     } catch (error) {
@@ -104,6 +124,18 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     const abort = new AbortController();
     session.abort = abort;
     const { rootId, rootPath } = session.review.open.root;
+    const { files, pump } = session.review.open;
+    // The run record (PRD 41 A8): folded from the review's progress and steps, posted throttled, kept on disk at the end.
+    const run = trackRun({
+      rootId,
+      request: { force: session.force, seed: !!session.seed },
+      files,
+      abort,
+      post: (record) => this.post({ stream: reviewId, type: "run", run: record }),
+      replica: async () => (pump ? replicaStatusOf(rootId, files) : undefined),
+      poolDown: extractPoolDown,
+      onSaveError: (error) => log("run record", error),
+    });
     void session.review
       .run({
         force: session.force,
@@ -112,23 +144,29 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
         onProgress: (progress) => {
           session.lastPhase = progress.phase;
           this.post({ stream: reviewId, type: "progress", progress });
+          run.progress(progress);
         },
+        onStep: run.step,
       })
       .then(
-        (report) => {
+        async (report) => {
+          await run.finish(report.aborted ? "stopped" : "done", report);
           // What this review left out, from its record (the plan, folders, coverage, uploads).
           const skipped = reviewRecords.get(rootId)?.skipped;
           this.post({ stream: reviewId, type: "done", rootId, report, ...(skipped ? { skipped } : {}) });
         },
-        (error: unknown) => this.post({
-          stream: reviewId,
-          type: "failed",
-          ...logReviewFailure(
-            this.sink,
-            { stage: "review", reviewId, rootId, rootPath, ...(session.lastPhase ? { lastPhase: session.lastPhase } : {}) },
-            error,
-          ),
-        }),
+        async (error: unknown) => {
+          await run.finish(abort.signal.aborted ? "stopped" : "failed");
+          this.post({
+            stream: reviewId,
+            type: "failed",
+            ...logReviewFailure(
+              this.sink,
+              { stage: "review", reviewId, rootId, rootPath, ...(session.lastPhase ? { lastPhase: session.lastPhase } : {}) },
+              error,
+            ),
+          });
+        },
       )
       .finally(() => this.sessions.delete(reviewId));
     return true;
@@ -136,6 +174,11 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
 
   stop(reviewId: string): void {
     this.sessions.get(reviewId)?.abort?.abort();
+  }
+
+  /** Stop by run id, process-wide (a run another panel, a closed one or a Retry started). */
+  stopRun(runId: string): void {
+    stopRunById(runId);
   }
 
   discard(reviewId: string): void {

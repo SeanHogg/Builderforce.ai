@@ -7,7 +7,7 @@ import { ABORT_GRACE_MS, createHostKnowledgeGraphSource, reviewCount, type Knowl
 const PLAN: ReviewPlan = { rootId: 'ws', files: 2, byPack: { docs: 2 }, unchanged: 0, changed: ['a.md', 'b.md'], removed: [], skipped: [], estimatedModelCalls: 2 };
 const REPORT: ReviewReport = {
   rootId: 'ws', digest: 'd', extracted: 2, judged: 2, unjudged: 0, invalidJudgements: 0, factsWritten: 2, relationsWritten: 1,
-  staleMarked: 2, aborted: false, durationMs: 1, readErrors: 0,
+  staleMarked: 2, aborted: false, durationMs: 1, readErrors: 0, extractErrors: 0, failures: [],
 };
 const GRAPH: KnowledgeGraph = {
   scope: { rootId: 'ws', packs: ['docs'], digest: 'd' }, nodes: [], edges: [], findings: [],

@@ -26,14 +26,17 @@ export interface ReviewProgressProps {
     /** The title of what is being reviewed (the plan's root, by the host's name). */
     titleOf(rootId: string): string;
     onContinue(rootId: string): void;
+    /** Opens the Run drawer (PRD 41 A8); absent ⇒ the host records no runs and there is no Details button. */
+    onDetails?: (() => void) | undefined;
 }
 
 const formatCost = (usd: number): string =>
     new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: usd < 1 ? 2 : 0 }).format(usd);
 
-export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgressProps) {
+export function ReviewProgress({ run, labels, titleOf, onContinue, onDetails }: ReviewProgressProps) {
     const s = run.state;
     if (s.status === 'idle') return null;
+    const details = onDetails ? <button type="button" style={quietButton} onClick={onDetails}>{labels.surface.run.details}</button> : null;
     const shell = (children: ReactNode, live: 'polite' | 'off' = 'polite') => (
         <section aria-label={labels.reviewFolder} aria-live={live} style={{ ...card, display: 'grid', gap: 10 }}>{children}</section>
     );
@@ -81,7 +84,10 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                     <div style={{ height: '100%', width: `${pct ?? 5}%`, borderRadius: 999, background: cssVar('accent') }} />
                 </div>
                 {p?.path && <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{p.path}</p>}
-                <div><button type="button" style={button} onClick={run.stop}>{labels.reviewStop}</button></div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" style={button} onClick={run.stop}>{labels.reviewStop}</button>
+                    {details}
+                </div>
             </>,
         );
     }
@@ -98,6 +104,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                 {s.skipped && <SkippedUploads items={s.skipped} labels={labels} />}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {r.unjudged > 0 && <button type="button" style={primaryButton} onClick={() => onContinue(s.rootId)}>{labels.reviewContinue}</button>}
+                    {details}
                     {dismiss}
                 </div>
             </>,

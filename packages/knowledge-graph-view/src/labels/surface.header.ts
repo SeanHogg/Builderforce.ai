@@ -54,7 +54,7 @@ export interface HeaderLabels {
     /** The ask bar's note per question: how it is answered. */
     answerMode: Record<QuestionId, string>;
     /** A drawer's subtitle, by panel id. */
-    drawerSubtitle: Record<'sync' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate', string>;
+    drawerSubtitle: Record<'sync' | 'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate', string>;
 }
 
 export const HEADER_DEFAULTS: HeaderLabels = {
@@ -149,7 +149,7 @@ export const HEADER_DEFAULTS: HeaderLabels = {
         claims: 'answered as claims', layers: 'answered as layers', knowledge: 'answered as facts',
     },
     drawerSubtitle: {
-        sync: 'local first, small batches, merged by file hash', coverage: 'tests, reach and gaps across the system',
+        sync: 'local first, small batches, merged by file hash', run: 'every phase, every worker, every failure', coverage: 'tests, reach and gaps across the system',
         patterns: 'design, enterprise and anti-patterns by layer', api: 'what the routes promise, what is tested, try it',
         resolve: 'a deterministic fix or a prompt, then verify', simulate: 'run the path with real values',
     },

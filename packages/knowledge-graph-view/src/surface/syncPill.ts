@@ -55,7 +55,12 @@ export function syncPill({ labels, review, stale, refreshFailed, sync, lastRevie
     if (sync?.skipped && sync.skipped.length > 0) return { state: 'error', text: counted(labels, 'fileNotStored', sync.skipped.length) };
     // No snapshot on this machine is not a fault: the folder was reviewed on the server only (the parity line says the same).
     if (sync && hasNoLocalSnapshot(sync)) return { state: 'serverOnly', text: labels.surface.pillStates.serverOnly };
+    // The map is local; the replica is what the project has not received yet (PRD 41 A7).
+    if (sync?.replica && sync.replica.failed.length > 0) return { state: 'error', text: counted(labels, 'replicaFailed', sync.replica.failed.length) };
+    if (sync?.replica && sync.replica.queued > 0) return { state: 'syncing', text: counted(labels, 'replicaQueued', sync.replica.queued) };
     if (sync?.server && sync.server.files !== sync.local.files) return { state: 'partial', text: labels.surface.pillStates.partial };
+    // Never "Synced" while the local side holds no files: nothing here is in step with anything.
+    if (sync && sync.local.files === 0) return { state: 'idle', text: h.notSynced };
     if (sync || lastReviewedAt) {
         const when = lastReviewedAt ? relativeTime(lastReviewedAt, now) : '';
         return { state: 'synced', text: when ? fillTemplate(h.syncedAt, { time: when }) : h.synced };

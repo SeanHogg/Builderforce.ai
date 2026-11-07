@@ -28,8 +28,10 @@ import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { subscribeLiveGraph } from "./knowledgeLive";
+import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
-import { linkedKnowledgeClient, loadGraph, log, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
+import { linkedKnowledgeClient, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
+import { getRun, listRuns } from "./review/reviewRuns";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
@@ -101,7 +103,13 @@ export class KnowledgeBridge implements vscode.Disposable {
         this.rights.loaded(call.rootId, graph?.scope.digest);
         // Only a FULL load is what the next open paints first (a focus load is a partial picture).
         if (graph && !call.focus) void this.rememberLastSeen(call.rootId, graph);
-        return graph;
+        // No local review of an open root: the typed "not reviewed on this machine", never the server's cut.
+        if (graph || pack) return graph;
+        // A root listed from the project that no folder here holds (a teammate's, an uploaded pack): no local tree to
+        // draw from, so the server's graph is shown read-only (PRD 41 A7 rule 3). Never for a folder open here.
+        const server = rootById(call.rootId, workspaceFolders()) ? undefined : linkedKnowledgeClient(this.secrets);
+        if (server) return server.graph(call.rootId, query).catch(() => null);
+        return notReviewedHere(this.secrets, call.rootId);
       }
       case "targets": return this.targets();
       case "plan": this.reviews.planOver(call.req, call.stream); return null;
@@ -133,6 +141,9 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "undoFix": return this.fixes.undo(call.rootId, this.rootOf(call.rootId).rootPath, call.fixId);
       case "cancelFixCheck": this.fixes.cancel(call.rootId); return null;
       case "tryRequest": return tryRequestOf(call.req);
+      case "runs": return listRuns(rootKnowledgeFiles(this.rootOf(call.rootId)), call.rootId);
+      case "runRecord": return getRun(this.workspaceRoots().map(rootKnowledgeFiles), call.runId);
+      case "stopRun": this.reviews.stopRun(call.runId); return null;
       case "symbols": {
         const rootPath = this.rootOf(call.rootId).rootPath;
         return this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs));
@@ -169,18 +180,29 @@ export class KnowledgeBridge implements vscode.Disposable {
 
   private async scopes(): Promise<KnowledgeScopeRow[]> {
     const client = linkedKnowledgeClient(this.secrets);
-    const rows = client
-      ? await client.scopes()
-      // A root listed under its old id resolves to its current one (its snapshot migrated on read).
-      : (await Promise.all([...new Set(reviewedRoots(this.host.ctx.workspaceState)
-        .map((listed) => rootById(listed, workspaceFolders()))
-        .filter((root): root is NonNullable<typeof root> => !!root)
-        .map((root) => root.rootId))].map(async (rootId) => {
-        const root = rootById(rootId, workspaceFolders());
-        return root ? (await openRoot(this.secrets, root).store.scopes()).filter((s) => s.rootId === rootId) : [];
-      }))).flat();
-    const listed = rows.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
+    // What this machine reviewed, linked or not. A root listed under its old id resolves to its current one (its snapshot migrated on read).
+    const here = (await Promise.all([...new Set(reviewedRoots(this.host.ctx.workspaceState)
+      .map((listed) => rootById(listed, workspaceFolders()))
+      .filter((root): root is NonNullable<typeof root> => !!root)
+      .map((root) => root.rootId))].map(async (rootId) => {
+      const root = rootById(rootId, workspaceFolders());
+      return root ? (await openRoot(this.secrets, root).store.scopes()).filter((s) => s.rootId === rootId) : [];
+    }))).flat();
+    // Linked: the project's other roots (teammates', packs) are listed beside them; unreachable adds nothing.
+    const there = client ? await client.scopes().catch(() => []) : [];
+    const rows = [...here, ...there.filter((s) => !here.some((h) => h.rootId === s.rootId))];
+    // A root no folder here holds has no local tree: it is the server's graph, shown read-only (the pack-row seam).
+    const listed = rows.map((r) => ({
+      rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}),
+      ...(rootById(r.rootId, workspaceFolders()) ? {} : { readOnly: true as const, serverOnly: true as const }),
+    }));
     return [...listed, ...packScopeRows()];
+  }
+
+  /** The root of each open workspace folder: where the run records of this window live. */
+  private workspaceRoots(): KnowledgeRoot[] {
+    const folders = workspaceFolders();
+    return folders.flatMap((f) => rootForPath(f.path, folders) ?? []);
   }
 
   private targets(): KnowledgeTargetRow[] {
@@ -193,8 +215,8 @@ export class KnowledgeBridge implements vscode.Disposable {
 
   private async remember(rootId: string, ref: string, content: string): Promise<null> {
     const root = rootById(rootId, workspaceFolders());
-    const client = linkedKnowledgeClient(this.secrets);
-    const store = client?.store ?? (root ? openRoot(this.secrets, root).store : undefined);
+    // Local first: the fact lands in the local store and, when linked, is queued for the project.
+    const store = root ? openRoot(this.secrets, root).store : undefined;
     if (!store) throw new Error(vscode.l10n.t("This folder is not open in the workspace."));
     const scope = (await store.scopes()).find((s) => s.rootId === rootId) ?? { rootId, title: root?.title ?? rootId, packs: [] };
     await store.write(humanFactBatch({ scope, ref, content }));

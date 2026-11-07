@@ -2,7 +2,7 @@
  * "Upload Knowledge Pack" (PRD 40, OD-2): a `.bfpack` becomes a knowledge ROOT of the project
  * the editor is linked to — no pack table. The pack is rebased onto `packRootIdFor(name, its
  * original root id)` (the `pack:` host segment is what marks it) and pushed through THE writer
- * the linked review uses (`pushSnapshot`; the server stamps the root as each fact's source).
+ * the linked review uses (the replica pump's first-sync case; the server stamps the root as each fact's source).
  * Uploading a pack that is already there REPLACES it: after a confirmation the old root is
  * removed (by provenance) first, so sources and facts the new pack dropped do not linger.
  *
@@ -12,9 +12,9 @@
 import * as vscode from "vscode";
 import { isWellFormedPackRootId, packRootIdFor, rebasePackRoot, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
 import { KnowledgeApiError } from "@builderforce/knowledge-client";
-import { pushSnapshot } from "../knowledgeStores";
 import { loadedPackRegistry } from "./loadedPackRegistry";
 import { readPackFile } from "./packIndexing";
+import { PackUploadIncomplete, PackUploadUnreachable, pushPack } from "./packPush";
 import { PACK_FILTER, linkedProjectClient, messageOf } from "./packUi";
 
 /** The pack file to upload: a loaded pack the person picks, else a `.bfpack` they choose. */
@@ -38,10 +38,6 @@ async function pickPackFile(): Promise<string | undefined> {
   });
   return file?.[0]?.fsPath;
 }
-
-/** Every source of the pack: its ref and the hash its extracted output is keyed under. */
-const sourcesOf = (pack: PortableKnowledgePack): Array<{ ref: string; hash: string }> =>
-  Object.entries(pack.snapshot.extracted).flatMap(([hash, list]) => list.map((e) => ({ ref: e.sourceRef as string, hash })));
 
 /**
  * The pack as the platform stores it: rebased onto its `pack:` root (collision-resistant: the
@@ -78,23 +74,25 @@ async function uploadKnowledgePack(context: vscode.ExtensionContext): Promise<vo
       {
         location: vscode.ProgressLocation.Notification,
         title: vscode.l10n.t("BuilderForce: uploading knowledge pack \"{0}\"…", pack.name),
+        cancellable: true,
       },
-      async (progress) => {
+      async (progress, token) => {
         // Replace = remove (by provenance, server-side) then push, so nothing the pack dropped accumulates.
         if (exists) await linked.client.deleteRoot(pack.rootId);
         let last = 0;
-        return pushSnapshot({
-          rootId: pack.rootId,
-          snapshot: pack.snapshot,
-          current: sourcesOf(pack),
-          client: linked.client,
-          onProgress(done, total) {
-            progress.report({ increment: total > 0 ? ((done - last) / total) * 100 : 0, message: vscode.l10n.t("{0} of {1} sources", done, total) });
-            last = done;
-          },
-        });
+        const abort = new AbortController();
+        const cancelled = token.onCancellationRequested(() => abort.abort());
+        try {
+          return await pushPack(pack, linked.client, abort.signal, (done, total) => {
+            progress.report({ increment: total > 0 ? (Math.max(0, done - last) / total) * 100 : 0, message: vscode.l10n.t("{0} of {1} sources", done, total) });
+            last = Math.max(last, done);
+          });
+        } finally {
+          cancelled.dispose();
+        }
       },
     );
+    if (!result) return; // cancelled: the pack is partly there, and uploading again replaces it
     void vscode.window.showInformationMessage(vscode.l10n.t(
       "BuilderForce: knowledge pack \"{0}\" uploaded to {1} ({2} sources, {3} facts, {4} relations).",
       pack.name, linked.project.name, result.sources, result.facts, result.relations,
@@ -104,6 +102,18 @@ async function uploadKnowledgePack(context: vscode.ExtensionContext): Promise<vo
     // so the server decides; the replace removes the old root first, so a refusal leaves it untouched).
     if (error instanceof KnowledgeApiError && error.status === 403) {
       void vscode.window.showWarningMessage(vscode.l10n.t("Only the person who uploaded this pack or a manager can replace it."));
+      return;
+    }
+    if (error instanceof PackUploadUnreachable) {
+      // Never wait forever: stop, say so, and let the person retry.
+      const retry = vscode.l10n.t("Retry");
+      const picked = await vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not upload the knowledge pack: {0}", vscode.l10n.t("The server could not be reached. The upload stopped.")), retry);
+      if (picked === retry) await uploadKnowledgePack(context);
+      return;
+    }
+    if (error instanceof PackUploadIncomplete) {
+      // Skipped or refused rows: what is on the project is NOT the whole pack, so there is no success message.
+      void vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not upload the knowledge pack: {0}", vscode.l10n.t("The pack is incomplete on the project: {0} item(s) were refused or too large to store.", error.items)));
       return;
     }
     void vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not upload the knowledge pack: {0}", messageOf(error)));

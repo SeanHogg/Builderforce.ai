@@ -9,12 +9,15 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { LENSES, lensApplies, lensFindings, lensesFor, type LensDef } from './lenses';
 import { localSearch } from './graphModel';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
-import type { KnowledgeBaseline, KnowledgeGraphSource, KnowledgeScopeSummary, KnowledgeSearchHit, LensId } from './types';
+import { isNotReviewedHere, type KnowledgeBaseline, type KnowledgeGraphSource, type KnowledgeScopeSummary, type KnowledgeSearchHit, type LensId, type NotReviewedHere } from './types';
 
-export type GraphStatus = 'loading' | 'empty' | 'load-failed' | 'ready' | 'error';
+/** `not-here`: the host holds no review of the root on THIS machine (PRD 41 A7) — Review, or the server's copy. */
+export type GraphStatus = 'loading' | 'empty' | 'load-failed' | 'ready' | 'error' | 'not-here';
 
 export interface KnowledgeGraphState {
     status: GraphStatus;
+    /** Set while `status` is `not-here`: whether the host can also seed from the server's copy. */
+    notHere: NotReviewedHere['notReviewedHere'] | null;
     scopes: KnowledgeScopeSummary[];
     rootId: string | null;
     graph: KnowledgeGraph | null;
@@ -61,6 +64,7 @@ export interface KnowledgeGraphOptions {
 
 export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeGraphOptions = {}): KnowledgeGraphState {
     const [status, setStatus] = useState<GraphStatus>('loading');
+    const [notHere, setNotHere] = useState<NotReviewedHere['notReviewedHere'] | null>(null);
     const [scopes, setScopes] = useState<KnowledgeScopeSummary[]>([]);
     const [rootId, setRootId] = useState<string | null>(null);
     const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
@@ -134,6 +138,13 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             .then(([g, base]) => {
                 if (loadedKey.current !== entry) return;
                 baselineMemo.current = { source, key: memoKey, value: base };
+                // No review of this root on this machine: said plainly, never drawn from anything else.
+                if (isNotReviewedHere(g)) {
+                    paint(null); setBaseline(null); setStale(false); setRefreshFailed(false);
+                    setNotHere(g.notReviewedHere); setStatus('not-here');
+                    return;
+                }
+                setNotHere(null);
                 if (!g && graphRef.current) { loadedKey.current = null; setRefreshFailed(true); return; }
                 paint(g);
                 setBaseline(base);
@@ -243,7 +254,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             const seq = growSeq.current;
             const focus = loadFocusRef.current;
             source.load(root, focus ? { focus } : undefined).then((g) => {
-                if (!g || growSeq.current !== seq || growing.current !== root || rootIdRef.current !== root) return;
+                if (!g || isNotReviewedHere(g) || growSeq.current !== seq || growing.current !== root || rootIdRef.current !== root) return;
                 paint(g); setStale(false); setRefreshFailed(false); setStatus('ready');
             }).catch(() => undefined);
         };
@@ -319,7 +330,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     if (held) {
         const heldRoot = held.graph.scope.rootId;
         return {
-            status: 'ready',
+            status: 'ready', notHere: null,
             scopes: [{ rootId: heldRoot, title: held.title ?? heldRoot, packs: held.graph.scope.packs }],
             rootId: heldRoot, graph: held.graph, baseline: held.baseline ?? null, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
             stale: false, refreshFailed: false,
@@ -328,7 +339,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         };
     }
     return {
-        status, scopes, rootId, graph, baseline, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
+        status, notHere, scopes, rootId, graph, baseline, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
         stale, refreshFailed,
         selectRoot, setLens: setLensId, select: setSelected, setFocus, focusRefs, search,
         reload: () => setGeneration((n) => n + 1),

@@ -26,7 +26,7 @@
  * this yields the plan, awaits `ctl.confirm`, and only then reviews.
  */
 
-import { factKeyOf, type DirectorySource, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
+import { factKeyOf, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, factRightsCache, humanFactBatch, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, ReviewControl, ReviewRequest, ReviewTarget } from '@builderforce/knowledge-graph-view';
@@ -127,7 +127,8 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
   };
 
   /** THE read of a root's graph: the view's `load`, and Live's reload of the same root. */
-  const load: KnowledgeGraphSource['load'] = async (rootId, q) => {
+  // The web has no local tree to be "not reviewed" on, so it never answers `NotReviewedHere`: its type is the narrower one.
+  const load = async (rootId: string, q?: Parameters<KnowledgeGraphSource['load']>[1]): Promise<KnowledgeGraph | null> => {
     lastRoot = rootId;
     loadedBy.set(rootId, q);
     const graph = await client.graph(rootId, { ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}) });

@@ -86,6 +86,9 @@ updates:
       # Node type defs must track the engines field, not the newest major.
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]
+      # `@types/vscode` must not exceed `engines.vscode` (vsce refuses to package):
+      # it moves only together with the engines floor, by hand.
+      - dependency-name: '@types/vscode'
     commit-message:
       prefix: 'chore(deps)'
       prefix-development: 'chore(dev-deps)'

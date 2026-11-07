@@ -100,7 +100,9 @@ async function errorOf(res: Response): Promise<KnowledgeApiError> {
   } catch {
     // A non-JSON error body keeps the status-derived code and message.
   }
-  return new KnowledgeApiError(res.status, code, message);
+  const seconds = Number(res.headers.get('retry-after'));
+  const waitMs = res.status === 429 && res.headers.get('retry-after') != null && Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+  return new KnowledgeApiError(res.status, code, message, waitMs);
 }
 
 export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeClient {
@@ -330,6 +332,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
       if (k != null) params.set('k', String(k));
       const out = await orNull(jsonCall<{ hits: IndexHit[] }>(`/knowledge/search?${params.toString()}`));
       return out?.hits ?? [];
+    },
+    async writeRows(rootId, rows) {
+      await call('/knowledge/write', send('POST', { root: rootId, facts: rows.facts, relations: rows.relations }));
     },
     async putAnalysis(sha: string, snapshot: AnalysisSnapshotPayload) {
       await call(`/code-analysis/${encodeURIComponent(sha)}`, send('PUT', snapshot));

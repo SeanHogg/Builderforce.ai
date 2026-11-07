@@ -10,7 +10,8 @@ import { cmp } from './order';
 import { reviewDiagnosticsText } from './reviewDiagnostics';
 import type { ReviewState } from './useReviewRun';
 import { surfaceDiagnosticLines, type SurfaceDiagnosticsInput } from './surfaceDiagnostics';
-import type { LensId, ViewMode } from './types';
+import type { LensId, StoredReviewRun, ViewMode } from './types';
+import { runDiagnosticLines } from './surface/run/runDiagnostics';
 
 export interface GraphDiagnosticsInput {
     status: string;
@@ -30,6 +31,8 @@ export interface GraphDiagnosticsInput {
     lastPhase?: string | undefined;
     /** The surface's facts (map source, data coverage, lines, scope, sync, findings); absent ⇒ that section is left out. */
     surface?: SurfaceDiagnosticsInput | undefined;
+    /** The latest review run the host reported (PRD 41 A8); absent ⇒ no run line. */
+    run?: StoredReviewRun | null | undefined;
     /** ISO time. */
     time: string;
 }
@@ -81,6 +84,7 @@ export function graphDiagnosticsText(i: GraphDiagnosticsInput): string {
         const perSecond = r.durationMs > 0 ? (r.extracted / (r.durationMs / 1000)).toFixed(1) : 'n/a';
         lines.push(`report: extracted=${r.extracted} judged=${r.judged} readErrors=${r.readErrors} duration=${r.durationMs}ms files/s=${perSecond}`);
     }
+    if (i.run) lines.push(...runDiagnosticLines(i.run));
     if (i.surface) lines.push(...surfaceDiagnosticLines(i.surface));
     lines.push(`time: ${i.time}`);
     if (s.status === 'error') lines.push('', reviewDiagnosticsText(s));

@@ -164,6 +164,12 @@ const options = integration
  * extension bundle — it is Node, CJS, and needs the same `import.meta.url` shim.
  */
 const hostWorker = harness || integration ? null : { ...options, entryPoints: ["src/hostBfi/worker.ts"], outfile: "out/bfiHostWorker.js" };
+/**
+ * The review's extraction worker (`src/knowledge/review/extractWorker.ts`, PRD 41 A8): a THIRD entry,
+ * started by the extraction pool (`extractPoolHost.ts`) with `worker_threads`. Same options as the
+ * extension bundle; `out/` ships in the .vsix, so no `.vscodeignore` entry is needed.
+ */
+const extractWorker = harness || integration ? null : { ...options, entryPoints: ["src/knowledge/review/extractWorker.ts"], outfile: "out/knowledgeExtractWorker.js" };
 async function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
@@ -248,6 +254,7 @@ if (watch) {
     await (await esbuild.context(hostWorker)).watch();
     await copyBfiWasm();
   }
+  if (extractWorker) await (await esbuild.context(extractWorker)).watch();
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
@@ -255,4 +262,5 @@ if (watch) {
     await esbuild.build(hostWorker);
     await copyBfiWasm();
   }
+  if (extractWorker) await esbuild.build(extractWorker);
 }

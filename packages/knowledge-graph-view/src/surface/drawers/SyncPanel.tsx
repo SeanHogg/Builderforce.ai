@@ -17,6 +17,7 @@ import { SyncExcluded } from './SyncExcluded';
 import { SyncSources } from './SyncSources';
 import { splitSkipped } from './syncDeltaModel';
 import { SyncParity } from './SyncParity';
+import { SyncReplica } from './SyncReplica';
 import { pipelineSteps, type StepState } from './syncModel';
 import { Section, StateLabel } from './ui';
 
@@ -53,6 +54,7 @@ export function SyncPanel({ labels, source, sync: status, syncFailed, onRefreshS
                 </ol>
             </Section>
             <SyncParity status={status} labels={labels} />
+            {status.replica && <SyncReplica replica={status.replica} labels={labels} />}
             <Section title={t.skippedTitle}>
                 {status.skipped === undefined ? <p data-testid="kg-sync-skipped-unknown" style={{ ...muted, margin: 0 }}>{t.skippedUnknown}</p>
                     : split.files.length === 0 ? <p style={{ ...muted, margin: 0 }}>{t.skippedNone}</p>

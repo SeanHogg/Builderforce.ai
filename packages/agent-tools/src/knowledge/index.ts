@@ -22,10 +22,11 @@ export {
     type DependencyCruiserPathMatch, type DependencyCruiserRule,
 } from './dependencyCruiserRules.js';
 export {
-    KNOWLEDGE_REVIEW_MODEL_CALLS, analysisManifestKey, analysisSha, buildStoredGraph, indexedSymbolSource,
+    KNOWLEDGE_REVIEW_MODEL_CALLS, analysisManifestKey, analysisSha, buildStoredGraph,
     planKnowledgeReview, planKnowledgeReviewDetail, reviewIndexPort, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
     type KnowledgeReviewOptions, type KnowledgeReviewPorts, type ReviewIndexPort, type StoredGraphArgs, type WorkspaceAnalyzersDeps,
 } from './reviewRunner.js';
+export { indexedSymbolLookup, indexedSymbolSource, type SymbolLookup } from './indexedSymbols.js';
 export { planDetailLine, reviewReportText } from './reviewText.js';
 export {
     LOCAL_COST_TEXT, reviewCostOf, reviewCostSuffix, type ReviewCallPrice, type ReviewCallPricePort, type ReviewCost,
@@ -39,7 +40,14 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
-export { fileManifest, manifestFileName, migratingRootFiles, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
+export { fileManifest, manifestFileName, migratingRootFiles, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
+export {
+    REPLICA_WRITE_ROWS, createReplicaQueue, memoryReplicaPersistence, relationKey,
+    type ReplicaOp, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,
+} from './replicaQueue.js';
+export { replicatedKnowledgeStore, type ReadThrough, type ReplicaTarget, type ReplicatedStoreArgs } from './replicatedStore.js';
+export { emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaState } from './replicaPump.js';
+export { currentSourcesOf, enqueueFirstSync, enqueueSources, type FirstSyncCounts } from './replicaFirstSync.js';
 export { PACK_ROOT_HOST, folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
 export {
     canDeleteFact, factRightsCache,

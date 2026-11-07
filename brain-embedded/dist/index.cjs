@@ -2999,10 +2999,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [487e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [4708e-11, 14124e-11],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1539e-10, 101489e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3076,10 +3076,10 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [487e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [59e-9, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [748374e-12, 1496748e-12],
+  "deepseek/deepseek-v4-pro": [66729e-11, 133458e-11],
   "deepseek/deepseek-v4-pro-0813": [1165e-10, 466e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
@@ -3308,7 +3308,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [18e-9, 66e-9],
+  "openai/gpt-oss-120b": [17e-9, 63e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -12424,18 +12424,21 @@ var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
 var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
+// ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
 var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [

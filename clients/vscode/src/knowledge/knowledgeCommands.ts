@@ -8,7 +8,8 @@
  *   - `builderforce.openKnowledgeGraph` `{ focus?, rootId? }` — the Visualization panel on
  *     its Knowledge view, focused (Open in graph chips, `/graph`);
  *   - linking: when the workspace is linked to a project (the selected project, now or at
- *     activation), every root reviewed while unlinked uploads its local snapshot once.
+ *     activation), every reviewed root queues its local snapshot for it once (the replica pump
+ *     sends it in the background), and a queue left waiting by an earlier session resumes.
  */
 
 import * as vscode from "vscode";
@@ -18,8 +19,10 @@ import { VisualizationPanel } from "../visualizationPanel";
 import { rootIdOfSourceRef } from "@builderforce/agent-tools/knowledge";
 import { reviewArgumentOf, reviewedRoots, rootById, rootForPath } from "./knowledgeRoots";
 import { registerKnowledgePackCommands } from "./knowledgePackCommands";
-import { configureKnowledgeHost, linkedKnowledgeClient, log, rootKnowledgeFiles, workspaceFolders } from "./knowledgeService";
-import { uploadLocalSnapshot, type UploadMarks } from "./knowledgeStores";
+import { configureKnowledgeHost, linkedKnowledgeClient, log, openRoot, workspaceFolders } from "./knowledgeService";
+import { configureExtractPool, disposeExtractPool } from "./review/extractPoolHost";
+import { BuilderForceAuthProvider } from "../auth";
+import { disposeReplicas, queueFirstSyncOnce, resumeAuthPaused, resumeReplica, stopReplicaPump, type UploadMarks } from "./knowledgeReplica";
 
 /** The ONE globalState key recording which project each root's local snapshot went to. */
 export const KNOWLEDGE_UPLOADED_KEY = "builderforce.knowledge.uploaded";
@@ -32,28 +35,27 @@ function uploadMarks(state: vscode.Memento): UploadMarks {
   };
 }
 
-/** Linking uploads what was reviewed locally (§5.1). Idempotent: a root goes to a project once. */
-async function uploadReviewedRoots(context: vscode.ExtensionContext, projectId: number): Promise<void> {
-  const client = linkedKnowledgeClient(context.secrets);
-  if (!client) return;
+/**
+ * Linking replicates what was reviewed locally (§5.1; PRD 41 A7): each reviewed root's local snapshot
+ * is queued for the project ONCE (the replica pump's first-sync case, marked per project), and a queue
+ * left waiting by an earlier session resumes. The pump runs in the background; its state shows in the
+ * Sync drawer.
+ */
+async function replicateReviewedRoots(context: vscode.ExtensionContext, linked: boolean): Promise<void> {
   const marks = uploadMarks(context.globalState);
-  let uploaded = 0;
   for (const listed of reviewedRoots(context.workspaceState)) {
     // A root listed under its old id resolves to its current one (and its migrated files).
     const root = rootById(listed, workspaceFolders());
     if (!root) continue;
-    const { rootId } = root;
     try {
-      const done = await uploadLocalSnapshot({ rootId, files: rootKnowledgeFiles(root), client, projectId, marks });
-      if (done) uploaded += 1;
+      // Unlinked (or the project changed): the old project's pump stops at once; it never sends another op.
+      if (!linked || !linkedKnowledgeClient(context.secrets)) { await stopReplicaPump(root.rootId); continue; }
+      const open = openRoot(context.secrets, root);
+      if (!open.pump) continue;
+      if (!(await queueFirstSyncOnce({ ...open.pump, manifest: open.manifest, marks }))) await resumeReplica(open.pump);
     } catch (error) {
-      log(`upload ${rootId}`, error);
+      log(`replicate ${root.rootId}`, error);
     }
-  }
-  if (uploaded > 0) {
-    void vscode.window.showInformationMessage(
-      vscode.l10n.t("BuilderForce: the knowledge of {0} reviewed folder(s) was uploaded to the linked project.", uploaded),
-    );
   }
 }
 
@@ -72,8 +74,12 @@ async function folderToReview(uri: unknown): Promise<vscode.Uri | undefined> {
 
 export function registerKnowledgeCommands(context: vscode.ExtensionContext): void {
   configureKnowledgeHost(context.workspaceState);
+  // The review's extraction pool lives as long as the extension (started on the first review).
+  configureExtractPool(context.extensionPath);
+  // (the pool's width is `min(cores - 1, 8)`; at one it is not used and the review runs at memory's default width)
   registerKnowledgePackCommands(context);
   context.subscriptions.push(
+    { dispose: disposeExtractPool },
     vscode.commands.registerCommand("builderforce.reviewFolder", async (uri?: unknown) => {
       const target = await folderToReview(uri);
       if (!target) return;
@@ -91,9 +97,14 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
       return VisualizationPanel.openKnowledge(context, { focus, ...(rootId ? { rootId } : {}) });
     }),
     onProjectChange((project) => {
-      if (project) void uploadReviewedRoots(context, project.id);
+      void replicateReviewedRoots(context, !!project);
     }),
+    // A pump that paused because the token was refused resumes when the person signs in again.
+    vscode.authentication.onDidChangeSessions((e) => {
+      if (e.provider.id === BuilderForceAuthProvider.id) void resumeAuthPaused();
+    }),
+    // Queues are made durable and pumps stop with the extension; the queues resume on the next open.
+    { dispose: () => { void disposeReplicas(); } },
   );
-  const linked = getSelectedProject();
-  if (linked) void uploadReviewedRoots(context, linked.id);
+  if (getSelectedProject()) void replicateReviewedRoots(context, true);
 }

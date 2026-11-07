@@ -2,6 +2,17 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.139] — Watch a review run, in parallel, and keep the map offline
+
+- **Open a review and watch it work.** "Review a folder" and "Re-review this folder" now open a Run panel (Run details):
+  - a phase timeline (plan, extract, judge, compare, write) with rate and time left;
+  - lanes that show which file each worker thread is on;
+  - the steps as they happen;
+  - failures, each with a Retry. Retry marks the failed files as owed and goes through the usual plan, estimate and confirm;
+  - the last 20 runs per folder. A run cut short by a crash shows as "interrupted".
+- **Reviews run in parallel.** Files are read on worker threads (up to 8, one fewer than your cores), and 4 files are judged at once. One shared limiter keeps model calls to 6 at a time and halves that after a rate limit, so the provider sees no extra load. The stored result is the same as a one-at-a-time run. If a worker cannot start, the review carries on in the editor and the panel says so.
+- **The map works offline, linked or not.** The knowledge view always draws from the copy on this machine. The server is a replica that a background queue keeps up to date. The queue survives sign-out, rate limits and crashes, and sends rows in chunks the server accepts. A folder that only the server has is drawn read-only. "Use the server's copy" seeds the local copy from the server.
+
 ## [2026.10.138] — "Use my connected accounts" works with Kimi Code
 
 - **Your connected accounts answer first.** "Use my connected accounts" now tries the accounts this editor calls itself, such as Kimi Code, before the workspace's server-side providers. It no longer fails with "no provider is connected on this workspace" when Kimi Code is your only account. It never falls back to on-device models or the free pool.

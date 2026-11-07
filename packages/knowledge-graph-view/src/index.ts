@@ -25,4 +25,6 @@ export type {
     ReviewEstimate, ReviewRequest, ReviewTarget, FactActions, LensId, KnowledgePanelRenderer,
     KnowledgePanelRenderProps, KnowledgeConfirm, KnowledgeBaseline, KnowledgeSnapshot, EvidenceSide,
     SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile, TryRequest, TryResponse, SymbolRecord,
+    NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
 } from './types';
+export { isNotReviewedHere } from './types';

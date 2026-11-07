@@ -84,11 +84,12 @@ export function SurfaceHeader(p: SurfaceHeaderProps) {
             <StatusStrip
                 labels={labels} narrow={narrow} pill={pill} parity={parityText(labels, sync)} reviewStatus={kg.review.state.status} reviewCard={p.reviewCard}
                 onSync={syncOpens ? () => p.onPanel('sync') : undefined}
+                onRun={availablePanels(graph, env).some((d) => d.id === 'run') ? () => p.onPanel('run') : undefined} updating={kg.stale}
                 time={<TimeSlider commits={p.history.commits} capped={p.history.total} picked={p.pickedCommit} labels={labels} onPick={p.onPickCommit} changedStations={p.changedStations} />}
                 overlays={overlays}
                 overflow={(
                     <OverflowMenu
-                        source={source} labels={labels} rootId={hasGraph ? kg.rootId : null} canReview={hasGraph || kg.status === 'load-failed' || kg.status === 'error'}
+                        source={source} labels={labels} rootId={hasGraph ? kg.rootId : null} canReview={hasGraph || kg.status === 'load-failed' || kg.status === 'error' || kg.status === 'not-here'}
                         reviewStatus={kg.review.state.status} onReview={(req: ReviewRequest) => kg.review.start(req)} revision={p.revision}
                         diagnosticsText={p.diagnosticsText} targets={p.targets} openReview={p.openReview}
                     />

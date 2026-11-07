@@ -1,5 +1,19 @@
 [
   {
+    "slug": "watch-your-codebase-review-run",
+    "title": "Watch your codebase review run — and keep your map when the server is gone",
+    "date": "2026-11-07",
+    "description": "Reviewing a folder used to be a spinner you could not see into, and the knowledge map disappeared without the server. Now the map lives on your machine, and every review is a run you can open, watch, retry and look back on.",
+    "tags": [
+      "knowledge-map",
+      "vscode",
+      "offline",
+      "observability",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "read-anyones-message-in-your-language",
     "title": "Read anyone's message in your own language — translated on your own device",
     "date": "2026-11-06",

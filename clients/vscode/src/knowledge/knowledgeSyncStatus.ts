@@ -12,7 +12,7 @@
  */
 
 import {
-  CODEOWNERS_LOCATIONS, coverageSourceState, reviewRecordStore, type KnowledgeFs,
+  CODEOWNERS_LOCATIONS, coverageSourceState, reviewRecordStore, type KnowledgeFs, type ReplicaState,
 } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeSyncCounts, KnowledgeSyncSkipped, KnowledgeSyncStatus } from "./knowledgeProtocol";
 
@@ -61,6 +61,8 @@ export interface SyncStatusInput {
   rootPath: string;
   local: KnowledgeSyncCounts;
   server?: KnowledgeSyncCounts;
+  /** The replica queue's state, when the root is linked. */
+  replica?: ReplicaState;
   /** The last review's skipped list; undefined when none was recorded. */
   skipped: readonly KnowledgeSyncSkipped[] | undefined;
   /** True once the root was reviewed (a record exists) or the platform holds its graph. */
@@ -79,8 +81,9 @@ export async function buildSyncStatus(input: SyncStatusInput): Promise<Knowledge
   const have = (ok: boolean): Source["state"] => (ok ? "collected" : "absent");
   const coverageSkips = (input.skipped ?? []).filter((s) => s.reason.startsWith("coverage-")).length;
   const sources: Source[] = [
-    { id: "code", state: have(input.reviewed && (input.server?.files ?? input.local.files) > 0) },
-    { id: "docs", state: have(input.reviewed && (input.server?.docs ?? input.local.docs) > 0) },
+    // The sources are what this machine's map draws from: the local counts, never the server's.
+    { id: "code", state: have(input.reviewed && input.local.files > 0) },
+    { id: "docs", state: have(input.reviewed && input.local.docs > 0) },
     { id: "coverage", state: coverage, ...(coverageSkips > 0 ? { note: `${coverageSkips} coverage file(s) skipped (too large or older than their source).` } : {}) },
     { id: "usage", state: "absent", note: "No runtime usage source is connected." },
     { id: "traces", state: "absent", note: "No trace source is connected." },
@@ -91,6 +94,7 @@ export async function buildSyncStatus(input: SyncStatusInput): Promise<Knowledge
   return {
     local: input.local,
     ...(input.server ? { server: input.server } : {}),
+    ...(input.replica ? { replica: input.replica } : {}),
     ...(input.skipped ? { skipped: [...input.skipped] } : {}),
     sources,
   };

@@ -12,6 +12,7 @@ import type { KnowledgeGraphLabels, StringLabelKey } from '../labels';
 import type { LensDef } from '../lenses';
 import type { Revision } from '../revision';
 import type { FindingEvidence, KnowledgeGraphSource, SourceLocation, SyncStatus, ViewMode } from '../types';
+import type { RunPanelData } from './run/useReviewRunRecord';
 import type { HistoryRead } from './TimeSlider';
 import type { SurfaceModel } from './useSurface';
 
@@ -24,6 +25,8 @@ export interface SurfaceEnv {
     compact: boolean;
     /** The source can report its sync status, so the Sync drawer has something to show. */
     hasSync?: boolean;
+    /** The source records its reviews as runs, so the Run drawer has something to show. */
+    hasRun?: boolean;
 }
 
 /** Everything a camera is handed; a camera takes what it draws from here. */
@@ -79,6 +82,8 @@ export interface PanelProps {
     onRefreshSync?: (() => void) | undefined;
     /** The root's ONE history read (the time slider's); the Sync drawer's delta feed draws it and fetches nothing. */
     history?: HistoryRead | undefined;
+    /** The review's run record and the review state machine, for the Run drawer (PRD 41 A8). */
+    runs?: RunPanelData | undefined;
     /** When the root was last reviewed: the delta feed's line between applied and pending. */
     lastReviewedAt?: string | undefined;
     /** Starts the view's review flow again for this root (the confirm chip still asks); absent when the host cannot review. */

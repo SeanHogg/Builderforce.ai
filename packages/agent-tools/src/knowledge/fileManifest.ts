@@ -13,10 +13,21 @@ import { rootFileStem } from './index/persistence.js';
 export interface KnowledgeFiles {
     read(name: string): Promise<string | undefined>;
     write(name: string, text: string): Promise<void>;
+    /** Renames within the folder, replacing the target: with it a file can be written atomically (temp, then rename). */
+    rename?(from: string, to: string): Promise<void>;
+    /** Deletes a file (a missing one is not an error). Optional: a host without it keeps old run records instead of pruning them. */
+    remove?(name: string): Promise<void>;
+    /** The file names directly inside a sub-folder (`runs`); [] when it does not exist. Optional: a host without it cannot rebuild a torn run index or prune orphans. */
+    list?(folder: string): Promise<string[]>;
 }
 
 export const snapshotFileName = (rootId: string): string => `${rootFileStem(rootId)}.json`;
 export const manifestFileName = (rootId: string): string => `${rootFileStem(rootId)}.manifest.json`;
+/** The root's replica queue (PRD 41 A7): what is still to be sent to the linked project, beside its snapshot. */
+export const replicaFileName = (rootId: string): string => `${rootFileStem(rootId)}.replica.json`;
+/** A review run's record (PRD 41 A8), in the `runs/` folder; the root's ordered list of them is `runsIndexFileName`. */
+export const runFileName = (runId: string): string => `runs/${runId}.json`;
+export const runsIndexFileName = (rootId: string): string => `runs/${rootFileStem(rootId)}.index.json`;
 
 type ManifestRecord = Record<string, ChunkFingerprint[]>;
 
@@ -107,5 +118,8 @@ export function migratingRootFiles(files: KnowledgeFiles, rootId: string, legacy
             return moved;
         },
         write: (name, text) => files.write(name, text),
+        ...(files.rename ? { rename: (from: string, to: string) => files.rename!(from, to) } : {}),
+        ...(files.remove ? { remove: (name: string) => files.remove!(name) } : {}),
+        ...(files.list ? { list: (folder: string) => files.list!(folder) } : {}),
     };
 }

@@ -12,6 +12,7 @@ import { counted } from './surface/plural';
 import { COVERAGE_KEYS, type DataCoverage, type GapReason } from './surface/dataCoverage';
 import type { LinesModel } from './surface/lines';
 import type { StationModel } from './surface/stations';
+import { replicaPhase, replicaPhaseEnglish } from './surface/drawers/replicaState';
 import { hasNoLocalSnapshot } from './surface/syncPill';
 import { buildTiers } from './surface/tiers';
 import type { SyncStatus } from './types';
@@ -32,6 +33,8 @@ export interface SurfaceDiagnosticsInput {
     sync: SyncStatus | null;
     /** When the folder was last reviewed (ISO), if the host knows. */
     lastReviewedAt?: string | undefined;
+    /** Where the host built the graph (`KnowledgeGraphSource.mapSource`); absent ⇒ the host does not say. */
+    mapFrom?: 'local' | 'server' | 'server-only' | undefined;
 }
 
 const REASON: Record<GapReason, string> = {
@@ -42,12 +45,17 @@ const REASON: Record<GapReason, string> = {
 
 const pct = (n: number, of: number): string => (of > 0 ? `${Math.round((n / of) * 100)}%` : 'n/a');
 
-function mapSourceLines(c: DataCoverage | null, stations: number): string[] {
-    if (!c) return [];
+function mapSourceLines(c: DataCoverage | null, stations: number, from: SurfaceDiagnosticsInput['mapFrom']): string[] {
+    // PRD 41 A7: an editor draws from the local projection; a server-sourced map is a defect, flagged here, not a mode.
+    // A root with no local tree here (a teammate's, an uploaded pack) is drawn from the server by design (A7 rule 3): not a defect.
+    const where = from === 'local' ? 'local projection, '
+        : from === 'server-only' ? 'server (no local tree for this root), '
+            : from === 'server' ? 'server (DEFECT: the editor must draw from the local projection), ' : '';
+    if (!c) return from ? [`map source: ${where.replace(/, $/, '')}`] : [];
     const s = c.source;
-    if (s.kind === 'outline') return [`map source: outline (files=${s.files}, stations=${stations}, capped=${s.capped ? 'yes' : 'no'})`];
-    if (s.kind === 'cut') return [`map source: cut graph — the server sent no outline (server older than the outline release); the map shows ${s.files} of ${s.sources} files`];
-    return [`map source: full graph (files=${s.files})`];
+    if (s.kind === 'outline') return [`map source: ${where}outline (files=${s.files}, stations=${stations}, capped=${s.capped ? 'yes' : 'no'})`];
+    if (s.kind === 'cut') return [`map source: ${where}cut graph — the server sent no outline (server older than the outline release); the map shows ${s.files} of ${s.sources} files`];
+    return [`map source: ${where}full graph (files=${s.files})`];
 }
 
 function coverageLines(c: DataCoverage | null): string[] {
@@ -63,13 +71,20 @@ function syncLines(sync: SyncStatus | null): string[] {
     const out = [`sync: local=${sync.local.files} server=${sync.server ? sync.server.files : 'n/a'} files`];
     if (hasNoLocalSnapshot(sync)) out.push('sync meaning: "0 here" = no local snapshot; this folder is reviewed on the server only (linked project)');
     else if (sync.server && sync.server.files !== sync.local.files) out.push('sync meaning: the counts here and on the server differ (out of sync)');
+    const r = sync.replica;
+    if (r) {
+        const state = replicaPhaseEnglish(replicaPhase(r), r.waitingUntil);
+        out.push(`replica: ${state} · queued=${r.queued} · skipped=${r.skipped} · failed=${r.failed.length}${r.lastSyncAt ? ` · last sent ${r.lastSyncAt}` : ''}`);
+        for (const s of r.skippedOps ?? []) out.push(`  replica skipped ${s.op}${s.key ? ` ${s.key}` : ''}`);
+        for (const f of r.failed) out.push(`  replica failed ${f.op}: ${f.reason}`);
+    }
     return out;
 }
 
 export function surfaceDiagnosticLines(i: SurfaceDiagnosticsInput): string[] {
     const { stations: model, lines: lm, coverage: c } = i;
     const out: string[] = [];
-    out.push(...mapSourceLines(c, model.stations.length));
+    out.push(...mapSourceLines(c, model.stations.length, i.mapFrom));
     out.push(...coverageLines(c));
 
     if (c) out.push(`partitions: files without a partition=${c.noPartition}/${c.files} (${pct(c.noPartition, c.files)})`);

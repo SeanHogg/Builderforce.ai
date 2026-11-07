@@ -36,11 +36,25 @@ export interface SurfaceStateProps {
     /** The host's review places, read once by the root. */
     targets: Parameters<typeof ReviewLauncher>[0]['targets'];
     openReview?: boolean | undefined;
+    /** "Use the server's copy": a local review that reads the project's extracted output first. Absent ⇒ not offered (not linked, or offline). */
+    onSeed?: (() => void) | undefined;
     onRetry(): void;
 }
 
 /** The screen for a status that has no graph yet, or null when there is one to draw. */
-export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onRetry }: SurfaceStateProps): ReactNode {
+export function SurfaceState({ status, labels, source, review, reviewStatus, start, targets, openReview, onSeed, onRetry }: SurfaceStateProps): ReactNode {
+    if (status === 'not-here') {
+        // This machine holds no review of the root: never the server's cut, never a fault — Review, or the server's copy.
+        return (
+            <div style={{ padding: 24, display: 'grid', gap: 12, justifyItems: 'start', maxWidth: 560 }}>
+                <h2 style={heading}>{labels.notHereTitle}</h2>
+                <p style={{ ...muted, margin: 0, fontSize: TYPE.bodyLarge.fontSize }}>{onSeed ? labels.notHereBody : labels.notHereBodyLocal}</p>
+                {onSeed && <button type="button" style={button} onClick={onSeed} disabled={reviewStatus === 'planning' || reviewStatus === 'running'}>{labels.useServerCopy}</button>}
+                <ReviewLauncher source={source} labels={labels} targets={targets} start={start} defaultOpen status={reviewStatus} />
+                {review}
+            </div>
+        );
+    }
     if (status === 'error') {
         return (
             <div role="alert" style={{ padding: 24, display: 'grid', gap: 10, justifyItems: 'start' }}>

@@ -68,8 +68,27 @@ export function workspaceKnowledgeFiles(folderPath: string): KnowledgeFiles {
       }
     },
     async write(name, text) {
-      await fs.createDirectory(dir);
-      await fs.writeFile(vscode.Uri.joinPath(dir, name), new TextEncoder().encode(text));
+      const target = vscode.Uri.joinPath(dir, name);
+      // A name may sit in a subfolder (`runs/<id>.json`): its folder is made, not only the knowledge folder.
+      await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
+      await fs.writeFile(target, new TextEncoder().encode(text));
+    },
+    async remove(name) {
+      try {
+        await fs.delete(vscode.Uri.joinPath(dir, name));
+      } catch {
+        // Already gone.
+      }
+    },
+    async list(folder) {
+      try {
+        return (await fs.readDirectory(vscode.Uri.joinPath(dir, folder))).map(([name]) => name);
+      } catch {
+        return [];
+      }
+    },
+    async rename(from, to) {
+      await fs.rename(vscode.Uri.joinPath(dir, from), vscode.Uri.joinPath(dir, to), { overwrite: true });
     },
   };
 }

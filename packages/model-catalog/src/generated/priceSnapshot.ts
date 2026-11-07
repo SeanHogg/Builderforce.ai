@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-07T11:28:51.110Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-07T14:56:03.126Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -14,10 +14,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~anthropic/claude-sonnet-latest": [0.000002, 0.00001],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [9.99e-8, 0.000008],
-  "~deepseek/deepseek-v4-flash-latest": [4.87e-8, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [4.708e-8, 1.4124e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.539e-7, 0.0000101489],
+  "~moonshotai/kimi-latest": [1.824e-7, 0.0000093388],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -91,10 +91,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v3.2": [2.6e-7, 3.8e-7],
   "deepseek/deepseek-v3.2-exp": [2.7e-7, 4.1e-7],
   "deepseek/deepseek-v4-flash": [9.1e-8, 1.82e-7],
-  "deepseek/deepseek-v4-flash-0731": [4.87e-8, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [5.9e-8, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [4.8e-8, 1.44e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [4.4e-7, 0.00000132],
-  "deepseek/deepseek-v4-pro": [7.48374e-7, 0.000001496748],
+  "deepseek/deepseek-v4-pro": [6.6729e-7, 0.00000133458],
   "deepseek/deepseek-v4-pro-0813": [1.165e-7, 0.00000466],
   "deepseek/deepseek-v4.1-flash": [5.1e-8, 5.67e-7],
   "deepseek/deepseek-v4.1-flash-1017": [1.5e-7, 6e-7],
@@ -323,7 +323,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [1.8e-8, 6.6e-8],
+  "openai/gpt-oss-120b": [1.7e-8, 6.3e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],

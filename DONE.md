@@ -1,3 +1,34 @@
+## ✅ RESOLVED 2026-11-07 — The knowledge view works offline, and a review is a run you can watch, in parallel (PRD 41 A7 + A8 · WS14 + WS23 · builderforce-memory 2026.10.44 · VS Code 2026.10.139)
+
+- **A7: the local copy is the source and the server is a replica.**
+  - Bug: a linked review kept no local snapshot, so the view drew `GET /knowledge-graph`. On 2026-11-07 the `agentic` map drew 119 of 3,038 files.
+  - The cause: `selectKnowledgeStore` returned the client store or the local store, never both.
+  - Fix: `replicatedKnowledgeStore` (agent-tools `src/knowledge/`) writes locally first. It also queues replica ops on a persisted queue, which a pump drains in FIFO order:
+    - the queue is bound to a project;
+    - writes go in chunks of 500 rows or fewer, and a 413 halves the chunk down to one row;
+    - 401 and 403 pause the queue until sign-in;
+    - 429 and 5xx back off and retry;
+    - writes are atomic (temp file then rename), and a corrupt queue triggers a re-enqueue;
+    - a `<root>.replica.lock` lock goes stale after 2 minutes;
+    - the pump waits for any review of that root.
+  - "Use the server's copy" is a local review with a `preloadExtracted` read-through plus the human facts. It is offered only when the workspace is linked, allowed and reachable.
+  - A root the server has but this machine does not is drawn read-only. Diagnostics name the map's source.
+- **A8: a review is a run you can watch, and it runs in parallel.**
+  - Memory 2026.10.44:
+    - `onStep` events, and `extractPool(job, signal)`;
+    - `judgeConcurrency` 4 with one ordered writer, so the stored bytes are the same at any width;
+    - one shared AIMD `createModelLimiter` (6 calls in flight);
+    - failures are tolerated (`failures[]`) and there is a `compare` phase;
+    - the pure `reviewRun` recorder.
+  - VS Code:
+    - a `worker_threads` extract pool (`out/knowledgeExtractWorker.js`, `clamp(cores-1,1,8)`);
+    - a worker that fails to start falls back to the editor's own thread, and a machine with 2 cores or fewer runs no pool;
+    - one symbol rule on both paths (the index's symbols when it has the file, otherwise the regex extractor), pinned by a parity test;
+    - a run recorder and an atomic run store (`.builderforce/knowledge/runs/`, the last 20 per root; a crashed run shows "interrupted").
+  - The Run panel drawer shows the timeline, lanes, steps, failures with Retry (plan, estimate, confirm; latest run only) and history.
+- **Also closes "Knowledge review of `agentic` fails".** One 429 or 413 used to end a linked review. A linked review now writes locally. The replica sends chunked `writeRows`, halves its chunks on a 413, and backs off on 429 (`retryAfterMs`), so a rate limit never ends a review.
+- **Ship.** Release note migration and the blog post "watch-your-codebase-review-run".
+
 ## ✅ RESOLVED 2026-11-07 — "Use my connected accounts" uses the accounts the editor calls itself (routing eb3f3f487 shipped in VS Code 2026.10.137 · wording in 2026.10.138)
 
 - **Bug.** In VS Code, picking "Use my connected accounts" (`routingMode: 'byo_pool'`) sent the turn straight to the gateway's strict BYO pool. That pool only holds providers the workspace connected on the server. When the person's only account was one the editor calls itself (Kimi Code), the turn failed with "BYO execution is required, but no provider is connected on this workspace".

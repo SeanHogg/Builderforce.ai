@@ -3,14 +3,15 @@
  * files come from and where knowledge is kept, never what the graph contains:
  *
  *   source     — the reviewed folder over `vscode.workspace.fs` (`vscodeDirectorySource.ts`);
- *   store      — the platform when the workspace is linked to a project (the selected
- *                project), else the local snapshot (`knowledgeStores.ts`);
+ *   store      — ALWAYS the local snapshot (`knowledgeStores.ts`), wrapped by
+ *                `replicatedKnowledgeStore`: linked to a project (the selected project), every
+ *                write is also queued for it and the replica pump sends it (`knowledgeReplica.ts`);
  *   review     — the shared runner (`@builderforce/agent-tools/knowledge`) in the extension
  *                host, with the editor's warm symbol index, the code pack's analyzers through
- *                the local shell (the snapshot uploaded when linked), the judgement port
- *                (`knowledgeJudgement.ts`) and the knowledge index's `similar`;
- *   graph      — linked: the platform's server-built graph; unlinked: built here from the
- *                local store.
+ *                the local shell (their snapshot queued for the project when linked), the
+ *                judgement port (`knowledgeJudgement.ts`) and the knowledge index's `similar`;
+ *   graph      — ALWAYS built here from the local store (PRD 41 A7), linked or not; the
+ *                server's graph is read only for the Sync drawer's server column.
  *
  * Used by the panel's bridge (`knowledgeBridge.ts`), the PreFetch rows (`knowledgeRows.ts`)
  * and the commands (`knowledgeCommands.ts`).
@@ -18,9 +19,9 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, claimSimilarity, createReviewRecorder, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, repoGraphEdgeCount, reviewIndexPort, reviewPacks, rootPorts, runKnowledgeReview,
-  workspaceCodeAnalyzers,
-  type FsDirectorySource, type KnowledgeReviewOptions, type KnowledgeReviewPorts, type RepoGraphPort, type ReviewRecorder,
+  buildStoredGraph, claimSimilarity, createReviewRecorder, indexedSymbolLookup, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, repoGraphEdgeCount, reviewIndexPort, reviewPacks,
+  rootManifest, rootStore, runKnowledgeReview, workspaceCodeAnalyzers,
+  type FsDirectorySource, type KnowledgeReviewOptions, type KnowledgeReviewPorts, type RepoGraphPort, type ReviewRecorder, type SymbolLookup,
 } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
@@ -37,10 +38,12 @@ import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
 import { createDirectorySource, type HashCache } from "./vscodeDirectorySource";
-import { fileManifest, manifestFileName, selectKnowledgeStore, type KnowledgeFiles } from "./knowledgeStores";
+import { fileManifest, localKnowledgeStore, manifestFileName, type KnowledgeFiles } from "./knowledgeStores";
+import { configureReplicaLog, duringReview, replicaQueueFor, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
 import { editorJudgement, type TrackedJudgement } from "./knowledgeJudgement";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
+import { reviewParallelism } from "./review/extractPoolHost";
 
 /** Hashes remembered across reviews, so a re-review re-hashes only what changed on disk. */
 const hashCache: HashCache = new Map();
@@ -50,6 +53,7 @@ let reviewedRootsMemento: RootsMemento | undefined;
 export function configureKnowledgeHost(memento: RootsMemento): void {
   reviewedRootsMemento = memento;
   useRecordMemento(memento);
+  configureReplicaLog(log);
 }
 
 export const log = (what: string, error: unknown): void =>
@@ -78,8 +82,13 @@ export function linkedKnowledgeClient(secrets: vscode.SecretStorage): KnowledgeC
 export interface OpenRoot {
   root: KnowledgeRoot;
   source: FsDirectorySource;
+  /** The local store wrapped for replication: every read and write is local; linked, writes are also queued. */
   store: KnowledgeStore;
+  /** The root's ONE local store (the pump reads bodies from it). */
+  local: KnowledgeStore;
   client?: KnowledgeClient;
+  /** Present when linked: what the replica pump needs. */
+  pump?: PumpSource;
   manifest: IngestManifest;
   files: KnowledgeFiles;
 }
@@ -93,29 +102,32 @@ export function rootKnowledgeFiles(root: KnowledgeRoot): KnowledgeFiles {
 }
 
 /**
- * A root, opened. Its manifest is the root's ONE record in this process, and its store the
- * ONE store for the project it is linked to (`rootPorts`): the review, the live watcher and
- * the graph reads all go through them, so a watcher can never write back a snapshot older
- * than a review's — linked or not, they share the manifest file's single handle.
+ * A root, opened. Its manifest and its LOCAL store are the root's ONE record in this process
+ * (`rootStore` / `rootManifest`): the review, the live watcher and the graph reads all go through
+ * them, so a watcher can never write back a snapshot older than a review's. The returned `store`
+ * wraps that local store for replication; `readThrough` (the "Use the server's copy" seed) lets the
+ * review seed its extracted cache from the project before it extracts.
  */
-export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): OpenRoot {
+export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opts: { readThrough?: boolean } = {}): OpenRoot {
   const files = rootKnowledgeFiles(root);
   const client = linkedKnowledgeClient(secrets);
-  const ports = rootPorts(root.rootId, {
-    store: () => selectKnowledgeStore({ rootId: root.rootId, files, ...withClient(client) }).store,
-    manifest: () => fileManifest(files, manifestFileName(root.rootId)),
-  }, { variant: String(getSelectedProject()?.id ?? "local"), location: root.folderPath });
+  const { rootId } = root;
+  const local = rootStore(rootId, () => localKnowledgeStore(files, rootId), "local");
+  const manifest = rootManifest(rootId, () => fileManifest(files, manifestFileName(rootId)), root.folderPath);
+  const projectId = getSelectedProject()?.id;
+  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId } : undefined;
   return {
     root,
-    source: createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId: root.rootId, title: root.title, hashCache }),
-    store: ports.store,
+    source: createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title, hashCache }),
+    // A kicked pump resolves its source when it STARTS, never holding the client of a project the workspace left.
+    store: replicatedStoreOf(rootId, files, local, pump, !!opts.readThrough, () => openRoot(secrets, root).pump),
+    local,
     ...(client ? { client } : {}),
-    manifest: ports.manifest,
+    ...(pump ? { pump } : {}),
+    manifest,
     files,
   };
 }
-
-const withClient = (client: KnowledgeClient | undefined) => (client ? { client } : {});
 
 /** The repo map, reporting the import-edge count of each graph it builds to the review's record (the sync panel's local edges). */
 function measuringRepoMap(recorder: ReviewRecorder): RepoGraphPort {
@@ -136,7 +148,7 @@ function measuringRepoMap(recorder: ReviewRecorder): RepoGraphPort {
 }
 
 /** The review's ports for an opened root: symbols, analyzers, layers, judgement and the index. */
-async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, recorder: ReviewRecorder): Promise<KnowledgeReviewPorts> {
+async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, recorder: ReviewRecorder): Promise<KnowledgeReviewPorts & { symbolLookup: SymbolLookup }> {
   const { root, client } = open;
   const caps = buildLocalCapabilityProvider(root.folderPath);
   const partitions = await readPartitions({ caps });
@@ -150,12 +162,21 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, record
     manifest: open.manifest,
     partitions,
     symbolsOf: indexedSymbolSource(symbols, root.rel),
+    // The same index hits, as plain data for the extraction pool's jobs (one symbol rule on both paths).
+    symbolLookup: indexedSymbolLookup(symbols, root.rel),
     analyzers: workspaceCodeAnalyzers({
       caps,
       partitions,
       repoGraph: measuringRepoMap(recorder),
       ...(root.rel ? { path: root.rel } : {}),
-      ...(client ? { upload: (sha: string, snapshot: unknown) => client.putAnalysis(sha, snapshot as AnalysisSnapshotPayload) } : {}),
+      // The analysis is always kept locally (the review stores its output); linked, its snapshot is queued for the project.
+      ...(open.pump ? {
+        upload: async (sha: string, snapshot: unknown) => {
+          const queue = replicaQueueFor(root.rootId, open.files);
+          await queue.adopt(open.pump!.projectId);
+          await queue.enqueue({ op: "putAnalysis", sha, snapshot: snapshot as AnalysisSnapshotPayload });
+        },
+      } : {}),
       onUploadError: (error) => log("analysis upload", error),
       onWarn: (message) => log("analysis", message),
     }),
@@ -166,7 +187,8 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, record
     ...(index ? { similar: claimSimilarity(index, open.store, root.rootId) } : {}),
     // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
     index: reviewIndexPort(() => getHostKnowledgeIndex(root.rootId)),
-    ...(client ? { platformGraph: (rootId: string) => client.graph(rootId) } : {}),
+    // No `platformGraph`: the knowledge index is fed from the LOCAL graph too, so nothing the editor
+    // shows or searches depends on the server's version (PRD 41 A7).
     onIndexError: (error) => log("index upsert", error),
   };
 }
@@ -187,11 +209,16 @@ export function onKnowledgeChanged(cb: (rootId: string) => void): () => void {
   return () => changedListeners.delete(cb);
 }
 
-export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): RootReview {
-  const open = openRoot(secrets, root);
+/**
+ * `seed` is "Use the server's copy": a local review with a server read-through — the extractor asks
+ * the project's bulk extracted route for the files' content hashes first, so unchanged files cost no
+ * model call (offline, the same review runs without it).
+ */
+export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opts: { seed?: boolean } = {}): RootReview {
+  const open = openRoot(secrets, root, { readThrough: !!opts.seed });
   // What this review skips (plan, folders, coverage, uploads during the run) is recorded per root for the sync status.
   const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, ...(open.client ? { client: open.client } : {}), folders: () => open.source.skippedFolders() });
-  let ports: Promise<KnowledgeReviewPorts> | undefined;
+  let ports: ReturnType<typeof reviewPorts> | undefined;
   const portsOnce = () => (ports ??= reviewPorts(secrets, open, recorder));
   return {
     open,
@@ -205,10 +232,13 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): 
       if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
       // The shared runner feeds the knowledge index (reported as the `index` phase).
       recorder.begin();
-      const report = await runKnowledgeReview(p, opts);
-      recorder.finish();
-      for (const cb of changedListeners) cb(root.rootId);
-      return report;
+      return duringReview(root.rootId, open.files, open.pump, async () => {
+        // Extraction runs in the worker pool and judging N wide (PRD 41 A8); the caller's options win.
+        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup), ...opts });
+        recorder.finish();
+        for (const cb of changedListeners) cb(root.rootId);
+        return report;
+      });
     },
     async judgeModel() {
       const judgement = (await portsOnce()).judgement as Partial<TrackedJudgement> | undefined;
@@ -220,14 +250,16 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): 
 /** How the view reads a root's graph: the refs to load around, and the node cap. */
 export interface GraphQuery { focus?: string[]; maxNodes?: number }
 
-/** A root's graph: the platform's when linked, else built here from the local store. */
+/**
+ * A root's graph, ALWAYS built here from the local store (PRD 41 A7) — linked or not, online or
+ * not: the cut, the outline and every badge are computed from the local projection, so the map
+ * never depends on the server. Null when this machine holds no review of the root.
+ */
 export async function loadGraph(
   secrets: vscode.SecretStorage,
   rootId: string,
   q: GraphQuery = {},
 ): Promise<KnowledgeGraph | null> {
-  const client = linkedKnowledgeClient(secrets);
-  if (client) return client.graph(rootId, { ...(q.focus ? { focus: q.focus } : {}), ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}) });
   const root = rootById(rootId, workspaceFolders());
   if (!root) return null;
   const open = openRoot(secrets, root);

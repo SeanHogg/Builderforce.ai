@@ -33,6 +33,10 @@ export interface StatusStripProps {
     reviewCard: ReactNode;
     /** Opens the Sync drawer (absent ⇒ the pill is a plain status). */
     onSync?: (() => void) | undefined;
+    /** Opens the Run drawer (PRD 41 A8): the pill's press while a review runs, or the graph is "Updating…". Absent ⇒ the pill behaves as before. */
+    onRun?: (() => void) | undefined;
+    /** A fresh read is running behind the graph on screen (the "Updating…" pill). */
+    updating?: boolean | undefined;
     /** The commit scrubber. */
     time?: ReactNode;
     /** The overlay menu, which lives in the strip on a narrow container. */
@@ -45,7 +49,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 /** Room inside the scrolling cluster for a 2px focus ring, taken back by the negative margin. */
 const RING = 3;
 
-export function StatusStrip({ labels, narrow, pill, parity, reviewStatus, reviewCard, onSync, time, overlays, overflow }: StatusStripProps) {
+export function StatusStrip({ labels, narrow, pill, parity, reviewStatus, reviewCard, onSync, onRun, updating, time, overlays, overflow }: StatusStripProps) {
     const [cardOpen, setCardOpen] = useState(false);
     const [focusCard, setFocusCard] = useState(false);
     const cardId = useId();
@@ -77,7 +81,9 @@ export function StatusStrip({ labels, narrow, pill, parity, reviewStatus, review
         setCardOpen(false);
         root.current?.querySelector<HTMLElement>('[data-state]')?.focus();
     };
-    const onPill = hasCard ? () => { setFocusCard(false); setCardOpen((v) => !v); } : onSync;
+    // Reviewing (or "Updating…"): the pill opens the Run drawer, where the run can be watched; the card stays one press away (Details).
+    const opensRun = !!onRun && (reviewStatus === 'running' || (!hasCard && !!updating));
+    const onPill = opensRun ? onRun : hasCard ? () => { setFocusCard(false); setCardOpen((v) => !v); } : onSync;
     const gutter = narrow ? 12 : 16;
     const states = labels.surface.pillStates;
 
@@ -90,7 +96,7 @@ export function StatusStrip({ labels, narrow, pill, parity, reviewStatus, review
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 auto', overflow: 'hidden', padding: RING, margin: -RING }}>
                     <StatusDot
                         state={pill.state} label={pill.text} stateLabel={states[pill.state]}
-                        {...(onPill ? { onClick: onPill } : {})} {...(hasCard ? { expanded: cardOpen, controls: cardId } : {})}
+                        {...(onPill ? { onClick: onPill } : {})} {...(hasCard && !opensRun ? { expanded: cardOpen, controls: cardId } : {})}
                     />
                     {!narrow && parity && <span data-testid="kg-parity" style={{ ...TYPE.monoValue, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{parity}</span>}
                     {!narrow && time}
