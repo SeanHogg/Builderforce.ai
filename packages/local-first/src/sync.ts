@@ -349,12 +349,12 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
             // An import the server already holds (conflict) is itself rebased: it becomes the update.
             const alreadyImported = receipt.status === 'conflict' && receipt.detail === 'entity_already_imported';
             await rebaseImportsOntoMapping(
-              tx, event.entityType, event.clientEntityId,
+              tx, event.entityType, event.clientEntityId, destination,
               alreadyImported ? event.localSequence - 1 : event.localSequence, receipt.serverVersion,
             );
           } else if (event.operation === 'update' && event.baseVersion !== undefined
             && receipt.status === 'accepted') {
-            await rebaseNewerWrites(tx, event.entityType, event.clientEntityId, event.localSequence, event.baseVersion, receipt.serverVersion);
+            await rebaseNewerWrites(tx, event.entityType, event.clientEntityId, destination, event.localSequence, event.baseVersion, receipt.serverVersion);
           }
         }
         if (receipt.status === 'accepted' || receipt.status === 'duplicate') acknowledged.push(event.eventId);
@@ -367,8 +367,11 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
           || (receipt.status === 'rejected' && !permanent);
         if (holds) {
           const at = now();
-          const attempts = (event.holdAttempts ?? 0) + 1;
-          const since = event.heldSince ?? at.toISOString();
+          // A different KIND of hold (waiting on a parent, then a conflict) starts a fresh clock: a long
+          // dependency wait must not make a later refusal give up instantly.
+          const sameKind = event.holdKind === undefined || event.holdKind === receipt.status;
+          const attempts = (sameKind ? (event.holdAttempts ?? 0) : 0) + 1;
+          const since = sameKind ? (event.heldSince ?? at.toISOString()) : at.toISOString();
           // A dependency_pending hold is the server waiting on a parent, not a defect of this event:
           // it backs off but never gives up. Everything else gives up once held for 7 days.
           if (receipt.status !== 'dependency_pending' && at.getTime() - Date.parse(since) >= HOLD_MAX_AGE_MS) {
@@ -376,7 +379,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
             await tx.deadLetter(event.eventId, `gave_up:${receipt.detail ?? receipt.status}`, at.toISOString());
           } else {
             const wait = Math.min(HOLD_BACKOFF_CAP_MS, HOLD_BACKOFF_BASE_MS * 2 ** (attempts - 1));
-            await tx.hold(event.eventId, { holdAttempts: attempts, heldSince: since, nextAttemptAt: new Date(at.getTime() + wait).toISOString() });
+            await tx.hold(event.eventId, { holdKind: receipt.status, holdAttempts: attempts, heldSince: since, nextAttemptAt: new Date(at.getTime() + wait).toISOString() });
           }
         }
       }

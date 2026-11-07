@@ -100,6 +100,8 @@ export interface JournalEvent<T = unknown> {
   deadLetter?: { reason: string; at: string };
   /** How many times the server held this event (not dependency-met, conflict, a non-permanent refusal). Absent = never. */
   holdAttempts?: number;
+  /** The receipt status that held it (`dependency_pending` | `conflict` | `rejected`); a change of kind restarts the hold clock. */
+  holdKind?: string;
   /** When the first hold happened (ISO) — the 7-day give-up is measured from here. */
   heldSince?: string;
   /** Do not send before this instant (ISO): exponential backoff after a hold. */

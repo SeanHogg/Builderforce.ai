@@ -3,6 +3,7 @@ import { createPlatformPolicy } from './policy.js';
 import type { JournalEvent, SyncReceipt } from './records.js';
 import { countPending, createMemoryLocalFirstStore, selectPending, type LocalFirstStore } from './store.js';
 import { wireDependencies } from './sync.js';
+import { loadMappedEntities } from './dependencyGraph.js';
 import { createSyncCoordinator, type SyncPushBatch } from './sync.js';
 
 const AT = '2026-10-19T00:00:00.000Z';
@@ -212,7 +213,9 @@ describe('sync does not let held events starve independent ones', () => {
 });
 
 describe('hold backoff is persisted on the journal event', () => {
-  it('survives a NEW coordinator, backs off exponentially, and gives up after 12 attempts', async () => {
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+  it('survives a NEW coordinator, backs off, and gives up only on AGE (7 days), never on a count', async () => {
     let clock = Date.parse(AT);
     const store = createMemoryLocalFirstStore();
     await append(store, 'stuck');
@@ -224,17 +227,31 @@ describe('hold backoff is persisted on the journal event', () => {
     const early = make();
     await early.coordinator.synchronize(BOUND);
     expect(early.pushed).toHaveLength(0);
-    for (let attempt = 2; attempt <= 11; attempt += 1) {
+    // Many attempts over a few days: still just held.
+    for (let attempt = 2; attempt <= 20; attempt += 1) {
       clock += 3_600_001;
       await make().coordinator.synchronize(BOUND);
     }
     [event] = await store.read((tx) => tx.pending(BOUND));
-    expect(event?.holdAttempts).toBe(11);
-    clock += 3_600_001;
+    expect(event?.deadLetter).toBeUndefined();
+    expect(event?.holdAttempts).toBe(20);
+    clock += WEEK;
     await make().coordinator.synchronize(BOUND);
     [event] = await store.read((tx) => tx.pending(BOUND));
     expect(event?.deadLetter?.reason).toBe('gave_up:project_unresolved');
     expect(await store.read((tx) => countPending(tx, BOUND))).toBe(0);
+  });
+
+  it('a dependency_pending hold never gives up, however old', async () => {
+    let clock = Date.parse(AT);
+    const store = createMemoryLocalFirstStore();
+    await append(store, 'waiting');
+    const make = () => coordinatorFor(store, (batch) => batch.events.map((e) => receiptOf(e.eventId, 'dependency_pending')), undefined, () => new Date(clock));
+    await make().coordinator.synchronize(BOUND);
+    clock += 2 * WEEK;
+    await make().coordinator.synchronize(BOUND);
+    expect((await store.read((tx) => tx.pending(BOUND)))[0]?.deadLetter).toBeUndefined();
+    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(1);
   });
 
   it('a backed-off event stays counted but a drain makes no progress and stops', async () => {
@@ -320,5 +337,94 @@ describe('receipts rebase edits made while a push was in flight', () => {
     const left = await store.read((tx) => tx.pending(BOUND));
     expect(left).toHaveLength(1);
     expect(left[0]).toMatchObject({ operation: 'update', baseVersion: 4, idempotencyKey: 'ticket:t1:import', payload: { v: 1 } });
+  });
+});
+
+describe('dependency resolution stays inside the dependency entity creating writes', () => {
+  const OTHER_DEST = { kind: 'bound' as const, tenantId: '8' };
+  const ev = (
+    store: LocalFirstStore,
+    type: 'project' | 'chat' | 'ticket' | 'execution',
+    id: string,
+    key: string,
+    operation: 'import' | 'update' | 'delete' | 'create',
+    dependsOn: string[] = [],
+    destination: typeof BOUND = BOUND,
+  ) => store.transact((tx) => tx.append({
+    idempotencyKey: key, clientEntityId: id, entityType: type, operation, ...(operation === 'update' || operation === 'delete' ? { baseVersion: 1 } : {}),
+    schemaVersion: 1, occurredAt: AT, dependsOn, destination, payload: {},
+  }));
+  const wiredDeps = async (store: LocalFirstStore, entityId: string, mapped: ReadonlySet<string> = new Set()) => {
+    const all = await store.read((tx) => tx.pending());
+    return wireDependencies(all.filter((e) => e.clientEntityId === entityId), all, mapped)[0]?.dependsOn;
+  };
+
+  it('(b) never waits on an update: a ticket import does not wait on a later chat edit (no cycle)', async () => {
+    const store = createMemoryLocalFirstStore();
+    const chat = await ev(store, 'chat', 'c', 'chat:c:import', 'import');
+    await ev(store, 'ticket', 't', 'ticket:t:import', 'import', ['chat:c:import']);
+    await ev(store, 'chat', 'c', 'chat:c:update:1', 'update');
+    expect(await wiredDeps(store, 't')).toEqual([chat.eventId]);
+  });
+
+  it('(c) ignores creating writes in another destination', async () => {
+    const store = createMemoryLocalFirstStore();
+    await ev(store, 'project', 'p', 'project:p:import', 'import', [], OTHER_DEST);
+    await ev(store, 'ticket', 't', 'ticket:t:import', 'import', ['project:p:import']);
+    expect(await wiredDeps(store, 't')).toEqual([]);
+  });
+
+  it('(e) an action-first key (execution:start:run) resolves by exact key, not as an entity', async () => {
+    const store = createMemoryLocalFirstStore();
+    const start = await ev(store, 'execution', 'run-1', 'execution:start:run-1', 'create');
+    await ev(store, 'execution', 'start', 'execution:start:other', 'update');
+    await ev(store, 'ticket', 't', 'ticket:t:import', 'import', ['execution:start:run-1']);
+    expect(await wiredDeps(store, 't')).toEqual([start.eventId]);
+  });
+
+  it('(a) a dependency the server already holds (mapping in the dependent destination) is satisfied', async () => {
+    const store = createMemoryLocalFirstStore();
+    await ev(store, 'project', 'p', 'project:p:import', 'import');
+    await ev(store, 'ticket', 't', 'ticket:t:import', 'import', ['project:p:import']);
+    await store.transact((tx) => tx.putMapping({ destination: BOUND, entityType: 'project', clientEntityId: 'p', serverId: '5', serverVersion: 1 }));
+    const all = await store.read((tx) => tx.pending());
+    const mapped = await store.read((tx) => loadMappedEntities(tx, all));
+    expect(await wiredDeps(store, 't', mapped)).toEqual([]);
+  });
+});
+
+describe('destination isolation and hold-kind clock', () => {
+  const OTHER = { kind: 'bound' as const, tenantId: '8' };
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+  it('a mapping accepted in destination A does not rebase the same row pending in destination B', async () => {
+    const store = createMemoryLocalFirstStore();
+    const mk = (destination: typeof BOUND, key: string, payload: unknown) => store.transact((tx) => tx.append({
+      idempotencyKey: key, clientEntityId: 't1', entityType: 'ticket', operation: 'import',
+      schemaVersion: 1, occurredAt: AT, dependsOn: [], destination, payload,
+    }));
+    const first = await mk(BOUND, 'a:import', { v: 1 });
+    await mk(OTHER, 'b:import', { v: 2 });
+    void first;
+    const { coordinator } = coordinatorFor(store, (batch) => batch.events.map((e) => ({ ...receiptOf(e.eventId, 'accepted'), serverId: '9', serverVersion: 1 })));
+    await coordinator.synchronize(BOUND);
+    const left = await store.read((tx) => tx.pending(OTHER));
+    expect(left).toHaveLength(1);
+    expect(left[0]).toMatchObject({ operation: 'import', idempotencyKey: 'b:import', payload: { v: 2 } });
+  });
+
+  it('a change of hold kind restarts the give-up clock', async () => {
+    let clock = Date.parse(AT);
+    const store = createMemoryLocalFirstStore();
+    await append(store, 'e');
+    let status: SyncReceipt['status'] = 'dependency_pending';
+    const make = () => coordinatorFor(store, (batch) => batch.events.map((x) => receiptOf(x.eventId, status, status === 'rejected' ? 'project_unresolved' : undefined)), undefined, () => new Date(clock));
+    await make().coordinator.synchronize(BOUND);
+    clock += 2 * WEEK;
+    status = 'rejected';
+    await make().coordinator.synchronize(BOUND);
+    const [event] = await store.read((tx) => tx.pending(BOUND));
+    expect(event?.deadLetter).toBeUndefined();
+    expect(event).toMatchObject({ holdKind: 'rejected', holdAttempts: 1 });
   });
 });

@@ -1,3 +1,38 @@
+## ✅ RESOLVED 2026-11-07 — The editor files tickets on the device, and a copied chat report fits a paste
+
+- **Bug: a signed-in VS Code run filed tickets one server call at a time and hit HTTP 429.** Chat #210 filed a 26-ticket program (an epic and 25 tasks) as `builtin_tasks_create` + `builtin_chats_link_ticket` pairs on the tenant's 300 rpm window, and both tools failed. The local `ticket-*` adapter ran only when sync was denied.
+- **Fix: tickets are written on the device and reach the account in batches.**
+  - `ticket-*` and `project-*` always write the local store (`clients/vscode/src/localDomainToolRouting.ts`).
+  - The editor hides `builtin_tasks_create` and `builtin_chats_link_ticket`.
+  - The creating chat (`chatClientId`) and the epic or gap `taskType` ride on the ticket.
+  - A UUID passed to a `builtin_*` tool is translated to the synced server id (`localTicketIdBridge.ts`).
+  - `ticketToolVocabulary` (brain-embedded) tells the prompt, the hand-off, the triage check and the reply nudge which create tool is present.
+- **Sync** (`@builderforce/local-first` `journalRules` / `workBinding`, `chatSyncHost` drain):
+  - binds projects, then tickets;
+  - resolves each dependency at send time to the dependency entity's creating write in the same destination (an entity the server already mapped counts as satisfied);
+  - drains up to 20 batches of 100 events;
+  - dead-letters only on an explicit list of permanent refusals; dependents are blocked, not killed, and unblock when the entity is filed again;
+  - holds every other refusal with backoff saved on the event (30 s doubling, capped at 1 hour), sent after fresh work, giving up only after 7 days (never for `dependency_pending`);
+  - rebases edits made during a push or after a lost receipt onto the server version.
+- **Server** (`importSyncedTicket`):
+  - writes `tasks.task_type` and the 'created' `chat_ticket_links` row in one savepoint (`upsertChatTicketLink`, shared with `linkTicket`);
+  - links the chat on a best-effort basis;
+  - holds an unmapped UUID reference for up to 10 minutes;
+  - bumps caches after commit.
+  - Board-write MCP calls (REST and an all-board JSON-RPC batch) go to the 4× `:board` bucket.
+  - The repository was split into project, ticket, ownership and shared modules, and the platform-caller plumbing was removed.
+- **Bug: a copied chat report was 110 KB, over the 50,000-character paste limit.** Only tool payloads were budgeted.
+- **Fix:**
+  - one 48,000-character ceiling for the whole report (`PASTE_SAFE_REPORT_CHARS`);
+  - reply and reasoning text are charged against it;
+  - compact diagnostics JSON with an `_elided` marker and a skeleton fallback;
+  - a 10-ticket list in the header;
+  - the error and the chat title are capped;
+  - a last-resort middle cut (`cutMiddleToFit`) that never splits a surrogate pair.
+- **Also fixed:**
+  - the unused `ManifestTree` import that blocked brain-embedded's d.ts build;
+  - 9 unscoped `annotations` queries in `canvasComments.ts`, which failed `check:tenant-scope`.
+
 ## ✅ RESOLVED 2026-11-07 — The canvas A2UI bundle builds, and resolves every `lit` import
 
 - **Build failure.** `canvas:a2ui:bundle` compiled the vendored `vendor/a2ui/renderers/lit` tsconfig, which includes `src/**/*.ts`. That pulled in `0.8/model.test.ts`, which imports `node:assert` and `node:test` and has no Node types.

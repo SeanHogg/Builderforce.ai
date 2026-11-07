@@ -70,7 +70,7 @@ export interface LocalFirstTransaction {
    * Record that the server held a pending event: persists the attempt count, when it was first
    * held and the instant before which it must not be re-sent (backoff). A no-op for an unknown id.
    */
-  hold(eventId: string, hold: { holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void>;
+  hold(eventId: string, hold: { holdKind?: string; holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void>;
   putMapping(mapping: ServerMapping): Promise<void>;
   mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
   /**

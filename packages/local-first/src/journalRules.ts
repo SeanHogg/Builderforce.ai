@@ -31,7 +31,7 @@
  */
 
 import { selectPending, type LocalFirstTransaction } from './store.js';
-import type { JournalOperation, LocalRecord, ServerMapping } from './records.js';
+import type { EntityDestination, JournalOperation, LocalRecord, ServerMapping } from './records.js';
 
 /** The version a sign-in binding records: a server chat exists, nothing was imported. */
 export const BOUND_ONLY_VERSION = 0;
@@ -114,6 +114,7 @@ export async function rebaseImportsOntoMapping(
   tx: LocalFirstTransaction,
   entityType: LocalRecord['entityType'],
   clientEntityId: string,
+  destination: EntityDestination,
   afterSequence: number,
   serverVersion: number,
 ): Promise<void> {
@@ -123,6 +124,7 @@ export async function rebaseImportsOntoMapping(
       && event.clientEntityId === clientEntityId
       && event.operation === 'import'
       && event.localSequence > afterSequence,
+    destination,
   );
   for (const event of newer) {
     await tx.acknowledge([event.eventId]);
@@ -150,6 +152,7 @@ export async function rebaseNewerWrites(
   tx: LocalFirstTransaction,
   entityType: LocalRecord['entityType'],
   clientEntityId: string,
+  destination: EntityDestination,
   afterSequence: number,
   fromBase: number,
   toVersion: number,
@@ -161,6 +164,7 @@ export async function rebaseNewerWrites(
       && (event.operation === 'update' || event.operation === 'delete')
       && event.localSequence > afterSequence
       && event.baseVersion === fromBase,
+    destination,
   );
   for (const event of newer) {
     await tx.acknowledge([event.eventId]);

@@ -162,7 +162,7 @@ export class Transaction implements LocalFirstTransaction {
     this.events.set(eventId, { ...event, deadLetter: { reason, at } });
   }
 
-  async hold(eventId: string, hold: { holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void> {
+  async hold(eventId: string, hold: { holdKind?: string; holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void> {
     this.assertMutable();
     const event = this.events.get(eventId);
     if (!event) return;
