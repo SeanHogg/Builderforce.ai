@@ -282,6 +282,8 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     if (byteLength(extracted) > MAX_EXTRACTED_BYTES) return tooLarge(MAX_EXTRACTED_BYTES);
     try {
       const { skippedRefs } = await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
+      // The per-hash object just written replaces the whole body: an older bundle row for this hash must not shadow it.
+      await p.ledger.index.drop([hash]);
       return json({ ok: true, hash, skippedRefs });
     } catch (error) {
       return writeRefusal(error);

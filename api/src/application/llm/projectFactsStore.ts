@@ -12,7 +12,7 @@
  * sweep). All governed by application/memory/memoryService (scope chain, provenance,
  * TTL): an agent write goes through that service, never directly here.
  */
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { agentHostDirectoryFiles, llmTraces } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -182,9 +182,11 @@ export async function stampAnchorHashes(
   db: Db,
   tenantId: number,
   anchors: FactFileAnchor[] | null,
+  /** A reader prepared for a whole batch (see {@link hostDirectoryHashesFor}); absent: one query per unhashed anchor. */
+  reader?: FileContentHashReader,
 ): Promise<FactFileAnchor[] | null> {
   if (!anchors?.length) return anchors;
-  const read = hostDirectoryHashReader(db, tenantId);
+  const read = reader ?? hostDirectoryHashReader(db, tenantId);
   const out: FactFileAnchor[] = [];
   for (const anchor of anchors) {
     if (anchor.contentHash) {
@@ -245,6 +247,25 @@ export async function resolveFactOrigin(
  * The only file-hash reader this repo already has: the host directory index.
  * A path it does not index returns null, and a null read is not stale.
  */
+export async function hostDirectoryHashesFor(db: Db, tenantId: number, paths: readonly string[]): Promise<FileContentHashReader> {
+  const wanted = [...new Set(paths.map((p) => p.trim()).filter(Boolean))];
+  const found = new Map<string, string>();
+  if (wanted.length > 0) {
+    // ONE query for a whole batch of facts; the newest row of a path wins, as in the per-path reader.
+    const rows = await db
+      .select({ relPath: agentHostDirectoryFiles.relPath, contentHash: agentHostDirectoryFiles.contentHash })
+      .from(agentHostDirectoryFiles)
+      .where(and(eq(agentHostDirectoryFiles.tenantId, tenantId), inArray(agentHostDirectoryFiles.relPath, wanted)))
+      .orderBy(desc(agentHostDirectoryFiles.updatedAt))
+      .catch((err: unknown) => {
+        reportCaughtError(err, { source: 'project-facts', operation: 'host-directory-hash-read', level: 'warning', context: { tenantId } });
+        return [] as Array<{ relPath: string; contentHash: string }>;
+      });
+    for (const r of rows) if (!found.has(r.relPath)) found.set(r.relPath, r.contentHash);
+  }
+  return async (path: string) => found.get(path.trim()) ?? null;
+}
+
 export function hostDirectoryHashReader(db: Db, tenantId: number): FileContentHashReader {
   return async (path: string) => {
     const rel = path.trim();

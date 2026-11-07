@@ -58,7 +58,12 @@ export interface KnowledgeStorePort {
   /** Removes every relation with any of `refs` at either end. */
   deleteRelationsOf(refs: NodeRef | readonly NodeRef[]): Promise<number>;
   /** Removes exactly these relations by their upsert identity (`from`, `to`, `kind`), in bounded batches. Returns rows removed. */
-  deleteRelationRows(rows: ReadonlyArray<{ from: string; to: string; kind: string }>): Promise<number>;
+  deleteRelationRows(rows: ReadonlyArray<{ from: string; to: string; kind: string }>, only?: { origin: 'model' }): Promise<number>;
+  /**
+   * Deletes facts by key in bounded batches — their relations first — applying the author rule in SQL: an authorless
+   * fact, the actor's own, or any fact for an admin. Returns the keys actually deleted (the rest are the caller's to report).
+   */
+  deleteFactsByKeys(keys: readonly string[], actor: { userId: string | null; admin: boolean }): Promise<string[]>;
   /** Removes the root's `knowledge_scopes` row. True when a row existed. */
   deleteScope(rootId: string): Promise<boolean>;
   /** The stored `source` of each of `keys` that exists (a missing key is absent from the map). */

@@ -25,6 +25,8 @@ import {
   type FactFileAnchor,
   type FactImportance,
   type FactOriginCost,
+  type FileContentHashReader,
+  hostDirectoryHashesFor,
 } from './projectFactsStore';
 
 /**
@@ -124,7 +126,7 @@ async function prepareFactRow(
   // Stamped on every write, on BOTH branches below. This digest is what tells a
   // corrected belief from a re-assertion of the same one.
   const contentHash = await factContentHash(k, c);
-  const fileAnchors = await stampAnchorHashes(db, tenantId, normalizeFileAnchors(anchorsIn));
+  const fileAnchors = await stampAnchorHashes(db, tenantId, normalizeFileAnchors(anchorsIn), shared.reader);
   // Embed on write so the fact is semantically reachable on the next recall (1134).
   // Best-effort, and now actually so: the `catch` used to be MISSING, so a provider
   // error propagated out of this function and the belief was never written at all —
@@ -219,6 +221,8 @@ interface PrepareShared {
   priors?: Map<string, PriorFact>;
   /** Embed on write (the single-fact path). A batch passes false and leaves the vector to the backfill sweep. */
   embed: boolean;
+  /** One content-hash reader for the whole batch (one query), so unhashed anchors do not cost a query each. */
+  reader?: FileContentHashReader;
 }
 
 /** One fact of a batch: `upsertProjectFact`'s arguments after the scope. */
@@ -232,15 +236,27 @@ export interface ProjectFactInput {
 /** Rows per INSERT: 200 rows of ~25 columns stay far under the driver's parameter limit. */
 const FACT_INSERT_CHUNK = 200;
 /** Columns a batch's conflict update takes from the incoming row; the rest are kept when the row states nothing. */
-const TAKEN_FROM_INCOMING = ['content', 'source', 'expiresAt', 'importance', 'contentHash', 'fileAnchors', 'embedding', 'embeddingModel', 'embeddedAt', 'embedding1024', 'embedding1024Model', 'embedded1024At'] as const;
+const TAKEN_FROM_INCOMING = ['content', 'source', 'expiresAt', 'importance', 'contentHash', 'fileAnchors'] as const;
+/** The vector columns: a rewrite of the SAME content keeps the vector it has (a batch embeds nothing, so excluded holds none). */
+const VECTOR_COLUMNS = ['embedding', 'embeddingModel', 'embeddedAt', 'embedding1024', 'embedding1024Model', 'embedded1024At'] as const;
 const KEPT_WHEN_ABSENT = ['origin', 'originExecutionId', 'originModel', 'originPromptTokens', 'originCompletionTokens'] as const;
 
-/** `col = excluded.col`, or `col = COALESCE(excluded.col, table.col)` for the columns a rewrite must not wipe. */
-function batchConflictSet(): Record<string, unknown> {
+/**
+ * The conflict update of a MULTI-row insert, as SQL text (one SET cannot name a different literal per row):
+ * `col = excluded.col`; the vector columns keep the stored vector when the content hash is unchanged
+ * (`CASE WHEN … IS NOT DISTINCT FROM`), else take the incoming (cleared) one; and the origin / cost columns
+ * `COALESCE(excluded.col, table.col)`, so a rewrite that does not know its run never wipes a stamp.
+ * Exported so a test can render it and pin the statement.
+ */
+export function batchConflictSet(updatedAt: Date = new Date()): Record<string, unknown> {
   const cols = getTableColumns(projectFacts) as unknown as Record<string, { name: string }>;
-  const set: Record<string, unknown> = { supersededBy: null, updatedAt: new Date() };
-  for (const k of TAKEN_FROM_INCOMING) set[k] = sql.raw(`excluded."${cols[k]!.name}"`);
-  for (const k of KEPT_WHEN_ABSENT) set[k] = sql.raw(`COALESCE(excluded."${cols[k]!.name}", "project_facts"."${cols[k]!.name}")`);
+  const set: Record<string, unknown> = { supersededBy: null, updatedAt };
+  const col = (k: string): string => cols[k]!.name;
+  for (const k of TAKEN_FROM_INCOMING) set[k] = sql.raw(`excluded."${col(k)}"`);
+  for (const k of VECTOR_COLUMNS) {
+    set[k] = sql.raw(`CASE WHEN "project_facts"."${col('contentHash')}" IS NOT DISTINCT FROM excluded."${col('contentHash')}" THEN "project_facts"."${col(k)}" ELSE excluded."${col(k)}" END`);
+  }
+  for (const k of KEPT_WHEN_ABSENT) set[k] = sql.raw(`COALESCE(excluded."${col(k)}", "project_facts"."${col(k)}")`);
   return set;
 }
 
@@ -261,7 +277,14 @@ export async function upsertProjectFacts(
 ): Promise<Set<string>> {
   const embed = batch.embed ?? items.length <= 1;
   const byKey = new Map<string, ProjectFactInput>();
-  for (const it of items) byKey.set((it.key ?? '').trim().slice(0, 255), it);
+  for (const it of items) {
+    const k = (it.key ?? '').trim().slice(0, 255);
+    const earlier = byKey.get(k);
+    // The single-fact path folds a code map into the stored one; two writes of one map in a batch fold the same way.
+    byKey.set(k, earlier && isCodemapKey(k)
+      ? { ...it, content: mergeConsolidated(k, earlier.content, it.content), opts: { ...it.opts, fileAnchors: [...(earlier.opts?.fileAnchors ?? []), ...(it.opts?.fileAnchors ?? [])] } }
+      : it);
+  }
   byKey.delete('');
   const keys = [...byKey.keys()];
   let priors: Map<string, PriorFact> | undefined;
@@ -275,22 +298,29 @@ export async function upsertProjectFacts(
       for (const r of rows) priors.set(r.key, r);
     }
   }
+  // Anchors that name no content hash are looked up for the WHOLE batch in one query (a lone fact keeps its own read).
+  let reader: FileContentHashReader | undefined;
+  if (byKey.size > 1) {
+    const unhashed = [...byKey.values()].flatMap((it) => (it.opts?.fileAnchors ?? []).filter((a) => !a.contentHash).map((a) => a.path));
+    if (unhashed.length > 0) reader = await hostDirectoryHashesFor(db, tenantId, unhashed);
+  }
   const prepared: PreparedFact[] = [];
   for (const it of byKey.values()) {
-    const row = await prepareFactRow(env, db, tenantId, projectId, it.key, it.content, it.source ?? 'agent', it.opts, { embed, ...(priors ? { priors } : {}) });
+    const row = await prepareFactRow(env, db, tenantId, projectId, it.key, it.content, it.source ?? 'agent', it.opts, {
+      embed, ...(priors ? { priors } : {}), ...(reader ? { reader } : {}),
+    });
     if (row) prepared.push(row);
   }
   for (let i = 0; i < prepared.length; i += FACT_INSERT_CHUNK) {
     const chunk = prepared.slice(i, i + FACT_INSERT_CHUNK);
-    await db
-      .insert(projectFacts)
-      .values(chunk.length === 1 ? chunk[0]!.values : chunk.map((p) => p.values))
-      // One row keeps its own literal update (the long-standing single-fact semantics); several take each
-      // row's values from `excluded`, since one SET cannot name a different literal per row.
-      .onConflictDoUpdate({
-        target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
-        set: (chunk.length === 1 ? chunk[0]!.set : batchConflictSet()) as never,
-      });
+    const target = [projectFacts.tenantId, projectFacts.projectId, projectFacts.key];
+    // One row keeps its own literal update (the long-standing single-fact semantics); several take each
+    // row's values from `excluded`, since one SET cannot name a different literal per row.
+    if (chunk.length === 1) {
+      await db.insert(projectFacts).values(chunk[0]!.values).onConflictDoUpdate({ target, set: chunk[0]!.set as never });
+    } else {
+      await db.insert(projectFacts).values(chunk.map((p) => p.values)).onConflictDoUpdate({ target, set: batchConflictSet() as never });
+    }
   }
   if (prepared.length > 0 && !batch.deferVersionBump) await bumpProjectFactsVersion(env, tenantId, projectId);
   return new Set(prepared.map((p) => p.values.key as string));

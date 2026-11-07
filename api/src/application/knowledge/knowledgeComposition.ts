@@ -14,7 +14,7 @@ import { cloudRepoGraphPort } from './knowledgeRepoGraph';
 import { knowledgeVersion } from './knowledgeVersion';
 import { knowledgeWritePortsFor } from './knowledgeWritePorts';
 import { r2KnowledgeSync } from './sync/knowledgeSyncBlobs';
-import { drizzleLedger } from './knowledgeLedger';
+import { drizzleLedger, type KnowledgeLedgerPort } from './knowledgeLedger';
 import type { KnowledgeSyncPort } from './sync/knowledgeSyncPorts';
 
 export interface KnowledgePorts {
@@ -28,12 +28,15 @@ export interface KnowledgePorts {
   index: KnowledgeIndexPort;
   /** Pack sync's state and staging (PRD 41 A11). */
   sync: KnowledgeSyncPort;
+  /** The bundle index, source rows, sync leaves and generations (PRD 41 A11 rules 4a-4b). */
+  ledger: KnowledgeLedgerPort;
 }
 
 export function knowledgePortsFor(env: Env, db: Db, tenantId: number, projectId: number): KnowledgePorts {
   const { store, extracted } = knowledgeWritePortsFor(env, db, tenantId, projectId);
+  const ledger = drizzleLedger(db, tenantId, projectId);
   return {
-    env, db, tenantId, projectId, store, extracted, sync: r2KnowledgeSync(env, tenantId, projectId, drizzleLedger(db, tenantId, projectId)),
+    env, db, tenantId, projectId, store, extracted, sync: r2KnowledgeSync(env, tenantId, projectId, ledger), ledger,
     graph: {
       cacheEnv: env, tenantId, projectId, store, extracted,
       analysis: r2AnalysisSnapshots(env, tenantId, projectId),

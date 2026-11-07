@@ -28,6 +28,7 @@
  * file's own entry. The bundle is a cache keyed by content hash: a lost race re-fetches.
  */
 import { sha256Hex, type Extracted, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
+import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
@@ -53,12 +54,9 @@ export function rootOfRef(ref: string): string | undefined {
 }
 
 const pathOfSourceRef = (ref: string): string => ref.slice(ref.indexOf('::') + 2);
-
-/** The object identity of a source: its path, or `~<tag>|<path>` for a root-level output. */
+n/** The object identity of a source: its path, or `~<tag>|<path>` for a root-level output. */
 export function sourceId(path: string, hash: string): string {
-  if (!hash.startsWith('~')) return path;
-  const colon = hash.indexOf(':');
-  return `${colon > 0 ? hash.slice(0, colon) : hash}|${path}`;
+  return fileLeafKey(path, hash).slice(2); // the codec's leaf key is `f:<this id>`: ONE rule for both sides
 }
 
 export function knowledgeBlobKeys(tenantId: number, projectId: number) {

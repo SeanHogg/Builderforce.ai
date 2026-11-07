@@ -97,6 +97,7 @@ beforeEach(() => {
     extracted: { setSource: vi.fn(), snapshotReview: vi.fn() },
     graph: { repo: { linked: async () => ({ rootId: 'cloud:r1:' }) } },
     index: {},
+    ledger: { index: { drop: vi.fn(async () => undefined) } },
   }));
   mocks.graph.mockResolvedValue({ scope: { rootId: 'r', packs: [], digest: 'd' }, nodes: [], edges: [], findings: [], stats: {} });
 });

@@ -18,6 +18,7 @@ import type { KnowledgePorts } from '../../application/knowledge/knowledgeCompos
 import { applyKnowledgePack } from '../../application/knowledge/sync/applyKnowledgePack';
 import { bucketIdsOf, haveBitmap, manifestLeaves, manifestSummary } from '../../application/knowledge/sync/knowledgeSyncManifest';
 import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES } from '../../application/knowledge/sync/knowledgeSyncPorts';
+import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -37,8 +38,25 @@ async function bodyOf(c: Context): Promise<Uint8Array> {
   if (Number.isFinite(declared) && declared > MAX_SYNC_BODY_BYTES) {
     throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
   }
-  const bytes = new Uint8Array(await c.req.arrayBuffer());
-  if (bytes.length > MAX_SYNC_BODY_BYTES) throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
+  // Read as a stream with a running count: a chunked body (no Content-Length) is cut off at the cap, never buffered whole.
+  const stream = c.req.raw.body;
+  if (!stream) return new Uint8Array(0);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_SYNC_BODY_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.length; }
   return bytes;
 }
 
@@ -50,6 +68,8 @@ async function answering(run: () => Promise<Response>): Promise<Response> {
     return await run();
   } catch (error) {
     if (error instanceof KnowledgeSyncError) return json({ error: error.message, code: error.code, ...(error.detail ?? {}) }, error.status);
+    // The writer's own refusals (a bad origin, too many rows) are the caller's 4xx, not a server fault.
+    if (error instanceof KnowledgeWriteError) return json({ error: error.message, code: error.code }, error.status);
     throw error;
   }
 }

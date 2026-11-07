@@ -5745,6 +5745,64 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
   });
 }
 
+// src/localChat/workSync.ts
+var SERVER_REFERENCE = /^\d+$/;
+function ticketWaitsOn(ticket) {
+  const waits = [];
+  if (!SERVER_REFERENCE.test(ticket.projectId.trim())) waits.push(importKey("project", ticket.projectId));
+  const parent = ticket.parentTicketId?.trim();
+  if (parent && !SERVER_REFERENCE.test(parent)) waits.push(importKey("ticket", parent));
+  return waits;
+}
+function parentsFirst(tickets) {
+  const byId = new Map(tickets.map((ticket) => [ticket.id, ticket]));
+  const depths = /* @__PURE__ */ new Map();
+  const depthOf = (ticket, seen = /* @__PURE__ */ new Set()) => {
+    const known = depths.get(ticket.id);
+    if (known !== void 0) return known;
+    const parent = ticket.payload.parentTicketId ? byId.get(ticket.payload.parentTicketId) : void 0;
+    const depth2 = parent && !seen.has(parent.id) ? depthOf(parent, /* @__PURE__ */ new Set([...seen, ticket.id])) + 1 : 0;
+    depths.set(ticket.id, depth2);
+    return depth2;
+  };
+  return [...tickets].sort((a, b) => depthOf(a) - depthOf(b) || a.occurredAt.localeCompare(b.occurredAt));
+}
+async function bindWorkForSync(store, deviceId, destination) {
+  if (destination.kind !== "bound") return 0;
+  const unbound = (row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId);
+  const anything = await store.read(async (tx) => {
+    let found = false;
+    for (const type of ["project", "ticket"]) {
+      if (found) break;
+      await tx.scan(type, (row) => {
+        if (unbound(row)) {
+          found = true;
+          return SCAN_STOP;
+        }
+      });
+    }
+    return found;
+  });
+  if (!anything) return 0;
+  return store.transact(async (tx) => {
+    const rebind = async (row) => {
+      const moved2 = { ...row, destination };
+      await tx.put(moved2);
+      return moved2;
+    };
+    let moved = 0;
+    for (const project of await selectRecords(tx, "project", unbound)) {
+      await queueImport(tx, await rebind(project));
+      moved += 1;
+    }
+    for (const ticket of parentsFirst(await selectRecords(tx, "ticket", unbound))) {
+      await queueImport(tx, await rebind(ticket), ticket.payload.chatClientId, ticketWaitsOn(ticket.payload));
+      moved += 1;
+    }
+    return moved;
+  });
+}
+
 // ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge";
 var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
@@ -31594,6 +31652,7 @@ export {
   attachEvermindLearn,
   attemptedPublish,
   bindChatHistoryForSync,
+  bindWorkForSync,
   brainPersonaAgents,
   brainRequestError,
   brainUploadUrl,
@@ -31739,6 +31798,7 @@ export {
   isEvermindModel,
   isFailedToolResult,
   isFallbackFailure,
+  isImported,
   isInferenceMode,
   isInvalidClientResult,
   isLive,
@@ -31764,6 +31824,7 @@ export {
   isUserConfiguredModelRef,
   isWasmTrap,
   joinRestorableTurns,
+  journalWrite,
   jsonClientResult,
   judgeClientFirstFor,
   lastConsolidationIndex,

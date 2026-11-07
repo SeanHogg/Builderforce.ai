@@ -102,6 +102,8 @@ export interface WriteKnowledgeDeps {
   legacyFact?: { originExecutionId?: number | null; origin?: FactOriginCost | null; retireByAnchor: boolean };
   /** Embed each fact as it is written (default true). Pack sync passes false: a provider call per fact is a subrequest per fact, and the backfill sweep embeds them. */
   embedFacts?: boolean;
+  /** The caller already ran `authorizePackUpload` for this pack root (a pack apply does it ONCE, not per chunk). */
+  packAuthorized?: boolean;
   /** The caller bumps the knowledge version ONCE for a larger unit of work (a pack apply: many calls, one transaction). */
   skipVersionBump?: boolean;
 }
@@ -173,7 +175,7 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
   const defaultOrigin: StoredFact['origin'] = userId ? 'human' : 'agent';
 
   const packRoot = packRootOf(input);
-  if (packRoot) {
+  if (packRoot && !deps.packAuthorized) {
     const access = await authorizePackUpload(env, store, { userId, role: deps.actorRole ?? null }, packRoot);
     if (!access.ok) throw new KnowledgeWriteError(access.status, 'forbidden', access.error);
   }
