@@ -43,6 +43,15 @@ describe('VFS directory source', () => {
     expect(entries[1]!.size).toBeGreaterThan('héllo'.length);
   });
 
+  it('hashOf of the text read() returns equals the hash list() gave (CRLF, non-ASCII)', async () => {
+    const { fs } = fakeVfs({ '/crlf.md': 'one\r\ntwo\r\n', '/uni.md': 'héllo — 日本語 😀' });
+    const source = createVfsDirectorySource({ fs, rootId: 'r', title: 't' });
+    for (const entry of await listed(source)) {
+      const text = ((await source.read(entry.path)).content as { text: string }).text;
+      expect(source.hashOf!(text)).toBe(entry.hash);
+    }
+  });
+
   it('reads a listed file as the text document memory reads', async () => {
     const { fs } = fakeVfs({ '/docs/lease.md': '# Lease' });
     const source = createVfsDirectorySource({ fs, rootId: 'web:vfs:7', title: 't' });

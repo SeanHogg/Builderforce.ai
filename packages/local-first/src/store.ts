@@ -12,8 +12,10 @@
  * learns of another window's commit calls `applyDelta` instead of rebuilding.
  */
 
+import { blockedEventIds } from './dependencyGraph.js';
 import {
   UNBOUND_DESTINATION,
+  destinationKey,
   type EntityDestination,
   type JournalEvent,
   type LocalEntityType,
@@ -75,9 +77,14 @@ export async function selectPending(
  * journal minus the dead-lettered. What a drain loop compares to know it is finished.
  */
 export async function countPending(tx: LocalFirstTransaction, destination?: EntityDestination): Promise<number> {
-  let count = 0;
-  await tx.scanPending((event) => { if (!event.deadLetter) count += 1; }, destination);
-  return count;
+  // Blocked events (behind a dead-lettered write that nothing replaced) are not work either:
+  // they cannot be sent until the user supersedes that write, so they must not hold a drain open.
+  const every: JournalEvent[] = [];
+  await tx.scanPending((event) => { every.push(event as JournalEvent); });
+  const blocked = blockedEventIds(every);
+  const key = destination ? destinationKey(destination) : undefined;
+  return every.filter((event) => !event.deadLetter && !blocked.has(event.eventId)
+    && (key === undefined || destinationKey(event.destination) === key)).length;
 }
 
 export interface MemoryLocalFirstStoreOptions {

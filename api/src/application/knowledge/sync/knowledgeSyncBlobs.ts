@@ -21,7 +21,6 @@ import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { KnowledgeSyncError, STAGE_TTL_MS, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
 
 const seg = (s: string): string => encodeURIComponent(s);
-const HEAD_CONCURRENCY = 8;
 const DELETE_BATCH = 1000;
 
 export function r2KnowledgeSync(
@@ -62,26 +61,8 @@ export function r2KnowledgeSync(
 
     sources: (rootId, over) => listRootSources(env.UPLOADS, over ?? ledger, tenantId, projectId, rootId),
 
-    async heldBodies(hashes, over) {
-      const l = over ?? ledger;
-      if (hashes.length === 0) return new Map();
-      const locs = await l.index.locate(hashes);
-      // A row whose bundle object is gone must not be claimed: check each DISTINCT bundle once (not each hash).
-      const distinct = [...new Set(locs.map((x) => x.bundleKey))];
-      const gone = new Set<string>();
-      if (env.UPLOADS && distinct.length > 0) {
-        let next = 0;
-        const lane = async (): Promise<void> => {
-          while (next < distinct.length) {
-            const key = distinct[next++]!;
-            if (!(await env.UPLOADS!.head(key))) gone.add(key);
-          }
-        };
-        await Promise.all(Array.from({ length: Math.min(HEAD_CONCURRENCY, distinct.length) }, lane));
-        if (gone.size > 0) await l.index.dropBundles([...gone]).catch(() => undefined);
-      }
-      return new Map(locs.filter((x) => !gone.has(x.bundleKey)).map((x) => [x.hash, x.sourceRefs] as const));
-    },
+    // One indexed query, no object probe: the sweep is the only deleter and it deletes only bundles no index row names.
+    heldEntries: (pairs, over) => (over ?? ledger).index.holds(pairs),
 
     async putBundle(bundle: Bundle) {
       await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
@@ -100,6 +81,7 @@ export function r2KnowledgeSync(
       await bucket().put(partKey(actor, syncId, part), bytes, { customMetadata: { at: String(now()) } });
     },
 
+    // The parts come back as the separate buffers they were staged in: the codec inflates them as one stream (never joined).
     async stagedParts(actor, syncId, parts, maxBytes) {
       const b = bucket();
       const out: Uint8Array[] = [];
@@ -139,6 +121,7 @@ export function r2KnowledgeSync(
 
     async clearRoot(rootId) {
       await ledger.leaves.clear(rootId);
+      await ledger.buckets.clear(rootId);
       await ledger.roots.clear(rootId);
       if (env.UPLOADS) await env.UPLOADS.delete(legacyStateKey(rootId));
     },

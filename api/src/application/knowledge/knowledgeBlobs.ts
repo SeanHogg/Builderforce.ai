@@ -32,7 +32,7 @@ import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
-import { readBundled } from './knowledgeBundles';
+import { buildBundle, mergeBodies, readBundled } from './knowledgeBundles';
 import type { KnowledgeLedgerPort } from './knowledgeLedger';
 
 const SOURCE = 'application/knowledge/knowledgeBlobs.ts';
@@ -143,7 +143,10 @@ export async function listRootSources(
   const legacy = bucket ? await listSources(bucket, knowledgeBlobKeys(tenantId, projectId).sources(rootId)) : [];
   if (!ledger) return legacy;
   const byId = new Map(legacy.map((s) => [sourceId(s.path, s.hash), s] as const));
-  for (const r of await ledger.sources.list(rootId)) byId.set(r.sourceId, { path: r.path, hash: r.hash });
+  for (const r of await ledger.sources.list(rootId)) {
+    // A removal marker (hash '') hides the legacy object of that source: the legacy object is advisory from then on.
+    if (r.hash === '') byId.delete(r.sourceId); else byId.set(r.sourceId, { path: r.path, hash: r.hash });
+  }
   return [...byId.values()];
 }
 
@@ -161,7 +164,8 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
   const putSource = async (rootId: string, path: string, hash: string, idHash = hash): Promise<void> => {
     const id = sourceId(path, idHash);
     if (ledger) {
-      if (hash) await ledger.sources.upsert(rootId, [{ sourceId: id, path, hash }]); else await ledger.sources.remove(rootId, [id]);
+      // A removal is a marker row, so a legacy object that could not be deleted below is harmless (the sweep retries it).
+      if (hash) await ledger.sources.upsert(rootId, [{ sourceId: id, path, hash }]); else await ledger.sources.mark(rootId, [id]);
       await bucket().delete(keys.source(rootId, id)).catch(() => undefined);
       return;
     }
@@ -174,10 +178,10 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
   };
 
   /** Bodies for `hashes`: through the bundle index first (ranged reads), the legacy per-hash object for the rest. */
-  const bodiesOf = async (b: R2Bucket, hashes: readonly string[]): Promise<Map<string, Extracted[]>> => {
+  const bodiesOf = async (b: R2Bucket, hashes: readonly string[], over: KnowledgeLedgerPort | undefined = ledger): Promise<Map<string, Extracted[]>> => {
     const found = new Map<string, Extracted[]>();
-    if (ledger && hashes.length > 0) {
-      for (const [h, body] of await readBundled(b, await ledger.index.locate(hashes))) found.set(h, body);
+    if (over && hashes.length > 0) {
+      for (const [h, body] of await readBundled(b, await over.index.locate(hashes))) found.set(h, body);
     }
     const rest = hashes.filter((h) => !found.has(h)).slice(0, MAX_BLOB_FETCHES_PER_BUILD);
     const fetched = await mapBounded(rest, FETCH_CONCURRENCY, (h) => readJson<Extracted[]>(b, keys.extracted(h)));
@@ -196,8 +200,24 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
       return bodiesOf(env.UPLOADS, hashes);
     },
 
+    /**
+     * The legacy per-hash upload. With a ledger it MERGES by `sourceRef` with the stored body (the same `mergeBodies` as a
+     * pack) under the project's sync lock, and stores the result as a one-body bundle + index row, so a pack's
+     * read-merge-write sees the change (its basis key moves) and neither evicts the other's entries. Without a ledger
+     * (a store with no database) it replaces the per-hash object, as before.
+     */
     async put(hash, extracted) {
-      await writeJson(bucket(), keys.extracted(hash), extracted);
+      if (ledger) {
+        await ledger.exclusive(async (locked) => {
+          const prior = (await locked.index.locate([hash]))[0]?.bundleKey ?? null;
+          const current = (await bodiesOf(bucket(), [hash], locked)).get(hash);
+          const bundle = buildBundle(tenantId, [{ hash, entries: mergeBodies(current, extracted) }]);
+          await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
+          if (await locked.index.upsert(bundle.locs, new Map([[hash, prior]])) === 0) throw new Error(`extracted index for ${hash} changed under the sync lock`);
+        });
+      } else {
+        await writeJson(bucket(), keys.extracted(hash), extracted);
+      }
       // A root-level output has no `markStale` of its own: register it now.
       if (!hash.startsWith('~')) return;
       for (const e of extracted) {

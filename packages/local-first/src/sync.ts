@@ -9,8 +9,11 @@ import {
 } from './records.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
-import { isJournalEventId, SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import { SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
+import { blockedEventIds, currentDependencyId, liveDependencyIndex } from './dependencyGraph.js';
+import { rebaseImportsOntoMapping } from './journalRules.js';
+import { isPermanentRefusal } from './permanentRefusals.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -153,34 +156,24 @@ async function mergePulled(
 }
 
 /**
- * Put `dependsOn` on the wire: every entry becomes a store-minted event id. A
- * caller key (`project:<id>:v1`) is resolved against ALL pending events — so a
- * forward reference written in the same transaction, or a dependency queued in
- * another destination's partition, still orders the push (the server answers
- * `dependency_pending` until it lands). A key with no pending event was already
- * acknowledged, so nothing is left to wait for and it is dropped. The journal
- * itself is not rewritten.
+ * Put `dependsOn` on the wire as event ids, resolved NOW. A dependency is a logical write's
+ * idempotency key (or, in an older stored event, a wire id); it names whichever LIVE pending event
+ * currently carries that key, in ANY destination's partition, so a replaced write (a bound row's
+ * import dropped and re-queued under a new id) is followed, not stranded. Nothing pending under it
+ * means it was acknowledged: the dependency is dropped. Dead-lettered events are not live, and a
+ * dependent of one is filtered out before this by `blockedEventIds`. The journal is not rewritten.
  */
 export function wireDependencies(events: readonly JournalEvent[], allPending: readonly JournalEvent[]): JournalEvent[] {
-  const byKey = new Map<string, string>();
-  for (const event of allPending) {
-    if (event.idempotencyKey !== undefined) byKey.set(event.idempotencyKey, event.eventId);
-  }
+  const index = liveDependencyIndex(allPending);
   return events.map((event) => {
     const dependsOn: string[] = [];
-    for (const id of event.dependsOn) {
-      const wire = isJournalEventId(id) ? id : byKey.get(id);
+    for (const dependency of event.dependsOn) {
+      const wire = currentDependencyId(dependency, index);
       if (wire !== undefined && wire !== event.eventId && !dependsOn.includes(wire)) dependsOn.push(wire);
     }
     return { ...event, dependsOn };
   });
 }
-
-/**
- * A refusal that is the server's fault, not the event's: retrying later can succeed, so the
- * event is held (sent last, never dead-lettered) instead of given up on.
- */
-const RETRYABLE_REJECTION = /_(write|insert)_failed$/;
 
 /**
  * Pick the next batch. `held` are events the server last answered `dependency_pending` or
@@ -222,28 +215,6 @@ function batchEvents(
     bytes += size;
   }
   return { batch: selected, bytes };
-}
-
-/**
- * Give up on `event` and on every pending event that (transitively) depends on it: the server
- * will never hold the parent, so a dependent would be answered `dependency_pending` forever.
- * `selectPending` is in sequence order, so one pass reaches the whole chain.
- */
-async function deadLetterWithDependents(
-  tx: LocalFirstTransaction,
-  destination: EntityDestination,
-  event: JournalEvent,
-  reason: string,
-  at: string,
-): Promise<void> {
-  await tx.deadLetter(event.eventId, reason, at);
-  const dead = new Set([event.eventId, ...(event.idempotencyKey !== undefined ? [event.idempotencyKey] : [])]);
-  for (const next of await selectPending(tx, undefined, destination)) {
-    if (!next.dependsOn.some((id) => dead.has(id))) continue;
-    await tx.deadLetter(next.eventId, 'dependency_dead_lettered', at);
-    dead.add(next.eventId);
-    if (next.idempotencyKey !== undefined) dead.add(next.idempotencyKey);
-  }
 }
 
 export function createSyncCoordinator(options: SyncCoordinatorOptions) {
@@ -301,7 +272,11 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       const every: JournalEvent[] = [];
       await tx.scanPending((event) => { every.push(event as JournalEvent); });
       every.sort((a, b) => a.localSequence - b.localSequence);
-      return wireDependencies(await selectPending(tx, undefined, destination), every);
+      // A dependent of a dead-lettered write is BLOCKED (not sent, not counted) until a new live
+      // event appears under that key; it needs no state change of its own to become sendable.
+      const blocked = blockedEventIds(every);
+      const sendable = (await selectPending(tx, undefined, destination)).filter((event) => !blocked.has(event.eventId));
+      return wireDependencies(sendable, every);
     });
     // G10: an unbound event parked in the bound partition (a record
     // rebound without its events, or a destination smuggled onto an
@@ -353,16 +328,20 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
             serverId: receipt.serverId,
             serverVersion: receipt.serverVersion,
           });
+          // The user kept editing while this was in flight: a NEWER pending import of the same row
+          // would collide with the mapping just written, so it becomes an update on that version.
+          if (event.operation === 'import' || event.operation === 'create') {
+            await rebaseImportsOntoMapping(tx, event.entityType, event.clientEntityId, event.localSequence, receipt.serverVersion);
+          }
         }
         if (receipt.status === 'accepted' || receipt.status === 'duplicate') acknowledged.push(event.eventId);
-        if (receipt.status === 'rejected' && !RETRYABLE_REJECTION.test(receipt.detail ?? '')) {
-          // A permanent refusal: dead-letter it so it is neither re-sent first forever nor counted
-          // as pending work. Its dependents go with it.
-          await deadLetterWithDependents(tx, destination, event, receipt.detail ?? 'rejected', now().toISOString());
-        }
-        const holds = receipt.status === 'dependency_pending'
-          || receipt.status === 'conflict'
-          || (receipt.status === 'rejected' && RETRYABLE_REJECTION.test(receipt.detail ?? ''));
+        const permanent = receipt.status === 'rejected' && isPermanentRefusal(receipt.detail);
+        // A refusal no resend can fix is dead-lettered (not re-sent, not counted). Dependents are
+        // NOT dead-lettered: they are blocked while no live event holds that key.
+        if (permanent) await tx.deadLetter(event.eventId, receipt.detail ?? 'rejected', now().toISOString());
+        // Anything else the server did not take (including an unknown refusal) is a HOLD.
+        const holds = receipt.status === 'dependency_pending' || receipt.status === 'conflict'
+          || (receipt.status === 'rejected' && !permanent);
         if (holds) held.add(event.eventId);
         else held.delete(event.eventId);
       }

@@ -41,10 +41,12 @@ function harness() {
 
 describe("localWorkRepository", () => {
   it("does not import bfApi, vscode, or fetch", () => {
-    const source = readFileSync(new URL("./localWorkRepository.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/from\s+["']\.\/bfApi["']/);
-    expect(source).not.toMatch(/from\s+["']vscode["']/);
-    expect(source).not.toMatch(/\bfetch\s*\(/);
+    for (const file of ["localWorkRepository", "localWorkShared", "localProjectRepository", "localTicketRepository", "localWorkOwnership"]) {
+      const source = readFileSync(new URL(`./${file}.ts`, import.meta.url), "utf8");
+      expect(source, file).not.toMatch(/from\s+["']\.\/bfApi["']/);
+      expect(source, file).not.toMatch(/from\s+["']vscode["']/);
+      expect(source, file).not.toMatch(/\bfetch\s*\(/);
+    }
   });
 
   it("creates a project and a ticket with no network call, and lists them back", async () => {
@@ -318,6 +320,31 @@ describe("localWorkRepository", () => {
       const [event] = await pendingFor(store, child.id);
       expect(event?.operation).toBe("create");
       expect(event?.dependsOn).toEqual([importKey("project", project.id), importKey("chat", CHAT)]);
+    });
+
+    it("re-imports (never updates) a row whose import was held back or dead-lettered", async () => {
+      const { store, repo, ticket } = await boundHarness();
+      await store.transact(async (tx) => {
+        const [held] = (await tx.pending()).filter((event) => event.clientEntityId === ticket.id);
+        await tx.deadLetter(held!.eventId, "refused", "2026-11-07T00:00:00.000Z");
+      });
+      await repo.updateTicket(ticket.id, { title: "After the refusal" });
+      const live = (await pendingFor(store, ticket.id)).filter((event) => !event.deadLetter);
+      expect(live).toHaveLength(1);
+      expect(live[0]).toMatchObject({ operation: "import" });
+      expect(live[0]?.payload).toMatchObject({ title: "After the refusal" });
+    });
+
+    it("does not wait on a project or chat the server has already imported", async () => {
+      const { store, repo, project, ticket } = await boundHarness();
+      await store.transact(async (tx) => {
+        await tx.acknowledge((await tx.pending()).map((event) => event.eventId));
+        await tx.putMapping({ destination: boundTo, entityType: "project", clientEntityId: project.id, serverId: "5", serverVersion: 2 });
+      });
+      const child = await repo.createTicket({ projectId: project.id, title: "After import" });
+      const [event] = await pendingFor(store, child.id);
+      expect(event?.dependsOn).toEqual([]);
+      expect(ticket.id).not.toBe(child.id);
     });
   });
 });

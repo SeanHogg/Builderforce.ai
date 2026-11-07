@@ -71,8 +71,8 @@ describe('bindWorkForSync', () => {
     const epic = byId.get(EPIC)!;
     const task = byId.get(TASK)!;
     expect(project.dependsOn).toEqual([]);
-    expect(epic.dependsOn).toEqual([chatImport.eventId, project.eventId]);
-    expect(task.dependsOn).toEqual([chatImport.eventId, project.eventId, epic.eventId]);
+    expect(epic.dependsOn).toEqual([chatImport.idempotencyKey, project.idempotencyKey]);
+    expect(task.dependsOn).toEqual([chatImport.idempotencyKey, project.idempotencyKey, epic.idempotencyKey]);
     // The import carries the ticket's current state, including what sync turns into the chat link.
     expect(epic.payload).toMatchObject({ taskType: 'epic', chatClientId });
     // Queue order is dependency order: project, then the parent, then its child.

@@ -230,7 +230,24 @@ export async function pendingKeyOf(
   id: string,
 ): Promise<string | undefined> {
   const own = await selectPending(tx, (event) => event.clientEntityId === id && event.entityType === entityType);
-  return own[own.length - 1]?.eventId;
+  const latest = own[own.length - 1];
+  return latest ? (latest.idempotencyKey ?? latest.eventId) : undefined;
+}
+
+/**
+ * The key a NEW record must wait on for the record it references: its newest pending event,
+ * and only while the server has not imported it. An imported record (or one that is not a
+ * local record at all) is nothing to wait for.
+ */
+export async function waitKeyOf(
+  tx: LocalFirstTransaction,
+  entityType: LocalRecord["entityType"],
+  id: string,
+): Promise<string | undefined> {
+  const record = await tx.get(entityType, id);
+  if (!record) return undefined;
+  if (isImported(await tx.mapping(entityType, id, record.destination))) return undefined;
+  return pendingKeyOf(tx, entityType, id);
 }
 
 // ── The commit + journal helper ──────────────────────────────────────────────
@@ -270,20 +287,19 @@ export async function commitRecord<T>(
   if (!bind && next.destination.kind === "bound") {
     const mapping = await tx.mapping(next.entityType, next.id, next.destination);
     if (isImported(mapping)) {
-      // Imported: update against the version the server holds, superseding an older pending one.
+      // Imported: update against the version the server holds, superseding an older
+      // pending write (the chat journal's rule). Superseding drops the prior pending event,
+      // so there is nothing left for the update to wait on.
       await journalWrite(tx, next, operation, { key: eventId(type, next.id, next.version) });
       return next;
     }
-    const pending = await selectPending(tx, (event) => event.clientEntityId === next.id && event.entityType === next.entityType);
-    if (pending.some((event) => event.operation === "import")) {
-      // Bound by the sync pass but not yet imported: the server has no version to apply an
-      // update against, so the pending import is REPLACED by one carrying this newest state
-      // (with the same chat / project / parent waits the bind gave it).
-      const chatClientId = type === "ticket" ? (payload as TicketValue).chatClientId : undefined;
-      const waitsOn = type === "ticket" ? ticketWaitsOn(payload as TicketValue) : [];
-      await queueImport(tx, next, chatClientId, waitsOn);
-      return next;
-    }
+    // NOT imported — still pending, held back, or dead-lettered: the server has no version
+    // to apply an update against, so the row is (re)IMPORTED with its newest state, with the
+    // same chat / project / parent waits the bind gave it. A delete sends nothing.
+    const chatClientId = type === "ticket" ? (payload as TicketValue).chatClientId : undefined;
+    const waitsOn = type === "ticket" ? ticketWaitsOn(payload as TicketValue) : [];
+    await queueImport(tx, next, chatClientId, waitsOn);
+    return next;
   }
   await tx.append({
     eventId: eventId(type, next.id, next.version),

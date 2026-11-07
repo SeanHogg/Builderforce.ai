@@ -30,6 +30,18 @@ describe('folder upload directory source', () => {
     ]);
   });
 
+  it('hashOf of the text read() returns equals the hash list() gave (CRLF, non-ASCII)', async () => {
+    const source = createUploadDirectorySource([
+      file('d/crlf.md', 'one\r\ntwo\r\n'),
+      file('d/uni.md', 'héllo — 日本語 😀'),
+    ], 'web');
+    for await (const entry of source.list()) {
+      const doc = await source.read(entry.path);
+      const text = (doc.content as { text: string }).text;
+      expect(source.hashOf!(text)).toBe(entry.hash);
+    }
+  });
+
   it('reads a file as a text document', async () => {
     const doc = await createUploadDirectorySource(files, 'web').read('policy/a.md');
     expect(doc.content).toMatchObject({ kind: 'text', text: 'policy' });

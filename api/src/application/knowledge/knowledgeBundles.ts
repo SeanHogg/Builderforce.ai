@@ -22,6 +22,16 @@ const PARALLEL_WINDOWS = 4;
 export const bundlePrefix = (tenantId: number): string => `knowledge/${tenantId}/extracted-bundles/`;
 export const bundleKey = (tenantId: number, digest: string): string => `${bundlePrefix(tenantId)}${digest}`;
 
+/**
+ * A hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (the arrival wins for the same
+ * ref), so two roots that share a content hash never evict each other's entries. The ONE merge: pack sync and the
+ * legacy per-hash upload both use it.
+ */
+export function mergeBodies(stored: readonly Extracted[] | undefined, arrival: readonly Extracted[]): Extracted[] {
+  const arrived = new Set(arrival.map((e) => e.sourceRef));
+  return [...(stored ?? []).filter((e) => !arrived.has(e.sourceRef)), ...arrival];
+}
+
 export interface Bundle {
   key: string;
   bytes: Uint8Array;

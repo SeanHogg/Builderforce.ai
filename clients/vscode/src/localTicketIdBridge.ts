@@ -21,7 +21,7 @@ export const SERVER_TICKET_ID_ARGS: Readonly<Record<string, readonly string[]>> 
   builtin_tasks_delete: ["id"],
   builtin_tasks_move: ["id"],
   builtin_tasks_add_dependency: ["taskId", "predecessorTaskId"],
-  builtin_tasks_remove_dependency: ["taskId", "predecessorTaskId"],
+  builtin_repos_pull_request_diff_summary: ["taskId"],
   builtin_tickets_from_delta: ["taskId"],
   builtin_tickets_lifecycle: ["taskId"],
   builtin_kanban_signoff: ["taskId"],
@@ -74,7 +74,11 @@ function widened(parameters: Record<string, unknown>, argNames: readonly string[
   const next: Record<string, Record<string, unknown>> = { ...properties };
   for (const name of argNames) {
     const prop = next[name];
-    if (prop && (prop.type === "number" || prop.type === "integer")) next[name] = { ...prop, type: ["number", "string"] };
+    if (!prop) continue;
+    const type = prop.type;
+    // `number` or `integer`, or a nullable union such as ["number","null"] (tasks_update parentTaskId).
+    if (type === "number" || type === "integer") next[name] = { ...prop, type: ["number", "string"] };
+    else if (Array.isArray(type) && (type.includes("number") || type.includes("integer"))) next[name] = { ...prop, type: [...type.filter((t) => t !== "number" && t !== "integer"), "number", "string"] };
   }
   return { ...parameters, properties: next };
 }

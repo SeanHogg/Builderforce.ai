@@ -20,6 +20,7 @@ export function storeMock(over: Partial<KnowledgeStorePort> = {}): KnowledgeStor
     deleteRelationsOf: vi.fn(async () => 0),
     deleteRelationRows: vi.fn(async () => 0),
     deleteFactsByKeys: vi.fn(async () => []),
+    relationsTouching: vi.fn(async () => []),
     deleteScope: vi.fn(async () => false),
     factSources: vi.fn(async () => new Map<string, string>()),
     deleteFactsBySource: vi.fn(async () => ({ keys: [], relations: 0 })),

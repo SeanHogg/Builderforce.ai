@@ -98,6 +98,9 @@ async function staffRoleOnProject(
 ): Promise<{ ref: string; name: string; brief: string; roleKeys?: string[]; created?: boolean } | null> {
   const tool = platformTools.find((t) => t.name === STAFF_ROLE_TOOL);
   if (!tool) return null;
+  // A LOCAL ticket ref (a UUID from the editor's `ticket-create`) is not an account task id:
+  // it parses to NaN and is left out of `taskIds` (never sent as NaN) — the slice's ticket
+  // is assigned once it has synced.
   const taskId = ticket != null ? Number(String(ticket).replace(/^#/, "")) : NaN;
   try {
     const raw = await tool.execute({ role, projectId, ...(Number.isInteger(taskId) ? { taskIds: [taskId] } : {}) }, root);

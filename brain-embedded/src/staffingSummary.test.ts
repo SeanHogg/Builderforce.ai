@@ -16,6 +16,16 @@ function tool(label: string, result: unknown = { ok: true }, isError = false): B
 const MANAGER_403 = { ok: false, error: 'manager role required' };
 
 describe('staffingSummaryInTrace', () => {
+  it('tickets filed with the editor\'s local ticket-create are filed-locally, not unstaffed', () => {
+    const s = staffingSummaryInTrace([tool('ticket-create', { id: 'u1' }), tool('ticket-create', { id: 'u2' })]);
+    expect(s).toMatchObject({ ticketsCreated: 2, filedLocally: 2, verdict: 'filed-locally' });
+    const text = formatStaffingSummary(s).join('\n');
+    expect(text).toMatch(/staffing after it syncs/i);
+    expect(text).not.toMatch(/nobody is running it/i);
+    // A mix with an account ticket is still an unstaffed account ticket.
+    expect(staffingSummaryInTrace([tool('ticket-create', { id: 'u1' }), tool('builtin_tasks_create', { id: 3 })]).verdict).toBe('filed-not-staffed');
+  });
+
   it('a run that files work and asks nobody is filed-not-staffed', () => {
     const events = [
       tool('builtin_tasks_create', { ok: true, id: 1 }),

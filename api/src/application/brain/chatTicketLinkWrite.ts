@@ -43,6 +43,13 @@ export function bumpChatTicketLinkCaches(tenantId: number, chatId: number, env?:
   return Promise.all([bumpChatStructure(chatId, target), bumpExecutionState(target, tenantId)]);
 }
 
+/** Whether the (chat, kind, ref) link already exists: a pure read, so a replay can skip the write. */
+export async function chatTicketLinkExists(db: Db | Tx, tenantId: number, chatId: number, kind: string, ref: string): Promise<boolean> {
+  const rows = await db.select({ id: chatTicketLinks.id }).from(chatTicketLinks)
+    .where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref))).limit(1);
+  return rows.length > 0;
+}
+
 /** Insert the link, or update an existing one keeping a 'created' lineage. */
 export async function upsertChatTicketLink(db: Db | Tx, input: ChatTicketLinkWrite): Promise<ChatTicketLinkRow> {
   const { tenantId, chatId, kind, ref, linkType } = input;

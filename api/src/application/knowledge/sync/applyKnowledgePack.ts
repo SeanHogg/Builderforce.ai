@@ -5,22 +5,28 @@
  * Refused before any row or object is written: a body over 8 MB; more than 8 parts, or parts adding up past 64 MB
  * (summed as they load); a wrong generation (read from the FRAME, before any inflation); a frame that is
  * malformed, fails its CRC (header and body) or inflates past the codec's caps (413 / 422); rows the writer cannot
- * take (ids, lengths, duplicates, non-model rows: `packValidation`); an unauthorised pack root; an oversized
- * analysis; a skipped body the project does not really hold (409 `extracted_missing`).
+ * take (ids, byte lengths, control characters, duplicates, contradictions, non-model rows: `packValidation`); an
+ * unauthorised pack root; an oversized analysis; a skipped body the project does not really hold for this root's file
+ * (409 `extracted_missing`).
  *
  * Storage is bounded per pack, not per file: the bodies are ONE content-addressed bundle object (merged with what is
  * stored, by `sourceRef`); then ONE Postgres transaction holds the bundle index, source rows, relation stale marks,
- * facts (the shared multi-row writer), relations, tombstones, the root's LEAVES and its generation.
+ * facts (the shared multi-row writer), relations, tombstones, the root's LEAVES, its bucket digests and its generation.
  *
- * The root's manifest is its leaves (`knowledge_sync_leaves`), never the shared fact and relation tables. Inside the
- * transaction the digest of those leaves is checked against the pack's `targetDigest` (409 `digest_mismatch`), and
- * the generation is advanced with a conditional UPDATE (409 `generation_mismatch` for the loser of a race); either
- * throws and everything rolls back. A tombstone must name a leaf of THIS root (422 `not_owned`); it always removes the
- * leaf, and deletes the fact or relation row only when no other root's leaves name it and the author rule allows —
- * what is kept is reported in `skipped`, never silently. Objects that must not live inside the transaction (the
- * review snapshot, legacy source deletes, the analysis) are written after it commits.
+ * Packs of one project are SERIALISED: the transaction's first statement takes the project's sync advisory lock. Under
+ * it, "no other root names this key" (tombstones) is true when acted on, and the body merge — built from the bodies read
+ * BEFORE the transaction — is checked against the index: a hash whose bundle moved since is `409 body_conflict` (the
+ * client rebuilds and resends), and the index write is conditional on the same key as a second safeguard.
+ *
+ * The root's manifest is its leaves (`knowledge_sync_leaves`) and the stored bucket digests built from them, never the
+ * shared fact and relation tables. A pack recomputes only the buckets it touched. Inside the transaction the root digest is
+ * checked against the pack's `targetDigest` (409 `digest_mismatch`), and the generation is advanced with a conditional
+ * UPDATE (409 `generation_mismatch`); either throws and everything rolls back. A tombstone must name a leaf of THIS root
+ * (422 `not_owned`); what is kept is reported in `skipped`, never silently (`packRows.ts`). A removed source is a MARKER
+ * row in the same transaction, so a legacy object that cannot be deleted afterwards is harmless. Objects that must not
+ * live inside the transaction (the review snapshot, legacy source deletes, the analysis) are written after it commits.
  */
-import { fileLeafKey, factDigest, factLeafKey, manifestTree, relationDigest, relationLeafKey, ZERO_DIGEST, joinParts, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { ZERO_DIGEST, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { srcRef } from '@seanhogg/builderforce-memory/knowledge';
 import { isPackRootId } from '@builderforce/agent-tools';
 import { inTransaction, type Db } from '../../../infrastructure/database/connection';
@@ -32,13 +38,14 @@ import { factViewer } from '../deleteKnowledgeFact';
 import { authorizePackUpload } from '../packAccess';
 import { sourceId } from '../knowledgeBlobs';
 import { buildBundle } from '../knowledgeBundles';
-import { drizzleLedger, type KnowledgeLedgerPort, type LeafRow, type SourceRow } from '../knowledgeLedger';
+import { ensureBuckets, recomputeBuckets } from '../knowledgeBuckets';
+import { drizzleLedger, type KnowledgeLedgerPort, type SourceRow } from '../knowledgeLedger';
 import { drizzleKnowledgeStore } from '../knowledgeStore';
-import { MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge, type KnowledgeFactInput } from '../writeKnowledge';
 import { decodeGuarded, peekGuarded } from './decodeGuarded';
 import { KnowledgeSyncError, MAX_PACK_BYTES, MAX_SYNC_BODY_BYTES, MAX_SYNC_PARTS, SYNC_ID_PATTERN, type KnowledgeSyncPort } from './knowledgeSyncPorts';
 import { buildBodies } from './packBodies';
-import { MAX_ROOT_ID, tombstoneKeys, validatePack } from './packValidation';
+import { applyTombstones, leavesOf, reconcileLegacyRows, writeRows } from './packRows';
+import { checkRootId, validatePack } from './packValidation';
 
 /** What one transaction writes through: the store and the ledger bound to the SAME handle. */
 export interface PackUnit {
@@ -55,8 +62,12 @@ export interface ApplyDeps {
   store: KnowledgeStorePort;
   extracted: ExtractedCachePort;
   sync: KnowledgeSyncPort;
+  /** The ledger over `db` (reads outside the transaction). */
+  ledger: KnowledgeLedgerPort;
   userId: string | null;
   actorRole: string | null;
+  /** Who staged parts are keyed by when `userId` is null: the machine key's id (never a literal shared by every key). */
+  stageActor?: string;
   /** Runs `work` as ONE transaction (default: a Postgres transaction over `db`). A test seam. */
   atomically?: <T>(work: (unit: PackUnit) => Promise<T>) => Promise<T>;
 }
@@ -82,15 +93,19 @@ const defaultAtomically = (deps: ApplyDeps): NonNullable<ApplyDeps['atomically']
     return work({ db, store: drizzleKnowledgeStore(db, deps.tenantId, deps.projectId), ledger: drizzleLedger(db, deps.tenantId, deps.projectId) });
   });
 
-const actorOf = (deps: ApplyDeps): string => deps.userId ?? 'machine';
+const actorOf = (deps: ApplyDeps): string => deps.userId ?? deps.stageActor ?? 'machine';
+
+const bodyConflict = (hashes: readonly string[]): KnowledgeSyncError =>
+  new KnowledgeSyncError(409, 'body_conflict', 'another pack changed these extracted bodies while this one was applied; rebuild and resend', { hashes: hashes.slice(0, 50) });
 
 /**
- * Parks an earlier part; returns the whole pack's bytes once the last part arrived. The LAST part is never staged:
- * it rides this request, so a pack of N parts costs N-1 staging writes. The parts' sizes are summed as they load.
+ * Parks an earlier part; returns the whole pack as its ordered parts once the last part arrived. The LAST part is never
+ * staged: it rides this request, so a pack of N parts costs N-1 staging writes. The parts' sizes are summed as they
+ * load, and they are NOT joined: the codec inflates them as one stream.
  */
-async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array | { staged: ApplyResult }> {
+async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array[] | { staged: ApplyResult }> {
   const { syncId, part, parts } = input;
-  if (!parts || parts <= 1) return input.body;
+  if (!parts || parts <= 1) return [input.body];
   if (!syncId || !SYNC_ID_PATTERN.test(syncId) || part === undefined || !Number.isInteger(part) || !Number.isInteger(parts)
     || part < 0 || part >= parts || parts > MAX_SYNC_PARTS) {
     throw new KnowledgeSyncError(400, 'bad_parts', `a multi-part pack names a syncId, a part within 0..parts-1 and at most ${MAX_SYNC_PARTS} parts`);
@@ -102,38 +117,44 @@ async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array 
   }
   const earlier = await deps.sync.stagedParts(actorOf(deps), syncId, parts - 1, MAX_PACK_BYTES - input.body.length);
   if (!earlier) throw new KnowledgeSyncError(409, 'parts_missing', 'a part of this pack is missing or expired; send the pack again', { syncId });
-  return joinParts([...earlier, input.body]);
+  return [...earlier, input.body];
 }
 
 /**
  * A file whose body the client skipped (the project already held that hash) must still be named by the stored body:
- * the body is per hash, its entries per source. ONE index query answers it for every such file; any that fails is a
- * 409 `extracted_missing` naming the hashes, and the client sends those bodies. Checked BEFORE anything is written.
+ * the body is per hash, its entries per source. ONE indexed query answers it for every such `(hash, sourceRef)`; any that
+ * fails is a 409 `extracted_missing` naming the hashes, and the client sends those bodies. Checked BEFORE anything is written.
  */
 async function verifyBodies(deps: ApplyDeps, pack: Pack): Promise<void> {
   const shipped = new Set((pack.extracted ?? []).map((x) => x.hash));
   const owed = (pack.files ?? []).filter((f) => !shipped.has(f.hash));
   if (owed.length === 0) return;
-  const held = await deps.sync.heldBodies([...new Set(owed.map((f) => f.hash))]);
+  const pairs = owed.map((f) => ({ hash: f.hash, sourceRef: srcRef(pack.rootId, f.path) }));
+  const held = await deps.sync.heldEntries(pairs);
   const missing = new Set<string>();
-  for (const f of owed) if (!held.get(f.hash)?.includes(srcRef(pack.rootId, f.path))) missing.add(f.hash);
+  pairs.forEach((p, i) => { if (!held.has(i)) missing.add(p.hash); });
   if (missing.size > 0) throw new KnowledgeSyncError(409, 'extracted_missing', 'the server lacks the extracted output of some files; send those bodies', { hashes: [...missing] });
 }
 
 interface SourcePlan {
   upsert: SourceRow[];
+  /** Source ids to mark removed (the pack's own tombstones, plus, on a migrated root, the legacy sources it does not name). */
   remove: string[];
   stale: Array<{ sourceRef: `src:${string}`; currentHash: string }>;
   /** The root's sources after the pack. */
   after: Array<{ path: string; hash: string }>;
+  /** Paths of legacy sources a migrated root's first pack drops: their model rows go too. */
+  legacyPaths: string[];
 }
 
-function planSources(pack: Pack, heldNow: ReadonlyArray<{ path: string; hash: string }>): SourcePlan {
+function planSources(pack: Pack, heldNow: ReadonlyArray<{ path: string; hash: string }>, migrated: boolean): SourcePlan {
   const held = new Map(heldNow.map((s) => [sourceId(s.path, s.hash), s] as const));
   const after = new Map(held);
-  const plan: SourcePlan = { upsert: [], remove: [], stale: [], after: [] };
+  const plan: SourcePlan = { upsert: [], remove: [], stale: [], after: [], legacyPaths: [] };
+  const named = new Set<string>();
   for (const f of pack.files ?? []) {
     const id = sourceId(f.path, f.hash);
+    named.add(id);
     const before = held.get(id);
     if (before?.hash === f.hash) continue;
     plan.upsert.push({ sourceId: id, path: f.path, hash: f.hash });
@@ -141,77 +162,24 @@ function planSources(pack: Pack, heldNow: ReadonlyArray<{ path: string; hash: st
     // A source that changed from a known hash makes its model relations stale; one new to the root has none to mark.
     if (before && !f.hash.startsWith('~')) plan.stale.push({ sourceRef: srcRef(pack.rootId, f.path) as `src:${string}`, currentHash: f.hash });
   }
-  for (const id of new Set(pack.deletes?.files ?? [])) {
+  const removed = new Set(pack.deletes?.files ?? []);
+  for (const id of removed) {
     const before = held.get(id);
     plan.remove.push(id);
     after.delete(id);
     if (before && !id.startsWith('~')) plan.stale.push({ sourceRef: srcRef(pack.rootId, id) as `src:${string}`, currentHash: '' });
   }
+  if (migrated) {
+    // The root has no leaves: the server is reconciling its own legacy state, so what the pack does not name is gone.
+    for (const [id, s] of held) {
+      if (named.has(id) || removed.has(id)) continue;
+      plan.remove.push(id);
+      plan.legacyPaths.push(s.path);
+      after.delete(id);
+    }
+  }
   plan.after = [...after.values()];
   return plan;
-}
-
-/** The leaves a pack sets: the digests of its own rows, by the codec's functions, so they are the client's digests. */
-function leavesOf(pack: Pack): LeafRow[] {
-  return [
-    ...(pack.files ?? []).map((f) => ({ key: fileLeafKey(f.path, f.hash), digest: f.hash })),
-    ...(pack.facts ?? []).map((f) => ({ key: factLeafKey(f.key), digest: factDigest(f) })),
-    ...(pack.relations ?? []).map((r) => ({ key: relationLeafKey(r), digest: relationDigest(r) })),
-  ];
-}
-
-/** Facts, relations and the scope, through the single writer, on the transaction's handle. */
-async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack): Promise<{ facts: number; relations: number }> {
-  const root = pack.rootId;
-  // The pack already wrote the sources and the review snapshot; the writer only writes rows here.
-  const blobs: ExtractedCachePort = { ...deps.extracted, setSource: async () => undefined, snapshotReview: async () => undefined };
-  const write = (rows: Parameters<typeof writeKnowledge>[1]) => writeKnowledge(
-    {
-      env: deps.env, db: unit.db, tenantId: deps.tenantId, projectId: deps.projectId, store: unit.store, blobs, userId: deps.userId, actorRole: deps.actorRole,
-      embedFacts: false, skipVersionBump: true, packAuthorized: true,
-    },
-    { root, ...rows },
-  );
-  const facts = (pack.facts ?? []) as KnowledgeFactInput[];
-  const relations = pack.relations ?? [];
-  const written = { facts: 0, relations: 0 };
-  // Facts first, then relations: a relation to a fact never lands before the fact.
-  for (let i = 0; i < facts.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.facts += (await write({ facts: facts.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).factsWritten;
-  for (let i = 0; i < relations.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.relations += (await write({ relations: relations.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).relationsWritten;
-  if (pack.scope) await write({ scope: pack.scope });
-  return written;
-}
-
-/**
- * Tombstones, limited to this root: each must already be a leaf of the root (else 422 `not_owned`, nothing written);
- * each removes its leaf; its fact or relation row is deleted only when no OTHER root's leaves name the key and the
- * author rule allows (SQL, in batches). Whatever is kept is returned, not hidden.
- */
-async function applyTombstones(deps: ApplyDeps, unit: PackUnit, pack: Pack, admin: boolean): Promise<{ deleted: number; skipped: SkippedTombstone[] }> {
-  const keys = tombstoneKeys(pack);
-  if (keys.all.length === 0) return { deleted: 0, skipped: [] };
-  const root = pack.rootId;
-  const owned = await unit.ledger.leaves.existing(root, keys.all);
-  const stray = keys.all.filter((k) => !owned.has(k));
-  if (stray.length > 0) throw new KnowledgeSyncError(422, 'not_owned', 'a tombstone names a key this root never synced', { keys: stray.slice(0, 50) });
-
-  const shared = await unit.ledger.leaves.namedByOthers(root, [...keys.facts, ...keys.relations]);
-  const skipped: SkippedTombstone[] = [...shared].map((key) => ({ key, reason: 'other_root' as const }));
-  let deleted = 0;
-
-  const factKeys = keys.facts.filter((k) => !shared.has(k)).map((k) => k.slice(2));
-  if (factKeys.length > 0) {
-    const gone = new Set(await unit.store.deleteFactsByKeys(factKeys, { userId: deps.userId, admin }));
-    deleted += gone.size;
-    for (const k of factKeys) if (!gone.has(k)) skipped.push({ key: `a:${k}`, reason: 'not_permitted' });
-  }
-  const relKeys = keys.relations.filter((k) => !shared.has(k));
-  if (relKeys.length > 0) {
-    const rows = relKeys.map((k) => { const [from = '', to = '', kind = ''] = k.slice(2).split('\u0000'); return { from, to, kind }; });
-    deleted += await unit.store.deleteRelationRows(rows, { origin: 'model' });
-  }
-  await unit.ledger.leaves.remove(root, keys.all);
-  return { deleted: deleted + keys.files.length, skipped };
 }
 
 function checkAnalysis(pack: Pack): { sha: string; snapshot: unknown } | undefined {
@@ -224,11 +192,11 @@ function checkAnalysis(pack: Pack): { sha: string; snapshot: unknown } | undefin
 export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Promise<ApplyResult> {
   if (input.body.length > MAX_SYNC_BODY_BYTES) throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
   const assembled = await assemble(deps, input);
-  if (!(assembled instanceof Uint8Array)) return assembled.staged;
+  if (!Array.isArray(assembled)) return assembled.staged;
   try {
     // The generation is read from the frame: a stale pack is refused before a byte of it is inflated.
     const head = peekGuarded(assembled);
-    if (!head.rootId || head.rootId.length > MAX_ROOT_ID) throw new KnowledgeSyncError(422, 'bad_pack', `the root id is 1..${MAX_ROOT_ID} characters`);
+    checkRootId(head.rootId);
     const root = head.rootId;
     const state = await deps.sync.state(root);
     // A full pack (generation 0) is accepted only while the root has no row; any other must be at the current generation.
@@ -243,42 +211,55 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
     }
     const analysis = checkAnalysis(pack);
     await verifyBodies(deps, pack);
+    // A root an older version synced (a generation from `sync.json`, no leaves) is reconciled by its first pack.
+    const migrated = state.generation > 0 && !(await deps.ledger.leaves.any(root));
     // Whoever may delete any fact is decided once, outside the transaction (it can call out).
-    const admin = (pack.deletes?.facts.length ?? 0) > 0 ? (await factViewer(deps.env, { userId: deps.userId, role: deps.actorRole })).canAdmin : false;
+    const admin = (pack.deletes?.facts.length ?? 0) > 0 || migrated ? (await factViewer(deps.env, { userId: deps.userId, role: deps.actorRole })).canAdmin : false;
 
     // Objects and lookups that must not sit inside the transaction: the bodies as one bundle, the held sources.
-    const bodies = await buildBodies(deps.extracted, pack.extracted ?? []);
+    const { bodies, basis } = await buildBodies(deps.extracted, deps.ledger, pack.extracted ?? []);
     const bundle = bodies.length > 0 ? buildBundle(deps.tenantId, bodies) : undefined;
-    const plan = planSources(pack, await deps.sync.sources(root));
+    const plan = planSources(pack, await deps.sync.sources(root), migrated);
     if (bundle) await deps.sync.putBundle(bundle);
 
     const atomically = deps.atomically ?? defaultAtomically(deps);
     const done = await atomically(async (unit) => {
+      // FIRST statement: serialise packs of this project. Everything below that reads "who else names this" or merges a body is then true.
+      await unit.ledger.lock();
+      await ensureBuckets(unit.ledger, root);
+      if (bundle) {
+        const now = new Map((await unit.ledger.index.locate(bundle.locs.map((l) => l.hash))).map((l) => [l.hash, l.bundleKey] as const));
+        const moved = bundle.locs.filter((l) => (now.get(l.hash) ?? null) !== (basis.get(l.hash) ?? null)).map((l) => l.hash);
+        if (moved.length > 0) throw bodyConflict(moved);
+        if (await unit.ledger.index.upsert(bundle.locs, basis) !== bundle.locs.length) throw bodyConflict(bundle.locs.map((l) => l.hash));
+      }
+      const legacy = await reconcileLegacyRows(deps, unit, pack, plan.legacyPaths, admin);
       const tomb = await applyTombstones(deps, unit, pack, admin);
-      if (bundle) await unit.ledger.index.upsert(bundle.locs);
       await unit.ledger.sources.upsert(root, plan.upsert);
-      await unit.ledger.sources.remove(root, plan.remove);
+      await unit.ledger.sources.mark(root, plan.remove);
       if (plan.stale.length > 0) await unit.store.markRelationsStaleMany(plan.stale);
       const written = await writeRows(deps, unit, pack);
-      await unit.ledger.leaves.upsert(root, leavesOf(pack));
-      // The digest of THIS ROOT'S leaves, checked inside the transaction: a mismatch throws and nothing above is kept.
-      const tree = manifestTree(await unit.ledger.leaves.all(root));
-      if (pack.targetDigest !== ZERO_DIGEST && tree.root !== pack.targetDigest) {
-        throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest: tree.root });
+      const leaves = leavesOf(pack);
+      await unit.ledger.leaves.upsert(root, leaves);
+      // The digest of THIS ROOT'S leaves, from the stored bucket digests with only the touched buckets recomputed.
+      const digest = await recomputeBuckets(unit.ledger, root, [...leaves.map((l) => l.key), ...tomb.keys]);
+      if (pack.targetDigest !== ZERO_DIGEST && digest !== pack.targetDigest) {
+        throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest });
       }
-      const generation = await unit.ledger.roots.advance(root, head.baseGeneration, tree.root);
+      const generation = await unit.ledger.roots.advance(root, head.baseGeneration, digest);
       if (generation === null) throw new KnowledgeSyncError(409, 'generation_mismatch', 'another pack reached this root first', { generation: state.generation });
-      return { written, tomb, generation, digest: tree.root };
+      return { written, tomb, legacy, generation, digest };
     });
 
-    // After the commit: objects and calls the transaction must not hold open.
+    // After the commit: objects and calls the transaction must not hold open. A legacy delete that fails here is harmless
+    // (the removal markers hide the object) and the sweep retries it.
     await deps.sync.deleteLegacySources(root, plan.remove).catch(() => undefined);
     if (pack.scope?.lastDigest) await deps.sync.snapshotReview(root, pack.scope.lastDigest, plan.after).catch(() => undefined);
     await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
     if (analysis) await putAnalysisSnapshot(deps, analysis.sha, root, analysis.snapshot);
     return {
       applied: true, generation: done.generation, digest: done.digest, files: plan.upsert.length + plan.remove.length, extracted: bodies.length,
-      facts: done.written.facts, relations: done.written.relations, deleted: done.tomb.deleted, skipped: done.tomb.skipped,
+      facts: done.written.facts, relations: done.written.relations, deleted: done.tomb.deleted + done.legacy.deleted, skipped: [...done.tomb.skipped, ...done.legacy.skipped],
     };
   } finally {
     if (input.syncId && (input.parts ?? 1) > 1) await deps.sync.dropStaged(actorOf(deps), input.syncId).catch(() => undefined);

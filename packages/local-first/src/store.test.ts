@@ -59,7 +59,7 @@ describe('append — the store mints the wire event id', () => {
     expect(next.eventId).not.toBe(first.eventId);
   });
 
-  it('rewrites a dependency on a pending key to that event id and keeps any other as written', async () => {
+  it('stores dependencies as written (keys resolve at send time, so a replaced event cannot strand them)', async () => {
     const store = createMemoryLocalFirstStore();
     const run = await store.transact((tx) => tx.append(event({ idempotencyKey: 'audit-run:create:r1', entityType: 'audit-run' })));
     const finding = await store.transact((tx) => tx.append(event({
@@ -67,6 +67,6 @@ describe('append — the store mints the wire event id', () => {
       entityType: 'audit-finding',
       dependsOn: ['audit-run:create:r1', 'execution:start:later', run.eventId],
     })));
-    expect(finding.dependsOn).toEqual([run.eventId, 'execution:start:later']);
+    expect(finding.dependsOn).toEqual(['audit-run:create:r1', 'execution:start:later', run.eventId]);
   });
 });

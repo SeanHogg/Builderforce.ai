@@ -363,7 +363,11 @@ describe('the entity catalog', () => {
     //    transaction; a hand edit would make the server's manifest lie about what the root holds.
     //  - `knowledge_sync_roots` is a root's generation counter, advanced by a conditional UPDATE so concurrent packs
     //    have one winner; a generic PATCH of `generation` would break that.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(54);
+    //
+    // Ceiling moved 54 → 55 (2026-11-07) with pack sync's incremental digests (1302, PRD 41 A11 rule 4b), adjudicated:
+    //  - `knowledge_sync_buckets` is the stored digest of each of a root's 4,096 manifest buckets, recomputed only for the
+    //    buckets a pack touched inside its transaction; a hand edit would make the root digest lie.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(55);
   });
 
   it('declares nothing that no migration creates', () => {

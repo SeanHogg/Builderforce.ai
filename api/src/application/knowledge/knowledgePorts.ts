@@ -62,8 +62,12 @@ export interface KnowledgeStorePort {
   /**
    * Deletes facts by key in bounded batches — their relations first — applying the author rule in SQL: an authorless
    * fact, the actor's own, or any fact for an admin. Returns the keys actually deleted (the rest are the caller's to report).
+   * With `keepRelations` the facts' relations are NOT removed: the caller removes the ones it may (a pack must not delete
+   * a human's or another root's relation because it dropped a fact).
    */
-  deleteFactsByKeys(keys: readonly string[], actor: { userId: string | null; admin: boolean }): Promise<string[]>;
+  deleteFactsByKeys(keys: readonly string[], actor: { userId: string | null; admin: boolean }, opts?: { keepRelations?: boolean }): Promise<string[]>;
+  /** Every relation with any of `refs` at either end, with its origin. Bounded batches. */
+  relationsTouching(refs: readonly string[]): Promise<Array<{ from: string; to: string; kind: string; origin: string }>>;
   /** Removes the root's `knowledge_scopes` row. True when a row existed. */
   deleteScope(rootId: string): Promise<boolean>;
   /** The stored `source` of each of `keys` that exists (a missing key is absent from the map). */

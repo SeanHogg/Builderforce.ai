@@ -22,6 +22,7 @@
  */
 
 import { isFailedToolResult, isTicketWriteTool, type BrainTraceEvent } from './brainTriage';
+import { isLocalTicketCreateLabel } from './ticketToolVocabulary';
 
 /**
  * Tool labels that put a HUMAN OR AGENT on work: the direct dispatch, the ticket
@@ -73,6 +74,8 @@ export interface StaffingSummary {
    * (An Epic is a `tasks.create` with `taskType: "epic"`, so it is counted here too.)
    */
   ticketsCreated: number;
+  /** Of those, the ones filed with the editor's device-local create: on this machine, not yet on the account's board. */
+  filedLocally: number;
   /** Calls that tried to put somebody on work — see {@link isDispatchTool}. */
   dispatchAttempts: number;
   /** Of those, the ones that actually did: no error, and any `autoRun.dispatched` true. */
@@ -86,9 +89,10 @@ export interface StaffingSummary {
    *  - `no-work-filed`     — nothing was filed and nothing was staffed; there is no gap.
    *  - `staffed`           — somebody (or some persona) is on the work.
    *  - `filed-not-staffed` — work exists, and nobody was even ASKED to run it.
+   *  - `filed-locally`     — every ticket was filed on this device; staffing happens after it syncs.
    *  - `staffing-refused`  — somebody was asked and the platform said no.
    */
-  verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'staffing-refused';
+  verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'filed-locally' | 'staffing-refused';
 }
 
 /** Read a tool result as an object, parsing the JSON string form the local executors return. */
@@ -150,6 +154,7 @@ function asAgentOf(args: unknown): string {
 /** Derive the staffing picture from a recorded trace. Pure — no clock, no I/O. */
 export function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSummary {
   let ticketsCreated = 0;
+  let filedLocally = 0;
   let dispatchAttempts = 0;
   let dispatched = 0;
   const dispatchRefusals: DispatchRefusal[] = [];
@@ -157,7 +162,10 @@ export function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSumma
 
   for (const ev of events) {
     if (ev.category !== 'tool') continue;
-    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) ticketsCreated += 1;
+    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) {
+      ticketsCreated += 1;
+      if (isLocalTicketCreateLabel(ev.label)) filedLocally += 1;
+    }
     if (isDispatchTool(ev.label)) {
       dispatchAttempts += 1;
       if (didDispatch(ev)) dispatched += 1;
@@ -189,11 +197,13 @@ export function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSumma
       ? 'staffed'
       : dispatchRefusals.length > 0
         ? 'staffing-refused'
-        : ticketsCreated > 0
+        : ticketsCreated > 0 && filedLocally === ticketsCreated
+          ? 'filed-locally'
+          : ticketsCreated > 0
           ? 'filed-not-staffed'
           : 'no-work-filed';
 
-  return { ticketsCreated, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
+  return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
 }
 
 /**
@@ -240,6 +250,8 @@ export function formatStaffingSummary(s: StaffingSummary, opts?: { sessionShippe
     ? ` — the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required`
     : s.verdict === 'filed-not-staffed'
       ? ' — the work was filed but nobody is running it'
+      : s.verdict === 'filed-locally'
+        ? ' — filed on this device, staffing after it syncs to the account'
       : s.verdict === 'staffing-refused'
         ? ' — every attempt to staff the work was refused, so nobody is running it'
         : '';

@@ -1,8 +1,11 @@
 /**
  * The explicit destination assignment for never-connected work (G10). Ownership is DATA on
  * the record: it is written when a record is created with a destination, or reassigned
- * here and only here. Nothing in the repository infers an account from whoever is signed
- * in, so a later sign-in cannot adopt unbound work, and a bound record is refused a
+ * here, or adopted by the SYNC pass. The policy, one rule for chats and work alike:
+ * SIGN-IN ALONE NEVER ADOPTS unbound work — nothing in the repository infers an account from
+ * whoever is signed in. ENABLING SYNC IS THE EXPLICIT CONSENT that adopts this device's
+ * unbound work into the account: the sync pass (`chatSyncHost.ts`, which runs only once the
+ * `synchronize` capability is granted) calls `bindWorkForSync`. A bound record is refused a
  * different account or tenant.
  *
  * The reassignment is journaled (version bump + update event) so the new destination rides

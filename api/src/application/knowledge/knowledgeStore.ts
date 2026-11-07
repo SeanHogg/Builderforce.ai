@@ -263,7 +263,19 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
       return removed;
     },
 
-    async deleteFactsByKeys(keys, actor) {
+    async relationsTouching(refs) {
+      const out: Array<{ from: string; to: string; kind: string; origin: string }> = [];
+      for (let i = 0; i < refs.length; i += IN_CHUNK) {
+        const chunk = refs.slice(i, i + IN_CHUNK);
+        const rows = await db.select({ from: projectFactRelations.fromRef, to: projectFactRelations.toRef, kind: projectFactRelations.kind, origin: projectFactRelations.origin })
+          .from(projectFactRelations)
+          .where(scoped(projectFactRelations, tenantId, or(inArray(projectFactRelations.fromRef, chunk), inArray(projectFactRelations.toRef, chunk))));
+        out.push(...rows);
+      }
+      return out;
+    },
+
+    async deleteFactsByKeys(keys, actor, opts) {
       const deleted: string[] = [];
       const distinct = [...new Set(keys.map((k) => k.trim().slice(0, 255)))];
       for (let i = 0; i < distinct.length; i += IN_CHUNK) {
@@ -278,7 +290,8 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
           .where(scoped(projectFacts, tenantId, inArray(projectFacts.key, batch), mayDelete));
         if (allowed.length === 0) continue;
         const allowedKeys = allowed.map((r) => r.key);
-        await store.deleteRelationsOf(allowedKeys.map((k) => factRef(k)));
+        // A pack passes `keepRelations`: it decides, per relation, which of them are its root's alone (see `removeRows`).
+        if (!opts?.keepRelations) await store.deleteRelationsOf(allowedKeys.map((k) => factRef(k)));
         const gone = await db.delete(projectFacts)
           .where(scoped(projectFacts, tenantId, inArray(projectFacts.key, allowedKeys), mayDelete))
           .returning({ key: projectFacts.key });

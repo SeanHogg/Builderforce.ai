@@ -61,7 +61,7 @@ describe('copy-on-write transactions', () => {
       await tx.append(event('other', { dependsOn: ['k', 'later'] })),
     ] as const);
     expect(dupe.eventId).toBe(first.eventId);
-    expect(dependent.dependsOn).toEqual([first.eventId, 'later']);
+    expect(dependent.dependsOn).toEqual(['k', 'later']);
     await store.transact((tx) => tx.acknowledge([first.eventId]));
     const next = await store.transact((tx) => tx.append(event('k')));
     expect(next.eventId).not.toBe(first.eventId);

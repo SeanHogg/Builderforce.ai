@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore, UNBOUND_DESTINATION } from "@builderforce/local-first";
 import { LOCAL_DOMAIN_TOOL_NAMES, LocalDomainToolError, classifyLocalDomainTool } from "./localDomainTools";
-import { LOCAL_DOMAIN_TOOL_SPECS } from "./localDomainToolRouting";
+import { LOCAL_DOMAIN_TOOL_SPECS, routeToLocalDomainTools } from "./localDomainToolRouting";
 import {
   HOST_DOMAIN_TOOL_LINE,
   installLocalDomainTools,
@@ -133,12 +133,15 @@ describe("the run host installs the local domain tools", () => {
     expect(source).toContain(HOST_DOMAIN_TOOL_LINE);
   });
 
-  it("routes domain tools through the adapter from the catalog seam, whatever the sync policy", () => {
-    const source = readFileSync(new URL(HOST_FILE, import.meta.url), "utf8");
-    // The tool list the run actually executes is wrapped, not merely built.
-    expect(source).toMatch(/routeDomainToolsLocal\(\s*ctx\s*,\s*local\.store\s*,\s*catalog\s*,/);
-    expect(source).toMatch(/function routeDomainToolsLocal/);
+  it("routes a catalog so ticket-create writes the device store, whatever the sync policy", async () => {
+    const store = createMemoryLocalFirstStore();
+    const installed = installLocalDomainTools({ id: `route-${Math.random()}` }, { localDeviceId: "device-1", localFirstStore: store });
+    const routed = routeToLocalDomainTools([], async (request) => installed.execute(request));
+    const project = JSON.parse(await routed.find((tool) => tool.name === "project-create")!.execute({ name: "P" }, "")) as { id: string };
+    await routed.find((tool) => tool.name === "ticket-create")!.execute({ projectId: project.id, title: "T" }, "");
+    expect(await store.read((tx) => tx.list("ticket"))).toHaveLength(1);
   });
+
 
   it("advertises only tool names the landed library actually implements", () => {
     const advertised = LOCAL_DOMAIN_TOOL_SPECS.map((spec) => spec.name as string);

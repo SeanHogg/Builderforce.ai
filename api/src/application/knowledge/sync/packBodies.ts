@@ -5,12 +5,16 @@
  *     server lacks, or a diff that does not fit it (positions out of order or range), is `409 prior_missing`, so the
  *     client falls back to sending the body whole;
  *   - an entry is sanitised and clamped exactly as `putExtracted` does (one line per label, no ref past the bound);
- *   - a hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (the arrival wins for the
- *     same ref), so two roots that share a content hash never evict each other's entries.
+ *   - a hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (`mergeBodies`).
+ *
+ * The merge is a read-modify-write, so it is only valid while nothing else changed those hashes: `basisOf` records the
+ * bundle each hash was read from, and the pack's transaction (under the project lock) refuses to commit if any moved.
  */
 import { applyEntryDiffs, type PackExtr } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import type { ExtractedCachePort } from '../knowledgePorts';
+import { mergeBodies } from '../knowledgeBundles';
+import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { clampExtracted, sanitizeExtracted } from '../knowledgePrivacy';
 import { KnowledgeSyncError } from './knowledgeSyncPorts';
 
@@ -29,15 +33,20 @@ function storable(hash: string, entries: readonly Extracted[]): Extracted[] {
   return clampExtracted(sanitizeExtracted(entries).entries);
 }
 
-/** Entries of `stored` whose source the arrival does not restate, then the arrival: the union by `sourceRef`. */
-export function mergeBodies(stored: readonly Extracted[] | undefined, arrival: readonly Extracted[]): Extracted[] {
-  const arrived = new Set(arrival.map((e) => e.sourceRef));
-  return [...(stored ?? []).filter((e) => !arrived.has(e.sourceRef)), ...arrival];
+export interface PackBodies {
+  bodies: Array<{ hash: string; entries: Extracted[] }>;
+  /** The bundle key each body's merge started from (null = the hash had no index row). Read BEFORE the bodies. */
+  basis: Map<string, string | null>;
 }
 
-export async function buildBodies(extracted: ExtractedCachePort, packExtr: readonly PackExtr[]): Promise<Array<{ hash: string; entries: Extracted[] }>> {
-  if (packExtr.length === 0) return [];
+export async function buildBodies(
+  extracted: ExtractedCachePort, ledger: Pick<KnowledgeLedgerPort, 'index'>, packExtr: readonly PackExtr[],
+): Promise<PackBodies> {
+  if (packExtr.length === 0) return { bodies: [], basis: new Map() };
   const wanted = [...new Set(packExtr.flatMap((x) => (x.kind === 'diff' ? [x.hash, x.prior] : [x.hash])))];
+  // The basis is read FIRST: if the index moves between this read and the bodies', the check at commit only ever errs towards a retry.
+  const located = new Map((await ledger.index.locate(wanted)).map((l) => [l.hash, l.bundleKey] as const));
+  const basis = new Map(packExtr.map((x) => [x.hash, located.get(x.hash) ?? null] as const));
   const stored = await storedBodies(extracted, wanted);
   const bodies = packExtr.map((x) => {
     let entries: Extracted[];
@@ -53,5 +62,5 @@ export async function buildBodies(extracted: ExtractedCachePort, packExtr: reado
     }
     return { hash: x.hash, entries: mergeBodies(stored.get(x.hash), storable(x.hash, entries)) };
   });
-  return bodies.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0));
+  return { bodies: bodies.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0)), basis };
 }

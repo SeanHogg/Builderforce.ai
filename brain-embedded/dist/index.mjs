@@ -1124,11 +1124,11 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
 ]);
 
-// ../packages/local-first/src/records.ts
-var UNBOUND_DESTINATION = { kind: "unbound" };
-
 // ../packages/local-first/src/storeContract.ts
 var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
+
+// ../packages/local-first/src/records.ts
+var UNBOUND_DESTINATION = { kind: "unbound" };
 
 // ../packages/local-first/src/clone.ts
 function clone(value) {
@@ -1146,6 +1146,7 @@ async function selectRecords(tx, type, where) {
 async function selectPending(tx, where, destination) {
   const matches = [];
   await tx.scanPending((event) => {
+    if (event.deadLetter) return;
     if (!where || where(event)) matches.push(event);
   }, destination);
   matches.sort((a, b) => a.localSequence - b.localSequence);
@@ -1270,6 +1271,95 @@ var LOCAL_CREATE_PATHS = Object.freeze([
     writes: Object.freeze(["memory-fact"])
   })
 ]);
+
+// ../packages/local-first/src/journalRules.ts
+var BOUND_ONLY_VERSION = 0;
+var importKey = (type, id) => `${type}:${id}:import`;
+function isOwnRecord(row, deviceId) {
+  return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
+}
+function isImported(mapping) {
+  return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
+}
+function hashPayload(payload) {
+  const text2 = JSON.stringify(payload) ?? "null";
+  let hash2 = 2166136261;
+  for (let index = 0; index < text2.length; index += 1) {
+    hash2 ^= text2.charCodeAt(index);
+    hash2 = Math.imul(hash2, 16777619);
+  }
+  return `fnv1a:${(hash2 >>> 0).toString(16).padStart(8, "0")}`;
+}
+function unboundMarker(record3, operation) {
+  const text2 = JSON.stringify(record3.payload) ?? "null";
+  return {
+    operation,
+    payloadSize: text2.length,
+    payloadHash: hashPayload(record3.payload),
+    payload: null
+  };
+}
+async function dropPending(tx, record3) {
+  const stale = await selectPending(tx, (event) => event.clientEntityId === record3.id && event.entityType === record3.entityType);
+  if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
+}
+function importPayload(record3, mapping) {
+  if (record3.entityType !== "chat" || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record3.payload;
+  const serverId = Number(mapping.serverId);
+  return Number.isSafeInteger(serverId) && serverId > 0 ? { ...record3.payload, serverId } : record3.payload;
+}
+async function queueImport(tx, record3, chatClientId, waitsOn = []) {
+  await dropPending(tx, record3);
+  if (record3.deletedAt) return;
+  const mapping = await tx.mapping(record3.entityType, record3.id, record3.destination);
+  await tx.append({
+    idempotencyKey: importKey(record3.entityType, record3.id),
+    clientEntityId: record3.id,
+    entityType: record3.entityType,
+    operation: "import",
+    schemaVersion: record3.schemaVersion,
+    occurredAt: record3.occurredAt,
+    dependsOn: [...chatClientId && record3.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn],
+    destination: record3.destination,
+    payload: importPayload(record3, mapping)
+  });
+}
+async function journalWrite(tx, record3, operation, options) {
+  if (record3.destination.kind === "unbound") {
+    await tx.append({
+      idempotencyKey: options.key,
+      clientEntityId: record3.id,
+      entityType: record3.entityType,
+      schemaVersion: record3.schemaVersion,
+      occurredAt: record3.occurredAt,
+      ...record3.baseVersion !== void 0 ? { baseVersion: record3.baseVersion } : {},
+      dependsOn: options.dependsOn ?? [],
+      destination: record3.destination,
+      // The marker carries size + a content hash of the real payload, never the
+      // payload itself; the record is the only copy while unbound (module comment).
+      ...unboundMarker(record3, operation)
+    });
+    return;
+  }
+  const mapping = await tx.mapping(record3.entityType, record3.id, record3.destination);
+  if (!isImported(mapping)) {
+    await queueImport(tx, record3, options.chatClientId);
+    return;
+  }
+  await dropPending(tx, record3);
+  await tx.append({
+    idempotencyKey: `${options.key}:server`,
+    clientEntityId: record3.id,
+    entityType: record3.entityType,
+    operation,
+    schemaVersion: record3.schemaVersion,
+    occurredAt: record3.occurredAt,
+    baseVersion: mapping.serverVersion,
+    dependsOn: [],
+    destination: record3.destination,
+    payload: operation === "delete" ? null : record3.payload
+  });
+}
 
 // ../packages/local-first/src/syncLease.ts
 var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
@@ -4322,96 +4412,7 @@ function transcriptSeedOf(history) {
   return { messages, ids: ids2 };
 }
 
-// src/localChat/journal.ts
-var BOUND_ONLY_VERSION = 0;
-var importKey = (type, id) => `${type}:${id}:import`;
-function isImported(mapping) {
-  return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
-}
-function hashPayload(payload) {
-  const text2 = JSON.stringify(payload) ?? "null";
-  let hash2 = 2166136261;
-  for (let index = 0; index < text2.length; index += 1) {
-    hash2 ^= text2.charCodeAt(index);
-    hash2 = Math.imul(hash2, 16777619);
-  }
-  return `fnv1a:${(hash2 >>> 0).toString(16).padStart(8, "0")}`;
-}
-function unboundMarker(record3, operation) {
-  const text2 = JSON.stringify(record3.payload) ?? "null";
-  return {
-    operation,
-    payloadSize: text2.length,
-    payloadHash: hashPayload(record3.payload),
-    payload: null
-  };
-}
-async function dropPending(tx, record3) {
-  const stale = await selectPending(tx, (event) => event.clientEntityId === record3.id && event.entityType === record3.entityType);
-  if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
-}
-function importPayload(record3, mapping) {
-  if (record3.entityType !== "chat" || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record3.payload;
-  const serverId = Number(mapping.serverId);
-  return Number.isSafeInteger(serverId) && serverId > 0 ? { ...record3.payload, serverId } : record3.payload;
-}
-async function queueImport(tx, record3, chatClientId, waitsOn = []) {
-  await dropPending(tx, record3);
-  if (record3.deletedAt) return;
-  const mapping = await tx.mapping(record3.entityType, record3.id, record3.destination);
-  await tx.append({
-    idempotencyKey: importKey(record3.entityType, record3.id),
-    clientEntityId: record3.id,
-    entityType: record3.entityType,
-    operation: "import",
-    schemaVersion: record3.schemaVersion,
-    occurredAt: record3.occurredAt,
-    dependsOn: [...chatClientId && record3.entityType !== "chat" ? [importKey("chat", chatClientId)] : [], ...waitsOn],
-    destination: record3.destination,
-    payload: importPayload(record3, mapping)
-  });
-}
-async function journalWrite(tx, record3, operation, options) {
-  if (record3.destination.kind === "unbound") {
-    await tx.append({
-      idempotencyKey: options.key,
-      clientEntityId: record3.id,
-      entityType: record3.entityType,
-      schemaVersion: record3.schemaVersion,
-      occurredAt: record3.occurredAt,
-      ...record3.baseVersion !== void 0 ? { baseVersion: record3.baseVersion } : {},
-      dependsOn: options.dependsOn ?? [],
-      destination: record3.destination,
-      // The marker carries size + a content hash of the real payload, never the
-      // payload itself; the record is the only copy while unbound (module comment).
-      ...unboundMarker(record3, operation)
-    });
-    return;
-  }
-  const mapping = await tx.mapping(record3.entityType, record3.id, record3.destination);
-  if (!isImported(mapping)) {
-    await queueImport(tx, record3, options.chatClientId);
-    return;
-  }
-  await dropPending(tx, record3);
-  await tx.append({
-    idempotencyKey: `${options.key}:server`,
-    clientEntityId: record3.id,
-    entityType: record3.entityType,
-    operation,
-    schemaVersion: record3.schemaVersion,
-    occurredAt: record3.occurredAt,
-    baseVersion: mapping.serverVersion,
-    dependsOn: [],
-    destination: record3.destination,
-    payload: operation === "delete" ? null : record3.payload
-  });
-}
-
 // src/localChat/records.ts
-function isOwnRecord(row, deviceId) {
-  return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
-}
 var isLiveOwn = (row, deviceId) => !row.deletedAt && isOwnRecord(row, deviceId);
 function scanLive(tx, type, deviceId, visit) {
   return tx.scan(type, (row) => {
@@ -5742,64 +5743,6 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
       if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
     }
     return chats.filter((chat) => !chat.deletedAt).length;
-  });
-}
-
-// src/localChat/workSync.ts
-var SERVER_REFERENCE = /^\d+$/;
-function ticketWaitsOn(ticket) {
-  const waits = [];
-  if (!SERVER_REFERENCE.test(ticket.projectId.trim())) waits.push(importKey("project", ticket.projectId));
-  const parent = ticket.parentTicketId?.trim();
-  if (parent && !SERVER_REFERENCE.test(parent)) waits.push(importKey("ticket", parent));
-  return waits;
-}
-function parentsFirst(tickets) {
-  const byId = new Map(tickets.map((ticket) => [ticket.id, ticket]));
-  const depths = /* @__PURE__ */ new Map();
-  const depthOf = (ticket, seen = /* @__PURE__ */ new Set()) => {
-    const known = depths.get(ticket.id);
-    if (known !== void 0) return known;
-    const parent = ticket.payload.parentTicketId ? byId.get(ticket.payload.parentTicketId) : void 0;
-    const depth2 = parent && !seen.has(parent.id) ? depthOf(parent, /* @__PURE__ */ new Set([...seen, ticket.id])) + 1 : 0;
-    depths.set(ticket.id, depth2);
-    return depth2;
-  };
-  return [...tickets].sort((a, b) => depthOf(a) - depthOf(b) || a.occurredAt.localeCompare(b.occurredAt));
-}
-async function bindWorkForSync(store, deviceId, destination) {
-  if (destination.kind !== "bound") return 0;
-  const unbound = (row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId);
-  const anything = await store.read(async (tx) => {
-    let found = false;
-    for (const type of ["project", "ticket"]) {
-      if (found) break;
-      await tx.scan(type, (row) => {
-        if (unbound(row)) {
-          found = true;
-          return SCAN_STOP;
-        }
-      });
-    }
-    return found;
-  });
-  if (!anything) return 0;
-  return store.transact(async (tx) => {
-    const rebind = async (row) => {
-      const moved2 = { ...row, destination };
-      await tx.put(moved2);
-      return moved2;
-    };
-    let moved = 0;
-    for (const project of await selectRecords(tx, "project", unbound)) {
-      await queueImport(tx, await rebind(project));
-      moved += 1;
-    }
-    for (const ticket of parentsFirst(await selectRecords(tx, "ticket", unbound))) {
-      await queueImport(tx, await rebind(ticket), ticket.payload.chatClientId, ticketWaitsOn(ticket.payload));
-      moved += 1;
-    }
-    return moved;
   });
 }
 
@@ -10456,28 +10399,28 @@ import { factLeafKey, fileLeafKey, relationLeafKey } from "@seanhogg/builderforc
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
 import { factDigest, relationDigest } from "@seanhogg/builderforce-memory/knowledge/pack";
 
-// ../packages/agent-tools/src/knowledge/replicaPump.ts
-import { MAX_PART_BYTES, splitParts } from "@seanhogg/builderforce-memory/knowledge/pack";
-
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
 import {
   bucketOf,
   diffEntries,
   encodePack,
   jsonBytesOf,
+  rootLeaves,
   rootDigestOf,
   ZERO_DIGEST,
   fileLeafKey as fileLeafKey2
 } from "@seanhogg/builderforce-memory/knowledge/pack";
+var DEFAULT_MAX_DECODED = 48 * 1024 * 1024;
+
+// ../packages/agent-tools/src/knowledge/replicaPump.ts
+import { MAX_PART_BYTES, splitParts } from "@seanhogg/builderforce-memory/knowledge/pack";
 
 // ../packages/agent-tools/src/knowledge/replicaReconcile.ts
-import {
-  differingBuckets,
-  leafDelta,
-  manifestTree,
-  rootLeaves
-} from "@seanhogg/builderforce-memory/knowledge/pack";
+import { differingBuckets, leafDelta, manifestTree, rootLeaves as rootLeaves2 } from "@seanhogg/builderforce-memory/knowledge/pack";
 var EMPTY_ROOT = manifestTree([]).root;
+
+// ../packages/agent-tools/src/knowledge/replicaPump.ts
+var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
 import { filesManifestKey as filesManifestKey2, srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
@@ -15489,11 +15432,45 @@ function useOptionalBrainContext() {
 // src/useBrainChats.ts
 import { useCallback as useCallback4, useEffect as useEffect6, useMemo as useMemo5, useRef as useRef4, useState as useState5 } from "react";
 
+// src/ticketToolVocabulary.ts
+var SERVER_TICKET_CREATE_TOOL = "builtin_tasks_create";
+var SERVER_TICKET_LINK_TOOL = "builtin_chats_link_ticket";
+var LOCAL_TICKET_CREATE_TOOL = "ticket-create";
+var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
+var SERVER = Object.freeze({
+  createTool: SERVER_TICKET_CREATE_TOOL,
+  local: false,
+  needsLinkStep: true,
+  kanbanScoping: true,
+  createName: SERVER_TICKET_CREATE_TOOL
+});
+var SERVER_TICKET_TOOLS = SERVER;
+function ticketToolVocabulary(toolNames) {
+  if (!toolNames) return SERVER;
+  const names = new Set(toolNames);
+  if (names.has(LOCAL_TICKET_CREATE_TOOL)) {
+    return Object.freeze({
+      createTool: LOCAL_TICKET_CREATE_TOOL,
+      local: true,
+      needsLinkStep: false,
+      kanbanScoping: false,
+      createName: LOCAL_TICKET_CREATE_TOOL
+    });
+  }
+  if (names.has(SERVER_TICKET_CREATE_TOOL)) return SERVER;
+  return Object.freeze({ ...SERVER, createTool: void 0 });
+}
+function isLocalTicketCreateLabel(label) {
+  return LOCAL_TICKET_CREATE_LABEL.test(label);
+}
+
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
   "builtin_tickets_from_delta",
   "builtin_chats_link_ticket",
-  "builtin_reviews_record"
+  "builtin_reviews_record",
+  // The editor's device-local create: it IS the recording (it links its own chat once synced).
+  LOCAL_TICKET_CREATE_TOOL
 ]);
 var CREATE_TOOL_KIND = {
   builtin_objectives_create: "objective",
@@ -15636,15 +15613,20 @@ function codeChangeFile(args) {
   }
   return null;
 }
-function chatWorkLinkingDirective(chatId) {
+function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const linked = chatId != null;
+  const createBullet = tickets.local ? `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically \u2014 do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.
+` : `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked && tickets.needsLinkStep ? ` AND link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}, linkType="created")` : ""}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+`;
+  const scopingBullet = tickets.kanbanScoping ? `\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
+` : `\u2022 A ticket filed with ${tickets.createName} is on this device first. The builtin_kanban_* resource-scoping tools address the account's tickets, so use them on a ticket only once it has synced (they answer plainly when it has not); file the work first and scope, staff and coordinate it afterwards.
+`;
+  const statusTool = tickets.local ? `ticket-move (id=<its local id>, status="in_progress") for a ticket filed here, or builtin_tasks_update (id=<the ticket's ref>, status="in_progress") for one that exists only on the account` : `builtin_tasks_update (id=<the ticket's ref>, status="in_progress")`;
   return (linked ? `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
 ` : `This conversation lives only on this machine \u2014 it has no platform chat to link work to, so never pass a chatId and do not call builtin_chats_link_ticket or builtin_chats_list_tickets. Still make the work visible on the board:
-`) + `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked ? ` AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created")` : ""}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
-\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
-` + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
+`) + createBullet + scopingBullet + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
 ` : `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
-`) + `\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? "linked " : ""}task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer \u2014 self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` + (linked ? `
+`) + `\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? "linked " : ""}task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer \u2014 self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` + (linked ? `
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.` : `
 \u2022 Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`);
 }
@@ -15691,7 +15673,7 @@ function chatWorkDirective(chatId, opts) {
 `;
   const refused = delegatesLocally ? " An execution kill-switch or run cap stops CLOUD runs only \u2014 an `autoRun: execution_disabled` verdict on a ticket is about the cloud \u2014 so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed." : " If the work is something you could do here, do it instead.";
   return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
-${chatWorkLinkingDirective(chatId)}
+${chatWorkLinkingDirective(chatId, opts?.ticketTools)}
 ` + whoIsHere + ordering + finish + `\u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it \u2014 Developer work to a developer, QA work to a QA agent \u2014 and never leave a ticket with no agent on it.${throughThem}
 ` + (chatId != null ? `\u2022 builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.
 ` : "") + `\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer.${refused} Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
@@ -23275,13 +23257,17 @@ function asAgentOf(args) {
 }
 function staffingSummaryInTrace(events) {
   let ticketsCreated = 0;
+  let filedLocally = 0;
   let dispatchAttempts = 0;
   let dispatched = 0;
   const dispatchRefusals = [];
   const personaSubagents = [];
   for (const ev of events) {
     if (ev.category !== "tool") continue;
-    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) ticketsCreated += 1;
+    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) {
+      ticketsCreated += 1;
+      if (isLocalTicketCreateLabel(ev.label)) filedLocally += 1;
+    }
     if (isDispatchTool(ev.label)) {
       dispatchAttempts += 1;
       if (didDispatch(ev)) dispatched += 1;
@@ -23300,8 +23286,8 @@ function staffingSummaryInTrace(events) {
       });
     }
   }
-  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 ? "filed-not-staffed" : "no-work-filed";
-  return { ticketsCreated, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 && filedLocally === ticketsCreated ? "filed-locally" : ticketsCreated > 0 ? "filed-not-staffed" : "no-work-filed";
+  return { ticketsCreated, filedLocally, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
 }
 function formatDispatchRefusals(refusals) {
   const counts = /* @__PURE__ */ new Map();
@@ -23317,7 +23303,7 @@ function formatStaffingSummary(s, opts) {
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
   const shipped = opts?.sessionShipped ?? 0;
   const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused");
-  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "filed-locally" ? " \u2014 filed on this device, staffing after it syncs to the account" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
   const lines = [
     `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
   ];
@@ -23369,7 +23355,10 @@ function isFileWriteTool(label) {
 var UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
 var UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
 var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
-var TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
+var TICKET_WRITE_TOOL = new RegExp(
+  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
+  "i"
+);
 var TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
 function isTicketWriteTool(label) {
   return TICKET_WRITE_TOOL.test(label);
@@ -24000,9 +23989,9 @@ function shippedToBaseBranch(events, opts) {
 
 // src/previewReview.ts
 var REVIEW_RECORD_TOOL = "builtin_reviews_record";
-function previewReviewDirective(chatId) {
+function previewReviewDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : "the ticket you recorded the change against";
-  const linkFirst = chatId != null ? ` If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first.` : "";
+  const linkFirst = chatId != null && tickets.needsLinkStep ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : "";
   return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
 1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
 2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 ${listed}; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
@@ -24212,7 +24201,6 @@ var HAND_OFF_TOOL = "hand_off";
 var FAN_OUT_TOOL = "spawn_agents";
 var FAN_OUT_BATCH = 4;
 var MAX_HAND_OFF_TASKS = 12;
-var TASK_CREATE_TOOL = "builtin_tasks_create";
 var HAND_OFF_TOOL_SPEC = {
   type: "function",
   function: {
@@ -24335,18 +24323,23 @@ async function call(ports, name, args) {
   return out;
 }
 async function fileTickets(plan, ports) {
-  if (ports.projectId == null || !ports.toolNames.has(TASK_CREATE_TOOL)) return plan.tasks.map(() => void 0);
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  const createTool = vocabulary.createTool;
+  if (ports.projectId == null || !createTool) return plan.tasks.map(() => void 0);
   const ids2 = [];
   for (const task of plan.tasks) {
-    const out = await call(ports, TASK_CREATE_TOOL, {
-      projectId: ports.projectId,
+    const out = await call(ports, createTool, {
+      // The local tool takes its project as text; the account's takes the number.
+      projectId: vocabulary.local ? String(ports.projectId) : ports.projectId,
       title: task.title,
       description: ticketDescription(task, plan.summary),
       taskType: "task"
     });
-    const id = !isFailed(out) ? out.id : void 0;
-    ids2.push(typeof id === "number" ? id : void 0);
-    if (!isFailed(out)) await ports.afterCreate?.(TASK_CREATE_TOOL, out).catch(() => void 0);
+    const record3 = asRecord(out);
+    const failed3 = isFailed(record3 ?? out);
+    const id = !failed3 ? record3?.id : void 0;
+    ids2.push(typeof id === "number" || vocabulary.local && typeof id === "string" && id ? id : void 0);
+    if (!failed3) await ports.afterCreate?.(createTool, out).catch(() => void 0);
   }
   return ids2;
 }
@@ -24565,11 +24558,11 @@ function isRestatedReply(current, previous) {
   for (const s of now) if (before.has(s)) seen += 1;
   return seen / now.size >= RESTATED_CONTAINMENT;
 }
-function restatedReplyNudge() {
+function restatedReplyNudge(tickets = SERVER_TICKET_TOOLS) {
   return [
     "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
     "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
-    "If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.",
+    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName}${tickets.needsLinkStep ? ", linked to this chat" : " \u2014 it links this chat itself"}) so the status lives on the board instead of in a repeated summary.`,
     "End with only what CHANGED this turn."
   ].join("\n");
 }
@@ -25852,7 +25845,7 @@ ${extra}`;
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
+${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster, ticketTools: ticketToolVocabulary(catalogToolNames) })}
 
 ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
@@ -25861,7 +25854,7 @@ ${turnOptimizationDirective()}`;
 ${selfReviewShipDirective(serverChatId)}`;
   if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
 
-${previewReviewDirective(serverChatId)}`;
+${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
   if (c.priorResearch) systemPrompt = `${systemPrompt}
 
 ${c.priorResearch}`;
@@ -26110,7 +26103,7 @@ function deliveryGates(run) {
       id: "brain.restate",
       entersVerify: false,
       applies: (text2) => !run.restateRecoveryUsed && isRestatedReply(text2, priorReply),
-      nudge: restatedReplyNudge,
+      nudge: () => restatedReplyNudge(ticketToolVocabulary(catalogToolNames)),
       trace: { label: "loop.recover_restated_reply", args: () => ({}), result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it." },
       spend: () => {
         run.restateRecoveryUsed = true;
@@ -26278,7 +26271,10 @@ function callPreflight(run) {
         // …and the goal, in the user's words: a child sees none of this conversation.
         request: run.goal,
         ...req.projectId != null ? { projectId: req.projectId } : {},
-        afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out),
+        afterCreate: async (toolName, out) => {
+          if (isTicketRecordingTool(toolName)) c.ticketRecorded = true;
+          await autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out);
+        },
         step: (label, args2, out, durationMs) => pushTrace(c, {
           ts: nowIso(),
           category: "tool",
@@ -31576,6 +31572,7 @@ export {
   LOCAL_PICKER_GROUPS,
   LOCAL_SKIP_CONFIDENCE,
   LOCAL_SKIP_EXPLORE,
+  LOCAL_TICKET_CREATE_TOOL,
   LOCAL_WORKSPACE_TOOLS,
   MAX_INLINE_TEXT_BYTES,
   MAX_STOP_HOOK_ROUNDS,
@@ -31608,6 +31605,8 @@ export {
   RUN_REFRESH_MS,
   ReadCoverage2 as ReadCoverage,
   RepetitionLoopError,
+  SERVER_TICKET_CREATE_TOOL,
+  SERVER_TICKET_TOOLS,
   STEP_MESSAGE_ROLE,
   STOPPED_TURN_META_KEY,
   STOPPED_TURN_STEP,
@@ -31652,7 +31651,6 @@ export {
   attachEvermindLearn,
   attemptedPublish,
   bindChatHistoryForSync,
-  bindWorkForSync,
   brainPersonaAgents,
   brainRequestError,
   brainUploadUrl,
@@ -31798,7 +31796,6 @@ export {
   isEvermindModel,
   isFailedToolResult,
   isFallbackFailure,
-  isImported,
   isInferenceMode,
   isInvalidClientResult,
   isLive,
@@ -31824,7 +31821,6 @@ export {
   isUserConfiguredModelRef,
   isWasmTrap,
   joinRestorableTurns,
-  journalWrite,
   jsonClientResult,
   judgeClientFirstFor,
   lastConsolidationIndex,
@@ -31988,6 +31984,7 @@ export {
   summarizeRouteRuns,
   takePendingPrompt,
   textClientResult,
+  ticketToolVocabulary,
   ticketsReviewedInPreview,
   toPromptApiTurn,
   toolActivity,

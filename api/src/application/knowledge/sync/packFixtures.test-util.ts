@@ -3,7 +3,8 @@ import { rootDigestOf, type Pack, type PackFileRow } from '@seanhogg/builderforc
 import type { Extracted, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 
 export const ROOT = 'ws:test';
-export const hashOf = (i: number): string => i.toString(16).padStart(64, 'a');
+/** Padded with '0' (not a hex digit that can also lead a value): 0xa and 0xaa must not collide. */
+export const hashOf = (i: number): string => i.toString(16).padStart(64, '0');
 export const refOf = (root: string, p: string): `src:${string}` => `src:${root}::${p}`;
 
 export const extraction = (root: string, path: string, hash: string, symbols = 3): Extracted => ({

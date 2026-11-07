@@ -60,7 +60,15 @@ async function bodyOf(c: Context): Promise<Uint8Array> {
   return bytes;
 }
 
-const intOf = (v: string | undefined): number | undefined => (v === undefined || v === '' ? undefined : Number(v));
+/** Who a machine's staged parts belong to: its key id, else its host id — never one literal shared by every machine key. */
+function stageActorOf(c: Context): string | undefined {
+  const keyId = c.get('apiKeyId') as string | number | undefined;
+  if (keyId !== undefined && keyId !== null) return `key:${keyId}`;
+  const machine = c.get('machineActor') as { kind?: string; agentHostId?: number | string } | undefined;
+  return machine ? `${machine.kind ?? 'machine'}:${machine.agentHostId ?? ''}` : undefined;
+}
+
+const intOf =(v: string | undefined): number | undefined => (v === undefined || v === '' ? undefined : Number(v));
 
 /** Runs a sync handler and answers its typed refusals; anything else is a server fault and rethrows. */
 async function answering(run: () => Promise<Response>): Promise<Response> {
@@ -82,15 +90,16 @@ export function registerKnowledgeSyncRoutes(router: Hono<HonoEnv>, h: SyncRouteH
     const parts = intOf(c.req.query('parts'));
     const part = intOf(c.req.query('part'));
     const result = await applyKnowledgePack(
-      { ...p, userId: h.person(c), actorRole: (c.get('role') as string | undefined) ?? null },
+      { ...p, userId: h.person(c), actorRole: (c.get('role') as string | undefined) ?? null, stageActor: stageActorOf(c) },
       { body: await bodyOf(c), ...(syncId ? { syncId } : {}), ...(part !== undefined ? { part } : {}), ...(parts !== undefined ? { parts } : {}) },
     );
     return json({ ok: true, ...result });
   })));
 
   router.get('/:projectId/knowledge/sync/manifest', (c) => h.withPorts(c, (p) => answering(async () => {
-    const rootId = c.req.query('root')?.trim();
-    if (!rootId) return json({ error: 'root is required' }, 400);
+    // Trimmed by `normalizeRootId` inside the use case: the pack route, this one and the leaf request read one root the same way.
+    const rootId = c.req.query('root');
+    if (!rootId?.trim()) return json({ error: 'root is required' }, 400);
     return binary(await manifestSummary(p, rootId), KPACK_CONTENT_TYPE);
   })));
 

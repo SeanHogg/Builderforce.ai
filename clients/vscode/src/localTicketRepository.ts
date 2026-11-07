@@ -30,7 +30,7 @@ import {
   eventId,
   isServerReference,
   live,
-  pendingKeyOf,
+  waitKeyOf,
   projectFor,
   requireText,
   ticketFor,
@@ -127,7 +127,7 @@ export function createTicketRepository(ctx: WorkRepoContext) {
         // or re-keyed to an import by a bind. A server reference has nothing local to wait for.
         const dependsOn: string[] = [];
         const waitOn = async (entityType: "project" | "ticket" | "chat", id: string): Promise<void> => {
-          const key = await pendingKeyOf(tx, entityType, id);
+          const key = await waitKeyOf(tx, entityType, id);
           if (key && !dependsOn.includes(key)) dependsOn.push(key);
         };
         if (project) await waitOn("project", project.id);

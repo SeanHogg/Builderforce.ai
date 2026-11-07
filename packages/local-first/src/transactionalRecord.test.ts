@@ -73,10 +73,10 @@ describe('transactional record store', () => {
     expect(sequences).toEqual([1, 2, 3, 4, 5]);
     expect(commit.firstSequence).toBe(1);
     // The ticket depends on the project; the run on the chat and the audit. A
-    // dependency on a pending event is stored as that event's wire id.
+    // dependency is stored as the depended-on write's key and resolved to its live event at send time.
     const [project, , chat, audit] = commit.events;
-    expect(commit.events[1].dependsOn).toEqual([project.eventId]);
-    expect(commit.events[4].dependsOn).toEqual([chat.eventId, audit.eventId]);
+    expect(commit.events[1].dependsOn).toEqual([project.idempotencyKey]);
+    expect(commit.events[4].dependsOn).toEqual([chat.idempotencyKey, audit.idempotencyKey]);
     for (const event of commit.events) expect(event.operation).toBe('create');
   });
 

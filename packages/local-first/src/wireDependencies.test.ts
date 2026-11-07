@@ -29,11 +29,12 @@ const T = '22222222-2222-4222-8222-222222222222';
 const OTHER = '33333333-3333-4333-8333-333333333333';
 
 describe('wireDependencies', () => {
-  it('resolves keys against every pending event, keeps ids, drops acknowledged keys', () => {
+  it('resolves keys against every live pending event; drops ids and keys nothing pending names', () => {
     const project = journal(P, 'project:p:v1');
     const ticket = journal(T, 'ticket:t:v1', ['project:p:v1', OTHER, 'execution:start:gone', 'ticket:t:v1']);
     const [wired] = wireDependencies([ticket], [project, ticket]);
-    expect(wired?.dependsOn).toEqual([P, OTHER]);
+    // OTHER is an id no pending event carries (acknowledged, or replaced away): nothing to wait for.
+    expect(wired?.dependsOn).toEqual([P]);
     expect(ticket.dependsOn).toHaveLength(4);
   });
 });

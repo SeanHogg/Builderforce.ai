@@ -24,11 +24,12 @@ export interface KnowledgeSyncPort {
    */
   sources(rootId: string, ledger?: KnowledgeLedgerPort): Promise<Array<{ path: string; hash: string }>>;
   /**
-   * The extracted bodies the project already holds among `hashes` (under ANY root), each with the `sourceRef`s its
-   * entries name. ONE index query for any number of hashes, never an object read per hash. A row whose bundle
-   * object is gone is not held (and is dropped), so a have-check never claims a body it cannot serve.
+   * Which `(hash, sourceRef)` pairs the project already holds (by position): the stored body of `hash`, under ANY root,
+   * has an entry for `sourceRef`. A hash held only under another root answers false, so just this root's entry is
+   * uploaded. ONE indexed query for any number of pairs. No object is read or probed: the sweep is the only deleter of
+   * bundles and it deletes only bundles no index row names, so an index row always has its object.
    */
-  heldBodies(hashes: readonly string[], ledger?: KnowledgeLedgerPort): Promise<Map<string, string[]>>;
+  heldEntries(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>, ledger?: KnowledgeLedgerPort): Promise<Set<number>>;
   /** Writes a pack's bodies as ONE content-addressed bundle object (the pack's only body write). */
   putBundle(bundle: Bundle): Promise<void>;
   /** Records a review's source list as the immutable snapshot of `digest` (written once per digest). */
@@ -59,11 +60,11 @@ export class KnowledgeSyncError extends Error {
 
 /** Largest compressed request body (one part). */
 export const MAX_SYNC_BODY_BYTES = 8 * 1024 * 1024;
-/** Most parts a pack may be split into: 8 x 8 MB is the whole 64 MB the decoder will inflate. */
+/** Most parts a pack may be split into. */
 export const MAX_SYNC_PARTS = 8;
-/** The parts of one pack may add up to at most this (checked while they load, before they are joined). */
+/** The parts of one pack may add up to at most this (checked while they load, before they are decoded). */
 export const MAX_PACK_BYTES = 64 * 1024 * 1024;
-/** Hashes one `have` request may ask about: it is ONE index query, so the bound is the request body, not the database. */
+/** Pairs one `have` request may ask about: it is ONE index query, so the bound is the request body, not the database. */
 export const MAX_HAVE_HASHES = 50_000;
 /** Parts and `syncId`s expire after this. */
 export const STAGE_TTL_MS = 60 * 60 * 1000;

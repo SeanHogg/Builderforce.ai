@@ -31,6 +31,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -899,17 +900,38 @@ export const knowledgeSources = pgTable('knowledge_sources', {
   index('idx_knowledge_sources_hash').on(t.tenantId, t.projectId, t.hash),
 ]);
 
+/** Raw bytes (`bytea`): the pack-sync tables hold digests as bytes, and the ledger reads and writes them through SQL. */
+const bytea = customType<{ data: Uint8Array }>({ dataType: () => 'bytea' });
+
 // The leaf digests of the rows a root synced (migration 1301, PRD 41 A11 rule 4b): the ONLY input of the server's
 // manifest tree, written in the pack transaction. Never read from project_facts, which every root of a project shares.
 export const knowledgeSyncLeaves = pgTable('knowledge_sync_leaves', {
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   rootId:    varchar('root_id', { length: 512 }).notNull(),
+  /** The key as the codec builds it; stored for reading back, NEVER indexed (a relation key can be 8 KB). */
   leafKey:   text('leaf_key').notNull(),
+  /** sha256 of `leaf_key` (migration 1302): the primary key, so no index entry depends on the key's length. */
+  leafKeyHash: bytea('leaf_key_hash').notNull(),
+  /** The manifest bucket of the key (`bucketOf`); NULL on rows written before 1302 until the server fills it lazily. */
+  bucket:    smallint('bucket'),
   digest:    varchar('digest', { length: 160 }).notNull(),
 }, (t) => [
-  primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.leafKey], name: 'pk_knowledge_sync_leaves' }),
-  index('idx_knowledge_sync_leaves_key').on(t.tenantId, t.projectId, t.leafKey),
+  primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.leafKeyHash], name: 'pk_knowledge_sync_leaves' }),
+  index('idx_knowledge_sync_leaves_keyhash').on(t.tenantId, t.projectId, t.leafKeyHash),
+  index('idx_knowledge_sync_leaves_bucket').on(t.tenantId, t.projectId, t.rootId, t.bucket),
+]);
+
+// The stored digest of each manifest bucket of a root (migration 1302): the root digest is built from these, and a pack
+// recomputes only the buckets it touched. An absent row is an empty bucket.
+export const knowledgeSyncBuckets = pgTable('knowledge_sync_buckets', {
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  rootId:    varchar('root_id', { length: 512 }).notNull(),
+  bucket:    smallint('bucket').notNull(),
+  digest:    bytea('digest').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.bucket], name: 'pk_knowledge_sync_buckets' }),
 ]);
 
 // A root's acknowledged sync state (migration 1301): advanced by a conditional UPDATE inside the pack transaction,

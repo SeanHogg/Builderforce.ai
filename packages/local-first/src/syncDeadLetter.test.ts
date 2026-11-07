@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createPlatformPolicy } from './policy.js';
 import type { JournalEvent, SyncReceipt } from './records.js';
 import { countPending, createMemoryLocalFirstStore, selectPending, type LocalFirstStore } from './store.js';
+import { wireDependencies } from './sync.js';
 import { createSyncCoordinator, type SyncPushBatch } from './sync.js';
 
 const AT = '2026-10-19T00:00:00.000Z';
@@ -53,7 +54,7 @@ describe('sync dead-letters permanent refusals', () => {
   it('dead-letters a rejected event: it is no longer pending work, so the count reaches 0 and it is not re-sent', async () => {
     const store = createMemoryLocalFirstStore();
     await append(store, 'bad');
-    const { coordinator, pushed } = coordinatorFor(store, (batch) => batch.events.map((e) => receiptOf(e.eventId, 'rejected', 'project_unresolved')));
+    const { coordinator, pushed } = coordinatorFor(store, (batch) => batch.events.map((e) => receiptOf(e.eventId, 'rejected', 'ticket_title_invalid')));
     const first = await coordinator.synchronize(BOUND);
     expect(first?.rejected).toBe(1);
     expect(await store.read((tx) => countPending(tx, BOUND))).toBe(0);
@@ -61,7 +62,7 @@ describe('sync dead-letters permanent refusals', () => {
     // Still in the journal, marked, for audit and sync status.
     const kept = await store.read((tx) => tx.pending(BOUND));
     expect(kept).toHaveLength(1);
-    expect(kept[0]?.deadLetter).toMatchObject({ reason: 'project_unresolved' });
+    expect(kept[0]?.deadLetter).toMatchObject({ reason: 'ticket_title_invalid' });
     await coordinator.synchronize(BOUND);
     expect(pushed).toHaveLength(1);
   });
@@ -79,25 +80,86 @@ describe('sync dead-letters permanent refusals', () => {
     expect(pushed.flatMap((b) => b.events).filter((e) => e.eventId === head.eventId)).toHaveLength(1);
   });
 
-  it('dead-letters the dependents of a rejected event with it', async () => {
+  it('BLOCKS (does not dead-letter) the dependents of a rejected event, and frees them when the key is re-filed', async () => {
     const store = createMemoryLocalFirstStore();
     const parent = await append(store, 'parent');
     await append(store, 'child', ['parent']);
-    const { coordinator } = coordinatorFor(store, (batch) => batch.events.map((e) => (
-      e.eventId === parent.eventId ? receiptOf(e.eventId, 'rejected', 'project_unresolved') : receiptOf(e.eventId, 'dependency_pending')
+    const { coordinator, pushed } = coordinatorFor(store, (batch) => batch.events.map((e) => (
+      e.eventId === parent.eventId ? receiptOf(e.eventId, 'rejected', 'ticket_title_invalid') : receiptOf(e.eventId, 'dependency_pending')
     )));
     await coordinator.synchronize(BOUND);
-    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(0);
+    // The child went out in the same batch as its parent and was held; it is not dead.
     const all = await store.read((tx) => tx.pending(BOUND));
-    expect(all.find((e) => e.idempotencyKey === 'child')?.deadLetter?.reason).toBe('dependency_dead_lettered');
+    expect(all.find((e) => e.idempotencyKey === 'child')?.deadLetter).toBeUndefined();
+    // Blocked behind the dead parent: not counted, not sent, so a drain terminates.
+    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(0);
+    const sent = pushed.length;
+    await coordinator.synchronize(BOUND);
+    expect(pushed).toHaveLength(sent);
+    // The user re-files the parent: a new live event under the key frees the child.
+    const refiled = await append(store, 'parent');
+    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(2);
+    const everyone = await store.read((tx) => tx.pending());
+    const wired = wireDependencies(everyone.filter((e) => e.idempotencyKey === 'child'), everyone);
+    expect(wired[0]?.dependsOn).toEqual([refiled.eventId]);
   });
 
-  it('keeps a server-fault refusal pending instead of dead-lettering it', async () => {
+  it('a dependency follows a REPLACED write: the key resolves to the new event id at send time', async () => {
     const store = createMemoryLocalFirstStore();
-    await append(store, 'flaky');
-    const { coordinator } = coordinatorFor(store, (batch) => batch.events.map((e) => receiptOf(e.eventId, 'rejected', 'ticket_write_failed')));
+    const old = await append(store, 'k');
+    await append(store, 'dependent', ['k']);
+    await store.transact(async (tx) => {
+      await tx.acknowledge([old.eventId]);
+    });
+    const next = await append(store, 'k');
+    const everyone = await store.read((tx) => tx.pending());
+    const wired = wireDependencies(everyone.filter((e) => e.idempotencyKey === 'dependent'), everyone);
+    expect(wired[0]?.dependsOn).toEqual([next.eventId]);
+  });
+
+  it('holds (never dead-letters) entity_not_imported, unresolved parents, future clocks and unknown codes', async () => {
+    const store = createMemoryLocalFirstStore();
+    await append(store, 'a');
+    await append(store, 'b');
+    await append(store, 'c');
+    await append(store, 'd');
+    const codes = ['entity_not_imported', 'project_unresolved', 'occurred_at_in_future', 'something_new'];
+    const { coordinator } = coordinatorFor(store, (batch) => batch.events.map((e, i) => receiptOf(e.eventId, 'rejected', codes[i])));
     await coordinator.synchronize(BOUND);
-    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(1);
+    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(4);
+    expect((await store.read((tx) => tx.pending(BOUND))).some((e) => e.deadLetter)).toBe(false);
+  });
+
+  it('turns a NEWER pending import into an update on the mapped version when the in-flight one is accepted', async () => {
+    const store = createMemoryLocalFirstStore();
+    const first = await store.transact((tx) => tx.append({
+      idempotencyKey: 'ticket:t1:import', clientEntityId: 't1', entityType: 'ticket', operation: 'import',
+      schemaVersion: 1, occurredAt: AT, dependsOn: [], destination: BOUND, payload: { v: 1 },
+    }));
+    // While the push is in flight the user edits: the first import is dropped, a newer one queued.
+    const racing = createSyncCoordinator({
+      store,
+      policy: (() => { const p = createPlatformPolicy(); p.set({ synchronize: true }); return p; })(),
+      deviceId: 'd',
+      lease: { run: (_o, work) => work() },
+      transport: {
+        async push(batch) {
+          await store.transact(async (tx) => {
+            await tx.acknowledge([first.eventId]);
+            await tx.append({
+              idempotencyKey: 'ticket:t1:import', clientEntityId: 't1', entityType: 'ticket', operation: 'import',
+              schemaVersion: 1, occurredAt: AT, dependsOn: [], destination: BOUND, payload: { v: 2 },
+            });
+          });
+          return batch.events.map((e) => ({ ...receiptOf(e.eventId, 'accepted'), serverId: '77', serverVersion: 1 }));
+        },
+        async pull() { return { records: [] }; },
+      },
+    });
+    await racing.synchronize(BOUND);
+    const left = await store.read((tx) => tx.pending(BOUND));
+    expect(left).toHaveLength(1);
+    expect(left[0]).toMatchObject({ operation: 'update', baseVersion: 1, idempotencyKey: 'ticket:t1:import', payload: { v: 2 } });
   });
 
   it('a new event under a dead-lettered key is a new event, not the dead one', async () => {

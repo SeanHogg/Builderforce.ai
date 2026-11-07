@@ -113,7 +113,7 @@ export class Transaction implements LocalFirstTransaction {
       ...clone(rest),
       eventId: wireId ?? crypto.randomUUID(),
       ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
-      dependsOn: this.resolveDependencies(event.dependsOn),
+      dependsOn: [...new Set(event.dependsOn)],
       localSequence: this.nextSequence,
       payloadHash: event.payloadHash ?? hashPayload(event.payload),
     };
@@ -127,22 +127,6 @@ export class Transaction implements LocalFirstTransaction {
   private pendingForKey(key: string): JournalEvent | undefined {
     const live = (event: JournalEvent): boolean => !event.deadLetter && this.events.get(event.eventId) === event;
     return this.addedKeys.latest(key, live) ?? this.base.pendingKeys.latest(key, live);
-  }
-
-  /**
-   * Rewrite `dependsOn` keys that name a PENDING event onto that event's wire id.
-   * Anything else is kept as written: a key for an event appended later in the
-   * same transaction (a forward reference) is resolved when the batch is built
-   * (`wireDependencies` in `sync.ts`), which also drops a key whose event has
-   * already been acknowledged.
-   */
-  private resolveDependencies(dependsOn: readonly string[]): string[] {
-    const ids: string[] = [];
-    for (const id of dependsOn) {
-      const resolved = this.pendingForKey(id)?.eventId ?? id;
-      if (!ids.includes(resolved)) ids.push(resolved);
-    }
-    return ids;
   }
 
   async pending(destination?: EntityDestination): Promise<JournalEvent[]> {

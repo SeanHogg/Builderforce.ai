@@ -266,11 +266,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ## 🧰 OTHER — enabling work outside the arc
 
-### Local-first VSIX `[vscode]`
-
-- **[vscode] Signed-in VSIX files tickets one server call at a time; a 26-ticket program hit HTTP 429.** `routeDeniedDomainTools` (`clients/vscode/src/brainRunHostPorts.ts`) used the local `ticket-*` adapter only when `synchronize` was denied, so a signed-in run fired `builtin_tasks_create` + `builtin_chats_link_ticket` per ticket on the human's 300 rpm bucket (MCP relay is not a board mutation). Fix in flight (2026-11-07): ticket/project writes always local, server twins hidden, chat link + epic `taskType` ride the ticket payload, the sync pass binds and batches tickets, `importSyncedTicket` writes the link; MCP board-write tools charged to the `:board` bucket.
-- **[vscode] Copied chat report exceeds the 50,000-character paste limit (110 KB seen).** Only tool payloads were budgeted; reply bodies, the 25-ticket header list and the pretty-printed diagnostics JSON (~25 KB) were not. Fix in flight (2026-11-07): one 48,000-char whole-report ceiling, message text charged, compact JSON with elision marker, 10-ticket cap, middle-cut guarantee.
-
 ### CI and release `[platform]`
 
 - **CI never runs frontend unit tests; 19 fail in 12 files.** Fix them and add a vitest job.

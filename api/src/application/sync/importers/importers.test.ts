@@ -437,7 +437,8 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
     );
     expect(first.status).toBe('applied');
     if (first.status !== 'applied') return;
-    const replay = dbOf();
+    // The replay may READ whether the link exists (it does) and must not write.
+    const replay = dbOf([[{ id: 1 }]]);
     const again = await importSyncedTicket(
       event({ entityType: 'ticket', operation: 'create', payload }),
       ctx(),
@@ -445,7 +446,7 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
       replay,
     );
     expect(again.status).toBe('applied');
-    expect(replay.calls).toHaveLength(0);
+    expect(replay.calls.map((call) => call.kind)).toEqual(['select']);
   });
 
   const YOUNG = '2026-10-17T23:58:00.000Z';
@@ -509,7 +510,7 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
     );
     expect(first.status).toBe('applied');
     if (first.status !== 'applied') return;
-    const retry = dbOf([[], [{ id: 2 }]]);
+    const retry = dbOf([[], [], [{ id: 2 }]]);
     const afterCommit = vi.fn();
     const again = await importSyncedTicket(
       event({ entityType: 'ticket', operation: 'create', payload }),
@@ -524,8 +525,36 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
     );
     expect(again).toMatchObject({ status: 'applied', serverId: '20' });
     // select (existing link?) then insert of the link; never an insert into tasks first.
-    expect(retry.calls.map((call) => call.kind)).toEqual(['select', 'insert']);
-    expect(retry.calls[1]?.payload).toMatchObject({ chatId: 55, ticketRef: '20', linkType: 'created' });
+    expect(retry.calls.map((call) => call.kind)).toEqual(['select', 'select', 'insert']);
+    expect(retry.calls[2]?.payload).toMatchObject({ chatId: 55, ticketRef: '20', linkType: 'created' });
+    expect(afterCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the ticket and reports ticket_chat_link_failed when only the link write fails', async () => {
+    const afterCommit = vi.fn();
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
+      ctx({ afterCommit }),
+      book(true),
+      dbOf([[{ id: 30 }], new Error('link write failed')]),
+    );
+    expect(outcome).toMatchObject({ status: 'applied', serverId: '30', detail: 'ticket_chat_link_failed' });
+    expect(afterCommit).not.toHaveBeenCalled();
+  });
+
+  it('an update writes the task type and moves the ticket\'s chat links onto the new kind', async () => {
+    const afterCommit = vi.fn();
+    const db = dbOf([[{ id: 42 }], [{ chatId: 55 }]]);
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'update', baseVersion: 2, payload: { ...base, taskType: 'epic' } }),
+      ctx({ afterCommit }),
+      stores(mapping({ serverVersion: 2 })),
+      db,
+    );
+    expect(outcome.status).toBe('applied');
+    expect(db.calls.map((call) => call.kind)).toEqual(['update', 'update']);
+    expect(db.calls[0]?.payload).toMatchObject({ taskType: 'epic' });
+    expect(db.calls[1]?.payload).toMatchObject({ ticketKind: 'epic' });
     expect(afterCommit).toHaveBeenCalledTimes(1);
   });
 

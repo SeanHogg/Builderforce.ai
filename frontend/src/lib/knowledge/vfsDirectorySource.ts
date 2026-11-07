@@ -35,6 +35,8 @@ export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsD
   return {
     rootId,
     title,
+    // list() hashes every file with contentHash(text); the review re-hashes the text read() returns.
+    hashOf: contentHash,
     async *list() {
       for (const vfsPath of fs.list()) {
         const path = relative(vfsPath);

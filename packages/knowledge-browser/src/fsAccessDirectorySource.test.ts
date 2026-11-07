@@ -77,6 +77,17 @@ describe('File System Access directory source', () => {
     expect(a.size).toBe(new TextEncoder().encode('first — ünïcode').length);
   });
 
+  it('hashOf of the text read() returns equals the hash list() gave (CRLF, non-ASCII)', async () => {
+    const source = createFsAccessDirectorySource(
+      fakeTree('r', { 'crlf.md': 'one\r\ntwo\r\n', 'uni.md': 'héllo — 日本語 😀' }),
+      'rovr',
+    );
+    for (const entry of await listAll(source)) {
+      const text = ((await source.read(entry.path)).content as { text: string }).text;
+      expect(source.hashOf!(text)).toBe(entry.hash);
+    }
+  });
+
   it('hashes a file the plan skips (binary, over the cap) from its metadata, never reading it', async () => {
     const big = 'x'.repeat(DEFAULT_MAX_FILE_BYTES + 1);
     const texts = vi.fn();

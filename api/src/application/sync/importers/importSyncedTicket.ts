@@ -12,14 +12,15 @@
  * transaction around it.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { CLIENT_REPORTED_EVIDENCE, withinPendingHoldWindow } from '../../../domain/sync/occurredAtGate';
 import { isJournalEventId } from '../../../domain/sync/syncProtocol';
-import { bumpChatTicketLinkCaches, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
+import { bumpChatTicketLinkCaches, chatTicketLinkExists, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
 import { ticketKindForTaskType } from '../../brain/chatTicketTypes';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import type { Tx } from '../../../infrastructure/database/connection';
-import { tasks } from '../../../infrastructure/database/schema';
+import { chatTicketLinks, tasks } from '../../../infrastructure/database/schema';
+import { scopedToTenant } from '../../../infrastructure/database/tenantScope';
 import { isUniqueViolation } from '../../../infrastructure/database/uniqueViolation';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
 import {
@@ -246,7 +247,12 @@ async function completeMissingLink(
   const link = await decideChatLink(event, payload, ctx, stores, false);
   if (link.kind !== 'link') return appliedExisting(mapping, stored);
   try {
-    await tx.transaction((savepoint) => linkCreated(savepoint, ctx, link.chatId, payload.taskType, ticketId));
+    await tx.transaction(async (savepoint) => {
+      // A pure replay reads and stops: write only when the link is actually missing.
+      const kind = ticketKindForTaskType(payload.taskType);
+      if (await chatTicketLinkExists(savepoint, ctx.auth.tenantId, link.chatId, kind, String(ticketId))) return;
+      await linkCreated(savepoint, ctx, link.chatId, payload.taskType, ticketId);
+    });
   } catch (error) {
     reportCaughtError(error, { source: 'application/sync/importers/importSyncedTicket.ts', operation: 'completeMissingLink' });
   }
@@ -278,6 +284,7 @@ async function createTicket(
   const chatId = link.kind === 'link' ? link.chatId : null;
   try {
     // The row and its 'created' link commit or roll back together (one savepoint).
+    let linkFailed = false;
     const id = await tx.transaction(async (savepoint) => {
       const rows = await savepoint.insert(tasks).values({
         projectId: refs.projectServerId,
@@ -295,15 +302,43 @@ async function createTicket(
         updatedAt: ctx.now,
       }).returning({ id: tasks.id });
       const inserted = insertedId(rows);
-      if (inserted !== null && chatId !== null) await linkCreated(savepoint, ctx, chatId, payload.taskType, inserted);
+      if (inserted !== null && chatId !== null) {
+        // The link is lineage, the ticket is the fact: its own nested savepoint, so a failed link
+        // rolls back to here and the ticket row still commits.
+        try {
+          await savepoint.transaction((linkPoint) => linkCreated(linkPoint, ctx, chatId, payload.taskType, inserted));
+        } catch (error) {
+          linkFailed = true;
+          reportCaughtError(error, { source: 'application/sync/importers/importSyncedTicket.ts', operation: 'linkCreated' });
+        }
+      }
       return inserted;
     });
     if (id === null) return rejected('ticket_insert_failed');
     const applied = appliedNew(String(id), 1, ctx.destinationKey, stored);
-    return link.kind === 'none' && link.detail ? { ...applied, detail: link.detail } : applied;
+    const detail = linkFailed ? 'ticket_chat_link_failed' : link.kind === 'none' ? link.detail : undefined;
+    return detail ? { ...applied, detail } : applied;
   } catch (error) {
     return writeFailure(error, 'createTicket');
   }
+}
+
+/**
+ * A ticket's chat links are addressed by kind (`epic` | `gap` | `task`), which follows its task
+ * type. When a synced edit changes the type, move the links onto the new kind (the ticket's id is
+ * numeric text, so no strategy-tier ref can collide) and bump the affected chats after commit.
+ */
+async function retargetLinks(savepoint: Tx, ctx: SyncImportContext, ticketId: number, taskType: TicketTaskType): Promise<void> {
+  const kind = ticketKindForTaskType(taskType);
+  const others = (['epic', 'gap', 'task'] as const).filter((candidate) => candidate !== kind);
+  const moved = await savepoint.update(chatTicketLinks).set({ ticketKind: kind }).where(scopedToTenant(
+    chatTicketLinks,
+    ctx.auth.tenantId,
+    eq(chatTicketLinks.ticketRef, String(ticketId)),
+    inArray(chatTicketLinks.ticketKind, others),
+  )).returning({ chatId: chatTicketLinks.chatId });
+  if (!Array.isArray(moved)) return;
+  for (const row of moved) ctx.afterCommit(() => bumpChatTicketLinkCaches(ctx.auth.tenantId, row.chatId));
 }
 
 async function updateTicket(
@@ -325,17 +360,22 @@ async function updateTicket(
   const stored = canonical(payload, refs.projectServerId, refs.parentServerId);
   if (sameCanonical(current, stored)) return appliedExisting(current, stored);
   try {
-    const rows = await tx.transaction((savepoint) => savepoint.update(tasks).set({
-      projectId: refs.projectServerId,
-      title: payload.title,
-      description: payload.description ?? null,
-      status: payload.status,
-      priority: payload.priority,
-      parentTaskId: refs.parentServerId,
-      assignedUserId: payload.assignedUserId ?? null,
-      archived: payload.archived,
-      updatedAt: ctx.now,
-    }).where(and(eq(tasks.id, id), eq(tasks.tenantId, ctx.auth.tenantId))).returning({ id: tasks.id }));
+    const rows = await tx.transaction(async (savepoint) => {
+      const updated = await savepoint.update(tasks).set({
+        projectId: refs.projectServerId,
+        title: payload.title,
+        description: payload.description ?? null,
+        status: payload.status,
+        priority: payload.priority,
+        parentTaskId: refs.parentServerId,
+        assignedUserId: payload.assignedUserId ?? null,
+        archived: payload.archived,
+        taskType: payload.taskType,
+        updatedAt: ctx.now,
+      }).where(and(eq(tasks.id, id), eq(tasks.tenantId, ctx.auth.tenantId))).returning({ id: tasks.id });
+      if (insertedId(updated) !== null) await retargetLinks(savepoint, ctx, id, payload.taskType);
+      return updated;
+    });
     if (insertedId(rows) === null) return rejected('ticket_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, stored);
   } catch (error) {

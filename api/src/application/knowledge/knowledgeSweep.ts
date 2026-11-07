@@ -25,6 +25,8 @@ const INDEX_ROW_MAX_AGE_DAYS = 90;
 /** Projects swept per run: the rest wait for the next. */
 const MAX_SCOPES = 200;
 const LIST_PAGE = 1000;
+/** Removal markers retried per project per run. */
+const MARKERS_PER_RUN = 1000;
 const CURSOR_KEY = 'knowledge/sweep-cursor.json';
 
 export interface KnowledgeSweepResult { tenants: number; bundlesRemoved: number; projects: number; indexRowsRemoved: number }
@@ -64,23 +66,48 @@ async function sweepTenantBundles(bucket: R2Bucket, db: Db, tenantId: number, no
   return removed;
 }
 
+/**
+ * Retries the legacy per-source deletes of removed sources (NEW-M4): a pack marks a removal in its transaction and
+ * deletes the legacy object after the commit, best effort. Here the object is deleted again and, only once that
+ * succeeded, the marker goes. Until then the marker keeps the source out of every listing.
+ */
+async function sweepRemovedSources(db: Db, sync: ReturnType<typeof r2KnowledgeSync>, tenantId: number, projectId: number): Promise<void> {
+  const ledger = drizzleLedger(db, tenantId, projectId);
+  const markers = await ledger.sources.markers(MARKERS_PER_RUN);
+  const byRoot = new Map<string, string[]>();
+  for (const m of markers) byRoot.set(m.rootId, [...(byRoot.get(m.rootId) ?? []), m.sourceId]);
+  const done: Array<{ rootId: string; sourceId: string }> = [];
+  for (const [rootId, ids] of byRoot) {
+    try {
+      await sync.deleteLegacySources(rootId, ids);
+      done.push(...ids.map((sourceId) => ({ rootId, sourceId })));
+    } catch { /* kept: the marker stays and the next run retries */ }
+  }
+  await ledger.sources.dropMarkers(done);
+}
+
 export async function sweepKnowledgeStorage(env: Pick<Env, 'UPLOADS'>, db: Db, now: number = Date.now(), minAgeMs: number = DAY_MS): Promise<KnowledgeSweepResult> {
   const result: KnowledgeSweepResult = { tenants: 0, bundlesRemoved: 0, projects: 0, indexRowsRemoved: 0 };
   const bucket = env.UPLOADS;
   if (!bucket) return result;
   const from = await readCursor(bucket);
+  // A cursor over the tables' own primary-key order: each branch reads at most MAX_SCOPES rows past the cursor (an ordered
+  // index scan with DISTINCT ON), never every (tenant, project) of two whole tables.
+  const branch = (table: ReturnType<typeof sql.raw>) => sql`
+    (SELECT DISTINCT ON (tenant_id, project_id) tenant_id, project_id FROM ${table}
+     WHERE (tenant_id, project_id) > (${from.tenantId}, ${from.projectId})
+     ORDER BY tenant_id, project_id LIMIT ${MAX_SCOPES})`;
   const scopes = rowsOf<{ tenant_id: number; project_id: number }>(await db.execute(sql`
     SELECT tenant_id, project_id FROM (
-      SELECT DISTINCT tenant_id, project_id FROM knowledge_extracted_index
-      UNION SELECT DISTINCT tenant_id, project_id FROM knowledge_sources
-    ) s
-    WHERE (tenant_id, project_id) > (${from.tenantId}, ${from.projectId})
-    ORDER BY tenant_id, project_id LIMIT ${MAX_SCOPES}`));
+      ${branch(sql.raw('knowledge_extracted_index'))} UNION ${branch(sql.raw('knowledge_sources'))} UNION ${branch(sql.raw('knowledge_sync_roots'))}
+    ) s ORDER BY tenant_id, project_id LIMIT ${MAX_SCOPES}`));
 
   const tenants = new Set<number>();
   for (const s of scopes) {
     tenants.add(s.tenant_id);
-    await r2KnowledgeSync({ UPLOADS: bucket }, s.tenant_id, s.project_id, drizzleLedger(db, s.tenant_id, s.project_id)).sweepStaged().catch(() => undefined);
+    const sync = r2KnowledgeSync({ UPLOADS: bucket }, s.tenant_id, s.project_id, drizzleLedger(db, s.tenant_id, s.project_id));
+    await sync.sweepStaged().catch(() => undefined);
+    await sweepRemovedSources(db, sync, s.tenant_id, s.project_id).catch(() => undefined);
     const gone = await db.execute(sql`
       DELETE FROM knowledge_extracted_index i
       WHERE i.tenant_id = ${s.tenant_id} AND i.project_id = ${s.project_id}

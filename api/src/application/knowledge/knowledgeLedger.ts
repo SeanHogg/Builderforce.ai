@@ -4,18 +4,27 @@
  *
  *   knowledge_extracted_index  hash → { bundle_key, byte_offset, byte_length, source_refs }: where a body lives in a
  *                              content-addressed bundle object, and which sources its entries name
- *   knowledge_sources          the current sources of a root, one row each (not one R2 object each)
- *   knowledge_sync_leaves      the leaf digests of the rows a root synced, as the client computed them: the ONLY
- *                              input of the server's manifest tree
+ *   knowledge_sources          the current sources of a root, one row each (not one R2 object each). A row with hash ''
+ *                              is a REMOVAL MARKER: it hides a legacy per-source object and is swept once that is gone
+ *   knowledge_sync_leaves      the leaf digests of the rows a root synced, as the client computed them (leaves + buckets:
+ *                              `knowledgeLedgerLeaves.ts`)
+ *   knowledge_sync_buckets     the digest of each of the root's 4,096 manifest buckets
  *   knowledge_sync_roots       a root's acknowledged `{ generation, digest }`, advanced by a conditional UPDATE
  *
  * Every statement here is ONE statement for any number of rows: the rows ride in a single JSON parameter and are
  * expanded in SQL (`jsonb_to_recordset`), so a 20,000-hash have-check or a 20,000-leaf upsert is one query. Bound
  * to one (tenant, project) like every knowledge port; pass a transaction handle as `db` to make a write atomic with
  * the pack's other rows.
+ *
+ * `lock()` takes the PROJECT's sync advisory lock for the rest of the transaction: packs of one project run one at a
+ * time (about one pack per root per minute, so this costs nothing), which is what makes "no other root names it" and the
+ * read-merge-write of a body true when they are acted on. It must be the first statement of the transaction.
  */
 import { sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
+import { bucketsLedger, leavesLedger, type BucketsPort, type LeavesPort } from './knowledgeLedgerLeaves';
+
+export type { BucketsPort, LeafRow, LeavesPort } from './knowledgeLedgerLeaves';
 
 export interface ExtractedLoc {
   hash: string;
@@ -33,15 +42,22 @@ export interface SourceRow {
   hash: string;
 }
 
-export interface LeafRow { key: string; digest: string }
-
 export interface SyncRootRow { generation: number; digest: string }
+
+/** A removal marker: the source `sourceId` of `rootId` was removed and its legacy object may still exist. */
+export interface SourceMarker { rootId: string; sourceId: string }
 
 export interface ExtractedIndexPort {
   /** Where each of `hashes` lives; a hash with no row is absent. ONE query. */
   locate(hashes: readonly string[]): Promise<ExtractedLoc[]>;
-  /** Records locations (a later write of a hash replaces it). ONE statement. */
-  upsert(rows: readonly ExtractedLoc[]): Promise<void>;
+  /** Which of `pairs` (by position) the stored body of `hash` has an entry for `sourceRef`. ONE indexed query (`source_refs` is on the row). */
+  holds(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>): Promise<Set<number>>;
+  /**
+   * Records locations. With `expected` (hash → the bundle key the caller's merge was built from, null = no row), a row
+   * is written only if the hash still names that key; the number written is returned, and fewer than `rows.length`
+   * means a concurrent change. Without it, a later write of a hash replaces it.
+   */
+  upsert(rows: readonly ExtractedLoc[], expected?: ReadonlyMap<string, string | null>): Promise<number>;
   /** Forgets these hashes (a body replaced by a legacy upload). */
   drop(hashes: readonly string[]): Promise<void>;
   /** Forgets every hash located in these bundles (the objects are gone). */
@@ -49,23 +65,17 @@ export interface ExtractedIndexPort {
 }
 
 export interface SourcesLedgerPort {
+  /** Every row of the root, markers included (`hash` ''). */
   list(rootId: string): Promise<SourceRow[]>;
-  /** Records sources (a later write of a source replaces it). ONE statement. */
+  /** Records sources (a later write of a source replaces it, a marker included). ONE statement. */
   upsert(rootId: string, rows: readonly SourceRow[]): Promise<void>;
-  remove(rootId: string, sourceIds: readonly string[]): Promise<void>;
-  /** Forgets every source of the root. Returns rows removed. */
-  clear(rootId: string): Promise<number>;
-}
-
-export interface LeavesPort {
-  /** Every leaf of the root, in key order, read in pages — never capped. */
-  all(rootId: string): Promise<LeafRow[]>;
-  upsert(rootId: string, rows: readonly LeafRow[]): Promise<void>;
-  remove(rootId: string, keys: readonly string[]): Promise<void>;
-  /** Which of `keys` this root holds as leaves. */
-  existing(rootId: string, keys: readonly string[]): Promise<Set<string>>;
-  /** Which of `keys` some OTHER root of the project holds as leaves. */
-  namedByOthers(rootId: string, keys: readonly string[]): Promise<Set<string>>;
+  /** Marks sources removed (a row with hash ''): the source is gone even if its legacy object could not be deleted. */
+  mark(rootId: string, sourceIds: readonly string[]): Promise<void>;
+  /** Removal markers across the project, for the sweep's legacy deletes. */
+  markers(limit: number): Promise<SourceMarker[]>;
+  /** Forgets markers once their legacy objects are deleted. */
+  dropMarkers(markers: readonly SourceMarker[]): Promise<void>;
+  /** Forgets every source row of the root. Returns rows removed. */
   clear(rootId: string): Promise<number>;
 }
 
@@ -85,18 +95,22 @@ export interface KnowledgeLedgerPort {
   index: ExtractedIndexPort;
   sources: SourcesLedgerPort;
   leaves: LeavesPort;
+  buckets: BucketsPort;
   roots: SyncRootsPort;
+  /** Takes the project's sync advisory lock until the transaction ends. The first statement of a pack's transaction. */
+  lock(): Promise<void>;
+  /** Runs `work` in ONE transaction that holds the project's sync lock, on a ledger bound to that transaction. */
+  exclusive<T>(work: (ledger: KnowledgeLedgerPort) => Promise<T>): Promise<T>;
 }
 
 const json = (value: unknown): string => JSON.stringify(value);
 /** The rows of a `db.execute` result, whichever driver shape it has. */
 export const rowsOf = <T>(result: unknown): T[] => ((result as { rows?: T[] }).rows ?? (result as T[])) as T[];
 const countOf = (result: unknown): number => (result as { rowCount?: number }).rowCount ?? 0;
-const LEAF_PAGE = 5000;
 
 export function drizzleLedger(db: Db, tenantId: number, projectId: number): KnowledgeLedgerPort {
   const scope = sql`tenant_id = ${tenantId} AND project_id = ${projectId}`;
-  return {
+  const ledger: KnowledgeLedgerPort = {
     index: {
       async locate(hashes) {
         if (hashes.length === 0) return [];
@@ -109,18 +123,52 @@ export function drizzleLedger(db: Db, tenantId: number, projectId: number): Know
         }));
       },
 
-      async upsert(rows) {
-        if (rows.length === 0) return;
-        const payload = rows.map((r) => ({ hash: r.hash, bundle_key: r.bundleKey, byte_offset: r.byteOffset, byte_length: r.byteLength, source_refs: r.sourceRefs }));
-        await db.execute(sql`
-          INSERT INTO knowledge_extracted_index (tenant_id, project_id, hash, bundle_key, byte_offset, byte_length, source_refs)
-          SELECT ${tenantId}, ${projectId}, r.hash, r.bundle_key, r.byte_offset, r.byte_length,
-                 ARRAY(SELECT jsonb_array_elements_text(r.source_refs))
+      async holds(pairs) {
+        if (pairs.length === 0) return new Set();
+        const payload = pairs.map((p, i) => ({ i, hash: p.hash, ref: p.sourceRef }));
+        const rows = rowsOf<{ i: number }>(await db.execute(sql`
+          SELECT p.i FROM jsonb_to_recordset(${json(payload)}::jsonb) AS p(i integer, hash text, ref text)
+          JOIN knowledge_extracted_index x ON x.tenant_id = ${tenantId} AND x.project_id = ${projectId} AND x.hash = p.hash AND p.ref = ANY (x.source_refs)`));
+        return new Set(rows.map((r) => r.i));
+      },
+
+      async upsert(rows, expected) {
+        if (rows.length === 0) return 0;
+        const payload = rows.map((r) => ({
+          hash: r.hash, bundle_key: r.bundleKey, byte_offset: r.byteOffset, byte_length: r.byteLength, source_refs: r.sourceRefs,
+          prior_key: expected ? (expected.get(r.hash) ?? null) : null,
+        }));
+        if (!expected) {
+          await db.execute(sql`
+            INSERT INTO knowledge_extracted_index (tenant_id, project_id, hash, bundle_key, byte_offset, byte_length, source_refs)
+            SELECT ${tenantId}, ${projectId}, r.hash, r.bundle_key, r.byte_offset, r.byte_length, ARRAY(SELECT jsonb_array_elements_text(r.source_refs))
+            FROM jsonb_to_recordset(${json(payload)}::jsonb)
+              AS r(hash text, bundle_key text, byte_offset integer, byte_length integer, source_refs jsonb, prior_key text)
+            ON CONFLICT (tenant_id, project_id, hash) DO UPDATE SET
+              bundle_key = excluded.bundle_key, byte_offset = excluded.byte_offset,
+              byte_length = excluded.byte_length, source_refs = excluded.source_refs`);
+          return rows.length;
+        }
+        // Conditional: a hash that had a row is updated only while it still names the key the merge was built from; a
+        // hash that had none is inserted only if nobody inserted it since. The loser of either is simply not counted.
+        const updated = rowsOf<unknown>(await db.execute(sql`
+          UPDATE knowledge_extracted_index i SET
+            bundle_key = r.bundle_key, byte_offset = r.byte_offset, byte_length = r.byte_length,
+            source_refs = ARRAY(SELECT jsonb_array_elements_text(r.source_refs))
           FROM jsonb_to_recordset(${json(payload)}::jsonb)
-            AS r(hash text, bundle_key text, byte_offset integer, byte_length integer, source_refs jsonb)
-          ON CONFLICT (tenant_id, project_id, hash) DO UPDATE SET
-            bundle_key = excluded.bundle_key, byte_offset = excluded.byte_offset,
-            byte_length = excluded.byte_length, source_refs = excluded.source_refs`);
+            AS r(hash text, bundle_key text, byte_offset integer, byte_length integer, source_refs jsonb, prior_key text)
+          WHERE i.tenant_id = ${tenantId} AND i.project_id = ${projectId} AND i.hash = r.hash
+            AND r.prior_key IS NOT NULL AND i.bundle_key = r.prior_key
+          RETURNING i.hash`)).length;
+        const inserted = rowsOf<unknown>(await db.execute(sql`
+          INSERT INTO knowledge_extracted_index (tenant_id, project_id, hash, bundle_key, byte_offset, byte_length, source_refs)
+          SELECT ${tenantId}, ${projectId}, r.hash, r.bundle_key, r.byte_offset, r.byte_length, ARRAY(SELECT jsonb_array_elements_text(r.source_refs))
+          FROM jsonb_to_recordset(${json(payload)}::jsonb)
+            AS r(hash text, bundle_key text, byte_offset integer, byte_length integer, source_refs jsonb, prior_key text)
+          WHERE r.prior_key IS NULL
+          ON CONFLICT (tenant_id, project_id, hash) DO NOTHING
+          RETURNING hash`)).length;
+        return updated + inserted;
       },
 
       async drop(hashes) {
@@ -151,11 +199,26 @@ export function drizzleLedger(db: Db, tenantId: number, projectId: number): Know
             path = excluded.path, hash = excluded.hash, updated_at = now()`);
       },
 
-      async remove(rootId, sourceIds) {
+      async mark(rootId, sourceIds) {
         if (sourceIds.length === 0) return;
         await db.execute(sql`
-          DELETE FROM knowledge_sources WHERE ${scope} AND root_id = ${rootId}
-            AND source_id IN (SELECT jsonb_array_elements_text(${json(sourceIds)}::jsonb))`);
+          INSERT INTO knowledge_sources (tenant_id, project_id, root_id, source_id, path, hash)
+          SELECT ${tenantId}, ${projectId}, ${rootId}, s, '', '' FROM jsonb_array_elements_text(${json(sourceIds)}::jsonb) AS s
+          ON CONFLICT (tenant_id, project_id, root_id, source_id) DO UPDATE SET path = '', hash = '', updated_at = now()`);
+      },
+
+      async markers(limit) {
+        const rows = rowsOf<{ root_id: string; source_id: string }>(await db.execute(sql`
+          SELECT root_id, source_id FROM knowledge_sources WHERE ${scope} AND hash = '' ORDER BY root_id, source_id LIMIT ${limit}`));
+        return rows.map((r) => ({ rootId: r.root_id, sourceId: r.source_id }));
+      },
+
+      async dropMarkers(markers) {
+        if (markers.length === 0) return;
+        await db.execute(sql`
+          DELETE FROM knowledge_sources k USING jsonb_to_recordset(${json(markers)}::jsonb) AS m("rootId" text, "sourceId" text)
+          WHERE k.tenant_id = ${tenantId} AND k.project_id = ${projectId} AND k.hash = ''
+            AND k.root_id = m."rootId" AND k.source_id = m."sourceId"`);
       },
 
       async clear(rootId) {
@@ -163,54 +226,8 @@ export function drizzleLedger(db: Db, tenantId: number, projectId: number): Know
       },
     },
 
-    leaves: {
-      async all(rootId) {
-        const out: LeafRow[] = [];
-        let after = '';
-        for (;;) {
-          // Keyset pages: no OFFSET to rescan, no cap — the tree must see EVERY leaf of the root.
-          const page = rowsOf<{ leaf_key: string; digest: string }>(await db.execute(sql`
-            SELECT leaf_key, digest FROM knowledge_sync_leaves
-            WHERE ${scope} AND root_id = ${rootId} AND leaf_key > ${after}
-            ORDER BY leaf_key LIMIT ${LEAF_PAGE}`));
-          for (const r of page) out.push({ key: r.leaf_key, digest: r.digest });
-          if (page.length < LEAF_PAGE) return out;
-          after = page[page.length - 1]!.leaf_key;
-        }
-      },
-
-      async upsert(rootId, rows) {
-        if (rows.length === 0) return;
-        await db.execute(sql`
-          INSERT INTO knowledge_sync_leaves (tenant_id, project_id, root_id, leaf_key, digest)
-          SELECT ${tenantId}, ${projectId}, ${rootId}, r.leaf_key, r.digest
-          FROM jsonb_to_recordset(${json(rows.map((r) => ({ leaf_key: r.key, digest: r.digest })))}::jsonb) AS r(leaf_key text, digest text)
-          ON CONFLICT (tenant_id, project_id, root_id, leaf_key) DO UPDATE SET digest = excluded.digest`);
-      },
-
-      async remove(rootId, keys) {
-        if (keys.length === 0) return;
-        await db.execute(sql`DELETE FROM knowledge_sync_leaves WHERE ${scope} AND root_id = ${rootId} AND leaf_key IN (SELECT jsonb_array_elements_text(${json(keys)}::jsonb))`);
-      },
-
-      async existing(rootId, keys) {
-        if (keys.length === 0) return new Set();
-        const rows = rowsOf<{ leaf_key: string }>(await db.execute(sql`
-          SELECT leaf_key FROM knowledge_sync_leaves WHERE ${scope} AND root_id = ${rootId} AND leaf_key IN (SELECT jsonb_array_elements_text(${json(keys)}::jsonb))`));
-        return new Set(rows.map((r) => r.leaf_key));
-      },
-
-      async namedByOthers(rootId, keys) {
-        if (keys.length === 0) return new Set();
-        const rows = rowsOf<{ leaf_key: string }>(await db.execute(sql`
-          SELECT DISTINCT leaf_key FROM knowledge_sync_leaves WHERE ${scope} AND root_id <> ${rootId} AND leaf_key IN (SELECT jsonb_array_elements_text(${json(keys)}::jsonb))`));
-        return new Set(rows.map((r) => r.leaf_key));
-      },
-
-      async clear(rootId) {
-        return countOf(await db.execute(sql`DELETE FROM knowledge_sync_leaves WHERE ${scope} AND root_id = ${rootId}`));
-      },
-    },
+    leaves: leavesLedger(db, tenantId, projectId),
+    buckets: bucketsLedger(db, tenantId, projectId),
 
     roots: {
       async get(rootId) {
@@ -241,5 +258,16 @@ export function drizzleLedger(db: Db, tenantId: number, projectId: number): Know
         await db.execute(sql`DELETE FROM knowledge_sync_roots WHERE ${scope} AND root_id = ${rootId}`);
       },
     },
+
+    async lock() {
+      await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('knowledge-sync:' || ${String(tenantId)}::text || ':' || ${String(projectId)}::text, 0))`);
+    },
+
+    exclusive: (work) => inTransaction(db, async (tx) => {
+      const bound = drizzleLedger(tx as unknown as Db, tenantId, projectId);
+      await bound.lock();
+      return work(bound);
+    }),
   };
+  return ledger;
 }

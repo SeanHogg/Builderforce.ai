@@ -63,3 +63,8 @@ export function ticketToolVocabulary(toolNames?: Iterable<string>): TicketToolVo
   if (names.has(SERVER_TICKET_CREATE_TOOL)) return SERVER;
   return Object.freeze({ ...SERVER, createTool: undefined });
 }
+
+/** Whether a trace label is the device-local create (a ticket that has not reached the account yet). */
+export function isLocalTicketCreateLabel(label: string): boolean {
+  return LOCAL_TICKET_CREATE_LABEL.test(label);
+}

@@ -103,6 +103,44 @@ async function dropPending(tx: LocalFirstTransaction, record: LocalRecord): Prom
   if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
 }
 
+/**
+ * A receipt just mapped this row (server version ≥ 1) while the user kept editing: the edit
+ * re-queued a NEWER `import` (the in-flight one was dropped as stale). The server now holds the
+ * row, so that import would collide with its own mapping. Turn each newer pending import into
+ * the `update` the bound path would have written, based on the version the server holds. The
+ * idempotency key is kept, so events that depend on the import follow it.
+ */
+export async function rebaseImportsOntoMapping(
+  tx: LocalFirstTransaction,
+  entityType: LocalRecord['entityType'],
+  clientEntityId: string,
+  afterSequence: number,
+  serverVersion: number,
+): Promise<void> {
+  const newer = await selectPending(
+    tx,
+    (event) => event.entityType === entityType
+      && event.clientEntityId === clientEntityId
+      && event.operation === 'import'
+      && event.localSequence > afterSequence,
+  );
+  for (const event of newer) {
+    await tx.acknowledge([event.eventId]);
+    await tx.append({
+      ...(event.idempotencyKey !== undefined ? { idempotencyKey: event.idempotencyKey } : {}),
+      clientEntityId,
+      entityType,
+      operation: 'update',
+      schemaVersion: event.schemaVersion,
+      occurredAt: event.occurredAt,
+      baseVersion: serverVersion,
+      dependsOn: event.dependsOn,
+      destination: event.destination,
+      payload: event.payload,
+    });
+  }
+}
+
 /** The payload a row is imported with: a sign-in-bound chat names its server chat. */
 function importPayload(record: LocalRecord, mapping: ServerMapping | undefined): unknown {
   if (record.entityType !== 'chat' || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record.payload;
