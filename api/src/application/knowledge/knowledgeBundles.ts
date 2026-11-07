@@ -9,6 +9,7 @@
  * together are fetched as one window, so reading thousands of bodies costs a handful of subrequests.
  */
 import { sha256Hex, type Extracted } from '@seanhogg/builderforce-memory/knowledge';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { ExtractedLoc } from './knowledgeLedger';
 
 const ENCODER = new TextEncoder();
@@ -82,7 +83,10 @@ export async function readBundled(bucket: R2Bucket, locs: readonly ExtractedLoc[
         try {
           const slice = buf.subarray(l.byteOffset - w.start, l.byteOffset - w.start + l.byteLength);
           out.set(l.hash, JSON.parse(DECODER.decode(slice)) as Extracted[]);
-        } catch { /* an unreadable range is absent */ }
+        } catch (error) {
+          // an unreadable range is absent
+          reportCaughtError(error, { source: 'application/knowledge/knowledgeBundles.ts', operation: 'readBundleRange', level: 'warning', context: { key: w.key } });
+        }
       }
     }
   };

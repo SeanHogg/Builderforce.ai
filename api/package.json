@@ -83,6 +83,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",
+    "@electric-sql/pglite": "0.5.15",
     "drizzle-kit": "0.31.11",
     "fake-indexeddb": "^6.2.7",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

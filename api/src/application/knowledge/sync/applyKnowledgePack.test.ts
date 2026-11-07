@@ -31,7 +31,7 @@ import { bucketIdsOf, haveBitmap, manifestLeaves, manifestSummary } from './know
 let w: World;
 const deps = (over: Partial<ApplyDeps> = {}): ApplyDeps => ({
   env: {} as never, db: {} as never, tenantId: 1, projectId: 2, userId: 'u1', actorRole: 'developer',
-  store: fakeStore(w), extracted: fakeExtracted(w), sync: fakeSync(w), atomically: atomically(w), ...over,
+  store: fakeStore(w), extracted: fakeExtracted(w), sync: fakeSync(w), ledger: fakeLedger(w), atomically: atomically(w), ...over,
 });
 const manifestDeps = () => ({ sync: fakeSync(w), ledger: fakeLedger(w) });
 const apply = async (pack: Pack, d: Partial<ApplyDeps> = {}) => applyKnowledgePack(deps(d), { body: await encodePack(pack) });
@@ -62,7 +62,7 @@ describe('applyKnowledgePack', () => {
       deletes: { files: ['src/f4.ts'], facts: [], relations: [] }, targetDigest: rootDigestOf(ROOT, after),
     };
     expect(await apply(delta)).toMatchObject({ applied: true, generation: 2 });
-    expect(w.sources.get(ROOT)!.has('src/f4.ts')).toBe(false);
+    expect(w.sources.get(ROOT)!.get('src/f4.ts')?.hash).toBe(''); // a removal is a marker row
     expect(w.sources.get(ROOT)!.get('src/new.ts')?.hash).toBe(hashOf(99));
   });
 

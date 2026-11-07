@@ -11,8 +11,8 @@ import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDest
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
 import { SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
-import { blockedEventIds, currentDependencyId, liveDependencyIndex } from './dependencyGraph.js';
-import { rebaseImportsOntoMapping } from './journalRules.js';
+import { blockedEventIds, dependencyIndex, loadMappedEntities, resolveDependency } from './dependencyGraph.js';
+import { rebaseImportsOntoMapping, rebaseNewerWrites } from './journalRules.js';
 import { isPermanentRefusal } from './permanentRefusals.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -163,30 +163,39 @@ async function mergePulled(
  * means it was acknowledged: the dependency is dropped. Dead-lettered events are not live, and a
  * dependent of one is filtered out before this by `blockedEventIds`. The journal is not rewritten.
  */
-export function wireDependencies(events: readonly JournalEvent[], allPending: readonly JournalEvent[]): JournalEvent[] {
-  const index = liveDependencyIndex(allPending);
+export function wireDependencies(
+  events: readonly JournalEvent[],
+  allPending: readonly JournalEvent[],
+  mapped: ReadonlySet<string> = new Set(),
+): JournalEvent[] {
+  const index = dependencyIndex(allPending, mapped);
   return events.map((event) => {
     const dependsOn: string[] = [];
     for (const dependency of event.dependsOn) {
-      const wire = currentDependencyId(dependency, index);
-      if (wire !== undefined && wire !== event.eventId && !dependsOn.includes(wire)) dependsOn.push(wire);
+      const resolved = resolveDependency(dependency, index, event);
+      if (resolved.kind !== 'event') continue;
+      const wire = resolved.event.eventId;
+      if (wire !== event.eventId && !dependsOn.includes(wire)) dependsOn.push(wire);
     }
     return { ...event, dependsOn };
   });
 }
 
 /**
- * Pick the next batch. `held` are events the server last answered `dependency_pending` or
- * `conflict`: they are re-sent LAST so they cannot fill the batch ahead of independent work, and
- * their dependents (transitively) are skipped this round, since the server would only hold them
- * too. Dead-lettered events are never sent.
+ * Pick the next batch. A HELD event (`holdAttempts` > 0: the server answered `dependency_pending`,
+ * `conflict` or a non-permanent refusal) is persisted on the journal event, so this holds across
+ * coordinators and restarts. Held events are ALWAYS ordered after fresh work, are skipped until
+ * their `nextAttemptAt` backoff has passed, and their dependents (transitively) are skipped, since
+ * the server would only hold them too. Dead-lettered events are never sent.
  */
 function batchEvents(
   events: readonly JournalEvent[],
   maxEvents: number,
   maxBytes: number,
-  held: ReadonlySet<string> = new Set(),
+  at: number,
 ): { batch: JournalEvent[]; bytes: number } {
+  const isHeld = (event: JournalEvent): boolean => (event.holdAttempts ?? 0) > 0;
+  const held = new Set(events.filter(isHeld).map((event) => event.eventId));
   const pending = new Set(events.map((event) => event.eventId));
   const behindHeld = new Set<string>();
   for (const event of events) {
@@ -202,6 +211,7 @@ function batchEvents(
   for (const event of ordered) {
     if (selected.length >= maxEvents) break;
     if (event.deadLetter || behindHeld.has(event.eventId)) continue;
+    if (event.nextAttemptAt !== undefined && Date.parse(event.nextAttemptAt) > at) continue;
     if (event.dependsOn.some((id) => pending.has(id) && !selectedIds.has(id))) continue;
     const size = jsonBytes(event);
     if (selected.length > 0 && bytes + size > maxBytes) break;
@@ -217,6 +227,11 @@ function batchEvents(
   return { batch: selected, bytes };
 }
 
+/** Backoff after a hold: 30s · 2^(n-1), capped at an hour. Give up only on AGE (7 days), never on a count. */
+const HOLD_BACKOFF_BASE_MS = 30_000;
+const HOLD_BACKOFF_CAP_MS = 60 * 60 * 1000;
+const HOLD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const maxEvents = options.maxEvents ?? 100;
   const maxBytes = options.maxBytes ?? 512 * 1024;
@@ -224,8 +239,6 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const newId = options.newId ?? (() => crypto.randomUUID());
   const now = options.now ?? (() => new Date());
   const owner = `local-first:${options.deviceId}`;
-  /** Events the server last held (`dependency_pending`, `conflict`, a retryable refusal): sent after fresh work. */
-  const held = new Set<string>();
 
   const pull = async (
     destination: EntityDestination,
@@ -274,9 +287,10 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       every.sort((a, b) => a.localSequence - b.localSequence);
       // A dependent of a dead-lettered write is BLOCKED (not sent, not counted) until a new live
       // event appears under that key; it needs no state change of its own to become sendable.
-      const blocked = blockedEventIds(every);
+      const mapped = await loadMappedEntities(tx, every);
+      const blocked = blockedEventIds(every, mapped);
       const sendable = (await selectPending(tx, undefined, destination)).filter((event) => !blocked.has(event.eventId));
-      return wireDependencies(sendable, every);
+      return wireDependencies(sendable, every, mapped);
     });
     // G10: an unbound event parked in the bound partition (a record
     // rebound without its events, or a destination smuggled onto an
@@ -284,7 +298,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     // coordinator's own destination argument is already bound, so this is
     // the per-record check the destination argument cannot express.
     const { syncable, refused } = partitionUnboundPending(pending);
-    const { batch, bytes } = batchEvents(syncable, maxEvents, maxBytes, held);
+    const { batch, bytes } = batchEvents(syncable, maxEvents, maxBytes, now().getTime());
     const summary: SyncSummary = {
       pulled: pulled.count,
       pushed: 0,
@@ -328,10 +342,19 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
             serverId: receipt.serverId,
             serverVersion: receipt.serverVersion,
           });
-          // The user kept editing while this was in flight: a NEWER pending import of the same row
-          // would collide with the mapping just written, so it becomes an update on that version.
+          // The user kept editing while this was in flight. A NEWER pending import of the row would
+          // collide with the mapping just written, so it becomes an update on that version; a
+          // newer update / delete based on the version just advanced is rebased onto the new one.
           if (event.operation === 'import' || event.operation === 'create') {
-            await rebaseImportsOntoMapping(tx, event.entityType, event.clientEntityId, event.localSequence, receipt.serverVersion);
+            // An import the server already holds (conflict) is itself rebased: it becomes the update.
+            const alreadyImported = receipt.status === 'conflict' && receipt.detail === 'entity_already_imported';
+            await rebaseImportsOntoMapping(
+              tx, event.entityType, event.clientEntityId,
+              alreadyImported ? event.localSequence - 1 : event.localSequence, receipt.serverVersion,
+            );
+          } else if (event.operation === 'update' && event.baseVersion !== undefined
+            && receipt.status === 'accepted') {
+            await rebaseNewerWrites(tx, event.entityType, event.clientEntityId, event.localSequence, event.baseVersion, receipt.serverVersion);
           }
         }
         if (receipt.status === 'accepted' || receipt.status === 'duplicate') acknowledged.push(event.eventId);
@@ -342,8 +365,20 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         // Anything else the server did not take (including an unknown refusal) is a HOLD.
         const holds = receipt.status === 'dependency_pending' || receipt.status === 'conflict'
           || (receipt.status === 'rejected' && !permanent);
-        if (holds) held.add(event.eventId);
-        else held.delete(event.eventId);
+        if (holds) {
+          const at = now();
+          const attempts = (event.holdAttempts ?? 0) + 1;
+          const since = event.heldSince ?? at.toISOString();
+          // A dependency_pending hold is the server waiting on a parent, not a defect of this event:
+          // it backs off but never gives up. Everything else gives up once held for 7 days.
+          if (receipt.status !== 'dependency_pending' && at.getTime() - Date.parse(since) >= HOLD_MAX_AGE_MS) {
+            // Out of patience: surface it in sync status instead of retrying forever.
+            await tx.deadLetter(event.eventId, `gave_up:${receipt.detail ?? receipt.status}`, at.toISOString());
+          } else {
+            const wait = Math.min(HOLD_BACKOFF_CAP_MS, HOLD_BACKOFF_BASE_MS * 2 ** (attempts - 1));
+            await tx.hold(event.eventId, { holdAttempts: attempts, heldSince: since, nextAttemptAt: new Date(at.getTime() + wait).toISOString() });
+          }
+        }
       }
       await tx.acknowledge(acknowledged);
     });

@@ -162,6 +162,17 @@ export class Transaction implements LocalFirstTransaction {
     this.events.set(eventId, { ...event, deadLetter: { reason, at } });
   }
 
+  async hold(eventId: string, hold: { holdAttempts: number; heldSince: string; nextAttemptAt: string }): Promise<void> {
+    this.assertMutable();
+    const event = this.events.get(eventId);
+    if (!event) return;
+    const held = { ...event, ...hold };
+    this.events.set(eventId, held);
+    // The key index finds events by identity (`live`), so a replaced object must be re-registered
+    // or the held event would vanish from `pendingForKey` for the rest of this transaction.
+    if (event.idempotencyKey !== undefined) this.addedKeys.add(held);
+  }
+
   async putMapping(mapping: ServerMapping): Promise<void> {
     this.assertMutable();
     this.mappings.set(mappingKey(mapping), clone(mapping));

@@ -7,8 +7,9 @@
  * the leaves, which is exactly what two roots sharing a project rely on.
  */
 import { type Extracted, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
-import { relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { bucketDigest, bucketOf, MANIFEST_BUCKETS, relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Db } from '../../../infrastructure/database/connection';
+import { reportedFallback } from '../../observability/caughtErrorReporter';
 import type { Bundle } from '../knowledgeBundles';
 import type { ExtractedLoc, KnowledgeLedgerPort, SourceRow } from '../knowledgeLedger';
 import type { ExtractedCachePort, KnowledgeStorePort } from '../knowledgePorts';
@@ -30,6 +31,8 @@ export interface World {
   legacyBodies: Map<string, Extracted[]>;
   /** root → leaf key → digest. */
   leaves: Map<string, Map<string, string>>;
+  /** root → bucket → digest (the buckets table; an absent bucket is empty). */
+  buckets: Map<string, Map<number, string>>;
   /** root → generation and digest (the roots table). */
   roots: Map<string, SyncState>;
   staged: Map<string, Uint8Array>;
@@ -48,7 +51,7 @@ export interface World {
 
 export const newWorld = (): World => ({
   facts: new Map(), relations: new Map(), sources: new Map(), legacySources: new Map(), legacyDeleted: [], index: new Map(), bundles: new Map(),
-  legacyBodies: new Map(), leaves: new Map(), roots: new Map(), staged: new Map(), stale: [], puts: [], bundleReads: 0, indexQueries: 0, sharedTableReads: 0,
+  legacyBodies: new Map(), leaves: new Map(), buckets: new Map(), roots: new Map(), staged: new Map(), stale: [], puts: [], bundleReads: 0, indexQueries: 0, sharedTableReads: 0,
 });
 
 const inner = <V>(m: Map<string, Map<string, V>>, root: string): Map<string, V> => {
@@ -67,6 +70,7 @@ export function fakeStore(w: World): KnowledgeStorePort {
     factAuthor: async (key) => (w.facts.has(key) ? (w.facts.get(key)!.createdBy ?? null) : undefined),
     factAuthors: async (keys) => new Map(keys.filter((k) => w.facts.has(k)).map((k) => [k, w.facts.get(k)!.createdBy ?? null] as const)),
     deleteRelationRows: async (rows) => { let n = 0; for (const r of rows) if (w.relations.delete(relationLeafKey(r))) n += 1; return n; },
+    relationsTouching: async (refs) => [...w.relations.values()].filter((r) => refs.includes(r.from) || refs.includes(r.to)),
     deleteFactsByKeys: async (keys, actor) => {
       const gone: string[] = [];
       for (const k of keys) {
@@ -79,26 +83,53 @@ export function fakeStore(w: World): KnowledgeStorePort {
 }
 
 export function fakeLedger(w: World): KnowledgeLedgerPort {
-  return {
+  const ledger: KnowledgeLedgerPort = {
     index: {
       locate: async (hashes) => { w.indexQueries += 1; return hashes.flatMap((h) => (w.index.has(h) ? [w.index.get(h)!] : [])); },
-      upsert: async (rows) => { for (const r of rows) w.index.set(r.hash, r); },
+      holds: async (pairs) => {
+        w.indexQueries += 1;
+        return new Set(pairs.flatMap((p, i) => (w.index.get(p.hash)?.sourceRefs.includes(p.sourceRef) ? [i] : [])));
+      },
+      upsert: async (rows, expected) => {
+        let n = 0;
+        for (const r of rows) {
+          if (expected && (w.index.get(r.hash)?.bundleKey ?? null) !== (expected.get(r.hash) ?? null)) continue;
+          w.index.set(r.hash, r);
+          n += 1;
+        }
+        return n;
+      },
       drop: async (hashes) => { for (const h of hashes) w.index.delete(h); },
       dropBundles: async (keys) => { for (const [h, l] of [...w.index]) if (keys.includes(l.bundleKey)) w.index.delete(h); },
     },
     sources: {
       list: async (root) => [...inner(w.sources, root).values()],
       upsert: async (root, rows) => { for (const r of rows) inner(w.sources, root).set(r.sourceId, r); },
-      remove: async (root, ids) => { for (const id of ids) inner(w.sources, root).delete(id); },
+      mark: async (root, ids) => { for (const id of ids) inner(w.sources, root).set(id, { sourceId: id, path: '', hash: '' }); },
+      markers: async (limit) => [...w.sources].flatMap(([rootId, m]) => [...m.values()].filter((r) => r.hash === '').map((r) => ({ rootId, sourceId: r.sourceId }))).slice(0, limit),
+      dropMarkers: async (markers) => { for (const m of markers) if (inner(w.sources, m.rootId).get(m.sourceId)?.hash === '') inner(w.sources, m.rootId).delete(m.sourceId); },
       clear: async (root) => { const n = inner(w.sources, root).size; w.sources.delete(root); return n; },
     },
     leaves: {
       all: async (root) => [...inner(w.leaves, root)].map(([key, digest]) => ({ key, digest })).sort((a, b) => (a.key < b.key ? -1 : 1)),
+      inBuckets: async (root, buckets) => [...inner(w.leaves, root)].filter(([key]) => buckets.includes(bucketOf(key))).map(([key, digest]) => ({ key, digest })),
+      any: async (root) => inner(w.leaves, root).size > 0,
       upsert: async (root, rows) => { for (const r of rows) inner(w.leaves, root).set(r.key, r.digest); },
       remove: async (root, keys) => { for (const k of keys) inner(w.leaves, root).delete(k); },
       existing: async (root, keys) => new Set(keys.filter((k) => inner(w.leaves, root).has(k))),
       namedByOthers: async (root, keys) => new Set(keys.filter((k) => [...w.leaves].some(([r, m]) => r !== root && m.has(k)))),
+      fillBuckets: async () => 0,
       clear: async (root) => { const n = inner(w.leaves, root).size; w.leaves.delete(root); return n; },
+    },
+    buckets: {
+      digests: async (root) => {
+        const out: string[] = new Array(MANIFEST_BUCKETS).fill(bucketDigest([]));
+        for (const [b, d] of inner(w.buckets, root)) out[b] = d;
+        return out;
+      },
+      has: async (root) => inner(w.buckets, root).size > 0,
+      put: async (root, rows) => { for (const r of rows) { if (r.digest === bucketDigest([])) inner(w.buckets, root).delete(r.bucket); else inner(w.buckets, root).set(r.bucket, r.digest); } },
+      clear: async (root) => { w.buckets.delete(root); },
     },
     roots: {
       get: async (root) => w.roots.get(root) ?? null,
@@ -112,7 +143,11 @@ export function fakeLedger(w: World): KnowledgeLedgerPort {
       },
       clear: async (root) => { w.roots.delete(root); },
     },
+    // The world's transactions are already serialised (`txChain`), which is what the advisory lock does in Postgres.
+    lock: async () => undefined,
+    exclusive: (work) => work(ledger),
   };
+  return ledger;
 }
 
 /** The body at an index location, read from real bundle bytes (a ranged read). */
@@ -150,10 +185,7 @@ export function fakeSync(w: World): KnowledgeSyncPort {
   return {
     state: async (root) => w.roots.get(root) ?? { generation: 0, digest: '' },
     sources: async (root) => all(root),
-    heldBodies: async (hashes) => {
-      w.indexQueries += 1;
-      return new Map(hashes.flatMap((h) => (w.index.has(h) ? [[h, w.index.get(h)!.sourceRefs] as const] : [])));
-    },
+    heldEntries: async (pairs) => fakeLedger(w).index.holds(pairs),
     putBundle: async (bundle: Bundle) => { w.puts.push('bundle'); w.bundles.set(bundle.key, bundle.bytes); },
     snapshotReview: async (root, digest) => { w.puts.push(`snapshot:${root}:${digest}`); },
     stagePart: async (actor, id, part, bytes) => { w.puts.push('stage'); w.staged.set(stageKey(actor, id, part), bytes); },
@@ -172,7 +204,7 @@ export function fakeSync(w: World): KnowledgeSyncPort {
     dropStaged: async (actor, id) => { for (const k of [...w.staged.keys()]) if (k.startsWith(`${actor}/${id}/`)) w.staged.delete(k); },
     sweepStaged: async () => undefined,
     deleteLegacySources: async (root, ids) => { for (const id of ids) { w.legacyDeleted.push(id); inner(w.legacySources, root).delete(id); } },
-    clearRoot: async (root) => { w.roots.delete(root); w.leaves.delete(root); },
+    clearRoot: async (root) => { w.roots.delete(root); w.leaves.delete(root); w.buckets.delete(root); },
   };
 }
 
@@ -182,7 +214,7 @@ export function atomically(w: World) {
   return <T>(work: (unit: PackUnit) => Promise<T>): Promise<T> => {
     const run = async (): Promise<T> => {
       const saved = {
-        facts: new Map(w.facts), relations: new Map(w.relations), sources: copy(w.sources), leaves: copy(w.leaves), index: new Map(w.index),
+        facts: new Map(w.facts), relations: new Map(w.relations), sources: copy(w.sources), leaves: copy(w.leaves), buckets: copy(w.buckets as never) as unknown as World['buckets'], index: new Map(w.index),
         roots: new Map(w.roots), stale: [...w.stale],
       };
       try {
@@ -193,7 +225,7 @@ export function atomically(w: World) {
       }
     };
     const next = (w.txChain ?? Promise.resolve()).then(run);
-    w.txChain = next.catch(() => undefined);
+    w.txChain = next.catch(reportedFallback(undefined, { source: 'application/knowledge/sync/syncFakes.test-util.ts', operation: 'txChain' }));
     return next;
   };
 }

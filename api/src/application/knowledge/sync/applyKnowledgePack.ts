@@ -33,6 +33,7 @@ import { inTransaction, type Db } from '../../../infrastructure/database/connect
 import type { Env } from '../../../env';
 import type { ExtractedCachePort, KnowledgeStorePort } from '../knowledgePorts';
 import { KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, putAnalysisSnapshot } from '../knowledgePerception';
+import { reportedFallback } from '../../observability/caughtErrorReporter';
 import { bumpKnowledgeVersion } from '../knowledgeVersion';
 import { factViewer } from '../deleteKnowledgeFact';
 import { authorizePackUpload } from '../packAccess';
@@ -93,6 +94,8 @@ const defaultAtomically = (deps: ApplyDeps): NonNullable<ApplyDeps['atomically']
     return work({ db, store: drizzleKnowledgeStore(db, deps.tenantId, deps.projectId), ledger: drizzleLedger(db, deps.tenantId, deps.projectId) });
   });
 
+const SOURCE = 'application/knowledge/sync/applyKnowledgePack.ts';
+
 const actorOf = (deps: ApplyDeps): string => deps.userId ?? deps.stageActor ?? 'machine';
 
 const bodyConflict = (hashes: readonly string[]): KnowledgeSyncError =>
@@ -110,7 +113,7 @@ async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array[
     || part < 0 || part >= parts || parts > MAX_SYNC_PARTS) {
     throw new KnowledgeSyncError(400, 'bad_parts', `a multi-part pack names a syncId, a part within 0..parts-1 and at most ${MAX_SYNC_PARTS} parts`);
   }
-  await deps.sync.sweepStaged().catch(() => undefined);
+  await deps.sync.sweepStaged().catch(reportedFallback(undefined, { source: SOURCE, operation: 'sweepStaged' }));
   if (part !== parts - 1) {
     await deps.sync.stagePart(actorOf(deps), syncId, part, input.body);
     return { staged: { applied: false, syncId, received: part + 1, parts } };
@@ -253,8 +256,8 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
 
     // After the commit: objects and calls the transaction must not hold open. A legacy delete that fails here is harmless
     // (the removal markers hide the object) and the sweep retries it.
-    await deps.sync.deleteLegacySources(root, plan.remove).catch(() => undefined);
-    if (pack.scope?.lastDigest) await deps.sync.snapshotReview(root, pack.scope.lastDigest, plan.after).catch(() => undefined);
+    await deps.sync.deleteLegacySources(root, plan.remove).catch(reportedFallback(undefined, { source: SOURCE, operation: 'deleteLegacySources', context: { root } }));
+    if (pack.scope?.lastDigest) await deps.sync.snapshotReview(root, pack.scope.lastDigest, plan.after).catch(reportedFallback(undefined, { source: SOURCE, operation: 'snapshotReview', context: { root } }));
     await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
     if (analysis) await putAnalysisSnapshot(deps, analysis.sha, root, analysis.snapshot);
     return {
@@ -262,6 +265,6 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
       facts: done.written.facts, relations: done.written.relations, deleted: done.tomb.deleted + done.legacy.deleted, skipped: [...done.tomb.skipped, ...done.legacy.skipped],
     };
   } finally {
-    if (input.syncId && (input.parts ?? 1) > 1) await deps.sync.dropStaged(actorOf(deps), input.syncId).catch(() => undefined);
+    if (input.syncId && (input.parts ?? 1) > 1) await deps.sync.dropStaged(actorOf(deps), input.syncId).catch(reportedFallback(undefined, { source: SOURCE, operation: 'dropStaged' }));
   }
 }

@@ -16,6 +16,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import { bundlePrefix } from './knowledgeBundles';
 import { drizzleLedger, rowsOf } from './knowledgeLedger';
 import { r2KnowledgeSync } from './sync/knowledgeSyncBlobs';
@@ -38,7 +39,10 @@ async function readCursor(bucket: R2Bucket): Promise<Cursor> {
     const obj = await bucket.get(CURSOR_KEY);
     const c = obj ? ((await obj.json()) as Partial<Cursor>) : undefined;
     if (c && Number.isInteger(c.tenantId) && Number.isInteger(c.projectId)) return { tenantId: c.tenantId!, projectId: c.projectId! };
-  } catch { /* an unreadable cursor starts over */ }
+  } catch (error) {
+    // an unreadable cursor starts over
+    reportCaughtError(error, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'readCursor', level: 'warning' });
+  }
   return { tenantId: 0, projectId: 0 };
 }
 
@@ -81,7 +85,10 @@ async function sweepRemovedSources(db: Db, sync: ReturnType<typeof r2KnowledgeSy
     try {
       await sync.deleteLegacySources(rootId, ids);
       done.push(...ids.map((sourceId) => ({ rootId, sourceId })));
-    } catch { /* kept: the marker stays and the next run retries */ }
+    } catch (error) {
+      // kept: the marker stays and the next run retries
+      reportCaughtError(error, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'deleteLegacySources', level: 'warning', context: { rootId } });
+    }
   }
   await ledger.sources.dropMarkers(done);
 }
@@ -106,8 +113,9 @@ export async function sweepKnowledgeStorage(env: Pick<Env, 'UPLOADS'>, db: Db, n
   for (const s of scopes) {
     tenants.add(s.tenant_id);
     const sync = r2KnowledgeSync({ UPLOADS: bucket }, s.tenant_id, s.project_id, drizzleLedger(db, s.tenant_id, s.project_id));
-    await sync.sweepStaged().catch(() => undefined);
-    await sweepRemovedSources(db, sync, s.tenant_id, s.project_id).catch(() => undefined);
+    const scope = { tenantId: s.tenant_id, projectId: s.project_id };
+    await sync.sweepStaged().catch(reportedFallback(undefined, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'sweepStaged', context: scope }));
+    await sweepRemovedSources(db, sync, s.tenant_id, s.project_id).catch(reportedFallback(undefined, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'sweepRemovedSources', context: scope }));
     const gone = await db.execute(sql`
       DELETE FROM knowledge_extracted_index i
       WHERE i.tenant_id = ${s.tenant_id} AND i.project_id = ${s.project_id}

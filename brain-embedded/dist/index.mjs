@@ -1124,11 +1124,11 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
 ]);
 
-// ../packages/local-first/src/storeContract.ts
-var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
-
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
+
+// ../packages/local-first/src/storeContract.ts
+var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
 
 // ../packages/local-first/src/clone.ts
 function clone(value) {
@@ -1360,6 +1360,10 @@ async function journalWrite(tx, record3, operation, options) {
     payload: operation === "delete" ? null : record3.payload
   });
 }
+
+// ../packages/local-first/src/sync.ts
+var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
+var HOLD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
 
 // ../packages/local-first/src/syncLease.ts
 var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
@@ -10214,7 +10218,7 @@ var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\|
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
-import { canonicalJson, srcRef } from "@seanhogg/builderforce-memory/knowledge";
+import { canonicalJson, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";
 import { areaOfPath } from "@seanhogg/builderforce-memory/working";
 import { hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
 
@@ -10282,14 +10286,14 @@ var CODE_LAYERS = defaultLayerRegistry();
 import { DOCS_PACK } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";
+import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef3 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
 import {
   DEFAULT_REVIEW_MODEL_CALLS,
   planDetail,
   reviewDirectory as reviewDirectory2,
-  srcRef as srcRef4
+  srcRef as srcRef5
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
@@ -10318,7 +10322,7 @@ import {
   isBinaryText,
   knownKeysOfEntities,
   sha256Hex as sha256Hex3,
-  srcRef as srcRef3
+  srcRef as srcRef4
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
@@ -10423,7 +10427,7 @@ var EMPTY_ROOT = manifestTree([]).root;
 var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-import { filesManifestKey as filesManifestKey2, srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
+import { filesManifestKey as filesManifestKey2, srcRef as srcRef6 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 import { factKeyOf } from "@seanhogg/builderforce-memory/knowledge";
@@ -10446,7 +10450,7 @@ import {
 import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-import { srcRef as srcRef6 } from "@seanhogg/builderforce-memory/knowledge";
+import { srcRef as srcRef7 } from "@seanhogg/builderforce-memory/knowledge";
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [

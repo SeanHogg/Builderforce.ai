@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { r2KnowledgeSync } from './knowledgeSyncBlobs';
 import { KnowledgeSyncError, STAGE_TTL_MS } from './knowledgeSyncPorts';
 import type { ExtractedLoc, KnowledgeLedgerPort } from '../knowledgeLedger';
+// (ExtractedLoc is used by `ledgerDouble`'s `locs` option)
 
 function fakeBucket() {
   const objects = new Map<string, { bytes: Uint8Array; meta?: Record<string, string> }>();
@@ -32,6 +33,7 @@ function ledgerDouble(over: { roots?: Map<string, { generation: number; digest: 
   const ledger = {
     roots: { get: async (r: string) => roots.get(r) ?? null, seed: async (r: string, row: { generation: number; digest: string }) => { if (!roots.has(r)) roots.set(r, row); }, clear: async (r: string) => { roots.delete(r); } },
     leaves: { clear: async () => 0 },
+    buckets: { clear: async () => undefined },
     index: { locate: async () => over.locs ?? [], dropBundles: async (keys: string[]) => { dropped.push(keys); } },
   } as unknown as KnowledgeLedgerPort;
   return { ledger, roots, dropped };
@@ -80,17 +82,16 @@ describe('r2KnowledgeSync', () => {
     expect(await sync.state('ws:none')).toEqual({ generation: 0, digest: '' });
   });
 
-  it('does not claim a body whose bundle object is gone: the rows are dropped and the have-check says no', async () => {
-    const { bucket, objects } = fakeBucket();
-    objects.set('knowledge/4/extracted-bundles/live', { bytes: new Uint8Array(1) });
-    const locs: ExtractedLoc[] = [
-      { hash: 'h1', bundleKey: 'knowledge/4/extracted-bundles/live', byteOffset: 0, byteLength: 1, sourceRefs: ['src:r::a'] },
-      { hash: 'h2', bundleKey: 'knowledge/4/extracted-bundles/gone', byteOffset: 0, byteLength: 1, sourceRefs: ['src:r::b'] },
-    ];
-    const d = ledgerDouble({ locs });
-    const held = await r2KnowledgeSync({ UPLOADS: bucket }, 4, 9, d.ledger).heldBodies(['h1', 'h2']);
-    expect([...held.keys()]).toEqual(['h1']);
-    expect(d.dropped).toEqual([['knowledge/4/extracted-bundles/gone']]);
+  it('regression: a have-check is the index answer alone: no HEAD per distinct bundle, nothing dropped (the sweep is the only deleter)', async () => {
+    const { bucket } = fakeBucket();
+    let heads = 0;
+    const counting = { ...(bucket as unknown as Record<string, unknown>), head: async () => { heads += 1; return null; } } as unknown as R2Bucket;
+    const d = ledgerDouble();
+    (d.ledger.index as unknown as { holds: unknown }).holds = async () => new Set([1]);
+    const held = await r2KnowledgeSync({ UPLOADS: counting }, 4, 9, d.ledger).heldEntries([{ hash: 'h1', sourceRef: 'src:r::a' }, { hash: 'h2', sourceRef: 'src:r::b' }]);
+    expect([...held]).toEqual([1]);
+    expect(heads).toBe(0);
+    expect(d.dropped).toEqual([]);
   });
 
   it('deletes legacy source objects in batches of at most 1,000 keys', async () => {

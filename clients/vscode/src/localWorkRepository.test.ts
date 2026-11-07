@@ -78,10 +78,9 @@ describe("localWorkRepository", () => {
 
       const exported = await store.export();
       const create = exported.events.find((event) => event.clientEntityId === ticket.id);
-      const projectEvent = exported.events.find((event) => event.idempotencyKey === `project:${project.id}:v1`);
       expect(create).toMatchObject({
         operation: "create",
-        dependsOn: [projectEvent?.eventId],
+        dependsOn: [`project:${project.id}:v1`],
         destination: UNBOUND_DESTINATION,
       });
     } finally {

@@ -5,7 +5,7 @@ import { surfaceDiagnosticLines } from '../surfaceDiagnostics';
 import { buildLines, MAX_LINES, MAX_STOPS } from './lines';
 import { outlineFixture, truncatedFixture } from './outlineFixture';
 import { groupLines } from './rail/lineGroups';
-import { endText } from './rail/LineRow';
+import { endText } from './rail/lineEnd';
 import { buildStations } from './stations';
 import { systemDiagnosticLines } from './systemDiagnostics';
 import { foldCopyFindings, systemsOf } from './systems';

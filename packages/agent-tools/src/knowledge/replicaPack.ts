@@ -20,9 +20,9 @@
  * scope and the `targetDigest`).
  */
 
-import type { Extracted, KnowledgeStore, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { srcRef, type Extracted, type KnowledgeStore, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import {
-    bucketOf, diffEntries, encodePack, jsonBytesOf, rootLeaves, rootDigestOf, ZERO_DIGEST, fileLeafKey,
+    bucketOf, diffEntries, encodePack, jsonBytesOf, parseRelationLeafKey, rootLeaves, rootDigestOf, ZERO_DIGEST, fileLeafKey,
     type Pack, type PackExtr,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { factKey, relationKey, type ReplicaAnalysis } from './replicaQueue.js';
@@ -32,7 +32,8 @@ export interface ReplicaSource { ref: string; hash: string; bytes?: number | und
 
 /** The knowledge client's sync calls the pack builder uses. */
 export interface PackQueries {
-    syncHave(rootId: string, hashes: readonly string[]): Promise<boolean[]>;
+    /** Which `(hash, sourceRef)` pairs the project holds a body entry for (same order as asked). */
+    syncHave(rootId: string, pairs: ReadonlyArray<{ hash: string; sourceRef: string }>): Promise<boolean[]>;
     syncLeaves(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }>;
 }
 
@@ -78,8 +79,9 @@ export const DIFF_MAX_FILES = 200;
 /** Hashes per have request: the server answers any number with ONE index query, so a 20,000-file root asks once. */
 const HAVE_CHUNK = 20_000;
 const LEAF_BUCKETS_PER_REQUEST = 512;
-export const DEFAULT_MAX_DECODED = 48 * 1024 * 1024;
-export const DEFAULT_MAX_ROWS = 600_000;
+/** A pack is cut below what the server decodes (24 MB, 200,000 rows: sized for a 128 MB Worker), with headroom for the rows `rowsIn` does not count. */
+export const DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
+export const DEFAULT_MAX_ROWS = 150_000;
 
 export const pathOfRef = (rootId: string, ref: string): string => {
     const prefix = `src:${rootId}::`;
@@ -88,11 +90,14 @@ export const pathOfRef = (rootId: string, ref: string): string => {
     return at >= 0 ? ref.slice(at + 2) : ref;
 };
 
-async function haveAll(client: PackQueries, rootId: string, hashes: readonly string[]): Promise<Set<string>> {
+const pairKey = (p: { hash: string; sourceRef: string }): string => `${p.hash}\u0000${p.sourceRef}`;
+
+/** The `(hash, sourceRef)` pairs the project holds among `pairs`, keyed by {@link pairKey}. */
+async function haveAll(client: PackQueries, rootId: string, pairs: readonly { hash: string; sourceRef: string }[]): Promise<Set<string>> {
     const held = new Set<string>();
-    for (let i = 0; i < hashes.length; i += HAVE_CHUNK) {
-        const chunk = hashes.slice(i, i + HAVE_CHUNK);
-        (await client.syncHave(rootId, chunk)).forEach((yes, k) => { if (yes) held.add(chunk[k]!); });
+    for (let i = 0; i < pairs.length; i += HAVE_CHUNK) {
+        const chunk = pairs.slice(i, i + HAVE_CHUNK);
+        (await client.syncHave(rootId, chunk)).forEach((yes, k) => { if (yes) held.add(pairKey(chunk[k]!)); });
     }
     return held;
 }
@@ -109,11 +114,6 @@ async function serverLeaves(client: PackQueries, rootId: string, keys: readonly 
     }
     return out;
 }
-
-const parseRelationKey = (key: string): { from: string; to: string; kind: string } => {
-    const [from = '', to = '', kind = ''] = key.slice(2).split('\u0000');
-    return { from, to, kind };
-};
 
 const rowsIn = (pack: Pack): number =>
     (pack.files?.length ?? 0) + (pack.facts?.length ?? 0) + (pack.relations?.length ?? 0)
@@ -161,10 +161,18 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         for (const f of files) { const p = leafMap.get(fileLeafKey(f.path, f.hash)); if (p && p !== f.hash) priorOf.set(f.hash, p); }
     }
 
-    // ONE have for the bodies and the priors: bodies only for hashes the project lacks, as a diff when the prior is held.
+    // ONE have for the bodies and the priors, per (hash, THIS root's sourceRef): a hash the project holds only under another
+    // root still uploads this root's entry. A body goes in only for a hash with a file the project lacks, as a diff when the
+    // prior is held for that file.
     const hashes = [...new Set(files.map((f) => f.hash))];
-    const held = await haveAll(client, rootId, [...new Set([...hashes, ...priorOf.values()])]);
-    const need = hashes.filter((h) => !held.has(h) || args.forceBodies?.has(h));
+    const asked = new Map<string, { hash: string; sourceRef: string }>();
+    for (const f of files) {
+        const sourceRef = srcRef(rootId, f.path);
+        for (const hash of [f.hash, priorOf.get(f.hash)]) if (hash) asked.set(pairKey({ hash, sourceRef }), { hash, sourceRef });
+    }
+    const held = await haveAll(client, rootId, [...asked.values()]);
+    const heldFor = (hash: string, f: { path: string }): boolean => held.has(pairKey({ hash, sourceRef: srcRef(rootId, f.path) }));
+    const need = hashes.filter((h) => files.some((f) => f.hash === h && !heldFor(h, f)) || args.forceBodies?.has(h));
 
     const extracted: PackExtr[] = [];
     const fullExtr: PackExtr[] = [];
@@ -173,7 +181,7 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         if (!entries || entries.length === 0) continue;
         fullExtr.push({ kind: 'full', hash, entries });
         const prior = priorOf.get(hash);
-        const priorEntries = prior && held.has(prior) ? await local.getExtracted?.(prior) : undefined;
+        const priorEntries = prior && files.some((f) => f.hash === hash && heldFor(prior, f)) ? await local.getExtracted?.(prior) : undefined;
         const diffs = priorEntries ? diffEntries(priorEntries, entries) : undefined;
         extracted.push(diffs && JSON.stringify(diffs).length * 5 < JSON.stringify(entries).length * 4
             ? { kind: 'diff', hash, prior: prior!, entries: diffs }
@@ -193,7 +201,7 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         }
         if (k.startsWith('f:')) tombstones.files.push(k.slice(2));
         else if (k.startsWith('a:')) tombstones.facts.push(k.slice(2));
-        else if (k.startsWith('r:')) tombstones.relations.push(parseRelationKey(k));
+        else if (k.startsWith('r:')) { const r = parseRelationLeafKey(k); if (r) tombstones.relations.push(r); }
     }
     if (final) {
         const facts = new Map(allFacts.map((f) => [factKey(f.key), f]));

@@ -18,6 +18,7 @@ import type { KnowledgePorts } from '../../application/knowledge/knowledgeCompos
 import { applyKnowledgePack } from '../../application/knowledge/sync/applyKnowledgePack';
 import { bucketIdsOf, haveBitmap, manifestLeaves, manifestSummary } from '../../application/knowledge/sync/knowledgeSyncManifest';
 import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES } from '../../application/knowledge/sync/knowledgeSyncPorts';
+import { reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
 
 const json = (body: unknown, status = 200): Response =>
@@ -49,7 +50,7 @@ async function bodyOf(c: Context): Promise<Uint8Array> {
     if (done) break;
     total += value.length;
     if (total > MAX_SYNC_BODY_BYTES) {
-      await reader.cancel().catch(() => undefined);
+      await reader.cancel().catch(reportedFallback(undefined, { source: 'presentation/routes/projectKnowledgeSyncRoutes.ts', operation: 'cancelOversizedBody' }));
       throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
     }
     chunks.push(value);

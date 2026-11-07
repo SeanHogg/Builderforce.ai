@@ -133,8 +133,11 @@ export interface KnowledgeClient {
   syncManifest(rootId: string): Promise<SyncManifest>;
   /** POST …/knowledge/sync/manifest — the server's leaves in the given buckets. */
   syncLeaves(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }>;
-  /** POST …/knowledge/sync/have — which of `hashes` the project already holds (same order as asked). */
-  syncHave(rootId: string, hashes: readonly string[]): Promise<boolean[]>;
+  /**
+   * POST …/knowledge/sync/have — which `(hash, sourceRef)` pairs the project already holds (same order as asked). A hash
+   * held only under another root answers false for this root's ref, so just this root's entry is uploaded.
+   */
+  syncHave(rootId: string, pairs: readonly SyncHavePair[]): Promise<boolean[]>;
   /**
    * POST …/knowledge/write of rows only (≤ 500), stamped with the root: the path for rows a pack does not carry — a person's
    * notes, an agent's facts, a model row with no leaf — each written under its own credential's rules.
@@ -156,6 +159,9 @@ export class KnowledgeApiError extends Error {
   }
 }
 
+/** A body entry the have-check asks about: the content hash and the source whose entry the stored body must hold. */
+export interface SyncHavePair { hash: string; sourceRef: string }
+
 /** One request of a sync: the pack's bytes, or one ordered part of them. */
 export interface SyncPart { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }
 
@@ -172,7 +178,7 @@ export interface SyncManifest {
   buckets: string[];
 }
 
-/** 409: the server moved (generation_mismatch), could not reach the digest (digest_mismatch) lacks a prior (prior_missing), lacks bodies (extracted_missing, `hashes` names them) or lost a part (parts_missing). Reconcile or resend. */
+/** 409: the server moved (generation_mismatch), could not reach the digest (digest_mismatch) lacks a prior (prior_missing), lacks bodies (extracted_missing, `hashes` names them), lost a part (parts_missing) or saw another pack change the same bodies at the same time (body_conflict: rebuild and resend now). Reconcile or resend. */
 export class KnowledgeSyncConflictError extends KnowledgeApiError {
   constructor(code: string, message: string, readonly generation?: number, readonly digest?: string, readonly hashes?: string[]) {
     super(409, code, message);

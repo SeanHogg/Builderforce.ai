@@ -177,8 +177,8 @@ export interface LocalDomainToolResult {
   id: string;
   /** Absent for a tombstoning write (`*-archive` on a project, `ticket-delete`). */
   record?: LocalRecord;
-  /** The journal event this write produced and queued for sync. */
-  syncEvent: QueuedLocalSyncEvent;
+  /** The journal event this write produced and queued for sync. Absent when a tombstone of a never-imported row left nothing to send. */
+  syncEvent?: QueuedLocalSyncEvent;
   /** The account's numeric id for this record, once a sync receipt mapped it (normally absent at creation). */
   serverId?: string;
   /** What the id is and when builtin_* tools accept it. */
@@ -416,10 +416,14 @@ async function queuedEventFor(
   store: LocalFirstStore,
   entityType: LocalEntityType,
   id: string,
-): Promise<QueuedLocalSyncEvent> {
+  tombstone = false,
+): Promise<QueuedLocalSyncEvent | undefined> {
   const pending = await store.read((tx) => tx.pending());
   const own = pending.filter((event) => event.clientEntityId === id && event.entityType === entityType);
   const latest = own[own.length - 1];
+  // A tombstone of a row the server never imported journals NOTHING (there is nothing to
+  // undo there): not a defect, and nothing to queue.
+  if (!latest && tombstone) return undefined;
   if (!latest) {
     throw new LocalDomainToolError(
       "invalid_arguments",
@@ -461,8 +465,8 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
     const name = normalizeDomainToolName(tool) as LocalDomainToolName;
 
     const write = await writeLocally(name, options.repository, options.store, args);
-    const syncEvent = await queuedEventFor(options.store, write.entityType, write.id);
-    options.syncQueue.enqueue([syncEvent]);
+    const syncEvent = await queuedEventFor(options.store, write.entityType, write.id, write.record === undefined);
+    if (syncEvent) options.syncQueue.enqueue([syncEvent]);
     const serverId = await serverIdOf(options.store, write.record);
     return Object.freeze({
       kind: "local",
@@ -470,7 +474,7 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
       entityType: write.entityType,
       id: write.id,
       ...(write.record ? { record: write.record } : {}),
-      syncEvent,
+      ...(syncEvent ? { syncEvent } : { note: "nothing to sync — never left this device" }),
       ...(serverId ? { serverId } : {}),
       ...(name === "ticket-create" || name === "project-create" ? { note: CREATE_NOTE } : {}),
     } as LocalDomainToolResult);

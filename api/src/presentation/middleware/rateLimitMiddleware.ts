@@ -38,6 +38,7 @@ import {
 } from '../../application/ratelimit/tenantBuckets';
 import { BUILTIN_EXTENSION_ID, advertisedName } from '../../application/llm/toolNaming';
 import { resolveBearerTenantId } from '../routes/llmRoutes';
+import { parseBody, z } from '../routes/requestBody';
 
 /** Requests the limiter never counts or blocks AT THE DOOR. Persisting a chat turn is
  *  the user's own work — a 429 there drops the turn ("Could not save the turn"), so the
@@ -171,7 +172,8 @@ async function isBoardMutationRelayCall(c: Parameters<MiddlewareHandler>[0]): Pr
   const relay = MCP_CALL_ROUTE.test(c.req.path);
   if (!relay && !MCP_JSONRPC_ROUTE.test(c.req.path)) return false;
   try {
-    const body = await c.req.json();
+    // Classification only: z.unknown() admits any JSON, the classifiers below do the shape checks.
+    const body = await parseBody(c, z.unknown());
     return relay ? isBoardMutationMcpCall(body) : isBoardMutationJsonRpc(body);
   } catch {
     return false; // not JSON — the route answers its own 400

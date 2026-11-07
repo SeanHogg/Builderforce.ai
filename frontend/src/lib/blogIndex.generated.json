@@ -1,5 +1,18 @@
 [
   {
+    "slug": "one-folder-many-systems",
+    "title": "One folder, many systems — each on its own map, with stray copies called out",
+    "date": "2026-11-07",
+    "description": "A big folder used to read as one tangled system, and stray copies polluted the map. Now every system in a monorepo or a workspace of many repos is its own system, and duplicated trees are found and offered as a one-click Exclude.",
+    "tags": [
+      "knowledge-map",
+      "monorepo",
+      "vscode",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "watch-your-codebase-review-run",
     "title": "Watch your codebase review run — and keep your map when the server is gone",
     "date": "2026-11-07",

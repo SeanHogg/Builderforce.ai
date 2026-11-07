@@ -12,7 +12,7 @@
  * learns of another window's commit calls `applyDelta` instead of rebuilding.
  */
 
-import { blockedEventIds } from './dependencyGraph.js';
+import { blockedEventIds, loadMappedEntities } from './dependencyGraph.js';
 import {
   UNBOUND_DESTINATION,
   destinationKey,
@@ -81,7 +81,7 @@ export async function countPending(tx: LocalFirstTransaction, destination?: Enti
   // they cannot be sent until the user supersedes that write, so they must not hold a drain open.
   const every: JournalEvent[] = [];
   await tx.scanPending((event) => { every.push(event as JournalEvent); });
-  const blocked = blockedEventIds(every);
+  const blocked = blockedEventIds(every, await loadMappedEntities(tx, every));
   const key = destination ? destinationKey(destination) : undefined;
   return every.filter((event) => !event.deadLetter && !blocked.has(event.eventId)
     && (key === undefined || destinationKey(event.destination) === key)).length;

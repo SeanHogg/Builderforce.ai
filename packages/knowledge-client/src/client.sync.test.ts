@@ -53,9 +53,10 @@ describe('client.sync (PRD 41 A11)', () => {
     expect(calls[0]!.path).toBe('/api/projects/5/knowledge/sync/manifest?root=r');
   });
 
-  it('answers have in the order asked, from the server bitmap over the sorted hashes', async () => {
-    const asked = ['c'.repeat(64), 'a'.repeat(64), 'b'.repeat(64)];
-    // sorted order a, b, c; the server holds a and c
+  it('answers have per (hash, sourceRef) in the order asked, from the server bitmap over the rows sorted by sourceRef', async () => {
+    const h = 'a'.repeat(64);
+    const asked = [{ hash: h, sourceRef: 'src:r::c.ts' }, { hash: h, sourceRef: 'src:r::a.ts' }, { hash: h, sourceRef: 'src:r::b.ts' }];
+    // sorted order a, b, c; the server holds a's and c's entries (a hash held under another root answers 0 for this root's ref)
     const { client } = clientWith(() => reply(new Uint8Array([0b101]) as unknown as BodyInit));
     expect(await client.syncHave('r', asked)).toEqual([true, true, false]);
   });

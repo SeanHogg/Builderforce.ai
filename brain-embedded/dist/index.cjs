@@ -2739,11 +2739,11 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
 ]);
 
-// ../packages/local-first/src/storeContract.ts
-var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
-
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
+
+// ../packages/local-first/src/storeContract.ts
+var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
 
 // ../packages/local-first/src/clone.ts
 function clone(value) {
@@ -2975,6 +2975,10 @@ async function journalWrite(tx, record3, operation, options) {
     payload: operation === "delete" ? null : record3.payload
   });
 }
+
+// ../packages/local-first/src/sync.ts
+var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
+var HOLD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
 
 // ../packages/local-first/src/syncLease.ts
 var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;

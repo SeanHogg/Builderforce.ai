@@ -91,12 +91,12 @@ describe("localDomainTools", () => {
           operation: "create",
           destination: ACCOUNT,
         });
-        expect(syncQueue.queued[0].eventId).toBe(created.syncEvent.eventId);
+        expect(syncQueue.queued[0].eventId).toBe(created.syncEvent!.eventId);
 
         // 3. The queued event is the journal event the local transaction appended —
         //    not a second, looser copy this module invented.
         const journal = await store.export();
-        const journalEvent = journal.events.find((event) => event.eventId === created.syncEvent.eventId);
+        const journalEvent = journal.events.find((event) => event.eventId === created.syncEvent!.eventId);
         expect(journalEvent).toMatchObject({
           clientEntityId: created.id,
           entityType: "project",
@@ -129,51 +129,56 @@ describe("localDomainTools", () => {
       });
       // The ticket took the PROJECT's bound destination, snapped (G11).
       expect(created.record?.destination).toEqual(ACCOUNT);
-      expect(created.syncEvent.operation).toBe("create");
+      expect(created.syncEvent!.operation).toBe("create");
       // The create depends on the project, so a later batch push orders them.
       const journal = await store.export();
-      // `dependsOn` carries the project event's wire id (the store resolves the key).
-      const projectEvent = journal.events.find((event) => event.idempotencyKey === `project:${project.id}:v1`);
-      expect(journal.events.find((event) => event.eventId === created.syncEvent.eventId)?.dependsOn).toEqual([
-        projectEvent?.eventId,
+      // `dependsOn` holds the project event's dedupe KEY; it is resolved to a wire id at send time.
+      expect(journal.events.find((event) => event.eventId === created.syncEvent!.eventId)?.dependsOn).toEqual([
+        `project:${project.id}:v1`,
       ]);
 
       const moved = await tools.execute("ticket-move", { id: created.id, status: "in_progress" });
       if (moved.kind !== "local") throw new Error("expected a local result");
       expect(moved.record?.payload).toMatchObject({ status: "in_progress" });
-      expect(moved.syncEvent.operation).toBe("update");
-      expect(moved.syncEvent.eventId).not.toBe(created.syncEvent.eventId);
+      // The ticket was never imported by the server, so the move REPLACES its pending create
+      // with one import carrying the newest state (never an update against a version the server lacks).
+      expect(moved.syncEvent!.operation).toBe("import");
+      expect(moved.syncEvent!.eventId).not.toBe(created.syncEvent!.eventId);
       expect((await repository.getTicket(created.id)).version).toBe(2);
 
-      expect(syncQueue.queued.map((event) => event.operation)).toEqual(["create", "update"]);
-      // The queued ids are the real journal events, in order.
+      expect(syncQueue.queued.map((event) => event.operation)).toEqual(["create", "import"]);
       const pendingIds = (await store.export()).events.map((event) => event.eventId);
-      expect(syncQueue.queued.map((event) => event.eventId)).toEqual([
-        created.syncEvent.eventId,
-        moved.syncEvent.eventId,
-      ]);
-      expect(pendingIds).toEqual(expect.arrayContaining(syncQueue.queued.map((event) => event.eventId)));
+      expect(pendingIds).toContain(moved.syncEvent!.eventId);
     });
 
-    it("queues an archive event for a tombstoned project and a deleted ticket", async () => {
+    it("tombstones a never-synced project and ticket with nothing to sync, and reports it", async () => {
       const { store, repository, syncQueue, tools } = harness();
       const project = await repository.createProject({ name: "Retired" });
-      const ticket = await repository.createTicket({ projectId: project.id, title: "Doomed" });
+      await repository.createTicket({ projectId: project.id, title: "Doomed" });
 
       const archived = await tools.execute("project-archive", { id: project.id });
-      if (archived.kind !== "local") throw new Error("expected a local result");
       expect(archived.record).toBeUndefined();
-      expect(archived.syncEvent).toMatchObject({ entityType: "project", operation: "delete" });
+      // Nothing left this device, so there is no event to send — and that is not a failure.
+      expect(archived.syncEvent).toBeUndefined();
+      expect(archived.note).toMatch(/nothing to sync/);
+      expect(syncQueue.queued).toEqual([]);
 
       const journal = await store.export();
-      // A tombstone is a delete EVENT, never a row removal, and its tickets went too.
+      // A tombstone is never a row removal, and the project's tickets went with it.
       expect(journal.records.some((record) => record.entityType === "project" && !record.deletedAt)).toBe(false);
       expect(journal.records.some((record) => record.entityType === "ticket" && !record.deletedAt)).toBe(false);
-      expect(journal.events.filter((event) => event.operation === "delete").map((event) => event.entityType)).toEqual([
-        "ticket",
-        "project",
-      ]);
-      expect(syncQueue.queued.map((event) => event.eventId)).toContain(archived.syncEvent.eventId);
+      expect(journal.events).toEqual([]);
+    });
+
+    it("queues a delete event for a tombstoned project the server HAS imported", async () => {
+      const { store, repository, tools } = harness();
+      const project = await repository.createProject({ name: "Synced" });
+      await store.transact(async (tx) => {
+        await tx.acknowledge((await tx.pending()).map((event) => event.eventId));
+        await tx.putMapping({ destination: ACCOUNT, entityType: "project", clientEntityId: project.id, serverId: "9", serverVersion: 3 });
+      });
+      const archived = await tools.execute("project-archive", { id: project.id });
+      expect(archived.syncEvent).toMatchObject({ entityType: "project", operation: "delete" });
     });
 
     it("tombstones a ticket through ticket-archive and keeps it readable", async () => {
@@ -183,7 +188,7 @@ describe("localDomainTools", () => {
 
       const archived = await tools.execute("ticket-archive", { id: ticket.id, archived: true });
       if (archived.kind !== "local") throw new Error("expected a local result");
-      expect(archived.syncEvent.operation).toBe("update");
+      expect(archived.syncEvent!.operation).toBe("import");
       expect((await repository.getTicket(ticket.id)).payload.archived).toBe(true);
       // An archived ticket is filtered out of the board, not deleted.
       expect(await repository.listTickets()).toHaveLength(0);
@@ -254,8 +259,8 @@ describe("localDomainTools", () => {
     if (created.kind !== "local") throw new Error("expected a local result");
 
     expect(created.record?.destination).toEqual(UNBOUND_DESTINATION);
-    expect(created.syncEvent.destination).toEqual(UNBOUND_DESTINATION);
-    expect(created.syncEvent.destinationKey).toBe("unbound");
+    expect(created.syncEvent!.destination).toEqual(UNBOUND_DESTINATION);
+    expect(created.syncEvent!.destinationKey).toBe("unbound");
     // G10: unbound work waits for an explicit bind, it is not adopted later.
     expect(syncQueue.queued).toHaveLength(1);
   });

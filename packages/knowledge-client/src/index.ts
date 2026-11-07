@@ -9,6 +9,7 @@ export {
   KnowledgeSyncConflictError,
   KnowledgeSyncTooLargeError,
   type SyncAck,
+  type SyncHavePair,
   type SyncManifest,
   type SyncPart,
   type AnalysisSnapshotPayload,

@@ -141,6 +141,44 @@ export async function rebaseImportsOntoMapping(
   }
 }
 
+/**
+ * A receipt just advanced a row from `fromBase` to `toVersion` while the user kept editing: newer
+ * pending updates / deletes of that row were based on `fromBase` and would now conflict with the
+ * version the server holds. Rebase each onto `toVersion` (same operation, same key, same payload).
+ */
+export async function rebaseNewerWrites(
+  tx: LocalFirstTransaction,
+  entityType: LocalRecord['entityType'],
+  clientEntityId: string,
+  afterSequence: number,
+  fromBase: number,
+  toVersion: number,
+): Promise<void> {
+  const newer = await selectPending(
+    tx,
+    (event) => event.entityType === entityType
+      && event.clientEntityId === clientEntityId
+      && (event.operation === 'update' || event.operation === 'delete')
+      && event.localSequence > afterSequence
+      && event.baseVersion === fromBase,
+  );
+  for (const event of newer) {
+    await tx.acknowledge([event.eventId]);
+    await tx.append({
+      ...(event.idempotencyKey !== undefined ? { idempotencyKey: event.idempotencyKey } : {}),
+      clientEntityId,
+      entityType,
+      operation: event.operation,
+      schemaVersion: event.schemaVersion,
+      occurredAt: event.occurredAt,
+      baseVersion: toVersion,
+      dependsOn: event.dependsOn,
+      destination: event.destination,
+      payload: event.payload,
+    });
+  }
+}
+
 /** The payload a row is imported with: a sign-in-bound chat names its server chat. */
 function importPayload(record: LocalRecord, mapping: ServerMapping | undefined): unknown {
   if (record.entityType !== 'chat' || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record.payload;

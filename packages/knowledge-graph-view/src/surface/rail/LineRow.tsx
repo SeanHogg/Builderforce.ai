@@ -10,21 +10,8 @@ import { lineTone } from '../overlays';
 import { counted } from '../plural';
 import type { StationModel } from '../stations';
 import { TYPE } from '../ui/type';
+import { deadEndsOf, endText } from './lineEnd';
 import { clip, railRow } from './railRow';
-
-/** A line ends in a dead end when its last station is nothing a store or service, and nobody has reported it yet. */
-export const deadEndsOf = (line: Line, byId: StationModel['byId']): number =>
-    line.terminus.kind === 'end' && (byId.get(line.terminus.stationId)?.findingIds.length ?? 0) === 0 ? 1 : 0;
-
-const REASON_KEY = {
-    'no-references': 'noReferences', 'only-upward': 'onlyUpward', 'only-visited': 'onlyVisited', 'only-higher-layer': 'onlyHigherLayer', 'max-stops': 'maxStops',
-} as const;
-
-/** Where a line ends, in words: why it stopped, unless it ends at a real store or service (or the line records no reason). */
-export function endText(line: Line, labels: KnowledgeGraphLabels): string {
-    const reason = line.stopReason;
-    return reason && reason !== 'terminus' ? labels.surface.stopReasons[REASON_KEY[reason]] : labels.surface.terminus[line.terminus.kind];
-}
 
 export interface LineRowProps {
     line: Line;

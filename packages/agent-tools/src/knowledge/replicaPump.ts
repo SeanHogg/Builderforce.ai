@@ -17,6 +17,7 @@
  *                             `maxTransientStreak` is set, after that many in a row (`paused: 'unreachable'`).
  *   401 / 403                 the work is KEPT and the pump pauses (`paused: 'auth'`): an expired token must
  *                             never lose the set. The next start resumes.
+ *   409 body_conflict         another pack merged the same bodies at once: rebuild and resend now, at most 3 times;
  *   409                       `generation_mismatch` / `digest_mismatch`: reconcile; `prior_missing`: resend
  *                             without diffs; `extracted_missing`: resend with those bodies; at most 4 in a row.
  *   413 pack_too_large        the pack is cut in half (by files) and the rest stays dirty.
@@ -110,6 +111,8 @@ const BACKOFF_START_MS = 1000;
 const BACKOFF_CAP_MS = 60_000;
 const MIN_WAIT_MS = 250;
 const MAX_CONFLICTS = 4;
+/** Rebuilds after `body_conflict` (two packs of one project merged the same bodies at once). */
+const MAX_BODY_CONFLICTS = 3;
 /** Rows per side write: the single writer's bound. */
 const SIDE_ROWS_CHUNK = 500;
 /** The analysis snapshot the server takes (2 MB). */
@@ -187,13 +190,13 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
     };
     const guarded = {
         sync: (r: string, p: Parameters<ReplicaClient['sync']>[1]) => request(() => args.client.sync(r, p)),
-        syncHave: (r: string, h: readonly string[]) => request(() => args.client.syncHave(r, h)),
+        syncHave: (r: string, p: Parameters<ReplicaClient['syncHave']>[1]) => request(() => args.client.syncHave(r, p)),
         syncLeaves: (r: string, b: readonly number[]) => request(() => args.client.syncLeaves(r, b)),
         syncManifest: (r: string) => request(() => args.client.syncManifest(r)),
         writeRows: (r: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }) => request(() => args.client.writeRows(r, rows)),
     };
 
-    let conflicts = 0, noDiff = false, maxFiles: number | undefined, force: Set<string> | undefined, lastFiles = 0;
+    let conflicts = 0, bodyConflicts = 0, noDiff = false, maxFiles: number | undefined, force: Set<string> | undefined, lastFiles = 0;
     let owned: Set<string> | undefined;
     let hadFailure = false;
     try {
@@ -258,8 +261,12 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                         const status = statusOf(error);
                         hadFailure = true;
                         state.failed.push({ reason: messageOf(error), ...(status !== undefined ? { status } : {}) });
-                        const unsent = new Set(side.keys);
-                        sentKeys = sentKeys.filter((k) => !unsent.has(k));
+                        // A 4xx is the server's final answer about THESE rows (the writer refused them): retrying every cycle
+                        // can never succeed, so they leave the dirty set and stay recorded in `failed`. Anything else is kept.
+                        if (!(status !== undefined && status >= 400 && status < 500)) {
+                            const unsent = new Set(side.keys);
+                            sentKeys = sentKeys.filter((k) => !unsent.has(k));
+                        }
                     }
                 }
                 await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, sentKeys, built.analysisSent);
@@ -268,11 +275,13 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                     percent: built.jsonBytes > 0 ? Math.round((built.bytes.length / built.jsonBytes) * 1000) / 10 : 0,
                 };
                 state.lastSyncAt = new Date(now()).toISOString();
-                conflicts = 0; noDiff = false; force = undefined; owned = undefined;
+                conflicts = 0; bodyConflicts = 0; noDiff = false; force = undefined; owned = undefined;
                 delete state.parts;
             } catch (error) {
                 if (error instanceof Stop) break;
                 const status = statusOf(error), code = codeOf(error);
+                // Another pack changed the same bodies at the same moment: rebuild and resend now (no reconcile), at most 3 times.
+                if (status === 409 && code === 'body_conflict' && bodyConflicts < MAX_BODY_CONFLICTS) { bodyConflicts += 1; continue; }
                 if (status === 409 && conflicts < MAX_CONFLICTS) {
                     conflicts += 1;
                     if (code === 'prior_missing') noDiff = true;

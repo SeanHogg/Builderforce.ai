@@ -21,7 +21,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInRequestScope } from '../shared/requestScope';
 import * as projectFacts from '../llm/projectFactsWrite';
-import * as writePorts from '../knowledge/knowledgeWritePorts';
+import { batchOverSingle } from '../knowledge/factWriterMock.test-util';
 import * as llmProxy from '../llm/LlmProxyService';
 import * as timelineTail from '../../domain/shared/timelineTail';
 import * as brainLlmCall from './brainLlmCall';
@@ -34,13 +34,18 @@ import * as sessionAuthority from './agentHostSessionAuthority';
 // factory never runs). Spy the live exports the use cases bound so the
 // assertion and the call are the same function, and so summarize never
 // reaches a model or a real access query.
-const upsertProjectFact = vi.spyOn(projectFacts, 'upsertProjectFact').mockResolvedValue(true);
+// The ONE writer (`writeKnowledge`) calls the BATCH `upsertProjectFacts`, so the single-fact spy the
+// assertions read is wrapped as the batch call (PRD 41 A11 rule 4a). Spying only `upsertProjectFact`
+// let the real batch writer run against these db doubles and overwrite the `chat_memories` insert capture.
+const upsertProjectFact = vi.fn(async (..._args: unknown[]) => true);
+vi.spyOn(projectFacts, 'upsertProjectFacts').mockImplementation(batchOverSingle(upsertProjectFact as never) as never);
 // The ONE writer asks the store who authored an existing fact before a machine writes over it;
-// these tests' db doubles have no select, and no fact exists here.
-vi.spyOn(writePorts, 'knowledgeWritePortsFor').mockReturnValue({
-  store: { factAuthor: async () => undefined, upsertRelations: async () => 0 },
-  extracted: {},
-} as never);
+// these tests' db doubles have no select, and no fact exists here. Both modules are replaced (not
+// spied) so the real ledger/R2 graph behind them is never loaded.
+vi.mock('../knowledge/knowledgeWritePorts', () => ({
+  knowledgeWritePortsFor: () => ({ store: { factAuthor: async () => undefined, upsertRelations: async () => 0 }, extracted: {} }),
+}));
+vi.mock('../knowledge/knowledgeVersion', () => ({ bumpKnowledgeVersion: vi.fn(async () => undefined), knowledgeVersion: vi.fn() }));
 vi.spyOn(llmProxy, 'readProxyChoice').mockResolvedValue({
   content: '<think>the user is right - I should have deleted the branch</think>Agreed; the branch stays.',
 } as never);

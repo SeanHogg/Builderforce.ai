@@ -25,7 +25,6 @@ export const PERMANENT_REFUSALS: ReadonlySet<string> = new Set([
   'ticket_priority_invalid',
   'ticket_task_type_invalid',
   'ticket_chat_invalid',
-  'ticket_assignee_invalid',
   'ticket_archived_invalid',
   'parent_ticket_invalid',
   'ticket_key_conflict',
@@ -45,6 +44,10 @@ export const PERMANENT_REFUSALS: ReadonlySet<string> = new Set([
   'usage_event_id_mismatch',
   'usage_immutable',
   'usage_server_observed',
+  'ticket_not_found',
+  'server_id_invalid',
+  'destination_mismatch',
+  'base_version_required',
 ]);
 
 /** Whether a receipt's `detail` names a refusal no resend can fix. */

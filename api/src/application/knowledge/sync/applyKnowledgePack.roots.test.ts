@@ -34,7 +34,7 @@ const NOTHING: Rows = { files: [], facts: [], relations: [] };
 let w: World;
 const deps = (over: Partial<ApplyDeps> = {}): ApplyDeps => ({
   env: {} as never, db: {} as never, tenantId: 1, projectId: 2, userId: 'u1', actorRole: 'developer',
-  store: fakeStore(w), extracted: fakeExtracted(w), sync: fakeSync(w), atomically: atomically(w), ...over,
+  store: fakeStore(w), extracted: fakeExtracted(w), sync: fakeSync(w), ledger: fakeLedger(w), atomically: atomically(w), ...over,
 });
 const apply = async (pack: Pack, over: Partial<ApplyDeps> = {}) => applyKnowledgePack(deps(over), { body: await encodePack(pack) });
 const digestOf = async (root: string) => (await decodePack(await manifestSummary({ sync: fakeSync(w), ledger: fakeLedger(w) }, root))).targetDigest;
@@ -59,7 +59,7 @@ describe('two roots of one project', () => {
     // A's leaves are gone; the fact ROW stays because B's leaves name it, and the answer says so.
     expect(res).toMatchObject({ applied: true, skipped: [{ key: 'a:claim:shared', reason: 'other_root' }] });
     expect(w.facts.has('claim:shared')).toBe(true);
-    expect(w.sources.get(A)?.size ?? 0).toBe(0);
+    expect([...(w.sources.get(A)?.values() ?? [])].filter((s) => s.hash !== '')).toEqual([]); // removed = a marker row
     expect(w.sources.get(B)!.size).toBe(1);
     expect(w.leaves.get(A)?.size ?? 0).toBe(0);
     expect(await digestOf(B)).toBe(before);
@@ -171,6 +171,6 @@ describe('bodies shared by roots', () => {
     expect(body.map((e) => e.sourceRef).sort()).toEqual([refOf(A, 'src/shared.ts'), refOf(B, 'src/shared.ts')].sort());
     expect(w.index.get(shared)!.sourceRefs.sort()).toEqual([refOf(A, 'src/shared.ts'), refOf(B, 'src/shared.ts')].sort());
     // Both roots can now skip the body for that hash.
-    expect([...(await fakeSync(w).heldBodies([shared])).get(shared)!].sort()).toEqual(body.map((e) => e.sourceRef).sort());
+    expect([...(await fakeSync(w).heldEntries([{ hash: shared, sourceRef: refOf(A, 'src/shared.ts') }, { hash: shared, sourceRef: refOf(B, 'src/shared.ts') }, { hash: shared, sourceRef: refOf('ws:c', 'src/shared.ts') }]))]).toEqual([0, 1]);
   });
 });

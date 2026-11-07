@@ -130,7 +130,7 @@ export function fakeServer() {
         },
         syncManifest: async () => { log.push({ kind: 'manifest' }); const t = tree(); return { generation: s.generation, digest: t.root, buckets: t.buckets }; },
         syncLeaves: async (_r, ids) => { log.push({ kind: 'leaves' }); const t = tree(); return { generation: s.generation, leaves: ids.flatMap((b) => t.leaves.get(b) ?? []) }; },
-        syncHave: async (_r, hashes) => { log.push({ kind: 'have' }); return hashes.map((h) => s.bodies.has(h)); },
+        syncHave: async (_r, pairs) => { log.push({ kind: 'have' }); return pairs.map((p) => s.bodies.has(p.hash)); },
         writeRows: async (_r, rows) => {
             s.sideWrites.push({ facts: [...rows.facts], relations: [...rows.relations] });
             for (const f of rows.facts) s.facts.set(f.key, f);

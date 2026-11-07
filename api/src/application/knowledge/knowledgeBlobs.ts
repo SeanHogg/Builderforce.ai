@@ -30,7 +30,7 @@
 import { sha256Hex, type Extracted, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
 import { buildBundle, mergeBodies, readBundled } from './knowledgeBundles';
 import type { KnowledgeLedgerPort } from './knowledgeLedger';
@@ -166,7 +166,7 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
     if (ledger) {
       // A removal is a marker row, so a legacy object that could not be deleted below is harmless (the sweep retries it).
       if (hash) await ledger.sources.upsert(rootId, [{ sourceId: id, path, hash }]); else await ledger.sources.mark(rootId, [id]);
-      await bucket().delete(keys.source(rootId, id)).catch(() => undefined);
+      await bucket().delete(keys.source(rootId, id)).catch(reportedFallback(undefined, { source: SOURCE, operation: 'deleteLegacySource', context: { rootId } }));
       return;
     }
     const key = keys.source(rootId, id);

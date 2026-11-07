@@ -154,7 +154,7 @@ describe('sync on enable — the chat history goes to the account once', () => {
     const chatImport = pending.find((e) => e.entityType === 'chat')!;
     expect((chatImport.payload as { chat: { title: string } }).chat.title).toBe('Renamed offline');
     // Every message and usage import waits on the chat's.
-    for (const event of pending.filter((e) => e.entityType !== 'chat')) expect(event.dependsOn).toEqual([chatImport.eventId]);
+    for (const event of pending.filter((e) => e.entityType !== 'chat')) expect(event.dependsOn).toEqual([chatImport.idempotencyKey]);
   });
 
   it('a chat bound by sign-in imports naming its server chat, so the server adopts it', async () => {

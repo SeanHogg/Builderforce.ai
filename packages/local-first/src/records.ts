@@ -98,6 +98,12 @@ export interface JournalEvent<T = unknown> {
   payload: T;
   payloadHash: string;
   deadLetter?: { reason: string; at: string };
+  /** How many times the server held this event (not dependency-met, conflict, a non-permanent refusal). Absent = never. */
+  holdAttempts?: number;
+  /** When the first hold happened (ISO) — the 7-day give-up is measured from here. */
+  heldSince?: string;
+  /** Do not send before this instant (ISO): exponential backoff after a hold. */
+  nextAttemptAt?: string;
 }
 
 export interface ServerMapping {

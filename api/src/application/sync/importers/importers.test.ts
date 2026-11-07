@@ -320,8 +320,8 @@ describe('importSyncedTicket', () => {
     expect(db.calls[0]?.payload).toMatchObject({ archived: true });
   });
 
-  it('rejects an assignee who is not an active member of the tenant, before any write', async () => {
-    const db = dbOf();
+  it('drops an assignee who is not an active member of the tenant and imports the ticket', async () => {
+    const db = dbOf([[{ id: 61 }]]);
     const asked: string[] = [];
     const outcome = await importSyncedTicket(
       event({ entityType: 'ticket', operation: 'create', payload }),
@@ -329,9 +329,9 @@ describe('importSyncedTicket', () => {
       stores(),
       db,
     );
-    expect(outcome).toEqual({ status: 'rejected', detail: 'ticket_assignee_invalid' });
+    expect(outcome).toMatchObject({ status: 'applied', serverId: '61', detail: 'ticket_assignee_dropped' });
     expect(asked).toEqual(['user-9']);
-    expect(db.calls).toHaveLength(0);
+    expect(db.calls[0]?.payload).toMatchObject({ assignedUserId: null });
   });
 
   it('writes the task inside a savepoint of the unit-of-work transaction', async () => {
@@ -544,7 +544,7 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
 
   it('an update writes the task type and moves the ticket\'s chat links onto the new kind', async () => {
     const afterCommit = vi.fn();
-    const db = dbOf([[{ id: 42 }], [{ chatId: 55 }]]);
+    const db = dbOf([[{ id: 42 }], [{ id: 1, chatId: 55, linkType: 'linked' }], [], []]);
     const outcome = await importSyncedTicket(
       event({ entityType: 'ticket', operation: 'update', baseVersion: 2, payload: { ...base, taskType: 'epic' } }),
       ctx({ afterCommit }),
@@ -552,10 +552,23 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
       db,
     );
     expect(outcome.status).toBe('applied');
-    expect(db.calls.map((call) => call.kind)).toEqual(['update', 'update']);
+    expect(db.calls.map((call) => call.kind)).toEqual(['update', 'select', 'select', 'update']);
     expect(db.calls[0]?.payload).toMatchObject({ taskType: 'epic' });
-    expect(db.calls[1]?.payload).toMatchObject({ ticketKind: 'epic' });
+    expect(db.calls[3]?.payload).toMatchObject({ ticketKind: 'epic' });
     expect(afterCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a retarget that would collide on (chat, kind, ref) merges into the existing row, keeping created lineage', async () => {
+    const db = dbOf([[{ id: 42 }], [{ id: 1, chatId: 55, linkType: 'created' }], [{ id: 2, linkType: 'linked' }], [], []]);
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'update', baseVersion: 2, payload: { ...base, taskType: 'epic' } }),
+      ctx(),
+      stores(mapping({ serverVersion: 2 })),
+      db,
+    );
+    expect(outcome.status).toBe('applied');
+    expect(db.calls.map((call) => call.kind)).toEqual(['update', 'select', 'select', 'update', 'delete']);
+    expect(db.calls[3]?.payload).toMatchObject({ linkType: 'created' });
   });
 
   it('rejects an unknown task type and a malformed chat id', async () => {

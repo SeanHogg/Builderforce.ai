@@ -15,6 +15,7 @@
  * and one immutable review snapshot when the scope records a new digest.
  */
 import type { Env } from '../../../env';
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import type { Bundle } from '../knowledgeBundles';
 import { knowledgeBlobKeys, listRootSources } from '../knowledgeBlobs';
 import type { KnowledgeLedgerPort } from '../knowledgeLedger';
@@ -45,7 +46,10 @@ export function r2KnowledgeSync(
     try {
       const s = (await obj.json()) as Partial<SyncState>;
       state = { generation: Number.isSafeInteger(s.generation) ? s.generation! : 0, digest: typeof s.digest === 'string' ? s.digest : '' };
-    } catch { /* an unreadable object is generation 0 */ }
+    } catch (error) {
+      // an unreadable object is generation 0
+      reportCaughtError(error, { source: 'application/knowledge/sync/knowledgeSyncBlobs.ts', operation: 'migrateLegacyState', level: 'warning', context: { rootId } });
+    }
     if (state.generation > 0) await over.roots.seed(rootId, state);
     await env.UPLOADS.delete(legacyStateKey(rootId));
     return state;
