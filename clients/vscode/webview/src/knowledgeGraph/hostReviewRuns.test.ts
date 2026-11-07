@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { KnowledgeEvent } from '../../../src/knowledge/knowledgeProtocol';
+import type { KnowledgeEvent, KnowledgeStoredRun } from '../../../src/knowledge/knowledgeProtocol';
 import { hostReviewRuns } from './hostReviewRuns';
 import type { KnowledgeTransport } from './hostKnowledgeGraphSource';
 
@@ -15,7 +15,7 @@ describe('hostReviewRuns', () => {
     const { t, emit, listeners } = transport();
     const seen: string[] = [];
     const off = hostReviewRuns(t).subscribe((run) => seen.push(run.id));
-    const run = { id: 'r1', root: 'ws', kind: 'review', startedAt: 1, updatedAt: 1, phases: [], lanes: [], steps: [], failures: [] } as const;
+    const run: KnowledgeStoredRun = { id: 'r1', root: 'ws', kind: 'review', startedAt: 1, updatedAt: 1, phases: [], lanes: [], steps: [], failures: [] };
     emit({ stream: 'review-3', type: 'run', run: { ...run } });
     emit({ stream: 'review-9', type: 'run', run: { ...run, id: 'r2' } });
     emit({ stream: 'review-3', type: 'progress', progress: { phase: 'extract', done: 0, total: 1 } });

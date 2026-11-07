@@ -7,7 +7,7 @@ import { ABORT_GRACE_MS, createHostKnowledgeGraphSource, reviewCount, type Knowl
 const PLAN: ReviewPlan = { rootId: 'ws', files: 2, byPack: { docs: 2 }, unchanged: 0, changed: ['a.md', 'b.md'], removed: [], skipped: [], estimatedModelCalls: 2 };
 const REPORT: ReviewReport = {
   rootId: 'ws', digest: 'd', extracted: 2, judged: 2, unjudged: 0, invalidJudgements: 0, factsWritten: 2, relationsWritten: 1,
-  staleMarked: 2, aborted: false, durationMs: 1, readErrors: 0, extractErrors: 0, failures: [],
+  staleMarked: 2, aborted: false, durationMs: 1, readErrors: 0, extractErrors: 0, failures: [], awaitingJudge: [],
 };
 const GRAPH: KnowledgeGraph = {
   scope: { rootId: 'ws', packs: ['docs'], digest: 'd' }, nodes: [], edges: [], findings: [],
@@ -117,7 +117,7 @@ describe('the editor knowledge source — planning rides the stream, not a reque
 
   it('is answered only by an event: the plan call itself carries no plan', async () => {
     const host = fakeHost({ holdPlan: true });
-    const it = createHostKnowledgeGraphSource(host.t).review!({ rootId: 'ws' }, control(true));
+    const it = createHostKnowledgeGraphSource(host.t).review!({ rootId: 'ws' }, control(true))[Symbol.asyncIterator]();
     const first = it.next();
     await tick();
     expect(host.calls.map((c) => c.op)).toEqual(['plan']);
@@ -127,7 +127,7 @@ describe('the editor knowledge source — planning rides the stream, not a reque
     expect(settled).toBe(false); // no request answered it; only the event can
     host.emit({ stream: host.planStream(), type: 'planned', reply: { reviewId: 'r1', rootId: 'ws', plan: PLAN } });
     expect((await first).value).toMatchObject({ type: 'plan' });
-    await it.return(undefined);
+    await it.return?.(undefined);
   });
 
   it('surfaces a failed plan as a ReviewFailure', async () => {
@@ -164,16 +164,16 @@ describe('the editor knowledge source — planning rides the stream, not a reque
     const host = fakeHost();
     const seen: boolean[] = [];
     const source = createHostKnowledgeGraphSource(host.t, { onReviewActive: (a) => seen.push(a) });
-    const first = source.review!({}, control(true));
-    const second = source.review!({}, control(true));
+    const first = source.review!({}, control(true))[Symbol.asyncIterator]();
+    const second = source.review!({}, control(true))[Symbol.asyncIterator]();
     await first.next(); // plan yielded: first is live
     await second.next(); // second is live too
-    await first.return(undefined); // the superseded one ends while the second is live
+    await first.return?.(undefined); // the superseded one ends while the second is live
     let count = 0;
     const counts = seen.map((a) => (count = reviewCount(count, a)));
     expect(seen).toEqual([true, true, false]);
     expect(counts).toEqual([1, 2, 1]); // never 0 while the second review is live
-    await second.return(undefined);
+    await second.return?.(undefined);
     expect(reviewCount(counts.at(-1)!, false)).toBe(0);
   });
 });
