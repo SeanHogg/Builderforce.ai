@@ -15,7 +15,7 @@ import { useChatChangedFiles } from '../useChatChangedFiles';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { getToken, refreshToken, type InitData } from '../vscodeBridge';
 import { request } from '../bridgeTransport';
-import { webviewOffline } from '../platformPolicy';
+import { useWebviewOffline } from '../platformPolicy';
 import { spendLabelsFrom } from './composerLabels';
 
 /** A linked ticket as the composer's `#` typeahead lists it. */
@@ -73,9 +73,11 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
   // OFFLINE `#`: when the platform is denied there is no server chat to read links
   // from, so the typeahead lists the host's LOCAL tickets (G05 `localWorkRepository`
   // over the `local.tickets` bridge). An unbound chat offline reads local too.
+  // Reactive: a late `platform.policy` frame must re-run this read on the right source.
+  const offline = useWebviewOffline();
   const [typeaheadTickets, setTypeaheadTickets] = useState<TypeaheadTicket[]>([]);
   useEffect(() => {
-    if (!webviewOffline() && serverChatId != null) {
+    if (!offline && serverChatId != null) {
       let live = true;
       ticketAdapter.listTickets(serverChatId).then((tickets) => {
         if (live) setTypeaheadTickets(tickets.map((tk) => ({ id: parseInt(tk.ref) || tk.linkId, title: tk.label || tk.ref, status: tk.status, key: tk.ref })));
@@ -87,7 +89,7 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
       .then((tickets) => { if (live) setTypeaheadTickets(tickets.map((t) => ({ id: t.id, title: t.title, status: t.status }))); })
       .catch(() => { if (live) setTypeaheadTickets([]); });
     return () => { live = false; };
-  }, [serverChatId, ticketAdapter, ticketRefresh]);
+  }, [offline, serverChatId, ticketAdapter, ticketRefresh]);
 
   // "The agent changed code and nothing said so" — the chat's own signal, as a pill.
   const chatFiles = useChatChangedFiles(apiReq, serverChatId, ticketRefresh);

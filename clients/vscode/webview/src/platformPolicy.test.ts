@@ -165,3 +165,42 @@ describe('webviewOffline', () => {
     expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
   });
 });
+
+describe('useWebviewOffline', () => {
+  // The `@`/`#` pickers read the offline decision through this hook so a
+  // `platform.policy` frame that lands AFTER the composer first rendered flips the
+  // roster source. The non-reactive `webviewOffline()` freezes the decision at its
+  // first render and left both typeaheads starved while signed in.
+  //
+  // The vitest env is `node` (no DOM, no react-test-renderer), so mounting a hook
+  // consumer is not possible here. What this verifies is the decision the hook
+  // snapshots — `webviewOffline()` reads the same mode + snapshot pair — flipping on a
+  // late frame, plus the subscribe/notify pair firing synchronously inside
+  // `applyWebviewPlatformPolicy` (the wiring `useSyncExternalStore` depends on).
+  it('flips the snapshot when a late platform.policy frame arrives', async () => {
+    const mod = await import('./platformPolicy');
+    mod.installWebviewPlatformPolicy();
+
+    // Before any host frame the decision is offline — the default-denied state that
+    // starved the pickers when a signed-in Hybrid frame landed after first render.
+    expect(mod.webviewOffline()).toBe(true);
+
+    // A signed-in Hybrid push arrives after the consumer's first render.
+    fromHost({
+      type: 'platform.policy',
+      platformPolicy: { connectedFeatures: true, gatewayInference: true, synchronize: false },
+      inferenceMode: 'hybrid',
+      baseUrl: 'https://builderforce.ai',
+    });
+    expect(mod.webviewOffline()).toBe(false);
+
+    // A later denial flips it back (sign-out mid-session).
+    fromHost({
+      type: 'platform.policy',
+      platformPolicy: { connectedFeatures: false, gatewayInference: false, synchronize: false },
+      inferenceMode: 'local-only',
+      baseUrl: 'https://builderforce.ai',
+    });
+    expect(mod.webviewOffline()).toBe(true);
+  });
+});

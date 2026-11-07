@@ -10,6 +10,7 @@ import {
   type PlatformPolicySnapshot,
   type PlatformRequestRecord,
 } from '@builderforce/local-first';
+import { useSyncExternalStore } from 'react';
 import { handleFrame } from './bridgeTransport';
 import { onInit } from './bridgeState';
 
@@ -34,9 +35,49 @@ export const webviewPlatformPolicy = () => policy;
  * uses this to swap `@`/`#` from server-backed (invited participants / linked
  * tickets) to LOCAL candidates (live sub-agents, persona agents / local tickets)
  * so the typeaheads still answer offline.
+ *
+ * NOT reactive — for React consumers use {@link useWebviewOffline}, which
+ * subscribes to policy pushes. Reading this during render freezes the decision at
+ * whatever the policy said on that render, so a `platform.policy` frame that
+ * arrives after mount never un-starves the pickers.
  */
 export function webviewOffline(): boolean {
   return mode === 'local-only' || !policy.snapshot().connectedFeatures;
+}
+
+/** One decision value the reactive hook snapshots — a stable primitive, so the
+ *  `useSyncExternalStore` snapshot never changes identity spuriously. */
+function offlineSnapshot(): boolean {
+  return mode === 'local-only' || !policy.snapshot().connectedFeatures;
+}
+
+// ── Reactive offline decision ────────────────────────────────────────────────
+// The host pushes a `platform.policy` frame on init and again on every policy
+// change. Plain `webviewOffline()` reads mode + snapshot non-reactively, so a
+// frame that lands AFTER the composer first rendered left the `@`/`#` pickers
+// computed for the stale (default-denied) state — both typeaheads starved at
+// once while signed in. Subscribing here makes the decision re-render consumers.
+
+const offlineListeners = new Set<() => void>();
+
+function emitOfflineChanged(): void {
+  for (const listener of [...offlineListeners]) listener();
+}
+
+function subscribeOffline(listener: () => void): () => void {
+  offlineListeners.add(listener);
+  return () => offlineListeners.delete(listener);
+}
+
+/**
+ * The reactive offline decision for React consumers. Re-renders the component the
+ * moment a `platform.policy` frame (or the init frame's carried snapshot) flips
+ * the mode or the connected-features capability — so the `@`/`#` pickers move
+ * from their local fallback to the server-backed roster as soon as the host says
+ * the platform is reachable. Prefer this over {@link webviewOffline} in hooks.
+ */
+export function useWebviewOffline(): boolean {
+  return useSyncExternalStore(subscribeOffline, offlineSnapshot, offlineSnapshot);
 }
 
 export function webviewPlatformRequestAccount(): { attempted: number; blocked: number; recent: readonly PlatformRequestRecord[] } {
@@ -67,6 +108,9 @@ export function applyWebviewPlatformPolicy(frame: {
   rememberOrigin(frame.webUrl);
   if (isInferenceMode(frame.inferenceMode)) mode = frame.inferenceMode;
   if (frame.platformPolicy && typeof frame.platformPolicy === 'object') policy.set(frame.platformPolicy);
+  // The mode/snapshot may have flipped the offline decision — wake every `useWebviewOffline`
+  // consumer (the `@`/`#` pickers) so a late-arriving frame un-starves them.
+  emitOfflineChanged();
 }
 
 /** `ws`/`wss` become `http`/`https` so the origin set — which is https — can see the socket. */
