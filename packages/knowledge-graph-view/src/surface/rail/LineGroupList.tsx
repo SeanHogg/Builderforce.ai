@@ -13,14 +13,14 @@ import type { SystemInfo } from '../systems';
 import { TYPE } from '../ui/type';
 import { groupLines } from './lineGroups';
 
-export interface LineGroupsProps {
+export interface LineGroupListProps {
     lines: readonly Line[];
     systems: readonly SystemInfo[];
     labels: KnowledgeGraphLabels;
     renderLine(line: Line): ReactNode;
 }
 
-export function LineGroups({ lines, systems, labels, renderLine }: LineGroupsProps) {
+export function LineGroupList({ lines, systems, labels, renderLine }: LineGroupListProps) {
     const s = labels.surface;
     return (
         <div style={{ display: 'grid', gap: 10 }}>

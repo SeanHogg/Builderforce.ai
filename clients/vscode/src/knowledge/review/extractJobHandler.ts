@@ -11,14 +11,50 @@
  * `symbolsOf` is synchronous and tree-sitter loads asynchronously.) `sectionsOnly` jobs read no symbols.
  */
 
+import { readFile } from "node:fs/promises";
+import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
-import { reviewPacks } from "@builderforce/agent-tools/knowledge";
-import { extractJob, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { reviewPacks, textDocument } from "@builderforce/agent-tools/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, extractJob, isBinaryText, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 
-/** Memory's job plus the index's definitions of the file, when the index holds it. */
-export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[] };
+/** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
+export const READ_TIMEOUT_MS = 5_000;
 
-export async function handleExtractJob(job: HostExtractJob): Promise<ExtractJobResult> {
+/**
+ * A job that makes the WORKER read the file (PRD 41 A10 rule 8): `rootPath` + `path` name it and `hash` is the
+ * planned hash, trusted (not recomputed). `doc` is then ignored — a placeholder (memory's `stubSource(path)`) is fine.
+ */
+export interface ReadFrom { rootPath: string; path: string; hash: string }
+
+/** Memory's job plus the index's definitions of the file, when the index holds it, plus an optional read-in-the-worker. */
+export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[]; readFrom?: ReadFrom };
+
+/** What a host job returns: memory's result; `binary` ⇒ the file is binary text and nothing was extracted (the step is `skipped: binary`). */
+export type HostExtractResult = ExtractJobResult & { binary?: true };
+
+/** The file of a `readFrom` job as a document. Throws `timeout`, `too large`, or the read's own error; a path outside the root is refused. */
+async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: number) {
+  const root = nodePath.resolve(from.rootPath);
+  const abs = nodePath.resolve(root, from.path);
+  if (abs !== root && !abs.startsWith(root + nodePath.sep)) throw new Error("path outside the review root");
+  let bytes: Uint8Array;
+  try {
+    bytes = await readFile(abs, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    const name = (error as { name?: string } | undefined)?.name;
+    throw name === "TimeoutError" || name === "AbortError" ? new Error("timeout") : error;
+  }
+  if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) throw new Error("too large");
+  return textDocument(job.rootId, from.path, new TextDecoder("utf-8").decode(bytes));
+}
+
+export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: number = READ_TIMEOUT_MS): Promise<HostExtractResult> {
   const symbols = job.sectionsOnly ? undefined : job.symbols;
-  return extractJob(job, reviewPacks(symbols ? { symbolsOf: () => symbols } : {}));
+  let ready: ExtractJob = job;
+  if (job.readFrom) {
+    const doc = await readDocument(job, job.readFrom, readTimeoutMs);
+    if (doc.content.kind === "text" && isBinaryText(doc.content.text)) return { extracted: [], binary: true };
+    ready = { ...job, doc, hash: job.readFrom.hash };
+  }
+  return extractJob(ready, reviewPacks(symbols ? { symbolsOf: () => symbols } : {}));
 }

@@ -43,6 +43,8 @@ export async function putExtracted(
   deps: Scope & { extracted: ExtractedCachePort; store: Pick<KnowledgeStorePort, 'markRelationsStale'> },
   hash: string,
   extracted: readonly Extracted[],
+  /** A pack apply bumps the version ONCE itself and marks staleness from its own file list. */
+  opts: { deferVersionBump?: boolean; skipStaleMarks?: boolean } = {},
 ): Promise<{ skippedRefs: number }> {
   const stray = extracted.find((e) => e.sourceHash !== hash);
   if (stray) {
@@ -52,15 +54,15 @@ export async function putExtracted(
     );
   }
   const { entries, skippedRefs } = sanitizeExtracted(extracted);
-  const held = new Set(((await deps.extracted.get(hash)) ?? []).map((e) => e.sourceRef));
+  const held = new Set((opts.skipStaleMarks ? [] : ((await deps.extracted.get(hash)) ?? [])).map((e) => e.sourceRef));
   await deps.extracted.put(hash, clampExtracted(entries));
   try {
-    if (hash.startsWith('~')) return { skippedRefs };
+    if (hash.startsWith('~') || opts.skipStaleMarks) return { skippedRefs };
     for (const entry of entries) {
       if (!held.has(entry.sourceRef)) await deps.store.markRelationsStale(entry.sourceRef, hash);
     }
   } finally {
-    await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
+    if (!opts.deferVersionBump) await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
   }
   return { skippedRefs };
 }

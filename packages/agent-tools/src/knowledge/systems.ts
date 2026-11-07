@@ -27,6 +27,8 @@ export interface SystemsListing {
     paths: readonly string[];
     /** Folders with a `.git` entry the walk saw. A `.git/` segment in `paths` says the same. */
     gitRoots?: readonly string[];
+    /** Content hash by root-relative path. With it, a folder with no `.git` that copies a git system is found (see the header). */
+    hashes?: ReadonlyMap<string, string>;
 }
 
 /** Reads a manifest by root-relative path; undefined when it cannot be read. */
@@ -43,18 +45,18 @@ export interface DetectedSystem {
     /** The project name its manifest declares, when it has one. */
     manifestName?: string;
     apps: DetectedApp[];
+    /** Set on a folder with no `.git` found to copy a git system by its file hashes. */
+    copy?: { original: string; similarity: number };
 }
 
 export interface DetectedSystems {
     systems: DetectedSystem[];
     /** The system path a root-relative path is in (the deepest), or undefined when it is in none. */
     systemOf(path: string): string | undefined;
-    /** The app path a root-relative path is in (the deepest), or undefined. */
-    appOf(path: string): string | undefined;
 }
 
 /** Manifests that name a project, by file name. */
-const PROJECT_MANIFESTS: readonly string[] = ['package.json', 'Cargo.toml', 'pyproject.toml', 'go.mod'];
+export const PROJECT_MANIFESTS: readonly string[] = ['package.json', 'Cargo.toml', 'pyproject.toml', 'go.mod'];
 const MAX_APPS_PER_SYSTEM = 500;
 
 
@@ -163,7 +165,7 @@ export async function detectSystems(listing: SystemsListing, readManifest: ReadM
         if (!r) reads.set(p, (r = readManifest(p).catch(() => undefined)));
         return r;
     };
-    const chosen: Array<{ path: string; hasGit: boolean; manifestName?: string }> = [];
+    const chosen: Array<{ path: string; hasGit: boolean; manifestName?: string; copy?: DetectedSystem['copy'] }> = [];
     const inside = (p: string): boolean => chosen.some((s) => within(p, s.path));
 
     const gits = gitRootsOf(listing);
@@ -171,6 +173,10 @@ export async function detectSystems(listing: SystemsListing, readManifest: ReadM
         chosen.push({ path: '', hasGit: true });
     } else {
         for (const g of gits) if (!inside(g)) chosen.push({ path: g, hasGit: true });
+        // A loose copy of a repository is one system, decided before any manifest can split it.
+        for (const stray of listing.hashes ? strayFolders(paths, gits, listing.hashes) : []) {
+            chosen.push({ path: stray.path, hasGit: false, copy: { original: stray.original, similarity: stray.similarity } });
+        }
         const candidates = paths.filter((p) => PROJECT_MANIFESTS.includes(baseOf(p))).map(dirOf);
         for (const dir of [...new Set(candidates)].sort(byDepthThenPath)) {
             // A folder holding a repository is not itself a project; a folder in a system is part of it.
@@ -190,9 +196,10 @@ export async function detectSystems(listing: SystemsListing, readManifest: ReadM
             hasGit: s.hasGit,
             ...(manifestName ? { manifestName } : {}),
             apps: await appsOf(s.path, paths, has, read),
+            ...(s.copy ? { copy: s.copy } : {}),
         });
     }
-    return { systems, systemOf: (p) => deepest(systems, p)?.path, appOf: (p) => deepestApp(systems, p) };
+    return { systems, systemOf: (p) => deepest(systems, p)?.path };
 }
 
 function deepest(systems: readonly DetectedSystem[], path: string): DetectedSystem | undefined {

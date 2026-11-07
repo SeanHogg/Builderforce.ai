@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GraphOutline, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import type { GraphOutline, KEdge, KNode, KnowledgeGraph, NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as LABELS } from '../labels';
 import { surfaceDiagnosticLines } from '../surfaceDiagnostics';
 import { buildLines, MAX_LINES, MAX_STOPS } from './lines';
@@ -8,7 +8,7 @@ import { groupLines } from './rail/lineGroups';
 import { endText } from './rail/LineRow';
 import { buildStations } from './stations';
 import { systemDiagnosticLines } from './systemDiagnostics';
-import { systemsOf } from './systems';
+import { foldCopyFindings, systemsOf } from './systems';
 
 type Tags = { system?: string; app?: string; copyOf?: string };
 const file = (path: string, partition: string, tags: Tags = {}): KNode =>
@@ -77,6 +77,13 @@ describe('line stop reasons', () => {
     it('only-higher-layer: the only hop goes to a higher layer', () => {
         expect(reason([e, a, p], [link(e, a), link(a, p)])).toBe('only-higher-layer');
     });
+    it('weighs every blocked hop, not just the strongest: upward beats visited', () => {
+        // a -> e is the strongest edge (twice) but only returns to the line; a -> p climbs. The line is held by the climb.
+        expect(reason([e, a, p], [link(e, a), link(a, e), link(a, e), link(a, p, { verdict: 'upward' })])).toBe('only-upward');
+    });
+    it('only-higher-layer beats only-visited', () => {
+        expect(reason([e, a, p], [link(e, a), link(a, e), link(a, e), link(a, p)])).toBe('only-higher-layer');
+    });
     it('max-stops: the walk is cut by the stop limit', () => {
         const chain = Array.from({ length: MAX_STOPS + 3 }, (_, i) => file(`c${i}/x.ts`, 'application'));
         expect(reason([e, ...chain], [link(e, chain[0]!), ...chain.slice(1).map((c, i) => link(chain[i]!, c))])).toBe('max-stops');
@@ -117,5 +124,26 @@ describe('systems from the outline and the diagnostics', () => {
         const out = surfaceDiagnosticLines({ graph: g, stations: model, lines: buildLines(g, model), coverage: null, scopeName: null, scope: null, lensFindings: 0, listedFindings: 0, queue: { open: 0, shown: 0, repo: 0 }, sync: null }).join('\n');
         expect(out).toContain('stop=no-references');
         expect(out).toContain('systems: 2');
+    });
+});
+
+describe('findings of a stray copy', () => {
+    const finding = (id: string, kind: string, nodes: string[]) => ({ id, kind, pack: 'code', nodes: nodes as NodeRef[], severity: 'warn' as const, params: {} });
+
+    it('are folded away; the duplicate-copy finding and findings that touch the original stay', () => {
+        const orig = file('a.ts', 'entry', { system: 'big' });
+        const copy = file('c/a.ts', 'entry', { system: 'big-copy', copyOf: 'big' });
+        const g = { ...graphOf([orig, copy]), findings: [
+            finding('in-copy', 'partition-violation', [copy.ref]),
+            finding('in-orig', 'partition-violation', [orig.ref]),
+            finding('across', 'partition-violation', [orig.ref, copy.ref]),
+            finding('dup', 'duplicate-copy', [copy.ref]),
+            finding('no-nodes', 'tidy', []),
+        ] };
+        const folded = foldCopyFindings(g);
+        expect(folded.findings.map((f) => f.id)).toEqual(['in-orig', 'across', 'dup', 'no-nodes']);
+        expect(foldCopyFindings(g)).toBe(folded);
+        const plain = graphOf([orig]);
+        expect(foldCopyFindings(plain)).toBe(plain);
     });
 });

@@ -3,7 +3,7 @@ import { filesManifestKey, srcRef, type Extracted } from "@seanhogg/builderforce
 import { replicaFileName } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import {
-  fileManifest, localKnowledgeStore, manifestFileName, snapshotFileName,
+  extractedLogFileName, extractedLogOf, fileManifest, localKnowledgeStore, manifestFileName, snapshotFileName,
   type KnowledgeFiles,
 } from "./knowledgeStores";
 import { disposeReplicas, queueFirstSyncOnce, replicaDrained, replicaQueueFor, replicaStatusOf, resumeAuthPaused, type UploadMarks } from "./knowledgeReplica";
@@ -58,6 +58,32 @@ describe("knowledge store", () => {
   it("names files safely and uniquely per root", () => {
     expect(snapshotFileName("a/b:c")).toMatch(/^a_b_c-[0-9a-f]{10}\.json$/);
     expect(snapshotFileName("a/b")).not.toBe(snapshotFileName("a_b"));
+  });
+
+  it("keeps the extract cache in an append-only log beside the snapshot, not in it, and reads it back", async () => {
+    const files = memoryFiles();
+    const store = localKnowledgeStore(files, ROOT);
+    const ref = srcRef(ROOT, "a.md");
+    await store.putExtracted!("h1", [{ sourceRef: ref, sourceHash: "h1", nodes: [], edges: [], keys: [] }]);
+    await store.write({ scope: { rootId: ROOT, title: "docs", packs: ["docs"] }, facts: [], relations: [] });
+    const log = files.data.get(extractedLogFileName(ROOT));
+    expect(extractedLogFileName(ROOT)).toBe(snapshotFileName(ROOT).replace(/\.json$/, ".extracted.jsonl"));
+    expect(log).toContain("h1");
+    expect(files.data.get(snapshotFileName(ROOT))).not.toContain("sourceHash");
+    expect(await localKnowledgeStore(files, ROOT).getExtracted!("h1")).toHaveLength(1);
+  });
+
+  it("appends through the files' own append when it has one, else by rewriting the concatenation", async () => {
+    const files = memoryFiles();
+    const appended: string[] = [];
+    await extractedLogOf({ ...files, append: async (n, t) => { appended.push(`${n}:${t}`); } }, ROOT).append("a\n");
+    expect(appended).toEqual([`${extractedLogFileName(ROOT)}:a\n`]);
+
+    const log = extractedLogOf(files, ROOT);
+    await log.append("a\n");
+    await log.append("b\n");
+    expect(await log.read()).toBe("a\nb\n");
+    expect(files.data.get(extractedLogFileName(ROOT))).toBe("a\nb\n");
   });
 
   it("persists the review manifest whole", async () => {

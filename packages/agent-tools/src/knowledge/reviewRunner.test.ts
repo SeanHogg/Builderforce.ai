@@ -290,7 +290,8 @@ describe("the code pack's analyzers over a workspace", () => {
         expect(listed[0]?.[1]).toBeTruthy();
         expect(added).toHaveLength(450);
         expect(added).not.toContain('node_modules/x/index.ts');
-        expect(read).toHaveLength(450);
+        // The review's ignore file is read too (it decides which files are nodes); the 450 files are each read once.
+        expect(read.filter((p) => !p.endsWith('ignore'))).toHaveLength(450);
         expect(graph?.graph.paths).toHaveLength(450);
         expect(warnings.some((w) => /truncated/.test(w))).toBe(true);
     });

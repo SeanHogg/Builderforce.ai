@@ -39,7 +39,7 @@ const FETCH_CONCURRENCY = 8;
 const LIST_PAGE = 1000;
 
 type Bundle = Record<string, Extracted[]>;
-interface SourceEntry { path: string; hash: string }
+export interface SourceEntry { path: string; hash: string }
 
 const seg = (s: string): string => encodeURIComponent(s);
 
@@ -108,7 +108,7 @@ async function mapBounded<T, R>(items: readonly T[], n: number, work: (item: T) 
 }
 
 /** Every current source of a root, by paginated prefix listing. */
-async function listSources(bucket: R2Bucket, prefix: string): Promise<SourceEntry[]> {
+export async function listSources(bucket: R2Bucket, prefix: string): Promise<SourceEntry[]> {
   const out: SourceEntry[] = [];
   const unlabeled: string[] = [];
   let cursor: string | undefined;

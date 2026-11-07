@@ -3,8 +3,9 @@
  * analysis stamps its `params` with `copy`, `original`, `similarity` and `reason`; this is the ONE reader.
  */
 
-import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
+import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../../labels';
+import { systemOfNode } from '../systems';
 
 export const DUPLICATE_COPY_KIND = 'duplicate-copy';
 
@@ -40,3 +41,8 @@ export function duplicateCopyOf(f: Finding): DuplicateCopy | null {
 const REASON_KEY = { 'no-git': 'reasonNoGit', 'name-mismatch': 'reasonNameMismatch', 'later-name': 'reasonLaterName' } as const;
 
 export const reasonText = (reason: CopyReason, labels: KnowledgeGraphLabels): string => labels.surface.duplicateCopy[REASON_KEY[reason]];
+
+/** The file nodes of the copy (what Show lights): those placed in the copy's system. The finding's own refs name folders, which are not nodes on the map. */
+export function copyFileRefs(graph: KnowledgeGraph, copy: string): string[] {
+    return graph.nodes.filter((n) => n.kind === 'file' && systemOfNode(n) === copy).map((n) => n.ref);
+}

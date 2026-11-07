@@ -9,6 +9,7 @@
  *     workspace folder's `.builderforce/knowledge/`.
  */
 
+import { appendFile } from "node:fs/promises";
 import * as vscode from "vscode";
 import type { KnowledgeFs } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
@@ -74,6 +75,11 @@ export function workspaceKnowledgeFiles(folderPath: string): KnowledgeFiles {
       await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
       await fs.writeFile(target, new TextEncoder().encode(text));
     },
+    async append(name, text) {
+      const target = vscode.Uri.joinPath(dir, name);
+      await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
+      await appendFile(target.fsPath, text, "utf8");
+    },
     async remove(name) {
       try {
         await fs.delete(vscode.Uri.joinPath(dir, name));
@@ -98,7 +104,6 @@ export function workspaceKnowledgeFiles(folderPath: string): KnowledgeFiles {
 export function rootIgnoreFile(rootPath: string): IgnoreFilePort {
   const dir = vscode.Uri.joinPath(uriOf(rootPath), ".builderforce");
   const target = vscode.Uri.joinPath(dir, "ignore");
-  const temp = vscode.Uri.joinPath(dir, "ignore.tmp");
   const fs = vscode.workspace.fs;
   return {
     async read() {
@@ -110,6 +115,8 @@ export function rootIgnoreFile(rootPath: string): IgnoreFilePort {
     },
     async write(text) {
       await fs.createDirectory(dir);
+      // A name of its own per write: two writes (two windows) never share a temp file.
+      const temp = vscode.Uri.joinPath(dir, `ignore.${process.pid}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.tmp`);
       await fs.writeFile(temp, new TextEncoder().encode(text));
       await fs.rename(temp, target, { overwrite: true });
     },

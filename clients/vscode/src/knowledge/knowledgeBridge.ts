@@ -9,7 +9,7 @@
 
 import * as vscode from "vscode";
 import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
-import { factRightsCache, humanFactBatch, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
+import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { openWorkspace } from "../openWorkspace";
 import { SELECTED_TENANT_KEY, getSelectedProject } from "../projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
@@ -29,7 +29,7 @@ import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./know
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { excludeFromReview } from "./knowledgeExclude";
 import { rootIgnoreFile } from "./knowledgeFs";
-import { isRootReviewing } from "./knowledgeReplica";
+import { duringReview, isRootReviewing } from "./knowledgeReplica";
 import { subscribeLiveGraph } from "./knowledgeLive";
 import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
@@ -147,9 +147,16 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "runs": return listRuns(rootKnowledgeFiles(this.rootOf(call.rootId)), call.rootId);
       case "runRecord": return getRun(this.workspaceRoots().map(rootKnowledgeFiles), call.runId);
       case "stopRun": this.reviews.stopRun(call.runId); return null;
-      case "excludeFromReview":
-        await excludeFromReview({ rootId: call.rootId, path: call.path, file: rootIgnoreFile(this.rootOf(call.rootId).rootPath), isReviewing: isRootReviewing });
+      case "excludeFromReview": {
+        const root = this.rootOf(call.rootId);
+        const open = openRoot(this.secrets, root);
+        await excludeFromReview({
+          rootId: call.rootId, path: call.path, file: rootIgnoreFile(root.rootPath), isReviewing: isRootReviewing,
+          copies: async () => (await readSystems(open.manifest, call.rootId)).flatMap((s) => (s.copyOf !== undefined ? [s.path] : [])),
+          hold: (run) => duringReview(call.rootId, open.files, undefined, run),
+        });
         return null;
+      }
       case "symbols": {
         const rootPath = this.rootOf(call.rootId).rootPath;
         return this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs));

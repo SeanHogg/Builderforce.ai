@@ -1,71 +1,60 @@
 /**
- * knowledge/graphReads.ts — what the repo graph read of each system, and what it left out (PRD 41 A9).
+ * knowledge/graphReads.ts — what the repo graph read of each FILE, and what it left out (PRD 41 A9).
  *
  * The graph has no file-count cap: every source file is read, in bounded concurrent batches, and
  * only its parsed facts are kept. A file it cannot use is COUNTED here by reason — never dropped
  * silently — so diagnostics can show, per system, the files read and the files skipped and why.
  *
+ * The graph reads FILES; it does not know systems. The systems are detected once, by the systems
+ * record ({@link recordSystems}), which assigns these files to them.
+ *
  * The analysis runs inside the review (as an analyzer), the systems record is written after it:
  * {@link noteGraphReads} / {@link takeGraphReads} carry one to the other per root, in process.
  */
 
-import type { GraphReadSkip } from '@seanhogg/builderforce-memory/knowledge';
-
 /** Why a source file was not added to the repo graph. */
 export type GraphSkipReason = 'too-large' | 'unreadable' | 'unsupported' | 'listing-truncated';
 
-/** One system's reading by the repo graph. `path` is relative to the reviewed root, '' for the root itself. */
-export interface SystemGraphRead {
-    path: string;
-    read: number;
-    skipped: GraphReadSkip[];
+/** The files the repo graph read and skipped, root-relative. */
+export interface GraphFileReads {
+    read: string[];
+    skipped: Array<{ reason: GraphSkipReason; paths: string[] }>;
+    /** Whether the repo map would read a file at this path: the files a system's reading should account for. Absent ⇒ every file counts. */
+    accepts?(path: string): boolean;
 }
 
-/** Counts reads and skips per system while the repo graph is fed. */
+/** Records each file's outcome while the repo graph is fed. */
 export class GraphReadTally {
-    private readonly reads = new Map<string, { read: number; skipped: Map<string, number> }>();
+    private readonly readPaths: string[] = [];
+    private readonly skips = new Map<GraphSkipReason, string[]>();
 
-    private of(system: string) {
-        let r = this.reads.get(system);
-        if (!r) this.reads.set(system, (r = { read: 0, skipped: new Map() }));
-        return r;
+    read(path: string): void {
+        this.readPaths.push(path);
     }
 
-    /** A system with files the graph could use, even when none was read. */
-    expect(system: string): void {
-        this.of(system);
+    skip(path: string, reason: GraphSkipReason): void {
+        (this.skips.get(reason) ?? this.skips.set(reason, []).get(reason)!).push(path);
     }
 
-    read(system: string): void {
-        this.of(system).read++;
-    }
-
-    skip(system: string, reason: GraphSkipReason, count = 1): void {
-        const r = this.of(system);
-        r.skipped.set(reason, (r.skipped.get(reason) ?? 0) + count);
-    }
-
-    /** Sorted by system, then reason. */
-    result(): SystemGraphRead[] {
-        return [...this.reads]
-            .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-            .map(([path, r]) => ({
-                path,
-                read: r.read,
-                skipped: [...r.skipped].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([reason, count]) => ({ reason, count })),
-            }));
+    result(accepts?: (path: string) => boolean): GraphFileReads {
+        return {
+            read: [...this.readPaths].sort(),
+            skipped: [...this.skips].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([reason, paths]) => ({ reason, paths: [...paths].sort() })),
+            ...(accepts ? { accepts } : {}),
+        };
     }
 }
 
-const noted = new Map<string, SystemGraphRead[]>();
+const noted = new Map<string, GraphFileReads>();
 
-/** Remembers the latest reading of a root's repo graph (root-relative system paths). */
-export function noteGraphReads(rootId: string, reads: readonly SystemGraphRead[]): void {
-    noted.set(rootId, [...reads]);
+/** Remembers the latest reading of a root's repo graph (root-relative file paths). */
+export function noteGraphReads(rootId: string, reads: GraphFileReads | undefined): void {
+    if (reads) noted.set(rootId, reads);
+    else noted.delete(rootId);
 }
 
 /** The reading noted for a root, once: the systems record takes it and it is forgotten. */
-export function takeGraphReads(rootId: string): SystemGraphRead[] | undefined {
+export function takeGraphReads(rootId: string): GraphFileReads | undefined {
     const reads = noted.get(rootId);
     noted.delete(rootId);
     return reads;

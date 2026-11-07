@@ -53,6 +53,8 @@ export interface KnowledgeStorePort {
   markRelationsStale(sourceRef: NodeRef, currentHash: string): Promise<number>;
   /** Removes every relation with any of `refs` at either end. */
   deleteRelationsOf(refs: NodeRef | readonly NodeRef[]): Promise<number>;
+  /** Removes exactly these relations by their upsert identity (`from`, `to`, `kind`), in bounded batches. Returns rows removed. */
+  deleteRelationRows(rows: ReadonlyArray<{ from: string; to: string; kind: string }>): Promise<number>;
   /** Removes the root's `knowledge_scopes` row. True when a row existed. */
   deleteScope(rootId: string): Promise<boolean>;
   /** The stored `source` of each of `keys` that exists (a missing key is absent from the map). */

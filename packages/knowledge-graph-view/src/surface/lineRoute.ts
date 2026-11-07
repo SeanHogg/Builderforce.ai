@@ -86,6 +86,15 @@ function blockOf(e: Edge, seen: ReadonlySet<string>, hereRank: number | undefine
     return hereRank === undefined || rank === undefined || rank >= hereRank ? undefined : 'only-higher-layer';
 }
 
+/** When every hop is blocked, the reason that holds the line: a layer rule beats a revisit. */
+const BLOCK_PRECEDENCE: readonly Block[] = ['only-upward', 'only-higher-layer', 'only-visited'];
+
+/** The stop reason over ALL the blocked hops (not only the strongest one), by {@link BLOCK_PRECEDENCE}. */
+function stopBlockOf(out: readonly Edge[], seen: ReadonlySet<string>, hereRank: number | undefined, model: StationModel): Block {
+    const blocks = new Set(out.map((e) => blockOf(e, seen, hereRank, model)));
+    return BLOCK_PRECEDENCE.find((b) => blocks.has(b))!;
+}
+
 const strongest = (model: StationModel) => (a: Edge, b: Edge): number =>
     b.count - a.count
     || (model.byId.get(b.to)?.use ?? 0) - (model.byId.get(a.to)?.use ?? 0)
@@ -103,7 +112,7 @@ export function followRoute(entryId: string, edges: ReadonlyMap<string, Readonly
         if (next && stops.length >= MAX_STOPS) return { stops, hops, stopReason: 'max-stops' };
         if (!next) {
             const stopReason: StopReason = terminusOf(model.byId.get(at), at).kind !== 'end' ? 'terminus'
-                : out.length === 0 ? 'no-references' : blockOf(out[0]!, seen, hereRank, model)!;
+                : out.length === 0 ? 'no-references' : stopBlockOf(out, seen, hereRank, model);
             return { stops, hops, stopReason };
         }
         hops.push({ from: at, to: next.to, count: next.count, ...(next.verdict ? { verdict: next.verdict } : {}), ...(next.cycle ? { cycle: true } : {}) });

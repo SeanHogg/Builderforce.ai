@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
+import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as LABELS } from '../../labels';
 import { DuplicateCopyCards, type CopyFix } from './DuplicateCopyCard';
 import { duplicateCopyOf } from './duplicateCopy';
@@ -48,5 +48,14 @@ describe('DuplicateCopyCards', () => {
         fireEvent.click(screen.getByRole('button', { name: /Exclude bf-copy/ }));
         expect((await screen.findByRole('alert')).textContent).toBe('Cannot write the ignore file');
         expect(f.rereview).not.toHaveBeenCalled();
+    });
+
+    it('Show lights the copy\'s file nodes, not the finding\'s folder refs', () => {
+        const node = (path: string, system: string) => ({ ref: `src:r::${path}`, kind: 'file', label: path, pack: 'code', system, importance: 0.5, origin: 'extracted' });
+        const graph = { scope: { rootId: 'r', packs: [], digest: 'd' }, nodes: [node('bf-copy/a.ts', 'bf-copy'), node('bf-copy/b.ts', 'bf-copy'), node('orig/a.ts', 'orig')], edges: [], findings: [] } as unknown as KnowledgeGraph;
+        const onShow = vi.fn();
+        render(<DuplicateCopyCards findings={[finding()]} labels={LABELS} fix={fix()} graph={graph} onShow={onShow} />);
+        fireEvent.click(document.querySelector('[data-act="show-copy"]')!);
+        expect(onShow).toHaveBeenCalledWith(['src:r::bf-copy/a.ts', 'src:r::bf-copy/b.ts']);
     });
 });

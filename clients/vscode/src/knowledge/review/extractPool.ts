@@ -43,13 +43,20 @@ export interface ExtractPoolOptions {
   fallback?: (job: ExtractJob, signal?: AbortSignal) => Promise<ExtractJobResult>;
   /** Told once, when the pool goes down, why. */
   onDown?: (reason: string) => void;
+  /** A job's longest stay in a worker, counted from the moment it is POSTED (not while queued); default {@link JOB_TIMEOUT_MS}. 0 = none. */
+  jobTimeoutMs?: number;
 }
+
+/** PRD 41 A10 rule 2: an extract job that has not answered in 10 s is a `timeout` failure and its worker is recycled. */
+export const JOB_TIMEOUT_MS = 10_000;
 
 export interface ExtractPoolHandle {
   pool: ExtractPool;
   size: number;
   /** `down` is why parallel extraction is unavailable (jobs run through the fallback); absent while it works. */
   state(): { down?: string };
+  /** Starts every slot's worker without a job (pre-warm, PRD 41 A10 rule 8); a no-op once the pool is down or disposed. */
+  warm(): void;
   /** Rejects what is waiting or running and terminates every worker. */
   dispose(): void;
 }
@@ -69,6 +76,7 @@ interface Pending {
   reject(error: Error): void;
   signal?: AbortSignal;
   onAbort?: () => void;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 interface Slot {
@@ -83,6 +91,7 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
   const spawn = options.spawn ?? ((file: string, workerData?: unknown) => new Worker(file, { workerData }) as unknown as PoolWorker);
   const slots: Slot[] = Array.from({ length: size }, () => ({}));
   const queue: Pending[] = [];
+  const jobTimeoutMs = options.jobTimeoutMs ?? JOB_TIMEOUT_MS;
   let nextId = 0;
   let disposed = false;
   let down: string | undefined;
@@ -90,6 +99,7 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
   const finish = (p: Pending, settle: () => void): void => {
     if (p.settled) return;
     p.settled = true;
+    if (p.timer) clearTimeout(p.timer);
     if (p.signal && p.onAbort) p.signal.removeEventListener("abort", p.onAbort);
     settle();
   };
@@ -173,6 +183,15 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
       slot.current = next;
       try {
         (slot.worker ?? start(slot)).postMessage({ id: next.id, job: next.job });
+        if (jobTimeoutMs > 0) {
+          const timed = next;
+          timed.timer = setTimeout(() => {
+            if (timed.settled) return;
+            if (slots.find((s) => s.current === timed)) retire(slots.find((s) => s.current === timed)!);
+            finish(timed, () => timed.reject(new Error("timeout")));
+            dispatch();
+          }, jobTimeoutMs);
+        }
       } catch (error) {
         const reason = `The extraction worker could not start: ${error instanceof Error ? error.message : String(error)}`;
         const held = next;
@@ -208,6 +227,18 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
     pool,
     size,
     state: () => (down === undefined ? {} : { down }),
+    warm() {
+      if (disposed || down !== undefined) return;
+      for (const slot of slots) {
+        if (slot.worker) continue;
+        try {
+          start(slot);
+        } catch (error) {
+          const reason = `The extraction worker could not start: ${error instanceof Error ? error.message : String(error)}`;
+          if (options.fallback) { goDown(reason); return; }
+        }
+      }
+    },
     dispose() {
       disposed = true;
       for (const p of queue.splice(0)) finish(p, () => p.reject(new Error("The extraction pool was disposed.")));

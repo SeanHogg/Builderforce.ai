@@ -7,13 +7,13 @@
  */
 
 import { useState } from 'react';
-import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
+import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { smallButton } from '../ActCards';
 import { Card } from '../ui';
 import { TYPE } from '../ui/type';
-import { duplicateCopyOf, reasonText } from './duplicateCopy';
+import { copyFileRefs, duplicateCopyOf, reasonText } from './duplicateCopy';
 
 export interface CopyFix {
     /** Appends the folder to the root's ignore file. */
@@ -29,10 +29,12 @@ export interface DuplicateCopyCardsProps {
     labels: KnowledgeGraphLabels;
     /** Absent ⇒ the host cannot exclude a folder: nothing is drawn. */
     fix?: CopyFix | undefined;
+    /** The graph, so Show lights the copy's FILES (the finding's own refs are folders). Absent ⇒ the finding's refs. */
+    graph?: KnowledgeGraph | undefined;
     onShow(refs: string[]): void;
 }
 
-export function DuplicateCopyCards({ findings, labels, fix, onShow }: DuplicateCopyCardsProps) {
+export function DuplicateCopyCards({ findings, labels, fix, graph, onShow }: DuplicateCopyCardsProps) {
     const [pending, setPending] = useState<string | null>(null);
     const [failed, setFailed] = useState<{ copy: string; message: string } | null>(null);
     if (!fix) return null;
@@ -40,6 +42,10 @@ export function DuplicateCopyCards({ findings, labels, fix, onShow }: DuplicateC
     const copies = findings.flatMap((f) => duplicateCopyOf(f) ?? []);
     if (copies.length === 0) return null;
     const locked = fix.busy || pending !== null;
+    const showRefs = (c: { copy: string; nodes: string[] }): string[] => {
+        const files = graph ? copyFileRefs(graph, c.copy) : [];
+        return files.length > 0 ? files : c.nodes;
+    };
 
     const exclude = async (copy: string) => {
         setPending(copy);
@@ -73,7 +79,7 @@ export function DuplicateCopyCards({ findings, labels, fix, onShow }: DuplicateC
                             >
                                 {pending === c.copy ? t.excluding : t.exclude}
                             </button>
-                            <button type="button" data-act="show-copy" style={smallButton} onClick={() => onShow(c.nodes)}>{labels.surface.act.show}</button>
+                            <button type="button" data-act="show-copy" style={smallButton} onClick={() => onShow(showRefs(c))}>{labels.surface.act.show}</button>
                         </div>
                         {failed?.copy === c.copy && <p role="alert" style={{ ...TYPE.meta, margin: 0, color: cssVar('errorText') }}>{failed.message}</p>}
                     </div>

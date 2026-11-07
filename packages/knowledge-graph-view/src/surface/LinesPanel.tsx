@@ -18,7 +18,7 @@ import { cssVar } from '../scene/themeColors';
 import { list, muted, swatch } from '../styles';
 import { TYPE } from './ui/type';
 import { LegendGlyph } from './LegendGlyph';
-import { LineGroups } from './rail/LineGroups';
+import { LineGroupList } from './rail/LineGroupList';
 import { LineRow } from './rail/LineRow';
 import { StopRow } from './rail/StopRow';
 import { firstFindings, stopTag } from './rail/stopTag';
@@ -81,7 +81,7 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
             <section aria-label={s.linesTitle} style={{ display: 'grid', gap: 6 }}>
                 <h3 style={TYPE.sectionHeading}>{s.rail.heading}</h3>
                 {lines.lines.length === 0 ? <p style={muted}>{s.linesEmpty}</p> : grouped ? (
-                    <LineGroups lines={lines.lines} systems={lines.systems ?? []} labels={labels} renderLine={renderLine} />
+                    <LineGroupList lines={lines.lines} systems={lines.systems ?? []} labels={labels} renderLine={renderLine} />
                 ) : (
                     <ul style={{ ...list, gap: 2 }}>
                         {lines.lines.map((l) => <li key={l.id}>{renderLine(l)}</li>)}

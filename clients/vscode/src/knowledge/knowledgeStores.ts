@@ -17,12 +17,24 @@
 import { localSnapshotStore, type KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 // The manifest and file names are the ONE disk rule (`.builderforce/knowledge/<stem>.*`,
 // shared with the knowledge index and on-prem).
-import { fileManifest, manifestFileName, snapshotFileName, type KnowledgeFiles } from "@builderforce/agent-tools/knowledge";
+import { extractedLogFileName, fileManifest, manifestFileName, snapshotFileName, type KnowledgeFiles } from "@builderforce/agent-tools/knowledge";
 
-export { fileManifest, manifestFileName, snapshotFileName, type KnowledgeFiles };
+export { extractedLogFileName, fileManifest, manifestFileName, snapshotFileName, type KnowledgeFiles };
 
-/** A root's local store: one canonical JSON snapshot beside its manifest. */
+/** The extract cache as memory's `extractedLog` port over the root's `<stem>.extracted.jsonl` (append-only JSON Lines). */
+export function extractedLogOf(files: KnowledgeFiles, rootId: string): { read(): Promise<string | undefined>; append(text: string): Promise<void> } {
+  const name = extractedLogFileName(rootId);
+  return {
+    read: () => files.read(name),
+    // A host without `append` rewrites the concatenation: slower, never wrong.
+    append: files.append
+      ? (text) => files.append!(name, text)
+      : async (text) => files.write(name, `${(await files.read(name)) ?? ""}${text}`),
+  };
+}
+
+/** A root's local store: one canonical JSON snapshot (scopes, facts, relations) beside its manifest and its extract-cache log. */
 export function localKnowledgeStore(files: KnowledgeFiles, rootId: string): KnowledgeStore {
   const name = snapshotFileName(rootId);
-  return localSnapshotStore({ read: () => files.read(name), write: (text) => files.write(name, text) });
+  return localSnapshotStore({ read: () => files.read(name), write: (text) => files.write(name, text) }, { extractedLog: extractedLogOf(files, rootId) });
 }

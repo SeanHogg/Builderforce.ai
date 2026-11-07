@@ -913,6 +913,12 @@
           "default": [],
           "markdownDescription": "%config.knowledgeDevOrigins.desc%"
         },
+        "builderforce.knowledge.judgeBudgetFiles": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 500,
+          "markdownDescription": "%config.knowledgeJudgeBudgetFiles.desc%"
+        },
         "builderforce.defaultModel": {
           "type": "string",
           "default": "",

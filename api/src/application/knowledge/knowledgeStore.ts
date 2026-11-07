@@ -227,6 +227,22 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
       return removed;
     },
 
+    async deleteRelationRows(rows) {
+      let removed = 0;
+      const TUPLES = 100;
+      for (let i = 0; i < rows.length; i += TUPLES) {
+        const tuples = rows.slice(i, i + TUPLES).map((r) => sql`(${r.from}, ${r.to}, ${r.kind})`);
+        const gone = await db.delete(projectFactRelations)
+          .where(scoped(
+            projectFactRelations, tenantId,
+            sql`(${projectFactRelations.fromRef}, ${projectFactRelations.toRef}, ${projectFactRelations.kind}) IN (${sql.join(tuples, sql`, `)})`,
+          ))
+          .returning({ id: projectFactRelations.id });
+        removed += gone.length;
+      }
+      return removed;
+    },
+
     async deleteScope(rootId) {
       const rows = await db.delete(knowledgeScopes)
         .where(scoped(knowledgeScopes, tenantId, eq(knowledgeScopes.rootId, rootId)))

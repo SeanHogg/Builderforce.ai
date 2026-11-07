@@ -10,7 +10,7 @@ const station = (id: string, layer: string | undefined, use: number): Station =>
 });
 const modelOf = (stations: Station[]): StationModel => ({ stations, byId: new Map(stations.map((s) => [s.id, s] as const)), stationOf: new Map() });
 const noLines: LinesModel = { lines: [], interchanges: new Map(), omitted: 0 };
-const lineOf = (stops: string[], terminus: Line['terminus']): Line => ({ id: 'line:1', name: 'x', colourIndex: 0, stops, hops: [], terminus });
+const lineOf = (stops: string[], terminus: Line['terminus']): Line => ({ id: 'line:1', name: 'x', colourIndex: 0, stops, hops: [], terminus, stopReason: 'no-references' });
 
 describe('buildSystemLayout', () => {
     it(`draws at most ${MAX_PER_TIER} cards per tier, busiest first, and counts the rest for the "+N more" card`, () => {

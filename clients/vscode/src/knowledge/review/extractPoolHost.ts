@@ -68,6 +68,11 @@ export function reviewParallelism(lookup?: SymbolLookup): Pick<KnowledgeReviewOp
   return { judgeConcurrency: JUDGE_CONCURRENCY, ...(pool ? { extractPool: withIndexSymbols(pool.pool, lookup), concurrency: pool.size } : {}) };
 }
 
+/** Creates the pool and starts its workers now, so the first file of a confirmed review meets a loaded worker (PRD 41 A10 rule 8). No pool ⇒ nothing. */
+export function prewarmExtractPool(): void {
+  poolHandle()?.warm();
+}
+
 export function disposeExtractPool(): void {
   handle?.dispose();
   handle = undefined;

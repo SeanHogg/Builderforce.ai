@@ -8,6 +8,13 @@ export interface RunLabels {
         timelineTitle: string;
         lanesTitle: string;
         stepsTitle: string;
+        /** The slowest steps, so a stall names itself. */
+        slowestTitle: string;
+        slowestNone: string;
+        /** A step's time split, `{time}` each. */
+        partRead: string;
+        partLookup: string;
+        partPool: string;
         failuresTitle: string;
         historyTitle: string;
         /** `{done}`, `{total}`. */
@@ -66,6 +73,11 @@ export const RUN_DEFAULTS: RunLabels = {
         timelineTitle: 'Phases',
         lanesTitle: 'Workers',
         stepsTitle: 'Steps',
+        slowestTitle: 'Slowest steps',
+        slowestNone: 'No steps to rank yet.',
+        partRead: 'read {time}',
+        partLookup: 'lookup {time}',
+        partPool: 'pool {time}',
         failuresTitle: 'Failures',
         historyTitle: 'Past runs',
         phaseProgress: '{done} of {total}',

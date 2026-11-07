@@ -17,7 +17,7 @@ export interface SystemInfo {
     name: string;
     files: number;
     apps: string[];
-    /** The reference graph hit its per-system file cap. */
+    /** The reference graph did not read every file of this system (see `graphRead.skipped`): a file too large, unreadable, unsupported, or never listed. There is no file-count cap. */
     truncated?: boolean;
     /** Set when this system is a stray copy of the system at that path. */
     copyOf?: string;
@@ -98,4 +98,25 @@ export const foldedSystem = (copies: ReadonlyMap<string, string>, path: string):
 export function systemName(systems: readonly SystemInfo[] | undefined, path: string | undefined): string | undefined {
     if (path === undefined) return undefined;
     return systems?.find((s) => s.path === path)?.name ?? (path ? tailOf(path) : undefined);
+}
+
+const folded = new WeakMap<KnowledgeGraph, KnowledgeGraph>();
+
+/**
+ * The graph with the findings of stray copies folded away: a finding whose nodes all lie in a copy
+ * of another system is the original's finding said again, so it is neither listed nor counted. The
+ * `duplicate-copy` finding itself stays (it is the one that names the copy). The same graph comes
+ * back when nothing folds.
+ */
+export function foldCopyFindings(graph: KnowledgeGraph): KnowledgeGraph {
+    const hit = folded.get(graph);
+    if (hit) return hit;
+    const inCopy = new Set<string>();
+    for (const n of graph.nodes) if ((n as Tagged).copyOf) inCopy.add(n.ref);
+    const kept = inCopy.size === 0
+        ? graph.findings
+        : graph.findings.filter((f) => f.kind === 'duplicate-copy' || f.nodes.length === 0 || !f.nodes.every((ref) => inCopy.has(ref)));
+    const out = kept.length === graph.findings.length ? graph : { ...graph, findings: kept };
+    folded.set(graph, out);
+    return out;
 }

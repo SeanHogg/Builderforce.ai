@@ -11,28 +11,57 @@
 
 import type { DirectorySource, GraphReadSkip, GraphSystem, PlanDetail } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
-import { takeGraphReads, type SystemGraphRead } from './graphReads.js';
-import { detectSystems, duplicateCopies, type DetectedSystem } from './systems.js';
+import { takeGraphReads, type GraphFileReads } from './graphReads.js';
+import { baseOf, byDepthThenPath, dirOf } from './systemPaths.js';
+import { detectSystems, duplicateCopies, PROJECT_MANIFESTS, type DetectedSystem } from './systems.js';
 
 /** Manifest entry holding a root's systems (one entry; its `id` is the JSON). */
 export const systemsManifestKey = (rootId: string): string => `knowledge:${rootId}:systems`;
 const RECORD_VERSION = 'systems/1';
 
-/** A source that also reports the folders its walk found a `.git` in (see `createFsDirectorySource`). */
-type SystemsSource = DirectorySource & { gitRoots?(): string[] };
+/** A source that also reports the folders its walk found a `.git` in, and answers whether one folder holds a `.git` now (see `createFsDirectorySource`). */
+type SystemsSource = DirectorySource & { gitRoots?(): string[]; hasGit?(folder: string): Promise<boolean> };
 
 const within = (path: string, folder: string): boolean => folder === '' || path === folder || path.startsWith(`${folder}/`);
 
-/** The reading of each system, matched to the systems recorded: a path no system has goes to the deepest one containing it. */
-function readsBySystem(systems: readonly DetectedSystem[], reads: readonly SystemGraphRead[] | undefined): Map<string, { read: number; skipped: Map<string, number> }> {
-    const out = new Map<string, { read: number; skipped: Map<string, number> }>();
-    for (const r of reads ?? []) {
-        const home = systems.filter((s) => within(r.path, s.path)).sort((a, b) => b.path.length - a.path.length)[0];
-        if (!home) continue;
-        const slot = out.get(home.path) ?? { read: 0, skipped: new Map() };
-        slot.read += r.read;
-        for (const s of r.skipped) slot.skipped.set(s.reason, (slot.skipped.get(s.reason) ?? 0) + s.count);
-        out.set(home.path, slot);
+interface SystemReading { read: number; skipped: Map<string, number> }
+
+/**
+ * The reading of each system. Systems are detected ONCE (by the caller); here the files the graph
+ * read or skipped are assigned to the deepest system containing them. A planned file the graph
+ * could have read but neither read nor skipped was never listed: `planned − read − skipped`,
+ * recorded as `listing-truncated` with its real count.
+ */
+function readsBySystem(
+    systems: readonly DetectedSystem[],
+    reads: GraphFileReads | undefined,
+    planned: readonly string[] | undefined,
+): Map<string, SystemReading> {
+    const out = new Map<string, SystemReading>();
+    if (!reads) return out;
+    const bySpecificity = [...systems].sort((a, b) => b.path.length - a.path.length);
+    const slotOf = (path: string): SystemReading | undefined => {
+        const home = bySpecificity.find((s) => within(path, s.path));
+        if (!home) return undefined;
+        return out.get(home.path) ?? out.set(home.path, { read: 0, skipped: new Map() }).get(home.path)!;
+    };
+    const handled = new Set<string>();
+    for (const path of reads.read) {
+        handled.add(path);
+        const slot = slotOf(path);
+        if (slot) slot.read++;
+    }
+    for (const { reason, paths } of reads.skipped) {
+        for (const path of paths) {
+            handled.add(path);
+            const slot = slotOf(path);
+            if (slot) slot.skipped.set(reason, (slot.skipped.get(reason) ?? 0) + 1);
+        }
+    }
+    for (const path of planned ?? []) {
+        if (handled.has(path) || (reads.accepts && !reads.accepts(path))) continue;
+        const slot = slotOf(path);
+        if (slot) slot.skipped.set('listing-truncated', (slot.skipped.get('listing-truncated') ?? 0) + 1);
     }
     return out;
 }
@@ -41,14 +70,15 @@ function skippedList(skipped: ReadonlyMap<string, number>): GraphReadSkip[] {
     return [...skipped].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([reason, count]) => ({ reason, count }));
 }
 
-/** The graph-ready systems: detection, copies and graph reads joined. `files` is filled by the graph build. */
+/** The graph-ready systems: detection, copies and graph reads joined. `files` is filled by the graph build. `planned` are the review's files, to count what the graph never listed. */
 export function graphSystems(
     systems: readonly DetectedSystem[],
     hashes: ReadonlyMap<string, string>,
-    reads?: readonly SystemGraphRead[],
+    reads?: GraphFileReads,
+    planned?: readonly string[],
 ): GraphSystem[] {
     const copies = new Map(duplicateCopies(systems, hashes).map((c) => [c.copy, c] as const));
-    const read = readsBySystem(systems, reads);
+    const read = readsBySystem(systems, reads, planned);
     return systems.map((s) => {
         const copy = copies.get(s.path);
         const r = read.get(s.path);
@@ -78,6 +108,28 @@ async function seenFiles(source: DirectorySource, plan: PlanDetail | undefined):
     return seen;
 }
 
+/**
+ * The folders holding a `.git`: the ones the source's last walk saw, plus — a confirmed plan walks
+ * nothing — the folders that could be systems (the root, each top-level folder, each folder with a
+ * project manifest) asked of the source directly, so `hasGit` never depends on an earlier `list()`.
+ */
+async function gitRootsOf(source: SystemsSource, paths: readonly string[]): Promise<string[]> {
+    const known = new Set(source.gitRoots?.() ?? []);
+    if (source.hasGit) {
+        const candidates = new Set<string>(['']);
+        for (const p of paths) {
+            const slashAt = p.indexOf('/');
+            if (slashAt > 0) candidates.add(p.slice(0, slashAt));
+            if (PROJECT_MANIFESTS.includes(baseOf(p))) candidates.add(dirOf(p));
+        }
+        for (const folder of [...candidates].sort(byDepthThenPath)) {
+            if (known.has(folder) || [...known].some((g) => within(folder, g))) continue;
+            if (await source.hasGit(folder)) known.add(folder);
+        }
+    }
+    return [...known].sort();
+}
+
 /** Detects, records and returns a root's systems after its review. A failure here is the caller's to report, never a failed review. */
 export async function recordSystems(args: {
     rootId: string;
@@ -89,15 +141,19 @@ export async function recordSystems(args: {
 }): Promise<GraphSystem[]> {
     const { rootId, source } = args;
     const seen = await seenFiles(source, args.plan);
+    const paths = [...seen.keys()];
+    const hashes = new Map([...seen].filter(([, hash]) => hash !== ''));
+    // The ONE detection of systems: the graph reads below are assigned to what it finds.
     const detected = await detectSystems(
-        { rootName: args.rootName, paths: [...seen.keys()], ...(source.gitRoots ? { gitRoots: source.gitRoots() } : {}) },
+        { rootName: args.rootName, paths, hashes, gitRoots: await gitRootsOf(source, paths) },
         async (path) => {
             const doc = await source.read(path);
             return doc.content.kind === 'text' ? doc.content.text : undefined;
         },
     );
-    const hashes = new Map([...seen].filter(([, hash]) => hash !== ''));
-    const systems = graphSystems(detected.systems, hashes, takeGraphReads(rootId));
+    // Only a plan says which files the review meant to cover, so only with one can unlisted files be counted.
+    const planned = args.plan?.files.map((f) => f.path);
+    const systems = graphSystems(detected.systems, hashes, takeGraphReads(rootId), planned);
     await args.manifest.set(systemsManifestKey(rootId), [{ id: JSON.stringify(systems), hash: RECORD_VERSION }]);
     return systems;
 }

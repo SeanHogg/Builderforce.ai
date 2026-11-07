@@ -14,7 +14,7 @@ export type CountedWord =
     | 'sectionUnjudged' | 'fixBatch' | 'findingCollapsed' | 'topNodes' | 'modelCalls' | 'endpointsCapped' | 'commitsCapped'
     | 'moreChecks' | 'fileEndpoints' | 'filesPlotted' | 'applyV8' | 'applyV8Request' | 'entryPointsOmitted' | 'interchange'
     | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'moreStations' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'moreStops' | 'antiTip'
-    | 'replicaQueued' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep';
+    | 'replicaQueued' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep' | 'awaitingJudge';
 
 export interface MapLabels {
     /** `{files}`, `{layer}`. */
@@ -135,6 +135,7 @@ export const MAP_DEFAULTS: MapLabels = {
         runFailureOne: '{count} file failed', runFailureOther: '{count} files failed',
         runRetryAllOne: 'Retry {count} file', runRetryAllOther: 'Retry all {count} files',
         runStepOne: 'Last step', runStepOther: 'Last {count} steps',
+        awaitingJudgeOne: '{count} file waiting to be judged', awaitingJudgeOther: '{count} files waiting to be judged',
         fileBothOne: '{count} file here and on the server', fileBothOther: '{count} files here and on the server',
         fileChangedOne: '{count} file changed', fileChangedOther: '{count} files changed',
         fileSkippedOne: '{count} file was not stored.', fileSkippedOther: '{count} files were not stored.',

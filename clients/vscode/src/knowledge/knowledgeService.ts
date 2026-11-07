@@ -203,6 +203,12 @@ export interface RootReview {
   judgeModel(): Promise<string | undefined>;
 }
 
+/** `builderforce.knowledge.judgeBudgetFiles` (PRD 41 A10): files judged per run after the map is complete; default 500, never negative. */
+const judgeBudgetFiles = (): number => {
+  const n = Math.floor(Number(vscode.workspace.getConfiguration("builderforce").get<number>("knowledge.judgeBudgetFiles", 500)));
+  return Number.isFinite(n) && n >= 0 ? n : 500;
+};
+
 /** Listeners told when a root's knowledge changed (a review finished): the live graph re-reads. */
 const changedListeners = new Set<(rootId: string) => void>();
 export function onKnowledgeChanged(cb: (rootId: string) => void): () => void {
@@ -235,7 +241,7 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
       recorder.begin();
       return duringReview(root.rootId, open.files, open.pump, async () => {
         // Extraction runs in the worker pool and judging N wide (PRD 41 A8); the caller's options win.
-        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup), ...opts });
+        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup), judgeFiles: judgeBudgetFiles(), ...opts });
         recorder.finish();
         for (const cb of changedListeners) cb(root.rootId);
         return report;

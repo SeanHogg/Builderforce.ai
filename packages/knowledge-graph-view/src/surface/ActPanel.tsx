@@ -134,7 +134,7 @@ export function ActPanel(p: ActPanelProps) {
 
                 {wide.length > 0 && <SystemWideBlock findings={wide} labels={labels} onShow={p.onShow} />}
 
-                <DuplicateCopyCards findings={copies} labels={labels} fix={p.copyFix} onShow={p.onShow} />
+                <DuplicateCopyCards findings={copies} labels={labels} fix={p.copyFix} graph={p.graph} onShow={p.onShow} />
 
                 {count === 0
                     ? <EmptyCard labels={labels} atStation={!!station} onAsk={() => p.onAskUntested?.()} onShow={() => p.onShow(emptyRefs())} />

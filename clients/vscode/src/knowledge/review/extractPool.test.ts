@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ExtractJob, ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 import { createExtractPool, defaultExtractPoolSize, type PoolWorker } from "./extractPool";
 
@@ -121,6 +121,49 @@ describe("createExtractPool", () => {
     await expect(queued).rejects.toThrow(/disposed/);
     expect(workers[0]!.terminated).toBe(true);
     await expect(pool(jobOf("c"))).rejects.toThrow(/disposed/);
+  });
+});
+
+describe("per-job timeout (PRD 41 A10)", () => {
+  it("rejects a job that never answers with 'timeout', recycles its worker and runs the next job on a fresh one", async () => {
+    vi.useFakeTimers();
+    try {
+      const workers: FakeWorker[] = [];
+      const { pool } = createExtractPool({ size: 1, workerFile: "w.js", jobTimeoutMs: 10_000, spawn: () => { const w = new FakeWorker(); workers.push(w); return w; } });
+      const hung = pool(jobOf("hang"));
+      const next = pool(jobOf("next"));
+      const caught = expect(hung).rejects.toThrow("timeout");
+      await vi.advanceTimersByTimeAsync(10_000);
+      await caught;
+      expect(workers[0]!.terminated).toBe(true);
+      expect(workers).toHaveLength(2);
+      expect(workers[1]!.posted.map((m) => m.job.path)).toEqual(["next"]);
+      workers[1]!.reply(0, done("next"));
+      await expect(next).resolves.toEqual(done("next"));
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("counts from the post, not from the queue: a queued job is not timed while it waits", async () => {
+    vi.useFakeTimers();
+    try {
+      const workers: FakeWorker[] = [];
+      const { pool } = createExtractPool({ size: 1, workerFile: "w.js", jobTimeoutMs: 10_000, spawn: () => { const w = new FakeWorker(); workers.push(w); return w; } });
+      const first = pool(jobOf("a"));
+      const second = pool(jobOf("b"));
+      await vi.advanceTimersByTimeAsync(9_000);
+      workers[0]!.reply(0, done("a"));
+      await first;
+      await vi.advanceTimersByTimeAsync(9_000); // 18 s since b was queued, 9 s since posted
+      workers[0]!.reply(1, done("b"));
+      await expect(second).resolves.toEqual(done("b"));
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("warm() starts every slot's worker without a job", () => {
+    const { workers, warm } = rig(3);
+    warm();
+    expect(workers).toHaveLength(3);
+    expect(workers.every((w) => w.posted.length === 0)).toBe(true);
   });
 });
 

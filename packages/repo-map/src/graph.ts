@@ -102,12 +102,18 @@ export class FileGraph {
       set.add(term);
     }
     const edges = new Map<number, Map<number, number>>();
+    // The streaming builder hands the SAME definers list to every file that mentions an ident: resolve and sort it once.
+    const resolved = new WeakMap<readonly string[], { defs: number[]; has: ReadonlySet<number> }>();
     for (const [fromPath, byIdent] of groups) {
       const from = g.node(fromPath);
       for (const [ident, raw] of byIdent) {
-        const defs = [...new Set(raw.map((p) => g.node(p)))].sort((a, b) => a - b);
-        if (defs.includes(from)) continue;
-        const chosen = g.bestDefiners(from, defs, importTerms.get(from));
+        let known = resolved.get(raw);
+        if (!known) {
+          const defs = [...new Set(raw.map((p) => g.node(p)))].sort((a, b) => a - b);
+          resolved.set(raw, (known = { defs, has: new Set(defs) }));
+        }
+        if (known.has.has(from)) continue;
+        const chosen = g.bestDefiners(from, known.defs, importTerms.get(from));
         const w = 1 / chosen.length;
         let out = edges.get(from);
         if (!out) edges.set(from, (out = new Map()));

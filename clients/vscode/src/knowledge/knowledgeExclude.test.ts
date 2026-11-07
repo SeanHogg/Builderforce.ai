@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("vscode", async () => (await import("./vscodeL10nMock")).vscodeL10nMock);
 
-import { excludeFromReview, ignorablePath, withIgnoredFolder, type IgnoreFilePort } from "./knowledgeExclude";
+import { excludeFromReview, ignorablePath, ignoreLiteral, withIgnoredFolder, type IgnoreFilePort } from "./knowledgeExclude";
 
 function file(initial?: string): IgnoreFilePort & { text?: string; writes: number } {
   const f: IgnoreFilePort & { text?: string; writes: number } = {
@@ -25,6 +25,13 @@ describe("withIgnoredFolder", () => {
     expect(withIgnoredFolder("x/\n", "x")).toBe("x/\n");
     expect(withIgnoredFolder("/x/\n", "x")).toBe("/x/\n");
   });
+
+  it("writes glob characters as literals, once", () => {
+    expect(ignoreLiteral("a*b?[c]{d}\\e")).toBe("a\\*b\\?\\[c\\]\\{d\\}\\\\e");
+    const once = withIgnoredFolder("", "copy*");
+    expect(once).toBe("copy\\*/\n");
+    expect(withIgnoredFolder(once, "copy*")).toBe(once);
+  });
 });
 
 describe("ignorablePath", () => {
@@ -32,34 +39,53 @@ describe("ignorablePath", () => {
     expect(ignorablePath("./a\\b/")).toBe("a/b");
     for (const bad of ["", ".", "../x", "a/../b", "#c", "!d", "a\nb", "/"]) expect(ignorablePath(bad)).toBeUndefined();
   });
+
+  it("refuses absolute, drive-lettered and whitespace-padded paths", () => {
+    for (const bad of ["/abs/x", "\\abs\\x", "C:/x", "c:\\x", "C:x", " x", "x ", "x\t"]) expect(ignorablePath(bad)).toBeUndefined();
+  });
 });
 
 describe("excludeFromReview", () => {
   const idle = (): boolean => false;
+  const copiesOf = (...paths: string[]) => async (): Promise<readonly string[]> => paths;
+  const holds = () => {
+    const state = { held: 0 };
+    return { state, hold: async <T>(run: () => Promise<T>): Promise<T> => { state.held++; try { return await run(); } finally { state.held--; } } };
+  };
 
-  it("writes the ignore file once, and not again for the same folder", async () => {
+  it("writes the ignore file once, inside the hold, and not again for the same folder", async () => {
     const f = file("node_modules\n");
-    await excludeFromReview({ rootId: "r", path: "bf-membump", file: f, isReviewing: idle });
-    await excludeFromReview({ rootId: "r", path: "bf-membump/", file: f, isReviewing: idle });
+    const h = holds();
+    const seen: number[] = [];
+    const watched: IgnoreFilePort = { read: () => { seen.push(h.state.held); return f.read(); }, write: (t) => { seen.push(h.state.held); return f.write(t); } };
+    await excludeFromReview({ rootId: "r", path: "bf-membump", file: watched, isReviewing: idle, copies: copiesOf("bf-membump"), hold: h.hold });
+    await excludeFromReview({ rootId: "r", path: "bf-membump/", file: watched, isReviewing: idle, copies: copiesOf("bf-membump"), hold: h.hold });
     expect(f.text).toBe("node_modules\nbf-membump/\n");
     expect(f.writes).toBe(1);
+    expect(seen.every((n) => n === 1)).toBe(true);
   });
 
   it("creates the file when there is none", async () => {
     const f = file();
-    await excludeFromReview({ rootId: "r", path: "copy", file: f, isReviewing: idle });
+    await excludeFromReview({ rootId: "r", path: "copy", file: f, isReviewing: idle, copies: copiesOf("copy"), hold: holds().hold });
     expect(f.text).toBe("copy/\n");
   });
 
   it("refuses while a review of the root is running, writing nothing", async () => {
     const f = file("a\n");
-    await expect(excludeFromReview({ rootId: "r", path: "x", file: f, isReviewing: (id) => id === "r" })).rejects.toThrow("already running");
+    await expect(excludeFromReview({ rootId: "r", path: "x", file: f, isReviewing: (id) => id === "r", copies: copiesOf("x"), hold: holds().hold })).rejects.toThrow("already running");
     expect(f.writes).toBe(0);
   });
 
   it("refuses a path outside the root", async () => {
     const f = file();
-    await expect(excludeFromReview({ rootId: "r", path: "../other", file: f, isReviewing: idle })).rejects.toThrow("cannot be excluded");
+    await expect(excludeFromReview({ rootId: "r", path: "../other", file: f, isReviewing: idle, copies: copiesOf("../other"), hold: holds().hold })).rejects.toThrow("cannot be excluded");
+    expect(f.writes).toBe(0);
+  });
+
+  it("refuses a folder the last review did not record as a copy, writing nothing", async () => {
+    const f = file("a\n");
+    await expect(excludeFromReview({ rootId: "r", path: "src", file: f, isReviewing: idle, copies: copiesOf("bf-membump"), hold: holds().hold })).rejects.toThrow("cannot be excluded");
     expect(f.writes).toBe(0);
   });
 });

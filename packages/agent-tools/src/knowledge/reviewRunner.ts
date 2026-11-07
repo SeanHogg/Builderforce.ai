@@ -379,7 +379,7 @@ export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPo
                 signal,
             );
             // What the repo graph read of each system goes to the systems record the review writes (see `recordSystems`).
-            noteGraphReads(rootId, graphReads ?? []);
+            noteGraphReads(rootId, graphReads);
             // The analyzers name files relative to the workspace; this root's files (its manifest,
             // its refs, the platform's graph of it) are relative to the root itself — the upload too.
             const scoped = snapshot && deps.path ? snapshotUnder(snapshot, deps.path) : snapshot;

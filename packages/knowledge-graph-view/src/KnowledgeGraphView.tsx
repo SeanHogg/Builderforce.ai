@@ -40,6 +40,7 @@ import { useSyncStatus } from './surface/useSyncStatus';
 import { useReviewRunRecord } from './surface/run/useReviewRunRecord';
 import { useZoomHost, ZoomProvider } from './surface/zoom';
 import { LinesPanel } from './surface/LinesPanel';
+import { foldCopyFindings } from './surface/systems';
 import { PanelDrawer } from './surface/PanelDock';
 import { canApplyKind } from './surface/codemods';
 import { isResolved } from './surface/fix/fixFlow';
@@ -107,7 +108,9 @@ export function KnowledgeGraphView({
     // Before/After: offered when the host keeps a baseline; "before" draws the baseline graph.
     const keepsBaseline = !!source.baseline || !!source.snapshot;
     const showingBefore = revision === 'before' && !!kg.baseline;
-    const real = showingBefore ? kg.baseline!.graph : kg.graph; // null until a graph arrives; the frame is drawn regardless
+    const shown = showingBefore ? kg.baseline!.graph : kg.graph;
+    // null until a graph arrives; the frame is drawn regardless. The findings of stray copies are folded away (PRD 41 A9).
+    const real = shown ? foldCopyFindings(shown) : shown;
     const graph = real ?? EMPTY_GRAPH;
     const side = showingBefore ? 'baseline' as const : 'current' as const;
     const evidenceFor = useMemo(() => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined), [source]);

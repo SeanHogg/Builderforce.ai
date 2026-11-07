@@ -103,12 +103,14 @@ export class RepoGraphBuilder {
    * same-file rows kept), one using file at a time — never materialized as a whole.
    */
   private *refGroups(): Generator<readonly [string, ReadonlyMap<string, readonly string[]>]> {
-    const definers = new Map<string, string[]>();
+    // Each name's distinct definers in first-seen order (a Set keeps insertion order), as the arrays the join hands on.
+    const seen = new Map<string, Set<string>>();
     for (const s of this.symbols) {
-      const list = definers.get(s.name);
-      if (!list) definers.set(s.name, [s.path]);
-      else if (list[list.length - 1] !== s.path && !list.includes(s.path)) list.push(s.path);
+      const paths = seen.get(s.name);
+      if (!paths) seen.set(s.name, new Set([s.path]));
+      else paths.add(s.path);
     }
+    const definers = new Map<string, string[]>([...seen].map(([name, paths]) => [name, [...paths]]));
     for (let f = 0; f < this.paths.length; f += 1) {
       const byIdent = new Map<string, readonly string[]>();
       for (const id of this.mentions[f]!) {

@@ -97,6 +97,8 @@ export type FsDirectorySource = DirectorySource & {
     skippedFolders(): SkippedFolder[];
     /** Folders (root-relative, "" = the root) the latest `list()` saw hold a `.git` entry, directory or file: the systems of the root (PRD 41 A9). */
     gitRoots?(): string[];
+    /** Whether a folder (root-relative, "" = the root) holds a `.git` entry right now, without a walk: a confirmed plan carries no walk of its own. */
+    hasGit?(folder: string): Promise<boolean>;
 };
 
 export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirectorySource {
@@ -184,5 +186,9 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
         })
         : undefined;
 
-    return { rootId, title, list, read, skippedFolders: () => [...skipped], gitRoots: () => [...gitRoots].sort(), ...(watch ? { watch } : {}) };
+    const hasGit = async (folder: string): Promise<boolean> => {
+        try { return (await fs.readDirectory(folder ? `${root}/${folder}` : root)).some(([name]) => name === '.git'); } catch { return false; }
+    };
+
+    return { rootId, title, list, read, skippedFolders: () => [...skipped], gitRoots: () => [...gitRoots].sort(), hasGit, ...(watch ? { watch } : {}) };
 }

@@ -13,6 +13,8 @@ import { rootFileStem } from './index/persistence.js';
 export interface KnowledgeFiles {
     read(name: string): Promise<string | undefined>;
     write(name: string, text: string): Promise<void>;
+    /** Appends to a file (created, with its folder, when missing). Optional: without it an append is a read plus a write of the concatenation. */
+    append?(name: string, text: string): Promise<void>;
     /** Renames within the folder, replacing the target: with it a file can be written atomically (temp, then rename). */
     rename?(from: string, to: string): Promise<void>;
     /** Deletes a file (a missing one is not an error). Optional: a host without it keeps old run records instead of pruning them. */
@@ -22,6 +24,8 @@ export interface KnowledgeFiles {
 }
 
 export const snapshotFileName = (rootId: string): string => `${rootFileStem(rootId)}.json`;
+/** The root's extract cache (PRD 41 A10): an append-only JSON Lines log beside its snapshot, content-addressed bodies the snapshot no longer holds. */
+export const extractedLogFileName = (rootId: string): string => `${rootFileStem(rootId)}.extracted.jsonl`;
 export const manifestFileName = (rootId: string): string => `${rootFileStem(rootId)}.manifest.json`;
 /** The root's replica queue (PRD 41 A7): what is still to be sent to the linked project, beside its snapshot. */
 export const replicaFileName = (rootId: string): string => `${rootFileStem(rootId)}.replica.json`;

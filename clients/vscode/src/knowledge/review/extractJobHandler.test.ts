@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { CODE_BADGES, indexedSymbolLookup, indexedSymbolSource, reviewPacks } from "@builderforce/agent-tools/knowledge";
-import { extractJob, type ExtractJob } from "@seanhogg/builderforce-memory/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, extractJob, type ExtractJob } from "@seanhogg/builderforce-memory/knowledge";
 import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
 import { withIndexSymbols } from "./extractPoolHost";
 
@@ -54,6 +57,32 @@ describe("one symbol rule for the pooled and the in-thread extraction", () => {
     const result = await handleExtractJob({ ...jobFor("notes.md", "# Title\n\nSome words.\n"), needSections: true });
     expect(result.extracted).toHaveLength(1);
     expect(result.sections?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("a worker that reads its own file (PRD 41 A10)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bf-readfrom-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const stub = (path: string): ExtractJob => jobFor(path, "");
+
+  it("extracts the same as a job carrying the document, with the planned hash", async () => {
+    const text = "# Title\n\nSome words about it.\n";
+    writeFileSync(join(dir, "n.md"), text);
+    const viaRead = await handleExtractJob({ ...stub("n.md"), hash: "ignored", readFrom: { rootPath: dir, path: "n.md", hash: "planned" }, needSections: true });
+    const inline = await handleExtractJob({ ...jobFor("n.md", text, { hash: "planned" }), needSections: true });
+    expect(viaRead).toEqual(inline);
+  });
+
+  it("returns {binary: true} for a binary file and extracts nothing", async () => {
+    writeFileSync(join(dir, "b.dat"), Buffer.from([1, 0, 2, 0, 0, 255, 0, 3]));
+    const out = await handleExtractJob({ ...stub("b.dat"), readFrom: { rootPath: dir, path: "b.dat", hash: "h" } });
+    expect(out).toEqual({ extracted: [], binary: true });
+  });
+
+  it("fails a file over the size cap and a path outside the root", async () => {
+    writeFileSync(join(dir, "huge.txt"), Buffer.alloc(DEFAULT_MAX_FILE_BYTES + 1, 97));
+    await expect(handleExtractJob({ ...stub("huge.txt"), readFrom: { rootPath: dir, path: "huge.txt", hash: "h" } })).rejects.toThrow("too large");
+    await expect(handleExtractJob({ ...stub("../x"), readFrom: { rootPath: dir, path: "../x", hash: "h" } })).rejects.toThrow(/outside/);
   });
 });
 

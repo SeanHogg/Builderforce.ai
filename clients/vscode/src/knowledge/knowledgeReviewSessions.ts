@@ -21,7 +21,9 @@ import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { log, reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
 import { reviewRecords } from "./knowledgeSyncStatus";
 import { duringReview, isRootReviewing, replicaStatusOf } from "./knowledgeReplica";
-import { extractPoolDown } from "./review/extractPoolHost";
+import type { ReviewProgress } from "@seanhogg/builderforce-memory/knowledge";
+import { extractPoolDown, prewarmExtractPool } from "./review/extractPoolHost";
+import { throttledEmit } from "./review/throttledEmit";
 import { markOwed } from "./review/retryOwed";
 import { stopRunById, trackRun } from "./review/reviewRuns";
 
@@ -123,6 +125,10 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     if (!session || session.abort) return false;
     const abort = new AbortController();
     session.abort = abort;
+    prewarmExtractPool(); // the plan is confirmed: the workers load while the review starts
+    // Progress posts at most 10 a second, latest wins (PRD 41 A10 rule 8), like the run recorder.
+    let latest: ReviewProgress | undefined;
+    const progressPost = throttledEmit(() => { if (latest) this.post({ stream: reviewId, type: "progress", progress: latest }); });
     const { rootId, rootPath } = session.review.open.root;
     const { files, pump } = session.review.open;
     // The run record (PRD 41 A8): folded from the review's progress and steps, posted throttled, kept on disk at the end.
@@ -143,7 +149,8 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
         signal: abort.signal,
         onProgress: (progress) => {
           session.lastPhase = progress.phase;
-          this.post({ stream: reviewId, type: "progress", progress });
+          latest = progress;
+          progressPost.emit();
           run.progress(progress);
         },
         onStep: run.step,
@@ -168,7 +175,7 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
           });
         },
       )
-      .finally(() => this.sessions.delete(reviewId));
+      .finally(() => { progressPost.cancel(); this.sessions.delete(reviewId); });
     return true;
   }
 

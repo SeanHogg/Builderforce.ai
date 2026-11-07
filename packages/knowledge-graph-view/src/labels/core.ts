@@ -193,7 +193,7 @@ export interface CoreLabels {
     /** The always-available capture: copies the view + run state for a bug/improvement report. */
     copyDiagnostics: string;
     reviewProgress: string;
-    phases: Record<'plan' | 'extract' | 'resolve' | 'judge' | 'compare' | 'write' | 'index' | 'done', string>;
+    phases: Record<'plan' | 'extract' | 'resolve' | 'mapped' | 'judge' | 'compare' | 'write' | 'index' | 'done', string>;
 }
 
 export const CORE_DEFAULTS: CoreLabels = {
@@ -400,6 +400,6 @@ reviewCopyDetails: 'Copy details',
 copyDiagnostics: 'Copy diagnostics',
 reviewProgress: '{phase} · {done} of {total}',
 phases: {
-    plan: 'Planning', extract: 'Reading', resolve: 'Resolving', judge: 'Judging', compare: 'Comparing', write: 'Writing', index: 'Indexing', done: 'Done',
+    plan: 'Planning', extract: 'Reading', resolve: 'Resolving', mapped: 'Map complete', judge: 'Judging', compare: 'Comparing', write: 'Writing', index: 'Indexing', done: 'Done',
 },
 };

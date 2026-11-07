@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { detectSystems, duplicateCopies, manifestProjectName, type DetectedSystem } from './systems.js';
+import { strideSample } from './systemCopies.js';
 
 const reader = (files: Record<string, string>) => async (p: string) => files[p];
 const pkg = (name: string, extra: Record<string, unknown> = {}) => JSON.stringify({ name, ...extra });
@@ -68,8 +69,6 @@ describe('detectSystems', () => {
             }),
         );
         expect(d.systems[0]!.apps).toEqual([{ path: 'm/packages/web', name: '@m/web' }, { path: 'm/tools/cli', name: 'cli' }]);
-        expect(d.appOf('m/packages/web/src/x.ts')).toBe('m/packages/web');
-        expect(d.appOf('m/other/y.ts')).toBeUndefined();
     });
 
     it('is deterministic whatever the listing order', async () => {
@@ -141,5 +140,54 @@ describe('duplicateCopies', () => {
             hashes(tree('o', 20), tree('c1', 20), tree('c2', 20)),
         );
         expect(out.map((c) => [c.copy, c.original])).toEqual([['c1', 'o'], ['c2', 'o']]);
+    });
+
+    it('samples at most 200 files as a stride across the WHOLE sorted list, not its first 200', () => {
+        // The last 200 of 400 differ: a first-200 sample would call these identical.
+        const edited = tree('copy', 400).map(([p, h], i): [string, string] => [p, i >= 200 ? `${h}-edited` : h]);
+        expect(duplicateCopies([sys('copy'), sys('orig', { hasGit: true })], hashes(edited, tree('orig', 400)))).toEqual([]);
+        expect(strideSample(Array.from({ length: 1000 }, (_, i) => i), 4)).toEqual([0, 250, 500, 750]);
+        expect(strideSample([1, 2, 3], 200)).toEqual([1, 2, 3]);
+    });
+
+    it('a git system with no manifest name matches by folder name', () => {
+        const out = duplicateCopies(
+            [{ path: 'proj', name: 'proj', hasGit: true, apps: [] }, sys('proj-copy', { manifestName: 'proj' })],
+            hashes(tree('proj', 20), tree('proj-copy', 20)),
+        );
+        expect(out).toEqual([{ copy: 'proj-copy', original: 'proj', similarity: 1, reason: 'no-git' }]);
+    });
+});
+
+describe('detectSystems — a loose copy of a repository with no root manifest', () => {
+    // The shape of c:/code/agentic: a repo with NO root manifest, a loose copy of it (no .git) whose
+    // manifests all sit in sub-folders, and another repository.
+    const files = (folder: string, n: number, salt = 'h'): Array<[string, string]> => Array.from({ length: n }, (_, i) => [`${folder}/src/f${String(i).padStart(3, '0')}.ts`, `${salt}${i}`]);
+    const manifests = { 'bf-verify-fdc/frontend/package.json': pkg('builderforce-frontend'), 'bf-verify-fdc/api/package.json': pkg('builderforce-api'), 'memory/package.json': pkg('memory') };
+    const listing = (extra: Array<[string, string]> = []) => {
+        const hashed = new Map<string, string>([...files('Builderforce.ai', 30), ...files('bf-verify-fdc', 30), ...files('memory', 30, 'm'), ...extra]);
+        const paths = [...hashed.keys(), 'Builderforce.ai/.git/HEAD', 'memory/.git/HEAD', ...Object.keys(manifests)];
+        return { rootName: 'agentic', paths, hashes: hashed };
+    };
+
+    it('is ONE system marked a copy, not split into its manifests', async () => {
+        const d = await detectSystems(listing(), reader(manifests));
+        expect(d.systems.map((s) => s.path)).toEqual(['Builderforce.ai', 'bf-verify-fdc', 'memory']);
+        expect(d.systems.find((s) => s.path === 'bf-verify-fdc')).toMatchObject({ hasGit: false, copy: { original: 'Builderforce.ai', similarity: 1 } });
+        expect(d.systemOf('bf-verify-fdc/frontend/src/a.ts')).toBe('bf-verify-fdc');
+        expect(duplicateCopies(d.systems, listing().hashes)).toEqual([{ copy: 'bf-verify-fdc', original: 'Builderforce.ai', similarity: 1, reason: 'no-git' }]);
+    });
+
+    it('without hashes the folder is split by its manifests (nothing proves it a copy)', async () => {
+        const { hashes: _h, ...bare } = listing();
+        const d = await detectSystems(bare, reader(manifests));
+        expect(d.systems.map((s) => s.path)).toContain('bf-verify-fdc/frontend');
+    });
+
+    it('a folder whose files differ is not a copy', async () => {
+        const changed = files('bf-verify-fdc', 30).map(([p]): [string, string] => [p, 'other']);
+        const l = listing(changed);
+        const d = await detectSystems(l, reader(manifests));
+        expect(d.systems.some((s) => s.copy)).toBe(false);
     });
 });

@@ -13,9 +13,9 @@ import {
 } from "@seanhogg/builderforce-memory/knowledge";
 import type { ReplicaState } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeStoredRun } from "../knowledgeProtocol";
+import { RUN_POST_INTERVAL_MS, throttledEmit } from "./throttledEmit";
 
-/** At most 10 posts a second. */
-export const RUN_POST_INTERVAL_MS = 100;
+export { RUN_POST_INTERVAL_MS };
 
 /** A stable id for a run: its start time and a random tail (file-name safe). */
 export const newRunId = (at: number = Date.now()): string => `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -45,21 +45,9 @@ export interface RunRecorderArgs {
 export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
   // Memory's own run (plus the replica state): `interrupted` is a word the STORE adds when it reads a record back.
   let run: ReviewRun & { replica?: ReplicaState } = startRun({ id: args.id, root: args.root, kind: args.kind, at: Date.now() });
-  let lastPostAt = Number.NEGATIVE_INFINITY;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const send = (): void => {
-    if (timer) { clearTimeout(timer); timer = undefined; }
-    lastPostAt = Date.now();
-    args.post(run);
-  };
-  /** Posts now when the interval has passed, else once at its end (latest state wins). */
-  const emit = (): void => {
-    if (timer) return;
-    const wait = RUN_POST_INTERVAL_MS - (Date.now() - lastPostAt);
-    if (wait <= 0) send();
-    else timer = setTimeout(send, wait);
-  };
+  // Latest state wins: a burst of events is one post per interval.
+  const throttle = throttledEmit(() => args.post(run));
+  const emit = throttle.emit;
 
   emit();
   return {
@@ -68,10 +56,10 @@ export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
     step(step) { run = applyRunEvent(run, { type: "step", step }, Date.now()); emit(); },
     close(outcome, report, replica) {
       // Nothing posts the closed run before the host has kept it and flushes. The report never carries the failures: `run.failures` holds the list.
-      if (timer) { clearTimeout(timer); timer = undefined; }
+      throttle.cancel();
       run = { ...applyRunEvent(run, { type: "end", outcome, ...(report ? { report: { ...report, failures: [] } } : {}) }, Date.now()), ...(replica ? { replica } : {}) };
       return run;
     },
-    flush: send,
+    flush: throttle.flush,
   };
 }

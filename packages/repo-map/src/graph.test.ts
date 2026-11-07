@@ -55,4 +55,15 @@ describe('FileGraph (mirror of bf-index graph.rs)', () => {
     expect(back.pagerank([])).toEqual(g.pagerank([]));
     expect(back.symbolInDegree(back.indexOf('c.ts')!, 'C')).toBe(2);
   });
+
+  it('grouped input sharing one definers list per ident builds the same graph as ungrouped rows', () => {
+    const defs = ['z.ts', 'a.ts'];
+    const files = ['a.ts', 'b.ts', 'c.ts', 'z.ts'];
+    const grouped = FileGraph.buildGrouped(files, [['b.ts', new Map([['Foo', defs]])], ['c.ts', new Map([['Foo', defs]])], ['a.ts', new Map([['Foo', defs]])]], []);
+    const rows = FileGraph.build(files, [r('b.ts', 'Foo', 'z.ts'), r('b.ts', 'Foo', 'a.ts'), r('c.ts', 'Foo', 'z.ts'), r('c.ts', 'Foo', 'a.ts'), r('a.ts', 'Foo', 'z.ts'), r('a.ts', 'Foo', 'a.ts')], []);
+    expect(grouped.toJSON()).toEqual(rows.toJSON());
+    // a.ts defines Foo itself: no edge from it, while b and c split between the two definers.
+    expect(grouped.edge(grouped.indexOf('a.ts')!, grouped.indexOf('z.ts')!)).toBe(0);
+    expect(grouped.edge(grouped.indexOf('b.ts')!, grouped.indexOf('z.ts')!)).toBeCloseTo(0.5, 12);
+  });
 });

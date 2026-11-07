@@ -4,12 +4,12 @@
  * phase, the step feed and its filter, and a failure's short reason. React-free and clock-free.
  */
 
-import { runEta, runRate, type ReviewPhase, type ReviewRun, type ReviewStep } from '@seanhogg/builderforce-memory/knowledge';
+import { runEta, runRate, slowestSteps, type ReviewPhase, type ReviewRun, type ReviewStep } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import type { StoredReviewRun } from '../../types';
 
-/** The order a review moves through its phases. */
-export const RUN_PHASE_ORDER: readonly ReviewPhase[] = ['plan', 'extract', 'resolve', 'judge', 'compare', 'write', 'index', 'done'];
+/** The order a review moves through its phases: pass 1 (mechanical) ends at the `mapped` milestone, then pass 2 judges (PRD 41 A10). */
+export const RUN_PHASE_ORDER: readonly ReviewPhase[] = ['plan', 'extract', 'resolve', 'compare', 'write', 'index', 'mapped', 'judge', 'done'];
 
 export type PhaseState = 'done' | 'active' | 'pending';
 
@@ -24,6 +24,8 @@ export interface PhaseRow {
     rate: number;
     /** Milliseconds left at that rate; undefined when it cannot be told. */
     etaMs: number | undefined;
+    /** A milestone (`mapped`: the map is complete) has no progress, rate or ETA of its own. */
+    milestone: boolean;
 }
 
 /** The phases the run has reached, in order, each with its progress, rate and ETA; the first unfinished one is the active one (none, once the run ended). */

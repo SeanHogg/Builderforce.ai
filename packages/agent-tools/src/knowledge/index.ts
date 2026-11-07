@@ -40,7 +40,7 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
-export { fileManifest, manifestFileName, migratingRootFiles, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
+export { extractedLogFileName, fileManifest, manifestFileName, migratingRootFiles, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
     REPLICA_WRITE_ROWS, createReplicaQueue, memoryReplicaPersistence, relationKey,
     type ReplicaOp, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,
@@ -97,4 +97,4 @@ export {
     type CopyReason, type DetectedApp, type DetectedSystem, type DetectedSystems, type DuplicateCopy, type ReadManifest, type SystemsListing,
 } from './systems.js';
 export { graphSystems, readSystems, recordSystems, systemsManifestKey } from './systemsRecord.js';
-export { GraphReadTally, noteGraphReads, takeGraphReads, type GraphSkipReason, type SystemGraphRead } from './graphReads.js';
+export { GraphReadTally, noteGraphReads, takeGraphReads, type GraphFileReads, type GraphSkipReason } from './graphReads.js';
