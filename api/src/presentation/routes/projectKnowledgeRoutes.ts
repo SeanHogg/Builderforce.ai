@@ -210,7 +210,7 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
       const access = await authorizePackManage(p.env, p.store, { userId: person(c), role: (c.get('role') as string | undefined) ?? null }, rootId);
       if (!access.ok) return json({ error: access.error }, access.status);
     }
-    const result = await deleteKnowledgeRoot({ env: p.env, graph: p.graph }, rootId);
+    const result = await deleteKnowledgeRoot({ env: p.env, graph: p.graph, sync: p.sync }, rootId);
     return result.ok ? json(result) : json({ error: result.error }, result.status);
   }));
 

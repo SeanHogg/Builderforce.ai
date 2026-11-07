@@ -102,6 +102,8 @@ export interface WriteKnowledgeDeps {
   legacyFact?: { originExecutionId?: number | null; origin?: FactOriginCost | null; retireByAnchor: boolean };
   /** Embed each fact as it is written (default true). Pack sync passes false: a provider call per fact is a subrequest per fact, and the backfill sweep embeds them. */
   embedFacts?: boolean;
+  /** The caller bumps the knowledge version ONCE for a larger unit of work (a pack apply: many calls, one transaction). */
+  skipVersionBump?: boolean;
 }
 
 export interface KnowledgeWriteResult {
@@ -267,7 +269,7 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
   } finally {
     // One bump for the whole call — also when it failed part-way, since what landed before
     // the failure must not be hidden behind a cached graph.
-    await bumpKnowledgeVersion(env, tenantId, projectId);
+    if (!deps.skipVersionBump) await bumpKnowledgeVersion(env, tenantId, projectId);
   }
   return result;
 }

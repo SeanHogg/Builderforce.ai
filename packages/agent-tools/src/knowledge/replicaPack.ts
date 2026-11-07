@@ -24,7 +24,8 @@ import {
 } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { factKey, relationKey, type ReplicaAnalysis } from './replicaQueue.js';
 
-export interface ReplicaSource { ref: string; hash: string }
+/** A current source: its ref, content hash, and size in bytes when the host's stat cache knows it. */
+export interface ReplicaSource { ref: string; hash: string; bytes?: number | undefined }
 
 /** The knowledge client's sync calls the pack builder uses. */
 export interface PackQueries {
@@ -91,8 +92,8 @@ const parseRelationKey = (key: string): { from: string; to: string; kind: string
 
 export async function buildPack(args: BuildArgs): Promise<BuiltPack> {
     const { rootId, local, client } = args;
-    const byKey = new Map<string, { path: string; hash: string }>();
-    for (const s of args.sources) { const path = pathOfRef(rootId, s.ref); byKey.set(fileLeafKey(path, s.hash), { path, hash: s.hash }); }
+    const byKey = new Map<string, { path: string; hash: string; bytes: number }>();
+    for (const s of args.sources) { const path = pathOfRef(rootId, s.ref); byKey.set(fileLeafKey(path, s.hash), { path, hash: s.hash, bytes: s.bytes ?? 0 }); }
 
     const fileKeys = args.touched.filter((k) => k.startsWith('f:'));
     const rowKeys = args.touched.filter((k) => !k.startsWith('f:'));
@@ -104,8 +105,8 @@ export async function buildPack(args: BuildArgs): Promise<BuiltPack> {
     const deleteFiles: string[] = [];
     for (const k of sentFileKeys) {
         const src = byKey.get(k);
-        if (src) files.push({ path: src.path, hash: src.hash, bytes: 0 });
-        else if (!k.startsWith('f:~')) deleteFiles.push(k.slice(2));
+        if (src) files.push({ path: src.path, hash: src.hash, bytes: src.bytes });
+        else deleteFiles.push(k.slice(2)); // a source id: the path, or `~tag|path` for a root-level output
     }
 
     // Bodies: only for hashes the project lacks, as a diff when the acknowledged prior is known.

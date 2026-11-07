@@ -1,35 +1,46 @@
 /**
- * applyKnowledgePack — `POST …/knowledge/sync` (PRD 41 A11 rules 3-4): one BFKP pack in, the root's rows
- * brought to the pack's state, `{ generation, digest }` out.
+ * applyKnowledgePack — `POST …/knowledge/sync` (PRD 41 A11 rules 3-4a): one BFKP pack in, the root's rows brought
+ * to the pack's state, `{ generation, digest }` out.
  *
- * Guards, before any row is touched: compressed body ≤ 8 MB; parts staged by `syncId` (expire in 1 h)
- * and applied only when the last arrives; the shared codec checks the magic, the CRC-32, the 64 MB
- * inflate cap and the string/row counts (413 `pack_too_large`, 422 `bad_pack`); the pack's
- * `baseGeneration` must be 0 (a full pack) or the root's current generation (else 409 `generation_mismatch`).
+ * Guards, before any row is touched: compressed body ≤ 8 MB; parts staged by `syncId` (expire in 1 h) and applied
+ * only when the last arrives; the shared codec checks the magic, the CRC-32, the 64 MB inflate cap and the
+ * string/row counts (413 `pack_too_large`, 422 `bad_pack`); the pack's `baseGeneration` must be 0 (a full pack) or
+ * the root's current generation (else 409 `generation_mismatch`); every file whose body the pack leaves out must
+ * be held already (ONE index query, else 409 `extracted_missing`).
  *
- * Apply goes through the code the `write` route runs, never a second writer:
- *   extracted bodies   `putExtracted` (diffs expanded against the prior the server holds)
- *   facts, relations   `writeKnowledge`, in chunks of its row bound (relations are one multi-row upsert each)
- *   sources            `writeKnowledge` stale marks for sources that changed; a source new to the root only registers
- *   tombstones         exact relation rows, fact keys (`deleteKnowledgeFact`'s rules), source removals
- *   scope              `writeKnowledge` last, so no digest is recorded before its rows
- * The knowledge version is bumped once. Then the root digest is recomputed from the server's rows with the
- * codec's `manifestTree`; it must equal the pack's `targetDigest` or the answer is 409 `digest_mismatch`
- * and the generation is NOT advanced, so the client reconciles instead of trusting the apply.
+ * Storage is bounded per pack, not per file:
+ *   objects   the pack's bodies are ONE content-addressed bundle (written before the transaction); the only other
+ *             writes are the earlier parts, `sync.json`, and one review snapshot when the scope records a new digest.
+ *   rows      ONE Postgres transaction holds the bundle index, the source rows, relation stale marks, facts (the
+ *             shared multi-row fact writer, via `writeKnowledge`), relations, tombstones and the scope.
+ *   digest    inside the transaction the server recomputes the root digest with the codec's `manifestTree`; unequal to
+ *             the pack's `targetDigest` throws, the transaction rolls back and the answer is 409 `digest_mismatch`.
+ *             An orphan bundle left behind is harmless (content-addressed) and swept by age.
  */
-import { joinParts, type Pack, type PackExtr } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { applyEntryDiffs, ZERO_DIGEST } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { joinParts, applyEntryDiffs, ZERO_DIGEST, type Pack, type PackExtr } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { srcRef, type Extracted } from '@seanhogg/builderforce-memory/knowledge';
-import type { Db } from '../../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import type { ExtractedCachePort, KnowledgeStorePort } from '../knowledgePorts';
-import { KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, putAnalysisSnapshot, putExtracted } from '../knowledgePerception';
+import { KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, putAnalysisSnapshot } from '../knowledgePerception';
+import { clampExtracted, sanitizeExtracted } from '../knowledgePrivacy';
 import { bumpKnowledgeVersion } from '../knowledgeVersion';
 import { deleteKnowledgeFact } from '../deleteKnowledgeFact';
-import { MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge, type KnowledgeFactInput, type KnowledgeStaleMark } from '../writeKnowledge';
+import { sourceId } from '../knowledgeBlobs';
+import { buildBundle } from '../knowledgeBundles';
+import { drizzleLedger, type KnowledgeLedgerPort, type SourceRow } from '../knowledgeLedger';
+import { drizzleKnowledgeStore } from '../knowledgeStore';
+import { MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge, type KnowledgeFactInput } from '../writeKnowledge';
 import { decodeGuarded } from './decodeGuarded';
 import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES, MAX_SYNC_PARTS, SYNC_ID_PATTERN, type KnowledgeSyncPort } from './knowledgeSyncPorts';
 import { serverManifest } from './knowledgeSyncManifest';
+
+/** What one transaction writes through: the store and the ledger bound to the SAME handle. */
+export interface PackUnit {
+  db: Db;
+  store: KnowledgeStorePort;
+  ledger: KnowledgeLedgerPort;
+}
 
 export interface ApplyDeps {
   env: Env;
@@ -41,6 +52,8 @@ export interface ApplyDeps {
   sync: KnowledgeSyncPort;
   userId: string | null;
   actorRole: string | null;
+  /** Runs `work` as ONE transaction (default: a Postgres transaction over `db`). A test seam. */
+  atomically?: <T>(work: (unit: PackUnit) => Promise<T>) => Promise<T>;
 }
 
 export interface ApplyInput {
@@ -63,7 +76,16 @@ async function mapBounded<T>(items: readonly T[], n: number, work: (item: T) => 
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, lane));
 }
 
-/** Parks a part; returns the whole pack's bytes once the last part arrived, else null. */
+const defaultAtomically = (deps: ApplyDeps): NonNullable<ApplyDeps['atomically']> => (work) =>
+  inTransaction(deps.db, (tx) => {
+    const db = tx as unknown as Db;
+    return work({ db, store: drizzleKnowledgeStore(db, deps.tenantId, deps.projectId), ledger: drizzleLedger(db, deps.tenantId, deps.projectId) });
+  });
+
+/**
+ * Parks an earlier part; returns the whole pack's bytes once the last part arrived. The LAST part is never staged:
+ * it rides this request, so a pack of N parts costs N-1 staging writes.
+ */
 async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array | { staged: ApplyResult }> {
   const { syncId, part, parts } = input;
   if (!parts || parts <= 1) return input.body;
@@ -72,34 +94,28 @@ async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array 
     throw new KnowledgeSyncError(400, 'bad_parts', 'a multi-part pack names a syncId, a part within 0..parts-1 and at most 64 parts');
   }
   await deps.sync.sweepStaged().catch(() => undefined);
-  await deps.sync.stagePart(syncId, part, input.body);
-  if (part !== parts - 1) return { staged: { applied: false, syncId, received: part + 1, parts } };
-  const all = await deps.sync.stagedParts(syncId, parts);
-  if (!all) throw new KnowledgeSyncError(409, 'parts_missing', 'a part of this pack is missing or expired; send the pack again', { syncId });
-  return joinParts(all);
+  if (part !== parts - 1) {
+    await deps.sync.stagePart(syncId, part, input.body);
+    return { staged: { applied: false, syncId, received: part + 1, parts } };
+  }
+  const earlier = parts > 1 ? await deps.sync.stagedParts(syncId, parts - 1) : [];
+  if (!earlier) throw new KnowledgeSyncError(409, 'parts_missing', 'a part of this pack is missing or expired; send the pack again', { syncId });
+  return joinParts([...earlier, input.body]);
 }
 
 /**
- * A file whose body the client skipped (the project already held that hash) must still be named by the object it
- * points at: the object is per hash, its entries per source. Any that is not is a 409 `extracted_missing` naming the hashes,
- * and the client sends those bodies. Checked BEFORE anything is written.
+ * A file whose body the client skipped (the project already held that hash) must still be named by the stored body:
+ * the body is per hash, its entries per source. ONE index query answers it for every such file; any that fails is a
+ * 409 `extracted_missing` naming the hashes, and the client sends those bodies. Checked BEFORE anything is written.
  */
 async function verifyBodies(deps: ApplyDeps, pack: Pack): Promise<void> {
   const shipped = new Set((pack.extracted ?? []).map((x) => x.hash));
   const owed = (pack.files ?? []).filter((f) => !shipped.has(f.hash));
+  if (owed.length === 0) return;
+  const held = await deps.sync.heldBodies([...new Set(owed.map((f) => f.hash))]);
   const missing = new Set<string>();
-  await mapBounded(owed, CONCURRENCY, async (f) => {
-    const entries = await deps.extracted.get(f.hash);
-    if (!entries?.some((e) => e.sourceRef === srcRef(pack.rootId, f.path))) missing.add(f.hash);
-  });
+  for (const f of owed) if (!held.get(f.hash)?.includes(srcRef(pack.rootId, f.path))) missing.add(f.hash);
   if (missing.size > 0) throw new KnowledgeSyncError(409, 'extracted_missing', 'the server lacks the extracted output of some files; send those bodies', { hashes: [...missing] });
-}
-
-async function applyAnalysis(deps: ApplyDeps, pack: Pack): Promise<void> {
-  const a = pack.analysis as { sha?: unknown; snapshot?: unknown } | undefined;
-  if (!a || typeof a.sha !== 'string' || !KNOWLEDGE_HASH_PATTERN.test(a.sha) || a.snapshot == null) return;
-  if (JSON.stringify(a.snapshot).length > MAX_ANALYSIS_SNAPSHOT_BYTES) throw new KnowledgeSyncError(413, 'payload_too_large', 'the analysis snapshot is over 2 MB');
-  await putAnalysisSnapshot(deps, a.sha, pack.rootId, a.snapshot);
 }
 
 async function expand(deps: ApplyDeps, x: PackExtr): Promise<Extracted[]> {
@@ -113,65 +129,90 @@ async function expand(deps: ApplyDeps, x: PackExtr): Promise<Extracted[]> {
   }
 }
 
-/** Source changes: a changed source marks its model relations stale; a source new to the root only registers. */
-async function applySources(deps: ApplyDeps, pack: Pack, held: ReadonlyMap<string, string>): Promise<number> {
-  const root = pack.rootId;
-  const marks = new Map<string, string>();
-  for (const f of pack.files ?? []) if (!f.hash.startsWith('~')) marks.set(f.path, f.hash);
-  const prefix = `src:${root}::`;
-  for (const s of pack.stale ?? []) if (s.sourceRef.startsWith(prefix)) marks.set(s.sourceRef.slice(prefix.length), s.hash);
-  const changed: KnowledgeStaleMark[] = [];
-  const fresh: Array<[string, string]> = [];
-  for (const [path, hash] of marks) {
-    const before = held.get(path);
-    if (before === hash) continue;
-    if (before === undefined && hash !== '') fresh.push([path, hash]);
-    else changed.push({ sourceRef: srcRef(root, path), currentHash: hash });
-  }
-  for (const f of pack.deletes?.files ?? []) if (!f.startsWith('~') && held.has(f)) changed.push({ sourceRef: srcRef(root, f), currentHash: '' });
-  await mapBounded(fresh, CONCURRENCY, ([path, hash]) => deps.extracted.setSource(srcRef(root, path), hash));
-  for (let i = 0; i < changed.length; i += MAX_KNOWLEDGE_WRITE_ROWS) {
-    await writeRows(deps, root, { stale: changed.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) });
-  }
-  return marks.size + (pack.deletes?.files.length ?? 0);
+/** One body as it is stored: the hash it claims, one line per label, no ref over the graph's bound (see `putExtracted`). */
+function storable(hash: string, entries: readonly Extracted[]): Extracted[] {
+  const stray = entries.find((e) => e.sourceHash !== hash);
+  if (stray) throw new KnowledgeSyncError(422, 'bad_pack', `extracted output for ${stray.sourceRef} is at hash '${stray.sourceHash}', not the '${hash}' it was sent under`);
+  return clampExtracted(sanitizeExtracted(entries).entries);
 }
 
-const writeRows = (deps: ApplyDeps, root: string, rows: Parameters<typeof writeKnowledge>[1]) =>
-  writeKnowledge(
-    { env: deps.env, db: deps.db, tenantId: deps.tenantId, projectId: deps.projectId, store: deps.store, blobs: deps.extracted, userId: deps.userId, actorRole: deps.actorRole },
+interface SourcePlan {
+  upsert: SourceRow[];
+  remove: string[];
+  stale: Array<{ sourceRef: `src:${string}`; currentHash: string }>;
+  /** The root's sources after the pack. */
+  after: Array<{ path: string; hash: string }>;
+}
+
+function planSources(pack: Pack, heldNow: ReadonlyArray<{ path: string; hash: string }>): SourcePlan {
+  const held = new Map(heldNow.map((s) => [sourceId(s.path, s.hash), s] as const));
+  const plan: SourcePlan = { upsert: [], remove: [], stale: [], after: [] };
+  const after = new Map(held);
+  const prefix = `src:${pack.rootId}::`;
+  const rows = new Map<string, SourceRow>();
+  for (const f of pack.files ?? []) rows.set(sourceId(f.path, f.hash), { sourceId: sourceId(f.path, f.hash), path: f.path, hash: f.hash });
+  for (const s of pack.stale ?? []) {
+    if (s.sourceRef.startsWith(prefix) && s.hash) rows.set(s.sourceRef.slice(prefix.length), { sourceId: s.sourceRef.slice(prefix.length), path: s.sourceRef.slice(prefix.length), hash: s.hash });
+  }
+  for (const row of rows.values()) {
+    const before = held.get(row.sourceId);
+    if (before?.hash === row.hash) continue;
+    plan.upsert.push(row);
+    after.set(row.sourceId, { path: row.path, hash: row.hash });
+    // A source that changed from a known hash makes its model relations stale; one new to the root has none to mark.
+    // (A plain path's id is the path; the held entry under that id carries the hash it changed from.)
+    if (before && !row.hash.startsWith('~')) plan.stale.push({ sourceRef: srcRef(pack.rootId, row.path) as `src:${string}`, currentHash: row.hash });
+  }
+  for (const id of pack.deletes?.files ?? []) {
+    const before = held.get(id);
+    plan.remove.push(id);
+    after.delete(id);
+    if (before && !id.startsWith('~')) plan.stale.push({ sourceRef: srcRef(pack.rootId, id) as `src:${string}`, currentHash: '' });
+  }
+  plan.after = [...after.values()];
+  return plan;
+}
+
+async function applyAnalysis(deps: ApplyDeps, pack: Pack): Promise<void> {
+  const a = pack.analysis as { sha?: unknown; snapshot?: unknown } | undefined;
+  if (!a || typeof a.sha !== 'string' || !KNOWLEDGE_HASH_PATTERN.test(a.sha) || a.snapshot == null) return;
+  if (JSON.stringify(a.snapshot).length > MAX_ANALYSIS_SNAPSHOT_BYTES) throw new KnowledgeSyncError(413, 'payload_too_large', 'the analysis snapshot is over 2 MB');
+  await putAnalysisSnapshot(deps, a.sha, pack.rootId, a.snapshot);
+}
+
+/** Facts, relations and the scope, through the single writer, on the transaction's handle. */
+async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack): Promise<{ facts: number; relations: number }> {
+  const root = pack.rootId;
+  // The pack already wrote the sources and the review snapshot; the writer only writes rows here.
+  const blobs: ExtractedCachePort = { ...deps.extracted, setSource: async () => undefined, snapshotReview: async () => undefined };
+  const write = (rows: Parameters<typeof writeKnowledge>[1]) => writeKnowledge(
+    { env: deps.env, db: unit.db, tenantId: deps.tenantId, projectId: deps.projectId, store: unit.store, blobs, userId: deps.userId, actorRole: deps.actorRole, embedFacts: false, skipVersionBump: true },
     { root, ...rows },
   );
-
-async function applyRows(deps: ApplyDeps, pack: Pack): Promise<{ facts: number; relations: number }> {
-  const root = pack.rootId;
   const facts = (pack.facts ?? []) as KnowledgeFactInput[];
   const relations = pack.relations ?? [];
-  let written = { facts: 0, relations: 0 };
+  const written = { facts: 0, relations: 0 };
   // Facts first, then relations: a relation to a fact never lands before the fact.
-  for (let i = 0; i < facts.length; i += MAX_KNOWLEDGE_WRITE_ROWS) {
-    written.facts += (await writeRows(deps, root, { facts: facts.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).factsWritten;
-  }
-  for (let i = 0; i < relations.length; i += MAX_KNOWLEDGE_WRITE_ROWS) {
-    written.relations += (await writeRows(deps, root, { relations: relations.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).relationsWritten;
-  }
+  for (let i = 0; i < facts.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.facts += (await write({ facts: facts.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).factsWritten;
+  for (let i = 0; i < relations.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.relations += (await write({ relations: relations.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).relationsWritten;
+  if (pack.scope) await write({ scope: pack.scope });
   return written;
 }
 
-async function applyTombstones(deps: ApplyDeps, pack: Pack): Promise<number> {
+async function applyTombstones(deps: ApplyDeps, unit: PackUnit, pack: Pack): Promise<number> {
   const d = pack.deletes;
   if (!d) return 0;
   let removed = 0;
   if (d.relations.length > 0) {
     // A person's edge is only removed by a person.
-    const human = deps.userId ? new Set<string>() : await deps.store.humanRelationKeys(d.relations);
-    const rows = d.relations.filter((r) => !human.has(`${r.from}\u0000${r.to}\u0000${r.kind}`));
-    removed += await deps.store.deleteRelationRows(rows);
+    const human = deps.userId ? new Set<string>() : await unit.store.humanRelationKeys(d.relations);
+    removed += await unit.store.deleteRelationRows(d.relations.filter((r) => !human.has(`${r.from}\u0000${r.to}\u0000${r.kind}`)));
   }
   for (const key of d.facts) {
-    const r = await deleteKnowledgeFact(deps, { userId: deps.userId, role: deps.actorRole }, key);
+    const r = await deleteKnowledgeFact({ env: deps.env, db: unit.db, tenantId: deps.tenantId, projectId: deps.projectId, store: unit.store }, { userId: deps.userId, role: deps.actorRole }, key);
     if (r.ok && r.removed) removed += 1;
   }
-  return removed + d.files.length;
+  return removed;
 }
 
 export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Promise<ApplyResult> {
@@ -186,26 +227,39 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
       throw new KnowledgeSyncError(409, 'generation_mismatch', 'the server moved since this pack was built', { generation: state.generation, digest: state.digest });
     }
     await verifyBodies(deps, pack);
-    const held = new Map((await deps.sync.sources(root)).map((s) => [s.path, s.hash] as const));
 
+    // Everything that reads or writes OBJECTS happens here, before the transaction: the bodies as one bundle, and
+    // the review snapshot (never recorded after the scope row that names its digest).
     const extracted = pack.extracted ?? [];
-    await mapBounded(extracted, CONCURRENCY, async (x) => {
-      await putExtracted(deps, x.hash, await expand(deps, x), { deferVersionBump: true, skipStaleMarks: true });
-    });
-    const files = await applySources(deps, pack, held);
-    const written = await applyRows(deps, pack);
-    const deleted = await applyTombstones(deps, pack);
-    if (pack.scope) await writeRows(deps, root, { scope: pack.scope });
-    await applyAnalysis(deps, pack);
-    await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
+    const bodies: Array<{ hash: string; entries: Extracted[] }> = [];
+    await mapBounded(extracted, CONCURRENCY, async (x) => { bodies.push({ hash: x.hash, entries: storable(x.hash, await expand(deps, x)) }); });
+    bodies.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0));
+    const bundle = bodies.length > 0 ? buildBundle(deps.tenantId, bodies) : undefined;
+    const plan = planSources(pack, await deps.sync.sources(root));
+    if (pack.scope?.lastDigest) await deps.sync.snapshotReview(root, pack.scope.lastDigest, plan.after);
+    if (bundle) await deps.sync.putBundle(bundle);
 
-    const { tree } = await serverManifest(deps, root);
-    if (pack.targetDigest !== ZERO_DIGEST && tree.root !== pack.targetDigest) {
-      throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest: tree.root });
-    }
-    const next = { generation: state.generation + 1, digest: tree.root };
+    const atomically = deps.atomically ?? defaultAtomically(deps);
+    const done = await atomically(async (unit) => {
+      if (bundle) await unit.ledger.index.upsert(bundle.locs);
+      await unit.ledger.sources.upsert(root, plan.upsert);
+      await unit.ledger.sources.remove(root, plan.remove);
+      if (plan.stale.length > 0) await unit.store.markRelationsStaleMany(plan.stale);
+      const written = await writeRows(deps, unit, pack);
+      const deleted = await applyTombstones(deps, unit, pack);
+      // The digest is checked INSIDE the transaction: a mismatch throws and nothing above is kept.
+      const { tree } = await serverManifest({ store: unit.store, sync: deps.sync }, root, unit.ledger);
+      if (pack.targetDigest !== ZERO_DIGEST && tree.root !== pack.targetDigest) {
+        throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest: tree.root });
+      }
+      return { written, deleted, digest: tree.root };
+    });
+
+    const next = { generation: state.generation + 1, digest: done.digest };
     await deps.sync.saveState(root, next);
-    return { applied: true, ...next, files, extracted: extracted.length, facts: written.facts, relations: written.relations, deleted };
+    await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
+    await applyAnalysis(deps, pack);
+    return { applied: true, ...next, files: plan.upsert.length + plan.remove.length, extracted: bodies.length, facts: done.written.facts, relations: done.written.relations, deleted: done.deleted };
   } finally {
     if (input.syncId && (input.parts ?? 1) > 1) await deps.sync.dropStaged(input.syncId).catch(() => undefined);
   }

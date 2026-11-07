@@ -55,7 +55,7 @@ export function rootOfRef(ref: string): string | undefined {
 const pathOfSourceRef = (ref: string): string => ref.slice(ref.indexOf('::') + 2);
 
 /** The object identity of a source: its path, or `~<tag>|<path>` for a root-level output. */
-function sourceId(path: string, hash: string): string {
+export function sourceId(path: string, hash: string): string {
   if (!hash.startsWith('~')) return path;
   const colon = hash.indexOf(':');
   return `${colon > 0 ? hash.slice(0, colon) : hash}|${path}`;

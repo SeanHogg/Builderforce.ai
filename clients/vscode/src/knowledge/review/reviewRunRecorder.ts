@@ -52,7 +52,7 @@ export interface RunRecorderArgs {
 
 export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
   // Memory's own run (plus the replica state): `interrupted` is a word the STORE adds when it reads a record back.
-  let run: ReviewRun & { replica?: ReplicaState } = startRun({ id: args.id, root: args.root, kind: args.kind, at: Date.now() });
+  let run: ReviewRun & { replica?: ReplicaState; awaitingJudgeTotal?: number } = startRun({ id: args.id, root: args.root, kind: args.kind, at: Date.now() });
   // Latest state wins: a burst of events is one post per interval.
   const throttle = throttledEmit(() => args.post(run));
   const emit = throttle.emit;

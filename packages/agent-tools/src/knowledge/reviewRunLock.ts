@@ -31,16 +31,17 @@ export async function runPreemptingJudge<T>(rootId: string, start: (handoff: Run
     }
     let result!: Promise<T>;
     const lock = serialisedByKey(rootId, () => new Promise<void>((release) => {
+        // `done` settles when the whole run has ended; it exists before the run starts, so a run may register its judge pass at once.
+        let finish!: () => void;
+        const done = new Promise<void>((r) => { finish = r; });
         const handoff: RunHandoff = {
             release,
-            judging: (stop) => {
-                const done = result.then(() => undefined, () => undefined).finally(() => { if (passes.get(rootId)?.done === done) passes.delete(rootId); });
-                passes.set(rootId, { stop, done });
-            },
+            judging: (stop) => { passes.set(rootId, { stop, done }); },
         };
         result = start(handoff);
         // A run that ends (or fails) without a judge pass releases the lock when it ends.
-        result.then(() => release(), () => release());
+        const ended = (): void => { release(); finish(); if (passes.get(rootId)?.done === done) passes.delete(rootId); };
+        result.then(ended, ended);
     }));
     await lock;
     return result;

@@ -40,6 +40,7 @@ import { TaskService } from './application/task/TaskService';
 import { TaskRepository } from './infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from './infrastructure/repositories/ProjectRepository';
 
+import { sweepKnowledgeStorage } from './application/knowledge/knowledgeSweep';
 import { runMemoryEmbeddingBackfill, type BackfillResult } from './application/memory/memoryEmbeddingBackfill';
 import { allDrained } from './application/memory/memoryEmbeddingPolicy';
 import { sweepAllUnrecalledFactDecay } from './application/llm/projectFactsDecay';
@@ -317,6 +318,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.matched > 0 || r.failed > 0
         ? `alerts=${r.evaluated} matched=${r.matched} notified=${r.notified}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;
+    },
+  },
+  {
+    key: 'knowledge-storage',
+    cadence: 'daily',
+    description: 'Sweep pack sync storage: orphan extracted bundles past a day with no index row, and expired staged parts.',
+    run: async ({ env, db }) => {
+      const swept = await sweepKnowledgeStorage(env, db);
+      return `bundles removed=${swept.bundlesRemoved} projects=${swept.projects}`;
     },
   },
   {

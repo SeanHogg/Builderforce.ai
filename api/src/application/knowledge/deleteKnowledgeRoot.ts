@@ -20,11 +20,14 @@ import { isPackRootId } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
 import type { KnowledgeGraphDeps } from './getKnowledgeGraph';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
+import type { KnowledgeSyncPort } from './sync/knowledgeSyncPorts';
 
 export interface DeleteRootDeps {
   env: Env;
   /** The project's knowledge ports (store, extracted cache, analysis) — already tenant-bound. */
   graph: KnowledgeGraphDeps;
+  /** Pack sync's state: the root's `sync.json` goes with it (its source rows go with `deleteRootSources`). Extracted-index rows are content-addressed and shared, so they stay; their bundles are swept by age. */
+  sync?: KnowledgeSyncPort;
 }
 
 export type DeleteRootResult =
@@ -44,6 +47,7 @@ export async function deleteKnowledgeRoot(deps: DeleteRootDeps, rootId: string):
     const { keys, relations: onFacts } = await graph.store.deleteFactsBySource(rootId);
     const sources = await graph.extracted.deleteRootSources(rootId);
     await graph.analysis.clear(rootId);
+    await deps.sync?.clearRoot(rootId);
     const scopeDeleted = await graph.store.deleteScope(rootId);
     if (!hadScope && !scopeDeleted && underRoot + onFacts + keys.length + sources === 0) {
       bump = false;
