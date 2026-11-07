@@ -485,6 +485,19 @@ export const annotations = pgTable('annotations', {
   value:      numeric('value', { precision: 10, scale: 2 }),
   label:      varchar('label', { length: 120 }),
   anchor:     jsonb('anchor'),
+  /** ── PRD 39 §2 (migration 1298) — canvas comment fold, expand phase ──────
+   *  `public_id` is the WIRE id once `creation_session_comments` folds in:
+   *  clients hold uuid comment ids today, so the folded row keeps a uuid.
+   *  NOT NULL with a `gen_random_uuid()` default (migration 1298 backfills
+   *  existing rows, then sets the default) — NOT an identity column, because
+   *  `ALTER COLUMN ... ADD GENERATED ALWAYS AS IDENTITY` is rejected on a
+   *  pre-existing NOT NULL column. Uniqueness is the migration's
+   *  `uq_annotations_public_id` unique index.
+   *  `mentions` / `resolvedBy` are the canvas comment fields that have no
+   *  kernel home yet; both nullable on expand, both backfilled on fold. */
+  publicId:   uuid('public_id'),
+  mentions:   jsonb('mentions'),
+  resolvedBy: varchar('resolved_by', { length: 64 }),
   /** ── Moderation (migration 1106) ─────────────────────────────────────────
    *  'published' | 'pending' | 'rejected'. Defaults to published, so every
    *  annotation this platform already writes is unaffected; a writer that
@@ -503,6 +516,42 @@ export const annotations = pgTable('annotations', {
   index('idx_annotations_object').on(t.objectId, t.kind, t.createdAt),
   index('idx_annotations_author').on(t.tenantId, t.authorRef),
   index('idx_annotations_parent').on(t.parentId),
+]);
+
+/**
+ * Canvas-comment fold ledger (PRD 39 §2, migration 1298) — the expand-phase
+ * bookkeeping for moving `creation_session_comments` into `annotations`.
+ *
+ * The fold is expand → move → contract (PRD 39 §2 sequence), and a push-2
+ * backfill must be IDEMPOTENT across the deploy window where the old Worker
+ * still writes to the old table: each ledger row records one source comment
+ * and the annotation it became, so a re-run copies nothing twice and push 3
+ * reconciles counts per session against it.
+ *
+ * Deliberately no foreign key to `creation_session_comments` (or anything in
+ * the canvas schema): this module takes no sibling imports (PRD 20 §6.2), and
+ * the ledger must survive the contract push that DROPS the source table.
+ */
+export const annotationFoldLedger = pgTable('annotation_fold_ledger', {
+  id:              bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:        integer('tenant_id').notNull(),
+  /** The `creation_session_comments.id` this row accounts for. */
+  sourceCommentId: uuid('source_comment_id').notNull(),
+  /** The session the comment belonged to — the per-session reconciliation key. */
+  sourceSessionId: uuid('source_session_id').notNull(),
+  /** The kernel object the comment folds onto (kind `creation_session`). */
+  objectId:        uuid('object_id').notNull().references(() => objects.id, { onDelete: 'cascade' }),
+  /** The annotation the backfill created. NULL until folded. */
+  annotationId:    bigint('annotation_id', { mode: 'number' }),
+  /** 'pending' | 'folded' | 'skipped'. */
+  status:          varchar('status', { length: 16 }).notNull().default('pending'),
+  note:            text('note'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  // One ledger row per source comment: the idempotency key of the fold.
+  uniqueIndex('uq_annotation_fold_ledger_source').on(t.sourceCommentId),
+  index('idx_annotation_fold_ledger_session').on(t.tenantId, t.sourceSessionId),
 ]);
 
 /**

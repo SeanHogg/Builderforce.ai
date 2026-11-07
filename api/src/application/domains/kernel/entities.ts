@@ -27,6 +27,7 @@
  */
 import {
   annotations,
+  annotationFoldLedger,
   artifacts,
   catalogItems,
   connections,
@@ -69,6 +70,14 @@ export const KERNEL_ENTITIES = defineDomainEntities('kernel', [
   syncStates,
   memberships,
   annotations,
+  /**
+   * READ-ONLY. The canvas-comment fold ledger (PRD 39 §2): one row per source
+   * comment, written ONLY by the fold backfill (push 2) and reconciled on contract
+   * (push 3). A generic PATCH here would corrupt the idempotency key the fold
+   * depends on, so like the other invariant-bearing primitives above it is
+   * reachable to read, never to write.
+   */
+  entity(annotationFoldLedger, { kind: 'annotation_fold_ledger', readOnly: true }),
   invitations,
   settings,
   relations,

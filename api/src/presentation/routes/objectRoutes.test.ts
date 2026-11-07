@@ -101,6 +101,38 @@ describe('shares of a board', () => {
   });
 });
 
+describe('annotations of a board (PRD 39 §2 — the annotation gate)', () => {
+  it('refuses a generic annotation write to a gated board', async () => {
+    const db = fakeDb([[BOARD]]);
+    const res = await appOver(db).request('/obj-board/annotations', post({ body: 'hi' }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'DOMAIN_GATED_RELATION' });
+    expect(db.calls.some((call) => call.kind === 'insert')).toBe(false);
+  });
+
+  it('refuses the annotations list to somebody the board grant does not admit', async () => {
+    boardGate.mockResolvedValue(false);
+    const res = await appOver(fakeDb([[BOARD]])).request('/obj-board/annotations');
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'DOMAIN_GATED_RELATION' });
+    expect(boardGate).toHaveBeenCalledWith({ tenantId: 7, refId: 'sess-1', userId: 'user-1' });
+  });
+
+  it('lists annotations for a board member', async () => {
+    boardGate.mockResolvedValue(true);
+    const res = await appOver(fakeDb([[BOARD], [{ id: 1, body: 'note' }]])).request('/obj-board/annotations');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([{ id: 1, body: 'note' }]);
+  });
+
+  it('refuses the activity timeline to somebody the board grant does not admit', async () => {
+    boardGate.mockResolvedValue(false);
+    const res = await appOver(fakeDb([[BOARD]])).request('/obj-board/activity');
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'DOMAIN_GATED_RELATION' });
+  });
+});
+
 describe('an ordinary object', () => {
   it('still takes generic member writes', async () => {
     const db = fakeDb([[DEAL], [{ id: 1 }]]);
