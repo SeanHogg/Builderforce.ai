@@ -78,7 +78,8 @@ vi.mock("./auditToolCatalog", () => ({
 
 vi.mock("./brainToolCatalog", () => ({ brainToolCatalog: async () => [] }));
 
-vi.mock("./modelRouting", () => ({
+vi.mock("./modelRouting", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./modelRouting")>()),
   localWindowProbes: async () => ({}),
   resolveModelRoute: async () => ({}),
   routeStream: () => async () => undefined,

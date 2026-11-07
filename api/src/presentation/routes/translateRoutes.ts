@@ -11,7 +11,7 @@
 import { Hono } from 'hono';
 import type { HonoEnv, Env } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { z } from './requestBody';
+import { z, parseBody } from './requestBody';
 import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import { spendTranslateBudget } from '../../application/translate/translateBudget';
 import { createDefaultTranslateText } from '../../application/translate/defaultTranslateText';
@@ -40,8 +40,7 @@ export function createTranslateRoutes(makeTranslate: TranslateFactory = createDe
   router.use('*', authMiddleware);
 
   router.post('/', async (c) => {
-    const parsed = Body.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: 'Invalid translate request' }, 400);
+    const body = await parseBody(c, Body);
 
     const env = c.env as Env;
     const verdict = await checkSlidingWindow(env, `translate:${c.get('tenantId')}:${c.get('userId')}`, TRANSLATE_RPM);
@@ -51,9 +50,9 @@ export function createTranslateRoutes(makeTranslate: TranslateFactory = createDe
     }
 
     // Nothing to translate: echo the texts, spend no budget, make no model call.
-    if (isSameLanguage(parsed.data.from, parsed.data.to)) return c.json({ translations: parsed.data.texts });
+    if (isSameLanguage(body.from, body.to)) return c.json({ translations: body.texts });
 
-    const chars = parsed.data.texts.reduce((n, t) => n + t.length, 0);
+    const chars = body.texts.reduce((n, t) => n + t.length, 0);
     const budget = await spendTranslateBudget(env, c.get('tenantId') as number, chars);
     if (budget) {
       c.header('Retry-After', String(budget.retryAfterSeconds));
@@ -61,7 +60,7 @@ export function createTranslateRoutes(makeTranslate: TranslateFactory = createDe
     }
 
     try {
-      const translations = await makeTranslate(env)(parsed.data);
+      const translations = await makeTranslate(env)(body);
       return c.json({ translations });
     } catch (e) {
       if (e instanceof TranslationUnavailableError) return c.json({ error: 'Translation is unavailable' }, 503);

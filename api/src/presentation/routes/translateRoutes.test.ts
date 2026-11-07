@@ -18,11 +18,13 @@ vi.mock('../../application/ratelimit/slidingWindow', () => ({ checkSlidingWindow
 vi.mock('../../application/translate/translateBudget', () => ({ spendTranslateBudget: mocks.budget }));
 
 import { createTranslateRoutes } from './translateRoutes';
+import { errorHandler } from '../middleware/errorHandler';
 import { TranslationUnavailableError } from '../../application/translate/translateText';
 
 const auth = { Authorization: 'Bearer t', 'Content-Type': 'application/json' };
 const post = (app: ReturnType<typeof createTranslateRoutes>, body: unknown, headers: Record<string, string> = auth) =>
-  app.request('/', { method: 'POST', headers, body: JSON.stringify(body) }, {});
+  // parseBody REJECTS; the app's own error handler is what answers 400.
+  app.onError(errorHandler as never).request('/', { method: 'POST', headers, body: JSON.stringify(body) }, {});
 
 beforeEach(() => {
   vi.clearAllMocks();

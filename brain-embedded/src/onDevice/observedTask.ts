@@ -7,6 +7,7 @@
  */
 
 import { approxTokens } from '../builtInAi/taskSession';
+import { reportOnDeviceFailure } from './onDeviceFailure';
 import type { OnDeviceObserver, OnDeviceTaskKind, ServedBy } from './onDeviceTasks';
 
 export interface ObservedTaskContext {
@@ -51,8 +52,8 @@ export async function observedTask<R>(
           promptTokens: approxTokens(ctx.input), completionTokens: outputTokens(result),
         });
       }
-    } catch {
-      /* an observer never fails a call */
+    } catch (e) {
+      reportOnDeviceFailure('observe', e); // an observer never fails a call
     }
   }
   return result;

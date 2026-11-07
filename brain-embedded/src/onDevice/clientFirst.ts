@@ -12,6 +12,7 @@
  */
 
 import { builtInModelIdentity } from '../builtInAi/identity';
+import { reportOnDeviceFailure } from './onDeviceFailure';
 import type { OnDeviceObserver, OnDeviceTasks, ServedBy } from './onDeviceTasks';
 
 export type ClientResultEngine = 'browser' | 'bfi' | 'webllm' | 'synapse';
@@ -105,8 +106,8 @@ function reportReplaced(payload: ClientResultPayload): void {
   if (!trace?.observe) return;
   try {
     trace.observe({ kind: trace.by.kind, engine: trace.by.engine, model: trace.by.model, outcome: 'replaced', ms: 0 });
-  } catch {
-    /* an observer never fails a request */
+  } catch (e) {
+    reportOnDeviceFailure('observe', e); // an observer never fails a request
   }
 }
 

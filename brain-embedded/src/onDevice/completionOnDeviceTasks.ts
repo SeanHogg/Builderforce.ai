@@ -15,6 +15,7 @@ import { parseLocalModelRef } from '@builderforce/local-inference';
 import { chunkedSummary, summaryReserveTokens } from './chunkedSummary';
 import { heuristicLanguage } from './heuristicLanguage';
 import { observedTask } from './observedTask';
+import { fallbackAfterFailure } from './onDeviceFailure';
 import type { JsonTaskOptions, OnDeviceEngine, OnDeviceObserver, OnDeviceTaskKind, OnDeviceTasks, ServedBy, ServedOption } from './onDeviceTasks';
 import {
   jsonPrompt, parseJsonReply, proofreadPrompt, rewritePrompt, summarizePrompt, writePrompt, type PromptPair,
@@ -64,7 +65,7 @@ export function servedByRef(kind: OnDeviceTaskKind, ref: string): ServedBy | nul
 
 export function completionOnDeviceTasks(options: CompletionOnDeviceOptions): CompletionOnDeviceTasks {
   const budgetFor = async (): Promise<Pick<InputBudget, 'limit' | 'measure'>> => {
-    const window = typeof options.contextTokens === 'function' ? await options.contextTokens().catch(() => undefined) : options.contextTokens;
+    const window = typeof options.contextTokens === 'function' ? await options.contextTokens().catch(fallbackAfterFailure('contextTokens', undefined)) : options.contextTokens;
     return { limit: window && window > 0 ? window : DEFAULT_CONTEXT_TOKENS, measure: async (text) => approxTokens(text) };
   };
 
@@ -84,7 +85,7 @@ export function completionOnDeviceTasks(options: CompletionOnDeviceOptions): Com
   return {
     complete: options.complete,
     available: async () => new Set<OnDeviceTaskKind>([
-      ...((await options.available().catch(() => false)) ? COMPLETION_KINDS : []),
+      ...((await options.available().catch(fallbackAfterFailure('available', false))) ? COMPLETION_KINDS : []),
       'detectLanguage', // deterministic: needs no model
     ]),
     summarize: (text, o) =>

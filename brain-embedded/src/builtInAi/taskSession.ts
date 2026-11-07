@@ -13,6 +13,7 @@
 import type {
   DetectedLanguage, JsonTaskOptions, OnDeviceTaskKind, RewriteOptions, SummarizeOptions, TranslateOptions, WriteOptions,
 } from '../onDevice/onDeviceTasks';
+import { reportOnDeviceFailure } from '../onDevice/onDeviceFailure';
 
 export type AdapterId =
   | 'summarizer' | 'rewriter' | 'writer' | 'proofreader' | 'languageDetector' | 'translator'
@@ -179,8 +180,8 @@ export function sessionBudget(session: TaskApiSession): InputBudget | null {
     measure: async (text, signal) => {
       try {
         if (session.measureInputUsage) return await session.measureInputUsage(text, signal ? { signal } : undefined);
-      } catch {
-        // fall through to the estimate
+      } catch (e) {
+        reportOnDeviceFailure('measure', e); // fall through to the estimate
       }
       return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
     },

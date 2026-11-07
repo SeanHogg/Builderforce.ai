@@ -2999,10 +2999,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [553e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
+  "~moonshotai/kimi-latest": [1548e-10, 10551e-9],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3010,7 +3010,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [284e-10, 923e-10],
+  "~z-ai/glm-flash-latest": [285e-10, 923e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -3076,10 +3076,10 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [553e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [16e-7, 32e-7],
+  "deepseek/deepseek-v4-pro": [849816e-12, 1699632e-12],
   "deepseek/deepseek-v4-pro-0813": [1165e-10, 466e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
@@ -3138,7 +3138,7 @@ var PRICE_SNAPSHOT = {
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
-  "inclusionai/ling-3.1-flash": [75e-9, 225e-9],
+  "inclusionai/ling-3.1-flash": [45e-9, 135e-9],
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
   "liquid/lfm-2.5-2.6b": [35e-8, 5e-7],
@@ -3308,7 +3308,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [11e-9, 41e-9],
+  "openai/gpt-oss-120b": [1e-8, 38e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -14061,6 +14061,18 @@ var promptApiEngine = {
   chatCompletions: promptApiCompletions
 };
 
+// src/onDevice/onDeviceFailure.ts
+function reportOnDeviceFailure(stage, error) {
+  const reason = error instanceof Error ? error.message : String(error);
+  console.warn(`BuilderForce on-device: ${stage} failed (${reason})`);
+}
+function fallbackAfterFailure(stage, value) {
+  return (error) => {
+    reportOnDeviceFailure(stage, error);
+    return value;
+  };
+}
+
 // src/builtInAi/taskSession.ts
 function progressFraction(event) {
   const { loaded, total } = event ?? {};
@@ -14135,7 +14147,8 @@ function sessionBudget(session) {
     measure: async (text2, signal) => {
       try {
         if (session.measureInputUsage) return await session.measureInputUsage(text2, signal ? { signal } : void 0);
-      } catch {
+      } catch (e) {
+        reportOnDeviceFailure("measure", e);
       }
       return Math.ceil(text2.length / APPROX_CHARS_PER_TOKEN);
     },
@@ -14311,7 +14324,8 @@ async function observedTask(ctx, run) {
           completionTokens: outputTokens(result)
         });
       }
-    } catch {
+    } catch (e) {
+      reportOnDeviceFailure("observe", e);
     }
   }
   return result;
@@ -14660,7 +14674,7 @@ function servedByRef(kind, ref) {
 }
 function completionOnDeviceTasks(options) {
   const budgetFor = async () => {
-    const window2 = typeof options.contextTokens === "function" ? await options.contextTokens().catch(() => void 0) : options.contextTokens;
+    const window2 = typeof options.contextTokens === "function" ? await options.contextTokens().catch(fallbackAfterFailure("contextTokens", void 0)) : options.contextTokens;
     return { limit: window2 && window2 > 0 ? window2 : DEFAULT_CONTEXT_TOKENS, measure: async (text2) => approxTokens(text2) };
   };
   const ask2 = (kind, pair, signal, served) => nullOnFailure(async () => {
@@ -14678,7 +14692,7 @@ function completionOnDeviceTasks(options) {
   return {
     complete: options.complete,
     available: async () => /* @__PURE__ */ new Set([
-      ...await options.available().catch(() => false) ? COMPLETION_KINDS : [],
+      ...await options.available().catch(fallbackAfterFailure("available", false)) ? COMPLETION_KINDS : [],
       "detectLanguage"
       // deterministic: needs no model
     ]),
@@ -14885,11 +14899,11 @@ function pageOnDeviceTasks(options) {
   return {
     available: async () => {
       if (cached2 && Date.now() - cached2.at < ttl) return cached2.kinds;
-      const pageReady = page ? await pageAvailable().catch(() => false) : false;
+      const pageReady = page ? await pageAvailable().catch(fallbackAfterFailure("available", false)) : false;
       const kinds = /* @__PURE__ */ new Set();
       for (const [kind, route] of Object.entries(routes)) {
         for (const id of route) {
-          const ready = id === "pageEngine" ? kind === "detectLanguage" || pageReady && kind !== "translate" : await adapters.get(id)?.ready().catch(() => false);
+          const ready = id === "pageEngine" ? kind === "detectLanguage" || pageReady && kind !== "translate" : await adapters.get(id)?.ready().catch(fallbackAfterFailure("ready", false));
           if (ready) {
             kinds.add(kind);
             break;
@@ -14951,7 +14965,8 @@ function reportReplaced(payload) {
   if (!trace4?.observe) return;
   try {
     trace4.observe({ kind: trace4.by.kind, engine: trace4.by.engine, model: trace4.by.model, outcome: "replaced", ms: 0 });
-  } catch {
+  } catch (e) {
+    reportOnDeviceFailure("observe", e);
   }
 }
 async function withClientResult(produce, send) {

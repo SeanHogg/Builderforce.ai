@@ -36,7 +36,12 @@ export function createWorkersAiTranslator(
         throw new TranslationUnavailableError(e instanceof Error ? e.message : 'Translation request failed');
       }
       if (!res.ok) throw new TranslationUnavailableError(`Translation model returned ${res.status}`);
-      const body = (await res.json().catch(() => null)) as { result?: { translated_text?: unknown } } | null;
+      let body: { result?: { translated_text?: unknown } } | null;
+      try {
+        body = (await res.json()) as { result?: { translated_text?: unknown } } | null;
+      } catch (e) {
+        throw new TranslationUnavailableError(`Translation model returned an unreadable body (${e instanceof Error ? e.message : 'invalid JSON'})`);
+      }
       const out = body?.result?.translated_text;
       if (typeof out !== 'string') throw new TranslationUnavailableError('Translation model returned no text');
       return out;

@@ -20,6 +20,7 @@ import { builtInModelIdentity } from '../builtInAi/identity';
 import { chunkedSummary, summaryReserveTokens } from './chunkedSummary';
 import { completionOnDeviceTasks, type OnDeviceCompletion } from './completionOnDeviceTasks';
 import { heuristicLanguage } from './heuristicLanguage';
+import { fallbackAfterFailure } from './onDeviceFailure';
 import { observedTask } from './observedTask';
 import type { OnDeviceObserver, OnDeviceTaskKind, OnDeviceTasks, ServedBy, ServedOption, SummarizeOptions } from './onDeviceTasks';
 import { ON_DEVICE_TASK_ROUTES } from './taskRoutes';
@@ -144,11 +145,11 @@ export function pageOnDeviceTasks(options: PageOnDeviceTasksOptions): OnDeviceTa
   return {
     available: async () => {
       if (cached && Date.now() - cached.at < ttl) return cached.kinds;
-      const pageReady = page ? await pageAvailable().catch(() => false) : false;
+      const pageReady = page ? await pageAvailable().catch(fallbackAfterFailure('available', false)) : false;
       const kinds = new Set<OnDeviceTaskKind>();
       for (const [kind, route] of Object.entries(routes) as Array<[OnDeviceTaskKind, readonly AdapterId[]]>) {
         for (const id of route) {
-          const ready = id === 'pageEngine' ? kind === 'detectLanguage' || (pageReady && kind !== 'translate') : await adapters.get(id)?.ready().catch(() => false);
+          const ready = id === 'pageEngine' ? kind === 'detectLanguage' || (pageReady && kind !== 'translate') : await adapters.get(id)?.ready().catch(fallbackAfterFailure('ready', false));
           if (ready) { kinds.add(kind); break; }
         }
       }

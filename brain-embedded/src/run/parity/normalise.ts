@@ -27,6 +27,10 @@
  *     terminalStatus, clientRunId, ...) is compared as it is: a wrong `steps` stays a failure.
  *  8. `agentOnly.recorded` (the agent's `reportRunRecord`, for a run with no grade) is not compared with the stored record, which has no such
  *     report; the suites assert instead that no run reports twice (`atMostOneReportPerRun`).
+ *  9. The utility role on summary requests (`wireEquivalent`, PRD 42 C1, archived in DONE.md). The agent stamps `role: 'utility'` on the
+ *     summarizer/fold request so the gateway can route it to the utility tier; the stored (old loop) request has no such field. Only
+ *     `role === 'utility'` on a request the harness marked `summary: true` is dropped; any other role, or a utility role on a
+ *     non-summary request, is still a difference.
  *
  * Nothing else is normalised: not message order, not step numbers, not counts, not wording.
  */
@@ -52,6 +56,7 @@ export function wireEquivalent<T extends Record<string, unknown>>(call: T): T {
   if (Array.isArray(out.tools) && out.tools.length === 0) delete out.tools;
   if (out.tools !== undefined && out.tool_choice === undefined) out.tool_choice = 'auto';
   if (out.metadata && Object.keys(out.metadata as object).length === 0) delete out.metadata;
+  if (out.summary === true && out.role === 'utility') delete out.role; // rule 9 (PRD 42 C1)
   return out as T;
 }
 
