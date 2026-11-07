@@ -33,7 +33,6 @@ import { currentFileHashes, pruneEditedFiles } from './fileEdits.js';
 import type { HistoryPort } from './historyPort.js';
 import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
-import { judgementWithTimeout, DEFAULT_JUDGEMENT_TIMEOUT_MS } from './judgement.js';
 import { noteGraphReads } from './graphReads.js';
 import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
 import { serialisedByKey } from './serialisedByKey.js';
@@ -41,6 +40,7 @@ import { readSystems, recordSystems } from './systemsRecord.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 import { runJudgePass } from './reviewJudgePass.js';
+import { directoryArgs } from './reviewDirectoryArgs.js';
 
 /** Judged sections per review before the chip asks again (PRD 38 §8.2). */
 export const KNOWLEDGE_REVIEW_MODEL_CALLS = DEFAULT_REVIEW_MODEL_CALLS;
@@ -235,45 +235,16 @@ async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOpti
     return outcome.report;
 }
 
-/** The arguments of one `reviewDirectory` call: pass 1 and pass 2 of a two-pass review, or the single pass. */
-export function directoryArgs(
-    ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],
-    extra: Pick<ReviewArgs, 'mechanical' | 'only'> = {},
-): ReviewArgs {
-    return {
-        source: ports.source,
-        store: ports.store,
-        packs: reviewPacks(ports, ports.manifest, opts.plan),
-        manifest: ports.manifest,
-        // A per-request timeout so a stalled engine cannot hang the whole review at `judge`:
-        // the affected sections stay unjudged and a later run judges them again. The wrapper
-        // lives here (not in memory's `reviewDirectory`), so the ONE review pipeline is unchanged.
-        ...(ports.judgement ? { judgement: judgementWithTimeout(ports.judgement, opts.judgementTimeoutMs ?? DEFAULT_JUDGEMENT_TIMEOUT_MS) } : {}),
-        ...(ports.similar ? { similar: ports.similar } : {}),
-        ...(opts.plan ? { plan: opts.plan } : {}),
-        ...(opts.force ? { force: true } : {}),
-        // Two-pass: the file budget bounds judging, not the call count (unless the caller set one).
-        budget: { modelCalls: opts.modelCalls ?? (opts.judgeFiles !== undefined ? Number.POSITIVE_INFINITY : KNOWLEDGE_REVIEW_MODEL_CALLS), ms: Number.POSITIVE_INFINITY },
-        ...(opts.signal ? { signal: opts.signal } : {}),
-        ...(progress ? { onProgress: progress } : {}),
-        ...(opts.onStep ? { onStep: opts.onStep } : {}),
-        ...(opts.extractPool ? { extractPool: opts.extractPool } : {}),
-        ...(opts.deferRead ? { deferRead: true } : {}),
-        ...(opts.readAhead !== undefined ? { readAhead: opts.readAhead } : {}),
-        ...(opts.timeouts ? { timeouts: opts.timeouts } : {}),
-        ...(opts.concurrency !== undefined ? { concurrency: opts.concurrency } : {}),
-        ...(opts.judgeConcurrency !== undefined ? { judgeConcurrency: opts.judgeConcurrency } : {}),
-        ...(opts.maxModelCalls !== undefined ? { maxModelCalls: opts.maxModelCalls } : {}),
-        ...extra,
-    };
-}
+const directoryArgsOf = (
+    ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'], extra: Pick<ReviewArgs, 'mechanical' | 'only'> = {},
+): ReviewArgs => directoryArgs(ports, opts, reviewPacks(ports, ports.manifest, opts.plan), progress, KNOWLEDGE_REVIEW_MODEL_CALLS, extra);
 
 async function reviewAndIndex(
     ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],
     tell: (p: ReviewProgress) => void,
 ): Promise<ReviewReport> {
     const twoPass = opts.judgeFiles !== undefined && !!ports.judgement;
-    const report = await reviewDirectory(directoryArgs(ports, opts, progress, twoPass ? { mechanical: true } : {}));
+    const report = await reviewDirectory(directoryArgsOf(ports, opts, progress, twoPass ? { mechanical: true } : {}));
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);
     // The root's systems (PRD 41 A9): detected from what this review saw, kept with it for the graph build.
@@ -287,7 +258,7 @@ async function reviewAndIndex(
     if (!twoPass || report.aborted) return report;
     // The map is complete: say so, then judge in the background of the same run (PRD 41 A10).
     tell({ phase: 'mapped', done: report.extracted, total: report.extracted });
-    return runJudgePass({ ports, opts, mapped: report, graph, tell, directoryArgs, indexReviewed, freshPlan: () => planKnowledgeReviewDetail(ports) });
+    return runJudgePass({ ports, opts, mapped: report, graph, tell, directoryArgs: directoryArgsOf, indexReviewed, freshPlan: () => planKnowledgeReviewDetail(ports) });
 }
 
 /**

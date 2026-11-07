@@ -25,6 +25,7 @@ import type { ReviewProgress } from "@seanhogg/builderforce-memory/knowledge";
 import { extractPoolDown, prewarmExtractPool } from "./review/extractPoolHost";
 import { throttledEmit } from "./review/throttledEmit";
 import { markOwed } from "./review/retryOwed";
+import { onTheWireReport } from "./review/reviewRunRecorder";
 import { stopRunById, trackRun } from "./review/reviewRuns";
 
 interface Session {
@@ -160,7 +161,7 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
           await run.finish(report.aborted ? "stopped" : "done", report);
           // What this review left out, from its record (the plan, folders, coverage, uploads).
           const skipped = reviewRecords.get(rootId)?.skipped;
-          this.post({ stream: reviewId, type: "done", rootId, report, ...(skipped ? { skipped } : {}) });
+          this.post({ stream: reviewId, type: "done", rootId, report: onTheWireReport(report), ...(skipped ? { skipped } : {}) });
         },
         async (error: unknown) => {
           await run.finish(abort.signal.aborted ? "stopped" : "failed");

@@ -1,83 +1,104 @@
 /**
- * knowledge/replicaPump.ts — drains the replica queue to the linked project (PRD 41 A7).
+ * knowledge/replicaPump.ts — syncs a linked root's dirty set to its project as ONE pack (PRD 41 A11).
  *
- * The review never waits for it and never sees its failures. The pump reads bodies from the LOCAL
- * store, sends them with the knowledge client's calls (`writeRows` ≤ 500 rows per op, the scope as
- * its own last op, `putExtracted`, `store.markStale`, `putAnalysis`), and reports a {@link ReplicaState}:
+ * The review never waits for it and never sees its failures. One cycle:
+ *   1. read the dirty set and the ack (`replicaQueue.ts`);
+ *   2. with an ack, the DELTA path: the pack holds the current bodies of the dirty keys (and tombstones for
+ *      keys with no row) and asserts `baseGeneration = ack.generation`;
+ *      without one — a first sync, a lost set, a server that moved — the RECONCILE path: compare manifest
+ *      trees (`replicaReconcile.ts`) and send exactly what differs; a full pack only when the server holds nothing;
+ *   3. build the pack from the LOCAL store (`replicaPack.ts`), split it into ordered parts over 8 MB, send;
+ *   4. on `{generation, digest}` the sent keys leave the set and the ack is stored.
+ * It never sends per file: one pack per cycle, and the host starts a cycle when a review ends and at most once
+ * a minute otherwise.
  *
- *   429 / 5xx / unreachable   the op stays queued; the pump waits `Retry-After` (else an exponential
- *                             backoff capped at 60 s) and tries again. Progress is per op, so a later
- *                             run resumes at the op that failed, not at the first one. It stops on
- *                             `signal`, or — when `maxTransientStreak` is set — after that many in a row
- *                             (`paused: 'unreachable'`).
- *   401 / 403                 the op is KEPT and the pump pauses (`paused: 'auth'`): an expired token
- *                             must never drain a queue. The next start resumes.
- *   413                       a write op is split in half and retried, down to one row; only a single
- *                             row the platform still refuses is skipped (its key recorded). Any other op
- *                             is skipped.
- *   any other error           the op is dropped as `failed` with its reason; the pump goes on.
+ *   429 / 5xx / unreachable   the same request is retried after `Retry-After` (else an exponential backoff
+ *                             capped at 60 s); progress is kept per part. It stops on `signal`, or, when
+ *                             `maxTransientStreak` is set, after that many in a row (`paused: 'unreachable'`).
+ *   401 / 403                 the work is KEPT and the pump pauses (`paused: 'auth'`): an expired token must
+ *                             never lose the set. The next start resumes.
+ *   409                       `generation_mismatch` / `digest_mismatch`: reconcile; `prior_missing`: resend
+ *                             without diffs; `extracted_missing`: resend with those bodies; at most 4 in a row.
+ *   413 pack_too_large        the pack is cut in half (by files) and the rest stays dirty.
+ *   422 / any other error     recorded in `failed`; the set is kept and the pump stops.
  *
- * Before EVERY send the pump checks that the queue still belongs to its project (`projectId`), and waits
- * out a running review of the root (`idle`). `pumpReplica` never throws.
+ * Before EVERY request the pump checks the set still belongs to its project (`projectId`) and waits out a
+ * running review of the root (`idle`). `pumpReplica` never throws.
  */
 
-import type { Extracted, KnowledgeStore, ScopeRecord, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
-import { relationKey, type ReplicaOp, type ReplicaQueue } from './replicaQueue.js';
+import type { KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
+import { MAX_PART_BYTES, splitParts } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { buildPack, type PackQueries, type ReplicaSource } from './replicaPack.js';
+import type { ReplicaQueue } from './replicaQueue.js';
+import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 
-/** The knowledge client's calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
-export interface ReplicaClient {
-    store: Pick<KnowledgeStore, 'write' | 'markStale'>;
-    putExtracted(hash: string, extracted: Extracted[]): Promise<void>;
-    putAnalysis(sha: string, snapshot: never): Promise<void>;
-    writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
-    /** Uploads the client skipped instead of throwing (a 413 on `putExtracted`). */
-    readonly skipped?: readonly unknown[];
+/** The knowledge client's sync calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
+export interface ReplicaClient extends PackQueries, ReconcileQueries {
+    sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }): Promise<
+        { applied: true; generation: number; digest: string } | { applied: false; received: number; parts: number }>;
 }
 
 export interface ReplicaFailure {
-    op: ReplicaOp['op'];
     reason: string;
     /** The HTTP status, when the error had one. */
     status?: number;
 }
 
+/** The last pack that reached the server. */
+export interface ReplicaPackStats {
+    /** Compressed bytes sent (all parts). */
+    bytes: number;
+    /** The bytes the same rows would take as JSON. */
+    jsonBytes: number;
+    /** `bytes` as a percentage of `jsonBytes`. */
+    percent: number;
+    parts: number;
+    files: number;
+    mode: 'delta' | 'reconcile' | 'full';
+}
+
 export interface ReplicaState {
-    /** Ops still to send. */
-    queued: number;
+    /** Dirty keys still to send. */
+    dirty: number;
     sending: boolean;
+    /** Parts of the pack being sent: how many the server has, how many in all. */
+    parts?: { sent: number; total: number };
     /** Epoch ms the pump retries at, while it waits out a 429 or an outage. */
     waitingUntil?: number;
     /** Why it waits (`429`, `network`, or the server status). */
     waitingFor?: string;
-    /** Why it stopped with work left: signed out (`auth`), the server unreachable, or the queue moved to another project. */
+    /** Why it stopped with work left: signed out (`auth`), the server unreachable, or the set moved to another project. */
     paused?: 'auth' | 'unreachable' | 'project';
     pausedStatus?: number;
-    skipped: number;
-    /** What was skipped, by op kind (at most 50 kept). */
-    skippedOps: { op: ReplicaOp['op']; key?: string }[];
     failed: ReplicaFailure[];
-    /** ISO time of the last op that reached the server. */
+    /** ISO time of the last pack the server acknowledged. */
     lastSyncAt?: string;
+    lastPack?: ReplicaPackStats;
 }
 
-export const emptyReplicaState = (): ReplicaState => ({ queued: 0, sending: false, skipped: 0, skippedOps: [], failed: [] });
+export const emptyReplicaState = (): ReplicaState => ({ dirty: 0, sending: false, failed: [] });
 
 export interface PumpArgs {
     queue: ReplicaQueue;
     local: KnowledgeStore;
     client: ReplicaClient;
     signal: AbortSignal;
-    /** The project the client talks to: the pump stops the moment the queue belongs to another. */
+    rootId: string;
+    /** The root's current sources (ref and content hash): the local truth the pack is built from. */
+    sources(): Promise<ReplicaSource[]>;
+    /** The project the client talks to: the pump stops the moment the set belongs to another. */
     projectId?: number;
     onState?(state: ReplicaState): void;
-    /** Carry the counts of an earlier pump of this root forward. */
+    /** Carry the last pack and failures of an earlier pump of this root forward. */
     initial?: ReplicaState;
-    /** Ops read from the queue at a time (default 200). */
-    batchSize?: number;
-    /** Resolves when no review of the root is running; awaited before each send. */
+    /** Resolves when no review of the root is running; awaited before each request. */
     idle?(signal: AbortSignal): Promise<void>;
     /** Stop (`paused: 'unreachable'`) after this many transient failures in a row. Default: never. */
     maxTransientStreak?: number;
+    /** Compressed bytes per part (default 8 MB). */
+    maxPartBytes?: number;
+    /** Names a multi-part pack. */
+    newSyncId?(): string;
     /** Injected for tests. */
     sleep?(ms: number, signal: AbortSignal): Promise<void>;
     now?(): number;
@@ -86,7 +107,7 @@ export interface PumpArgs {
 const BACKOFF_START_MS = 1000;
 const BACKOFF_CAP_MS = 60_000;
 const MIN_WAIT_MS = 250;
-const SKIPPED_KEPT = 50;
+const MAX_CONFLICTS = 4;
 
 const sleepFor = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
@@ -100,149 +121,142 @@ const statusOf = (error: unknown): number | undefined => {
     const status = (error as { status?: unknown } | null)?.status;
     return typeof status === 'number' ? status : undefined;
 };
+const codeOf = (error: unknown): string | undefined => {
+    const code = (error as { code?: unknown } | null)?.code;
+    return typeof code === 'string' ? code : undefined;
+};
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 /** Worth waiting for: rate limited, the server failing, or unreachable (the client reports that as status 0). */
 const transient = (status: number | undefined): boolean => status === 429 || status === 0 || (status !== undefined && status >= 500);
 
-/** The local rows of a root, read once per batch. */
-interface RowCache { facts: Map<string, StoredFact[]>; relations: Map<string, StoredRelation[]> }
+/** Thrown inside a cycle when the pump must stop (aborted, paused): unwinds to the loop. */
+class Stop extends Error {}
 
-/** Sends one op; resolves to how it ended. Throws what the client threw. */
-async function send(op: ReplicaOp, local: KnowledgeStore, client: ReplicaClient, rows: RowCache): Promise<'sent' | 'nothing'> {
-    switch (op.op) {
-        case 'putExtracted': {
-            const body = await local.getExtracted?.(op.hash);
-            if (!body || body.length === 0) return 'nothing';
-            await client.putExtracted(op.hash, body);
-            return 'sent';
-        }
-        case 'markStale':
-            await client.store.markStale({ rootId: op.rootId }, op.sourceRef as never, op.hash);
-            return 'sent';
-        case 'putAnalysis':
-            await client.putAnalysis(op.sha, op.snapshot as never);
-            return 'sent';
-        case 'scope':
-            await client.store.write({ scope: op.scope as ScopeRecord, facts: [], relations: [] });
-            return 'sent';
-        case 'write': {
-            const scope = { rootId: op.rootId };
-            if (!rows.facts.has(op.rootId)) rows.facts.set(op.rootId, await local.facts(scope));
-            if (!rows.relations.has(op.rootId)) rows.relations.set(op.rootId, await local.relations(scope));
-            const wantFacts = new Set(op.facts), wantRelations = new Set(op.relations);
-            const facts = rows.facts.get(op.rootId)!.filter((f) => wantFacts.has(f.key));
-            const relations = rows.relations.get(op.rootId)!.filter((r) => wantRelations.has(relationKey(r)));
-            if (facts.length + relations.length === 0) return 'nothing';
-            await client.writeRows(op.rootId, { facts, relations });
-            return 'sent';
-        }
-    }
-}
-
-/** A write op cut in two (a 413): its rows in order, half and half. */
-function halves(op: Extract<ReplicaOp, { op: 'write' }>): ReplicaOp[] {
-    const rows = [...op.facts.map((k) => ({ fact: true, k })), ...op.relations.map((k) => ({ fact: false, k }))];
-    const mid = Math.ceil(rows.length / 2);
-    const part = (list: typeof rows): ReplicaOp => ({
-        op: 'write', rootId: op.rootId, facts: list.filter((r) => r.fact).map((r) => r.k), relations: list.filter((r) => !r.fact).map((r) => r.k),
-    });
-    return [part(rows.slice(0, mid)), part(rows.slice(mid))];
-}
+const newId = (): string => `sync-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
-    const { queue, local, client, signal } = args;
+    const { queue, local, signal, rootId } = args;
     const sleep = args.sleep ?? sleepFor;
     const now = args.now ?? Date.now;
-    const batchSize = args.batchSize ?? 200;
-    const state: ReplicaState = {
-        ...emptyReplicaState(), ...(args.initial ?? {}),
-        skippedOps: [...(args.initial?.skippedOps ?? [])], failed: [...(args.initial?.failed ?? [])], sending: false,
-    };
-    delete state.waitingUntil;
-    delete state.waitingFor;
-    delete state.paused;
-    delete state.pausedStatus;
+    const state: ReplicaState = { ...emptyReplicaState(), ...(args.initial ?? {}), failed: [...(args.initial?.failed ?? [])], sending: false };
+    delete state.waitingUntil; delete state.waitingFor; delete state.paused; delete state.pausedStatus; delete state.parts;
     const emit = async (): Promise<void> => {
         try {
-            state.queued = await queue.size();
-            args.onState?.({ ...state, skippedOps: [...state.skippedOps], failed: [...state.failed] });
+            state.dirty = await queue.size();
+            args.onState?.({ ...state, failed: [...state.failed] });
         } catch { /* reporting never stops the pump */ }
     };
-    const skip = (op: ReplicaOp['op'], key?: string): void => {
-        state.skipped += 1;
-        if (state.skippedOps.length < SKIPPED_KEPT) state.skippedOps.push({ op, ...(key ? { key } : {}) });
+
+    let attempt = 0, streak = 0;
+    /** One request, retried through 429 / 5xx / unreachable; throws {@link Stop} when the pump must stop. */
+    const request = async <T>(fn: () => Promise<T>): Promise<T> => {
+        for (;;) {
+            await args.idle?.(signal);
+            if (signal.aborted) throw new Stop();
+            if (args.projectId !== undefined && (await queue.projectId()) !== args.projectId) { state.paused = 'project'; throw new Stop(); }
+            try {
+                const value = await fn();
+                delete state.waitingUntil; delete state.waitingFor;
+                attempt = 0; streak = 0;
+                return value;
+            } catch (error) {
+                const status = statusOf(error);
+                if (status === 401 || status === 403) { state.paused = 'auth'; state.pausedStatus = status; throw new Stop(); }
+                if (!transient(status)) throw error;
+                streak += 1;
+                if (args.maxTransientStreak !== undefined && streak >= args.maxTransientStreak) { state.paused = 'unreachable'; if (status !== undefined) state.pausedStatus = status; throw new Stop(); }
+                const asked = (error as { retryAfterMs?: unknown }).retryAfterMs;
+                // A server's own wait is honoured, but never shorter than MIN_WAIT_MS (`Retry-After: 0` must not spin).
+                const wait = typeof asked === 'number' && asked >= 0 ? Math.max(asked, MIN_WAIT_MS) : Math.min(BACKOFF_START_MS * 2 ** attempt, BACKOFF_CAP_MS);
+                attempt += 1;
+                state.sending = false;
+                state.waitingUntil = now() + wait;
+                state.waitingFor = status === 429 ? '429' : status === 0 ? 'network' : String(status);
+                await emit();
+                await sleep(wait, signal);
+                state.sending = true;
+                delete state.waitingUntil;
+            }
+        }
     };
-    let attempt = 0, streak = 0, newFailures = 0;
+    const guarded = {
+        sync: (r: string, p: Parameters<ReplicaClient['sync']>[1]) => request(() => args.client.sync(r, p)),
+        syncHave: (r: string, h: readonly string[]) => request(() => args.client.syncHave(r, h)),
+        syncLeaves: (r: string, b: readonly number[]) => request(() => args.client.syncLeaves(r, b)),
+        syncManifest: (r: string) => request(() => args.client.syncManifest(r)),
+    };
+
+    let conflicts = 0, noDiff = false, maxFiles: number | undefined, force: Set<string> | undefined, lastFiles = 0;
+    let hadFailure = false;
     try {
         await emit();
-        outer: while (!signal.aborted) {
-            const rows: RowCache = { facts: new Map(), relations: new Map() };
-            // Queue order is send order: a stale-marking queued after a write never reaches the server before it.
-            const batch = await queue.peek(batchSize);
-            if (batch.length === 0) break;
+        while (!signal.aborted) {
+            let snap = await queue.snapshot();
+            if (snap.ack && snap.keys.length === 0 && !snap.analysis) break;
             state.sending = true;
-            for (const op of batch) {
-                // One op, retried until it is sent, skipped, split or failed (or the pump is stopped).
-                for (;;) {
-                    await args.idle?.(signal);
-                    if (signal.aborted) break outer;
-                    if (args.projectId !== undefined && (await queue.projectId()) !== args.projectId) { state.paused = 'project'; break outer; }
-                    const skippedBefore = client.skipped?.length ?? 0;
-                    try {
-                        await emit();
-                        const outcome = await send(op, local, client, rows);
-                        if (outcome === 'sent') state.lastSyncAt = new Date(now()).toISOString();
-                        for (let i = skippedBefore; i < (client.skipped?.length ?? 0); i++) skip(op.op, op.op === 'putExtracted' ? op.hash : undefined);
-                        delete state.waitingUntil;
-                        delete state.waitingFor;
-                        attempt = 0; streak = 0;
-                        await queue.remove([op]);
-                        break;
-                    } catch (error) {
-                        const status = statusOf(error);
-                        if (status === 413) {
-                            if (op.op === 'write' && op.facts.length + op.relations.length > 1) { await queue.replace(op, halves(op)); break; }
-                            skip(op.op, op.op === 'write' ? (op.facts[0] ?? op.relations[0]) : op.op === 'putExtracted' ? op.hash : undefined);
-                            await queue.remove([op]);
-                            break;
-                        }
-                        if (status === 401 || status === 403) {
-                            // Signed out or refused: the work is not lost, it waits for the next start.
-                            state.paused = 'auth'; state.pausedStatus = status;
-                            break outer;
-                        }
-                        if (!transient(status)) {
-                            newFailures += 1;
-                            state.failed.push({ op: op.op, reason: messageOf(error), ...(status !== undefined ? { status } : {}) });
-                            await queue.remove([op]);
-                            break;
-                        }
-                        streak += 1;
-                        if (args.maxTransientStreak !== undefined && streak >= args.maxTransientStreak) { state.paused = 'unreachable'; state.pausedStatus = status; break outer; }
-                        const asked = (error as { retryAfterMs?: unknown }).retryAfterMs;
-                        // A server's own wait is honoured, but never shorter than MIN_WAIT_MS (`Retry-After: 0` must not spin).
-                        const wait = typeof asked === 'number' && asked >= 0 ? Math.max(asked, MIN_WAIT_MS) : Math.min(BACKOFF_START_MS * 2 ** attempt, BACKOFF_CAP_MS);
-                        attempt += 1;
-                        state.sending = false;
-                        state.waitingUntil = now() + wait;
-                        state.waitingFor = status === 429 ? '429' : status === 0 ? 'network' : String(status);
-                        await emit();
-                        await sleep(wait, signal);
-                        state.sending = true;
-                        delete state.waitingUntil;
+            await emit();
+            try {
+                const sources = await args.sources();
+                let baseGeneration = snap.ack?.generation ?? 0;
+                let mode: ReplicaPackStats['mode'] = 'delta';
+                if (!snap.ack) {
+                    const plan = await planReconcile({ rootId, local, sources, client: guarded, dirty: snap.keys });
+                    if (plan.kind === 'equal') {
+                        await queue.settle(snap, plan.ack);
+                        state.lastSyncAt = new Date(now()).toISOString();
+                        continue;
                     }
+                    // What differs IS the pending work (the rest is satisfied), so a pack cut by size or a retry keeps exactly it.
+                    await queue.replaceDirty(plan.touched);
+                    snap = await queue.snapshot();
+                    mode = plan.kind === 'full' ? 'full' : 'reconcile';
+                    baseGeneration = plan.kind === 'full' ? 0 : plan.baseGeneration;
                 }
+                const built = await buildPack({
+                    rootId, local, sources, client: guarded, touched: snap.keys, baseGeneration, analysis: snap.analysis,
+                    ...(maxFiles !== undefined ? { maxFiles } : {}), noDiff, ...(force ? { forceBodies: force } : {}),
+                });
+                lastFiles = built.files;
+                const parts = splitParts(built.bytes, args.maxPartBytes ?? MAX_PART_BYTES);
+                const syncId = parts.length > 1 ? (args.newSyncId?.() ?? newId()) : undefined;
+                let ack: Awaited<ReturnType<ReplicaClient['sync']>> | undefined;
+                for (let i = 0; i < parts.length; i++) {
+                    state.parts = { sent: i, total: parts.length };
+                    await emit();
+                    ack = await guarded.sync(rootId, { bytes: parts[i]!, ...(syncId ? { syncId, part: i, parts: parts.length } : {}) });
+                }
+                state.parts = { sent: parts.length, total: parts.length };
+                if (!ack || !ack.applied) throw new Error('the server did not apply the pack');
+                await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, built.sentKeys, built.analysisSent);
+                state.lastPack = {
+                    bytes: built.bytes.length, jsonBytes: built.jsonBytes, files: built.files, parts: parts.length, mode,
+                    percent: built.jsonBytes > 0 ? Math.round((built.bytes.length / built.jsonBytes) * 1000) / 10 : 0,
+                };
+                state.lastSyncAt = new Date(now()).toISOString();
+                conflicts = 0; noDiff = false; force = undefined;
+                delete state.parts;
+            } catch (error) {
+                if (error instanceof Stop) break;
+                const status = statusOf(error), code = codeOf(error);
+                if (status === 409 && conflicts < MAX_CONFLICTS) {
+                    conflicts += 1;
+                    if (code === 'prior_missing') noDiff = true;
+                    else if (code === 'extracted_missing') force = new Set((error as { hashes?: string[] }).hashes ?? []);
+                    else if (code !== 'parts_missing') await queue.requestReconcile();
+                    continue;
+                }
+                if (status === 413 && code === 'pack_too_large' && lastFiles > 1) { maxFiles = Math.floor(lastFiles / 2); continue; }
+                hadFailure = true;
+                state.failed.push({ reason: messageOf(error), ...(status !== undefined ? { status } : {}) });
+                break;
             }
-            await queue.flush();
         }
-        // A run that emptied the queue without a new failure clears the old ones.
-        if (!signal.aborted && !state.paused && newFailures === 0 && (await queue.size()) === 0) state.failed = [];
+        if (!signal.aborted && !state.paused && !hadFailure && (await queue.size()) === 0) state.failed = [];
     } catch (error) {
-        state.failed.push({ op: 'write', reason: `replica pump: ${messageOf(error)}` });
+        state.failed.push({ reason: `replica pump: ${messageOf(error)}` });
     } finally {
         state.sending = false;
-        delete state.waitingUntil;
-        delete state.waitingFor;
+        delete state.waitingUntil; delete state.waitingFor; delete state.parts;
         try { await queue.flush(); } catch { /* durable on the next flush */ }
         await emit();
     }

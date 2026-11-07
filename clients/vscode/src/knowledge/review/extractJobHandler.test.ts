@@ -63,7 +63,7 @@ describe("one symbol rule for the pooled and the in-thread extraction", () => {
 describe("a worker that reads its own file (PRD 41 A10)", () => {
   const dir = mkdtempSync(join(tmpdir(), "bf-readfrom-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
-  const stub = (path: string): ExtractJob => jobFor(path, "");
+  const stub = (path: string): ExtractJob => ({ rootId: "ws", path, hash: `h-${path}`, knownKeys: [], readByPool: { path, hash: `h-${path}` } });
 
   it("extracts the same as a job carrying the document, with the planned hash", async () => {
     const text = "# Title\n\nSome words about it.\n";

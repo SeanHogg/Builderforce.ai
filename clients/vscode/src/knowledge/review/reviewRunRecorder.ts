@@ -57,7 +57,7 @@ export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
     close(outcome, report, replica) {
       // Nothing posts the closed run before the host has kept it and flushes. The report never carries the failures: `run.failures` holds the list.
       throttle.cancel();
-      run = { ...applyRunEvent(run, { type: "end", outcome, ...(report ? { report: { ...report, failures: [] } } : {}) }, Date.now()), ...(replica ? { replica } : {}) };
+      run = { ...applyRunEvent(run, { type: "end", outcome, ...(report ? { report: onTheWireReport(report) } : {}) }, Date.now()), ...(replica ? { replica } : {}) };
       return run;
     },
     flush: throttle.flush,

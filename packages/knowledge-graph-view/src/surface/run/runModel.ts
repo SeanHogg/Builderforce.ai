@@ -53,11 +53,11 @@ export function phaseRows(run: StoredReviewRun): PhaseRow[] {
 }
 
 /**
- * How many files still wait for model judging (PRD 41 A10): the report's `awaitingJudge` once it exists, else, while the run
+ * How many files still wait for model judging (PRD 41 A10): the report's `awaitingJudgeCount` once it exists (a count only: the path list never leaves memory), else, while the run
  * is judging after the map is complete, the judge phase's total minus done. 0 when nothing waits.
  */
 export function awaitingJudgeCount(run: StoredReviewRun): number {
-    const owed = run.report?.awaitingJudge?.length ?? 0;
+    const owed = run.report?.awaitingJudgeCount ?? 0;
     if (owed > 0) return owed;
     if (run.endedAt !== undefined || !run.phases.some((p) => p.phase === 'mapped')) return 0;
     const judge = run.phases.find((p) => p.phase === 'judge');

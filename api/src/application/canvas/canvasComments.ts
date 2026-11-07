@@ -108,7 +108,7 @@ async function commentIdMap(db: Db, session: SessionKey): Promise<Map<number, st
   const rows = await db.select({ id: annotations.id, publicId: annotations.publicId })
     .from(annotations)
     .where(onSession(session));
-  return new Map(rows.map((row) => [row.id, row.publicId]));
+  return new Map(rows.flatMap((row) => (row.publicId ? [[row.id, row.publicId] as const] : [])));
 }
 
 type RawCommentRow = {
@@ -239,7 +239,10 @@ export async function createComment(db: Db, env: Env | undefined, session: Sessi
     mentions: input.mentions,
     anchor: Object.keys(anchor).length ? anchor : null,
   }).returning({ id: annotations.id });
-  return selectComment(db, session, created.id) as Promise<CanvasComment>;
+  if (!created) throw new Error('createComment: insert returned no row');
+  const selected = await selectComment(db, session, created.id);
+  if (!selected) throw new Error('createComment: inserted row not readable');
+  return selected;
 }
 
 /** Mark a comment resolved/unresolved. Returns the updated wire row, or null when absent. */
@@ -252,8 +255,9 @@ export async function setCommentResolved(
     updatedAt: new Date(),
   }).where(and(eq(annotations.publicId, commentPublicId), onSession(session)))
     .returning({ id: annotations.id });
-  if (target.length === 0) return null;
-  return selectComment(db, session, target[0].id);
+  const first = target[0];
+  if (!first) return null;
+  return selectComment(db, session, first.id);
 }
 
 /**

@@ -40,13 +40,15 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
-export { extractedLogFileName, fileManifest, manifestFileName, migratingRootFiles, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
+export { extractedLogFileName, fileManifest, manifestFileName, migratingRootFiles, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
-    REPLICA_WRITE_ROWS, createReplicaQueue, memoryReplicaPersistence, relationKey,
-    type ReplicaOp, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,
+    createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, fileKey,
+    type DirtySnapshot, type ReplicaAck, type ReplicaAnalysis, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,
 } from './replicaQueue.js';
 export { replicatedKnowledgeStore, type ReadThrough, type ReplicaTarget, type ReplicatedStoreArgs } from './replicatedStore.js';
-export { emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaState } from './replicaPump.js';
+export { emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaPackStats, type ReplicaState } from './replicaPump.js';
+export { buildPack, pathOfRef, DIFF_MAX_FILES, type BuiltPack, type ReplicaSource } from './replicaPack.js';
+export { planReconcile, type ReconcilePlan } from './replicaReconcile.js';
 export { currentSourcesOf, enqueueFirstSync, enqueueSources, type FirstSyncCounts } from './replicaFirstSync.js';
 export { PACK_ROOT_HOST, folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
 export {

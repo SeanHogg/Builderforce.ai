@@ -39,12 +39,21 @@ export async function planReconcile(args: {
     local: KnowledgeStore;
     sources: readonly ReplicaSource[];
     client: ReconcileQueries;
+    /** The dirty keys now: those whose rows the digest does not cover (a person's or agent's) are sent whatever the trees say. */
+    dirty?: readonly string[];
 }, attempt = 0): Promise<ReconcilePlan> {
     const { rootId, client } = args;
     const [facts, relations] = await Promise.all([args.local.facts({ rootId }), args.local.relations({ rootId })]);
     const tree = manifestTree(rootLeaves(rootId, { files: args.sources.map((x) => ({ path: pathOfRef(rootId, x.ref), hash: x.hash })), facts, relations }));
     const server = await client.syncManifest(rootId);
-    if (server.digest === tree.root) return { kind: 'equal', ack: { generation: server.generation, digest: server.digest } };
+    const uncovered = new Set(facts.filter((f) => f.origin !== 'model').map((f) => factKey(f.key)));
+    for (const r of relations) if (r.origin !== 'model') uncovered.add(relationKey(r));
+    const pending = (args.dirty ?? []).filter((k) => uncovered.has(k));
+    if (server.digest === tree.root) {
+        return pending.length === 0
+            ? { kind: 'equal', ack: { generation: server.generation, digest: server.digest } }
+            : { kind: 'delta', touched: pending, baseGeneration: server.generation };
+    }
     // Every local row goes (the digest covers only the review's own judgements; a person's notes still belong on the project).
     if (server.digest === EMPTY_ROOT) {
         const files = [...tree.leaves.values()].flat().map((l) => l.key).filter((k) => k.startsWith('f:'));
@@ -63,5 +72,5 @@ export async function planReconcile(args: {
         remote.push(...answer.leaves);
     }
     const delta = leafDelta(tree, remote, differing);
-    return { kind: 'delta', touched: [...delta.upsert, ...delta.remove], baseGeneration: server.generation };
+    return { kind: 'delta', touched: [...new Set([...delta.upsert, ...delta.remove, ...pending])], baseGeneration: server.generation };
 }

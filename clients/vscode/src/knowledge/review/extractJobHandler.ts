@@ -22,7 +22,7 @@ export const READ_TIMEOUT_MS = 5_000;
 
 /**
  * A job that makes the WORKER read the file (PRD 41 A10 rule 8): `rootPath` + `path` name it and `hash` is the
- * planned hash, trusted (not recomputed). `doc` is then ignored — a placeholder (memory's `stubSource(path)`) is fine.
+ * planned hash, trusted (not recomputed). A job that is `readByPool` (memory) has no `doc` at all.
  */
 export interface ReadFrom { rootPath: string; path: string; hash: string }
 
@@ -54,7 +54,9 @@ export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: numbe
   if (job.readFrom) {
     const doc = await readDocument(job, job.readFrom, readTimeoutMs);
     if (doc.content.kind === "text" && isBinaryText(doc.content.text)) return { extracted: [], binary: true };
-    ready = { ...job, doc, hash: job.readFrom.hash };
+    // The job's source becomes the document the worker read, at the planned hash.
+    const { readByPool: _unread, doc: _stale, ...base } = job;
+    ready = { ...base, doc, hash: job.readFrom.hash } as ExtractJob;
   }
   return extractJob(ready, reviewPacks(symbols ? { symbolsOf: () => symbols } : {}));
 }

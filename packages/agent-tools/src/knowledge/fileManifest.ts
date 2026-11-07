@@ -28,7 +28,10 @@ export const snapshotFileName = (rootId: string): string => `${rootFileStem(root
 export const extractedLogFileName = (rootId: string): string => `${rootFileStem(rootId)}.extracted.jsonl`;
 export const manifestFileName = (rootId: string): string => `${rootFileStem(rootId)}.manifest.json`;
 /** The root's replica queue (PRD 41 A7): what is still to be sent to the linked project, beside its snapshot. */
+/** The op log older versions kept (PRD 41 A7); read once to migrate, then deleted. */
 export const replicaFileName = (rootId: string): string => `${rootFileStem(rootId)}.replica.json`;
+/** The replica's dirty set and ack (PRD 41 A11). */
+export const dirtyFileName = (rootId: string): string => `${rootFileStem(rootId)}.dirty.json`;
 /** A review run's record (PRD 41 A8), in the `runs/` folder; the root's ordered list of them is `runsIndexFileName`. */
 export const runFileName = (runId: string): string => `runs/${runId}.json`;
 export const runsIndexFileName = (rootId: string): string => `runs/${rootFileStem(rootId)}.index.json`;

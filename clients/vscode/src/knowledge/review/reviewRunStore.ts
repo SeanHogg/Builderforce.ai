@@ -15,6 +15,7 @@
  */
 
 import { runFileName, runsIndexFileName, type KnowledgeFiles } from "@builderforce/agent-tools/knowledge";
+import { onTheWireReport } from "./reviewRunRecorder";
 import type { KnowledgeRunSummary, KnowledgeStoredRun } from "../knowledgeProtocol";
 
 /** Runs kept per root. */
@@ -166,7 +167,7 @@ export function createRunStore(files: KnowledgeFiles, options: RunStoreOptions =
       return runs.flatMap((r) => {
         if (!r) return [];
         const { steps: _steps, lanes: _lanes, failures, report, ...summary } = settled(r);
-        return [{ ...summary, ...(report ? { report: { ...report, failures: [] } } : {}), failureCount: failures?.length ?? 0 }];
+        return [{ ...summary, ...(report ? { report: onTheWireReport(report) } : {}), failureCount: failures?.length ?? 0 }];
       });
     },
   };

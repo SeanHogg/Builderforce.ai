@@ -15,7 +15,7 @@
 import type { ReviewProgress, ReviewReport, ReviewRunOutcome, ReviewStep } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeFiles, ReplicaState } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeRunSummary, KnowledgeStoredRun } from "../knowledgeProtocol";
-import { createRunRecorder, newRunId, runKindOf } from "./reviewRunRecorder";
+import { createRunRecorder, newRunId, onTheWireReport, runKindOf } from "./reviewRunRecorder";
 import { createRunStore } from "./reviewRunStore";
 
 /** The failures a posted run carries; the rest are one `runRecord` call away. */
@@ -42,7 +42,7 @@ const storeOf = (files: KnowledgeFiles) => createRunStore(files, { isLive: isRun
 export function onTheWire(run: KnowledgeStoredRun): KnowledgeStoredRun {
   const { report, ...rest } = run;
   // The report never rides with its failures: the bounded list is `failures`, the whole one is `getRun`.
-  return { ...rest, ...(report ? { report: { ...report, failures: [] } } : {}), failures: run.failures.slice(-WIRE_FAILURES), failureCount: run.failures.length };
+  return { ...rest, ...(report ? { report: onTheWireReport(report) } : {}), failures: run.failures.slice(-WIRE_FAILURES), failureCount: run.failures.length };
 }
 
 export interface TrackRunArgs {

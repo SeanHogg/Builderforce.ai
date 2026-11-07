@@ -68,6 +68,7 @@ export interface JudgePassDeps {
 
 /** Merges pass 2's report into pass 1's: counters add, what is still owed is the rest of pass 1's list plus pass 2's own. */
 export function mergeReports(mapped: ReviewReport, judged: ReviewReport, took: ReadonlySet<string>): ReviewReport {
+    const owed = [...mapped.awaitingJudge.filter((p) => !took.has(p)), ...judged.awaitingJudge];
     return {
         ...judged,
         extracted: mapped.extracted,
@@ -77,7 +78,8 @@ export function mergeReports(mapped: ReviewReport, judged: ReviewReport, took: R
         factsWritten: mapped.factsWritten + judged.factsWritten,
         relationsWritten: mapped.relationsWritten + judged.relationsWritten,
         staleMarked: mapped.staleMarked + judged.staleMarked,
-        awaitingJudge: [...mapped.awaitingJudge.filter((p) => !took.has(p)), ...judged.awaitingJudge],
+        awaitingJudge: owed,
+        awaitingJudgeCount: owed.length,
         durationMs: mapped.durationMs + judged.durationMs,
     };
 }

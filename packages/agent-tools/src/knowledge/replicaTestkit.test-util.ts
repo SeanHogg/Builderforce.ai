@@ -1,0 +1,123 @@
+/**
+ * knowledge/replicaTestkit.test-util.ts — a local root and a fake project server for the replica tests (PRD 41 A11).
+ * The server applies real BFKP packs with the shared codec and checks generation and digest as the API does, so a
+ * test of the pump is a test of the whole wire contract.
+ */
+
+import { localSnapshotStore, srcRef, type Extracted, type KnowledgeStore, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import {
+    applyEntryDiffs, decodePack, joinParts, manifestTree, rootLeaves, ZERO_DIGEST, type Pack,
+} from '@seanhogg/builderforce-memory/knowledge/pack';
+import { createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, type ReplicaPersistence, type ReplicaQueue } from './replicaQueue.js';
+import { replicatedKnowledgeStore } from './replicatedStore.js';
+import type { ReplicaClient } from './replicaPump.js';
+
+export const ROOT = 'ws:test';
+export const scope = { rootId: ROOT, title: 'test', packs: ['code'] };
+
+export const hashOf = (i: number, rev = 0): string => `${i.toString(16)}${rev.toString(16)}`.padStart(64, 'c');
+export const pathOf = (i: number): string => `src/f${i}.ts`;
+
+export const extraction = (path: string, hash: string, nodes = 2): Extracted => ({
+    sourceRef: srcRef(ROOT, path), sourceHash: hash,
+    nodes: Array.from({ length: nodes }, (_, i) => ({ ref: `${srcRef(ROOT, path)}#n${i}` as never, kind: 'symbol', label: `n${i}`, pack: 'code', importance: 0.25, origin: 'extracted' as const, sourceHash: hash })),
+    edges: [], keys: [],
+});
+
+export const factOf = (key: string, path: string): StoredFact => ({ key, content: `about ${path}`, source: 'review', importance: 0.5, origin: 'model', fileAnchors: [{ path }] });
+
+/** An error shaped like the knowledge client's. */
+export const apiError = (status: number, extra: { retryAfterMs?: number; code?: string; hashes?: string[] } = {}) =>
+    Object.assign(new Error(`knowledge API ${status}`), { status, ...extra });
+
+export interface World {
+    local: KnowledgeStore;
+    queue: ReplicaQueue;
+    persistence: ReplicaPersistence;
+    store: KnowledgeStore;
+    sources: Array<{ ref: string; hash: string }>;
+    /** Writes files `[from, to)` through the replicated store at revision `rev`, as a review would. */
+    review(from: number, to: number, rev?: number, nodes?: number): Promise<void>;
+}
+
+export function world(opts: { projectId?: number; persistence?: ReplicaPersistence } = {}): World {
+    let text: string | undefined;
+    const local = localSnapshotStore({ read: async () => text, write: async (t) => { text = t; } });
+    const persistence = opts.persistence ?? memoryReplicaPersistence();
+    const queue = createReplicaQueue(persistence);
+    const sources: World['sources'] = [];
+    const store = replicatedKnowledgeStore({
+        local, rootId: ROOT, replica: { projectId: opts.projectId ?? 1 }, queue,
+        knownHashes: async () => new Map(sources.map((s) => [s.ref, s.hash])),
+    });
+    const w: World = {
+        local, queue, persistence, store, sources,
+        async review(from, to, rev = 0, nodes = 2) {
+            for (let i = from; i < to; i++) {
+                const hash = hashOf(i, rev), ref = srcRef(ROOT, pathOf(i));
+                await store.putExtracted!(hash, [extraction(pathOf(i), hash, nodes)]);
+                await store.markStale({ rootId: ROOT }, ref as never, hash);
+                const at = sources.findIndex((s) => s.ref === ref);
+                if (at >= 0) sources[at] = { ref, hash }; else sources.push({ ref, hash });
+                if (rev === 0 && i % 2 === 0) await store.write({ scope, facts: [factOf(`claim:${i}`, pathOf(i))], relations: [] });
+            }
+        },
+    };
+    return w;
+}
+
+export type Logged = { kind: 'sync' | 'manifest' | 'leaves' | 'have'; bytes?: number; pack?: Pack; part?: number };
+
+export function fakeServer() {
+    const s = {
+        generation: 0,
+        files: new Map<string, string>(), facts: new Map<string, StoredFact>(), relations: new Map<string, StoredRelation>(), bodies: new Map<string, Extracted[]>(),
+        /** Refuse (413 pack_too_large) a pack carrying more files than this. */
+        rejectOver: Infinity,
+        /** Errors thrown by the next `sync` calls, in order, before anything is applied. */
+        failSync: [] as Array<() => unknown>,
+    };
+    const log: Logged[] = [];
+    const staged = new Map<string, Uint8Array[]>();
+    const tree = () => manifestTree(rootLeaves(ROOT, { files: [...s.files].map(([path, hash]) => ({ path, hash })), facts: [...s.facts.values()], relations: [...s.relations.values()] }));
+    const fail = (status: number, code: string, extra: object = {}) => apiError(status, { code, ...extra });
+
+    const client: ReplicaClient = {
+        sync: async (_root, part) => {
+            const next = s.failSync.shift();
+            if (next) throw next();
+            let bytes = part.bytes;
+            if (part.parts && part.parts > 1) {
+                const list = staged.get(part.syncId!) ?? [];
+                list[part.part!] = part.bytes;
+                staged.set(part.syncId!, list);
+                log.push({ kind: 'sync', bytes: part.bytes.length, part: part.part! });
+                if (part.part !== part.parts - 1) return { applied: false as const, received: part.part! + 1, parts: part.parts };
+                bytes = joinParts(list);
+            }
+            const pack = await decodePack(bytes);
+            if (!(part.parts && part.parts > 1)) log.push({ kind: 'sync', bytes: part.bytes.length, pack });
+            else log[log.length - 1]!.pack = pack;
+            if (pack.baseGeneration !== 0 && pack.baseGeneration !== s.generation) throw fail(409, 'generation_mismatch', { generation: s.generation });
+            if ((pack.files?.length ?? 0) > s.rejectOver) throw fail(413, 'pack_too_large');
+            for (const x of pack.extracted ?? []) {
+                s.bodies.set(x.hash, x.kind === 'full' ? x.entries : applyEntryDiffs(s.bodies.get(x.prior) ?? [], x.entries));
+            }
+            for (const f of pack.files ?? []) s.files.set(f.path, f.hash);
+            for (const f of pack.facts ?? []) s.facts.set(f.key, f);
+            for (const r of pack.relations ?? []) s.relations.set(relationKey(r), r);
+            for (const p of pack.deletes?.files ?? []) s.files.delete(p);
+            for (const k of pack.deletes?.facts ?? []) s.facts.delete(k);
+            for (const r of pack.deletes?.relations ?? []) s.relations.delete(relationKey(r));
+            if (pack.targetDigest !== ZERO_DIGEST && tree().root !== pack.targetDigest) throw fail(409, 'digest_mismatch');
+            s.generation += 1;
+            return { applied: true as const, generation: s.generation, digest: tree().root };
+        },
+        syncManifest: async () => { log.push({ kind: 'manifest' }); const t = tree(); return { generation: s.generation, digest: t.root, buckets: t.buckets }; },
+        syncLeaves: async (_r, ids) => { log.push({ kind: 'leaves' }); const t = tree(); return { generation: s.generation, leaves: ids.flatMap((b) => t.leaves.get(b) ?? []) }; },
+        syncHave: async (_r, hashes) => { log.push({ kind: 'have' }); return hashes.map((h) => s.bodies.has(h)); },
+    };
+    return { s, client, log, tree, syncs: () => log.filter((l) => l.kind === 'sync') };
+}
+
+export { factKey };

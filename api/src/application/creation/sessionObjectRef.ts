@@ -28,7 +28,7 @@ import { SESSION_OBJECT_KIND, sessionMembersChanged, type SessionKey } from './s
 /** The three fields of a board any registry write needs. Deliberately not the whole row. */
 export type SessionRef = { id: string; tenantId: number; title: string };
 
-export async function ensureSessionObject(db: Db, env: Env, session: SessionRef): Promise<ObjectRef> {
+export async function ensureSessionObject(db: Db, env: Env | undefined, session: SessionRef): Promise<ObjectRef> {
   return registerObject(db, env, {
     tenantId: session.tenantId,
     kind: SESSION_OBJECT_KIND,

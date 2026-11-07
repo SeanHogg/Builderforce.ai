@@ -61,6 +61,8 @@ export interface DirtySnapshot {
 export interface ReplicaQueue {
     /** Marks keys changed. Synchronous, deduplicated, never throws. */
     markDirty(keys: Iterable<string>): void;
+    /** Makes the dirty set exactly `keys` (a reconcile has decided what differs; everything else is satisfied). */
+    replaceDirty(keys: Iterable<string>): Promise<void>;
     /** Stores the analysis snapshot the next pack carries (the latest wins). */
     setAnalysis(analysis: ReplicaAnalysis): void;
     /** The dirty keys, the ack and the pending analysis, as of now. */
@@ -216,6 +218,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
                 touch();
             } catch (error) { opts.onError?.(error); }
         },
+        async replaceDirty(keys) { await ready(); dirty.clear(); add(keys); touch(); },
         setAnalysis(next) { analysis = next; void ready(); touch(); },
         async snapshot() {
             await ready();

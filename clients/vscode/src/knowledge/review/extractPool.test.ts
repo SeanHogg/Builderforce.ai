@@ -16,7 +16,7 @@ class FakeWorker implements PoolWorker {
   reply(index: number, result: ExtractJobResult): void { this.emit("message", { id: this.posted[index]!.id, result }); }
 }
 
-const jobOf = (path: string): ExtractJob => ({ rootId: "r", path, hash: path, doc: {} as ExtractJob["doc"], knownKeys: [] });
+const jobOf = (path: string): ExtractJob => ({ rootId: "r", path, hash: path, doc: {} as never, knownKeys: [] });
 const done = (tag: string): ExtractJobResult => ({ extracted: [], sections: [{ text: tag } as never] });
 
 function rig(size: number) {

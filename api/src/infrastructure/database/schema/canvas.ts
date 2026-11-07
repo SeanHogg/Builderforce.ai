@@ -1646,6 +1646,14 @@ export const creationOutcomeEvents = pgTable('creation_outcome_events', {
   correlationPhase: uniqueIndex('uq_creation_outcomes_correlation_phase').on(t.sessionId, t.correlationId, t.action, t.phase),
 }));
 
+/**
+ * @deprecated PRD 39 §2 — folded into kernel `annotations` (kind 'comment') by
+ * migration 1299's backfill. The declaration survives until push 3 (contract)
+ * drops the table; new reads/writes go through `application/canvas/canvasComments.ts`.
+ * The wire id mapping: `id` here = `annotations.public_id`; `object_id` =
+ * `anchor.canvasObjectId`; `parent_comment_id` = `annotations.parent_id` resolved
+ * through the fold ledger.
+ */
 export const creationSessionComments = pgTable('creation_session_comments', {
   id:              uuid('id').primaryKey().defaultRandom(),
   sessionId:       uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
