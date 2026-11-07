@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.138] — "Use my connected accounts" works with Kimi Code
+
+- **Your connected accounts answer first.** "Use my connected accounts" now tries the accounts this editor calls itself, such as Kimi Code, before the workspace's server-side providers. It no longer fails with "no provider is connected on this workspace" when Kimi Code is your only account. It never falls back to on-device models or the free pool.
+- **Clearer failure notices.** If your account cannot take a turn, the error names the account and the reason. The fallback notice no longer says "on this device" for a hosted account.
+
 ## [2026.10.137] — The knowledge view looks like its design and says what you are looking at
 
 - **Every "Not set up" says why and what to do.** Examples: "no file has churn yet — review again to collect it", or "the server sent only 119 of 3,038 files". When the map has only part of the repo, it says so.

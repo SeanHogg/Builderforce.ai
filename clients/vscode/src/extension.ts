@@ -4,6 +4,7 @@ import { manageByoConnections } from "./byoConnections";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
+import { syncCapabilityContexts } from "./capabilityContext";
 import { promptSignInAgain, watchRejectedEditorKey } from "./editorKeyGuard";
 import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
@@ -144,6 +145,9 @@ let meetings: MeetingsTreeProvider | undefined;
 async function syncSignedInContext(context: vscode.ExtensionContext): Promise<void> {
   const signedIn = !!(await context.secrets.get(SECRET_KEY));
   await vscode.commands.executeCommand("setContext", "builderforce.signedIn", signedIn);
+  // PRD 41 Part A1: the sidebar's capability-gated surfaces (health, evermind) refresh
+  // from the SAME auth-state sites as the signed-in key, so the two never drift.
+  await syncCapabilityContexts();
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -1668,9 +1672,12 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
 }
 
 /**
- * Run the codebase scan if a folder is open and we are signed in. Best-effort: the
- * grounding summary is cached by a version token (only re-summarizes on drift or force),
- * and any failure leaves the agent working, just ungrounded.
+ * Run the codebase scan if a folder is open. The definition-index refresh is UNGATED — it
+ * needs no model, no account and no key, so it runs before any route resolution and even
+ * when the summarizer has nothing to run (PRD 41 Part A4). The scan's summary/overview step
+ * still resolves the model route; a route that needs a model, a local model or a key this
+ * workspace lacks skips ONLY that step (with an explanation when the person asked for it),
+ * leaving the agent grounded on the deterministic map.
  */
 async function maybeScan(context: vscode.ExtensionContext, force: boolean): Promise<void> {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -1678,9 +1685,9 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   // Hand the folder to Builderforce Desktop (when it runs) so its index starts building
   // now — before any sign-in gate, because the local index needs no account.
   void registerWorkspace(root);
-  // A rescan the person asked for re-walks the definition index FIRST: it needs no model
-  // and no account, so neither gate below may skip it (they used to return before it ran).
-  if (force) void workspaceSymbolIndex(root).refresh().catch((e) => console.error("BuilderForce symbol index refresh failed:", e));
+  // The definition index refresh is FIRST and UNGATED (PRD 41 Part A4): it needs no model
+  // and no account, so neither gate below may skip it. Kicks off immediately, never awaited.
+  void workspaceSymbolIndex(root).refresh().catch((e) => console.error("BuilderForce symbol index refresh failed:", e));
   // The route reads the inference mode, which is only real once the policy resolved.
   await platformPolicyResolved();
   const key = await context.secrets.get(SECRET_KEY);
@@ -1689,22 +1696,25 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   // the scan summarizing through the gateway under a different model entirely. A local
   // route also needs no account, so the sign-in gate follows the route, not the key.
   const route = await resolveModelRoute(context.secrets);
-  // Nothing can summarize the workspace for a reason signing in won't fix. The automatic
-  // scan stays quiet; a rescan the person ASKED for says why and offers the remedies.
+  // Nothing can summarize the workspace for a reason signing in won't fix: the overview is
+  // optional, so the scan still runs and grounds the agent on the deterministic map. A
+  // rescan the person ASKED for says why and offers the remedies.
   const noModel = routeNeedsLocalModel(route) ? "no_local_model" : routeNeedsSpecificModel(route) ? "no_specific_model" : null;
-  if (noModel) {
-    if (force) void showNoLocalModelPrompt(noModel);
+  const needsSignIn = !key && routeRequiresSignIn(route);
+  if (noModel || needsSignIn) {
+    if (force && noModel) void showNoLocalModelPrompt(noModel);
+    const scan = await scanCodebase(context.secrets, root, route, force);
+    setGroundingSummary(scan.grounding);
     return;
   }
-  if (!key && routeRequiresSignIn(route)) return;
 
   const work = async (progress?: vscode.Progress<{ message?: string }>) => {
     progress?.report({ message: "Scanning workspace…" });
     try {
       const scan = await scanCodebase(context.secrets, root, route, force);
       setGroundingSummary(scan.grounding);
-      // Warm the definition index and publish the digest into the project's facts, in
-      // the background: grounding is ready now, and neither must hold up activation.
+      // Publish the digest into the project's facts in the background: grounding is ready
+      // now, and it must not hold up activation.
       void afterWorkspaceScan(context.secrets, root, scan).catch((e) => console.error("BuilderForce workspace digest failed:", e));
     } catch (e) {
       console.error("BuilderForce codebase scan failed:", e);

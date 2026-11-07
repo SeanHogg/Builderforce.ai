@@ -804,7 +804,7 @@ var DEFAULT_MODEL_MOVE_LABELS = {
   modelMoveHowSummarized: "summarized",
   modelMoveHowRecalled: "replaced by recalled memory",
   modelMoveHowElided: "left out",
-  modelMoveLocalFallback: "{from} on this device could not take this turn \u2014 {to} answered it",
+  modelMoveLocalFallback: "{from} could not take this turn \u2014 {to} answered it",
   modelMoveHint: "The run moved to another model, so the conversation was fitted to that model\u2019s context window."
 };
 var MODEL_MOVE_STEP_LABELS = ["llm.handoff", "llm.local_fallback"];

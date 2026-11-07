@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-11-07 — "Use my connected accounts" uses the accounts the editor calls itself (routing eb3f3f487 shipped in VS Code 2026.10.137 · wording in 2026.10.138)
+
+- **Bug.** In VS Code, picking "Use my connected accounts" (`routingMode: 'byo_pool'`) sent the turn straight to the gateway's strict BYO pool. That pool only holds providers the workspace connected on the server. When the person's only account was one the editor calls itself (Kimi Code), the turn failed with "BYO execution is required, but no provider is connected on this workspace".
+- **Fix.**
+  - `isAccountPoolCall` in `brain-embedded/src/localFirstTransport.ts` identifies an account-pool call.
+  - For those calls, `createHostModelStream` tries the host-called accounts from `editorAccounts(secrets).hybridAccounts()` first, then the gateway pool with `byo_pool` intact. Device models and the free pool are never tried.
+  - `clients/vscode/src/modelRouting.ts` hands those accounts over for byo_pool in Hybrid and Specific mode.
+  - When an account failed and the gateway then refused, the error names the account and its reason.
+  - An account that has already streamed owns the turn.
+- **Wording.** The fallback notice no longer says "on this device". The account may be hosted.
+
 ## ✅ RESOLVED 2026-11-07 — The knowledge view matches its design and explains what it shows (PRD 38 · VS Code 2026.10.137)
 
 The design audit of 2026-11-07 (the B-Surface mockup compared region by region, 14 items) is closed.

@@ -11989,7 +11989,7 @@
       "modelMoveHowSummarized": "resumidos",
       "modelMoveHowRecalled": "sustituidos por memoria recuperada",
       "modelMoveHowElided": "omitidos",
-      "modelMoveLocalFallback": "{from} en este dispositivo no pudo atender este turno; respondió {to}",
+      "modelMoveLocalFallback": "{from} no pudo atender este turno; respondió {to}",
       "modelMoveHint": "La ejecución pasó a otro modelo, así que la conversación se ajustó a la ventana de contexto de ese modelo.",
       "contextCompacted": "Contexto compactado automáticamente: pasos anteriores resumidos en una memoria ({count})",
       "contextCompactedHint": "La conversación superó su presupuesto de trabajo, así que la parte más antigua se resumió en una nota de memoria con la que el modelo sigue trabajando. No se elimina nada de esta transcripción.",

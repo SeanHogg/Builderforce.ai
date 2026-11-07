@@ -503,7 +503,7 @@
   "summarized": "resumidos",
   "replaced by recalled memory": "sustituidos por memoria recuperada",
   "left out": "omitidos",
-  "{from} on this device could not take this turn — {to} answered it": "{from} en este dispositivo no pudo atender este turno; respondió {to}",
+  "{from} could not take this turn — {to} answered it": "{from} no pudo atender este turno; respondió {to}",
   "The run moved to another model, so the conversation was fitted to that model’s context window.": "La ejecución pasó a otro modelo, así que la conversación se ajustó a la ventana de contexto de ese modelo.",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Recuperado del razonamiento del modelo: este turno terminó sin una respuesta aparte.",
   "Stopped by you — this is what the model had written when you pressed Stop.": "Detenido por ti: esto es lo que el modelo había escrito cuando pulsaste Detener.",
@@ -1183,4 +1183,4 @@
   "Show translation": "Mostrar traducción",
   "Translating…": "Traduciendo…",
   "Translation needs this browser's built-in translator": "La traducción necesita el traductor integrado de este navegador"
-}
+}

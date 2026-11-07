@@ -11989,7 +11989,7 @@
       "modelMoveHowSummarized": "résumés",
       "modelMoveHowRecalled": "remplacés par la mémoire rappelée",
       "modelMoveHowElided": "omis",
-      "modelMoveLocalFallback": "{from} sur cet appareil n’a pas pu prendre ce tour — {to} y a répondu",
+      "modelMoveLocalFallback": "{from} n’a pas pu prendre ce tour — {to} y a répondu",
       "modelMoveHint": "L’exécution est passée à un autre modèle ; la conversation a donc été ajustée à la fenêtre de contexte de ce modèle.",
       "contextCompacted": "Contexte compacté automatiquement : étapes antérieures résumées dans une mémoire ({count})",
       "contextCompactedHint": "La conversation a dépassé son budget de travail : la partie la plus ancienne a été résumée dans une note de mémoire à partir de laquelle le modèle continue. Rien n’est supprimé de cette transcription.",

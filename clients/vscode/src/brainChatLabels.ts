@@ -80,7 +80,7 @@ export function brainChatLabels(): Record<string, string> {
     "tl.modelMoveHowSummarized": t("summarized"),
     "tl.modelMoveHowRecalled": t("replaced by recalled memory"),
     "tl.modelMoveHowElided": t("left out"),
-    "tl.modelMoveLocalFallback": t("{from} on this device could not take this turn — {to} answered it"),
+    "tl.modelMoveLocalFallback": t("{from} could not take this turn — {to} answered it"),
     "tl.modelMoveHint": t("The run moved to another model, so the conversation was fitted to that model’s context window."),
     "tl.contextCompacted": t("Context auto-compacted: older steps summarized into a memory ({count})"),
     "tl.contextCompactedHint": t("The conversation outgrew its working budget, so the older part was summarized into a memory note the model keeps working from. Nothing is deleted from this transcript."),

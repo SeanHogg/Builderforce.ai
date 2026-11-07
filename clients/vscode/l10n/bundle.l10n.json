@@ -503,7 +503,7 @@
   "summarized": "summarized",
   "replaced by recalled memory": "replaced by recalled memory",
   "left out": "left out",
-  "{from} on this device could not take this turn — {to} answered it": "{from} on this device could not take this turn — {to} answered it",
+  "{from} could not take this turn — {to} answered it": "{from} could not take this turn — {to} answered it",
   "The run moved to another model, so the conversation was fitted to that model’s context window.": "The run moved to another model, so the conversation was fitted to that model’s context window.",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Recovered from the model's reasoning — the turn ended without a separate reply.",
   "Stopped by you — this is what the model had written when you pressed Stop.": "Stopped by you — this is what the model had written when you pressed Stop.",
@@ -1183,4 +1183,4 @@
   "Show translation": "Show translation",
   "Translating…": "Translating…",
   "Translation needs this browser's built-in translator": "Translation needs this browser's built-in translator"
-}
+}

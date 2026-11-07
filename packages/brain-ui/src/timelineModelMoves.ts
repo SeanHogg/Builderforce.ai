@@ -42,7 +42,7 @@ export const DEFAULT_MODEL_MOVE_LABELS: ModelMoveLabels = {
   modelMoveHowSummarized: 'summarized',
   modelMoveHowRecalled: 'replaced by recalled memory',
   modelMoveHowElided: 'left out',
-  modelMoveLocalFallback: '{from} on this device could not take this turn — {to} answered it',
+  modelMoveLocalFallback: '{from} could not take this turn — {to} answered it',
   modelMoveHint: 'The run moved to another model, so the conversation was fitted to that model’s context window.',
 };
 

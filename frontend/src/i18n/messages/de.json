@@ -11989,7 +11989,7 @@
       "modelMoveHowSummarized": "zusammengefasst",
       "modelMoveHowRecalled": "durch abgerufene Erinnerungen ersetzt",
       "modelMoveHowElided": "ausgelassen",
-      "modelMoveLocalFallback": "{from} auf diesem Gerät konnte diese Runde nicht übernehmen — {to} hat geantwortet",
+      "modelMoveLocalFallback": "{from} konnte diese Runde nicht übernehmen — {to} hat geantwortet",
       "modelMoveHint": "Der Lauf ist zu einem anderen Modell gewechselt, daher wurde die Unterhaltung an dessen Kontextfenster angepasst.",
       "contextCompacted": "Kontext automatisch komprimiert: ältere Schritte zu einer Erinnerung zusammengefasst ({count})",
       "contextCompactedHint": "Die Unterhaltung hat ihr Arbeitsbudget überschritten, daher wurde der ältere Teil zu einer Gedächtnisnotiz zusammengefasst, mit der das Modell weiterarbeitet. Aus diesem Verlauf wird nichts gelöscht.",

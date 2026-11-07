@@ -11989,7 +11989,7 @@
       "modelMoveHowSummarized": "摘要",
       "modelMoveHowRecalled": "替换为召回的记忆",
       "modelMoveHowElided": "省略",
-      "modelMoveLocalFallback": "本设备上的 {from} 无法处理此轮 — 已由 {to} 回答",
+      "modelMoveLocalFallback": "{from} 无法处理此轮 — 已由 {to} 回答",
       "modelMoveHint": "运行切换到了另一个模型，因此对话已适配该模型的上下文窗口。",
       "contextCompacted": "上下文已自动压缩：较早的步骤已汇总为一条记忆（{count}）",
       "contextCompactedHint": "对话超出了工作预算，因此较早的部分被汇总为一条记忆笔记，模型会基于它继续工作。此记录中的内容不会被删除。",

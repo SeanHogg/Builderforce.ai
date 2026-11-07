@@ -503,7 +503,7 @@
   "summarized": "résumés",
   "replaced by recalled memory": "remplacés par la mémoire rappelée",
   "left out": "omis",
-  "{from} on this device could not take this turn — {to} answered it": "{from} sur cet appareil n’a pas pu prendre ce tour — {to} y a répondu",
+  "{from} could not take this turn — {to} answered it": "{from} n’a pas pu prendre ce tour — {to} y a répondu",
   "The run moved to another model, so the conversation was fitted to that model’s context window.": "L’exécution est passée à un autre modèle ; la conversation a donc été ajustée à la fenêtre de contexte de ce modèle.",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Récupéré du raisonnement du modèle — ce tour s'est terminé sans réponse distincte.",
   "Stopped by you — this is what the model had written when you pressed Stop.": "Arrêté par vous — voici ce que le modèle avait écrit quand vous avez appuyé sur Arrêter.",
