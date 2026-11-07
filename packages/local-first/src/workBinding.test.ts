@@ -5,19 +5,11 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import {
-  UNBOUND_DESTINATION,
-  createMemoryLocalFirstStore,
-  newLocalRecord,
-  type EntityDestination,
-  type LocalFirstStore,
-  type ProjectValue,
-  type TicketValue,
-} from '@builderforce/local-first';
-import { createLocalBrainPersistence } from '../localFirstPersistence';
-import { importKey } from './journal';
-import { bindChatHistoryForSync } from './chatSync';
-import { bindWorkForSync } from './workSync';
+import { UNBOUND_DESTINATION } from './records.js';
+import type { EntityDestination, ProjectValue, TicketValue } from './records.js';
+import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstStore } from './store.js';
+import { importKey, queueImport } from './journalRules.js';
+import { bindWorkForSync } from './workBinding.js';
 
 const ACCOUNT: EntityDestination = { kind: 'bound', platformInstance: 'https://builderforce.ai', tenantId: '7' };
 const DEVICE = 'device-1';
@@ -54,17 +46,21 @@ async function file(store: LocalFirstStore, entityType: 'project' | 'ticket', id
 describe('bindWorkForSync', () => {
   it('rebinds an unbound ticket and queues its import waiting on its project, its parent and its chat', async () => {
     const store = createMemoryLocalFirstStore();
-    const persistence = createLocalBrainPersistence({
-      store, deviceId: DEVICE, summarizeUnavailable: 'n/a', accountDestination: () => undefined,
+    // The chat's own import is queued first by the chat slice of the same sync pass.
+    const chatClientId = '00000000-0000-4000-8000-0000000000c1';
+    await store.transact(async (tx) => {
+      const chat = newLocalRecord<unknown>({
+        id: chatClientId, entityType: 'chat', payload: { clientId: chatClientId, chat: { title: 'Program' } },
+        deviceId: DEVICE, destination: ACCOUNT, occurredAt: '2026-11-07T00:00:00.000Z',
+      });
+      await tx.put(chat);
+      await queueImport(tx, chat);
     });
-    const chat = await persistence.createChat({ title: 'Program' });
-    const chatClientId = (await store.read((tx) => tx.list('chat')))[0]!.id;
     await file(store, 'project', PROJECT, { name: 'Board' }, 1);
     // Filed child-first on purpose: the parent must still be queued first.
     await file(store, 'ticket', TASK, { projectId: PROJECT, title: 'Task', status: 'backlog', parentTicketId: EPIC, chatClientId }, 3);
     await file(store, 'ticket', EPIC, { projectId: PROJECT, title: 'Epic', status: 'backlog', taskType: 'epic', chatClientId }, 2);
 
-    await bindChatHistoryForSync(store, DEVICE, ACCOUNT);
     expect(await bindWorkForSync(store, DEVICE, ACCOUNT)).toBe(3);
 
     const pending = await store.read((tx) => tx.pending());
@@ -82,7 +78,6 @@ describe('bindWorkForSync', () => {
     // Queue order is dependency order: project, then the parent, then its child.
     const order = pending.filter((event) => event.entityType !== 'chat').map((event) => event.clientEntityId);
     expect(order).toEqual([PROJECT, EPIC, TASK]);
-    expect(chat.id).toBeDefined();
   });
 
   it('waits on nothing local for a server project / parent reference, and leaves a bound row alone', async () => {

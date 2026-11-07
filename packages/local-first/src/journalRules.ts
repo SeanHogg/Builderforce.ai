@@ -48,6 +48,11 @@ export interface JournalWriteOptions {
   chatClientId?: string;
 }
 
+/** Whether a row is this device's own: written here, or this device's write pulled back. */
+export function isOwnRecord(row: LocalRecord, deviceId: string): boolean {
+  return row.provenance?.source !== 'imported' || row.provenance.deviceId === deviceId;
+}
+
 /** Whether the server has imported this row (a sync receipt mapped it). */
 export function isImported(mapping: ServerMapping | undefined): boolean {
   return mapping !== undefined && mapping.serverVersion > BOUND_ONLY_VERSION;
@@ -109,7 +114,7 @@ function importPayload(record: LocalRecord, mapping: ServerMapping | undefined):
  * Replace a bound row's pending events with ONE import of its current state (nothing,
  * when the row is deleted). Used by every bound write the server has not imported, and
  * by the sync pass that binds a long-offline chat's history (and the work — projects and
- * tickets — written beside it, `workSync.ts`). `waitsOn` names further imports this one
+ * tickets — written beside it, `workBinding.ts`). `waitsOn` names further imports this one
  * must follow (a ticket's project / parent ticket), as `importKey`s.
  */
 export async function queueImport(

@@ -56,6 +56,26 @@ export function occurredAtGate(occurredAt: string, now: Date): OccurredAtGateDec
 }
 
 /**
+ * How long an event whose parent (a chat, a project, a parent ticket) has not
+ * mapped yet stays HELD (`dependency_pending`). A device flushes its journal in
+ * dependency order, so a parent that is going to land lands within minutes; an
+ * event older than this is waiting on a parent that is never coming, and holding
+ * it forever would starve the queue.
+ */
+export const PENDING_HOLD_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * May an event stamped `occurredAt` still be held for a missing parent? True for
+ * a young event (including one a little ahead of our clock); false for an old or
+ * unparseable one: the caller then drops the optional link or rejects.
+ */
+export function withinPendingHoldWindow(occurredAt: string, now: Date): boolean {
+  const at = Date.parse(occurredAt);
+  if (Number.isNaN(at)) return false;
+  return now.getTime() - at <= PENDING_HOLD_WINDOW_MS;
+}
+
+/**
  * Trust label for a client clock the server accepted. Imported evidence is a
  * claim, not a server observation — billing and audit must not treat
  * `occurredAt` as time the server witnessed.

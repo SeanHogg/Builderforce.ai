@@ -6,9 +6,9 @@
 
 import { localSnapshotStore, srcRef, type Extracted, type KnowledgeStore, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import {
-    applyEntryDiffs, decodePack, joinParts, manifestTree, rootLeaves, ZERO_DIGEST, type Pack,
+import {
+    applyEntryDiffs, decodePack, factDigest, factLeafKey, fileLeafKey, joinParts, manifestTree, relationDigest, relationLeafKey, ZERO_DIGEST, type Pack,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, type ReplicaPersistence, type ReplicaQueue } from './replicaQueue.js';
 import { replicatedKnowledgeStore } from './replicatedStore.js';
 import type { ReplicaClient } from './replicaPump.js';
 
@@ -76,10 +76,15 @@ export function fakeServer() {
         rejectOver: Infinity,
         /** Errors thrown by the next `sync` calls, in order, before anything is applied. */
         failSync: [] as Array<() => unknown>,
+        /** key → digest: the root's leaves on the server. */
+        leaves: new Map<string, string>(),
+        /** Rows written through the single writer (`writeRows`), not the pack. */
+        sideWrites: [] as Array<{ facts: StoredFact[]; relations: StoredRelation[] }>,
     };
     const log: Logged[] = [];
     const staged = new Map<string, Uint8Array[]>();
-    const tree = () => manifestTree(rootLeaves(ROOT, { files: [...s.files].map(([path, hash]) => ({ path, hash })), facts: [...s.facts.values()], relations: [...s.relations.values()] }));
+    // The manifest is the LEAVES this root synced (rule 4b), exactly as the API keeps them — never the shared rows.
+    const tree = () => manifestTree([...s.leaves].map(([key, digest]) => ({ key, digest })));
     const fail = (status: number, code: string, extra: object = {}) => apiError(status, { code, ...extra });
 
     const client: ReplicaClient = {
@@ -98,18 +103,23 @@ export function fakeServer() {
             const pack = await decodePack(bytes);
             if (!(part.parts && part.parts > 1)) log.push({ kind: 'sync', bytes: part.bytes.length, pack });
             else log[log.length - 1]!.pack = pack;
-            if (pack.baseGeneration !== 0 && pack.baseGeneration !== s.generation) throw fail(409, 'generation_mismatch', { generation: s.generation });
+            // A full pack (generation 0) only while the root has no row; any other at the current generation.
+            if (pack.baseGeneration !== s.generation) throw fail(409, 'generation_mismatch', { generation: s.generation });
             if ((pack.files?.length ?? 0) > s.rejectOver) throw fail(413, 'pack_too_large');
+            const tomb = [
+                ...(pack.deletes?.files ?? []).map((id) => `f:${id}`), ...(pack.deletes?.facts ?? []).map(factLeafKey), ...(pack.deletes?.relations ?? []).map(relationLeafKey),
+            ];
+            if (tomb.some((k) => !s.leaves.has(k))) throw fail(422, 'not_owned');
             for (const x of pack.extracted ?? []) {
                 s.bodies.set(x.hash, x.kind === 'full' ? x.entries : applyEntryDiffs(s.bodies.get(x.prior) ?? [], x.entries));
             }
-            for (const f of pack.files ?? []) s.files.set(f.path, f.hash);
-            for (const f of pack.facts ?? []) s.facts.set(f.key, f);
-            for (const r of pack.relations ?? []) s.relations.set(relationKey(r), r);
+            for (const f of pack.files ?? []) { s.files.set(f.path, f.hash); s.leaves.set(fileLeafKey(f.path, f.hash), f.hash); }
+            for (const f of pack.facts ?? []) { s.facts.set(f.key, f); s.leaves.set(factLeafKey(f.key), factDigest(f)); }
+            for (const r of pack.relations ?? []) { s.relations.set(relationKey(r), r); s.leaves.set(relationLeafKey(r), relationDigest(r)); }
             for (const p of pack.deletes?.files ?? []) s.files.delete(p);
             for (const k of pack.deletes?.facts ?? []) s.facts.delete(k);
             for (const r of pack.deletes?.relations ?? []) s.relations.delete(relationKey(r));
-            if (pack.targetDigest !== ZERO_DIGEST && tree().root !== pack.targetDigest) throw fail(409, 'digest_mismatch');
+            for (const k of tomb) s.leaves.delete(k);
             s.generation += 1;
             return { applied: true as const, generation: s.generation, digest: tree().root };
         },

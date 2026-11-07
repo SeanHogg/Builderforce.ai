@@ -179,7 +179,7 @@ describe('parts', () => {
         await w.review(0, 120, 0, 8);
         const srv = fakeServer();
         const states: ReplicaState[] = [];
-        const state = await pump(w, srv.client, { maxPartBytes: 2000, newSyncId: () => 'sync-test-0001', onState: (s) => states.push(s) });
+        const state = await pump(w, srv.client, { maxPartBytes: 1000, newSyncId: () => 'sync-test-0001', onState: (s) => states.push(s) });
         const parts = srv.syncs();
         expect(parts.length).toBeGreaterThan(2);
         expect(parts.map((p) => p.part)).toEqual(parts.map((_, i) => i));

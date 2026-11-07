@@ -98,6 +98,7 @@ function importContext(
   deps: SyncPushDeps,
   scope: ApplyScope,
   bound: BoundSyncDestination,
+  afterCommit: (effect: () => Promise<unknown>) => void,
 ): SyncImportContext {
   const tenantId = deps.auth.tenantId;
   return {
@@ -110,6 +111,7 @@ function importContext(
     resolveTaskId: (reference) => resolveReference(tx, deps.stores, tenantId, 'ticket', reference),
     isTenantMember: (userId) => deps.stores.references.tenantMember(tenantId, userId),
     resolveOwnChatId: async (chatId) => ((await ownsChat(deps, chatId)) ? chatId : null),
+    afterCommit,
   };
 }
 
@@ -126,19 +128,20 @@ async function unmetDependency(
 }
 
 /** Step (d): one atomic unit of work for one event. */
-function applyEvent(
+async function applyEvent(
   event: ParsedEvent,
   deps: SyncPushDeps,
   scope: ApplyScope,
   bound: BoundSyncDestination,
 ): Promise<SyncReceipt> {
   const receivedAt = deps.now.toISOString();
-  return deps.stores.transact(async ({ stores: tx, importers }) => {
+  const effects: Array<() => Promise<unknown>> = [];
+  const decided = await deps.stores.transact(async ({ stores: tx, importers }) => {
     const name = syncImporterFor(event.entityType);
     const importer = name ? importers[name] : undefined;
     if (!importer) return receipt(event.eventId, 'rejected', receivedAt, { detail: 'entity_type_rejected' });
 
-    const outcome = await importer(asSyncEvent(event, bound.destination), importContext(tx, deps, scope, bound), tx);
+    const outcome = await importer(asSyncEvent(event, bound.destination), importContext(tx, deps, scope, bound, (effect) => { effects.push(effect); }), tx);
     if (outcome.status === 'applied') {
       await persistAccepted(tx, event, scope, outcome);
       return receipt(event.eventId, 'accepted', receivedAt, outcome);
@@ -151,6 +154,10 @@ function applyEvent(
     if (outcome.status === 'pending') return receipt(event.eventId, 'dependency_pending', receivedAt, { detail: outcome.detail });
     return receipt(event.eventId, 'rejected', receivedAt, { detail: outcome.detail });
   });
+  // The unit of work has committed: only now are the importers' cache bumps true. A bump that
+  // fails must not turn a committed import into a retry.
+  await Promise.allSettled(effects.map((effect) => effect()));
+  return decided;
 }
 
 async function decideEvent(

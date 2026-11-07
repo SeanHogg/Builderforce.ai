@@ -13,9 +13,8 @@
  * Idempotent: a second pass finds nothing unbound.
  */
 
-import { SCAN_STOP, selectRecords, type EntityDestination, type LocalFirstStore, type LocalRecord } from '@builderforce/local-first';
-import { queueImport } from './journal';
-import { isOwnRecord, type ChatValue, type MessageValue } from './records';
+import { SCAN_STOP, isOwnRecord, queueImport, selectRecords, type EntityDestination, type LocalFirstStore, type LocalRecord } from '@builderforce/local-first';
+import type { ChatValue, MessageValue } from './records';
 import { syncsToPlatform } from './gateLedger';
 import type { RunUsageValue } from './usageLedger';
 

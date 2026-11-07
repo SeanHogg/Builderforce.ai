@@ -23,11 +23,12 @@
 import * as vscode from "vscode";
 import {
   SCAN_STOP,
+  bindWorkForSync,
   createDeviceStoreCoordinatorLease,
   createHttpSyncTransport,
   type LocalFirstChange,
 } from "@builderforce/local-first";
-import { bindChatHistoryForSync, bindWorkForSync } from "@seanhogg/builderforce-brain-embedded";
+import { bindChatHistoryForSync } from "@seanhogg/builderforce-brain-embedded";
 import { getTenantJwt } from "./bfApi";
 import { chatAccountDestination, invalidateServerChatSpend } from "./chatAccount";
 import { getBaseUrl } from "./gateway";

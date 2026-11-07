@@ -134,7 +134,6 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.14.1",
-    "@anthropic-ai/sdk": "^0.100.1",
     "@aws-sdk/client-bedrock": "^3.992.0",
     "@buape/carbon": "^0.14.0",
     "@clack/prompts": "^1.0.1",
@@ -215,7 +214,7 @@
   },
   "optionalDependencies": {
     "@seanhogg/builderforce-memory": "^2026.10.46",
-    "@seanhogg/builderforce-memory-mcp": "^2026.10.43"
+    "@seanhogg/builderforce-memory-mcp": "^2026.10.46"
   },
   "engines": {
     "node": ">=22.12.0"

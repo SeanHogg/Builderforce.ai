@@ -15,14 +15,13 @@
  * chat's other rows (`journal.ts`).
  */
 
-import { newLocalRecord, type LocalFirstStore } from '@builderforce/local-first';
+import { journalWrite, newLocalRecord, type LocalFirstStore } from '@builderforce/local-first';
 import { servedIdentity } from '@builderforce/local-inference';
 import { offDeviceRouteOf } from './callCost';
 import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
 import type { BrainStreamFn } from '../runStore/runTypes';
-import { journalWrite } from './journal';
 import { chatRecordById } from './records';
 import { ledgerCount as count, paidRouteOf, usageRowsOf } from './paidRoute';
 import {

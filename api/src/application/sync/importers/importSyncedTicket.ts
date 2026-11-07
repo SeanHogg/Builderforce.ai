@@ -13,7 +13,7 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import { CLIENT_REPORTED_EVIDENCE } from '../../../domain/sync/occurredAtGate';
+import { CLIENT_REPORTED_EVIDENCE, withinPendingHoldWindow } from '../../../domain/sync/occurredAtGate';
 import { isJournalEventId } from '../../../domain/sync/syncProtocol';
 import { bumpChatTicketLinkCaches, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
 import { ticketKindForTaskType } from '../../brain/chatTicketTypes';
@@ -148,7 +148,25 @@ async function writeFailure(error: unknown, operation: string): Promise<BoundedI
   return rejected('ticket_write_failed');
 }
 
+/**
+ * A reference that resolved to nothing: a client UUID whose entity has not mapped yet is HELD
+ * while the event is young (its parent is probably still in flight); a decimal id the tenant
+ * does not own, or a UUID that stayed unmapped past the window, is a permanent rejection.
+ */
+function unresolved(
+  event: SyncEventInput,
+  ctx: SyncImportContext,
+  reference: string,
+  code: 'project' | 'parent_ticket',
+): BoundedImportOutcome {
+  if (isJournalEventId(reference.trim()) && withinPendingHoldWindow(event.occurredAt, ctx.now)) {
+    return pending(`${code}_pending`);
+  }
+  return rejected(`${code}_unresolved`);
+}
+
 async function resolveRefs(
+  event: SyncEventInput,
   payload: TicketPayload,
   ctx: SyncImportContext,
 ): Promise<{ projectServerId: number; parentServerId: number | null } | BoundedImportOutcome> {
@@ -156,11 +174,83 @@ async function resolveRefs(
     return rejected('ticket_assignee_invalid');
   }
   const projectServerId = await ctx.resolveProjectId(payload.projectId);
-  if (projectServerId === null) return rejected('project_unresolved');
+  if (projectServerId === null) return unresolved(event, ctx, payload.projectId, 'project');
   if (payload.parentTicketId === undefined) return { projectServerId, parentServerId: null };
   const parentServerId = await ctx.resolveTaskId(payload.parentTicketId);
-  if (parentServerId === null) return rejected('parent_ticket_unresolved');
+  if (parentServerId === null) return unresolved(event, ctx, payload.parentTicketId, 'parent_ticket');
   return { projectServerId, parentServerId };
+}
+
+/**
+ * The chat link is best-effort: the ticket is the fact, the link is lineage. A chat that is
+ * another destination's or not the caller's, or one that stayed unmapped past the hold window,
+ * imports the ticket WITHOUT the link (the reason rides the receipt detail). Only a young event
+ * whose chat has not mapped yet is held.
+ */
+type ChatLinkDecision =
+  | { kind: 'link'; chatId: number }
+  | { kind: 'none'; detail?: string }
+  | { kind: 'hold' };
+
+async function decideChatLink(
+  event: SyncEventInput,
+  payload: TicketPayload,
+  ctx: SyncImportContext,
+  stores: SyncStoreSet,
+  holdable: boolean,
+): Promise<ChatLinkDecision> {
+  if (payload.chatClientId === undefined) return { kind: 'none' };
+  const chat = await mappedChat(stores, ctx, payload.chatClientId);
+  if (chat.kind === 'own') return { kind: 'link', chatId: chat.chatId };
+  if (chat.kind === 'foreign') return { kind: 'none', detail: 'ticket_chat_link_skipped_not_owned' };
+  if (holdable && withinPendingHoldWindow(event.occurredAt, ctx.now)) return { kind: 'hold' };
+  return { kind: 'none', detail: 'ticket_chat_link_skipped_unmapped' };
+}
+
+/** Write the 'created' link inside `savepoint`; the cache bump waits for the push's commit. */
+async function linkCreated(
+  savepoint: Tx,
+  ctx: SyncImportContext,
+  chatId: number,
+  taskType: TicketTaskType,
+  ticketId: number,
+): Promise<void> {
+  await upsertChatTicketLink(savepoint, {
+    tenantId: ctx.auth.tenantId,
+    chatId,
+    kind: ticketKindForTaskType(taskType),
+    ref: String(ticketId),
+    linkType: 'created',
+    createdBy: ctx.auth.userId,
+  });
+  ctx.afterCommit(() => bumpChatTicketLinkCaches(ctx.auth.tenantId, chatId));
+}
+
+/**
+ * The ticket is already imported and this is the same ticket again. If an earlier delivery
+ * imported it without its chat link (the chat had not mapped, or was not the caller's then) and
+ * the chat is the caller's own now, add the link; `upsertChatTicketLink` is idempotent, so a
+ * further replay changes nothing. Never holds: the ticket exists, the answer is `applied`.
+ */
+async function completeMissingLink(
+  event: SyncEventInput,
+  ctx: SyncImportContext,
+  stores: SyncStoreSet,
+  tx: Tx,
+  mapping: SyncEntityMappingRow,
+  payload: TicketPayload,
+  stored: Record<string, unknown>,
+): Promise<BoundedImportOutcome> {
+  const ticketId = serverNumericId(mapping.serverId);
+  if (ticketId === null || payload.chatClientId === undefined) return appliedExisting(mapping, stored);
+  const link = await decideChatLink(event, payload, ctx, stores, false);
+  if (link.kind !== 'link') return appliedExisting(mapping, stored);
+  try {
+    await tx.transaction((savepoint) => linkCreated(savepoint, ctx, link.chatId, payload.taskType, ticketId));
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/sync/importers/importSyncedTicket.ts', operation: 'completeMissingLink' });
+  }
+  return appliedExisting(mapping, stored);
 }
 
 async function createTicket(
@@ -173,23 +263,19 @@ async function createTicket(
   const parsed = readTicket(event.payload, 'backlog');
   if (!parsed.ok) return rejected(parsed.detail);
   const payload = parsed.value;
-  const refs = await resolveRefs(payload, ctx);
+  const refs = await resolveRefs(event, payload, ctx);
   if ('status' in refs) return refs;
   const stored = canonical(payload, refs.projectServerId, refs.parentServerId);
   if (mapping) {
     if (mapping.destinationKey !== ctx.destinationKey) return rejected('destination_mismatch');
-    if (sameCanonical(mapping, stored)) return appliedExisting(mapping, stored);
+    if (sameCanonical(mapping, stored)) return completeMissingLink(event, ctx, stores, tx, mapping, payload, stored);
     return conflict(mapping, 'entity_already_imported');
   }
-  // The chat the ticket was created in, resolved BEFORE the write: an unmapped chat holds the
-  // event (`dependency_pending`, nothing written) rather than dropping the link.
-  let chatId: number | null = null;
-  if (payload.chatClientId !== undefined) {
-    const chat = await mappedChat(stores, ctx, payload.chatClientId);
-    if (chat.kind === 'unmapped') return pending('ticket_chat_pending');
-    if (chat.kind === 'foreign') return rejected('ticket_chat_not_owned');
-    chatId = chat.chatId;
-  }
+  // Resolved BEFORE the write: a young event whose chat is still in flight is held
+  // (`dependency_pending`, nothing written); every other non-own chat just skips the link.
+  const link = await decideChatLink(event, payload, ctx, stores, true);
+  if (link.kind === 'hold') return pending('ticket_chat_pending');
+  const chatId = link.kind === 'link' ? link.chatId : null;
   try {
     // The row and its 'created' link commit or roll back together (one savepoint).
     const id = await tx.transaction(async (savepoint) => {
@@ -209,21 +295,12 @@ async function createTicket(
         updatedAt: ctx.now,
       }).returning({ id: tasks.id });
       const inserted = insertedId(rows);
-      if (inserted !== null && chatId !== null) {
-        await upsertChatTicketLink(savepoint, {
-          tenantId: ctx.auth.tenantId,
-          chatId,
-          kind: ticketKindForTaskType(payload.taskType),
-          ref: String(inserted),
-          linkType: 'created',
-          createdBy: ctx.auth.userId,
-        });
-      }
+      if (inserted !== null && chatId !== null) await linkCreated(savepoint, ctx, chatId, payload.taskType, inserted);
       return inserted;
     });
     if (id === null) return rejected('ticket_insert_failed');
-    if (chatId !== null) await bumpChatTicketLinkCaches(ctx.auth.tenantId, chatId);
-    return appliedNew(String(id), 1, ctx.destinationKey, stored);
+    const applied = appliedNew(String(id), 1, ctx.destinationKey, stored);
+    return link.kind === 'none' && link.detail ? { ...applied, detail: link.detail } : applied;
   } catch (error) {
     return writeFailure(error, 'createTicket');
   }
@@ -243,7 +320,7 @@ async function updateTicket(
   const parsed = readTicket(event.payload, null);
   if (!parsed.ok) return rejected(parsed.detail);
   const payload = parsed.value;
-  const refs = await resolveRefs(payload, ctx);
+  const refs = await resolveRefs(event, payload, ctx);
   if ('status' in refs) return refs;
   const stored = canonical(payload, refs.projectServerId, refs.parentServerId);
   if (sameCanonical(current, stored)) return appliedExisting(current, stored);

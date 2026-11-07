@@ -5,11 +5,10 @@
  * device and the api's ledger run the same arithmetic.
  */
 
-import type { EntityDestination, LocalFirstTransaction } from '@builderforce/local-first';
+import { isImported, type EntityDestination, type LocalFirstTransaction } from '@builderforce/local-first';
 import { pricedId } from '@builderforce/local-inference';
 import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { foldSpendSavings, type SpendSavingsSummary, type UsageSlice } from '@builderforce/spend-contract';
-import { isImported } from './journal';
 import { scanLive } from './records';
 import { callCostOrUnknown, isOwnKeySpend } from './callCost';
 import type { RunUsageValue } from './usageLedger';

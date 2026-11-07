@@ -24,6 +24,7 @@ export function ctx(overrides: Partial<SyncImportContext> = {}): SyncImportConte
     resolveTaskId: async () => null,
     isTenantMember: async () => true,
     resolveOwnChatId: async (chatId) => chatId,
+    afterCommit: () => undefined,
     ...overrides,
   };
 }
@@ -35,6 +36,7 @@ export function event(partial: {
   clientEntityId?: string;
   baseVersion?: number;
   schemaVersion?: number;
+  occurredAt?: string;
 }): SyncEventInput {
   return {
     eventId: 'evt-1',
@@ -43,7 +45,7 @@ export function event(partial: {
     operation: partial.operation,
     schemaVersion: partial.schemaVersion ?? 1,
     localSequence: 1,
-    occurredAt: '2026-01-01T00:00:00.000Z',
+    occurredAt: partial.occurredAt ?? '2026-01-01T00:00:00.000Z',
     baseVersion: partial.baseVersion,
     dependsOn: [],
     destination,

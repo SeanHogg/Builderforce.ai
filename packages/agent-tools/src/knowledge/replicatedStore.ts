@@ -143,9 +143,10 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
         facts: (scope: Scope) => local.facts(scope),
         relations: (scope: Scope) => local.relations(scope),
         async write(batch) {
+            // What the store held BEFORE this write is read first: read after it, every row would look unchanged.
+            const known = replica ? await knownRows() : undefined;
             await local.write(batch);
-            if (!replica) return;
-            const known = await knownRows();
+            if (!known) return;
             const keys: string[] = [];
             for (const f of batch.facts) {
                 const k = factKey(f.key), d = factDigest(f);

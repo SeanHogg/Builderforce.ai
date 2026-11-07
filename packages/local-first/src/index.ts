@@ -114,3 +114,13 @@ export {
   type HttpSyncResponse,
   type HttpSyncTransportOptions,
 } from './httpSyncTransport.js';
+export {
+  BOUND_ONLY_VERSION,
+  importKey,
+  isImported,
+  isOwnRecord,
+  journalWrite,
+  queueImport,
+  type JournalWriteOptions,
+} from './journalRules.js';
+export { bindWorkForSync } from './workBinding.js';

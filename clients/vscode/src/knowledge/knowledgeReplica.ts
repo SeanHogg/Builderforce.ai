@@ -29,6 +29,8 @@ import { acquireReplicaLock } from "./replicaLock";
 const KICK_DEBOUNCE_MS = 1500;
 /** While files change, a pack is sent at most this often; a review's end sends at once. */
 export const MIN_SEND_INTERVAL_MS = 60_000;
+/** A background pump gives up (paused: unreachable) after this many transient failures in a row, instead of retrying for ever. */
+export const BACKGROUND_TRANSIENT_STREAK = 8;
 
 /** Which project each root's local snapshot was first-synced to (`globalState`), set once the first sync has DRAINED. */
 export interface UploadMarks {
@@ -226,7 +228,7 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
     try {
       const state = await pumpReplica({
         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
-        projectId: source.projectId, rootId: source.rootId, sources: async () => (await currentSourcesOf(source.manifest, source.rootId)).map((s) => {
+        projectId: source.projectId, rootId: source.rootId, maxTransientStreak: BACKGROUND_TRANSIENT_STREAK, sources: async () => (await currentSourcesOf(source.manifest, source.rootId)).map((s) => {
           const bytes = source.sizeOf?.(s.ref.slice(s.ref.indexOf("::") + 2));
           return bytes === undefined ? s : { ...s, bytes };
         }),

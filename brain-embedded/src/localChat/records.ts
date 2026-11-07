@@ -10,7 +10,7 @@
  * left out of every read here.
  */
 
-import { selectRecords, type LocalFirstTransaction, type LocalRecord } from '@builderforce/local-first';
+import { isOwnRecord, selectRecords, type LocalFirstTransaction, type LocalRecord } from '@builderforce/local-first';
 import type { BrainChat, BrainMessage } from '../types';
 
 export interface ChatValue {
@@ -26,11 +26,6 @@ export interface MessageValue {
   chatClientId: string;
   eventKey: string;
   message: BrainMessage;
-}
-
-/** Whether a row is this device's own: written here, or this device's write pulled back. */
-export function isOwnRecord(row: LocalRecord, deviceId: string): boolean {
-  return row.provenance?.source !== 'imported' || row.provenance.deviceId === deviceId;
 }
 
 /** A live row of this device: not tombstoned, and written here (or this device's write pulled back). */

@@ -147,12 +147,14 @@ const MCP_JSONRPC_ROUTE = /^\/mcp\/?$/;
 const BOARD_MUTATION_ADVERTISED_NAMES: ReadonlySet<string> = new Set([...BOARD_MUTATION_MCP_TOOLS].map(advertisedName));
 
 /**
- * Whether a JSON-RPC body (one request or a batch) holds a `tools/call` of a board-write
- * builtin tool. One such call in a batch charges the whole POST to the board bucket.
+ * Whether a JSON-RPC body (one request or a batch) belongs in the board bucket: EVERY call in it
+ * is a `tools/call` of a board-write builtin tool. One board write riding with a billable call
+ * must not move the whole POST (billable work included) to the larger board bucket, so a mixed
+ * batch stays on the normal one.
  */
 export function isBoardMutationJsonRpc(body: unknown): boolean {
   const requests = Array.isArray(body) ? body : [body];
-  return requests.some((request) => {
+  return requests.length > 0 && requests.every((request) => {
     if (!request || typeof request !== 'object') return false;
     const { method, params } = request as { method?: unknown; params?: { name?: unknown } | null };
     return method === 'tools/call' && typeof params?.name === 'string' && BOARD_MUTATION_ADVERTISED_NAMES.has(params.name);

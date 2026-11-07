@@ -41,6 +41,8 @@ export async function pushPack(
   client: KnowledgeClient,
   signal: AbortSignal,
   onProgress: (sourcesDone: number, sources: number) => void,
+  /** Injected for tests: how a wait between retries passes. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>,
 ): Promise<FirstSyncCounts | undefined> {
   const local = localSnapshotStore({ read: async () => JSON.stringify(pack.snapshot), write: async () => undefined });
   const queue = createReplicaQueue(memoryReplicaPersistence());
@@ -50,7 +52,7 @@ export async function pushPack(
     if (s.parts && s.parts.total > 0) onProgress(Math.floor((counts.sources * s.parts.sent) / s.parts.total), counts.sources);
   };
   const state = await pumpReplica({
-    queue, local, client, signal, maxTransientStreak: PACK_TRANSIENT_STREAK, rootId: pack.rootId, onState,
+    queue, local, client, signal, maxTransientStreak: PACK_TRANSIENT_STREAK, rootId: pack.rootId, onState, ...(sleep ? { sleep } : {}),
     sources: async () => sourcesOf(pack),
   });
   if (!state.paused && state.failed.length === 0) onProgress(counts.sources, counts.sources);

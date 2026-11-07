@@ -13,9 +13,7 @@
  * from the host, so a chat bound in workspace A is not named in workspace B.
  */
 
-import type { EntityDestination, LocalFirstStore, LocalFirstTransaction } from '@builderforce/local-first';
-import { SCAN_STOP } from '@builderforce/local-first';
-import { BOUND_ONLY_VERSION, queueImport } from './journal';
+import { BOUND_ONLY_VERSION, SCAN_STOP, queueImport, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
 import { chatRecordById, liveRecords, scanLive, type ChatValue } from './records';
 
 /** What a host supplies so a local chat can be bound. */

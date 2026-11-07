@@ -196,6 +196,11 @@ export interface SyncImportContext {
    * sync import may adopt or write history into. `null` otherwise.
    */
   resolveOwnChatId(chatId: number): Promise<number | null>;
+  /**
+   * Register work to run only AFTER the push's unit of work commits (cache bumps). Never
+   * run when the unit rolls back, so a cache is never orphaned for a write that did not land.
+   */
+  afterCommit(effect: () => Promise<unknown>): void;
 }
 
 /** Mapping fields the push persists beside the receipt. */
@@ -211,7 +216,8 @@ export interface SyncImportMapping {
  * stale base version into a generic rejection or a blind overwrite.
  */
 export type BoundedImportOutcome =
-  | ({ status: 'applied'; payload: unknown } & SyncImportMapping)
+  /** `detail`: why part of the event was not applied (e.g. the optional chat link was dropped). */
+  | ({ status: 'applied'; payload: unknown; detail?: string } & SyncImportMapping)
   | ({ status: 'conflict'; detail: string } & SyncImportMapping)
   | { status: 'rejected'; detail: string }
   /**

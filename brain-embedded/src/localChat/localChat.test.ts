@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoryLocalFirstStore, newLocalRecord, type EntityDestination } from '@builderforce/local-first';
-import { journalWrite } from './journal';
+import { journalWrite } from '@builderforce/local-first';
 import { priceBookFromPrices } from '@builderforce/model-catalog';
 import { combineSpendSavings, foldSpendSavings } from '@builderforce/spend-contract';
 import { createLocalBrainPersistence } from '../localFirstPersistence';

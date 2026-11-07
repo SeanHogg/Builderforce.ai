@@ -258,7 +258,11 @@ describe('MCP relay board-write tools spend the board bucket', () => {
     const call = (name: string) => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } });
     expect(isBoardMutationJsonRpc(call('builtin_tasks_create'))).toBe(true);
     expect(isBoardMutationJsonRpc(call('builtin_chats_link_ticket'))).toBe(true);
-    expect(isBoardMutationJsonRpc([call('builtin_tasks_list'), call('builtin_tasks_update')])).toBe(true);
+    expect(isBoardMutationJsonRpc([call('builtin_tasks_create'), call('builtin_tasks_update')])).toBe(true);
+    // One board write riding with a read/billable call does not move the POST to the board bucket.
+    expect(isBoardMutationJsonRpc([call('builtin_tasks_list'), call('builtin_tasks_update')])).toBe(false);
+    expect(isBoardMutationJsonRpc([call('builtin_tasks_create'), { jsonrpc: '2.0', id: 2, method: 'tools/list' }])).toBe(false);
+    expect(isBoardMutationJsonRpc([])).toBe(false);
     expect(isBoardMutationJsonRpc(call('builtin_tasks_list'))).toBe(false);
     expect(isBoardMutationJsonRpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).toBe(false);
     expect(isBoardMutationJsonRpc({ method: 'tools/call', params: null })).toBe(false);

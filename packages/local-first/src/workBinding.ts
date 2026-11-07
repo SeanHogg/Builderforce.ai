@@ -18,14 +18,14 @@
  * Idempotent: a second pass finds nothing unbound.
  */
 
-import { SCAN_STOP, selectRecords, type EntityDestination, type LocalFirstStore, type LocalRecord, type ProjectValue, type TicketValue } from '@builderforce/local-first';
-import { importKey, queueImport } from './journal';
-import { isOwnRecord } from './records';
+import { importKey, isOwnRecord, queueImport } from './journalRules.js';
+import type { EntityDestination, LocalRecord, ProjectValue, TicketValue } from './records.js';
+import { SCAN_STOP, selectRecords, type LocalFirstStore } from './store.js';
 
 const SERVER_REFERENCE = /^\d+$/;
 
 /** The import keys a ticket must follow: its local project, its local parent. */
-function ticketWaitsOn(ticket: TicketValue): string[] {
+export function ticketWaitsOn(ticket: TicketValue): string[] {
   const waits: string[] = [];
   if (!SERVER_REFERENCE.test(ticket.projectId.trim())) waits.push(importKey('project', ticket.projectId));
   const parent = ticket.parentTicketId?.trim();

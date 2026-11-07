@@ -62,17 +62,12 @@ describe("pushPack", () => {
   });
 
   it("stops after three transient failures in a row instead of waiting forever", async () => {
-    vi.useFakeTimers();
-    try {
-      const c = client({ sync: async () => { throw apiError(503); } });
-      const pushed = pushPack(pack, c.client, live(), () => undefined);
-      const settled = expect(pushed).rejects.toBeInstanceOf(PackUploadUnreachable);
-      await vi.advanceTimersByTimeAsync(10_000);
-      await settled;
-      expect(c.sync).toHaveBeenCalledTimes(PACK_TRANSIENT_STREAK);
-    } finally {
-      vi.useRealTimers();
-    }
+    // The pack is built with CompressionStream (real async I/O), so the wait is injected rather than faked with timers.
+    const waits: number[] = [];
+    const c = client({ sync: async () => { throw apiError(503); } });
+    await expect(pushPack(pack, c.client, live(), () => undefined, async (ms) => { waits.push(ms); })).rejects.toBeInstanceOf(PackUploadUnreachable);
+    expect(c.sync).toHaveBeenCalledTimes(PACK_TRANSIENT_STREAK);
+    expect(waits).toEqual([1000, 2000]);
   });
 
   it("is never a success when the server refused the pack: it is incomplete", async () => {

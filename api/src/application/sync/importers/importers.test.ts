@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { hashSyncPayload, type LocalEntityType } from '../../../domain/sync/syncProtocol';
 import { boundKey, ctx, dbOf, event, mapping, stores } from './__fixtures__/importerHarness';
 import { importMirrorRecord, mirrorRefuses } from './importMirrorRecord';
@@ -238,6 +238,32 @@ describe('importSyncedTicket', () => {
     expect(db.calls).toHaveLength(0);
   });
 
+  it('holds a young event whose project/parent is a well-formed UUID with no mapping yet, rejects it once old', async () => {
+    const UUID = '33333333-3333-4333-8333-333333333333';
+    const young = '2026-10-17T23:58:00.000Z';
+    const noProject = ctx({ resolveProjectId: async () => null });
+    const heldProject = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', occurredAt: young, payload: { ...payload, projectId: UUID } }),
+      noProject, stores(), dbOf(),
+    );
+    expect(heldProject).toEqual({ status: 'pending', detail: 'project_pending' });
+    const oldProject = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...payload, projectId: UUID } }),
+      noProject, stores(), dbOf(),
+    );
+    expect(oldProject).toEqual({ status: 'rejected', detail: 'project_unresolved' });
+    const heldParent = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', occurredAt: young, payload: { ...payload, parentTicketId: UUID } }),
+      ctx({ resolveTaskId: async () => null }), stores(), dbOf(),
+    );
+    expect(heldParent).toEqual({ status: 'pending', detail: 'parent_ticket_pending' });
+    const decimalParent = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', occurredAt: young, payload: { ...payload, parentTicketId: '999' } }),
+      ctx({ resolveTaskId: async () => null }), stores(), dbOf(),
+    );
+    expect(decimalParent).toEqual({ status: 'rejected', detail: 'parent_ticket_unresolved' });
+  });
+
   it('rejects when a parent ticket reference does not resolve', async () => {
     const db = dbOf();
     const outcome = await importSyncedTicket(
@@ -422,10 +448,12 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
     expect(replay.calls).toHaveLength(0);
   });
 
-  it('holds the event as dependency_pending while the chat is unmapped, writing nothing', async () => {
+  const YOUNG = '2026-10-17T23:58:00.000Z';
+
+  it('holds a YOUNG event as dependency_pending while the chat is unmapped, writing nothing', async () => {
     const db = dbOf();
     const outcome = await importSyncedTicket(
-      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
+      event({ entityType: 'ticket', operation: 'create', occurredAt: YOUNG, payload: { ...base, chatClientId: CHAT } }),
       ctx(),
       book(false),
       db,
@@ -434,14 +462,74 @@ describe('importSyncedTicket — task type and the chat it was created in', () =
     expect(db.calls).toHaveLength(0);
   });
 
-  it('rejects a chat that is not the caller\'s own, an unknown task type and a malformed chat id', async () => {
-    const foreign = await importSyncedTicket(
+  it('imports an OLD event without the link when its chat never mapped (no pending forever)', async () => {
+    const db = dbOf([[{ id: 17 }]]);
+    const outcome = await importSyncedTicket(
       event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
-      ctx({ resolveOwnChatId: async () => null }),
-      book(true),
-      dbOf(),
+      ctx(),
+      book(false),
+      db,
     );
-    expect(foreign).toEqual({ status: 'rejected', detail: 'ticket_chat_not_owned' });
+    expect(outcome).toMatchObject({ status: 'applied', serverId: '17', detail: 'ticket_chat_link_skipped_unmapped' });
+    expect(db.calls.map((call) => call.kind)).toEqual(['insert']);
+  });
+
+  it('imports the ticket WITHOUT the link when the chat is not the callers own, and says why', async () => {
+    const db = dbOf([[{ id: 18 }]]);
+    const afterCommit = vi.fn();
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
+      ctx({ resolveOwnChatId: async () => null, afterCommit }),
+      book(true),
+      db,
+    );
+    expect(outcome).toMatchObject({ status: 'applied', serverId: '18', detail: 'ticket_chat_link_skipped_not_owned' });
+    expect(db.calls.map((call) => call.kind)).toEqual(['insert']);
+    expect(afterCommit).not.toHaveBeenCalled();
+  });
+
+  it('defers the cache bump to after commit instead of running it inside the unit of work', async () => {
+    const afterCommit = vi.fn();
+    await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
+      ctx({ afterCommit }),
+      book(true),
+      dbOf([[{ id: 19 }], [], [{ id: 1 }]]),
+    );
+    expect(afterCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a retry after the chat maps adds the missing link to the existing ticket without a second ticket', async () => {
+    const payload = { ...base, chatClientId: CHAT };
+    const first = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload }),
+      ctx(),
+      book(false),
+      dbOf([[{ id: 20 }]]),
+    );
+    expect(first.status).toBe('applied');
+    if (first.status !== 'applied') return;
+    const retry = dbOf([[], [{ id: 2 }]]);
+    const afterCommit = vi.fn();
+    const again = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload }),
+      ctx({ afterCommit }),
+      {
+        ...stores(),
+        findMapping: async (_t: number, type: string) => (
+          type === 'chat' ? mapping({ serverId: '55' }) : mapping({ serverId: '20', serverVersion: 1, payloadHash: first.payloadHash })
+        ),
+      },
+      retry,
+    );
+    expect(again).toMatchObject({ status: 'applied', serverId: '20' });
+    // select (existing link?) then insert of the link; never an insert into tasks first.
+    expect(retry.calls.map((call) => call.kind)).toEqual(['select', 'insert']);
+    expect(retry.calls[1]?.payload).toMatchObject({ chatId: 55, ticketRef: '20', linkType: 'created' });
+    expect(afterCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unknown task type and a malformed chat id', async () => {
     const type = await importSyncedTicket(
       event({ entityType: 'ticket', operation: 'create', payload: { ...base, taskType: 'portfolio' } }),
       ctx(),

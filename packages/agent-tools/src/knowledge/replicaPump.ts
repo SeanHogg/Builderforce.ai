@@ -26,7 +26,7 @@
  * running review of the root (`idle`). `pumpReplica` never throws.
  */
 
-import type { KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
+import type { KnowledgeStore, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { MAX_PART_BYTES, splitParts } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { buildPack, type PackQueries, type ReplicaSource } from './replicaPack.js';
 import type { ReplicaQueue } from './replicaQueue.js';
@@ -36,6 +36,8 @@ import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 export interface ReplicaClient extends PackQueries, ReconcileQueries {
     sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }): Promise<
         { applied: true; generation: number; digest: string } | { applied: false; received: number; parts: number }>;
+    /** The existing single writer (≤ 500 rows): the path for rows a pack does not carry. */
+    writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
 }
 
 export interface ReplicaFailure {
@@ -108,6 +110,10 @@ const BACKOFF_START_MS = 1000;
 const BACKOFF_CAP_MS = 60_000;
 const MIN_WAIT_MS = 250;
 const MAX_CONFLICTS = 4;
+/** Rows per side write: the single writer's bound. */
+const SIDE_ROWS_CHUNK = 500;
+/** The analysis snapshot the server takes (2 MB). */
+const MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 
 const sleepFor = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
@@ -184,9 +190,11 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
         syncHave: (r: string, h: readonly string[]) => request(() => args.client.syncHave(r, h)),
         syncLeaves: (r: string, b: readonly number[]) => request(() => args.client.syncLeaves(r, b)),
         syncManifest: (r: string) => request(() => args.client.syncManifest(r)),
+        writeRows: (r: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }) => request(() => args.client.writeRows(r, rows)),
     };
 
     let conflicts = 0, noDiff = false, maxFiles: number | undefined, force: Set<string> | undefined, lastFiles = 0;
+    let owned: Set<string> | undefined;
     let hadFailure = false;
     try {
         await emit();
@@ -206,15 +214,24 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                         state.lastSyncAt = new Date(now()).toISOString();
                         continue;
                     }
-                    // What differs IS the pending work (the rest is satisfied), so a pack cut by size or a retry keeps exactly it.
-                    await queue.replaceDirty(plan.touched);
+                    // What differs IS the pending work (the rest is satisfied), so a pack cut by size or a retry keeps exactly
+                    // it — and whatever was marked after this snapshot was read.
+                    await queue.replaceDirty(plan.touched, snap);
                     snap = await queue.snapshot();
                     mode = plan.kind === 'full' ? 'full' : 'reconcile';
-                    baseGeneration = plan.kind === 'full' ? 0 : plan.baseGeneration;
+                    baseGeneration = plan.baseGeneration;
+                    owned = plan.kind === 'delta' ? plan.owned : undefined;
+                }
+                // An analysis snapshot past what the server takes can never be sent: drop it and say so, rather than loop on it.
+                if (snap.analysis && JSON.stringify(snap.analysis.snapshot).length > MAX_ANALYSIS_BYTES) {
+                    queue.clearAnalysis();
+                    state.failed.push({ reason: 'the code analysis snapshot is over 2 MB and was not sent', status: 413 });
+                    hadFailure = true;
+                    snap = await queue.snapshot();
                 }
                 const built = await buildPack({
                     rootId, local, sources, client: guarded, touched: snap.keys, baseGeneration, analysis: snap.analysis,
-                    ...(maxFiles !== undefined ? { maxFiles } : {}), noDiff, ...(force ? { forceBodies: force } : {}),
+                    ...(maxFiles !== undefined ? { maxFiles } : {}), noDiff, ...(force ? { forceBodies: force } : {}), ...(owned ? { ownedKeys: owned } : {}),
                 });
                 lastFiles = built.files;
                 const parts = splitParts(built.bytes, args.maxPartBytes ?? MAX_PART_BYTES);
@@ -227,13 +244,31 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 }
                 state.parts = { sent: parts.length, total: parts.length };
                 if (!ack || !ack.applied) throw new Error('the server did not apply the pack');
-                await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, built.sentKeys, built.analysisSent);
+                // Rows a pack does not carry (a person's notes, an agent's facts) go through the single writer, in chunks of
+                // 500. A key whose row could not be written stays dirty; the rest are settled.
+                let sentKeys = built.sentKeys;
+                const side = built.sideRows;
+                if (side.keys.length > 0) {
+                    try {
+                        for (let i = 0; i < Math.max(side.facts.length, side.relations.length); i += SIDE_ROWS_CHUNK) {
+                            await guarded.writeRows(rootId, { facts: side.facts.slice(i, i + SIDE_ROWS_CHUNK), relations: side.relations.slice(i, i + SIDE_ROWS_CHUNK) });
+                        }
+                    } catch (error) {
+                        if (error instanceof Stop) throw error;
+                        const status = statusOf(error);
+                        hadFailure = true;
+                        state.failed.push({ reason: messageOf(error), ...(status !== undefined ? { status } : {}) });
+                        const unsent = new Set(side.keys);
+                        sentKeys = sentKeys.filter((k) => !unsent.has(k));
+                    }
+                }
+                await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, sentKeys, built.analysisSent);
                 state.lastPack = {
                     bytes: built.bytes.length, jsonBytes: built.jsonBytes, files: built.files, parts: parts.length, mode,
                     percent: built.jsonBytes > 0 ? Math.round((built.bytes.length / built.jsonBytes) * 1000) / 10 : 0,
                 };
                 state.lastSyncAt = new Date(now()).toISOString();
-                conflicts = 0; noDiff = false; force = undefined;
+                conflicts = 0; noDiff = false; force = undefined; owned = undefined;
                 delete state.parts;
             } catch (error) {
                 if (error instanceof Stop) break;

@@ -1,4 +1,5 @@
 import {
+  journalWrite,
   newLocalRecord,
   UNBOUND_DESTINATION,
   type EntityDestination,
@@ -15,7 +16,6 @@ import { slotKeyedRows } from './keyedRows';
 import type { BrainChat, BrainMessage } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
-import { journalWrite } from './localChat/journal';
 import { chatRecordById, liveRecords, scanLive, type ChatValue, type MessageValue } from './localChat/records';
 import { importedUsageIds, ledgerSpend, usageRowsByChat } from './localChat/ledgerSpend';
 import type { RunUsageValue } from './localChat/usageLedger';
