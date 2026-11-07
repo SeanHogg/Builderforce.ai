@@ -27,7 +27,11 @@ import { connectionModelRefs, listOpenRouterConnections } from '../../../applica
 import { byoModelsFor } from '../../../application/llm/byoModelRouting';
 import { listProviderModelSelections } from '../../../application/llm/providerModelSelection';
 import { evaluateFrontierAccess, evaluatePremiumModelAccess } from '../../../domain/tenant/planFeatures';
-import { requireTenantAccess, type TenantAccess } from './access';
+import { requireTenantAccess, respondToAccessError, TenantAccessError, type TenantAccess } from './access';
+
+/** A key refused its workspace must hear WHY (the editor reacts to the code); every other
+ *  access failure still means "anonymous", which this advisory listing answers with the free pool. */
+const WORKSPACE_REFUSAL_CODES = new Set(['editor_key_required', 'workspace_not_member', 'workspace_invalid']);
 
 export function mountModelsRoutes(router: Hono<HonoEnv>): void {
   // No auth: this is the same OpenRouter catalog we proxy, served through the
@@ -45,7 +49,10 @@ export function mountModelsRoutes(router: Hono<HonoEnv>): void {
     let access: TenantAccess | null = null;
     try {
       access = await requireTenantAccess(c);
-    } catch {
+    } catch (error) {
+      if (error instanceof TenantAccessError && WORKSPACE_REFUSAL_CODES.has(error.code)) {
+        return respondToAccessError(c, error);
+      }
       access = null;
     }
 

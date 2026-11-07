@@ -41,6 +41,7 @@ import { applyModelPick } from "./modelPick";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
 import { buildModelItems, installStepDurability, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
+import { watchDroppedWorkspace } from "./workspaceDrop";
 import { SELECTED_TENANT_KEY, getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./projectState";
 import { clearLastSeen } from "./knowledge/knowledgeLastSeen";
 import { getProjectNames, invalidateProjectNames } from "./projectNames";
@@ -362,6 +363,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
+  context.subscriptions.push(watchDroppedWorkspace(context, () => resetWorkspaceViews(projects)));
   const auth = BuilderForceAuthProvider.register(context);
   // Storage + credential for the durable write outboxes (activity, error reports,
   // unsaved chat turns, run outcomes) — a backlog from the last session replays now.
@@ -1095,6 +1097,11 @@ async function applyWorkspace(
 ): Promise<void> {
   bfApi.setSelectedWorkspace(tenantId);
   await context.globalState.update(SELECTED_TENANT_KEY, tenantId);
+  resetWorkspaceViews(projects);
+}
+
+/** Projects and tasks belong to a workspace: reset them and refresh the views. */
+function resetWorkspaceViews(projects: ProjectsTreeProvider): void {
   bfApi.invalidateTasks();
   setSelectedProject(undefined); // projects belong to a workspace — pick one in the new one
   projects.refresh();

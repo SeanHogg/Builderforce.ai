@@ -839,6 +839,8 @@ export interface Vars {
   agentActorRef?: string;
   /** Server-signed client surface from JwtPayload.src (a `DeviceClient`). */
   clientSurface?: import('@builderforce/creation-canvas-contract').DeviceClient;
+  /** The `tenant_api_keys.id` an editor session was exchanged from (`JwtPayload.kid`). */
+  apiKeyId?: string;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**

@@ -90,7 +90,7 @@ export type ResolvedKey =
  * Only versions > 1 emit a segment, so `clk`/`jwt` keys stay byte-identical to what is
  * already in KV and keep their hits across this deploy.
  */
-const KEY_CACHE_SCHEMA: Record<KeyCacheType, number> = { bfk: 2, clk: 1, jwt: 1 };
+const KEY_CACHE_SCHEMA: Record<KeyCacheType, number> = { bfk: 3, clk: 1, jwt: 1 };
 
 /**
  * The ONE spelling of a key-resolution cache key — read AND invalidated through this,

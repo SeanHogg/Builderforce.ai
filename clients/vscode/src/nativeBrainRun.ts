@@ -36,6 +36,7 @@ import {
   type BrainStreamFn,
   type BrainTransport,
 } from "@seanhogg/builderforce-brain-embedded";
+import { observeGatewayResponse } from "./gatewayAuth";
 import { withRunPreamble } from "./runPreamble";
 import { runRequestFields } from "./stageModels";
 import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from "./nativeRunStream";
@@ -80,11 +81,18 @@ export function createNativeStream(
   baseUrl: string,
   apiKey: string,
   fetchImpl: (input: string, init: RequestInit) => Promise<Response> = (input, init) => fetch(input, init),
+  /** Extra request headers read PER REQUEST (the selected workspace); injected so this
+   *  module stays free of editor session state. */
+  extraHeaders: () => Record<string, string> | Promise<Record<string, string>> = () => ({}),
 ): BrainStreamFn {
+  const withExtra = async (input: string, init: RequestInit) => {
+    const headers = { ...((init.headers as Record<string, string> | undefined) ?? {}), ...(await extraHeaders()) };
+    return observeGatewayResponse(await fetchImpl(input, { ...init, headers }), headers);
+  };
   const transport: BrainTransport = {
     baseUrl,
     getToken: () => apiKey,
-    fetch: withUsageSurface(fetchImpl, SURFACE_VALUE),
+    fetch: withUsageSurface(withExtra, SURFACE_VALUE),
   };
   return (opts, handlers) => streamChatCompletion({ ...opts, transport }, handlers);
 }

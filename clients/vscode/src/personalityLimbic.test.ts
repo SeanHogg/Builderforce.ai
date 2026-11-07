@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as vscode from "vscode";
 
 const gateway = vi.hoisted(() => ({ key: "bfk_test" as string | undefined }));
-vi.mock("./gateway", () => ({
-  getApiKey: async () => gateway.key,
-  getBaseUrl: () => "https://api.example",
+
+// `/api/limbic/block` goes through the session transport (tenant JWT); here it just reaches
+// the stubbed global fetch, and resolves undefined when signed out, as the real one does.
+vi.mock("./bfApi/transport", () => ({
+  fetchAuthed: async (_s: unknown, path: string, init?: RequestInit) =>
+    gateway.key ? fetch(`https://api.example${path}`, init) : undefined,
 }));
 
 import { clearPersonalityBlockCache, fetchPersonalityBlock, turnLimbicBlock } from "./personalityLimbic";

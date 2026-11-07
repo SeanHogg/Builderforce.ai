@@ -8,6 +8,7 @@ import { listVscodeConnections, upsertVscodeConnection } from '../../application
 import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
+import { resolveEditorKeySession } from '../../application/llm/gatewayAccess';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseOptionalBody, z } from './requestBody';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
@@ -64,6 +65,34 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const userId = c.get('userId') as string;
     const tenantId = Number(c.req.param('id'));
     if (!Number.isFinite(tenantId) || tenantId <= 0) return c.json({ error: 'invalid tenant id' }, 400);
+    // A session derived from an editor KEY carries the server-signed device `src` (web
+    // sessions carry none and switch freely). While the key is the session's authority:
+    //   - a revoked / unknown / foreign key may not keep renewing derived JWTs: 401, which the
+    //     editor answers by re-exchanging the key (and signing out if it is really dead);
+    //   - a switch to ANOTHER workspace also needs the key to pass the gateway's editor-key
+    //     bar (the same predicate), so the picker never selects a workspace the gateway will
+    //     refuse: 403 `editor_key_required`;
+    //   - a token with no `kid` was minted before it was stamped: it cannot be checked, but
+    //     the key may be perfectly fine, so it is `session_stale` (re-exchange and retry),
+    //     never a verdict on the key - whether or not the target is its own workspace.
+    if (c.get('clientSurface')) {
+      const keyId = c.get('apiKeyId');
+      const crossTenant = tenantId !== c.get('tenantId');
+      if (!keyId) {
+        // Unchecked, and a token minted from it would carry no kid either - it could renew
+        // itself forever after its key is revoked. Always send it back to the key.
+        return c.json({ error: 'Session predates key tracking; exchange the key again.', code: 'session_stale' }, 403);
+      } else {
+        const key = await resolveEditorKeySession(db, keyId, userId);
+        if (!key.valid) return c.json({ error: 'Invalid or revoked API key' }, 401);
+        if (crossTenant && !key.mayRescope) {
+          return c.json({
+            error: 'Only an unrestricted, server-only editor key issued by device sign-in can act in another workspace.',
+            code: 'editor_key_required',
+          }, 403);
+        }
+      }
+    }
     const member = (await tenantService.listTenantsForUser(userId)).find((t) => t.id === tenantId);
     if (!member) return c.json({ error: 'Not a member of this workspace' }, 403);
     // Role is resolved from the caller's active membership inside the minter, so an
@@ -73,6 +102,8 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
       tenantId,
       // The app that asked keeps its own surface across the switch (Synapse, Spawn).
       clientSurface: c.get('clientSurface') ?? 'vscode',
+      // Carry the key forward, so a switch FROM this token is checked against the same key.
+      ...(c.get('apiKeyId') ? { keyId: c.get('apiKeyId') } : {}),
       userAgent: c.req.header('User-Agent') ?? null,
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });

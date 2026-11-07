@@ -66,6 +66,7 @@ import { logLine } from "./errorReporter";
 import { probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
+import { gatewayWorkspaceHeaders } from "./gatewayAuth";
 import { hostModelProvisioner } from "./hostBfi/provision";
 import { hostPageEngines } from "./pageEngineBridge";
 import { localSuccessFederation, localSuccessStore, localSuccessTuning } from "./localSuccessStorage";
@@ -310,7 +311,7 @@ export function routeStream(
   // The pick never ran (it could not be authorized here): say so once, the way a pick that
   // failed mid-call is told — the turn is answered with Auto either way.
   if (route.pickUnavailable) onFallback?.({ from: route.pickUnavailable.model, reason: route.pickUnavailable.detail });
-  const cloud = !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey) : null;
+  const cloud = !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey, undefined, gatewayWorkspaceHeaders) : null;
   const local = route.local;
   const pinnedRef = local ? formatLocalModelRef(local.provider, local.model) : null;
   return createHostModelStream({

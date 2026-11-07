@@ -120,6 +120,8 @@
   "Connecting…": "Conectando…",
   "Couldn't reach BuilderForce. Check your connection and try again.": "No se pudo contactar con BuilderForce. Comprueba tu conexión e inténtalo de nuevo.",
   "BuilderForce no longer accepts this editor's key (it was revoked or expired). Sign in again to reconnect.": "BuilderForce ya no acepta la clave de este editor (se revocó o caducó). Inicia sesión de nuevo para reconectar.",
+  "This sign-in can't switch workspaces. Sign in again to get one that can.": "Este inicio de sesión no puede cambiar de espacio de trabajo. Inicia sesión de nuevo para obtener uno que pueda.",
+  "The workspace you selected is no longer available to you, so BuilderForce switched back to your default workspace.": "El espacio de trabajo que seleccionaste ya no está disponible para ti, así que BuilderForce volvió a tu espacio de trabajo predeterminado.",
   "BuilderForce: signed in.": "BuilderForce: sesión iniciada.",
   "BuilderForce: signed in, but the gateway can't be reached right now. Your panels will load once it responds.": "BuilderForce: sesión iniciada, pero ahora mismo no se puede contactar con el gateway. Tus paneles se cargarán cuando responda.",
   "Retry": "Reintentar",

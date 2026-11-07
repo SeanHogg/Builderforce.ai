@@ -40,7 +40,7 @@ class MemoryMemento {
 const host = (): void => {
   bindOutboxStorage({ workspaceState: new MemoryMemento(), secrets: {} } as never);
   bindOutboxSendPermission(createRevokeGate());
-  setOutboxScope({ workspace: 7, key: undefined });
+  setOutboxScope({ workspace: 7 });
 };
 
 const refused = (): never => {
@@ -72,7 +72,7 @@ describe("live outbox constructors — work kind", () => {
       'work: classifyQueue("run-outcomes")?.retention === "best-effort" ? "telemetry" : "history"',
     );
     expect(gateway).toContain('createDurableOutbox<object>("run-outcomes"');
-    expect(gateway).toContain('}, "key")');
+    expect(gateway).toContain('}, "workspace")');
     expect(reporter).toContain(
       'work: classifyQueue("error-reports")?.retention === "durable" ? "history" : "telemetry"',
     );

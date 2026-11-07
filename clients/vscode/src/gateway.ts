@@ -18,7 +18,8 @@ import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } fr
 import { localCredentialSnapshot } from "./localProviderCredentials";
 import { classifyQueue } from "@builderforce/write-outbox";
 import { registerDeadLetterQueue } from "./deadLetterCommand";
-import { createDurableOutbox, outboxSecrets, trackReachability } from "./outboxStorage";
+import { createDurableOutbox, outboxSecrets, scopeTenantId, trackReachability } from "./outboxStorage";
+import { gatewayAuthHeaders, observeGatewayResponse } from "./gatewayAuth";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -345,9 +346,11 @@ export async function getModels(
   }
   const key = await getApiKey(secrets);
   if (!key) throw new Error(NOT_SIGNED_IN);
+  const headers = gatewayAuthHeaders(key);
   const res = await fetch(`${getBaseUrl()}/llm/v1/models`, {
-    headers: { authorization: `Bearer ${key}` },
+    headers,
   });
+  observeGatewayResponse(res, headers);
   if (!res.ok) throw new Error(`models_failed_${res.status}`);
   const json = (await res.json()) as ModelsResponse;
   const models = gatewayPlanModels(json);
@@ -358,7 +361,7 @@ export async function getModels(
   const canUsePremiumModels = json.canUsePremiumModels === true;
   const [premiumModels, configuredModels] = await Promise.all([
     canUsePremiumModels ? getPremiumCatalog().catch(() => []) : Promise.resolve([] as string[]),
-    getConfiguredModels(key).catch(() => []),
+    getConfiguredModels(secrets).catch(() => []),
   ]);
 
   // BYO + entitlement flags. Tolerant of an older gateway that omits them: no BYO,
@@ -413,12 +416,14 @@ export function isModelAllowed(choices: ModelChoices, model: string | undefined)
   return choices.canUsePremiumModels && choices.premiumModels.includes(model);
 }
 
-async function getConfiguredModels(key: string): Promise<Array<{ ref: string; name: string }>> {
-  const res = await fetch(`${getBaseUrl()}/api/llm/models`, {
-    headers: { authorization: `Bearer ${key}` },
+async function getConfiguredModels(secrets: vscode.SecretStorage): Promise<Array<{ ref: string; name: string }>> {
+  // `/api/*` is JWT-only: the session transport sends the selected workspace's token.
+  // Lazy: the session module needs a full vscode host at import time.
+  const { authed } = await import("./bfApi/transport");
+  const json = await authed<{ models?: Array<{ ref?: string; name?: string }> }>(secrets, "/api/llm/models", {
+    asTenant: "current",
   });
-  if (!res.ok) throw new Error(`configured_models_failed_${res.status}`);
-  const json = (await res.json()) as { models?: Array<{ ref?: string; name?: string }> };
+  if (!json) throw new Error("configured_models_failed_not_signed_in");
   return (json.models ?? [])
     .filter((model): model is { ref: string; name?: string } => typeof model.ref === 'string' && !!model.ref)
     .map((model) => ({ ref: model.ref, name: model.name?.trim() || model.ref }));
@@ -478,9 +483,11 @@ export async function getBuilderInsights(
 ): Promise<BuilderInsightsSnapshot> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error(NOT_SIGNED_IN);
+  const headers = gatewayAuthHeaders(key);
   const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights${insightsProjectQuery(projectId)}`, {
-    headers: { authorization: `Bearer ${key}` },
+    headers,
   });
+  observeGatewayResponse(res, headers);
   if (!res.ok) throw new Error(`insights_failed_${res.status}`);
   return (await res.json()) as BuilderInsightsSnapshot;
 }
@@ -500,10 +507,12 @@ export async function streamBuilderInsights(
 ): Promise<void> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error(NOT_SIGNED_IN);
+  const headers = gatewayAuthHeaders(key, { accept: "text/event-stream" });
   const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights/stream${insightsProjectQuery(projectId)}`, {
-    headers: { authorization: `Bearer ${key}`, accept: "text/event-stream" },
+    headers,
     signal,
   });
+  observeGatewayResponse(res, headers);
   if (!res.ok || !res.body) throw new Error(`insights_stream_failed_${res.status}`);
 
   const reader = res.body.getReader();
@@ -565,12 +574,14 @@ export async function complete(
   if (model) body.model = model;
   if (options.temperature !== undefined) body.temperature = options.temperature;
   if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+  const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
   const res = await fetch(`${getBaseUrl()}/llm/v1/chat/completions`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    headers,
     body: JSON.stringify(body),
     signal,
   });
+  observeGatewayResponse(res, headers);
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`complete_failed_${res.status}: ${txt.slice(0, 200)}`);
@@ -593,19 +604,22 @@ const runOutcomes = createDurableOutbox<object>("run-outcomes", {
   work: classifyQueue("run-outcomes")?.retention === "best-effort" ? "telemetry" : "history",
   maxItems: 1,
   maxWaitMs: 0,
-  send: async (_lane, [outcome]) => {
+  send: async (_lane, [outcome], ctx) => {
     const key = await getApiKey(await outboxSecrets());
     if (!key) throw new Error("no gateway key");
+    const headers = gatewayAuthHeaders(key, { "content-type": "application/json" }, scopeTenantId(ctx.scope));
     const res = await trackReachability(fetch(`${getBaseUrl()}/llm/v1/run-outcome`, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      // The workspace the outcome was QUEUED in, not whichever is selected at send time.
+      headers,
       body: JSON.stringify(outcome),
     }));
+    observeGatewayResponse(res, headers);
     if (!res.ok) throw Object.assign(new Error(`run-outcome → HTTP ${res.status}`), { status: res.status });
   },
-  // Scoped to the editor KEY's tenant (gateway calls act as the key, whatever workspace
-  // is selected): outcomes queued under one key are parked, not sent with another.
-}, "key");
+  // Scoped to the WORKSPACE it was queued in: it is parked until that workspace is current
+  // again, so an outcome queued in one workspace never replays into another.
+}, "workspace");
 
 /** The queue this module already owns. Export and repair see this object, not a second outbox. */
 registerDeadLetterQueue({ name: "run-outcomes", outbox: runOutcomes });

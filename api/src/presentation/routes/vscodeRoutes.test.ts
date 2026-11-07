@@ -3,12 +3,18 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const USER = 'user-abc';
 const TENANT = 5;
 
+// What the JWT carries beyond user/tenant: a key-derived editor session has the device
+// `src` surface and the `kid` of its key; a web session has neither (the default).
+const session = vi.hoisted(() => ({ surface: undefined as string | undefined, keyId: undefined as string | undefined }));
+
 // authMiddleware injects the signed-in user/tenant (mirrors a valid editor JWT).
 vi.mock('../middleware/authMiddleware', () => ({
   authMiddleware: async (c: any, next: any) => {
     c.set('userId', USER);
     c.set('tenantId', TENANT);
     c.set('role', 'developer');
+    if (session.surface) c.set('clientSurface', session.surface);
+    if (session.keyId) c.set('apiKeyId', session.keyId);
     await next();
   },
   requireRole: () => async (_c: any, next: any) => next(),
@@ -39,7 +45,7 @@ function makeTenantService() {
 /** A chainable drizzle-select stub whose terminal `.limit()` resolves to `rows`. */
 function makeDb(rows: unknown[]) {
   const qb: Record<string, unknown> = {};
-  for (const m of ['select', 'from', 'innerJoin', 'where', 'orderBy']) qb[m] = () => qb;
+  for (const m of ['select', 'from', 'innerJoin', 'leftJoin', 'where', 'orderBy']) qb[m] = () => qb;
   qb.limit = () => Promise.resolve(rows);
   return qb;
 }
@@ -53,6 +59,8 @@ const postJson = (body?: unknown) => ({
 
 describe('vscodeRoutes — workspace (tenant) management', () => {
   beforeEach(() => {
+    session.surface = undefined;
+    session.keyId = undefined;
     mintTenantSessionToken.mockReset();
     mintTenantSessionToken.mockResolvedValue({ token: 'minted.jwt', expiresIn: 3600 });
   });
@@ -98,6 +106,67 @@ describe('vscodeRoutes — workspace (tenant) management', () => {
     const [, secret, opts] = mintTenantSessionToken.mock.calls[0] as any[];
     expect(secret).toBe('test-secret');
     expect(opts).toMatchObject({ userId: USER, tenantId: 8, clientSurface: 'vscode' });
+  });
+
+  describe('POST /tenants/:id/token for a key-derived editor session', () => {
+    const keyRow = (over: Record<string, unknown> = {}) => ({
+      revokedAt: null, createdByUserId: USER, client: 'vscode', scopes: null, allowedOrigins: null, ...over,
+    });
+    const rescope = (rows: unknown[]) => {
+      session.surface = 'vscode';
+      session.keyId = 'key-1';
+      return createVscodeRoutes(makeDb(rows) as any, makeTenantService() as any).request('/tenants/8/token', postJson(), ENV);
+    };
+
+    it('allows a device key whose creator is a member, and carries the key forward as kid', async () => {
+      const res = await rescope([keyRow()]);
+      expect(res.status).toBe(200);
+      expect(mintTenantSessionToken.mock.calls[0]![2]).toMatchObject({ tenantId: 8, keyId: 'key-1' });
+    });
+
+    it.each([
+      ['non-device', { client: null }],
+      ['scoped', { scopes: JSON.stringify(['recordings:write']) }],
+      ['origin-allowlisted', { allowedOrigins: JSON.stringify(['https://app.example.com']) }],
+    ])('refuses a %s key with editor_key_required', async (_name, over) => {
+      const res = await rescope([keyRow(over)]);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ code: 'editor_key_required' });
+      expect(mintTenantSessionToken).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['revoked', [keyRow({ revokedAt: new Date('2026-01-01') })]],
+      ["someone else's", [keyRow({ createdByUserId: 'user-other' })]],
+      ['unknown (the kid matches no key row)', []],
+    ])('answers 401 for a %s key, so the editor re-checks its key', async (_name, rows) => {
+      const res = await rescope(rows as unknown[]);
+      expect(res.status).toBe(401);
+      expect(mintTenantSessionToken).not.toHaveBeenCalled();
+    });
+
+    it("a revoked key cannot keep renewing a token in the session's own workspace either", async () => {
+      session.surface = 'vscode';
+      session.keyId = 'key-1';
+      const res = await createVscodeRoutes(makeDb([keyRow({ revokedAt: new Date('2026-01-01') })]) as any, makeTenantService() as any)
+        .request(`/tenants/${TENANT}/token`, postJson(), ENV);
+      expect(res.status).toBe(401);
+    });
+
+    it('a cross-workspace switch from a token with no kid is session_stale (not a verdict on the key)', async () => {
+      session.surface = 'vscode';
+      const res = await createVscodeRoutes(makeDb([keyRow()]) as any, makeTenantService() as any).request('/tenants/8/token', postJson(), ENV);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ code: 'session_stale' });
+    });
+
+    it("a legacy token with no kid is session_stale even for its own workspace (it must not self-renew)", async () => {
+      session.surface = 'vscode';
+      const res = await createVscodeRoutes(makeDb([]) as any, makeTenantService() as any).request(`/tenants/${TENANT}/token`, postJson(), ENV);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ code: 'session_stale' });
+      expect(mintTenantSessionToken).not.toHaveBeenCalled();
+    });
   });
 
   it('POST /tenants/:id/token refuses a workspace the user is NOT a member of (403)', async () => {

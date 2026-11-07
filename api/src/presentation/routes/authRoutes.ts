@@ -396,6 +396,8 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       tenantId: row.tenantId,
       // The app the key was minted for; a hand-made key keeps the editor surface.
       clientSurface: isDeviceClient(row.client) ? row.client : 'vscode',
+      // Which key this session came from, so the workspace switch can apply the key's limits.
+      keyId: row.id,
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });

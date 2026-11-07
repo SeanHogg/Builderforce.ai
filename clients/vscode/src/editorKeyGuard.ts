@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
-import { onEditorKeyRejected } from "./bfApi";
+import { dropWorkspaceSelection, onEditorKeyRejected } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
+import { onWorkspaceRefused } from "./gatewayAuth";
 
 /**
  * A stored editor key the gateway REFUSES is a signed-out editor, not a signed-in one.
@@ -19,7 +20,26 @@ export function watchRejectedEditorKey(
   signOut: () => Promise<void>,
 ): vscode.Disposable {
   let expiring = false;
-  return onEditorKeyRejected(async (rejectedKey) => {
+  // The gateway refusing the SELECTED WORKSPACE fails closed (never a fallback to the key's
+  // own tenant), in one of two ways:
+  //   - `workspace_not_member`: the person left that workspace. The key is fine - drop the
+  //     stale selection (the same function the /api re-scope refusal uses), no sign-out.
+  //   - `editor_key_required`: THIS key can never switch workspaces (a legacy or restricted
+  //     key). A fresh sign-in mints one that can, so sign out and say why - once per key.
+  const refusedKeys = new Set<string>();
+  const workspaceRefused = onWorkspaceRefused(async ({ refusal, key, workspace }) => {
+    // Only the key that is STILL stored: a refusal answering a previous key must not act.
+    if ((await secrets.get(SECRET_KEY)) !== key) return;
+    if (refusal === "workspace_not_member") {
+      dropWorkspaceSelection(workspace);
+      return;
+    }
+    if (refusedKeys.has(key)) return;
+    refusedKeys.add(key);
+    await signOut();
+    void promptSignInForWorkspace();
+  });
+  const keyRejected = onEditorKeyRejected(async (rejectedKey) => {
     // Only the key that is STILL stored: an exchange for the previous key can land
     // after a fresh sign-in, and must not sign the new one out. Several in-flight
     // exchanges reject together — act once.
@@ -32,6 +52,17 @@ export function watchRejectedEditorKey(
     }
     void promptSignInAgain();
   });
+  return vscode.Disposable.from(keyRejected, { dispose: workspaceRefused });
+}
+
+/** This key cannot switch workspaces; the one action that fixes it is a fresh sign-in. */
+export async function promptSignInForWorkspace(): Promise<void> {
+  const signIn = vscode.l10n.t("Sign In");
+  const pick = await vscode.window.showWarningMessage(
+    vscode.l10n.t("This sign-in can't switch workspaces. Sign in again to get one that can."),
+    signIn,
+  );
+  if (pick === signIn) void vscode.commands.executeCommand("builderforce.signIn");
 }
 
 /** Tell the person their key no longer works, with the one action that fixes it. */

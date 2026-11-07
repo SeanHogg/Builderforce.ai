@@ -155,6 +155,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // write can credit the agent rather than the ref parked in `sub`.
   if (payload.agt) c.set('agentActorRef', payload.agt);
   if (isDeviceClient(payload.src)) c.set('clientSurface', payload.src);
+  if (payload.kid) c.set('apiKeyId', payload.kid);
   updateRequestScope({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 

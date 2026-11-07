@@ -60,12 +60,18 @@ export async function mintTenantSessionToken(
     expiresIn?: number;
     /** The device-flow app this session belongs to (`DEVICE_CLIENTS`). */
     clientSurface?: DeviceClient;
+    /** The `tenant_api_keys.id` this session derives from (editor sessions); stamped as `kid`. */
+    keyId?: string;
   },
 ): Promise<{ token: string; expiresIn: number }> {
   const expiresIn = opts.expiresIn ?? 3600;
   const role = opts.role ?? (await resolveMemberRole(db, opts.userId, opts.tenantId));
   const token = await signJwt(
-    { sub: opts.userId, tid: opts.tenantId, role, ...(opts.clientSurface ? { src: opts.clientSurface } : {}) },
+    {
+      sub: opts.userId, tid: opts.tenantId, role,
+      ...(opts.clientSurface ? { src: opts.clientSurface } : {}),
+      ...(opts.keyId ? { kid: opts.keyId } : {}),
+    },
     jwtSecret,
     expiresIn,
   );

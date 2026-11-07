@@ -152,13 +152,13 @@ export function bindOutboxSendPermission(permission: OutboxSendPermission | null
 /**
  * The identities durable writes are sent as; `null` = not known / parked.
  *   - `workspace`: the tenant the API client's tenant JWT acts as (the selected workspace)
- *     — every `/api/*` write.
- *   - `key`: the editor key's own tenant — gateway (`/llm/*`) writes, which always act as
- *     the key whatever workspace is selected.
+ *     — every `/api/*` write, and gateway (`/llm/*`) writes too: the gateway acts in the
+ *     workspace the request names (`x-builderforce-workspace`), which a sender takes from
+ *     the queued scope (`scopeTenantId(ctx.scope)`).
  */
-const scopes: Record<OutboxIdentity, string | null> = { workspace: null, key: null };
+const scopes: Record<OutboxIdentity, string | null> = { workspace: null };
 
-export type OutboxIdentity = "workspace" | "key";
+export type OutboxIdentity = "workspace";
 
 /** Every durable outbox's flush, so an identity change can replay what was parked for it. */
 const replays = new Set<() => Promise<void>>();
@@ -177,12 +177,11 @@ export function scopeTenantId(scope: string | undefined): number | undefined {
  * is parked while workspace B is selected — never replayed into B — and sent when A is
  * current again. Called by `bfApi.ts` whenever its effective tenant changes.
  */
-export function setOutboxScope(ids: { workspace: number | undefined; key: number | undefined }): void {
-  const next = { workspace: toScope(ids.workspace), key: toScope(ids.key) };
-  if (next.workspace === scopes.workspace && next.key === scopes.key) return;
+export function setOutboxScope(ids: { workspace: number | undefined }): void {
+  const next = { workspace: toScope(ids.workspace) };
+  if (next.workspace === scopes.workspace) return;
   scopes.workspace = next.workspace;
-  scopes.key = next.key;
-  if (next.workspace !== null || next.key !== null) for (const replay of replays) void replay();
+  if (next.workspace !== null) for (const replay of replays) void replay();
 }
 
 /**

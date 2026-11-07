@@ -19,7 +19,7 @@ import {
   hasScope as sharedHasScope,
   serializeScopes as sharedSerializeScopes,
 } from '../shared/scopeList';
-import type { DeviceClient } from '@builderforce/creation-canvas-contract';
+import { isDeviceClient, type DeviceClient } from '@builderforce/creation-canvas-contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint scopes — single source of truth for the per-scope service-token model
@@ -99,6 +99,24 @@ export function keyHasScope(scopes: string[] | null, required: TenantApiScope): 
  */
 export function keyMayActAsMember(scopes: string[] | null): boolean {
   return !scopes || scopes.length === 0;
+}
+
+/**
+ * May this key act in a workspace OTHER than the one it is bound to? Only an editor
+ * credential: unrestricted (`keyMayActAsMember`), server-only (no origin allowlist), issued
+ * by device sign-in (a known device `client`) to a real person. The ONE predicate behind
+ * the gateway's `x-builderforce-workspace` header.
+ */
+export function keyMayActInOtherWorkspace(key: {
+  scopes?: string[] | null;
+  allowedOrigins?: string[] | null;
+  client?: string | null;
+  createdByUserId?: string | null;
+}): boolean {
+  return keyMayActAsMember(key.scopes ?? null)
+    && (!key.allowedOrigins || key.allowedOrigins.length === 0)
+    && isDeviceClient(key.client)
+    && !!key.createdByUserId;
 }
 
 /** The prefix of the public Insights site key — see `HashService.generateApiKey`. */

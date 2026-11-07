@@ -120,6 +120,8 @@
   "Connecting…": "正在连接…",
   "Couldn't reach BuilderForce. Check your connection and try again.": "无法连接 BuilderForce。请检查网络连接后重试。",
   "BuilderForce no longer accepts this editor's key (it was revoked or expired). Sign in again to reconnect.": "BuilderForce 不再接受此编辑器的密钥（已被撤销或已过期）。请重新登录以恢复连接。",
+  "This sign-in can't switch workspaces. Sign in again to get one that can.": "此登录无法切换工作区。请重新登录以获取可切换工作区的登录。",
+  "The workspace you selected is no longer available to you, so BuilderForce switched back to your default workspace.": "你所选的工作区已不再可用，BuilderForce 已切换回你的默认工作区。",
   "BuilderForce: signed in.": "BuilderForce：已登录。",
   "BuilderForce: signed in, but the gateway can't be reached right now. Your panels will load once it responds.": "BuilderForce：已登录，但当前无法连接网关。网关响应后面板将自动加载。",
   "Retry": "重试",

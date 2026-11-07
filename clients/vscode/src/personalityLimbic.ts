@@ -16,7 +16,6 @@
 
 import type * as vscode from "vscode";
 import { turnAffectBlock, type LimbicState } from "@seanhogg/builderforce-brain-embedded";
-import { getApiKey, getBaseUrl } from "./gateway";
 import { createPersonalityBlockCache } from "./personalityBlockCache";
 
 /**
@@ -61,16 +60,18 @@ const PERSONALITY_TIMEOUT_MS = 10_000;
 
 async function requestPersonalityLayers(secrets: vscode.SecretStorage, persona?: PersonaContext): Promise<PersonalityLayers | null> {
   try {
-    const key = await getApiKey(secrets);
-    if (!key) return null;
-    const res = await fetch(`${getBaseUrl()}/api/limbic/block`, {
+    // `/api/*` is JWT-only: the session transport exchanges the editor key for the
+    // selected workspace's token (a raw key 401s there). Signed out it resolves undefined.
+    // Lazy: the session module needs a full vscode host at import time.
+    const { fetchAuthed } = await import("./bfApi/transport");
+    const res = await fetchAuthed(secrets, "/api/limbic/block", {
+      asTenant: "current",
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({ text: "", ...(persona ?? {}) }),
       // Unbounded, a gateway that never answers held every caller (the panel's init) for undici's 300 s.
       signal: AbortSignal.timeout(PERSONALITY_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res?.ok) return null;
     const json = (await res.json()) as { block?: string; personaBlock?: string; setpoints?: LimbicState };
     return {
       restBlock: nonEmpty(json.block) ? json.block : "",

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../gateway", () => ({ getBaseUrl: () => "https://api.example" }));
 vi.mock("../outboxStorage", () => ({ trackReachability: <T>(p: T) => p }));
-vi.mock("./session", () => ({ exchangeJwt: async () => "jwt", tenantOfToken: () => 1 }));
+const current = vi.hoisted(() => ({ workspace: undefined as number | undefined }));
+vi.mock("./session", () => ({ exchangeJwt: async () => "jwt", tenantOfToken: () => 1, workspaceTenantId: () => current.workspace }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({ NOT_SIGNED_IN: "not_signed_in" }));
 
 import { fetchAuthed } from "./transport";
@@ -31,5 +32,24 @@ describe("fetchAuthed's timeout", () => {
   it("leaves an upload (FormData) unbounded", async () => {
     await fetchAuthed({} as never, "/api/x", { method: "POST", body: new FormData() });
     expect(sent?.signal).toBeUndefined();
+  });
+});
+
+describe("asTenant: \"current\"", () => {
+  it("is refused when no current workspace is known (never sent unpinned)", async () => {
+    current.workspace = undefined;
+    await expect(fetchAuthed({} as never, "/api/x", { asTenant: "current" })).rejects.toThrow(/no current workspace/);
+    expect(sent).toBeUndefined();
+  });
+
+  it("is refused when the token acts as another tenant than the current workspace", async () => {
+    current.workspace = 2; // the mocked token acts as tenant 1
+    await expect(fetchAuthed({} as never, "/api/x", { asTenant: "current" })).rejects.toThrow(/not the current workspace/);
+  });
+
+  it("is sent when the token acts as the current workspace", async () => {
+    current.workspace = 1;
+    await fetchAuthed({} as never, "/api/x", { asTenant: "current" });
+    expect(sent).toBeDefined();
   });
 });

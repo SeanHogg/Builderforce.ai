@@ -50,7 +50,7 @@ class MemoryMemento {
 const host = (): void => {
   bindOutboxStorage({ workspaceState: new MemoryMemento(), secrets: {} } as never);
   bindOutboxSendPermission(createRevokeGate());
-  setOutboxScope({ workspace: 7, key: undefined });
+  setOutboxScope({ workspace: 7 });
 };
 
 /** A permanent refusal — the 4xx that must dead-letter history and drop telemetry. */

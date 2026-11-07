@@ -1,5 +1,6 @@
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
+import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "./gatewayAuth";
 import type { ToolDef } from "./fileTools";
 import { ttlCache } from "./ttlCache";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
@@ -106,7 +107,9 @@ export async function listPlatformTools(
   const key = await getApiKey(secrets);
   if (!key) return [];
   const url = getBaseUrl();
-  const cached = catalogCache.get(url);
+  // The catalog is per workspace: the gateway resolves the key to the selected tenant.
+  const catalogKey = `${url}|${gatewayWorkspaceHeaders()[GATEWAY_WORKSPACE_HEADER] ?? ""}`;
+  const cached = catalogCache.get(catalogKey);
   let entries: McpToolEntry[];
   if (cached) {
     entries = cached.value;
@@ -114,16 +117,17 @@ export async function listPlatformTools(
     try {
       // A run that starts while the network is down would otherwise hold NO platform tools,
       // and every `builtin_*` call it was told to make would fail as an unknown tool.
-      const res = await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, {
-        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      }));
+      const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
+      const res = observeGatewayResponse(await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, {
+        headers,
+      })), headers);
       if (!res.ok) return [];
       const body = (await res.json()) as { tools?: McpToolEntry[] };
       entries = Array.isArray(body.tools) ? body.tools : [];
     } catch {
       return [];
     }
-    catalogCache.set(url, entries);
+    catalogCache.set(catalogKey, entries);
   }
 
   const tools = entries.map((e): ToolDef => ({
@@ -154,11 +158,12 @@ export async function callPlatformTool(
   if (!key) throw new Error("not signed in");
   // Sent again only while the connection cannot be opened — then nothing reached the
   // gateway, so even a write is safe to repeat. Any other failure is reported as it is.
+  const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
   const res = await retryOnConnectFailure(() => fetch(`${getBaseUrl()}/llm/v1/mcp/call`, {
     method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ extensionId, tool, arguments: args }),
-  })).catch((e: unknown) => {
+  })).then((r) => observeGatewayResponse(r, headers)).catch((e: unknown) => {
     throw new Error(describeNetworkError(e), { cause: e });
   });
   const text = await res.text().catch(() => "");

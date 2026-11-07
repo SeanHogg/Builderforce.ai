@@ -33,7 +33,7 @@ class MemoryMemento {
 const host = (): void => {
   bindOutboxStorage({ workspaceState: new MemoryMemento(), secrets: {} } as never);
   bindOutboxSendPermission(createRevokeGate());
-  setOutboxScope({ workspace: 7, key: undefined });
+  setOutboxScope({ workspace: 7 });
 };
 
 const http = (status: number): never => {

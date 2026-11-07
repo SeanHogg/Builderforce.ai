@@ -8,8 +8,10 @@
 export {
   boundToken,
   clearJwt,
+  dropWorkspaceSelection,
   getTenantJwt,
   onEditorKeyRejected,
+  onWorkspaceDropped,
   probeEditorKey,
   refreshTenantJwt,
   setSelectedWorkspace,

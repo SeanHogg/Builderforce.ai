@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
   llmProxyForPlan: vi.fn(),
+  /** Tenant ids the membership resolver was asked about, in call order. */
+  membershipTenants: [] as number[],
   resolveTenantLlmCredentials: vi.fn<() => Promise<TenantLlmCredentials>>(async () => ({
     anthropicOAuthToken: null,
     openaiCodexAuth: null,
@@ -59,8 +61,21 @@ vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
   resolveAnthropicResolution: mocks.resolveAnthropicResolution,
 }));
 
+// Spy on the membership resolver (delegating to the real one) so a test can prove WHICH
+// tenant the gateway looked the key's creator up in.
+vi.mock('../../application/auth/tenantMembership', async (orig) => {
+  const real = await orig<typeof import('../../application/auth/tenantMembership')>();
+  return {
+    ...real,
+    resolveTenantMembership: ((...args: Parameters<typeof real.resolveTenantMembership>) => {
+      mocks.membershipTenants.push(args[2]);
+      return real.resolveTenantMembership(...args);
+    }) as typeof real.resolveTenantMembership,
+  };
+});
+
 // Imports must follow the vi.mock calls above so the mocks are in place.
-const { requireTenantAccess } = await import('./llmRoutes');
+const { requireTenantAccess, resolveBearerTenantId } = await import('./llmRoutes');
 // `byoModelsFor` lives in the application layer (byoModelRouting) so the model picker,
 // the credential probe and the daily sweep share ONE projection — an application-layer
 // probe importing it from a route module would have been a layering inversion.
@@ -329,6 +344,12 @@ type TenantApiKeyRow = {
   allowedOrigins?: string | null;
   /** The member who minted the key; their role is read by the membership resolver. */
   createdByUserId?: string | null;
+  /** The key creator's superadmin flag as cached with the key (can be stale). */
+  creatorIsSuperadmin?: boolean;
+  /** Serialized scope list; absent = unrestricted. */
+  scopes?: string | null;
+  /** The device-flow app the key was issued to. */
+  client?: string | null;
 };
 type TenantRow = {
   id: number;
@@ -418,9 +439,9 @@ function makeKvMock() {
   };
 }
 
-function mockContext(token: string, db: unknown): Context<HonoEnv> {
+function mockContext(token: string, db: unknown, extraHeaders: Record<string, string> = {}): Context<HonoEnv> {
   return {
-    req: { header: (n: string) => (n === 'Authorization' ? `Bearer ${token}` : undefined) },
+    req: { header: (n: string) => (n === 'Authorization' ? `Bearer ${token}` : extraHeaders[n]) },
     env: { JWT_SECRET: 'test', NEON_DATABASE_URL: 'x' },
     executionCtx: { waitUntil: (_p: Promise<unknown>) => undefined },
     // resolveTenantPlan calls buildDatabase a second time; same mock works.
@@ -486,6 +507,133 @@ describe('requireTenantAccess (bfk_* path)', () => {
 
     expect(access.userId).toBeNull();
     expect(access.role).toBe('developer');
+  });
+
+  describe('x-builderforce-workspace header', () => {
+    const WS = 'x-builderforce-workspace';
+    // An unrestricted, server-only, device-flow (editor) key — the only kind that may re-scope.
+    const keyRow: TenantApiKeyRow = { id: 'kid', tenantId: 42, revokedAt: null, createdByUserId: 'user-owner', client: 'vscode' };
+
+    beforeEach(() => { mocks.membershipTenants.length = 0; });
+
+    it('header equal to the key tenant keeps the key tenant', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_same');
+      const db = mockDb({
+        keyRow,
+        membershipRow: { userId: 'user-owner', role: 'owner', isSuperadmin: false },
+        tenantRow:     { id: 42, plan: 'pro', billingStatus: 'active' },
+      });
+      mocks.buildDatabase.mockReturnValue(db);
+
+      const access = await requireTenantAccess(mockContext('bfk_ws_same', db, { [WS]: '42' }));
+
+      expect(access.tenantId).toBe(42);
+      expect(access.role).toBe('owner');
+    });
+
+    it('acts in another workspace where the creator is a member, under their role there', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_other');
+      const db = mockDb({
+        keyRow,
+        membershipRow: { userId: 'user-owner', role: 'manager', isSuperadmin: false },
+        tenantRow:     { id: 77, plan: 'teams', billingStatus: 'active' },
+      });
+      mocks.buildDatabase.mockReturnValue(db);
+
+      const access = await requireTenantAccess(mockContext('bfk_ws_other', db, { [WS]: '77' }));
+
+      expect(access.tenantId).toBe(77);
+      expect(access.userId).toBe('user-owner');
+      expect(access.role).toBe('manager');
+      expect(access.tenantApiKeyId).toBe('kid');
+      // The membership was read for the TARGET tenant (never the key's), and the plan
+      // comes from the target's tenant row.
+      expect(mocks.membershipTenants).toEqual([77]);
+      expect(access.effectivePlan).toBe('teams');
+    });
+
+    it('isSuperadmin is the creator\'s LIVE flag, whatever the cached key flag says', async () => {
+      const cases: Array<[boolean, boolean]> = [[true, false], [false, true]]; // [cached, live]
+      for (const [cached, live] of cases) {
+        mocks.hashSecret.mockResolvedValue(`hash_ws_sa_${cached}`);
+        const db = mockDb({
+          // A distinct user per case: the membership resolver caches (tenant, user) in-isolate.
+          keyRow:        { ...keyRow, createdByUserId: `user-sa-${cached}`, creatorIsSuperadmin: cached },
+          membershipRow: { userId: `user-sa-${cached}`, role: 'owner', isSuperadmin: live },
+          tenantRow:     { id: 77, plan: 'pro', billingStatus: 'active' },
+        });
+        mocks.buildDatabase.mockReturnValue(db);
+
+        const access = await requireTenantAccess(mockContext(`bfk_ws_sa_${cached}`, db, { [WS]: '77' }));
+
+        expect(access.isSuperadmin).toBe(live);
+      }
+    });
+
+    it('refuses a scoped key, an origin-allowlisted key and a non-device key', async () => {
+      const refused: Array<[string, TenantApiKeyRow]> = [
+        ['scoped', { ...keyRow, scopes: JSON.stringify(['recordings:write']) }],
+        ['origin-allowlisted', { ...keyRow, allowedOrigins: JSON.stringify(['https://app.example.com']) }],
+        ['non-device', { ...keyRow, client: null }],
+      ];
+      for (const [name, row] of refused) {
+        mocks.hashSecret.mockResolvedValue(`hash_ws_refused_${name}`);
+        const db = mockDb({ keyRow: row, membershipRow: { userId: 'user-owner', role: 'owner', isSuperadmin: false } });
+        mocks.buildDatabase.mockReturnValue(db);
+
+        await expect(requireTenantAccess(mockContext(`bfk_ws_refused_${name}`, db, { [WS]: '77' })))
+          .rejects.toMatchObject({ status: 403, code: 'editor_key_required' });
+      }
+    });
+
+    it('resolveBearerTenantId honours a verified header and falls back to the key tenant on rejection', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_bearer_ok');
+      let db = mockDb({ keyRow, membershipRow: { userId: 'user-owner', role: 'owner', isSuperadmin: false } });
+      mocks.buildDatabase.mockReturnValue(db);
+      expect(await resolveBearerTenantId(mockContext('bfk_ws_bearer_ok', db, { [WS]: '77' }))).toBe(77);
+
+      mocks.hashSecret.mockResolvedValue('hash_ws_bearer_no');
+      db = mockDb({ keyRow, membershipRow: null });
+      mocks.buildDatabase.mockReturnValue(db);
+      expect(await resolveBearerTenantId(mockContext('bfk_ws_bearer_no', db, { [WS]: '99' }))).toBe(42);
+    });
+
+    it('resolveBearerTenantId makes no membership read without a workspace override', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_bearer_plain');
+      const db = mockDb({ keyRow });
+      mocks.buildDatabase.mockReturnValue(db);
+      expect(await resolveBearerTenantId(mockContext('bfk_ws_bearer_plain', db))).toBe(42);
+      // A header naming the key's OWN tenant is no override either: still no membership read.
+      expect(await resolveBearerTenantId(mockContext('bfk_ws_bearer_plain', db, { [WS]: '42' }))).toBe(42);
+      expect(mocks.membershipTenants).toEqual([]);
+    });
+
+    it('rejects a workspace the creator is not a member of with 403 workspace_not_member', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_nonmember');
+      const db = mockDb({ keyRow, membershipRow: null });
+      mocks.buildDatabase.mockReturnValue(db);
+
+      await expect(requireTenantAccess(mockContext('bfk_ws_nonmember', db, { [WS]: '99' })))
+        .rejects.toMatchObject({ status: 403, code: 'workspace_not_member' });
+    });
+
+    it('rejects a malformed header with 400 rather than falling back to the key tenant', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_bad');
+      const db = mockDb({ keyRow });
+      mocks.buildDatabase.mockReturnValue(db);
+
+      await expect(requireTenantAccess(mockContext('bfk_ws_bad', db, { [WS]: 'abc' })))
+        .rejects.toMatchObject({ status: 400, code: 'workspace_invalid' });
+    });
+
+    it('rejects a key with no creator that names another workspace', async () => {
+      mocks.hashSecret.mockResolvedValue('hash_ws_nocreator');
+      const db = mockDb({ keyRow: { id: 'kid', tenantId: 42, revokedAt: null } });
+      mocks.buildDatabase.mockReturnValue(db);
+
+      await expect(requireTenantAccess(mockContext('bfk_ws_nocreator', db, { [WS]: '77' })))
+        .rejects.toMatchObject({ status: 403, code: 'editor_key_required' });
+    });
   });
 
   it('rejects a revoked bfk_* key with 401-shaped error', async () => {

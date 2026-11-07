@@ -52,7 +52,7 @@ const host = (): ReturnType<typeof createRevokeGate> => {
   bindOutboxStorage({ workspaceState: memento, secrets: {} } as never);
   bindOutboxSendPermission(gate);
   // Stable across tests, so this only replays parked queues on the very first call.
-  setOutboxScope({ workspace: 7, key: undefined });
+  setOutboxScope({ workspace: 7 });
   return gate;
 };
 

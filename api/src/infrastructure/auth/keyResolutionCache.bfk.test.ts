@@ -41,7 +41,7 @@ beforeEach(() => __clearL1CacheForTests());
 
 describe('keyCacheKey versioning', () => {
   it('carries the schema version on bfk keys', () => {
-    expect(keyCacheKey('bfk', 'abc123')).toBe('auth:bfk:v2:abc123');
+    expect(keyCacheKey('bfk', 'abc123')).toBe('auth:bfk:v3:abc123');
   });
 
   it('leaves clk and jwt keys unversioned so existing entries keep hitting', () => {
@@ -67,7 +67,7 @@ describe('keyCacheKey versioning', () => {
 
     expect(loader).toHaveBeenCalledTimes(1); // the stale entry was not a hit
     expect(resolved).toEqual({ ok: true, payload: { id: 'k1', tenantId: 7, createdByUserId: 'user-1' } });
-    expect(kv.store.has('cache:auth:bfk:v2:abc123')).toBe(true);
+    expect(kv.store.has('cache:auth:bfk:v3:abc123')).toBe(true);
   });
 
   it('caches under the versioned key and serves the second call from it', async () => {
@@ -103,7 +103,7 @@ describe('keyCacheKey versioning', () => {
     createdByUserId = 'user-1';
 
     await invalidateKeyCache(env, 'bfk', 'abc123');
-    expect(kv.delete).toHaveBeenCalledWith('cache:auth:bfk:v2:abc123');
+    expect(kv.delete).toHaveBeenCalledWith('cache:auth:bfk:v3:abc123');
 
     const afterInvalidate = await resolveKeyCached(env, 'bfk', 'abc123', loader);
     expect(loader).toHaveBeenCalledTimes(2);

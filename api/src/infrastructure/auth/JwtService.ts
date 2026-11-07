@@ -37,6 +37,13 @@ export interface JwtPayload {
    * (`DEVICE_CLIENTS`). Minted by the server; never inferred from a request header
    * because it controls kill-switch exemptions. */
   src?: DeviceClient;
+  /**
+   * The `tenant_api_keys.id` this session was exchanged from. Set only on editor sessions
+   * minted from a `bfk_*` key (and carried forward by a workspace re-scope), so a route can
+   * check what THAT KEY may do - e.g. whether it may act in another workspace. Absent on web
+   * sessions and every other minter.
+   */
+  kid?: string;
   iat:  number;
   exp:  number;
 }

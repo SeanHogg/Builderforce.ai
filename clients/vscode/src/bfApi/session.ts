@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway";
 import { setOutboxScope, trackReachability } from "../outboxStorage";
+import { setCurrentWorkspace } from "../workspaceSelection";
+import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../gatewayAuth";
 
 /**
  * Client for BuilderForce's tenant APIs (projects/tasks/connection). The extension holds
@@ -27,6 +29,36 @@ export function setSelectedWorkspace(tenantId: number | undefined): void {
   delete exchanges.forced;
   notifySessionChange("workspace");
   syncOutboxScope();
+}
+
+const droppedListeners: Array<(droppedTenantId: number) => void> = [];
+
+/**
+ * Register what must follow when the selected workspace is dropped because the user is no
+ * longer a member (persist the cleared selection, refresh the views, tell the person).
+ * Registered once by the extension; the session module holds no globalState or UI.
+ */
+export function onWorkspaceDropped(listener: (droppedTenantId: number) => void): () => void {
+  droppedListeners.push(listener);
+  return () => {
+    const at = droppedListeners.indexOf(listener);
+    if (at >= 0) droppedListeners.splice(at, 1);
+  };
+}
+
+/**
+ * THE way a selected workspace is dropped because it is no longer available to this person:
+ * the `/api` re-scope was refused (403) or the gateway said `workspace_not_member`. Clears
+ * the selection (the key's own workspace takes over) and notifies {@link onWorkspaceDropped}
+ * listeners. A no-op when nothing is selected. `refused` is the workspace the refusal was
+ * ABOUT; when given, the drop applies only if that is still the selection (an answer for a
+ * workspace the person has since left must not drop the one they chose after).
+ */
+export function dropWorkspaceSelection(refused?: number): void {
+  const dropped = selectedTenantId;
+  if (dropped === undefined || (refused !== undefined && refused !== dropped)) return;
+  setSelectedWorkspace(undefined);
+  for (const listener of droppedListeners) listener(dropped);
 }
 
 /** What changed under the per-session caches that other modules hold. */
@@ -83,16 +115,18 @@ export function boundToken(token: string | undefined): { token: string; tenantId
 
 /** Tell the durable outboxes which tenants writes now go to (see `outboxStorage.ts`). */
 function syncOutboxScope(): void {
-  setOutboxScope({ workspace: effectiveTenantId(), key: baseJwt?.tenantId });
+  setOutboxScope({ workspace: effectiveTenantId() });
+  // The gateway names this workspace on its calls (`gatewayAuth.ts` reads the leaf).
+  setCurrentWorkspace(effectiveTenantId());
 }
 
 /**
  * Re-scoping to the selected workspace failed in a way that falls back to the key's own
  * token: workspace writes PARK (they were queued for the selected tenant and must not
- * land in the key's) until a re-scope succeeds; gateway writes carry on.
+ * land in the key's) until a re-scope succeeds.
  */
 function parkWorkspaceWrites(): void {
-  setOutboxScope({ workspace: undefined, key: baseJwt?.tenantId });
+  setOutboxScope({ workspace: undefined });
 }
 
 /** The tenant a token we minted acts as, or undefined when it is not one of ours. */
@@ -205,7 +239,7 @@ export function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promi
 
 async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<string | undefined> {
   const epoch = jwtEpoch;
-  const base = await exchangeBaseJwt(secrets, force);
+  let base = await exchangeBaseJwt(secrets, force);
   if (!base) return undefined;
   const target = selectedTenantId ?? base.tenantId;
   if (target === base.tenantId || rescopeUnsupported) return base.token;
@@ -215,36 +249,62 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
   // Re-scope to another of the user's workspaces. Degrades to the base token: 404 =
   // endpoint not deployed (latch off), 403 = no longer a member (drop the selection).
   try {
-    const res = await fetch(`${getBaseUrl()}/api/vscode/tenants/${target}/token`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${base.token}`, "content-type": "application/json" },
-      signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
-    });
-    // Signed out or re-keyed meanwhile (as in `exchangeBaseJwt`): nothing here is ours to keep.
-    if (epoch !== jwtEpoch) return undefined;
-    if (res.status === 404) {
-      rescopeUnsupported = true;
+    // A stale base token (minted before the server stamped its key id, or its key just
+    // renewed) is answered 401 / `session_stale`: re-mint the base ONCE and ask again.
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(`${getBaseUrl()}/api/vscode/tenants/${target}/token`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${base.token}`, "content-type": "application/json" },
+        signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
+      });
+      // Signed out or re-keyed meanwhile (as in `exchangeBaseJwt`): nothing here is ours to keep.
+      if (epoch !== jwtEpoch) return undefined;
+      if (res.status === 404) {
+        rescopeUnsupported = true;
+        syncOutboxScope();
+        return base.token;
+      }
+      const errorBody = res.status === 403 || res.status === 401 ? await res.json().catch(() => null) : null;
+      const stale = res.status === 401 || (res.status === 403 && (errorBody as { code?: unknown } | null)?.code === "session_stale");
+      if (stale && attempt === 0) {
+        // A revoked key is rejected by this exchange (the editor-key guard signs out).
+        const fresh = await exchangeBaseJwt(secrets, true);
+        if (!fresh) {
+          // Unreachable (or the key was just rejected and the editor is signing out): the
+          // old base token is still valid in its own tenant.
+          if (epoch !== jwtEpoch) return undefined;
+          parkWorkspaceWrites();
+          return base.token;
+        }
+        base = fresh;
+        continue;
+      }
+      if (res.status === 403 && !stale) {
+        // The server says WHY. This key can never switch workspaces: the same refusal path
+        // as the gateway's (sign in again). Otherwise the person left the workspace: drop it.
+        const refusal = classifyWorkspaceRefusal(403, errorBody);
+        if (refusal === "editor_key_required") {
+          const key = await getApiKey(secrets);
+          if (key) reportWorkspaceRefusal(refusal, key, target);
+        } else {
+          dropWorkspaceSelection(target);
+        }
+        return base.token;
+      }
+      if (!res.ok) {
+        parkWorkspaceWrites();
+        return base.token;
+      }
+      const body = (await res.json()) as { token?: string; expiresIn?: number };
+      if (epoch !== jwtEpoch) return undefined;
+      if (!body.token) {
+        parkWorkspaceWrites();
+        return base.token;
+      }
+      scopedJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: target };
       syncOutboxScope();
-      return base.token;
+      return scopedJwt.token;
     }
-    if (res.status === 403) {
-      selectedTenantId = base.tenantId;
-      syncOutboxScope();
-      return base.token;
-    }
-    if (!res.ok) {
-      parkWorkspaceWrites();
-      return base.token;
-    }
-    const body = (await res.json()) as { token?: string; expiresIn?: number };
-    if (epoch !== jwtEpoch) return undefined;
-    if (!body.token) {
-      parkWorkspaceWrites();
-      return base.token;
-    }
-    scopedJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: target };
-    syncOutboxScope();
-    return scopedJwt.token;
   } catch {
     parkWorkspaceWrites();
     return base.token;
@@ -259,7 +319,10 @@ export function clearJwt(): void {
   scopedJwt = undefined;
   rescopeUnsupported = false;
   // Signed out (or re-keying): durable writes hold until the next identity is known.
-  setOutboxScope({ workspace: undefined, key: undefined });
+  setOutboxScope({ workspace: undefined });
+  // The SELECTION survives a re-key: gateway calls keep naming it until the next exchange.
+  // Only signing out (setSelectedWorkspace(undefined)) or a drop clears it.
+  setCurrentWorkspace(selectedTenantId);
   notifySessionChange("reset");
 }
 

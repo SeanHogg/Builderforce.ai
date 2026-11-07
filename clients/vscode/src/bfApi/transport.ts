@@ -2,19 +2,26 @@ import type * as vscode from "vscode";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { getBaseUrl } from "../gateway";
 import { trackReachability } from "../outboxStorage";
-import { exchangeJwt, tenantOfToken } from "./session";
+import { exchangeJwt, tenantOfToken, workspaceTenantId } from "./session";
 
 /**
  * A request init that may pin the tenant it must act as. A durable outbox replaying a
  * write passes the tenant the write was queued for; if the token at hand acts as any
  * other tenant the request is NOT sent — it fails (retriably) and the write waits.
  */
-export type AuthedInit = RequestInit & { asTenant?: number };
+export type AuthedInit = RequestInit & { asTenant?: number | "current" };
 
 function assertActsAs(token: string, asTenant: number | undefined): void {
   if (asTenant !== undefined && tenantOfToken(token) !== asTenant) {
     throw new Error(`tenant ${asTenant} is not the current workspace — write parked`);
   }
+}
+
+/** The workspace selected NOW; unknown means the request cannot be pinned to it, so it is refused. */
+export function currentWorkspaceOrThrow(): number {
+  const current = workspaceTenantId();
+  if (current === undefined) throw new Error("no current workspace is known — request not sent");
+  return current;
 }
 
 const AUTHED_FETCH_TIMEOUT_MS = 60_000;
@@ -30,11 +37,13 @@ export async function fetchAuthed(
   path: string,
   authedInit?: AuthedInit,
 ): Promise<Response | undefined> {
-  const { asTenant, ...init } = authedInit ?? {};
+  const { asTenant: requestedTenant, ...init } = authedInit ?? {};
   let token = await exchangeJwt(secrets);
   if (!token) return undefined;
   const call = (t: string) => {
-    assertActsAs(t, asTenant);
+    // "current": the workspace selected NOW. A token that still acts as another tenant (a
+    // re-scope that failed and fell back to the key's) must not be used.
+    assertActsAs(t, requestedTenant === "current" ? currentWorkspaceOrThrow() : requestedTenant);
     return trackReachability(fetch(`${getBaseUrl()}${path}`, {
       ...init,
       // Unbounded, a server that never answers holds the caller for undici's 300 s default;
