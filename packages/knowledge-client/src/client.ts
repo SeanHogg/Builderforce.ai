@@ -273,7 +273,7 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
         Array.isArray(detail.hashes) ? detail.hashes.filter((h): h is string => typeof h === 'string') : undefined);
     }
     if (res.status === 413 && (base.code === 'pack_too_large' || base.code === 'payload_too_large')) return new KnowledgeSyncTooLargeError(base.code, base.message);
-    if (res.status === 422) return new KnowledgeSyncBadPackError(base.message);
+    if (res.status === 422) return new KnowledgeSyncBadPackError(base.message, base.code);
     return base;
   };
 
@@ -291,7 +291,7 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
   const kpack = async (rootId: string, fields: Partial<Pack>): Promise<BodyInit> =>
     (await encodePack({ rootId, baseGeneration: 0, targetDigest: ZERO_DIGEST, ...fields })) as unknown as BodyInit;
 
-  async function syncRequest(rootId: string, part: SyncPart): Promise<SyncAck> {
+  async function syncRequest(_rootId: string, part: SyncPart): Promise<SyncAck> {
     const q = new URLSearchParams();
     if (part.syncId) q.set('syncId', part.syncId);
     if (part.part !== undefined) q.set('part', String(part.part));
@@ -408,6 +408,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
       if (k != null) params.set('k', String(k));
       const out = await orNull(jsonCall<{ hits: IndexHit[] }>(`/knowledge/search?${params.toString()}`));
       return out?.hits ?? [];
+    },
+    async writeRows(rootId, rows) {
+      await call('/knowledge/write', send('POST', { root: rootId, facts: rows.facts, relations: rows.relations }));
     },
     sync: syncRequest,
     syncManifest: syncManifestRequest,

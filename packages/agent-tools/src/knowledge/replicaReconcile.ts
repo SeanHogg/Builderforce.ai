@@ -12,7 +12,7 @@
 
 import type { KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import {
-    differingBuckets, leafDelta, manifestTree, rootLeaves, type ManifestTree,
+    differingBuckets, leafDelta, manifestTree, rootLeaves,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { pathOfRef, type ReplicaSource } from './replicaPack.js';
 import { factKey, relationKey, type ReplicaAck } from './replicaQueue.js';

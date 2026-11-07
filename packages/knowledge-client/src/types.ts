@@ -14,6 +14,7 @@ import type {
   KnowledgeStore,
   ScopeRecord,
   StoredFact,
+  StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 /** `fetch`-compatible; `path` is API-relative (e.g. `/api/projects/12/knowledge/scopes`). */
@@ -134,6 +135,11 @@ export interface KnowledgeClient {
   syncLeaves(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }>;
   /** POST …/knowledge/sync/have — which of `hashes` the project already holds (same order as asked). */
   syncHave(rootId: string, hashes: readonly string[]): Promise<boolean[]>;
+  /**
+   * POST …/knowledge/write of rows only (≤ 500), stamped with the root: the path for rows a pack does not carry — a person's
+   * notes, an agent's facts, a model row with no leaf — each written under its own credential's rules.
+   */
+  writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
   /** PUT …/knowledge/extracted/:hash */
   putExtracted(hash: string, extracted: Extracted[]): Promise<void>;
   /** DELETE …/facts/:key — author or project admin only; also removes the fact's relations. */
@@ -179,7 +185,7 @@ export class KnowledgeSyncTooLargeError extends KnowledgeApiError {
   constructor(code: string, message: string) { super(413, code, message); this.name = 'KnowledgeSyncTooLargeError'; }
 }
 
-/** 422: the frame is malformed or its CRC failed (bad_pack). A defect, not a retry. */
+/** 422: the frame is malformed or its CRC failed (bad_pack), or a tombstone named a key the root never synced (not_owned). A defect, not a retry. */
 export class KnowledgeSyncBadPackError extends KnowledgeApiError {
-  constructor(message: string) { super(422, 'bad_pack', message); this.name = 'KnowledgeSyncBadPackError'; }
+  constructor(message: string, code = 'bad_pack') { super(422, code, message); this.name = 'KnowledgeSyncBadPackError'; }
 }

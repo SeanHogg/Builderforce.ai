@@ -1,65 +1,81 @@
 /**
- * In-memory ports for the pack-sync tests: a knowledge store, a ledger (bundle index + source rows), an extracted
- * cache over real bundle bytes, the sync state/staging port, and a transaction that really rolls back. The R2
- * writes and index queries are COUNTED, so the bounds of PRD 41 A11 rule 4a are assertions, not hopes.
+ * In-memory ports for the pack-sync tests: a knowledge store, a ledger (bundle index, source rows, sync leaves,
+ * generations), an extracted cache over real bundle bytes, the sync staging port, and a transaction that really rolls
+ * back. R2 writes and index queries are COUNTED, so the bounds of PRD 41 A11 rules 4a-4b are assertions, not hopes.
+ *
+ * `facts` and `relations` are the PROJECT's shared tables; `leaves` are per root — the server's manifest reads only
+ * the leaves, which is exactly what two roots sharing a project rely on.
  */
-import { sha256Hex, type Extracted, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { type Extracted, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Bundle } from '../knowledgeBundles';
 import type { ExtractedLoc, KnowledgeLedgerPort, SourceRow } from '../knowledgeLedger';
 import type { ExtractedCachePort, KnowledgeStorePort } from '../knowledgePorts';
+import { storeMock } from '../knowledgeStoreMock.test-util';
 import type { PackUnit } from './applyKnowledgePack';
-import type { KnowledgeSyncPort, SyncState } from './knowledgeSyncPorts';
+import { KnowledgeSyncError, type KnowledgeSyncPort, type SyncState } from './knowledgeSyncPorts';
 
 export interface World {
-  facts: Map<string, StoredFact>;
+  facts: Map<string, StoredFact & { createdBy?: string | null }>;
   relations: Map<string, StoredRelation>;
-  /** source id → row (rows are the record; `legacy` holds per-source objects written before the ledger). */
-  sources: Map<string, SourceRow>;
-  legacySources: Map<string, SourceRow>;
+  /** root → source id → row (the record; `legacySources` holds per-source objects written before the ledger). */
+  sources: Map<string, Map<string, SourceRow>>;
+  legacySources: Map<string, Map<string, SourceRow>>;
+  /** Legacy per-source objects deleted by a sync, by source id. */
+  legacyDeleted: string[];
   index: Map<string, ExtractedLoc>;
   bundles: Map<string, Uint8Array>;
   /** Per-hash objects written before bundles existed. */
   legacyBodies: Map<string, Extracted[]>;
-  state: Map<string, SyncState>;
+  /** root → leaf key → digest. */
+  leaves: Map<string, Map<string, string>>;
+  /** root → generation and digest (the roots table). */
+  roots: Map<string, SyncState>;
   staged: Map<string, Uint8Array>;
   stale: string[];
-  deletedFacts: string[];
   /** Every R2 object write, by what it was. */
   puts: string[];
   /** Every ranged/whole object read of a bundle. */
   bundleReads: number;
   /** Index queries (`locate`). */
   indexQueries: number;
+  /** Rows read from the shared fact / relation tables (a manifest must never do this). */
+  sharedTableReads: number;
+  /** Serialises transactions, as row locks do: a second pack waits for the first to commit or roll back. */
+  txChain?: Promise<unknown>;
 }
 
 export const newWorld = (): World => ({
-  facts: new Map(), relations: new Map(), sources: new Map(), legacySources: new Map(), index: new Map(), bundles: new Map(), legacyBodies: new Map(),
-  state: new Map(), staged: new Map(), stale: [], deletedFacts: [], puts: [], bundleReads: 0, indexQueries: 0,
+  facts: new Map(), relations: new Map(), sources: new Map(), legacySources: new Map(), legacyDeleted: [], index: new Map(), bundles: new Map(),
+  legacyBodies: new Map(), leaves: new Map(), roots: new Map(), staged: new Map(), stale: [], puts: [], bundleReads: 0, indexQueries: 0, sharedTableReads: 0,
 });
 
-const rkey = (r: { from: string; to: string; kind: string }): string => `${r.from}\u0000${r.to}\u0000${r.kind}`;
+const inner = <V>(m: Map<string, Map<string, V>>, root: string): Map<string, V> => {
+  let x = m.get(root);
+  if (!x) { x = new Map(); m.set(root, x); }
+  return x;
+};
 
 export function fakeStore(w: World): KnowledgeStorePort {
-  return {
-    scopes: async () => [], scope: async () => null,
-    facts: async (paths) => [...w.facts.values()].filter((f) => f.fileAnchors.some((a) => paths.has(a.path))),
-    relations: async (root, refs) => [...w.relations.values()].filter((r) =>
-      r.from.startsWith(`src:${root}::`) || r.to.startsWith(`src:${root}::`) || refs.has(r.from) || refs.has(r.to)),
-    upsertRelations: async (rows) => { for (const r of rows) w.relations.set(rkey(r), r); return rows.length; },
-    upsertScope: async () => undefined,
+  return storeMock({
+    facts: async (paths) => { w.sharedTableReads += 1; return [...w.facts.values()].filter((f) => f.fileAnchors.some((a) => paths.has(a.path))); },
+    relations: async () => { w.sharedTableReads += 1; return [...w.relations.values()]; },
+    upsertRelations: async (rows) => { for (const r of rows) w.relations.set(relationLeafKey(r), r); return rows.length; },
     markRelationsStale: async (ref, hash) => { w.stale.push(`${ref}@${hash}`); return 0; },
     markRelationsStaleMany: async (marks) => { for (const m of marks) w.stale.push(`${m.sourceRef}@${m.currentHash}`); return 0; },
-    deleteRelationsOf: async () => 0,
-    deleteScope: async () => false,
-    factSources: async () => new Map(),
-    deleteFactsBySource: async () => ({ keys: [], relations: 0 }),
-    humanRelationKeys: async () => new Set(),
-    deleteRelationsUnder: async () => 0,
-    factAuthor: async (key) => (w.facts.has(key) ? null : undefined),
-    factAuthors: async (keys) => new Map(keys.filter((k) => w.facts.has(k)).map((k) => [k, null] as const)),
-    deleteRelationRows: async (rows) => { let n = 0; for (const r of rows) if (w.relations.delete(rkey(r))) n += 1; return n; },
-  };
+    factAuthor: async (key) => (w.facts.has(key) ? (w.facts.get(key)!.createdBy ?? null) : undefined),
+    factAuthors: async (keys) => new Map(keys.filter((k) => w.facts.has(k)).map((k) => [k, w.facts.get(k)!.createdBy ?? null] as const)),
+    deleteRelationRows: async (rows) => { let n = 0; for (const r of rows) if (w.relations.delete(relationLeafKey(r))) n += 1; return n; },
+    deleteFactsByKeys: async (keys, actor) => {
+      const gone: string[] = [];
+      for (const k of keys) {
+        const f = w.facts.get(k);
+        if (f && (f.createdBy == null || f.createdBy === actor.userId || actor.admin)) { w.facts.delete(k); gone.push(k); }
+      }
+      return gone;
+    },
+  });
 }
 
 export function fakeLedger(w: World): KnowledgeLedgerPort {
@@ -67,12 +83,34 @@ export function fakeLedger(w: World): KnowledgeLedgerPort {
     index: {
       locate: async (hashes) => { w.indexQueries += 1; return hashes.flatMap((h) => (w.index.has(h) ? [w.index.get(h)!] : [])); },
       upsert: async (rows) => { for (const r of rows) w.index.set(r.hash, r); },
+      drop: async (hashes) => { for (const h of hashes) w.index.delete(h); },
+      dropBundles: async (keys) => { for (const [h, l] of [...w.index]) if (keys.includes(l.bundleKey)) w.index.delete(h); },
     },
     sources: {
-      list: async () => [...w.sources.values()],
-      upsert: async (_root, rows) => { for (const r of rows) w.sources.set(r.sourceId, r); },
-      remove: async (_root, ids) => { for (const id of ids) w.sources.delete(id); },
-      clear: async () => { const n = w.sources.size; w.sources.clear(); return n; },
+      list: async (root) => [...inner(w.sources, root).values()],
+      upsert: async (root, rows) => { for (const r of rows) inner(w.sources, root).set(r.sourceId, r); },
+      remove: async (root, ids) => { for (const id of ids) inner(w.sources, root).delete(id); },
+      clear: async (root) => { const n = inner(w.sources, root).size; w.sources.delete(root); return n; },
+    },
+    leaves: {
+      all: async (root) => [...inner(w.leaves, root)].map(([key, digest]) => ({ key, digest })).sort((a, b) => (a.key < b.key ? -1 : 1)),
+      upsert: async (root, rows) => { for (const r of rows) inner(w.leaves, root).set(r.key, r.digest); },
+      remove: async (root, keys) => { for (const k of keys) inner(w.leaves, root).delete(k); },
+      existing: async (root, keys) => new Set(keys.filter((k) => inner(w.leaves, root).has(k))),
+      namedByOthers: async (root, keys) => new Set(keys.filter((k) => [...w.leaves].some(([r, m]) => r !== root && m.has(k)))),
+      clear: async (root) => { const n = inner(w.leaves, root).size; w.leaves.delete(root); return n; },
+    },
+    roots: {
+      get: async (root) => w.roots.get(root) ?? null,
+      seed: async (root, row) => { if (!w.roots.has(root)) w.roots.set(root, row); },
+      advance: async (root, base, digest) => {
+        const cur = w.roots.get(root);
+        if (base === 0 ? cur !== undefined : cur?.generation !== base) return null;
+        const next = { generation: (cur?.generation ?? 0) + 1, digest };
+        w.roots.set(root, next);
+        return next.generation;
+      },
+      clear: async (root) => { w.roots.delete(root); },
     },
   };
 }
@@ -86,60 +124,76 @@ function bodyAt(w: World, loc: ExtractedLoc): Extracted[] | undefined {
 }
 
 export function fakeExtracted(w: World): ExtractedCachePort {
+  const get = async (hash: string): Promise<Extracted[] | undefined> => {
+    const loc = w.index.get(hash);
+    return (loc ? bodyAt(w, loc) : undefined) ?? w.legacyBodies.get(hash);
+  };
   return {
-    get: async (hash) => {
-      const loc = w.index.get(hash);
-      return (loc ? bodyAt(w, loc) : undefined) ?? w.legacyBodies.get(hash);
+    get,
+    getMany: async (hashes) => {
+      const out = new Map<string, Extracted[]>();
+      for (const h of hashes) { const body = await get(h); if (body) out.set(h, body); }
+      return out;
     },
     put: async (hash, extracted) => { w.puts.push('legacy-body'); w.legacyBodies.set(hash, [...extracted]); },
-    setSource: async (ref, hash) => {
-      const path = ref.slice(ref.indexOf('::') + 2);
-      if (hash) w.sources.set(path, { sourceId: path, path, hash }); else w.sources.delete(path);
-    },
+    setSource: async () => undefined,
     rootExtracted: async () => [], deleteRootSources: async () => 0, snapshotReview: async () => undefined, reviewExtracted: async () => null,
   };
 }
 
 export function fakeSync(w: World): KnowledgeSyncPort {
-  const all = (): Array<{ path: string; hash: string }> => {
-    const byId = new Map([...w.legacySources, ...w.sources]);
+  const all = (root: string): Array<{ path: string; hash: string }> => {
+    const byId = new Map([...inner(w.legacySources, root), ...inner(w.sources, root)]);
     return [...byId.values()].map((r) => ({ path: r.path, hash: r.hash }));
   };
+  const stageKey = (actor: string, id: string, part: number): string => `${actor}/${id}/${part}`;
   return {
-    state: async (root) => w.state.get(root) ?? { generation: 0, digest: '' },
-    saveState: async (root, s) => { w.puts.push('sync.json'); w.state.set(root, s); },
-    sources: async () => all(),
+    state: async (root) => w.roots.get(root) ?? { generation: 0, digest: '' },
+    sources: async (root) => all(root),
     heldBodies: async (hashes) => {
       w.indexQueries += 1;
       return new Map(hashes.flatMap((h) => (w.index.has(h) ? [[h, w.index.get(h)!.sourceRefs] as const] : [])));
     },
     putBundle: async (bundle: Bundle) => { w.puts.push('bundle'); w.bundles.set(bundle.key, bundle.bytes); },
     snapshotReview: async (root, digest) => { w.puts.push(`snapshot:${root}:${digest}`); },
-    stagePart: async (id, part, bytes) => { w.puts.push('stage'); w.staged.set(`${id}/${part}`, bytes); },
-    stagedParts: async (id, parts) => {
+    stagePart: async (actor, id, part, bytes) => { w.puts.push('stage'); w.staged.set(stageKey(actor, id, part), bytes); },
+    stagedParts: async (actor, id, parts, maxBytes) => {
       const out: Uint8Array[] = [];
-      for (let i = 0; i < parts; i++) { const b = w.staged.get(`${id}/${i}`); if (!b) return null; out.push(b); }
+      let total = 0;
+      for (let i = 0; i < parts; i++) {
+        const b = w.staged.get(stageKey(actor, id, i));
+        if (!b) return null;
+        total += b.length;
+        if (total > maxBytes) throw new KnowledgeSyncError(413, 'pack_too_large', 'parts add up past the cap');
+        out.push(b);
+      }
       return out;
     },
-    dropStaged: async (id) => { for (const k of [...w.staged.keys()]) if (k.startsWith(`${id}/`)) w.staged.delete(k); },
+    dropStaged: async (actor, id) => { for (const k of [...w.staged.keys()]) if (k.startsWith(`${actor}/${id}/`)) w.staged.delete(k); },
     sweepStaged: async () => undefined,
-    clearRoot: async (root) => { w.state.delete(root); },
+    deleteLegacySources: async (root, ids) => { for (const id of ids) { w.legacyDeleted.push(id); inner(w.legacySources, root).delete(id); } },
+    clearRoot: async (root) => { w.roots.delete(root); w.leaves.delete(root); },
   };
 }
 
 /** A transaction over the world: what `work` wrote is kept when it resolves and restored when it throws. */
 export function atomically(w: World) {
-  return async <T>(work: (unit: PackUnit) => Promise<T>): Promise<T> => {
-    const saved = {
-      facts: new Map(w.facts), relations: new Map(w.relations), sources: new Map(w.sources), index: new Map(w.index), stale: [...w.stale],
+  const copy = <V>(m: Map<string, Map<string, V>>): Map<string, Map<string, V>> => new Map([...m].map(([k, v]) => [k, new Map(v)]));
+  return <T>(work: (unit: PackUnit) => Promise<T>): Promise<T> => {
+    const run = async (): Promise<T> => {
+      const saved = {
+        facts: new Map(w.facts), relations: new Map(w.relations), sources: copy(w.sources), leaves: copy(w.leaves), index: new Map(w.index),
+        roots: new Map(w.roots), stale: [...w.stale],
+      };
+      try {
+        return await work({ db: {} as Db, store: fakeStore(w), ledger: fakeLedger(w) });
+      } catch (error) {
+        Object.assign(w, saved);
+        throw error;
+      }
     };
-    try {
-      return await work({ db: {} as Db, store: fakeStore(w), ledger: fakeLedger(w) });
-    } catch (error) {
-      w.facts = saved.facts; w.relations = saved.relations; w.sources = saved.sources; w.index = saved.index; w.stale = saved.stale;
-      throw error;
-    }
+    const next = (w.txChain ?? Promise.resolve()).then(run);
+    w.txChain = next.catch(() => undefined);
+    return next;
   };
 }
-
-export { sha256Hex };

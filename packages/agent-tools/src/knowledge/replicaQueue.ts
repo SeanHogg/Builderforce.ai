@@ -68,7 +68,9 @@ export interface ReplicaQueue {
     /** Marks keys changed. Synchronous, deduplicated, never throws. */
     markDirty(keys: Iterable<string>): void;
     /** Makes the dirty set exactly `keys` (a reconcile has decided what differs; everything else is satisfied). */
-    replaceDirty(keys: Iterable<string>): Promise<void>;
+    replaceDirty(keys: Iterable<string>, since?: DirtySnapshot): Promise<void>;
+    /** Drops the pending analysis snapshot (one that can never be sent). */
+    clearAnalysis(): void;
     /** Stores the analysis snapshot the next pack carries (the latest wins). */
     setAnalysis(analysis: ReplicaAnalysis): void;
     /** The dirty keys, the ack and the pending analysis, as of now. */
@@ -240,7 +242,14 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
                 touch();
             } catch (error) { opts.onError?.(error); }
         },
-        async replaceDirty(keys) { await ready(); dirty.clear(); add(keys); touch(); },
+        async replaceDirty(keys, since) {
+            await ready();
+            // Keys marked AFTER `since` was read are newer work than the reconcile saw: they stay.
+            for (const k of [...dirty.keys()]) if (!since || dirty.get(k) === since.marks.get(k)) dirty.delete(k);
+            add(keys);
+            touch();
+        },
+        clearAnalysis() { if (analysis) { analysis = undefined; analysisChanged = true; touch(); } },
         setAnalysis(next) { analysis = next; analysisChanged = true; void ready(); touch(); },
         async snapshot() {
             await ready();

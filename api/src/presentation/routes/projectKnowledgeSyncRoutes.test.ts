@@ -30,6 +30,7 @@ vi.mock('../../application/knowledge/sync/knowledgeSyncManifest', () => ({
 import { createProjectKnowledgeRoutes } from './projectKnowledgeRoutes';
 import type { FrontDoor } from '../middleware/frontDoor';
 import { KnowledgeSyncError } from '../../application/knowledge/sync/knowledgeSyncPorts';
+import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
 
 const KPACK = 'application/vnd.builderforce.kpack';
 const hostDoor: FrontDoor = {
@@ -79,6 +80,24 @@ describe.each([['tenant door', () => createProjectKnowledgeRoutes({} as never)],
     const res = await make().request(big.url, { ...big.init, headers: { ...big.init.headers, 'content-length': String(9 * 1024 * 1024) } });
     expect(res.status).toBe(413);
     expect(mocks.apply).not.toHaveBeenCalled();
+  });
+
+  it('cuts a chunked body (no Content-Length) off at 8 MB without buffering it', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({ pull(c) { if (sent++ < 12) c.enqueue(chunk); else c.close(); } });
+    const res = await make().request('/3/knowledge/sync', { method: 'POST', headers: { 'content-type': KPACK }, body, duplex: 'half' } as never);
+    expect(res.status).toBe(413);
+    expect(sent).toBeLessThan(12);          // it stopped reading
+    expect(mocks.apply).not.toHaveBeenCalled();
+  });
+
+  it('answers the writer\'s own refusals with their status, not 500', async () => {
+    mocks.apply.mockRejectedValue(new KnowledgeWriteError(400, 'origin_mismatch', 'origin human cannot be written by a machine'));
+    const { url, init } = send(new Uint8Array([1]));
+    const res = await make().request(url, init);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'origin_mismatch' });
   });
 
   it('answers 404 for a project that is not the tenant’s, before any port exists', async () => {

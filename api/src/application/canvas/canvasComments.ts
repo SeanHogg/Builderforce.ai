@@ -30,8 +30,9 @@
  * lives here, at the single write path, exactly where the PRD §2 mapping puts it.
  */
 
-import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { annotations, users } from '../../infrastructure/database/schema';
 import { ensureSessionObject, type SessionRef } from '../creation/sessionObjectRef';
@@ -88,10 +89,14 @@ const COMMENT_ROW = {
   updatedAt: annotations.updatedAt,
 };
 
-/** Every comment of one session: the session-scoped, kind-scoped, not-deleted predicate. */
-function onSession(session: SessionKey): SQL {
-  return and(
-    eq(annotations.tenantId, session.tenantId),
+/**
+ * Every comment of one session: the session-scoped, kind-scoped, not-deleted
+ * conditions. The tenant predicate is NOT in here — each statement wraps these in
+ * `scopedToTenant(annotations, session.tenantId, ...)` so the scope is visible (and
+ * guarded) at the query.
+ */
+function onSession(session: SessionKey): SQL[] {
+  return [
     // The session's registry object, kind 'creation_session' (sessionObjectRef.ts).
     sql`${annotations.objectId} = (select id from objects
           where tenant_id = ${session.tenantId}
@@ -100,14 +105,14 @@ function onSession(session: SessionKey): SQL {
           limit 1)`,
     eq(annotations.kind, 'comment'),
     isNull(annotations.deletedAt),
-  )!;
+  ];
 }
 
 /** Wire ids of this session's comments keyed by bigserial id — the parent-id map. */
 async function commentIdMap(db: Db, session: SessionKey): Promise<Map<number, string>> {
   const rows = await db.select({ id: annotations.id, publicId: annotations.publicId })
     .from(annotations)
-    .where(onSession(session));
+    .where(scopedToTenant(annotations, session.tenantId, ...onSession(session)));
   return new Map(rows.flatMap((row) => (row.publicId ? [[row.id, row.publicId] as const] : [])));
 }
 
@@ -145,7 +150,7 @@ function toComment(row: RawCommentRow, parentIds: Map<number, string>): CanvasCo
 async function selectComment(db: Db, session: SessionKey, annotationId: number): Promise<CanvasComment | null> {
   const [row] = await db.select(COMMENT_ROW).from(annotations)
     .leftJoin(users, eq(users.id, annotations.authorRef))
-    .where(and(eq(annotations.id, annotationId), onSession(session)))
+    .where(scopedToTenant(annotations, session.tenantId, eq(annotations.id, annotationId), ...onSession(session)))
     .limit(1) as unknown as RawCommentRow[];
   if (!row) return null;
   const parentIds = row.parentId === null ? new Map<number, string>() : await commentIdMap(db, session);
@@ -154,13 +159,13 @@ async function selectComment(db: Db, session: SessionKey, annotationId: number):
 
 /** Every comment on a board, newest first, optionally filtered to one pinned object. */
 export async function listComments(db: Db, session: SessionKey, objectId?: string | null): Promise<CanvasComment[]> {
-  const where = and(
-    onSession(session),
-    objectId ? sql`${annotations.anchor}->>'${sql.raw(PIN_KEY)}' = ${objectId}` : undefined,
-  )!;
   const rows = await db.select(COMMENT_ROW).from(annotations)
     .leftJoin(users, eq(users.id, annotations.authorRef))
-    .where(where)
+    .where(scopedToTenant(
+      annotations, session.tenantId,
+      ...onSession(session),
+      objectId ? sql`${annotations.anchor}->>'${sql.raw(PIN_KEY)}' = ${objectId}` : undefined,
+    ))
     .orderBy(desc(annotations.createdAt))
     .limit(200) as unknown as RawCommentRow[];
   if (rows.length === 0) return [];
@@ -172,7 +177,7 @@ export async function listComments(db: Db, session: SessionKey, objectId?: strin
 export async function listCommentActivity(db: Db, session: SessionKey, limit: number): Promise<CanvasCommentActivity[]> {
   const rows = await db.select(COMMENT_ROW).from(annotations)
     .leftJoin(users, eq(users.id, annotations.authorRef))
-    .where(onSession(session))
+    .where(scopedToTenant(annotations, session.tenantId, ...onSession(session)))
     .orderBy(desc(annotations.createdAt))
     .limit(limit) as unknown as RawCommentRow[];
   if (rows.length === 0) return [];
@@ -194,7 +199,7 @@ export async function listCommentActivity(db: Db, session: SessionKey, limit: nu
 /** A parent comment's author, for the reply notification. Null when not a comment here. */
 export async function findCommentCreator(db: Db, session: SessionKey, commentPublicId: string): Promise<string | null> {
   const [row] = await db.select({ authorRef: annotations.authorRef }).from(annotations)
-    .where(and(eq(annotations.publicId, commentPublicId), onSession(session)))
+    .where(scopedToTenant(annotations, session.tenantId, eq(annotations.publicId, commentPublicId), ...onSession(session)))
     .limit(1);
   return row?.authorRef ?? null;
 }
@@ -221,7 +226,7 @@ export async function createComment(db: Db, env: Env | undefined, session: Sessi
   let parentId: number | null = null;
   if (input.parentCommentId) {
     const [parent] = await db.select({ id: annotations.id }).from(annotations)
-      .where(and(eq(annotations.publicId, input.parentCommentId), onSession(session)))
+      .where(scopedToTenant(annotations, session.tenantId, eq(annotations.publicId, input.parentCommentId), ...onSession(session)))
       .limit(1);
     if (!parent) throw new ParentCommentNotFoundError(input.parentCommentId);
     parentId = parent.id;
@@ -253,7 +258,7 @@ export async function setCommentResolved(
     resolvedAt: resolved ? new Date() : null,
     resolvedBy: resolved ? userId : null,
     updatedAt: new Date(),
-  }).where(and(eq(annotations.publicId, commentPublicId), onSession(session)))
+  }).where(scopedToTenant(annotations, session.tenantId, eq(annotations.publicId, commentPublicId), ...onSession(session)))
     .returning({ id: annotations.id });
   const first = target[0];
   if (!first) return null;
@@ -269,15 +274,16 @@ export async function setCommentResolved(
 export async function clearCommentPins(db: Db, session: SessionKey, canvasObjectId: string): Promise<void> {
   await db.update(annotations)
     .set({ anchor: sql`${annotations.anchor} - '${sql.raw(PIN_KEY)}'::text`, updatedAt: new Date() })
-    .where(and(
-      onSession(session),
+    .where(scopedToTenant(
+      annotations, session.tenantId,
+      ...onSession(session),
       sql`${annotations.anchor}->>'${sql.raw(PIN_KEY)}' = ${canvasObjectId}`,
     ));
 }
 
 /** Hard-delete a board's folded comments (annotations on its registry object). */
 export async function deleteSessionComments(db: Db, session: SessionKey): Promise<void> {
-  await db.delete(annotations).where(onSession(session));
+  await db.delete(annotations).where(scopedToTenant(annotations, session.tenantId, ...onSession(session)));
 }
 
 /** Drop annotations whose registry object is gone (an orphan sweep for the fold). */
