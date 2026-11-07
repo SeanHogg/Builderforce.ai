@@ -495,7 +495,7 @@ export const annotations = pgTable('annotations', {
    *  `uq_annotations_public_id` unique index.
    *  `mentions` / `resolvedBy` are the canvas comment fields that have no
    *  kernel home yet; both nullable on expand, both backfilled on fold. */
-  publicId:   uuid('public_id'),
+  publicId:   uuid('public_id').notNull().defaultRandom(),
   mentions:   jsonb('mentions'),
   resolvedBy: varchar('resolved_by', { length: 64 }),
   /** ── Moderation (migration 1106) ─────────────────────────────────────────

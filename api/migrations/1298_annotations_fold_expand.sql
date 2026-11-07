@@ -6,13 +6,13 @@
 -- here — the move is a later push, gated behind the live annotation gate (the
 -- gate itself shipped in the same push as this migration's deploy).
 --
--- Columns added (all nullable / identity, so the old Worker's INSERT/UPDATE of
+-- Columns added (nullable or defaulted, so the old Worker's INSERT/UPDATE of
 -- `annotations` names none of them and is unaffected during the deploy window):
 --
---   public_id    uuid  GENERATED ALWAYS AS IDENTITY — the WIRE id of a folded
+--   public_id    uuid NOT NULL DEFAULT gen_random_uuid() — the WIRE id of a folded
 --                comment. Clients hold uuid comment ids today, so the folded row
---                keeps a uuid; identity generation means existing rows gain one
---                on migration and the backfill never mints one.
+--                keeps a uuid; existing rows are backfilled once here and new rows
+--                get one from the default, so the fold backfill never mints one.
 --   mentions     jsonb — the canvas `mentions` array; backfilled on fold.
 --   resolved_by  varchar(64) — who resolved a thread; backfilled on fold.
 --                Deliberately varchar, NOT a users FK: kernel takes no sibling
@@ -37,10 +37,9 @@ ALTER TABLE annotations
   ADD COLUMN IF NOT EXISTS mentions jsonb,
   ADD COLUMN IF NOT EXISTS resolved_by varchar(64);
 
--- Identity on a pre-existing column needs a one-time backfill then the default.
+-- One-time backfill of existing rows, then the default for new rows, then NOT NULL.
 UPDATE annotations SET public_id = gen_random_uuid() WHERE public_id IS NULL;
 ALTER TABLE annotations ALTER COLUMN public_id SET DEFAULT gen_random_uuid();
-ALTER TABLE annotations ALTER COLUMN public_id ADD GENERATED ALWAYS AS IDENTITY;
 ALTER TABLE annotations ALTER COLUMN public_id SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_annotations_public_id
