@@ -20,6 +20,18 @@ const WATCH_DEBOUNCE_MS = 400;
 
 const uriOf = (path: string): vscode.Uri => vscode.Uri.file(path);
 
+/** The tail of each file path's in-process write chain. */
+const fileChains = new Map<string, Promise<unknown>>();
+
+/** Runs `task` after every earlier task on the same file path, one at a time; a failure does not break the chain. */
+function exclusiveOn<T>(path: string, task: () => Promise<T>): Promise<T> {
+  const run = (fileChains.get(path) ?? Promise.resolve()).then(task);
+  const tail = run.catch(() => undefined);
+  fileChains.set(path, tail);
+  void tail.then(() => { if (fileChains.get(path) === tail) fileChains.delete(path); });
+  return run;
+}
+
 export function vscodeKnowledgeFs(): KnowledgeFs {
   const fs = vscode.workspace.fs;
   return {
@@ -69,16 +81,26 @@ export function workspaceKnowledgeFiles(folderPath: string): KnowledgeFiles {
         return undefined;
       }
     },
-    async write(name, text) {
+    write(name, text) {
       const target = vscode.Uri.joinPath(dir, name);
-      // A name may sit in a subfolder (`runs/<id>.json`): its folder is made, not only the knowledge folder.
-      await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
-      await fs.writeFile(target, new TextEncoder().encode(text));
+      return exclusiveOn(target.fsPath, async () => {
+        // A name may sit in a subfolder (`runs/<id>.json`): its folder is made, not only the knowledge folder.
+        await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
+        // Never truncate in place: a crash mid-write would leave a half file. Write beside it, then rename over.
+        const temp = vscode.Uri.joinPath(dir, `${name}.tmp`);
+        await fs.writeFile(temp, new TextEncoder().encode(text));
+        await fs.rename(temp, target, { overwrite: true });
+      });
     },
-    async append(name, text) {
+    append(name, text) {
       const target = vscode.Uri.joinPath(dir, name);
-      await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
-      await appendFile(target.fsPath, text, "utf8");
+      // One batch can exceed the size an OS appends atomically, so appends to a file never overlap in this process.
+      // ACROSS windows safety rests on the reader, not on locking: a line-level torn-line skip on read plus
+      // last-line-wins per hash (see `LocalSnapshotStore`), so interleaved or partial lines cost a cache entry, never the log.
+      return exclusiveOn(target.fsPath, async () => {
+        await fs.createDirectory(vscode.Uri.joinPath(target, ".."));
+        await appendFile(target.fsPath, text, "utf8");
+      });
     },
     async remove(name) {
       try {

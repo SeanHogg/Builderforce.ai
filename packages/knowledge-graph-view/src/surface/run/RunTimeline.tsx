@@ -55,6 +55,11 @@ export function RunTimeline({ run, labels }: { run: StoredReviewRun; labels: Kno
                 })}
             </ol>
             {waiting > 0 && <p data-testid="kg-run-awaiting-judge" style={{ ...TYPE.meta, margin: 0 }}>{counted(labels, 'awaitingJudge', waiting)}</p>}
+            {run.report?.judgeStopped && (
+                <p data-testid="kg-run-judge-stopped" style={{ ...TYPE.meta, margin: 0, color: cssVar('cycle'), overflowWrap: 'anywhere', minWidth: 0 }}>
+                    {fillTemplate(t.judgeStopped, { reason: run.report.judgeStopped })}
+                </p>
+            )}
         </Section>
     );
 }

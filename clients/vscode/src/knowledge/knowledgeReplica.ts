@@ -1,12 +1,13 @@
 /**
- * The editor's REPLICA HOST (PRD 41 A7): one persisted queue and one pump per linked root, in this
- * process. The review writes its local store and queues for the linked project
- * (`replicatedKnowledgeStore`); this module owns what happens to the queue afterwards:
+ * The editor's REPLICA HOST (PRD 41 A7, A11): one persisted dirty set and one pump per linked root, in this
+ * process. The review writes its local store and marks what changed for the linked project
+ * (`replicatedKnowledgeStore`); this module owns what happens to the dirty set afterwards:
  *
- *   queue    `.builderforce/knowledge/<root>.replica.json`, written atomically (temp, then rename),
- *            bound to ONE project, shared by every opener of the root;
- *   pump     starts after a review finishes, when the workspace opens with ops waiting, and shortly
- *            after a live edit queued one. It never sends while the root is being reviewed, only the
+ *   queue    `.builderforce/knowledge/<root>.dirty.json` (keys, plus the server's last ack), written atomically
+ *            (temp, then rename), bound to ONE project, shared by every opener of the root. An op log an older
+ *            version left (`<root>.replica.json`) is converted to keys on first load, then deleted;
+ *   pump     sends ONE pack when a review finishes, when the workspace opens with keys waiting, and, while files
+ *            change, at most once every 60 s after a live edit marked one. It never sends while the root is being reviewed, only the
  *            window holding the root's lock pumps (`replicaLock.ts`), and it is bound to the project
  *            of its client: a project switch aborts it, discards the other project's queue and starts
  *            a fresh pump with the new client. It is stopped on dispose; the queue resumes next time;
@@ -16,7 +17,7 @@
  */
 
 import {
-  createReplicaQueue, emptyReplicaState, enqueueFirstSync, pumpReplica, replicaFileName, replicatedKnowledgeStore,
+  createReplicaQueue, currentSourcesOf, dirtyFileName, emptyReplicaState, enqueueFirstSync, pumpReplica, replicaFileName, replicatedKnowledgeStore,
   type KnowledgeFiles, type ReadThrough, type ReplicaPersistence, type ReplicaQueue, type ReplicaState,
 } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -24,8 +25,10 @@ import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { acquireReplicaLock } from "./replicaLock";
 
-/** A live edit's queued op is sent this long after the last one (never during a review). */
+/** A live edit's mark waits this long for more (never during a review). */
 const KICK_DEBOUNCE_MS = 1500;
+/** While files change, a pack is sent at most this often; a review's end sends at once. */
+export const MIN_SEND_INTERVAL_MS = 60_000;
 
 /** Which project each root's local snapshot was first-synced to (`globalState`), set once the first sync has DRAINED. */
 export interface UploadMarks {
@@ -45,6 +48,8 @@ interface Entry {
   timer?: ReturnType<typeof setTimeout>;
   /** The saved queue did not parse: the first sync is queued again whatever the marks say. */
   corrupt: boolean;
+  /** Epoch ms the last pump started: live edits wait until `MIN_SEND_INTERVAL_MS` after it. */
+  lastStartAt?: number;
   /** The source of the last pump, so a sign-in can restart one that paused on auth. */
   lastSource?: PumpSource;
   /** Runs once the queue has drained for `projectId` (marks the first sync done). */
@@ -69,6 +74,7 @@ function persistenceOf(files: KnowledgeFiles, name: string): ReplicaPersistence 
       await files.rename(temp, name);
     },
     keepAside: (text) => files.write(`${name}.corrupt`, text),
+    ...(files.remove ? { remove: () => files.remove!(name) } : {}),
   };
 }
 
@@ -76,7 +82,8 @@ const entryOf = (rootId: string, files: KnowledgeFiles): Entry => {
   let held = entries.get(rootId);
   if (!held) {
     const made: Entry = {
-      queue: createReplicaQueue(persistenceOf(files, replicaFileName(rootId)), {
+      queue: createReplicaQueue(persistenceOf(files, dirtyFileName(rootId)), {
+        legacy: persistenceOf(files, replicaFileName(rootId)),
         onError: (error) => report("replica queue", error),
         onCorrupt: () => { made.corrupt = true; },
       }),
@@ -94,7 +101,7 @@ export const replicaQueueFor = (rootId: string, files: KnowledgeFiles): ReplicaQ
 /** The root's replica state, with the queue's current length. */
 export async function replicaStatusOf(rootId: string, files: KnowledgeFiles): Promise<ReplicaState> {
   const held = entryOf(rootId, files);
-  return { ...held.state, skippedOps: [...held.state.skippedOps], failed: [...held.state.failed], queued: await held.queue.size() };
+  return { ...held.state, failed: [...held.state.failed], dirty: await held.queue.size() };
 }
 
 export function onReplicaState(cb: (rootId: string, state: ReplicaState) => void): () => void {
@@ -110,6 +117,8 @@ export interface PumpSource {
   client: KnowledgeClient;
   /** The project `client` talks to. */
   projectId: number;
+  /** The root's manifest: the current sources (path and content hash) the pack is built from. */
+  manifest: IngestManifest;
 }
 
 /** The server's copy as the seed reads it: extracted output by hash, and the root's human-authored facts. */
@@ -140,6 +149,8 @@ export function replicatedStoreOf(
     rootId,
     queue: replicaQueueFor(rootId, files),
     ...(pump ? {
+      // What the last local review held: a file is marked dirty only when its hash differs from it.
+      knownHashes: async () => new Map((await currentSourcesOf(pump.manifest, rootId)).map((s) => [s.ref, s.hash] as const)),
       replica: { projectId: pump.projectId, ...(readThrough ? { readThrough: readThroughOf(pump) } : {}) },
       onQueued: () => kickReplicaPump(rootId, files, resolve),
     } : {}),
@@ -204,6 +215,7 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
   held.abort = abort;
   held.projectId = source.projectId;
   held.lastSource = source;
+  held.lastStartAt = Date.now();
   const running: Promise<void> = (async () => {
     // Only the window holding the lock pumps: another window's pump on this folder is not ours to double.
     const lock = await acquireReplicaLock(source.files, source.rootId).catch(() => undefined);
@@ -211,7 +223,7 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
     try {
       const state = await pumpReplica({
         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
-        projectId: source.projectId,
+        projectId: source.projectId, rootId: source.rootId, sources: () => currentSourcesOf(source.manifest, source.rootId),
         idle: (signal) => waitNotReviewing(held, signal),
         onState: (next) => {
           held.state = next;
@@ -219,7 +231,7 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
         },
       });
       const mark = held.pendingMark;
-      if (mark && mark.projectId === source.projectId && !abort.signal.aborted && state.queued === 0 && !state.paused && state.failed.length === 0) {
+      if (mark && mark.projectId === source.projectId && !abort.signal.aborted && state.dirty === 0 && !state.paused && state.failed.length === 0) {
         held.pendingMark = undefined;
         await mark.run();
       }
@@ -242,19 +254,20 @@ export async function resumeAuthPaused(): Promise<void> {
     .map((e) => startReplicaPump(e.lastSource!)));
 }
 
-/** A live edit queued an op: send it soon, unless a review is running (its end starts the pump). */
+/** A live edit marked a key: send a pack, at most once a minute, unless a review is running (its end starts the pump). */
 export function kickReplicaPump(rootId: string, files: KnowledgeFiles, resolve: () => PumpSource | undefined): void {
   const held = entryOf(rootId, files);
   if (held.timer) clearTimeout(held.timer);
+  const wait = Math.max(KICK_DEBOUNCE_MS, (held.lastStartAt ?? 0) + MIN_SEND_INTERVAL_MS - Date.now());
   held.timer = setTimeout(() => {
     held.timer = undefined;
     if (held.reviewing > 0) return;
-    const source = resolve(); // resolved NOW: the project may have changed since the op was queued
+    const source = resolve(); // resolved NOW: the project may have changed since the key was marked
     if (source) void startReplicaPump(source);
-  }, KICK_DEBOUNCE_MS);
+  }, wait);
 }
 
-/** Starts the pump when the queue holds ops (the workspace opened with work waiting). */
+/** Starts the pump when the dirty set holds keys (the workspace opened with work waiting). */
 export async function resumeReplica(source: PumpSource): Promise<void> {
   const queue = entryOf(source.rootId, source.files).queue;
   if ((await queue.size()) > 0 && (await queue.projectId()) === source.projectId) void startReplicaPump(source);

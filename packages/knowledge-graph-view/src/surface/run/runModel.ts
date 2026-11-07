@@ -54,14 +54,16 @@ export function phaseRows(run: StoredReviewRun): PhaseRow[] {
 
 /**
  * How many files still wait for model judging (PRD 41 A10): the report's `awaitingJudgeCount` once it exists (a count only: the path list never leaves memory), else, while the run
- * is judging after the map is complete, the judge phase's total minus done. 0 when nothing waits.
+ * is judging after the map is complete, the owed total the host recorded at `mapped` (`awaitingJudgeTotal`) minus the judge phase's done. The judge phase's own total is the
+ * budget pass 2 took, not what is owed, so it is the fallback only when the host sent no owed total. 0 when nothing waits.
  */
 export function awaitingJudgeCount(run: StoredReviewRun): number {
     const owed = run.report?.awaitingJudgeCount ?? 0;
     if (owed > 0) return owed;
     if (run.endedAt !== undefined || !run.phases.some((p) => p.phase === 'mapped')) return 0;
     const judge = run.phases.find((p) => p.phase === 'judge');
-    return judge ? Math.max(0, judge.total - judge.done) : 0;
+    if (!judge) return 0;
+    return Math.max(0, (run.awaitingJudgeTotal ?? judge.total) - judge.done);
 }
 
 /** The five slowest steps of the run's ring, longest first (memory's `slowestSteps`). */

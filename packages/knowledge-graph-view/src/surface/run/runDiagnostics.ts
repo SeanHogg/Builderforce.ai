@@ -21,6 +21,7 @@ export function runDiagnosticLines(run: StoredReviewRun): string[] {
         `last run: id=${run.id} kind=${run.kind} outcome=${run.outcome ?? 'running'} duration=${runDurationMs(run)}ms`,
         `run phases: ${phases.join(' · ') || 'none'}`,
         `awaiting judge: ${awaitingJudgeCount(run)}`,
+        ...(run.report?.judgeStopped ? [`judge stopped: ${run.report.judgeStopped}`] : []),
         `slowest steps: ${slowest.join(' | ') || 'none'}`,
         `run errors: extractErrors=${run.report?.extractErrors ?? 'n/a'} failures=${failureCountOf(run)}`,
         `extraction pool: ${run.poolDown ? `down (${run.poolDown}); extracted on one thread` : 'parallel, or the review default'}`,

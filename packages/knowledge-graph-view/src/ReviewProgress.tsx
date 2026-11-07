@@ -60,6 +60,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue, onDetails }: 
                         {counted(labels, 'modelCalls', calls)}
                         {estimate?.costUsd !== undefined && !estimate.local && ` · ${fillTemplate(labels.reviewPlanCost, { cost: formatCost(estimate.costUsd) })}`}
                     </li>
+                    {plan.judgeFiles !== undefined && plan.judgeFiles > 0 && <li>{fillTemplate(labels.reviewPlanJudgeBudget, { count: plan.judgeFiles })}</li>}
                     {estimate?.local
                         ? <li style={muted}>{labels.reviewPlanCostLocal}</li>
                         : estimate?.costUsd === undefined && <li style={muted}>{labels.reviewPlanCostPending}</li>}

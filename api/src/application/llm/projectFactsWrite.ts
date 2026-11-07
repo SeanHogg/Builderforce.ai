@@ -4,7 +4,7 @@
  * cached read serves a stale set. Primitives live in `projectFactsStore`.
  */
 import { CONSOLIDATED_KEY_PREFIX, mergeConsolidated } from '@seanhogg/builderforce-memory/working';
-import { and, eq, isNull, ne, notLike, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, inArray, isNull, ne, notLike, sql } from 'drizzle-orm';
 import { memoryEmbeddingText } from '../memory/memoryEmbedding';
 import { NO_MEMORY_EMBEDDING, memoryEmbeddingFieldsFor } from '../memory/memoryEmbeddingPolicy';
 import { projectFacts } from '../../infrastructure/database/schema';
@@ -32,7 +32,7 @@ import {
  * recall cache so the next read reflects it. No-op on an invalid project / empty
  * key or content.
  */
-export async function upsertProjectFact(
+async function prepareFactRow(
   env: Env,
   db: Db,
   tenantId: number,
@@ -72,10 +72,11 @@ export async function upsertProjectFact(
      *  token in a burst would each wait out the rate limit. */
     deferVersionBump?: boolean;
   },
-): Promise<boolean> {
+  shared: PrepareShared = { embed: true },
+): Promise<PreparedFact | null> {
   const k = (key ?? '').trim().slice(0, 255);
   const incoming = (content ?? '').trim();
-  if (!k || !incoming || !Number.isInteger(projectId) || projectId <= 0) return false;
+  if (!k || !incoming || !Number.isInteger(projectId) || projectId <= 0) return null;
   const expiresAt = opts?.expiresAt ?? null;
   const originExecutionId = opts?.originExecutionId ?? null;
   // Provenance is the execution id the caller already has, plus the model of that
@@ -84,9 +85,11 @@ export async function upsertProjectFact(
   const originCost = originCostColumns(origin);
   // Content score, then a small lift from how often recall has already returned
   // this key. A brand-new key has no prior count, so it keeps the content score.
-  type PriorFact = { recallCount: number; content: string | null; expiresAt: Date | null; supersededBy: number | null; fileAnchors?: unknown };
   let prior: PriorFact[] = [];
-  try {
+  if (shared.priors) {
+    const known = shared.priors.get(k);
+    prior = known ? [known] : [];
+  } else try {
     const result = await db
       .select({ recallCount: projectFacts.recallCount, content: projectFacts.content, expiresAt: projectFacts.expiresAt, supersededBy: projectFacts.supersededBy, fileAnchors: projectFacts.fileAnchors })
       .from(projectFacts)
@@ -130,10 +133,14 @@ export async function upsertProjectFact(
   const now = new Date();
   // Every embedding column (1536 and, since 1256, the free 1024 space) is set or
   // cleared together, so a rewrite never leaves a vector of the OLD content behind.
-  const embeddingFields = await memoryEmbeddingFieldsFor(env, tenantId, memoryEmbeddingText(k, c), now).catch((err: unknown) => {
-    reportCaughtError(err, { source: 'project-facts', operation: 'embed-on-write', level: 'warning', context: { tenantId, projectId } });
-    return { ...NO_MEMORY_EMBEDDING };
-  });
+  // A batch (pack sync) skips the per-fact provider call — that is one subrequest per fact — and stores no
+  // vector; the embedding backfill sweep fills it in, exactly as for any fact written while embedding was down.
+  const embeddingFields = shared.embed
+    ? await memoryEmbeddingFieldsFor(env, tenantId, memoryEmbeddingText(k, c), now).catch((err: unknown) => {
+      reportCaughtError(err, { source: 'project-facts', operation: 'embed-on-write', level: 'warning', context: { tenantId, projectId } });
+      return { ...NO_MEMORY_EMBEDDING };
+    })
+    : { ...NO_MEMORY_EMBEDDING };
 
   // Retire what this write CONTRADICTS, and do it BEFORE the new row lands — otherwise
   // both beliefs are live for the window between the two writes, which is the exact
@@ -182,31 +189,129 @@ export async function upsertProjectFact(
     }
   }
 
-  await db
-    .insert(projectFacts)
-    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, createdBy: opts?.createdBy ?? null, origin: opts?.factOrigin ?? null, ...originCost, ...embeddingFields })
-    .onConflictDoUpdate({
-      target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
-      // A re-write REPLACES the governance metadata too: re-remembering a fact without
-      // a TTL makes it durable again, which is the only reading of "update == replace"
-      // that does not leave a stale expiry silently attached to fresh content. The
-      // vector goes with it — an embedding of superseded content ranks the fact by
-      // what it used to say.
-      //
-      // `supersededBy: null` REVIVES a retired row when someone re-asserts the belief:
-      // a retirement is "this was contradicted", not "this is forbidden", and a fresh
-      // assertion is exactly the evidence that it is live again.
-      set: {
-        content: c, source: source.slice(0, 64), expiresAt, importance, contentHash, fileAnchors, supersededBy: null, ...embeddingFields, updatedAt: now,
-        ...(opts?.factOrigin ? { origin: opts.factOrigin } : {}),
-        // A rewrite that does not know its run must not wipe a stamp a previous write
-        // recorded. Insert still writes null when nothing is known (values above).
-        ...(originExecutionId != null ? { originExecutionId } : {}),
-        ...(origin ? originCost : {}),
-      },
-    });
-  if (!opts?.deferVersionBump) await bumpProjectFactsVersion(env, tenantId, projectId);
-  return true;
+  return {
+    values: { tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, createdBy: opts?.createdBy ?? null, origin: opts?.factOrigin ?? null, ...originCost, ...embeddingFields },
+    // A re-write REPLACES the governance metadata too: re-remembering a fact without
+    // a TTL makes it durable again, which is the only reading of "update == replace"
+    // that does not leave a stale expiry silently attached to fresh content. The
+    // vector goes with it — an embedding of superseded content ranks the fact by
+    // what it used to say.
+    //
+    // `supersededBy: null` REVIVES a retired row when someone re-asserts the belief:
+    // a retirement is "this was contradicted", not "this is forbidden", and a fresh
+    // assertion is exactly the evidence that it is live again.
+    set: {
+      content: c, source: source.slice(0, 64), expiresAt, importance, contentHash, fileAnchors, supersededBy: null, ...embeddingFields, updatedAt: now,
+      ...(opts?.factOrigin ? { origin: opts.factOrigin } : {}),
+      // A rewrite that does not know its run must not wipe a stamp a previous write
+      // recorded. Insert still writes null when nothing is known (values above).
+      ...(originExecutionId != null ? { originExecutionId } : {}),
+      ...(origin ? originCost : {}),
+    },
+  };
+}
+
+type PriorFact = { recallCount: number; content: string | null; expiresAt: Date | null; supersededBy: number | null; fileAnchors?: unknown };
+type FactValues = typeof projectFacts.$inferInsert;
+interface PreparedFact { values: FactValues; set: Record<string, unknown> }
+interface PrepareShared {
+  /** The facts' prior rows, read for the whole batch in ONE query (absent: read this fact's own). */
+  priors?: Map<string, PriorFact>;
+  /** Embed on write (the single-fact path). A batch passes false and leaves the vector to the backfill sweep. */
+  embed: boolean;
+}
+
+/** One fact of a batch: `upsertProjectFact`'s arguments after the scope. */
+export interface ProjectFactInput {
+  key: string;
+  content: string;
+  source?: string;
+  opts?: Parameters<typeof prepareFactRow>[7];
+}
+
+/** Rows per INSERT: 200 rows of ~25 columns stay far under the driver's parameter limit. */
+const FACT_INSERT_CHUNK = 200;
+/** Columns a batch's conflict update takes from the incoming row; the rest are kept when the row states nothing. */
+const TAKEN_FROM_INCOMING = ['content', 'source', 'expiresAt', 'importance', 'contentHash', 'fileAnchors', 'embedding', 'embeddingModel', 'embeddedAt', 'embedding1024', 'embedding1024Model', 'embedded1024At'] as const;
+const KEPT_WHEN_ABSENT = ['origin', 'originExecutionId', 'originModel', 'originPromptTokens', 'originCompletionTokens'] as const;
+
+/** `col = excluded.col`, or `col = COALESCE(excluded.col, table.col)` for the columns a rewrite must not wipe. */
+function batchConflictSet(): Record<string, unknown> {
+  const cols = getTableColumns(projectFacts) as unknown as Record<string, { name: string }>;
+  const set: Record<string, unknown> = { supersededBy: null, updatedAt: new Date() };
+  for (const k of TAKEN_FROM_INCOMING) set[k] = sql.raw(`excluded."${cols[k]!.name}"`);
+  for (const k of KEPT_WHEN_ABSENT) set[k] = sql.raw(`COALESCE(excluded."${cols[k]!.name}", "project_facts"."${cols[k]!.name}")`);
+  return set;
+}
+
+/**
+ * THE fact writer: upserts a batch in multi-row statements (PRD 41 A11 rule 4a) — one prior read for the
+ * whole batch, then one INSERT … ON CONFLICT per {@link FACT_INSERT_CHUNK} rows. `upsertProjectFact` is the
+ * one-fact call of this function, so there is no second writer. Pass a transaction handle as `db` to make the
+ * batch part of a larger atomic write. Returns the keys written (an invalid key or empty content is skipped).
+ * A later item with the same key replaces an earlier one in the batch.
+ */
+export async function upsertProjectFacts(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  items: readonly ProjectFactInput[],
+  batch: { embed?: boolean; deferVersionBump?: boolean } = {},
+): Promise<Set<string>> {
+  const embed = batch.embed ?? items.length <= 1;
+  const byKey = new Map<string, ProjectFactInput>();
+  for (const it of items) byKey.set((it.key ?? '').trim().slice(0, 255), it);
+  byKey.delete('');
+  const keys = [...byKey.keys()];
+  let priors: Map<string, PriorFact> | undefined;
+  if (keys.length > 1) {
+    priors = new Map();
+    for (let i = 0; i < keys.length; i += FACT_INSERT_CHUNK) {
+      const rows = await db
+        .select({ key: projectFacts.key, recallCount: projectFacts.recallCount, content: projectFacts.content, expiresAt: projectFacts.expiresAt, supersededBy: projectFacts.supersededBy, fileAnchors: projectFacts.fileAnchors })
+        .from(projectFacts)
+        .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), inArray(projectFacts.key, keys.slice(i, i + FACT_INSERT_CHUNK))));
+      for (const r of rows) priors.set(r.key, r);
+    }
+  }
+  const prepared: PreparedFact[] = [];
+  for (const it of byKey.values()) {
+    const row = await prepareFactRow(env, db, tenantId, projectId, it.key, it.content, it.source ?? 'agent', it.opts, { embed, ...(priors ? { priors } : {}) });
+    if (row) prepared.push(row);
+  }
+  for (let i = 0; i < prepared.length; i += FACT_INSERT_CHUNK) {
+    const chunk = prepared.slice(i, i + FACT_INSERT_CHUNK);
+    await db
+      .insert(projectFacts)
+      .values(chunk.length === 1 ? chunk[0]!.values : chunk.map((p) => p.values))
+      // One row keeps its own literal update (the long-standing single-fact semantics); several take each
+      // row's values from `excluded`, since one SET cannot name a different literal per row.
+      .onConflictDoUpdate({
+        target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
+        set: (chunk.length === 1 ? chunk[0]!.set : batchConflictSet()) as never,
+      });
+  }
+  if (prepared.length > 0 && !batch.deferVersionBump) await bumpProjectFactsVersion(env, tenantId, projectId);
+  return new Set(prepared.map((p) => p.values.key as string));
+}
+
+/** Write-through upsert one fact under a stable `key` — the one-fact call of {@link upsertProjectFacts}. */
+export async function upsertProjectFact(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  key: string,
+  content: string,
+  source = 'agent',
+  opts?: ProjectFactInput['opts'],
+): Promise<boolean> {
+  const written = await upsertProjectFacts(
+    env, db, tenantId, projectId, [{ key, content, source, ...(opts ? { opts } : {}) }],
+    { embed: true, ...(opts?.deferVersionBump ? { deferVersionBump: true } : {}) },
+  );
+  return written.size > 0;
 }
 
 /**

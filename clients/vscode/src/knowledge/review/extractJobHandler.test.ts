@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { CODE_BADGES, indexedSymbolLookup, indexedSymbolSource, reviewPacks } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, extractJob, type ExtractJob } from "@seanhogg/builderforce-memory/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, extractJob, sha256Hex, type ExtractJob } from "@seanhogg/builderforce-memory/knowledge";
 import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
 import { withIndexSymbols } from "./extractPoolHost";
 
@@ -68,14 +68,24 @@ describe("a worker that reads its own file (PRD 41 A10)", () => {
   it("extracts the same as a job carrying the document, with the planned hash", async () => {
     const text = "# Title\n\nSome words about it.\n";
     writeFileSync(join(dir, "n.md"), text);
-    const viaRead = await handleExtractJob({ ...stub("n.md"), hash: "ignored", readFrom: { rootPath: dir, path: "n.md", hash: "planned" }, needSections: true });
-    const inline = await handleExtractJob({ ...jobFor("n.md", text, { hash: "planned" }), needSections: true });
+    const planned = await sha256Hex(Buffer.from(text));
+    const viaRead = await handleExtractJob({ ...stub("n.md"), hash: "ignored", readFrom: { rootPath: dir, path: "n.md", hash: planned }, needSections: true });
+    const inline = await handleExtractJob({ ...jobFor("n.md", text, { hash: planned }), needSections: true });
     expect(viaRead).toEqual(inline);
   });
 
+  it("throws \"changed since plan\" when the file was edited after planning, for a normal and a sectionsOnly job", async () => {
+    const planned = await sha256Hex(Buffer.from("# Old\n"));
+    writeFileSync(join(dir, "edited.md"), "# New, edited after the plan\n");
+    const readFrom = { rootPath: dir, path: "edited.md", hash: planned };
+    await expect(handleExtractJob({ ...stub("edited.md"), readFrom })).rejects.toThrow("changed since plan");
+    await expect(handleExtractJob({ ...stub("edited.md"), readFrom, sectionsOnly: true })).rejects.toThrow("changed since plan");
+  });
+
   it("returns {binary: true} for a binary file and extracts nothing", async () => {
-    writeFileSync(join(dir, "b.dat"), Buffer.from([1, 0, 2, 0, 0, 255, 0, 3]));
-    const out = await handleExtractJob({ ...stub("b.dat"), readFrom: { rootPath: dir, path: "b.dat", hash: "h" } });
+    const binary = Buffer.from([1, 0, 2, 0, 0, 255, 0, 3]);
+    writeFileSync(join(dir, "b.dat"), binary);
+    const out = await handleExtractJob({ ...stub("b.dat"), readFrom: { rootPath: dir, path: "b.dat", hash: await sha256Hex(binary) } });
     expect(out).toEqual({ extracted: [], binary: true });
   });
 

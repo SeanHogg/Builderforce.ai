@@ -98,6 +98,7 @@
       "@react-three/fiber": ["../../../frontend/node_modules/@react-three/fiber"],
       "@react-three/drei": ["../../../frontend/node_modules/@react-three/drei"],
       "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      "@seanhogg/builderforce-memory/knowledge/pack": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
       "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
       "@seanhogg/builderforce-memory/handoff": ["../node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts"],
       "@seanhogg/builderforce-memory/working": ["../node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],

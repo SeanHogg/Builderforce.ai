@@ -11,6 +11,7 @@ import type { Env } from '../../env';
 import { r2ExtractedCache } from './knowledgeBlobs';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 import { drizzleKnowledgeStore } from './knowledgeStore';
+import { drizzleLedger } from './knowledgeLedger';
 
 export interface KnowledgeWritePorts {
   store: KnowledgeStorePort;
@@ -18,5 +19,8 @@ export interface KnowledgeWritePorts {
 }
 
 export function knowledgeWritePortsFor(env: Env, db: Db, tenantId: number, projectId: number): KnowledgeWritePorts {
-  return { store: drizzleKnowledgeStore(db, tenantId, projectId), extracted: r2ExtractedCache(env, tenantId, projectId) };
+  return {
+    store: drizzleKnowledgeStore(db, tenantId, projectId),
+    extracted: r2ExtractedCache(env, tenantId, projectId, drizzleLedger(db, tenantId, projectId)),
+  };
 }

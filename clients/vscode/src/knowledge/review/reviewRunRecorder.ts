@@ -17,6 +17,14 @@ import { RUN_POST_INTERVAL_MS, throttledEmit } from "./throttledEmit";
 
 export { RUN_POST_INTERVAL_MS };
 
+/**
+ * A report as it is kept and sent: no failure list (`run.failures` holds it) and no awaiting-judge path list — only its count;
+ * memory keeps the list, pass 2 needs it.
+ */
+export const onTheWireReport = (report: ReviewReport): ReviewReport => ({
+  ...report, failures: [], awaitingJudge: [], awaitingJudgeCount: report.awaitingJudgeCount ?? report.awaitingJudge.length,
+});
+
 /** A stable id for a run: its start time and a random tail (file-name safe). */
 export const newRunId = (at: number = Date.now()): string => `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 

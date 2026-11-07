@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ upsert: vi.fn(async () => true), bump: vi.fn(async () => undefined), superadmin: vi.fn(async () => false) }));
-vi.mock('../llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsert, deleteProjectFact: vi.fn() }));
+vi.mock('../llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upsert, upsertProjectFacts: (await import('./factWriterMock.test-util')).batchOverSingle(mocks.upsert as never), deleteProjectFact: vi.fn() }));
 vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowledgeVersion: vi.fn() }));
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
 

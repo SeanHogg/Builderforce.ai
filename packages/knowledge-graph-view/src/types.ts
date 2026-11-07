@@ -87,6 +87,8 @@ export type StoredReviewRun = Omit<MemoryReviewRun, 'outcome'> & {
     poolDown?: string;
     /** On a live event `failures` holds only the latest; this is how many there are in all (`runs.get` returns every one). */
     failureCount?: number;
+    /** Files owed judgement when the map was completed (the host sets it at `mapped`); a live run record carries no other owed total. */
+    awaitingJudgeTotal?: number;
 };
 
 /** A run without its steps, lanes and failures: what the history list needs. */

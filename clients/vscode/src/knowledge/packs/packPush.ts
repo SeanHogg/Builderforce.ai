@@ -5,15 +5,15 @@
  *
  *   - 401/403 stop it at once (the existing 403 handling shows the refusal);
  *   - three transient failures in a row stop it (`PackUploadUnreachable`, the caller offers Retry);
- *   - ANY skipped or failed op means the pack is not fully on the project: `PackUploadIncomplete`, never
+ *   - ANY failure means the pack is not fully on the project: `PackUploadIncomplete`, never
  *     a success.
  *
- * Progress counts SOURCES (the pack's files), not ops. No vscode import: tested directly.
+ * Progress counts SOURCES (the pack's files): the parts of the one pack sent, scaled to them. No vscode import: tested directly.
  */
 
 import {
   createReplicaQueue, enqueueSources, memoryReplicaPersistence, pumpReplica,
-  type FirstSyncCounts, type PortableKnowledgePack,
+  type FirstSyncCounts, type PortableKnowledgePack, type ReplicaState,
 } from "@builderforce/agent-tools/knowledge";
 import { KnowledgeApiError, type KnowledgeClient } from "@builderforce/knowledge-client";
 import { localSnapshotStore } from "@seanhogg/builderforce-memory/knowledge";
@@ -45,17 +45,21 @@ export async function pushPack(
   const local = localSnapshotStore({ read: async () => JSON.stringify(pack.snapshot), write: async () => undefined });
   const queue = createReplicaQueue(memoryReplicaPersistence());
   const counts = await enqueueSources({ rootId: pack.rootId, local, queue, current: sourcesOf(pack) });
-  const sourcesLeft = async (): Promise<number> => (await queue.peek(Number.MAX_SAFE_INTEGER)).filter((o) => o.op === "putExtracted").length;
+  // One pack (in parts when large): progress is the parts sent, scaled to the pack's sources.
+  const onState = (s: ReplicaState): void => {
+    if (s.parts && s.parts.total > 0) onProgress(Math.floor((counts.sources * s.parts.sent) / s.parts.total), counts.sources);
+  };
   const state = await pumpReplica({
-    queue, local, client, signal, maxTransientStreak: PACK_TRANSIENT_STREAK,
-    onState: () => { void sourcesLeft().then((left) => onProgress(counts.sources - left, counts.sources)); },
+    queue, local, client, signal, maxTransientStreak: PACK_TRANSIENT_STREAK, rootId: pack.rootId, onState,
+    sources: async () => sourcesOf(pack),
   });
+  if (!state.paused && state.failed.length === 0) onProgress(counts.sources, counts.sources);
   if (signal.aborted) return undefined;
   if (state.paused === "auth") throw new KnowledgeApiError(state.pausedStatus ?? 403, "forbidden", "knowledge API refused the upload");
   if (state.paused === "unreachable") throw new PackUploadUnreachable();
   const refused = state.failed.filter((f) => f.status === 403 || f.status === 401)[0];
   if (refused) throw new KnowledgeApiError(refused.status ?? 403, "forbidden", refused.reason);
-  const incomplete = state.skipped + state.failed.length;
+  const incomplete = state.failed.length;
   if (incomplete > 0) throw new PackUploadIncomplete(incomplete);
   return counts;
 }

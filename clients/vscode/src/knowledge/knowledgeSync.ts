@@ -8,7 +8,7 @@
  *   server   the linked project's graph when it is reachable; counts from its `stats` (not from the
  *            capped nodes), `truncated` when the cap cut the file/doc split. The ONLY use the editor
  *            makes of `GET /knowledge-graph`;
- *   replica  the replica queue's state (queued / sending / waiting / failed), when linked;
+ *   replica  the replica dirty set's state (dirty keys / last pack / parts / sending / waiting / failed), when linked;
  *   skipped  the last review's recorded list (persisted per root); absent = unknown.
  */
 

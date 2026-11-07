@@ -51,6 +51,10 @@ export interface KnowledgeStorePort {
   upsertScope(scope: KnowledgeScopeWrite): Promise<void>;
   /** Model relations judged from `sourceRef` (or its sections) at another hash get `stale_at`. */
   markRelationsStale(sourceRef: NodeRef, currentHash: string): Promise<number>;
+  /** `markRelationsStale` for many sources in multi-row statements. Returns edges marked. */
+  markRelationsStaleMany(marks: ReadonlyArray<{ sourceRef: NodeRef; currentHash: string }>): Promise<number>;
+  /** The author of each of `keys` that exists (null = no recorded author; a missing key is absent from the map). One query per bounded batch. */
+  factAuthors(keys: readonly string[]): Promise<Map<string, string | null>>;
   /** Removes every relation with any of `refs` at either end. */
   deleteRelationsOf(refs: NodeRef | readonly NodeRef[]): Promise<number>;
   /** Removes exactly these relations by their upsert identity (`from`, `to`, `kind`), in bounded batches. Returns rows removed. */

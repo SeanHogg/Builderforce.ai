@@ -43,6 +43,11 @@
         "../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts",
         "../../../../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts"
       ],
+      "@seanhogg/builderforce-memory/knowledge/pack": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/knowledge/pack/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/knowledge/pack/index.d.ts"
+      ],
       "@seanhogg/builderforce-memory/ingest": [
         "./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts",
         "../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts",

@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 
 const mocks = vi.hoisted(() => ({ upsert: vi.fn(async () => true), bump: vi.fn(async () => undefined) }));
-vi.mock('../llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsert, deleteProjectFact: vi.fn() }));
+vi.mock('../llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upsert, upsertProjectFacts: (await import('./factWriterMock.test-util')).batchOverSingle(mocks.upsert as never), deleteProjectFact: vi.fn() }));
 vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowledgeVersion: vi.fn() }));
 
 import { writeKnowledge } from './writeKnowledge';

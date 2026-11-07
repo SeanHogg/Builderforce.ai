@@ -13,7 +13,7 @@ vi.mock("./knowledgeFailureLog", () => ({ logReviewFailure: (_sink: unknown, _wh
 const held = vi.hoisted(() => ({ reviewing: new Map<string, number>() }));
 const hold = (id: string, by: number): void => { held.reviewing.set(id, Math.max(0, (held.reviewing.get(id) ?? 0) + by)); };
 vi.mock("./knowledgeReplica", () => ({
-  replicaStatusOf: vi.fn(async () => ({ queued: 2, sending: false, skipped: 0, skippedOps: [], failed: [] })),
+  replicaStatusOf: vi.fn(async () => ({ dirty: 2, sending: false, failed: [] })),
   isRootReviewing: (id: string) => (held.reviewing.get(id) ?? 0) > 0,
   duringReview: async (id: string, _files: unknown, _pump: unknown, run: () => Promise<unknown>) => { hold(id, 1); try { return await run(); } finally { hold(id, -1); } },
 }));

@@ -49,7 +49,7 @@ describe("createRunRecorder", () => {
     const { recorder, posted } = rig();
     recorder.step(step("a.ts"));
     const before = posted.length;
-    const replica = { ...emptyReplicaState(), queued: 2 };
+    const replica = { ...emptyReplicaState(), dirty: 2 };
     const final = recorder.close("done", undefined, replica);
     recorder.flush();
     expect(posted.length).toBe(before + 1);

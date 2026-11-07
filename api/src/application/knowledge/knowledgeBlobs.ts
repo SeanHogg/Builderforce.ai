@@ -31,6 +31,8 @@ import { sha256Hex, type Extracted, type NodeRef } from '@seanhogg/builderforce-
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
+import { readBundled } from './knowledgeBundles';
+import type { KnowledgeLedgerPort } from './knowledgeLedger';
 
 const SOURCE = 'application/knowledge/knowledgeBlobs.ts';
 /** Blobs fetched per graph build when the bundle is cold; the rest arrive on the next build. */
@@ -132,16 +134,39 @@ export async function listSources(bucket: R2Bucket, prefix: string): Promise<Sou
   return out;
 }
 
-export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number): ExtractedCachePort {
+/**
+ * The root's current sources: the `knowledge_sources` rows (written by pack sync and by `setSource`) over the
+ * legacy per-source R2 objects, a row winning for the same source id. Without a ledger it is the legacy listing.
+ */
+export async function listRootSources(
+  bucket: R2Bucket | undefined, ledger: KnowledgeLedgerPort | undefined, tenantId: number, projectId: number, rootId: string,
+): Promise<SourceEntry[]> {
+  const legacy = bucket ? await listSources(bucket, knowledgeBlobKeys(tenantId, projectId).sources(rootId)) : [];
+  if (!ledger) return legacy;
+  const byId = new Map(legacy.map((s) => [sourceId(s.path, s.hash), s] as const));
+  for (const r of await ledger.sources.list(rootId)) byId.set(r.sourceId, { path: r.path, hash: r.hash });
+  return [...byId.values()];
+}
+
+export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, ledger?: KnowledgeLedgerPort): ExtractedCachePort {
   const keys = knowledgeBlobKeys(tenantId, projectId);
   const bucket = (): R2Bucket => {
     if (!env.UPLOADS) throw new Error('knowledge storage (R2) is not configured');
     return env.UPLOADS;
   };
 
-  /** Records (or, with hash '', deletes) one source's current hash. Touches only that object. */
+  /**
+   * Records (or, with hash '', deletes) one source's current hash. With a ledger the row is the record, and the
+   * legacy object of the same source, if any, is dropped so it can never contradict the row.
+   */
   const putSource = async (rootId: string, path: string, hash: string, idHash = hash): Promise<void> => {
-    const key = keys.source(rootId, sourceId(path, idHash));
+    const id = sourceId(path, idHash);
+    if (ledger) {
+      if (hash) await ledger.sources.upsert(rootId, [{ sourceId: id, path, hash }]); else await ledger.sources.remove(rootId, [id]);
+      await bucket().delete(keys.source(rootId, id)).catch(() => undefined);
+      return;
+    }
+    const key = keys.source(rootId, id);
     if (!hash) {
       await bucket().delete(key);
       return;
@@ -149,10 +174,22 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
     await writeJson(bucket(), key, { path, hash }, { path, hash });
   };
 
+  /** Bodies for `hashes`: through the bundle index first (ranged reads), the legacy per-hash object for the rest. */
+  const bodiesOf = async (b: R2Bucket, hashes: readonly string[]): Promise<Map<string, Extracted[]>> => {
+    const found = new Map<string, Extracted[]>();
+    if (ledger && hashes.length > 0) {
+      for (const [h, body] of await readBundled(b, await ledger.index.locate(hashes))) found.set(h, body);
+    }
+    const rest = hashes.filter((h) => !found.has(h)).slice(0, MAX_BLOB_FETCHES_PER_BUILD);
+    const fetched = await mapBounded(rest, FETCH_CONCURRENCY, (h) => readJson<Extracted[]>(b, keys.extracted(h)));
+    rest.forEach((h, i) => { if (fetched[i]) found.set(h, fetched[i]!); });
+    return found;
+  };
+
   return {
     async get(hash) {
       if (!env.UPLOADS) return undefined;
-      return readJson<Extracted[]>(env.UPLOADS, keys.extracted(hash));
+      return (await bodiesOf(env.UPLOADS, [hash])).get(hash);
     },
 
     async put(hash, extracted) {
@@ -174,7 +211,7 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
 
     async rootExtracted(rootId) {
       if (!env.UPLOADS) return [];
-      return extractedOf(env.UPLOADS, rootId, await listSources(env.UPLOADS, keys.sources(rootId)), true);
+      return extractedOf(env.UPLOADS, rootId, await listRootSources(env.UPLOADS, ledger, tenantId, projectId, rootId), true);
     },
 
     async deleteRootSources(rootId) {
@@ -191,6 +228,7 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
         if (!page.truncated) break;
       }
       await b.delete(keys.bundle(rootId));
+      if (ledger) removed += await ledger.sources.clear(rootId);
       return removed;
     },
 
@@ -200,7 +238,7 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
       // Immutable per digest: a digest names exactly these sources, so a second writer of the
       // same digest has nothing to add. Never a read-modify-write.
       if (await b.head(key)) return;
-      const sources = await listSources(b, keys.sources(rootId));
+      const sources = await listRootSources(b, ledger, tenantId, projectId, rootId);
       sources.sort((a, c) => (a.path < c.path ? -1 : a.path > c.path ? 1 : a.hash < c.hash ? -1 : a.hash > c.hash ? 1 : 0));
       await writeJson(b, key, sources);
     },
@@ -223,11 +261,14 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
   async function extractedOf(b: R2Bucket, rootId: string, sources: readonly SourceEntry[], refreshBundle: boolean): Promise<Extracted[]> {
     const prior = (await readJson<Bundle>(b, keys.bundle(rootId))) ?? {};
     const wanted = [...new Set(sources.map((s) => s.hash))].sort();
-    const missing = wanted.filter((h) => !(h in prior)).slice(0, MAX_BLOB_FETCHES_PER_BUILD);
-    const fetched = await mapBounded(missing, FETCH_CONCURRENCY, (h) => readJson<Extracted[]>(b, keys.extracted(h)));
+    const missingAll = wanted.filter((h) => !(h in prior));
+    const missing = missingAll.slice(0, MAX_BLOB_FETCHES_PER_BUILD);
+    // Indexed bodies are read in coalesced ranged windows (a few subrequests for thousands of bodies); only the
+    // rest are fetched one object each, still bounded per build.
+    const fetched = missing.length > 0 ? await bodiesOf(b, missingAll) : new Map<string, Extracted[]>();
     const bundle: Bundle = {};
     for (const h of wanted) if (prior[h]) bundle[h] = prior[h]!;
-    missing.forEach((h, i) => { if (fetched[i]) bundle[h] = fetched[i]!; });
+    for (const h of missingAll) { const body = fetched.get(h); if (body) bundle[h] = body; }
     if (refreshBundle && (missing.length > 0 || Object.keys(prior).length !== Object.keys(bundle).length)) {
       await writeJson(b, keys.bundle(rootId), bundle).catch((error: unknown) => {
         // The bundle is a read-through cache; the next build re-fetches what it lacks.

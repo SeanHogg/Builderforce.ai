@@ -46,7 +46,7 @@ vi.mock('../../application/knowledge/judgeKnowledge', async (importOriginal) => 
   judgeKnowledge: mocks.judge,
 }));
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
-vi.mock('../../application/llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsertFact, deleteProjectFact: vi.fn() }));
+vi.mock('../../application/llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upsertFact, upsertProjectFacts: (await import('../../application/knowledge/factWriterMock.test-util')).batchOverSingle(mocks.upsertFact as never), deleteProjectFact: vi.fn() }));
 vi.mock('../../application/knowledge/getKnowledgeGraph', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../application/knowledge/getKnowledgeGraph')>()),
   getKnowledgeGraph: mocks.graph,

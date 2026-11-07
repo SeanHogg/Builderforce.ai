@@ -7,6 +7,7 @@ import type { KnowledgeGraphSource, ReviewRunsPort, StoredReviewRun } from '../.
 import type { ReviewRun as ReviewMachine } from '../../useReviewRun';
 import type { PanelProps } from '../registry';
 import { RunPanel } from './RunPanel';
+import { runDiagnosticLines } from './runDiagnostics';
 import { finishedRun, liveRun, RUN_AT, summaryOf } from './runFixture';
 import { useReviewRunRecord } from './useReviewRunRecord';
 
@@ -68,7 +69,33 @@ describe('the Run panel', () => {
         expect(within(rows[2]!).getByText(L.phases.mapped)).toBeTruthy();
         expect(rows[3]!.dataset.state).toBe('active');
         expect(within(rows[1]!).queryByText(/^about .* left$/)).toBeNull();
+        // No owed total on the record: the judge phase's own total minus done is the fallback.
         expect(screen.getByTestId('kg-run-awaiting-judge').textContent).toBe('3 files waiting to be judged');
+        expect(screen.queryByTestId('kg-run-judge-stopped')).toBeNull();
+    });
+
+    it('counts the live waiting files from the owed total the host recorded at the map, not from the judge budget', () => {
+        const { port, push } = portOf();
+        render(<Harness port={port} review={machine()} />);
+        push(liveRun({
+            awaitingJudgeTotal: 40,
+            phases: [
+                { phase: 'mapped', startedAt: RUN_AT + 4000, endedAt: RUN_AT + 4000, done: 1, total: 1 },
+                { phase: 'judge', startedAt: RUN_AT + 4000, done: 5, total: 8 },
+            ],
+        }));
+        expect(screen.getByTestId('kg-run-awaiting-judge').textContent).toBe('35 files waiting to be judged');
+    });
+
+    it('says why judging stopped, and puts it in the copied diagnostics', () => {
+        const { port, push } = portOf();
+        render(<Harness port={port} review={machine('done')} />);
+        const reason = '5 model calls failed in a row: 429 rate limited';
+        const run = finishedRun({ report: { judgeStopped: reason, awaitingJudgeCount: 7 } as unknown as StoredReviewRun['report'] });
+        push(run);
+        expect(screen.getByTestId('kg-run-judge-stopped').textContent).toBe(`Judging stopped: ${reason}`);
+        expect(screen.getByTestId('kg-run-awaiting-judge').textContent).toBe('7 files waiting to be judged');
+        expect(runDiagnosticLines(run)).toContain(`judge stopped: ${reason}`);
     });
 
     it('lists the five slowest steps, longest first, with their reason and the read / lookup / pool split', () => {

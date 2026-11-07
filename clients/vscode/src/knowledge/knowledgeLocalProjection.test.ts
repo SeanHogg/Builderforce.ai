@@ -102,7 +102,7 @@ describe("a linked workspace draws from the local projection", () => {
     const status = await rootSyncStatus(secrets, root);
     expect(status.local.files).toBe(1);
     expect(status.server).toBeUndefined();
-    expect(status.replica).toMatchObject({ queued: 0, sending: false, skipped: 0, failed: [] });
+    expect(status.replica).toMatchObject({ dirty: 0, sending: false, failed: [] });
     expect(status.sources.find((s) => s.id === "code")?.state).toBe("collected");
   });
 });

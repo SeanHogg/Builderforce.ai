@@ -49,6 +49,7 @@
       // of its own (as in frontend/ and clients/*/tsconfig.json): the memory subpath it
       // reaches resolves from THIS package's install.
       "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      "@seanhogg/builderforce-memory/knowledge/pack": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
       // The same install serves the subpaths `@builderforce/agent-tools` reaches (the run's
       // working memory, the ingest hashes): agent-tools has no install in a checkout that
       // typechecks from here, so they resolve from THIS package's install.

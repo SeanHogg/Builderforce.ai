@@ -15,14 +15,14 @@ import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { reviewPacks, textDocument } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, extractJob, isBinaryText, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, extractJob, isBinaryText, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
 export const READ_TIMEOUT_MS = 5_000;
 
 /**
  * A job that makes the WORKER read the file (PRD 41 A10 rule 8): `rootPath` + `path` name it and `hash` is the
- * planned hash, trusted (not recomputed). A job that is `readByPool` (memory) has no `doc` at all.
+ * planned hash, VERIFIED against the bytes read (a mismatch throws "changed since plan"). A job that is `readByPool` (memory) has no `doc` at all.
  */
 export interface ReadFrom { rootPath: string; path: string; hash: string }
 
@@ -32,7 +32,7 @@ export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[]; rea
 /** What a host job returns: memory's result; `binary` ⇒ the file is binary text and nothing was extracted (the step is `skipped: binary`). */
 export type HostExtractResult = ExtractJobResult & { binary?: true };
 
-/** The file of a `readFrom` job as a document. Throws `timeout`, `too large`, or the read's own error; a path outside the root is refused. */
+/** The file of a `readFrom` job as a document (hashed and decoded from the SAME bytes). Throws `timeout`, `too large`, `changed since plan`, or the read's own error; a path outside the root is refused. */
 async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: number) {
   const root = nodePath.resolve(from.rootPath);
   const abs = nodePath.resolve(root, from.path);
@@ -45,6 +45,8 @@ async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: numb
     throw name === "TimeoutError" || name === "AbortError" ? new Error("timeout") : error;
   }
   if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) throw new Error("too large");
+  // Hash FIRST, over the raw bytes (as `createFsDirectorySource` does): a stale plan must not store an extract under the wrong hash.
+  if ((await sha256Hex(bytes)) !== from.hash) throw new Error("changed since plan");
   return textDocument(job.rootId, from.path, new TextDecoder("utf-8").decode(bytes));
 }
 

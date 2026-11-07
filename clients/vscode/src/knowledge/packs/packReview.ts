@@ -8,22 +8,24 @@
 
 import * as vscode from "vscode";
 import {
-  packFromStore, reviewHasWork, snapshotFileName,
+  packFromStore, reviewHasWork,
   type PackProvenance, type PortableKnowledgePack,
 } from "@builderforce/agent-tools/knowledge";
-import type { KnowledgeSnapshot } from "@seanhogg/builderforce-memory/knowledge";
+import type { Extracted, LocalSnapshotStore } from "@seanhogg/builderforce-memory/knowledge";
 import { getCurrentUserName } from "../../bfApi";
 import type { KnowledgeRoot } from "../knowledgeRoots";
 import { log, openRoot, reviewRoot, type OpenRoot } from "../knowledgeService";
 
-/** The extracted cache of a root's snapshot file (`extracted` is keyed by content hash). */
-async function extractedOf(open: OpenRoot, rootId: string): Promise<KnowledgeSnapshot["extracted"]> {
+/**
+ * The extract cache of a root, keyed by content hash — read THROUGH the root's one local store (its log, else a
+ * legacy snapshot's `extracted`), never from the snapshot file: the snapshot no longer holds it.
+ */
+async function extractedOf(open: OpenRoot, rootId: string): Promise<Record<string, Extracted[]>> {
   try {
-    const text = await open.files.read(snapshotFileName(rootId));
-    if (!text) return {};
-    const parsed = JSON.parse(text) as Partial<KnowledgeSnapshot>;
-    return parsed.extracted && typeof parsed.extracted === "object" ? parsed.extracted : {};
-  } catch {
+    const local = open.local as unknown as Partial<Pick<LocalSnapshotStore, "extractedEntries">>;
+    return (await local.extractedEntries?.()) ?? {};
+  } catch (error) {
+    log(`pack extracted ${rootId}`, error);
     return {};
   }
 }

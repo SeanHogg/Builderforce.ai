@@ -2,7 +2,7 @@
  * writeKnowledge — the ONE writer of stored knowledge (PRD 38 §4.2): facts, relations,
  * a scope's digest and stale marks, for one (tenant, project), in one bounded call.
  *
- *   • facts      reuse `upsertProjectFact` (the platform's one fact upsert: replace by key,
+ *   • facts      reuse `upsertProjectFacts` (the platform's one fact upsert, in multi-row statements: replace by key,
  *                embedding, provenance, anchor hash stamping). Knowledge facts never run
  *                its single-subject anchor sweep — many claims share one file.
  *   • relations  upsert on (tenant, project, from, to, kind).
@@ -42,7 +42,7 @@ import { clampClaim, type NodeRef, type StoredFact, type StoredRelation } from '
 import { isPackRootId, isWellFormedPackRootId } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { upsertProjectFact } from '../llm/projectFactsWrite';
+import { upsertProjectFacts, type ProjectFactInput } from '../llm/projectFactsWrite';
 import type { FactOriginCost } from '../llm/projectFactsStore';
 import type { ExtractedCachePort, KnowledgeScopeWrite, KnowledgeStorePort } from './knowledgePorts';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
@@ -100,6 +100,8 @@ export interface WriteKnowledgeDeps {
    * older one about the same file). Absent for knowledge writes.
    */
   legacyFact?: { originExecutionId?: number | null; origin?: FactOriginCost | null; retireByAnchor: boolean };
+  /** Embed each fact as it is written (default true). Pack sync passes false: a provider call per fact is a subrequest per fact, and the backfill sweep embeds them. */
+  embedFacts?: boolean;
 }
 
 export interface KnowledgeWriteResult {
@@ -183,6 +185,17 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
 
   try {
     if (packRoot) await ensurePackScope(store, packRoot, userId, input.scope);
+    // A machine's authors check is ONE query for the batch, not one per fact.
+    const factKeys = (input.facts ?? []).map((f) => f.key);
+    let authors: Map<string, string | null> | undefined;
+    if (!userId && factKeys.length === 1) {
+      // The one-fact route keeps its single lookup.
+      const author = await store.factAuthor(factKeys[0]!);
+      authors = new Map(author === undefined ? [] : [[factKeys[0]!.trim().slice(0, 255), author]]);
+    } else if (!userId && factKeys.length > 1) {
+      authors = await store.factAuthors(factKeys);
+    }
+    const items: ProjectFactInput[] = [];
     for (const f of input.facts ?? []) {
       if (packRoot && owners!.has(f.key.trim()) && owners!.get(f.key.trim()) !== packRoot) {
         (result.factsSkipped ??= []).push(f.key);
@@ -192,30 +205,36 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
       // A machine writes over a person's fact only to merge a code map, and then as a guest:
       // the fact keeps its origin and author.
       let keepsPersonsFact = false;
-      if (!userId && (await store.factAuthor(f.key)) != null) {
+      if (authors && authors.get(f.key.trim().slice(0, 255)) != null) {
         if (!isCodemapKey(f.key.trim())) {
           (result.factsSkipped ??= []).push(f.key);
           continue;
         }
         keepsPersonsFact = true;
       }
-      const ok = await upsertProjectFact(env, db, tenantId, projectId, f.key,
+      items.push({
+        key: f.key,
         // A model's claim quotes a bounded number of lines and characters — never a file body (§5.2).
-        origin === 'model' ? clampClaim(f.content) : f.content, packRoot ?? (f.source || 'knowledge'), {
-        ...(f.expiresAt !== undefined ? { expiresAt: f.expiresAt } : {}),
-        ...(f.importance != null ? { importance: f.importance } : {}),
-        ...(f.fileAnchors?.length ? { fileAnchors: f.fileAnchors } : {}),
-        ...(keepsPersonsFact ? {} : { factOrigin: origin }),
-        createdBy: origin === 'human' ? userId : null,
-        retireByAnchor: deps.legacyFact?.retireByAnchor ?? false,
-        deferVersionBump: true,
-        ...(deps.legacyFact?.originExecutionId != null ? { originExecutionId: deps.legacyFact.originExecutionId } : {}),
-        ...(deps.legacyFact?.origin ? { origin: deps.legacyFact.origin } : {}),
+        content: origin === 'model' ? clampClaim(f.content) : f.content,
+        source: packRoot ?? (f.source || 'knowledge'),
+        opts: {
+          ...(f.expiresAt !== undefined ? { expiresAt: f.expiresAt } : {}),
+          ...(f.importance != null ? { importance: f.importance } : {}),
+          ...(f.fileAnchors?.length ? { fileAnchors: f.fileAnchors } : {}),
+          ...(keepsPersonsFact ? {} : { factOrigin: origin }),
+          createdBy: origin === 'human' ? userId : null,
+          retireByAnchor: deps.legacyFact?.retireByAnchor ?? false,
+          deferVersionBump: true,
+          ...(deps.legacyFact?.originExecutionId != null ? { originExecutionId: deps.legacyFact.originExecutionId } : {}),
+          ...(deps.legacyFact?.origin ? { origin: deps.legacyFact.origin } : {}),
+        },
       });
-      if (ok) {
-        result.factsWritten += 1;
-        ownedKeys.add(f.key.trim());
-      }
+    }
+    // The ONE fact writer, in multi-row statements; a one-fact write (the facts route) keeps its single-row path.
+    const written = await upsertProjectFacts(env, db, tenantId, projectId, items, { embed: deps.embedFacts ?? true, deferVersionBump: true });
+    for (const key of written) {
+      result.factsWritten += 1;
+      ownedKeys.add(key.trim());
     }
 
     let relations = input.relations ?? [];

@@ -502,6 +502,14 @@ A review of 18,838 files queued 34,001 ops, and the queue itself is one JSON fil
      - decompression stops past 64 MB of output (`413 pack_too_large`);
      - string and row counts are bounded;
      - malformed frames are rejected (`422 bad_pack`).
+4a. **Storage writes are bounded per pack, not per file** (decided 2026-11-07, after the first implementation found about 40,000 object writes per first sync, past the Worker subrequest cap).
+   - **Rows in one transaction.** Facts, relations, stale marks, tombstones and source records are written in one Postgres transaction with multi-row statements. The shared fact writer gains a multi-row upsert, and the single-row path calls it, so there is one writer.
+   - **Extracted bodies.** The pack's `EXTR` section is stored as one content-addressed bundle object per pack part (`knowledge/{tenant}/extracted-bundles/{digest}`).
+   - **The bundle index.** An additive table, `knowledge_extracted_index (hash PK, bundle_key, byte_offset, byte_length)`, records where each body lives. It is written in the same transaction.
+   - **Reading a body.** `getExtracted` and the bulk read resolve a hash through the index and read it with a ranged GET. They fall back to the legacy per-hash object, so nothing is migrated eagerly.
+   - **Have-check and body checks.** The `have` check and the body verification answer from the index with one query, never one object read per hash.
+   - **The bound.** Object writes per sync are at most one per part, plus `sync.json`.
+   - **Order and atomicity.** The bundle is written before the transaction commits. An orphan bundle left by a failed transaction is harmless (content-addressed) and is swept by age. The digest is checked inside the transaction, and a mismatch rolls it back.
 5. **Retire the per-file uploads.** The pump's `putExtracted`, `writeRows` and `markStale` calls are removed. The `PUT …/extracted/:hash` route is deleted if nothing else calls it. Reads (`GET`, `bulk`) stay.
 6. **Visible.** The sync pill and the Run panel's replica row show:
    - the dirty-key count instead of the op count;

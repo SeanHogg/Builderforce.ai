@@ -174,6 +174,7 @@ export interface CoreLabels {
     reviewPlanCostPending: string;
     /** Shown in the confirm chip when the judgement pass runs on the person's own local model. */
     reviewPlanCostLocal: string;
+    reviewPlanJudgeBudget: string;
     reviewPlanSkipped: string;
     reviewConfirm: string;
     reviewCancel: string;
@@ -383,6 +384,7 @@ reviewPlanUnchanged: '{count} unchanged since the last review',
 reviewPlanCost: '≈ {cost}',
 reviewPlanCostPending: 'Cost is shown after routing.',
 reviewPlanCostLocal: 'Runs on your local model — no cost.',
+reviewPlanJudgeBudget: 'The first {count} files are judged in this run; the rest wait for the next.',
 reviewPlanSkipped: '{count} skipped',
 reviewConfirm: 'Review',
 reviewCancel: 'Cancel',

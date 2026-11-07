@@ -14,7 +14,7 @@
  * Pure over {@link KnowledgeFiles} (the workspace-fs adapter is `knowledgeFs.ts`).
  */
 
-import { localSnapshotStore, type KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
+import { localSnapshotStore, type ExtractedLogPersistence, type LocalSnapshotStore } from "@seanhogg/builderforce-memory/knowledge";
 // The manifest and file names are the ONE disk rule (`.builderforce/knowledge/<stem>.*`,
 // shared with the knowledge index and on-prem).
 import { extractedLogFileName, fileManifest, manifestFileName, snapshotFileName, type KnowledgeFiles } from "@builderforce/agent-tools/knowledge";
@@ -22,19 +22,42 @@ import { extractedLogFileName, fileManifest, manifestFileName, snapshotFileName,
 export { extractedLogFileName, fileManifest, manifestFileName, snapshotFileName, type KnowledgeFiles };
 
 /** The extract cache as memory's `extractedLog` port over the root's `<stem>.extracted.jsonl` (append-only JSON Lines). */
-export function extractedLogOf(files: KnowledgeFiles, rootId: string): { read(): Promise<string | undefined>; append(text: string): Promise<void> } {
+export function extractedLogOf(files: KnowledgeFiles, rootId: string): ExtractedLogPersistence {
   const name = extractedLogFileName(rootId);
+  /** A whole-file write that is never torn in place: a temp file, then a rename over the target (when the host can rename). */
+  const writeWhole = async (text: string): Promise<void> => {
+    if (!files.rename) return files.write(name, text);
+    const temp = `${name}.tmp`;
+    await files.write(temp, text);
+    await files.rename(temp, name);
+  };
+  // The read-modify-write fallback and `replace` share the temp name, so they run one at a time.
+  let chain: Promise<unknown> = Promise.resolve();
+  const exclusive = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = chain.then(task);
+    chain = run.catch(() => undefined);
+    return run;
+  };
   return {
     read: () => files.read(name),
-    // A host without `append` rewrites the concatenation: slower, never wrong.
+    // A host without `append` rewrites the concatenation (through a temp file when it can rename): slower, never wrong.
     append: files.append
       ? (text) => files.append!(name, text)
-      : async (text) => files.write(name, `${(await files.read(name)) ?? ""}${text}`),
+      : (text) => exclusive(async () => writeWhole(`${(await files.read(name)) ?? ""}${text}`)),
+    ...(files.rename ? { replace: (text: string) => exclusive(() => writeWhole(text)) } : {}),
   };
 }
 
 /** A root's local store: one canonical JSON snapshot (scopes, facts, relations) beside its manifest and its extract-cache log. */
-export function localKnowledgeStore(files: KnowledgeFiles, rootId: string): KnowledgeStore {
+export function localKnowledgeStore(files: KnowledgeFiles, rootId: string): LocalSnapshotStore {
   const name = snapshotFileName(rootId);
-  return localSnapshotStore({ read: () => files.read(name), write: (text) => files.write(name, text) }, { extractedLog: extractedLogOf(files, rootId) });
+  return localSnapshotStore(
+    {
+      read: () => files.read(name),
+      write: (text) => files.write(name, text),
+      // A snapshot that does not parse is kept beside it before the store starts empty.
+      keepAside: (text) => files.write(`${name}.corrupt`, text),
+    },
+    { extractedLog: extractedLogOf(files, rootId) },
+  );
 }

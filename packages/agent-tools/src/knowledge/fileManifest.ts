@@ -125,6 +125,7 @@ export function migratingRootFiles(files: KnowledgeFiles, rootId: string, legacy
             return moved;
         },
         write: (name, text) => files.write(name, text),
+        ...(files.append ? { append: (name: string, text: string) => files.append!(name, text) } : {}),
         ...(files.rename ? { rename: (from: string, to: string) => files.rename!(from, to) } : {}),
         ...(files.remove ? { remove: (name: string) => files.remove!(name) } : {}),
         ...(files.list ? { list: (folder: string) => files.list!(folder) } : {}),

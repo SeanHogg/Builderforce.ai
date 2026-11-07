@@ -865,6 +865,39 @@ export const knowledgeScopes = pgTable('knowledge_scopes', {
   unique('uq_knowledge_scope').on(t.tenantId, t.projectId, t.rootId),
 ]);
 
+// Where each extracted body lives (migration 1300, PRD 41 A11 rule 4a). A pack part's EXTR section is ONE
+// content-addressed R2 object (`bundle_key`); this row says which byte range of it holds the body for `hash`,
+// so a read is a ranged GET and a have-check is one query. Written in the same transaction as the pack's rows.
+export const knowledgeExtractedIndex = pgTable('knowledge_extracted_index', {
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  hash:       varchar('hash', { length: 160 }).notNull(),
+  bundleKey:  text('bundle_key').notNull(),
+  byteOffset: integer('byte_offset').notNull(),
+  byteLength: integer('byte_length').notNull(),
+  /** The `sourceRef` of each entry of the stored body: whether a file's entry is there is answered without reading the body. */
+  sourceRefs: text('source_refs').array().notNull().default(sql`'{}'::text[]`),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.projectId, t.hash], name: 'pk_knowledge_extracted_index' }),
+  index('idx_knowledge_extracted_index_bundle').on(t.bundleKey),
+]);
+
+// The current sources of a knowledge root — one row per source, written by pack sync in its transaction
+// (migration 1300) instead of one R2 object per file. `source_id` is the path, or `~tag|path` for a root-level
+// output. The legacy per-source R2 objects are still read as a fallback.
+export const knowledgeSources = pgTable('knowledge_sources', {
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  rootId:    varchar('root_id', { length: 512 }).notNull(),
+  sourceId:  text('source_id').notNull(),
+  path:      text('path').notNull(),
+  hash:      varchar('hash', { length: 160 }).notNull(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.sourceId], name: 'pk_knowledge_sources' }),
+]);
+
 
 export const roadmapItems = pgTable('roadmap_items', {
   id:         uuid('id').primaryKey().defaultRandom(),

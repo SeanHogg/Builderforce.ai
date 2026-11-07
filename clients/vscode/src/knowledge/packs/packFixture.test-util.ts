@@ -5,7 +5,7 @@
  */
 
 import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
-import { localSnapshotStore, type DirectorySource, type KnowledgeSnapshot } from "@seanhogg/builderforce-memory/knowledge";
+import { localSnapshotStore, type DirectorySource } from "@seanhogg/builderforce-memory/knowledge";
 import { packFromStore, runKnowledgeReview, type PortableKnowledgePack } from "@builderforce/agent-tools/knowledge";
 import type { PackMemento } from "./loadedPackRegistry";
 
@@ -36,7 +36,7 @@ export async function leasePack(rootId = FOREIGN_ROOT, name = "lease-docs", docs
   const store = localSnapshotStore({ read: async () => snapshot, write: async (s) => { snapshot = s; } });
   const manifest = new InMemoryIngestManifest();
   await runKnowledgeReview({ source: docsSource(rootId, docs), store, manifest });
-  const extracted = (JSON.parse(snapshot ?? "{}") as Partial<KnowledgeSnapshot>).extracted ?? {};
+  const extracted = await store.extractedEntries();
   return packFromStore({ name, rootId, title: "Lease docs", store, manifest, extracted });
 }
 

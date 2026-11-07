@@ -48,4 +48,24 @@ describe('migratingRootFiles — a local graph survives the root-id change', () 
         expect(migratingRootFiles(disk, NEW, undefined)).toBe(disk);
         expect(await migratingRootFiles(disk, NEW, OLD).read(snapshotFileName(NEW))).toBeUndefined();
     });
+
+    it('forwards every optional capability of the wrapped files, append included, and only those it has', async () => {
+        const calls: string[] = [];
+        const full: KnowledgeFiles = {
+            ...memoryFiles(),
+            append: async (n, t) => { calls.push(`append:${n}:${t}`); },
+            rename: async (a, b) => { calls.push(`rename:${a}>${b}`); },
+            remove: async (n) => { calls.push(`remove:${n}`); },
+            list: async (f) => { calls.push(`list:${f}`); return ['x']; },
+        };
+        const wrapped = migratingRootFiles(full, NEW, OLD);
+        await wrapped.append!('log.jsonl', 'a\n');
+        await wrapped.rename!('a', 'b');
+        await wrapped.remove!('c');
+        expect(await wrapped.list!('runs')).toEqual(['x']);
+        expect(calls).toEqual(['append:log.jsonl:a\n', 'rename:a>b', 'remove:c', 'list:runs']);
+
+        const bare = migratingRootFiles(memoryFiles(), NEW, OLD);
+        expect(bare.append).toBeUndefined();
+    });
 });

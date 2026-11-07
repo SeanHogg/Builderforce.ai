@@ -17,6 +17,7 @@
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/knowledge-client": ["../../packages/knowledge-client/src/index.ts"],
       "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      "@seanhogg/builderforce-memory/knowledge/pack": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/pack/index.d.ts"],
       "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],
       "@builderforce/cost-levers": ["../../packages/cost-levers/src/index.ts"],
       "@builderforce/difficulty-router": ["../../packages/difficulty-router/src/index.ts"],

@@ -352,7 +352,12 @@ describe('the entity catalog', () => {
     //  - `knowledge_scopes` is a per-root REVIEW DIGEST: one row per reviewed directory,
     //    upserted by that same writer, with a `last_digest` that names the graph state the
     //    cache keys on. Editing it by hand would be a false statement about a review.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(50);
+    //
+    // Ceiling moved 50 → 52 (2026-11-07) with pack sync's storage (1300, PRD 41 A11 rule 4a), adjudicated:
+    //  - `knowledge_extracted_index` is a LOCATOR (hash → byte range of a bundle object); no title, no status.
+    //  - `knowledge_sources` is the current source list of a root, written only by the pack-sync transaction;
+    //    a hand edit would be a false statement about what a review saw.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(52);
   });
 
   it('declares nothing that no migration creates', () => {

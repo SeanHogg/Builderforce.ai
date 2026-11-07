@@ -23,8 +23,10 @@ describe('judgementWithTimeout (PRD 41 A10 rule 9)', () => {
             expect(seen?.aborted).toBe(true);
             await vi.advanceTimersByTimeAsync(60);
             const out = await settled;
+            const settledAt = Date.now();
             expect(out).toBeInstanceOf(JudgementTimeout);
-            expect(endedAt).toBeGreaterThan(0); // the slot was held until the real call ended
+            expect(endedAt).toBeGreaterThan(0);
+            expect(settledAt).toBeGreaterThanOrEqual(endedAt); // the slot was held until the real call ended
         } finally {
             vi.useRealTimers();
         }

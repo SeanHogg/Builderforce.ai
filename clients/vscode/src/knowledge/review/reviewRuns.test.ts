@@ -155,7 +155,7 @@ describe("trackRun", () => {
   it("records a review from start to end, posts it, keeps it with the replica state, and lists it back", async () => {
     const files = memoryFiles();
     const posted: KnowledgeStoredRun[] = [];
-    const replica = { ...emptyReplicaState(), queued: 4 };
+    const replica = { ...emptyReplicaState(), dirty: 4 };
     const tracker = trackRun({ rootId: "root-a", request: { force: true }, files, post: (r) => posted.push(r), replica: async () => replica });
 
     tracker.progress({ phase: "extract", done: 0, total: 2 });

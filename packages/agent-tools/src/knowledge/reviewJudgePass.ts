@@ -68,6 +68,7 @@ export interface JudgePassDeps {
 
 /** Merges pass 2's report into pass 1's: counters add, what is still owed is the rest of pass 1's list plus pass 2's own. */
 export function mergeReports(mapped: ReviewReport, judged: ReviewReport, took: ReadonlySet<string>): ReviewReport {
+    const judgedFiles = (mapped.judgedFiles ?? 0) + (judged.judgedFiles ?? 0);
     const owed = [...mapped.awaitingJudge.filter((p) => !took.has(p)), ...judged.awaitingJudge];
     return {
         ...judged,
@@ -78,34 +79,48 @@ export function mergeReports(mapped: ReviewReport, judged: ReviewReport, took: R
         factsWritten: mapped.factsWritten + judged.factsWritten,
         relationsWritten: mapped.relationsWritten + judged.relationsWritten,
         staleMarked: mapped.staleMarked + judged.staleMarked,
+        judged: mapped.judged + judged.judged,
+        unjudged: mapped.unjudged + judged.unjudged,
+        invalidJudgements: mapped.invalidJudgements + judged.invalidJudgements,
         awaitingJudge: owed,
         awaitingJudgeCount: owed.length,
+        ...(judged.judgeStopped ? { judgeStopped: judged.judgeStopped } : mapped.judgeStopped ? { judgeStopped: mapped.judgeStopped } : {}),
+        judgedFiles,
         durationMs: mapped.durationMs + judged.durationMs,
     };
 }
+
+/** Files judged between two index updates: the map follows the judging in steps, not only at its end. */
+export const JUDGE_INDEX_EVERY = 100;
 
 export async function runJudgePass(d: JudgePassDeps): Promise<ReviewReport> {
     const { ports, opts, mapped } = d;
     const budget = Math.max(0, Math.floor(opts.judgeFiles ?? 0));
     if (budget === 0 || mapped.awaitingJudge.length === 0 || opts.signal?.aborted) return mapped;
 
+    // `opts.plan` is the plan pass 1 ran on: its manifest hashes are the LAST review's, which is what "recently changed" compares against.
     const plan = opts.plan ? await refreshPlan(opts.plan, ports.manifest) : await d.freshPlan();
     const ordered = orderForJudging(mapped.awaitingJudge, judgeSignalsOf(d.graph, mapped.rootId, opts.plan ?? plan));
     const only = ordered.slice(0, budget);
-    const took = new Set(only);
-    d.tell({ phase: 'judge', done: 0, total: only.length });
-    // Only judge progress and steps are the run's: the cached re-extraction of these files is not a second extraction.
-    const forward: KnowledgeReviewOptions['onProgress'] = (p) => {
-        if (p.phase === 'judge') d.tell({ ...p, done: Math.min(p.done, only.length - 1), total: only.length });
-    };
-    const judgeOpts: KnowledgeReviewOptions = {
-        ...opts, plan,
-        ...(opts.onStep ? { onStep: (s: ReviewStep) => { if (s.phase === 'judge') opts.onStep!(s); } } : {}),
-    };
-    const judged = await reviewDirectory(
-        d.directoryArgs(ports, judgeOpts, forward, { only }),
-    );
-    d.tell({ phase: 'judge', done: only.length, total: only.length });
-    await d.indexReviewed(ports, mapped.rootId, d.tell); // each judged file is now in the map
-    return mergeReports(mapped, judged, took);
+    // Judging alone: no analyzers, no coverage / history / owner reads (the map pass did them), only the parsers.
+    const { analyzers: _analyzers, history: _history, rootFiles: _rootFiles, ...judgingPorts } = ports;
+    let report = mapped;
+    for (let at = 0; at < only.length; at += JUDGE_INDEX_EVERY) {
+        const slice = only.slice(at, at + JUDGE_INDEX_EVERY);
+        // Only judge progress and steps are the run's: the cached re-extraction of these files is not a second extraction.
+        // The phase's `done` is the index of the file reached (the run reducer adds one), across slices.
+        const forward: KnowledgeReviewOptions['onProgress'] = (p) => {
+            if (p.phase === 'judge') d.tell({ ...p, done: at + p.done, total: only.length });
+        };
+        const judgeOpts: KnowledgeReviewOptions = {
+            ...opts, plan,
+            ...(opts.onStep ? { onStep: (s: ReviewStep) => { if (s.phase === 'judge') opts.onStep!(s); } } : {}),
+        };
+        const judged = await reviewDirectory(d.directoryArgs(judgingPorts, judgeOpts, forward, { only: slice }));
+        report = mergeReports(report, judged, new Set(slice));
+        await d.indexReviewed(ports, mapped.rootId, d.tell); // each judged file is now in the map
+        if (judged.aborted || judged.judgeStopped) break;
+    }
+    if (!report.aborted && !report.judgeStopped) d.tell({ phase: 'judge', done: only.length - 1, total: only.length });
+    return report;
 }

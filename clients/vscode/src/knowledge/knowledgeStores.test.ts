@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { filesManifestKey, srcRef, type Extracted } from "@seanhogg/builderforce-memory/knowledge";
-import { replicaFileName } from "@builderforce/agent-tools/knowledge";
+import { decodePack, manifestTree } from "@seanhogg/builderforce-memory/knowledge/pack";
+import { dirtyFileName, replicaFileName } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import {
   extractedLogFileName, extractedLogOf, fileManifest, localKnowledgeStore, manifestFileName, snapshotFileName,
@@ -17,25 +18,30 @@ function memoryFiles(): Files {
     read: async (n) => data.get(n),
     write: async (n, t) => { data.set(n, t); },
     rename: async (from, to) => { renames.push(`${from}>${to}`); data.set(to, data.get(from)!); data.delete(from); },
+    remove: async (n) => { data.delete(n); },
   };
 }
 
 const apiError = (status: number, retryAfterMs?: number) => Object.assign(new Error(`knowledge API ${status}`), { status, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) });
 
-function fakeClient(over: { putExtracted?: () => Promise<void> } = {}) {
-  const store = {
-    scopes: vi.fn(async () => []),
-    facts: vi.fn(async () => []),
-    relations: vi.fn(async () => []),
-    write: vi.fn(async () => undefined),
-    markStale: vi.fn(async () => undefined),
-  };
-  // Typed with the client's own parameters, so the mock's calls are `[hash, extracted]` tuples.
-  const impl: (hash: string, extracted: unknown[]) => Promise<void> = over.putExtracted ?? (async () => undefined);
-  const putExtracted = vi.fn(impl);
-  const writeRows = vi.fn(async () => undefined);
-  const client = { store, putExtracted, writeRows, putAnalysis: vi.fn(async () => undefined) } as unknown as KnowledgeClient;
-  return { client, store, putExtracted, writeRows };
+/** A project that holds nothing for the root: the first sync is one full pack. `sync` can be made to fail. */
+function fakeClient(over: { sync?: () => Promise<void> } = {}) {
+  const empty = manifestTree([]);
+  const packs: Uint8Array[] = [];
+  const sync = vi.fn(async (_root: string, part: { bytes: Uint8Array }) => {
+    await over.sync?.();
+    packs.push(part.bytes);
+    return { applied: true as const, generation: packs.length, digest: "d" };
+  });
+  const client = {
+    store: { scopes: vi.fn(async () => []), facts: vi.fn(async () => []), relations: vi.fn(async () => []) },
+    sync,
+    syncManifest: vi.fn(async () => ({ generation: 0, digest: empty.root, buckets: empty.buckets })),
+    syncLeaves: vi.fn(async () => ({ generation: 0, leaves: [] })),
+    syncHave: vi.fn(async (_r: string, hashes: string[]) => hashes.map(() => false)),
+    putAnalysis: vi.fn(async () => undefined),
+  } as unknown as KnowledgeClient;
+  return { client, sync, packs };
 }
 
 function marks(): UploadMarks & { map: Map<string, number> } {
@@ -86,6 +92,52 @@ describe("knowledge store", () => {
     expect(files.data.get(extractedLogFileName(ROOT))).toBe("a\nb\n");
   });
 
+  it("the append fallback writes a temp file then renames it over the log, never rewriting in place", async () => {
+    const files = memoryFiles();
+    const log = extractedLogOf(files, ROOT);
+    await log.append("a\n");
+    await log.append("b\n");
+    const name = extractedLogFileName(ROOT);
+    expect(files.renames).toEqual([`${name}.tmp>${name}`, `${name}.tmp>${name}`]);
+    expect(files.data.get(name)).toBe("a\nb\n");
+    expect(files.data.has(`${name}.tmp`)).toBe(false);
+  });
+
+  it("offers `replace` (temp + rename) only when the files can rename", async () => {
+    const files = memoryFiles();
+    await extractedLogOf(files, ROOT).replace!("live\n");
+    expect(files.data.get(extractedLogFileName(ROOT))).toBe("live\n");
+    const { rename: _rename, ...noRename } = files;
+    expect(extractedLogOf(noRename, ROOT).replace).toBeUndefined();
+  });
+
+  it("compacts a mostly-dead log on load through temp + rename", async () => {
+    const files = memoryFiles();
+    const row = (v: string) => `${JSON.stringify({ h: "h1", e: [{ sourceRef: srcRef(ROOT, "a.md"), sourceHash: v, nodes: [], edges: [], keys: [] }] })}\n`;
+    files.data.set(extractedLogFileName(ROOT), `${row("v1")}${row("v2")}${row("v3")}torn{\n`);
+    const entries = await localKnowledgeStore(files, ROOT).extractedEntries();
+    expect(entries.h1![0]!.sourceHash).toBe("v3");
+    expect(files.data.get(extractedLogFileName(ROOT))).toBe(row("v3"));
+    expect(files.renames).toEqual([`${extractedLogFileName(ROOT)}.tmp>${extractedLogFileName(ROOT)}`]);
+  });
+
+  it("keeps an unparseable snapshot as <snapshot>.corrupt, then starts empty", async () => {
+    const files = memoryFiles();
+    files.data.set(snapshotFileName(ROOT), "{ truncated");
+    expect(await localKnowledgeStore(files, ROOT).scopes()).toEqual([]);
+    expect(files.data.get(`${snapshotFileName(ROOT)}.corrupt`)).toBe("{ truncated");
+  });
+
+  it("reads the whole extract cache through the store (what a pack uses), not from the snapshot file", async () => {
+    const files = memoryFiles();
+    const store = localKnowledgeStore(files, ROOT);
+    const ex: Extracted = { sourceRef: srcRef(ROOT, "a.md"), sourceHash: "h1", nodes: [], edges: [], keys: [] };
+    await store.putExtracted!("h1", [ex]);
+    await store.write({ scope: { rootId: ROOT, title: "docs", packs: ["docs"] }, facts: [], relations: [] });
+    expect(JSON.parse(files.data.get(snapshotFileName(ROOT))!)).not.toHaveProperty("extracted");
+    expect(await localKnowledgeStore(files, ROOT).extractedEntries()).toEqual({ h1: [ex] });
+  });
+
   it("persists the review manifest whole", async () => {
     const files = memoryFiles();
     const m = fileManifest(files, "m.json");
@@ -94,7 +146,7 @@ describe("knowledge store", () => {
   });
 });
 
-describe("linking queues the local snapshot for the replica pump", () => {
+describe("linking owes the local snapshot to the replica pump as one pack", () => {
   async function reviewedLocally(files: Files) {
     const store = localKnowledgeStore(files, ROOT);
     const ref = srcRef(ROOT, "lease.md");
@@ -113,99 +165,106 @@ describe("linking queues the local snapshot for the replica pump", () => {
   const sync = (files: KnowledgeFiles, local: ReturnType<typeof localKnowledgeStore>, client: KnowledgeClient, projectId: number, m: UploadMarks) =>
     queueFirstSyncOnce({ rootId: ROOT, files, local, client, projectId, manifest: fileManifest(files, manifestFileName(ROOT)), marks: m });
 
-  it("sends each source's CURRENT output, then the rows, then the scope, once per project; the mark is set when the queue has drained", async () => {
+  it("sends each source's CURRENT output, the rows and the scope in ONE pack, once per project; the mark is set when the set has drained", async () => {
     const files = memoryFiles();
     const local = await reviewedLocally(files);
     const a = fakeClient();
     const m = marks();
     expect(await sync(files, local, a.client, 7, m)).toBe(true);
     await replicaDrained(ROOT);
-    expect(a.putExtracted).toHaveBeenCalledTimes(1);
-    expect(a.putExtracted.mock.calls[0]![0]).toBe("h1");
-    expect(a.store.markStale).toHaveBeenCalledWith({ rootId: ROOT }, srcRef(ROOT, "lease.md"), "h1");
-    expect(a.writeRows).toHaveBeenCalledWith(ROOT, { facts: [expect.objectContaining({ key: "claim:1" })], relations: [expect.objectContaining({ kind: "about" })] });
-    expect(a.store.write).toHaveBeenCalledWith(expect.objectContaining({ scope: expect.objectContaining({ rootId: ROOT }) }));
+    expect(a.sync).toHaveBeenCalledTimes(1);
+    const pack = await decodePack(a.packs[0]!);
+    expect(pack.baseGeneration).toBe(0);
+    expect(pack.files).toEqual([{ path: "lease.md", hash: "h1", bytes: 0 }]);
+    expect(pack.extracted?.map((x) => x.hash)).toEqual(["h1"]);
+    expect(pack.facts).toEqual([expect.objectContaining({ key: "claim:1" })]);
+    expect(pack.relations).toEqual([expect.objectContaining({ kind: "about" })]);
+    expect(pack.scope).toMatchObject({ rootId: ROOT });
     expect(m.map.get(ROOT)).toBe(7);
 
     expect(await sync(files, local, a.client, 7, m)).toBe(false);
-    expect(a.store.write).toHaveBeenCalledTimes(1);
+    expect(a.sync).toHaveBeenCalledTimes(1);
 
-    // Linked to ANOTHER project: that project receives the data, the old queue is gone.
+    // Linked to ANOTHER project: that project receives the data, the old set is gone.
     const b = fakeClient();
     expect(await sync(files, local, b.client, 8, m)).toBe(true);
     await replicaDrained(ROOT);
-    expect(b.putExtracted).toHaveBeenCalledTimes(1);
-    expect(b.writeRows).toHaveBeenCalledTimes(1);
-    expect(b.store.write).toHaveBeenCalledTimes(1);
+    expect(b.sync).toHaveBeenCalledTimes(1);
     expect(m.map.get(ROOT)).toBe(8);
     expect(await replicaQueueFor(ROOT, files).size()).toBe(0);
-    expect(a.putExtracted).toHaveBeenCalledTimes(1);
+    expect(a.sync).toHaveBeenCalledTimes(1);
   });
 
   it("switching project while a pump waits on a 429 sends nothing of B to A, and B receives its first sync", async () => {
     const files = memoryFiles();
     const local = await reviewedLocally(files);
-    const a = fakeClient({ putExtracted: async () => { throw apiError(429, 600_000); } });
+    const a = fakeClient({ sync: async () => { throw apiError(429, 600_000); } });
     const b = fakeClient();
     const m = marks();
     await sync(files, local, a.client, 7, m);
     await vi.waitFor(async () => expect((await replicaStatusOf(ROOT, files)).waitingUntil).toBeDefined());
     await sync(files, local, b.client, 8, m);
     await replicaDrained(ROOT);
-    expect(a.writeRows).not.toHaveBeenCalled();
-    expect(a.store.write).not.toHaveBeenCalled();
-    expect(b.putExtracted).toHaveBeenCalledTimes(1);
-    expect(b.writeRows).toHaveBeenCalledTimes(1);
-    expect(b.store.write).toHaveBeenCalledTimes(1);
+    expect(a.packs).toHaveLength(0);
+    expect(b.sync).toHaveBeenCalledTimes(1);
     expect(m.map.get(ROOT)).toBe(8); // project 7 never drained, so it was never marked
   });
 
-  it("an expired token keeps the whole queue and does not mark the first sync done", async () => {
+  it("an expired token keeps the whole dirty set and does not mark the first sync done", async () => {
     const files = memoryFiles();
     const local = await reviewedLocally(files);
     let signedIn = false;
-    const a = fakeClient({ putExtracted: async () => { if (!signedIn) throw apiError(401); } });
+    const a = fakeClient({ sync: async () => { if (!signedIn) throw apiError(401); } });
     const m = marks();
     await sync(files, local, a.client, 7, m);
     await replicaDrained(ROOT);
     const status = await replicaStatusOf(ROOT, files);
-    expect(status).toMatchObject({ paused: "auth", queued: 4, failed: [] });
+    expect(status).toMatchObject({ paused: "auth", failed: [] });
+    expect(status.dirty).toBeGreaterThan(0);
     expect(m.map.has(ROOT)).toBe(false);
-    expect(a.writeRows).not.toHaveBeenCalled();
+    expect(a.packs).toHaveLength(0);
 
-    // The person signs in again: the paused pump resumes, drains the intact queue, and the first sync is marked.
+    // The person signs in again: the paused pump resumes, drains the intact set, and the first sync is marked.
     signedIn = true;
     await resumeAuthPaused();
     await replicaDrained(ROOT);
-    expect(await replicaStatusOf(ROOT, files)).toMatchObject({ queued: 0, failed: [] });
+    expect(await replicaStatusOf(ROOT, files)).toMatchObject({ dirty: 0, failed: [] });
     expect((await replicaStatusOf(ROOT, files)).paused).toBeUndefined();
-    expect(a.writeRows).toHaveBeenCalledTimes(1);
+    expect(a.packs).toHaveLength(1);
     expect(m.map.get(ROOT)).toBe(7);
   });
 
-  it("a queue that does not parse is kept aside and the first sync is queued again, whatever the mark says", async () => {
+  it("a dirty-set file that does not parse is kept aside and the first sync is owed again, whatever the mark says", async () => {
     const files = memoryFiles();
     const local = await reviewedLocally(files);
-    files.data.set(replicaFileName(ROOT), "{ truncated");
+    files.data.set(dirtyFileName(ROOT), "{ truncated");
     const a = fakeClient();
     const m = marks();
-    m.map.set(ROOT, 7); // the old mark says it was done; the queue that held the proof is lost
+    m.map.set(ROOT, 7); // the old mark says it was done; the set that held the proof is lost
     expect(await sync(files, local, a.client, 7, m)).toBe(true);
     await replicaDrained(ROOT);
-    expect(files.data.get(`${replicaFileName(ROOT)}.corrupt`)).toBe("{ truncated");
-    expect(a.writeRows).toHaveBeenCalledTimes(1);
+    expect(files.data.get(`${dirtyFileName(ROOT)}.corrupt`)).toBe("{ truncated");
+    expect(a.sync).toHaveBeenCalledTimes(1);
   });
 
-  it("writes the queue atomically (temp, then rename), and dispose makes every queue durable first", async () => {
+  it("writes the dirty set atomically (temp, then rename), only when it changed, and dispose makes it durable first", async () => {
     const files = memoryFiles();
-    await replicaQueueFor(ROOT, files).enqueue({ op: "putExtracted", hash: "h9" });
-    expect(files.data.has(replicaFileName(ROOT))).toBe(false); // throttled: not yet saved
+    replicaQueueFor(ROOT, files).markDirty(["f:h9.md"]);
+    expect(files.data.has(dirtyFileName(ROOT))).toBe(false); // throttled: not yet saved
     await disposeReplicas();
-    expect(files.data.get(replicaFileName(ROOT))).toContain("h9");
-    expect(files.renames).toEqual([`${replicaFileName(ROOT)}.tmp>${replicaFileName(ROOT)}`]);
+    expect(files.data.get(dirtyFileName(ROOT))).toContain("f:h9.md");
+    expect(files.renames).toEqual([`${dirtyFileName(ROOT)}.tmp>${dirtyFileName(ROOT)}`]);
   });
 
-  it("queues nothing for a root never reviewed locally", async () => {
+  it("converts an op log an older version left to dirty keys, then deletes it", async () => {
+    const files = memoryFiles();
+    files.data.set(replicaFileName(ROOT), JSON.stringify({ version: 1, ops: [{ op: "write", rootId: ROOT, facts: ["claim:9"], relations: [] }] }));
+    const queue = replicaQueueFor(ROOT, files);
+    expect((await queue.snapshot()).keys).toEqual(["a:claim:9"]);
+    expect(files.data.has(replicaFileName(ROOT))).toBe(false);
+  });
+
+  it("owes nothing for a root never reviewed locally", async () => {
     const { client } = fakeClient();
     const files = memoryFiles();
     expect(await sync(files, localKnowledgeStore(files, ROOT), client, 7, marks())).toBe(false);

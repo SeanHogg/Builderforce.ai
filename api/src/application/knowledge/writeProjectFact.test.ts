@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   // The author of the existing fact: undefined = none, null = no recorded author, string = a person.
   factAuthor: vi.fn(async (_key: string): Promise<string | null | undefined> => undefined),
 }));
-vi.mock('../llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsert, deleteProjectFact: vi.fn() }));
+vi.mock('../llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upsert, upsertProjectFacts: (await import('./factWriterMock.test-util')).batchOverSingle(mocks.upsert as never), deleteProjectFact: vi.fn() }));
 vi.mock('./knowledgeWritePorts', () => ({
   knowledgeWritePortsFor: () => ({ store: { factAuthor: mocks.factAuthor, upsertRelations: vi.fn(async () => 0) }, extracted: {} }),
 }));

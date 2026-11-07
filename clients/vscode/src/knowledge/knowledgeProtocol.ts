@@ -102,6 +102,8 @@ export type KnowledgeStoredRun = Omit<ReviewRun, "outcome"> & {
   /** Why the extraction pool was unavailable (the run extracted on one thread); absent ⇒ it was not. */
   poolDown?: string;
   failureCount?: number;
+  /** Files owed judgement when the map was completed; the host sets it at `mapped`. */
+  awaitingJudgeTotal?: number;
 };
 
 /** A run without its steps, lanes and failures: what the history list needs. */

@@ -115,7 +115,7 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
   const local = rootStore(rootId, () => localKnowledgeStore(files, rootId), "local");
   const manifest = rootManifest(rootId, () => fileManifest(files, manifestFileName(rootId)), root.folderPath);
   const projectId = getSelectedProject()?.id;
-  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId } : undefined;
+  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest } : undefined;
   return {
     root,
     source: createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title, hashCache }),
@@ -174,7 +174,7 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, record
         upload: async (sha: string, snapshot: unknown) => {
           const queue = replicaQueueFor(root.rootId, open.files);
           await queue.adopt(open.pump!.projectId);
-          await queue.enqueue({ op: "putAnalysis", sha, snapshot: snapshot as AnalysisSnapshotPayload });
+          queue.setAnalysis({ sha, snapshot: snapshot as AnalysisSnapshotPayload });
         },
       } : {}),
       onUploadError: (error) => log("analysis upload", error),
@@ -230,9 +230,10 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
   return {
     open,
     async plan(force) {
-      const detail = await planKnowledgeReviewDetail(await portsOnce(), { force: !!force });
-      recorder.planned(detail.plan);
-      return detail;
+      const planned = await planKnowledgeReviewDetail(await portsOnce(), { force: !!force });
+      recorder.planned(planned.plan);
+      // The confirm chip states the file budget of the judge pass too (PRD 41 A10).
+      return { ...planned, plan: { ...planned.plan, judgeFiles: judgeBudgetFiles() } };
     },
     async run(opts) {
       const p = await portsOnce();

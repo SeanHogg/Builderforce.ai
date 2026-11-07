@@ -23,6 +23,8 @@ export interface RunLabels {
         perSecond: string;
         /** `{time}`: "about 2 min left". */
         eta: string;
+        /** Why judging stopped for the run: `{reason}`. */
+        judgeStopped: string;
         /** `{id}`. */
         laneName: string;
         laneIdle: string;
@@ -83,6 +85,7 @@ export const RUN_DEFAULTS: RunLabels = {
         phaseProgress: '{done} of {total}',
         perSecond: '{rate}/s',
         eta: 'about {time} left',
+        judgeStopped: 'Judging stopped: {reason}',
         laneName: 'Worker {id}',
         laneIdle: 'idle',
         lanesNone: 'No worker is busy right now.',

@@ -214,6 +214,24 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
       return rows.length;
     },
 
+    async markRelationsStaleMany(marks) {
+      let marked = 0;
+      const CHUNK = 200;
+      for (let i = 0; i < marks.length; i += CHUNK) {
+        const values = marks.slice(i, i + CHUNK).map((m) => sql`(${m.sourceRef}, ${m.currentHash})`);
+        // One statement per chunk: an edge judged from a known, different hash of the source (or one of its sections) goes stale.
+        const result = await db.execute(sql`
+          UPDATE project_fact_relations r SET stale_at = now()
+          FROM (VALUES ${sql.join(values, sql`, `)}) AS m(ref, hash)
+          WHERE r.tenant_id = ${tenantId} AND r.project_id = ${projectId}
+            AND r.origin = 'model' AND r.stale_at IS NULL AND r.source_hash IS NOT NULL AND r.source_hash <> m.hash
+            AND (r.from_ref = m.ref OR starts_with(r.from_ref, m.ref || '#') OR r.to_ref = m.ref OR starts_with(r.to_ref, m.ref || '#'))
+        `);
+        marked += (result as unknown as { rowCount?: number }).rowCount ?? 0;
+      }
+      return marked;
+    },
+
     async deleteRelationsOf(refs) {
       const all = typeof refs === 'string' ? [refs] : [...refs];
       let removed = 0;
@@ -316,6 +334,17 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
         if (ids.length < DELETE_CHUNK) break;
       }
       return removed;
+    },
+
+    async factAuthors(keys) {
+      const out = new Map<string, string | null>();
+      const distinct = [...new Set(keys.map((k) => k.trim().slice(0, 255)))];
+      for (let i = 0; i < distinct.length; i += IN_CHUNK) {
+        const rows = await db.select({ key: projectFacts.key, createdBy: projectFacts.createdBy }).from(projectFacts)
+          .where(scoped(projectFacts, tenantId, inArray(projectFacts.key, distinct.slice(i, i + IN_CHUNK))));
+        for (const r of rows) out.set(r.key, r.createdBy ?? null);
+      }
+      return out;
     },
 
     async factAuthor(key) {
