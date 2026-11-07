@@ -54,7 +54,8 @@ export function rootOfRef(ref: string): string | undefined {
 }
 
 const pathOfSourceRef = (ref: string): string => ref.slice(ref.indexOf('::') + 2);
-n/** The object identity of a source: its path, or `~<tag>|<path>` for a root-level output. */
+
+/** The object identity of a source: its path, or `~<tag>|<path>` for a root-level output. */
 export function sourceId(path: string, hash: string): string {
   return fileLeafKey(path, hash).slice(2); // the codec's leaf key is `f:<this id>`: ONE rule for both sides
 }

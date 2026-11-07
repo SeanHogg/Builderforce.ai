@@ -13,21 +13,17 @@ vi.mock('../llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upse
 vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowledgeVersion: vi.fn() }));
 
 import { writeKnowledge } from './writeKnowledge';
+import { storeMock } from './knowledgeStoreMock.test-util';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 
 function store(authors: Record<string, string | null>): KnowledgeStorePort {
-  return {
-    scopes: vi.fn(async () => []), scope: vi.fn(async () => null), facts: vi.fn(async () => []), relations: vi.fn(async () => []),
+  return storeMock({
     upsertRelations: vi.fn(async (rows: readonly StoredRelation[]) => rows.length),
-    upsertScope: vi.fn(async () => undefined), markRelationsStale: vi.fn(async () => 0), deleteRelationsOf: vi.fn(async () => 0),
     deleteScope: vi.fn(async () => true),
-    factSources: vi.fn(async () => new Map<string, string>()),
-    deleteFactsBySource: vi.fn(async () => ({ keys: [], relations: 0 })),
-    humanRelationKeys: vi.fn(async () => new Set<string>()),
-    deleteRelationsUnder: vi.fn(async () => 0),
     // `undefined` = no such fact; null = no recorded author; string = the person who wrote it.
     factAuthor: vi.fn(async (key: string) => (key in authors ? authors[key] : undefined)),
-  };
+    factAuthors: vi.fn(async (keys: readonly string[]) => new Map(keys.filter((k) => k in authors).map((k) => [k, authors[k]!] as const))),
+  });
 }
 const blobs = { setSource: vi.fn(), snapshotReview: vi.fn() } as unknown as ExtractedCachePort;
 const deps = (s: KnowledgeStorePort, userId: string | null) => ({ env: {} as never, db: {} as never, tenantId: 4, projectId: 9, store: s, blobs, userId });

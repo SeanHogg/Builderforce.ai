@@ -22,7 +22,7 @@ vi.mock('../../application/llm/projectFactsStore', () => ({
   parseFactFileAnchors: (value: unknown) => (Array.isArray(value) ? value : undefined),
 }));
 vi.mock('../../application/llm/projectFactsRecall', () => ({ recallProjectFacts: mocks.recall }));
-vi.mock('../../application/llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsert, deleteProjectFact: vi.fn() }));
+vi.mock('../../application/llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upsert, upsertProjectFacts: (await import('../../application/knowledge/factWriterMock.test-util')).batchOverSingle(mocks.upsert as never), deleteProjectFact: vi.fn() }));
 vi.mock('../../application/llm/projectMemory', () => ({
   cacheProjectAnswer: mocks.cacheAnswer,
   resolveMemoryAnswer: mocks.resolveAnswer,

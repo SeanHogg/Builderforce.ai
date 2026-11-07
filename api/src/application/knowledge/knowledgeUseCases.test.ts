@@ -15,6 +15,7 @@ vi.mock('../llm/projectFactsWrite', async () => ({ upsertProjectFact: mocks.upse
 vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowledgeVersion: vi.fn() }));
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
 
+import { storeMock } from './knowledgeStoreMock.test-util';
 import { clampMaxNodes, getKnowledgeGraph, knowledgeGraphCacheKey, type KnowledgeGraphDeps } from './getKnowledgeGraph';
 import { MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge } from './writeKnowledge';
 import { KnowledgeWriteError } from './knowledgeWriteError';
@@ -38,6 +39,7 @@ const extractedOld: Extracted = {
 
 function fakeStore(over: Partial<KnowledgeStorePort> = {}): KnowledgeStorePort {
   return {
+    ...storeMock(),
     scopes: vi.fn(async () => []),
     scope: vi.fn(async () => ({ rootId: ROOT, title: 'Folder', packs: ['docs'], lastDigest: 'd1' })),
     facts: vi.fn(async () => []),

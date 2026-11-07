@@ -2,6 +2,7 @@
  * The outline of a truncated graph: cached once per root (not per focus variant), attached on
  * read, and left off for callers that do not read it (search).
  */
+import { storeMock } from './knowledgeStoreMock.test-util';
 import { describe, expect, it, vi } from 'vitest';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
 
@@ -29,6 +30,7 @@ function deps(version: string): KnowledgeGraphDeps {
   return {
     cacheEnv: undefined, tenantId: 41, projectId: 7,
     store: {
+      ...storeMock(),
       scopes: vi.fn(async () => []), scope: vi.fn(async () => ({ rootId: ROOT, title: 'Root', packs: ['docs'], lastDigest: 'd1' })),
       facts: vi.fn(async () => []), relations: vi.fn(async () => []), upsertRelations: vi.fn(async () => 0), upsertScope: vi.fn(async () => undefined),
       markRelationsStale: vi.fn(async () => 0), deleteRelationsOf: vi.fn(async () => 0), deleteScope: vi.fn(async () => true), factSources: vi.fn(async () => new Map<string, string>()),

@@ -326,7 +326,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description: 'Sweep pack sync storage: orphan extracted bundles past a day with no index row, and expired staged parts.',
     run: async ({ env, db }) => {
       const swept = await sweepKnowledgeStorage(env, db);
-      return `bundles removed=${swept.bundlesRemoved} projects=${swept.projects}`;
+      return `bundles removed=${swept.bundlesRemoved} index rows removed=${swept.indexRowsRemoved} projects=${swept.projects}`;
     },
   },
   {
