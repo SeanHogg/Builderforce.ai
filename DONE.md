@@ -1,3 +1,40 @@
+## ✅ RESOLVED 2026-11-07 — One folder reads as many systems, a review maps in minutes, and sync is one compact pack (PRD 41 A9 + A10 + A11 · WS25 + WS26 · builderforce-memory 2026.10.46–48 · VS Code 2026.10.140)
+
+- **A9: a folder of many systems reads as many systems.**
+  - Each child repository or manifest is its own system. Lines are grouped by system and shared out fairly, there is no file-count cap, and the header starts at the system you are in.
+  - Near-identical copies are detected, the likely stray is named with the reason, and the user gets a one-click Exclude. The visualizer surfaces directory problems instead of us fixing them in the directory.
+  - Ship: release note migration 1303 and the blog post "one-folder-many-systems" (5 locales).
+- **A10: the map completes in minutes, and judging follows in the background.**
+  - Bug: a ~240 s stall per file made a review take 78 h. The causes were shared I/O, extraction coupled to judging, and timeouts recorded as judged.
+  - Fix:
+    - Pass 1 is a mechanical `mapped` pass, with per-job deadlines (read 5 s, extract 10 s).
+    - Pass 2 judges within a budget (500 files by default, capped by `KNOWLEDGE_REVIEW_MODEL_CALLS`). `JudgeBreaker` stops after 5 failures in a row, and a judge timeout leaves the section owed.
+    - The extract log `.extracted.jsonl` is append-only.
+    - Workers do an in-thread changed-since-plan sha256 check.
+    - `reviewRunLock` releases at `mapped`, and a new run pre-empts pass 2.
+- **A11: sync to the server is one compact BFKP pack, and only the exact delta.**
+  - Memory codec: front-coded strings, columnar sections, LEB128 varints and deflate-raw. A CRC covers header and body. There is a 4,096-bucket manifest tree, plus content-addressed `have` and within-file diff.
+  - In 2026.10.48:
+    - relation keys are `r:`+JSON, because NUL was rejected by Postgres;
+    - bucket digests are incremental;
+    - multi-part decode is streamed;
+    - limits are 24 MB / 200k rows.
+  - Server (`POST …/knowledge/sync`, `…/sync/manifest`, `…/sync/have`):
+    - one transaction under a per-project advisory lock with a 10 s timeout, answering 503 `sync_busy` with Retry-After;
+    - a conditional index upsert, so a race returns 409 `body_conflict`;
+    - root-scoped tombstones, and a model-only cascade with leaf cleanup;
+    - removal markers, and migrated-root reconciliation;
+    - the legacy PUT merges bundle-first, then does a locked upsert;
+    - the sweep takes the lock per project.
+  - Migrations: 1300, 1301, and 1302 (the `leaf_key_hash` PK and `knowledge_sync_buckets`).
+  - Client: one pack per sync with size halving. A file with a control character is skipped and recorded instead of stopping the sync. The browser worker trusts only declared content hashes.
+  - Reviews: three Opus passes. The last said ship. Real-SQL ledger tests run on pglite.
+- **Also closed:**
+  - migration 1298 (identity on a uuid column), which blocked every API deploy after it;
+  - memory contract and regression tests (`src/contract/`);
+  - stale knowledge tests;
+  - the brain-embedded dist now ships `.d.ts`.
+
 ## ✅ RESOLVED 2026-11-07 — The editor files tickets on the device, and a copied chat report fits a paste
 
 - **Bug: a signed-in VS Code run filed tickets one server call at a time and hit HTTP 429.** Chat #210 filed a 26-ticket program (an epic and 25 tasks) as `builtin_tasks_create` + `builtin_chats_link_ticket` pairs on the tenant's 300 rpm window, and both tools failed. The local `ticket-*` adapter ran only when sync was denied.
