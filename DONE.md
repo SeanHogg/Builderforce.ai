@@ -856,6 +856,8 @@ Verified: brain-embedded `tsc` clean; the `usePendingTurns` + `useBrainConversat
 
 ## ✅ RESOLVED 2026-11-01 — PRD 35 closed: VS Code, web and Rovr chat and on-prem channels run on the one agent; the Brain's `runLoop` and the engine switch are deleted (VS Code 2026.10.118 · api 2026.10.96 · frontend 2026.10.100 · agent-runtime 2026.10.24 · brain-embedded 2026.10.73 · brain-ui 2026.10.31 · agent-run 2026.10.85 · agent-loop 2026.10.15 · agent-tools 2026.10.18 · run-guards 2026.10.4 · Rovr 2026.10.35)
 
+> **Verification re-confirm — 2026-11-07.** PRD 35's ship-gate claims were re-checked live and still hold: `runLoop.ts` and the engine switch are absent from `brain-embedded/src` (`runLoop*.ts` glob → 0 matches); nothing outside `agent-run`/`agent-loop` imports `runAgentLoop` (`check:one-execution --enforce` → PASS, 0 importers, empty allowlist); the conformance oracle is green (`brain-embedded/src/referenceScenario.test.ts` → 2/2). No gaps in PRD 35 itself. Follow-on work this pass surfaced — none of it a PRD 35 regression — is carried on the Roadmap (the red-`main` parity-oracle drift, local-first G-tasks in epic #5747, and code-health scale). See ROADMAP.md §Make and §Run.
+
 Many entry points → ONE agent (`packages/agent-run`) → ONE kernel (`packages/agent-loop`). Nothing outside those two packages imports `runAgentLoop`, and `check:one-execution` enforces that with an empty allowlist.
 
 - **WS4 chat.** `startRun` drives every Brain run through `runPrepared` → `runAgent`. Differences from the loop are switched by `RunPolicy` data or a port, never by `entryPoint`, so canvas, cloud, tickets and channels are unchanged.
