@@ -2980,7 +2980,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 101489e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3122,6 +3122,8 @@ var PRICE_SNAPSHOT = {
   "liquid/lfm-2.5-2.6b": [35e-8, 5e-7],
   "liquid/lfm-2.5-2.6b:free": [0, 0],
   "liquid/lfm-2.5-24b-a2b": [5e-8, 7e-7],
+  "liquid/lfm-3-1.7b": [8e-8, 2e-7],
+  "liquid/lfm-3-1.7b:free": [0, 0],
   "mancer/weaver": [4e-7, 75e-8],
   "meituan/longcat-2.0": [3e-7, 12e-7],
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
@@ -3147,7 +3149,7 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
+  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -3284,7 +3286,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [15e-9, 55e-9],
+  "openai/gpt-oss-120b": [11e-9, 41e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -31872,6 +31874,10 @@ function formatChatDiagnostics(d) {
     `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}` + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : "")
   );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
+  if (d.workspaceTenantId != null) {
+    const same = `${d.workspaceTenantId}` === `${d.tenantId}`;
+    lines.push(`- Workspace tenant (selected): #${d.workspaceTenantId}${same ? " (same as the token tenant)" : " \u2014 MISMATCH: platform writes will 403 against this workspace"}`);
+  }
   if (d.role != null && d.role.trim() !== "") {
     lines.push(`- Workspace role: ${d.role}`);
   }
@@ -32069,6 +32075,7 @@ async function gatherChatDiagnostics(src) {
     selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
+    workspaceTenantId: src.workspaceTenantId ?? null,
     role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,

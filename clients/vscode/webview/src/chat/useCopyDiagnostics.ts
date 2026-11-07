@@ -80,6 +80,12 @@ export function useCopyDiagnostics({
         selectedProjectName: init.project?.name ?? null,
         tenantId: claims.tid ?? null,
         userId: claims.sub ?? null,
+        // The workspace the panel ACTS AS (the init frame's tenant, set by the host from
+        // its selected workspace — see `initFrameAuth`/`workspaceTenantId`). Decoded
+        // separately from the token's OWN claims above so a mismatch between the two —
+        // a parked re-scope handing back another tenant's token — is what a 403 "Project
+        // belongs to a different workspace" on every platform write actually looks like.
+        workspaceTenantId: init.tenantId ?? null,
         messages: conv.messages,
         // The chat lives in this machine's local-first store, keyed by the local chat id.
         historyLocation: init.chatHistoryPath

@@ -95,6 +95,13 @@ export interface ChatDiagnosticsSources {
   selectedProjectName?: string | null;
   tenantId?: number | string | null;
   userId?: string | null;
+  /** The tenant the surrounding UI currently ACTS AS (its selected workspace), when the
+   *  surface tracks one — distinct from {@link tenantId}, which is decoded from the token's
+   *  own claims. A mismatch between the two is what makes a platform write die with 403
+   *  "Project belongs to a different workspace" (a parked re-scope hands back another
+   *  tenant's token while the workspace selection still points elsewhere), so the report
+   *  names both. Absent when the surface does not track a separate workspace selection. */
+  workspaceTenantId?: number | string | null;
   /** The caller's workspace role, when the host already knows it (from its own stored
    *  tenant/token — NEVER a new read: a capture must add no round trips). */
   role?: string | null;
@@ -245,6 +252,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     selectedProjectName: src.selectedProjectName ?? null,
     tenantId: src.tenantId ?? null,
     userId: src.userId ?? null,
+    workspaceTenantId: src.workspaceTenantId ?? null,
     role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,

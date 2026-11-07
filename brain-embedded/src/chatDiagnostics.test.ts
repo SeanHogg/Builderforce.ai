@@ -196,6 +196,28 @@ describe('classifyModelFunding', () => {
   });
 });
 
+describe('formatChatDiagnostics — workspace tenant', () => {
+  it('prints the workspace tenant beside the token tenant when gathered', () => {
+    // The token's OWN tenant and the workspace the UI ACTS AS are decoded separately;
+    // when they match the line reads as agreement, not as a finding.
+    const out = render(baseline({ tenantId: 1, workspaceTenantId: 1 }));
+    expect(out).toContain('- Workspace tenant (selected): #1 (same as the token tenant)');
+  });
+
+  it('names a MISMATCH as the cause of a 403 on platform writes', () => {
+    // The exact posture behind "Project belongs to a different workspace": the token was
+    // minted for one tenant (e.g. a parked re-scope handed back the key tenant's token)
+    // while the workspace selection still points at another.
+    const out = render(baseline({ tenantId: 14, workspaceTenantId: 1 }));
+    expect(out).toContain('- Workspace tenant (selected): #1 — MISMATCH: platform writes will 403 against this workspace');
+  });
+
+  it('omits the line when the surface did not gather a workspace tenant', () => {
+    // "not gathered" must stay distinguishable from "no selection" — as with role/mode.
+    expect(render(baseline()).split('\n').some((l) => l.startsWith('- Workspace tenant'))).toBe(false);
+  });
+});
+
 describe('chat mode', () => {
   it('states the mode directly under the chat line', () => {
     // The same trace is a healthy answer in `chat` and an unfinished execution in

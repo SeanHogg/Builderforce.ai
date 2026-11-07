@@ -209,6 +209,15 @@ export interface ChatDiagnosticsData {
   tenantId?: number | string | null;
   userId?: string | null;
   /**
+   * The tenant the surrounding UI currently ACTS AS (its selected workspace) — distinct
+   * from {@link tenantId}, which is decoded from the token's own claims. A mismatch is
+   * what makes a platform write die with 403 "Project belongs to a different workspace"
+   * (a parked re-scope hands back another tenant's token while the workspace selection
+   * still points elsewhere), so the report names BOTH. Printed only when gathered — an
+   * absent line means "not gathered", never "no workspace selection".
+   */
+  workspaceTenantId?: number | string | null;
+  /**
    * The caller's WORKSPACE (tenant) role — 'viewer' | 'contributor' | 'developer' |
    * 'manager' | 'owner', as the surface knows it.
    *
@@ -831,6 +840,14 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
       + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : ''),
   );
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : 'unknown'} · User: ${d.userId ?? 'unknown'}`);
+  // Printed only when gathered: an absent line means "not gathered", never "no workspace
+  // selection". A MISMATCH with the line above is the exact cause of a 403 "Project
+  // belongs to a different workspace" on every platform write — a parked re-scope handed
+  // back another tenant's token while the workspace selection still points elsewhere.
+  if (d.workspaceTenantId != null) {
+    const same = `${d.workspaceTenantId}` === `${d.tenantId}`;
+    lines.push(`- Workspace tenant (selected): #${d.workspaceTenantId}${same ? ' (same as the token tenant)' : ' — MISMATCH: platform writes will 403 against this workspace'}`);
+  }
   // Printed only when known: an absent line means "not gathered", never "no role".
   // Every mutating built-in tool is gated at ≥ developer, so a `contributor` here is
   // the likely cause of a run whose failed steps are all HTTP 403 role refusals.

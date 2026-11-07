@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.134] — Copy diagnostics names the workspace, not just the tenant
+
+- **Copy diagnostics now shows the workspace you are acting as, next to the tenant.** The `Tenant:` line came from your token's own claims; the workspace the panel has selected (the one platform writes go to) was never shown. When those two disagree you get 403 "Project belongs to a different workspace" on every ticket/tool write — the report now prints both, and flags the mismatch directly.
+
 ## [NEXT] — Knowledge packs answer in chat
 
 - **A loaded knowledge pack answers your questions.** Ask in chat, or let the agent and Synapse look things up, and the pack's knowledge is used too. It works even when no folder is open.
