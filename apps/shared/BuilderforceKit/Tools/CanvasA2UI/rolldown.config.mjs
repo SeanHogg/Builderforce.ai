@@ -24,15 +24,18 @@ export default {
   treeshake: false,
   resolve: {
     alias: {
-      "@a2ui/lit": path.resolve(a2uiLitDist, "index.js"),
+      "@a2ui/lit$": path.resolve(a2uiLitDist, "index.js"),
       "@a2ui/lit/ui": path.resolve(a2uiLitDist, "0.8/ui/ui.js"),
       "@builderforce/a2ui-theme-context": a2uiThemeContext,
-      "@lit/context": path.resolve(repoRoot, "node_modules/@lit/context/index.js"),
-      "@lit/context/": path.resolve(repoRoot, "node_modules/@lit/context/"),
-      "@lit-labs/signals": path.resolve(repoRoot, "node_modules/@lit-labs/signals/index.js"),
-      "@lit-labs/signals/": path.resolve(repoRoot, "node_modules/@lit-labs/signals/"),
-      lit: path.resolve(repoRoot, "node_modules/lit/index.js"),
-      "lit/": path.resolve(repoRoot, "node_modules/lit/"),
+      // Alias keys match by PREFIX, so a bare `lit` key also rewrites `lit/directives/x.js`
+      // to `lit/index.js/directives/x.js`. A trailing `$` makes the entry exact-match only;
+      // the un-suffixed key then maps subpaths onto the package directory.
+      "@lit/context$": path.resolve(repoRoot, "node_modules/@lit/context/index.js"),
+      "@lit/context": path.resolve(repoRoot, "node_modules/@lit/context"),
+      "@lit-labs/signals$": path.resolve(repoRoot, "node_modules/@lit-labs/signals/index.js"),
+      "@lit-labs/signals": path.resolve(repoRoot, "node_modules/@lit-labs/signals"),
+      lit$: path.resolve(repoRoot, "node_modules/lit/index.js"),
+      lit: path.resolve(repoRoot, "node_modules/lit"),
     },
   },
   output: {

@@ -1,0 +1,11 @@
+{
+  // Build-only config for the vendored A2UI lit renderer (used by bundle-a2ui.sh).
+  // Extends the vendored tsconfig unchanged; adds the exclusion for test files,
+  // which must never be compiled into (or shipped with) the bundle.
+  "extends": "../vendor/a2ui/renderers/lit/tsconfig.json",
+  "include": ["../vendor/a2ui/renderers/lit/src/**/*.ts", "../vendor/a2ui/renderers/lit/src/**/*.json"],
+  "exclude": [
+    "../vendor/a2ui/renderers/lit/src/**/*.test.ts",
+    "../vendor/a2ui/renderers/lit/src/**/*.spec.ts"
+  ]
+}

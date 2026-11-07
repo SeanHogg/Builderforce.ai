@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-11-07 — The canvas A2UI bundle builds, and resolves every `lit` import
+
+- **Build failure.** `canvas:a2ui:bundle` compiled the vendored `vendor/a2ui/renderers/lit` tsconfig, which includes `src/**/*.ts`. That pulled in `0.8/model.test.ts`, which imports `node:assert` and `node:test` and has no Node types.
+  - Fix: a wrapper, `agent-runtime/scripts/a2ui-renderer.tsconfig.json`, extends the vendored tsconfig and excludes `*.test.ts` and `*.spec.ts`. The output layout is unchanged, and the vendored sources are untouched.
+  - The wrapper is part of `.bundle.hash`, so editing it triggers a rebuild.
+- **Runtime defect found along the way.** Rolldown alias keys match by prefix. The bare `lit` key rewrote `lit/directives/repeat.js` to `lit/index.js/directives/...`. That import was left external, so the shipped bundle asked the browser for a bare `lit/...` URL it could not load.
+  - Fix (`apps/shared/BuilderforceKit/Tools/CanvasA2UI/rolldown.config.mjs`): `$` exact-match keys (`lit$`, `@lit/context$`, `@lit-labs/signals$`, `@a2ui/lit$`), plus directory keys for subpaths.
+  - Verified: the bundle builds with no unresolved imports, it contains no bare `lit` or `@lit` imports, and `canvas-a2ui-copy.test.ts` passes. Review: no blocking findings.
+
 ## ✅ RESOLVED 2026-11-07 — The knowledge view works offline, and a review is a run you can watch, in parallel (PRD 41 A7 + A8 · WS14 + WS23 · builderforce-memory 2026.10.44 · VS Code 2026.10.139)
 
 - **A7: the local copy is the source and the server is a replica.**

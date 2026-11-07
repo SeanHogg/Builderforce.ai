@@ -15,7 +15,8 @@ A2UI_RENDERER_DIR="$ROOT_DIR/vendor/a2ui/renderers/lit"
 A2UI_APP_DIR="$REPO_ROOT/apps/shared/BuilderforceKit/Tools/CanvasA2UI"
 A2UI_RENDERER_TSCONFIG="$A2UI_RENDERER_DIR/tsconfig.json"
 A2UI_APP_ROLLDOWN_CONFIG="$A2UI_APP_DIR/rolldown.config.mjs"
-A2UI_RENDERER_TSCONFIG_REL="vendor/a2ui/renderers/lit/tsconfig.json"
+# Build config extends the vendored tsconfig and excludes *.test.ts (never bundled).
+A2UI_RENDERER_TSCONFIG_REL="scripts/a2ui-renderer.tsconfig.json"
 # Relative to ROOT_DIR (agent-runtime/), where the bundle commands run.
 A2UI_APP_ROLLDOWN_CONFIG_REL="../apps/shared/BuilderforceKit/Tools/CanvasA2UI/rolldown.config.mjs"
 
@@ -49,6 +50,7 @@ fi
 INPUT_PATHS=(
   "$ROOT_DIR/package.json"
   "$ROOT_DIR/pnpm-lock.yaml"
+  "$ROOT_DIR/scripts/a2ui-renderer.tsconfig.json"
   "$A2UI_RENDERER_DIR"
   "$A2UI_APP_DIR"
 )
