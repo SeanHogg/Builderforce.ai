@@ -35,9 +35,9 @@ The exact exception has not been observed. The failure card and the BuilderForce
 
 The surface shipped in VS Code 2026.10.130. DONE.md (2026-11-05) records what was built. Acceptance is still open:
 
-The design match (station cards, levels, termini, fix flow, Try it) shipped in VS Code 2026.10.132 on memory 2026.10.43; DONE.md (2026-11-06) records it.
+The design match (station cards, levels, termini, fix flow, Try it) shipped in VS Code 2026.10.133 on memory 2026.10.43; DONE.md (2026-11-06) records it.
 
-1. Re-review the `agentic` workspace with 2026.10.132 and check:
+1. Re-review the `agentic` workspace with 2026.10.133 and check:
    - At most 5% of files are drawn as "No partition".
    - The server's source count equals the local count.
    - Pasting a screenshot of the review progress card filters to `ReviewProgress.tsx` → `labels.ts` → `useReviewRun.ts` → the review runner.

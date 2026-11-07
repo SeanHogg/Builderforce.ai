@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-11-06 — Knowledge view matches the B-Surface design: station cards and levels, termini, staged fix flow, Try it, Sync and Coverage detail (VS Code 2026.10.132 · memory 2026.10.43)
+## ✅ RESOLVED 2026-11-06 — Knowledge view matches the B-Surface design: station cards and levels, termini, staged fix flow, Try it, Sync and Coverage detail (VS Code 2026.10.133 · memory 2026.10.43)
 
 - **Map.** Station card with Callers/API/Patterns/Enter; drill station → files → symbols (`useDrill`, `drillView`, level path and **Out to**); unfold satellites; termini for data stores and the 8 external services (`EXTERNAL_SERVICE_IDS`, memory 2026.10.42); corridor lanes; label and terminus placement; questions and lenses in drilled levels. No "Loading…" screen: the last-seen graph (24 MB cap) and the outline fill in incrementally.
 - **Outline.** Memory `outlineOf` carries `externals`; the API caches the outline under its own `kg-outline:v1` key; `areaRollup` keeps stations ≤ 400.

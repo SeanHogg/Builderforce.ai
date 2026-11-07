@@ -14,7 +14,7 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 - **Update follows the folder.** Files you deleted leave the pack, and the search cards are rebuilt from what the pack now holds. A moved folder's claims are no longer counted twice.
 - **A pack never overwrites a folder you have open.** Starting the editor no longer replaces that folder's live knowledge with an older pack.
 
-## [2026.10.132] — The knowledge view matches its design, and big repos draw their whole map
+## [2026.10.133] — The knowledge view matches its design, and big repos draw their whole map
 
 - **Open a station.** Click a station for its card: files, owners, risk, and Callers, API, Patterns and Enter. **Enter** goes down a level, from station to files to symbols. The level path shows where you are, and **Out to** steps back. If the map changes under you, the view steps back out and says why.
 - **Unfold a station in place.** Its files fan out round it as satellites you can tab to and select.
