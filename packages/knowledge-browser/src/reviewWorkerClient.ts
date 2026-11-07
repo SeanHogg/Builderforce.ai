@@ -71,6 +71,6 @@ export function runReview(job: ReviewJob, ports: ReviewPorts, opts: RunReviewOpt
       }
     };
     worker.onerror = (e) => { finish(); reject(new Error(e.message || 'knowledge review worker failed')); };
-    post({ type: 'start', job, source: { rootId: ports.source.rootId, title: ports.source.title }, hasJudgement: !!ports.judgement });
+    post({ type: 'start', job, source: { rootId: ports.source.rootId, title: ports.source.title }, hasJudgement: !!ports.judgement, hashesAreContentHash: typeof ports.source.hashOf === 'function' });
   });
 }

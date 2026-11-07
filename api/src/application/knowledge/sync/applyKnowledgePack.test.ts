@@ -258,27 +258,29 @@ describe('manifest, leaves and have', () => {
     expect(delta.remove).toEqual([]);
   });
 
-  it('answers a bitmap of the hashes the project holds, under any root', async () => {
+  // The have request is per (hash, sourceRef) pair, in `stale` rows; the answer's bit i is the i-th row in the codec's decoded order.
+  const pairOf = (i: number) => ({ sourceRef: refOf(ROOT, `src/f${i}.ts`), hash: hashOf(i + 1) });
+  const haveBody = (pairs: ReadonlyArray<{ sourceRef: string; hash: string }>) =>
+    encodePack({ rootId: ROOT, baseGeneration: 0, targetDigest: ZERO_DIGEST, stale: pairs.map((p) => ({ sourceRef: p.sourceRef as never, hash: p.hash })) });
+  const heldIn = (pairs: ReadonlyArray<{ sourceRef: string }>, bits: Uint8Array): string[] =>
+    [...pairs].sort((a, b) => (a.sourceRef < b.sourceRef ? -1 : 1)).filter((_, i) => ((bits[i >> 3]! >> (i & 7)) & 1) === 1).map((p) => p.sourceRef);
+
+  it('answers a bitmap of the (hash, sourceRef) pairs the project holds; a hash held under another file answers 0', async () => {
     await apply(packOf(rowsFor(3)));
-    const ask = [hashOf(2), hashOf(40), hashOf(1)];
-    const body = await encodePack({ rootId: ROOT, baseGeneration: 0, targetDigest: ZERO_DIGEST, hashes: ask });
-    const bits = await haveBitmap({ sync: fakeSync(w) }, body);
-    const order = [...ask].sort();
-    const has = order.map((_, i) => (bits[i >> 3]! >> (i & 7)) & 1);
-    expect(order.map((h, i) => [h, has[i]])).toEqual(order.map((h) => [h, h === hashOf(40) ? 0 : 1]));
+    const ask = [pairOf(1), pairOf(39), pairOf(0), { sourceRef: refOf(ROOT, 'src/f2.ts'), hash: hashOf(1) }];
+    const bits = await haveBitmap({ sync: fakeSync(w) }, await haveBody(ask));
+    expect(heldIn(ask, bits).sort()).toEqual([pairOf(0).sourceRef, pairOf(1).sourceRef].sort());
   });
 
-  it('a have-check with 20,000 hashes is ONE index query, never an object read per hash', async () => {
+  it('a have-check with 20,000 pairs is ONE index query, never an object read per pair', async () => {
     await apply(packOf(rowsFor(50)));
-    const ask = Array.from({ length: 20_000 }, (_, i) => hashOf(i + 1));
-    const body = await encodePack({ rootId: ROOT, baseGeneration: 0, targetDigest: ZERO_DIGEST, hashes: ask });
+    const ask = Array.from({ length: 20_000 }, (_, i) => pairOf(i));
     w.indexQueries = 0;
     w.bundleReads = 0;
-    const bits = await haveBitmap({ sync: fakeSync(w) }, body);
+    const bits = await haveBitmap({ sync: fakeSync(w) }, await haveBody(ask));
     expect(w.indexQueries).toBe(1);
     expect(w.bundleReads).toBe(0);
-    const order = [...ask].sort();
-    expect(order.filter((_, i) => ((bits[i >> 3]! >> (i & 7)) & 1) === 1).sort()).toEqual(Array.from({ length: 50 }, (_, i) => hashOf(i + 1)).sort());
+    expect(heldIn(ask, bits).sort()).toEqual(Array.from({ length: 50 }, (_, i) => pairOf(i).sourceRef).sort());
   });
 });
 

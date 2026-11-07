@@ -270,6 +270,9 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                     }
                 }
                 await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, sentKeys, built.analysisSent);
+                // Rows the server would refuse (a control character in a path or key) were left out of the pack and settled: one
+                // such file must not 422 the pack and stall the pump. They are recorded, never silent.
+                for (const row of built.skipped) { state.failed.push({ reason: row.reason }); hadFailure = true; }
                 state.lastPack = {
                     bytes: built.bytes.length, jsonBytes: built.jsonBytes, files: built.files, parts: parts.length, mode,
                     percent: built.jsonBytes > 0 ? Math.round((built.bytes.length / built.jsonBytes) * 1000) / 10 : 0,
@@ -282,7 +285,8 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 const status = statusOf(error), code = codeOf(error);
                 // Another pack changed the same bodies at the same moment: rebuild and resend now (no reconcile), at most 3 times.
                 if (status === 409 && code === 'body_conflict' && bodyConflicts < MAX_BODY_CONFLICTS) { bodyConflicts += 1; continue; }
-                if (status === 409 && conflicts < MAX_CONFLICTS) {
+                // Past its 3 rebuilds a body_conflict is a failure, not a reconcile: another writer is hammering the same bodies.
+                if (status === 409 && code !== 'body_conflict' && conflicts < MAX_CONFLICTS) {
                     conflicts += 1;
                     if (code === 'prior_missing') noDiff = true;
                     else if (code === 'extracted_missing') force = new Set((error as { hashes?: string[] }).hashes ?? []);

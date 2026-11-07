@@ -25,7 +25,14 @@ import {
     bucketOf, diffEntries, encodePack, jsonBytesOf, parseRelationLeafKey, rootLeaves, rootDigestOf, ZERO_DIGEST, fileLeafKey,
     type Pack, type PackExtr,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { hasControlChar } from './packKeyGuard.js';
 import { factKey, relationKey, type ReplicaAnalysis } from './replicaQueue.js';
+
+/** A row the pack left out because the server would refuse its key (`422 bad_pack`), with the dirty key it settles. */
+export interface SkippedRow { key: string; reason: string }
+
+const shown = (s: string): string => JSON.stringify(s.length > 80 ? `${s.slice(0, 80)}…` : s);
+const skip = (what: string, id: string): string => `${what} ${shown(id)} was not synced: its path or key holds a control character`;
 
 /** A current source: its ref, content hash, and size in bytes when the host's stat cache knows it. */
 export interface ReplicaSource { ref: string; hash: string; bytes?: number | undefined }
@@ -69,6 +76,8 @@ export interface BuiltPack {
     /** The pack carried every touched key (and so the rows, scope, analysis and the digest). */
     final: boolean;
     analysisSent: boolean;
+    /** Rows left out because their path or key holds a control character; their keys are in `sentKeys` (settled, never retried). */
+    skipped: SkippedRow[];
     /** Rows that are not the pack's to carry, with their dirty keys: sent through `writeRows` after the pack. */
     sideRows: { facts: StoredFact[]; relations: StoredRelation[]; keys: string[] };
     decodedBytes: number;
@@ -121,8 +130,16 @@ const rowsIn = (pack: Pack): number =>
 
 async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<BuiltPack & { oversize: boolean }> {
     const { rootId, local, client } = args;
+    // Rows the server would refuse (a control character in a path or key) never enter the pack or its digest.
+    const refused: SkippedRow[] = [];
+    const sources = args.sources.filter((s) => {
+        const path = pathOfRef(rootId, s.ref);
+        if (!hasControlChar(path)) return true;
+        refused.push({ key: fileLeafKey(path, s.hash), reason: skip('file', path) });
+        return false;
+    });
     const byKey = new Map<string, { path: string; hash: string; bytes: number }>();
-    for (const s of args.sources) { const path = pathOfRef(rootId, s.ref); byKey.set(fileLeafKey(path, s.hash), { path, hash: s.hash, bytes: s.bytes ?? 0 }); }
+    for (const s of sources) { const path = pathOfRef(rootId, s.ref); byKey.set(fileLeafKey(path, s.hash), { path, hash: s.hash, bytes: s.bytes ?? 0 }); }
 
     const fileKeys = args.touched.filter((k) => k.startsWith('f:'));
     const rowKeys = args.touched.filter((k) => !k.startsWith('f:'));
@@ -134,8 +151,18 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     let allFacts: StoredFact[] = [], allRels: StoredRelation[] = [];
     let treeKeys = new Set<string>();
     if (final) {
-        [allFacts, allRels] = await Promise.all([local.facts({ rootId }), local.relations({ rootId })]);
-        const current = args.sources.map((s) => ({ path: pathOfRef(rootId, s.ref), hash: s.hash }));
+        const [facts, rels] = await Promise.all([local.facts({ rootId }), local.relations({ rootId })]);
+        allFacts = facts.filter((f) => {
+            if (!hasControlChar(f.key) && !f.fileAnchors.some((a) => hasControlChar(a.path ?? ''))) return true;
+            refused.push({ key: factKey(f.key), reason: skip('fact', f.key) });
+            return false;
+        });
+        allRels = rels.filter((r) => {
+            if (![r.from, r.to, r.kind].some(hasControlChar)) return true;
+            refused.push({ key: relationKey(r), reason: skip('relation', `${r.from} -> ${r.to}`) });
+            return false;
+        });
+        const current = sources.map((s) => ({ path: pathOfRef(rootId, s.ref), hash: s.hash }));
         treeKeys = new Set(rootLeaves(rootId, { files: current, facts: allFacts, relations: allRels }).map((l) => l.key));
     }
 
@@ -218,7 +245,7 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         const scope = (await local.scopes()).find((s) => s.rootId === rootId);
         if (scope) pack.scope = scope;
         if (args.analysis) pack.analysis = { sha: args.analysis.sha, snapshot: args.analysis.snapshot };
-        const current = args.sources.map((s) => ({ path: pathOfRef(rootId, s.ref), hash: s.hash }));
+        const current = sources.map((s) => ({ path: pathOfRef(rootId, s.ref), hash: s.hash }));
         pack.targetDigest = rootDigestOf(rootId, { files: current, facts: allFacts, relations: allRels });
     }
     if (tombstones.files.length + tombstones.facts.length + tombstones.relations.length > 0) pack.deletes = tombstones;
@@ -226,11 +253,15 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     const stats = { decodedBytes: 0 };
     const bytes = await encodePack(pack, { stats });
     const oversize = stats.decodedBytes > (args.maxDecodedBytes ?? DEFAULT_MAX_DECODED) || rowsIn(pack) > (args.maxRows ?? DEFAULT_MAX_ROWS);
+    const sentKeys = final ? [...args.touched] : sentFileKeys;
+    const settled = new Set(sentKeys);
     return {
         bytes, oversize, decodedBytes: stats.decodedBytes,
         jsonBytes: jsonBytesOf({ ...pack, extracted: fullExtr }),
         files: files.length,
-        sentKeys: final ? [...args.touched] : sentFileKeys,
+        // Only a row this pack was asked to settle is reported: a skipped row outside the slice is reported by the slice that carries it.
+        skipped: refused.filter((r) => settled.has(r.key)),
+        sentKeys,
         final,
         analysisSent: final && !!args.analysis,
         sideRows: side,

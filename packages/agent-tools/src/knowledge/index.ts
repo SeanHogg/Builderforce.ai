@@ -47,7 +47,8 @@ export {
 } from './replicaQueue.js';
 export { replicatedKnowledgeStore, type ReadThrough, type ReplicaTarget, type ReplicatedStoreArgs } from './replicatedStore.js';
 export { emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaPackStats, type ReplicaState } from './replicaPump.js';
-export { buildPack, pathOfRef, DIFF_MAX_FILES, type BuiltPack, type ReplicaSource } from './replicaPack.js';
+export { buildPack, pathOfRef, DIFF_MAX_FILES, type BuiltPack, type ReplicaSource, type SkippedRow } from './replicaPack.js';
+export { hasControlChar } from './packKeyGuard.js';
 export { planReconcile, type ReconcilePlan } from './replicaReconcile.js';
 export { currentSourcesOf, enqueueFirstSync, enqueueSources, type FirstSyncCounts } from './replicaFirstSync.js';
 export { PACK_ROOT_HOST, folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';

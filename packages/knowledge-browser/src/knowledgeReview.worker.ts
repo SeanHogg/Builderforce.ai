@@ -8,6 +8,7 @@
 
 import type { DirectorySource, JudgementPort, KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
+import { contentHash } from './directorySourceKit';
 import { runReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
 
@@ -30,6 +31,8 @@ function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPo
     title: start.source.title,
     async *list() { for (const entry of await call<Array<{ path: string; hash: string; size: number }>>('source', LIST_ALL)) yield entry; },
     read: (path) => call('source', 'read', [path]),
+    // Only a source whose hashes ARE contentHash of the text (the page said so) can check the text it reads against the plan.
+    ...(start.hashesAreContentHash ? { hashOf: contentHash } : {}),
   };
   const store: KnowledgeStore = {
     scopes: () => call('store', 'scopes'),

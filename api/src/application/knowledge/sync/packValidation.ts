@@ -14,13 +14,12 @@
  *   - provenance: a pack carries MODEL rows (human and agent rows travel by their own writers).
  */
 import { factLeafKey, fileLeafKey, relationLeafKey, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { hasControlChar } from '@builderforce/agent-tools';
 import { KNOWLEDGE_HASH_PATTERN } from '../knowledgePerception';
 import { KnowledgeSyncError } from './knowledgeSyncPorts';
 
 const bad = (message: string): never => { throw new KnowledgeSyncError(422, 'bad_pack', message); };
 const REF = /^(src|ent|fact):/;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
 const ENCODER = new TextEncoder();
 const bytesOf = (s: string): number => ENCODER.encode(s).length;
 
@@ -41,7 +40,7 @@ export const normalizeRootId = (rootId: string): string => rootId.trim();
 function id(what: string, s: string, max: number): void {
   if (!s) bad(`${what} is empty`);
   if (bytesOf(s) > max) bad(`${what} is over ${max} bytes`);
-  if (CONTROL.test(s)) bad(`${what} holds a control character`);
+  if (hasControlChar(s)) bad(`${what} holds a control character`);
 }
 
 function noDuplicates(what: string, keys: Iterable<string>): void {
