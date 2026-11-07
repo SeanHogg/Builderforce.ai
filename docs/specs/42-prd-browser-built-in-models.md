@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | In progress — WS1 core implemented (A1 identity, the probe `state`, the vendor-aware `browserEngine`, `promptApi` moved to `builtInAi/`); picker Download (A2) and WS2–WS6 not yet built. Review before each workstream ships. |
+| Status | In progress — WS1 core shipped: A1 (vendor identity table and labels "Gemini Nano (Chrome)" / "Phi-4-mini (Edge)" / "Built-in model", the vendor-aware `browserEngine`, `PIN_REMAPPED` through `onFallback`) and the A2 probe `state` with routing limited to servable (`ready`) rows. A2 picker Download UI is still open, as are WS2–WS6. Review before each workstream ships. |
 | Owner | Agents program. Model roles are in CLAUDE.md. |
 | Roadmap | `ROADMAP.md` › Local-first. Builds on PRD 34 (local models everywhere: `bfi`, WebLLM and the `browser` page runtime), the inference modes (Local only · Hybrid · Specific) and the four routing packages (`model-catalog`, `workload`, `model-router`, `run-policy`). |
 | Date | 2026-11-06 |

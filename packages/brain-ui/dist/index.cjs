@@ -2544,6 +2544,7 @@ var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain
 var import_jsx_runtime17 = require("react/jsx-runtime");
 var DEFAULT_MODEL_FALLBACK_LABELS = {
   fallback: import_builderforce_brain_embedded11.DEFAULT_MODEL_FALLBACK_TEMPLATE,
+  remapped: import_builderforce_brain_embedded11.DEFAULT_MODEL_REMAPPED_TEMPLATE,
   dismiss: "Dismiss"
 };
 var NO_EVENT = () => null;
@@ -2556,7 +2557,7 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
   if (!event || !channel) return null;
   const labels = { ...DEFAULT_MODEL_FALLBACK_LABELS, ...partial };
   return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: ["bf-fallback-notice", className].filter(Boolean).join(" "), role: "status", "aria-live": "polite", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "bf-fallback-notice__text", children: (0, import_builderforce_brain_embedded11.modelFallbackText)(labels.fallback, event) }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "bf-fallback-notice__text", children: (0, import_builderforce_brain_embedded11.modelFallbackText)(event.code === "PIN_REMAPPED" ? labels.remapped : labels.fallback, event) }),
     /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
       "button",
       {

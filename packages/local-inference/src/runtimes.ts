@@ -82,6 +82,9 @@ export interface LocalRuntime {
   automaticRank: number;
   /** Brand token, deliberately NOT localized — "Ollama" is "Ollama" in every catalog. */
   label: string;
+  /** The runtime serves ONE vendor-named model, so its probe row's `label` ("Gemini Nano
+   *  (Chrome)") is also the runtime's display name — see `localModelLabel`. */
+  labelFromProbe?: true;
   /** Inference runs on the user's own CPU/GPU: residency `local`, zero cost, offline, and
    *  eligible for local-first routing. */
   onDevice: boolean;
@@ -199,6 +202,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     // PRD 42 · A1 — generic; the probe row carries the vendor's label ("Gemini Nano",
     // "Phi-4-mini"), so the picker shows "Gemini Nano (Chrome)" / "Phi-4-mini (Edge)".
     label: 'Built-in model',
+    labelFromProbe: true,
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
     catalog: 'declared',

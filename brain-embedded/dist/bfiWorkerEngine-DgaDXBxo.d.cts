@@ -1,4 +1,4 @@
-import { L as LocalRuntimeId, a as LocalRuntimeProbe } from './probe-BF7uUc_H.cjs';
+import { L as LocalRuntimeId, a as LocalRuntimeProbe } from './probe-DkPrGnWT.cjs';
 
 /**
  * Can THIS device run a catalog model — and on which backend? Answered from what the

@@ -1104,6 +1104,8 @@ declare function chatErrorMessage(error: string, action: ChatErrorAction | null,
 interface ModelFallbackNoticeLabels {
     /** The line — must contain the literal `{model}` token. */
     fallback: string;
+    /** The line for a `PIN_REMAPPED` event — must contain `{model}` and `{to}`. */
+    remapped: string;
     dismiss: string;
 }
 declare const DEFAULT_MODEL_FALLBACK_LABELS: ModelFallbackNoticeLabels;

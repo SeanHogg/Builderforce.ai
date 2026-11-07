@@ -300,6 +300,7 @@ export const MESSAGE_KEYS = [
   'platformRefusedSync',
   'platformRefusedSetting',
   'modelFallback',
+  'modelRemapped',
   'stLoading',
   'stAccount',
   'stPlan',

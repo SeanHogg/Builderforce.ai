@@ -81,7 +81,7 @@ describe('registry', () => {
       freetoken: 'FreeToken',
       bfi: 'Builderforce engine',
       webllm: 'WebLLM',
-      browser: 'Gemini Nano',
+      browser: 'Built-in model',
       'kimi-code': 'Kimi Code',
     });
   });

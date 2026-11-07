@@ -12327,6 +12327,7 @@
     },
     "noLocalModel": "No model on this device can answer. Switch to Hybrid, or download a local model.",
     "modelFallback": "Your pick {model} failed; answered with Auto.",
+    "modelRemapped": "Your pick {model} is not available in this browser; used {to} instead.",
     "switchToHybrid": "Switch to Hybrid",
     "downloadLocalModel": "Download a local model",
     "noSpecificModel": "Specific model is on, but no model is picked. Pick one, or switch to Hybrid.",

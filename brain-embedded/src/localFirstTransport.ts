@@ -23,6 +23,7 @@ import {
   localChatCompletionsUrl,
   localFirstPlan,
   localRuntime,
+  isServableLocalModel,
   normalizeLocalBaseUrl,
   parseLocalModelRef,
   rewriteToLocalUrl,
@@ -185,7 +186,7 @@ interface LocalTarget {
 function probedTarget(ref: string, probes: readonly LocalRuntimeProbe[]): LocalTarget | null {
   for (const p of probes) {
     if (!p.reachable) continue;
-    const m = p.models.find((x) => x.ref === ref);
+    const m = p.models.find((x) => x.ref === ref && isServableLocalModel(x));
     if (m) return { ref, provider: p.provider, model: m.model, endpoint: p.endpoint };
   }
   return null;

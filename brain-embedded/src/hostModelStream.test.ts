@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalRuntimeProbe } from '@builderforce/local-inference';
 import type { BrainStreamFn } from './brainRunStore';
 import { BrainRequestError } from './chatError';
@@ -88,6 +88,52 @@ describe('createHostModelStream', () => {
     await stream({ ...hello, routingMode: 'byo_pool' });
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(calls).toHaveLength(1);
+  });
+
+  describe('a built-in model pin (PRD 42 · A1)', () => {
+    const asBrowser = (brand: string) =>
+      vi.stubGlobal('navigator', { userAgentData: { brands: [{ brand, version: '138' }] } });
+    const run = async (pin: string) => {
+      const sent: string[] = [];
+      const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+        sent.push((JSON.parse(String(init.body)) as { model: string }).model);
+        return sse('hi');
+      });
+      const onFallback = vi.fn();
+      const stream = createHostModelStream({
+        pinned: () => pin,
+        probes: async () => [],
+        cloud: () => null,
+        fetch: fetchImpl,
+        fit: async (m) => m,
+        onFallback,
+      });
+      const result = await stream({ ...hello, model: pin });
+      return { result, sent, onFallback };
+    };
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("reports PIN_REMAPPED and runs on this browser's model when the pin names another vendor's", async () => {
+      asBrowser('Microsoft Edge');
+      const { result, sent, onFallback } = await run('local/browser/gemini-nano');
+      expect(onFallback).toHaveBeenCalledTimes(1);
+      expect(onFallback).toHaveBeenCalledWith({
+        from: 'local/browser/gemini-nano',
+        to: 'local/browser/phi-4-mini',
+        code: 'PIN_REMAPPED',
+        reason: 'PIN_REMAPPED',
+      });
+      expect(sent).toEqual(['phi-4-mini']);
+      expect(result.resolvedModel).toBe('local/browser/phi-4-mini');
+    });
+
+    it('reports nothing when the pin already names this browser\'s model', async () => {
+      asBrowser('Google Chrome');
+      const { result, sent, onFallback } = await run('local/browser/gemini-nano');
+      expect(onFallback).not.toHaveBeenCalled();
+      expect(sent).toEqual(['gemini-nano']);
+      expect(result.resolvedModel).toBe('local/browser/gemini-nano');
+    });
   });
 
   it('routes a local pin this host cannot serve automatically', async () => {

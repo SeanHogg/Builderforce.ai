@@ -12327,6 +12327,7 @@
     },
     "noLocalModel": "Kein Modell auf diesem Gerät kann antworten. Wechsle zu Hybrid oder lade ein lokales Modell herunter.",
     "modelFallback": "Deine Wahl {model} ist fehlgeschlagen; mit Auto beantwortet.",
+    "modelRemapped": "Deine Wahl {model} ist in diesem Browser nicht verfügbar; stattdessen wurde {to} verwendet.",
     "switchToHybrid": "Zu Hybrid wechseln",
     "downloadLocalModel": "Lokales Modell herunterladen",
     "noSpecificModel": "„Bestimmtes Modell“ ist aktiv, aber kein Modell ist ausgewählt. Wähle eines aus oder wechsle zu Hybrid.",

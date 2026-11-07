@@ -944,6 +944,7 @@
   "{0} needs you to sign in again.": "{0} necesita que vuelvas a iniciar sesión.",
   "Sign in to {0}": "Iniciar sesión en {0}",
   "Your pick {0} failed; answered with Auto.": "Su elección {0} falló; se respondió con Auto.",
+  "Your pick {0} is not available here; used {1} instead.": "Su elección {0} no está disponible aquí; se usó {1} en su lugar.",
   "Hybrid": "Híbrido",
   "This device first, then BuilderForce cloud when it needs to": "Primero este dispositivo y, cuando haga falta, la nube de BuilderForce",
   "Local only": "Solo local",

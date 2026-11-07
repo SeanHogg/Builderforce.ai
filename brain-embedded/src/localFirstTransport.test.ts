@@ -206,6 +206,20 @@ describe('createLocalFirstStream', () => {
     expect(cloud).not.toHaveBeenCalled();
   });
 
+  it('does not target a pinned ref whose row is only downloadable', async () => {
+    const pending: LocalRuntimeProbe = {
+      provider: 'browser',
+      endpoint: { baseUrl: 'http://page.local' },
+      reachable: true,
+      models: [{ ref: 'local/browser/gemini-nano', provider: 'browser', model: 'gemini-nano', state: 'downloadable' }],
+    };
+    const fetchImpl = vi.fn();
+    await expect(
+      createLocalFirstStream({ probes: [pending], cloud: null, fetch: fetchImpl })({ ...hello, model: 'local/browser/gemini-nano' }),
+    ).rejects.toThrow('not_signed_in');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('signed out, an explicit cloud model asks for sign-in', async () => {
     await expect(createLocalFirstStream({ probes, cloud: null, fetch: vi.fn() })({ ...hello, model: 'openai/gpt-5' })).rejects.toThrow('not_signed_in');
   });

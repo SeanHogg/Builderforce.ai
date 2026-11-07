@@ -4,7 +4,7 @@
  * error reports may leave the browser.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { localRuntime, type LocalRuntimeProbe } from '@builderforce/local-inference';
+import { isServableLocalModel, localModelLabel, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { completeDeviceSignIn, DeviceAuthError, startDeviceSignIn, type DeviceAuthFailure } from '@builderforce/device-auth';
 import { DEVICE_CLIENT } from '../config';
 import { SYNAPSE_DEFAULT_URL } from '../inference/localRuntimes';
@@ -142,6 +142,9 @@ function SitesSection() {
   );
 }
 
+/** Models a runtime can serve NOW — a downloadable built-in row is listed, not counted. */
+const servableCount = (p: LocalRuntimeProbe): number => p.models.filter(isServableLocalModel).length;
+
 function LocalModelsSection() {
   const services = useServices();
   const [probes, setProbes] = useState<LocalRuntimeProbe[] | null>(null);
@@ -166,9 +169,9 @@ function LocalModelsSection() {
           {probes.map((p) => (
             <li key={p.provider} className="rovr-row rovr-row--spread">
               {/* Runtime brands are not translated ("Ollama" is "Ollama" everywhere). */}
-              <span>{localRuntime(p.provider).label}</span>
-              <span className={`bf-chip bf-chip--${p.reachable && p.models.length ? 'ok' : 'off'}`}>
-                {p.reachable ? t('localModels', p.models.length) : t('localNotRunning')}
+              <span>{localModelLabel(p.models[0], p.provider)}</span>
+              <span className={`bf-chip bf-chip--${p.reachable && servableCount(p) ? 'ok' : 'off'}`}>
+                {p.reachable ? t('localModels', servableCount(p)) : t('localNotRunning')}
               </span>
             </li>
           ))}

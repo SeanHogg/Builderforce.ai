@@ -10,6 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   DEFAULT_MODEL_FALLBACK_TEMPLATE,
+  DEFAULT_MODEL_REMAPPED_TEMPLATE,
   modelFallbackText,
   type ModelFallbackChannel,
   type ModelFallbackEvent,
@@ -18,11 +19,14 @@ import {
 export interface ModelFallbackNoticeLabels {
   /** The line — must contain the literal `{model}` token. */
   fallback: string;
+  /** The line for a `PIN_REMAPPED` event — must contain `{model}` and `{to}`. */
+  remapped: string;
   dismiss: string;
 }
 
 export const DEFAULT_MODEL_FALLBACK_LABELS: ModelFallbackNoticeLabels = {
   fallback: DEFAULT_MODEL_FALLBACK_TEMPLATE,
+  remapped: DEFAULT_MODEL_REMAPPED_TEMPLATE,
   dismiss: 'Dismiss',
 };
 
@@ -46,7 +50,7 @@ export function ModelFallbackNotice({ channel, labels: partial, className }: Mod
   const labels = { ...DEFAULT_MODEL_FALLBACK_LABELS, ...partial };
   return (
     <div className={['bf-fallback-notice', className].filter(Boolean).join(' ')} role="status" aria-live="polite">
-      <span className="bf-fallback-notice__text">{modelFallbackText(labels.fallback, event)}</span>
+      <span className="bf-fallback-notice__text">{modelFallbackText(event.code === 'PIN_REMAPPED' ? labels.remapped : labels.fallback, event)}</span>
       <button
         type="button"
         className="bf-fallback-notice__dismiss"

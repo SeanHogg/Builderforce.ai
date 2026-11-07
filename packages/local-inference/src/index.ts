@@ -58,6 +58,8 @@ export {
   createLocalRuntimeProber,
   ollamaLoadedModels,
   ollamaResidentModel,
+  isServableLocalModel,
+  localModelLabel,
   probeLocalRuntimes,
   probedModels,
   type FetchLike,

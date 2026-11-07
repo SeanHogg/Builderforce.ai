@@ -10,7 +10,7 @@
  * on the sentence that told the user who was being billed.
  */
 
-import { localCatalogModel, localRuntime, parseLocalModelRef, runsOnDevice } from '@builderforce/local-inference';
+import { localCatalogModel, localModelLabel, localRuntime, parseLocalModelRef, runsOnDevice } from '@builderforce/local-inference';
 import {
   DEFAULT_MODEL_IDENTITY,
   productModelName,
@@ -270,7 +270,7 @@ export function withReadyPageModels(options: ChatModelOptions, rows: readonly Lo
     ...options,
     local: [
       ...(options.local ?? []),
-      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localRuntime(row.runtime).label })),
+      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localModelLabel(row, row.runtime) })),
     ],
   };
 }

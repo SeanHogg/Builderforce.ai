@@ -40,10 +40,14 @@ export function createModelFallbackChannel(): ModelFallbackChannel {
   };
 }
 
-/** The notice's one line: the host's localized template with its `{model}` token filled. */
-export function modelFallbackText(template: string, event: Pick<ModelFallbackEvent, 'from'>): string {
-  return template.replace('{model}', event.from);
+/** The notice's one line: the host's localized template with its `{model}` token filled
+ *  (and `{to}`, for a `PIN_REMAPPED` event). */
+export function modelFallbackText(template: string, event: Pick<ModelFallbackEvent, 'from' | 'to'>): string {
+  return template.replace('{model}', event.from).replace('{to}', event.to ?? '');
 }
 
 /** English default — every host passes its own localized template. */
 export const DEFAULT_MODEL_FALLBACK_TEMPLATE = 'Your pick {model} failed; answered with Auto.';
+
+/** English default for a `PIN_REMAPPED` event (not a failure) — hosts pass a localized one. */
+export const DEFAULT_MODEL_REMAPPED_TEMPLATE = 'Your pick {model} is not available in this browser; used {to} instead.';

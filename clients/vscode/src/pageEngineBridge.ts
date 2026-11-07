@@ -32,6 +32,7 @@
  */
 import {
   LOCAL_RUNTIMES,
+  isServableLocalModel,
   type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
@@ -108,7 +109,10 @@ function rankedEngine(client: PageEngineClient, runtime: LocalRuntimeId, baseUrl
         if (!probe) continue;
         base ??= probe;
         for (const m of probe.models) {
-          if (merged.has(m.model)) continue;
+          // First attached page wins — unless its row is not servable and this one is: a
+          // downloadable row never shadows a ready row with the same id.
+          const held = merged.get(m.model);
+          if (held && (isServableLocalModel(held) || !isServableLocalModel(m))) continue;
           merged.set(m.model, m);
           owner.set(m.model, entries[i]!.port);
         }

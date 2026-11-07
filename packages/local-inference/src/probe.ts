@@ -50,6 +50,24 @@ export interface LocalModel {
   state?: 'ready' | 'downloadable' | 'downloading';
 }
 
+/**
+ * May this row take a turn NOW? Absent `state` = a runtime that has no notion of one
+ * (every HTTP runtime) = servable; otherwise only `ready`. THE filter every consumer of a
+ * probe's `models` applies before routing, counting or shadowing by id.
+ */
+export function isServableLocalModel(m: Pick<LocalModel, 'state'>): boolean {
+  return m.state === undefined || m.state === 'ready';
+}
+
+/** The runtime's display name for a probed row: for a runtime that serves one
+ *  vendor-named model (`labelFromProbe`) the row's own label ("Gemini Nano (Chrome)"),
+ *  else the registry's brand label. A multi-model runtime's row label is a MODEL name and
+ *  is never used as the runtime's. */
+export function localModelLabel(row: Pick<LocalModel, 'label'> | undefined, runtimeId: LocalRuntimeId): string {
+  const runtime = localRuntime(runtimeId);
+  return (runtime.labelFromProbe && row?.label) || runtime.label;
+}
+
 /** One runtime's answer. */
 export interface LocalRuntimeProbe {
   provider: LocalRuntimeId;

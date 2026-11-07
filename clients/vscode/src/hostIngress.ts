@@ -7,6 +7,7 @@
 
 import * as vscode from "vscode";
 import { brainUploadUrl, signedBrainFileUrl, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
+import { isServableLocalModel } from "@builderforce/local-inference";
 import { mentionBudget, type MentionBudget } from "@builderforce/tool-output-policy";
 import { authed, authedRaw } from "./bfApi";
 import { desktopCompressProse } from "./desktopContext";
@@ -32,7 +33,7 @@ export async function routeMentionBudget(route: ModelRoute): Promise<MentionBudg
       const pin = route.local;
       contextWindowTokens = (await localWindowProbes())
         .flatMap((p) => p.models)
-        .find((m) => m.provider === pin.provider && m.model === pin.model)?.contextTokens;
+        .find((m) => m.provider === pin.provider && m.model === pin.model && isServableLocalModel(m))?.contextTokens;
     } catch { /* unknown window: the default local row */ }
   }
   return mentionBudget("local", contextWindowTokens ? { contextWindowTokens } : {});

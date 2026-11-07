@@ -12327,6 +12327,7 @@
     },
     "noLocalModel": "本设备上没有可以回答的模型。请切换到混合模式，或下载一个本地模型。",
     "modelFallback": "你选择的 {model} 失败了；已改用自动模式回答。",
+    "modelRemapped": "你选择的 {model} 在此浏览器中不可用；已改用 {to}。",
     "switchToHybrid": "切换到混合模式",
     "downloadLocalModel": "下载本地模型",
     "noSpecificModel": "已开启“指定模型”，但尚未选择模型。请选择一个模型，或切换到混合模式。",

@@ -43,9 +43,8 @@ __export(src_exports, {
   BRAIN_AGENT_ASSIGNMENTS_PATH: () => BRAIN_AGENT_ASSIGNMENTS_PATH,
   BRAIN_UPLOAD_PATH: () => BRAIN_UPLOAD_PATH,
   BRAIN_UPLOAD_SIGN_PATH: () => BRAIN_UPLOAD_SIGN_PATH,
-  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS: () => BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
-  BROWSER_ENGINE_MODEL: () => BROWSER_ENGINE_MODEL,
   BUILDERFORCE_PRODUCT_NAME: () => BUILDERFORCE_PRODUCT_NAME,
+  BUILT_IN_MODELS: () => BUILT_IN_MODELS,
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
@@ -63,6 +62,7 @@ __export(src_exports, {
   DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_FALLBACK_TEMPLATE: () => DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_REMAPPED_TEMPLATE: () => DEFAULT_MODEL_REMAPPED_TEMPLATE,
   DEFAULT_PERSONA: () => DEFAULT_PERSONA,
   DEFAULT_ROUTE_THRESHOLD: () => DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_TOOL_FAILURE_STREAK: () => DEFAULT_TOOL_FAILURE_STREAK,
@@ -163,6 +163,7 @@ __export(src_exports, {
   buildChatDiagnosticsReport: () => buildChatDiagnosticsReport,
   buildComposerDirectives: () => buildComposerDirectives,
   buildModelItems: () => buildModelItems,
+  builtInModelIdentity: () => builtInModelIdentity,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
@@ -2976,10 +2977,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [59e-9, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1529e-10, 93388e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 101489e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3053,9 +3054,10 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [59e-9, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
+  "deepseek/deepseek-v4-pro": [16e-7, 32e-7],
   "deepseek/deepseek-v4-pro-0813": [1165e-10, 466e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
@@ -3100,7 +3102,7 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -3131,6 +3133,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
   "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
   "meta/muse-glimmer-30b": [3e-7, 12e-7],
+  "meta/muse-glimmer-30b:batch": [24e-8, 96e-8],
   "meta/muse-spark-1.1": [125e-8, 425e-8],
   "meta/muse-spark-1.2": [125e-8, 425e-8],
   "meta/muse-spark-1.2-contributor": [1e-7, 2e-7],
@@ -3140,10 +3143,11 @@ var PRICE_SNAPSHOT = {
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
   "minimax/minimax-m1": [55e-8, 22e-7],
-  "minimax/minimax-m2.5": [27e-8, 95e-8],
+  "minimax/minimax-m2.5": [3e-7, 12e-7],
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
-  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
+  "minimax/minimax-m3:batch": [224e-9, 88e-8],
+  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -3280,7 +3284,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [15e-8, 6e-7],
+  "openai/gpt-oss-120b": [15e-9, 55e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -3345,6 +3349,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
   "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
   "qwen/qwen3.8-27b": [15e-8, 1875e-9],
+  "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
   "qwen/qwen3.8-flash": [15e-8, 47e-8],
   "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
   "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
@@ -3381,6 +3386,7 @@ var PRICE_SNAPSHOT = {
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
   "thinkingmachines/inkling": [1e-6, 405e-8],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
+  "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
   "typesafe/jev-router": [0, 0],
   "unbiased/pareto-26.10": [8e-7, 32e-7],
   "unbiased/pareto-26.9": [25e-7, 75e-7],
@@ -6114,7 +6120,10 @@ var LOCAL_RUNTIMES = [
   {
     id: "browser",
     automaticRank: 40,
-    label: "Gemini Nano",
+    // PRD 42 · A1 — generic; the probe row carries the vendor's label ("Gemini Nano",
+    // "Phi-4-mini"), so the picker shows "Gemini Nano (Chrome)" / "Phi-4-mini (Edge)".
+    label: "Built-in model",
+    labelFromProbe: true,
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
     catalog: "declared",
@@ -6231,6 +6240,15 @@ function withBearer(headers, token) {
 }
 function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
+}
+
+// ../packages/local-inference/src/probe.ts
+function isServableLocalModel(m) {
+  return m.state === void 0 || m.state === "ready";
+}
+function localModelLabel(row, runtimeId) {
+  const runtime = localRuntime(runtimeId);
+  return runtime.labelFromProbe && row?.label || runtime.label;
 }
 
 // ../packages/local-inference/src/bfiLimits.generated.ts
@@ -6483,7 +6501,7 @@ function localFirstPlan(input) {
   const onDevice2 = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
   const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
   const candidates = input.probes.filter((p) => p.reachable && onDevice2.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
-    (p) => p.models.filter((m) => localModelUnfitReason(m, input.workload) === null).map((m) => ({
+    (p) => p.models.filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null).map((m) => ({
       kind: "local",
       ref: m.ref,
       provider: p.provider,
@@ -12545,7 +12563,7 @@ var positive = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ?
 function contextWindowOf(modelRef, sources = {}) {
   if (!modelRef) return void 0;
   if (isLocalModelRef(modelRef)) {
-    const live2 = [...sources.models ?? [], ...(sources.probes ?? []).flatMap((p) => p.models)].find((m) => m.ref === modelRef)?.contextTokens;
+    const live2 = [...sources.models ?? [], ...(sources.probes ?? []).flatMap((p) => p.models)].find((m) => m.ref === modelRef && isServableLocalModel(m))?.contextTokens;
     return positive(live2) ?? positive(localCatalogModel(modelRef)?.contextTokens);
   }
   return positive(sources.cloud?.(modelRef));
@@ -12629,7 +12647,7 @@ function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
 function probedTarget(ref, probes) {
   for (const p of probes) {
     if (!p.reachable) continue;
-    const m = p.models.find((x) => x.ref === ref);
+    const m = p.models.find((x) => x.ref === ref && isServableLocalModel(x));
     if (m) return { ref, provider: p.provider, model: m.model, endpoint: p.endpoint };
   }
   return null;
@@ -12997,7 +13015,56 @@ function createHandoffFit(options = {}) {
   };
 }
 
+// src/builtInAi/identity.ts
+var FALLBACK_CONTEXT_TOKENS = 4096;
+var BUILT_IN_MODELS = {
+  chrome: {
+    vendor: "chrome",
+    model: "gemini-nano",
+    label: "Gemini Nano (Chrome)",
+    fallbackContextTokens: FALLBACK_CONTEXT_TOKENS
+  },
+  edge: {
+    vendor: "edge",
+    model: "phi-4-mini",
+    label: "Phi-4-mini (Edge)",
+    fallbackContextTokens: FALLBACK_CONTEXT_TOKENS
+  },
+  unknown: {
+    vendor: "unknown",
+    model: "built-in",
+    label: "Built-in model",
+    fallbackContextTokens: FALLBACK_CONTEXT_TOKENS
+  }
+};
+function defaultNavigator() {
+  return typeof navigator === "undefined" ? void 0 : navigator;
+}
+function vendorFromUserAgentData(brands) {
+  const names = brands.map((b) => b.brand);
+  if (names.includes("Microsoft Edge")) return "edge";
+  if (names.includes("Google Chrome")) return "chrome";
+  return "unknown";
+}
+function vendorFromUserAgent(nav) {
+  const ua = nav.userAgent;
+  if (!ua) return void 0;
+  if (/Edg(?:e|A|iOS)?\//.test(ua) || /Microsoft Edge/.test(ua)) return "edge";
+  if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) return "chrome";
+  return void 0;
+}
+function builtInModelIdentity(nav = defaultNavigator()) {
+  const brands = nav?.userAgentData?.brands;
+  const vendor = brands ? vendorFromUserAgentData(brands) : (nav && vendorFromUserAgent(nav)) ?? "unknown";
+  return BUILT_IN_MODELS[vendor];
+}
+
 // src/pageEngines/pageRuntimePin.ts
+function remapBuiltInPin(ref, pin, current = builtInModelIdentity().model) {
+  const parsed = parseLocalModelRef(ref);
+  if (!parsed || !localRuntime(parsed.provider).labelFromProbe || parsed.model === current) return null;
+  return { ref: formatLocalModelRef(parsed.provider, current), pin: { ...pin, model: current } };
+}
 function pageRuntimePin(ref) {
   const pin = parseLocalModelRef(ref);
   if (!pin) return null;
@@ -13478,7 +13545,14 @@ function accountsUnavailable(error) {
 }
 var handoffFit = createHandoffFit();
 function createHostModelStream(input) {
-  const resolveLocal = input.localPin ?? pageRuntimePin;
+  const resolvePin = input.localPin ?? pageRuntimePin;
+  const resolveLocal = (ref) => {
+    const found = resolvePin(ref);
+    if (!found) return null;
+    const remap = remapBuiltInPin(ref, found);
+    if (remap) input.onFallback?.({ from: ref, to: remap.ref, code: "PIN_REMAPPED", reason: "PIN_REMAPPED" });
+    return { pin: remap?.pin ?? found, ref: remap?.ref ?? ref, remapped: remap !== null };
+  };
   const fit = input.fit ?? handoffFit;
   return async (callOpts, handlers = {}) => {
     const mode = await input.mode?.() ?? "hybrid";
@@ -13494,7 +13568,12 @@ function createHostModelStream(input) {
     const auto = async (call2, h) => {
       const localRef = call2.model;
       const local2 = localRef ? resolveLocal(localRef) : null;
-      if (local2 && localRef) return createLocalStream(local2.endpoint, local2.model, input.fetch, { ref: localRef, cloud, fit })(call2, h);
+      if (local2 && localRef) {
+        return createLocalStream(local2.pin.endpoint, local2.pin.model, input.fetch, { ref: local2.ref, cloud, fit })(
+          local2.remapped ? { ...call2, model: local2.ref } : call2,
+          h
+        );
+      }
       const probes = input.probes ? await input.probes() : [];
       const accounts = mode === "hybrid" && input.accounts ? await input.accounts().catch(accountsUnavailable) : [];
       if (probes.length === 0 && accounts.length === 0) {
@@ -13542,9 +13621,11 @@ function createHostModelStream(input) {
       return auto(opts, handlers);
     }
     const local = resolveLocal(pick2);
+    const pickRef = local?.ref ?? pick2;
+    const pinOpts = local?.remapped && opts.model === pick2 ? { ...opts, model: pickRef } : opts;
     const pinned = (h) => {
       if (local) {
-        return createLocalStream(local.endpoint, local.model, input.fetch, { ref: pick2, cloud: strict ? null : cloud, fit })(opts, h);
+        return createLocalStream(local.pin.endpoint, local.pin.model, input.fetch, { ref: pickRef, cloud: strict ? null : cloud, fit })(pinOpts, h);
       }
       if (isLocalModelRef(pick2) || !cloud) throw new Error(isLocalModelRef(pick2) ? NO_LOCAL_MODEL : noModel);
       return cloud({ ...opts, model: pick2, modelStrict: strict }, h);
@@ -13552,7 +13633,7 @@ function createHostModelStream(input) {
     if (strict) return pinned(handlers);
     if (!local && (isLocalModelRef(pick2) || !cloud)) return auto(unpicked(opts), handlers);
     return pickThenAuto(pinned, () => auto(unpicked(opts), handlers), handlers, opts.signal, {
-      from: pick2,
+      from: pickRef,
       local: !!local,
       ...input.onFallback ? { onFallback: input.onFallback } : {}
     });
@@ -13632,9 +13713,10 @@ function createModelFallbackChannel() {
   };
 }
 function modelFallbackText(template, event) {
-  return template.replace("{model}", event.from);
+  return template.replace("{model}", event.from).replace("{to}", event.to ?? "");
 }
 var DEFAULT_MODEL_FALLBACK_TEMPLATE = "Your pick {model} failed; answered with Auto.";
+var DEFAULT_MODEL_REMAPPED_TEMPLATE = "Your pick {model} is not available in this browser; used {to} instead.";
 
 // src/limbicAffect.ts
 var import_limbic = require("@seanhogg/builderforce-memory-engine/limbic");
@@ -13660,7 +13742,7 @@ function messageText(content) {
   return parts.join("\n");
 }
 
-// src/promptApi.ts
+// src/builtInAi/promptApi.ts
 function promptApiFactory() {
   if (typeof globalThis === "undefined") return null;
   const g = globalThis;
@@ -13712,8 +13794,9 @@ async function* promptStreamDeltas(stream) {
 }
 
 // src/browserEngine.ts
-var BROWSER_ENGINE_MODEL = "gemini-nano";
-var BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS = 4096;
+function probeState(availability) {
+  return availability === "available" ? "ready" : availability;
+}
 async function readInputQuota() {
   const factory = promptApiFactory();
   if (!factory) return void 0;
@@ -13729,7 +13812,27 @@ async function readInputQuota() {
   }
 }
 async function probeOnce(knownQuota, learnQuota) {
-  if (await promptApiAvailability() !== "available") return null;
+  const identity = builtInModelIdentity();
+  const availability = await promptApiAvailability();
+  if (availability === "unavailable") return null;
+  if (availability !== "available") {
+    return {
+      provider: "browser",
+      endpoint: { baseUrl: BROWSER_ENGINE_BASE_URL },
+      reachable: true,
+      models: [
+        {
+          ref: formatLocalModelRef("browser", identity.model),
+          provider: "browser",
+          model: identity.model,
+          label: identity.label,
+          tools: false,
+          contextTokens: identity.fallbackContextTokens,
+          state: probeState(availability)
+        }
+      ]
+    };
+  }
   let contextTokens = knownQuota();
   if (contextTokens === void 0) {
     contextTokens = await readInputQuota();
@@ -13741,12 +13844,13 @@ async function probeOnce(knownQuota, learnQuota) {
     reachable: true,
     models: [
       {
-        ref: formatLocalModelRef("browser", BROWSER_ENGINE_MODEL),
+        ref: formatLocalModelRef("browser", identity.model),
         provider: "browser",
-        model: BROWSER_ENGINE_MODEL,
-        label: localRuntime("browser").label,
+        model: identity.model,
+        label: identity.label,
         tools: false,
-        contextTokens: contextTokens ?? BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS
+        contextTokens: contextTokens ?? identity.fallbackContextTokens,
+        state: "ready"
       }
     ]
   };
@@ -13787,8 +13891,9 @@ function toPromptApiTurn(messages) {
   };
 }
 var isQuotaError = (e) => e?.name === "QuotaExceededError";
+var engineModelId = () => builtInModelIdentity().model;
 var chunk = (delta, finish) => ({
-  model: BROWSER_ENGINE_MODEL,
+  model: engineModelId(),
   choices: [{ index: 0, delta, finish_reason: finish }]
 });
 async function* sessionChunks(session, prompt, signal) {
@@ -31386,7 +31491,7 @@ function withReadyPageModels(options, rows) {
     ...options,
     local: [
       ...options.local ?? [],
-      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localRuntime(row.runtime).label }))
+      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localModelLabel(row, row.runtime) }))
     ]
   };
 }
@@ -32872,9 +32977,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   BRAIN_AGENT_ASSIGNMENTS_PATH,
   BRAIN_UPLOAD_PATH,
   BRAIN_UPLOAD_SIGN_PATH,
-  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
-  BROWSER_ENGINE_MODEL,
   BUILDERFORCE_PRODUCT_NAME,
+  BUILT_IN_MODELS,
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
@@ -32892,6 +32996,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_REMAPPED_TEMPLATE,
   DEFAULT_PERSONA,
   DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_TOOL_FAILURE_STREAK,
@@ -32992,6 +33097,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   buildChatDiagnosticsReport,
   buildComposerDirectives,
   buildModelItems,
+  builtInModelIdentity,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,

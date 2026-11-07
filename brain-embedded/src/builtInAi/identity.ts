@@ -47,13 +47,13 @@ export const BUILT_IN_MODELS: Record<BuiltInAiVendor, BuiltInModelIdentity> = {
   chrome: {
     vendor: 'chrome',
     model: 'gemini-nano',
-    label: 'Gemini Nano',
+    label: 'Gemini Nano (Chrome)',
     fallbackContextTokens: FALLBACK_CONTEXT_TOKENS,
   },
   edge: {
     vendor: 'edge',
     model: 'phi-4-mini',
-    label: 'Phi-4-mini',
+    label: 'Phi-4-mini (Edge)',
     fallbackContextTokens: FALLBACK_CONTEXT_TOKENS,
   },
   unknown: {
@@ -69,15 +69,13 @@ function defaultNavigator(): NavigatorLike | undefined {
   return typeof navigator === 'undefined' ? undefined : (navigator as NavigatorLike);
 }
 
-function vendorFromUserAgentData(nav: NavigatorLike): BuiltInAiVendor | undefined {
-  const brands = nav.userAgentData?.brands;
-  if (!brands) return undefined;
+function vendorFromUserAgentData(brands: NonNullable<NavigatorUserAgentDataLike['brands']>): BuiltInAiVendor {
   // A browser may list several brands (e.g. Chromium alongside its own). Match the
   // most specific brand first so Edge is not read as Chromium/Chrome.
   const names = brands.map((b) => b.brand);
   if (names.includes('Microsoft Edge')) return 'edge';
   if (names.includes('Google Chrome')) return 'chrome';
-  return undefined;
+  return 'unknown';
 }
 
 function vendorFromUserAgent(nav: NavigatorLike): BuiltInAiVendor | undefined {
@@ -95,6 +93,9 @@ function vendorFromUserAgent(nav: NavigatorLike): BuiltInAiVendor | undefined {
  * any host without a readable navigator reads as `unknown`.
  */
 export function builtInModelIdentity(nav: NavigatorLike | undefined = defaultNavigator()): BuiltInModelIdentity {
-  const vendor = (nav && (vendorFromUserAgentData(nav) ?? vendorFromUserAgent(nav))) ?? 'unknown';
+  // userAgentData present ⇒ trust it: no Edge/Chrome brand (Brave, Opera, Samsung) is
+  // `unknown`, never re-read from the UA string (which those browsers spoof as Chrome).
+  const brands = nav?.userAgentData?.brands;
+  const vendor = brands ? vendorFromUserAgentData(brands) : ((nav && vendorFromUserAgent(nav)) ?? 'unknown');
   return BUILT_IN_MODELS[vendor];
 }

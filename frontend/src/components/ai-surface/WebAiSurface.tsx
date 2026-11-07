@@ -66,7 +66,7 @@ export function WebAiSurface({
   const t = useTranslations('brain');
   const tCommon = useTranslations('common');
   const fallbackNotice = fellBack
-    ? <ModelFallbackNotice channel={webModelFallback} labels={{ fallback: t('modelFallback', { model: '{model}' }), dismiss: tCommon('dismiss') }} />
+    ? <ModelFallbackNotice channel={webModelFallback} labels={{ fallback: t('modelFallback', { model: '{model}' }), remapped: t('modelRemapped', { model: '{model}', to: '{to}' }), dismiss: tCommon('dismiss') }} />
     : null;
   return (
     <AiSurface

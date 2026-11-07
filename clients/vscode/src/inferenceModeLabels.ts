@@ -75,5 +75,7 @@ export function inferenceModeLabels(): Record<string, string> {
     // The webview's Hybrid fallback notice — the participant's catalog string, its `{0}`
     // handed back as brain-ui's `{model}` token so one translation serves both surfaces.
     "app.modelFallback": t("Your pick {0} failed; answered with Auto.", "{model}"),
+    // A built-in-model pin remapped to the one this editor's browser engine ships (`PIN_REMAPPED`, not a failure).
+    "app.modelRemapped": t("Your pick {0} is not available here; used {1} instead.", "{model}", "{to}"),
   };
 }

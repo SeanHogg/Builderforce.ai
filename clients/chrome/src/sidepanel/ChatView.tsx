@@ -82,7 +82,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     <ModelFallbackNotice
       channel={services.modelFallback}
       // Chrome substitutes `$1`; brain-ui fills its `{model}` token — one translation.
-      labels={{ fallback: t('modelFallback', '{model}'), dismiss: t('dismiss') }}
+      labels={{ fallback: t('modelFallback', '{model}'), remapped: t('modelRemapped', '{model}', '{to}'), dismiss: t('dismiss') }}
     />
   ) : null;
   // The composer below, as the error banner names it to open its `/` menu.

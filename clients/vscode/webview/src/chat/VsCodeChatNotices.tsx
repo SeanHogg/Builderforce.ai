@@ -88,6 +88,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
         labels={{
           // The line names the pick; WHY (the host's clamped detail) follows in brackets.
           fallback: t('app.modelFallback', 'Your pick {model} failed; answered with Auto.') + (fallbackEvent?.reason ? ` (${fallbackEvent.reason})` : ''),
+          remapped: t('app.modelRemapped', 'Your pick {model} is not available here; used {to} instead.'),
           dismiss: errorLabels.dismiss,
         }}
       />

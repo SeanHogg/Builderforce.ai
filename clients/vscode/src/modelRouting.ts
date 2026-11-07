@@ -42,6 +42,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import {
   clientPinOf,
+  isServableLocalModel,
   localRuntime,
   formatLocalModelRef,
   type LocalEndpoint,
@@ -165,7 +166,7 @@ async function unpinnedLocalProbes(config: LocalModelsConfig, request: RouteRequ
  */
 async function onDeviceOnly(route: ModelRoute, request: RouteRequest): Promise<ModelRoute> {
   const probes = await unpinnedLocalProbes(getLocalModelsConfig(), request);
-  return probes.some((p) => p.models.length > 0) ? { ...route, localFirst: { probes } } : route;
+  return probes.some((p) => p.models.some(isServableLocalModel)) ? { ...route, localFirst: { probes } } : route;
 }
 
 async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRoute, request: RouteRequest): Promise<ModelRoute> {
@@ -220,7 +221,7 @@ async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRo
 async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig, request: RouteRequest): Promise<ModelRoute> {
   if (!localFirstApplies(choice)) return choice;
   const probes = await unpinnedLocalProbes(config, request);
-  if (!probes.some((p) => p.models.length > 0)) return choice;
+  if (!probes.some((p) => p.models.some(isServableLocalModel))) return choice;
   return { ...choice, localFirst: { probes } };
 }
 
@@ -410,5 +411,5 @@ export async function completeOnDevice(
 
 /** Whether anything on this machine could serve {@link completeOnDevice} right now. */
 export async function onDeviceModelAvailable(): Promise<boolean> {
-  return (await probeOnDeviceRuntimes(getLocalModelsConfig())).some((p) => p.models.length > 0);
+  return (await probeOnDeviceRuntimes(getLocalModelsConfig())).some((p) => p.models.some(isServableLocalModel));
 }

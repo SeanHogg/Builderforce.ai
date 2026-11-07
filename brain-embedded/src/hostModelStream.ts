@@ -73,7 +73,7 @@ import {
   type LocalAttemptFit,
   type LocalFetch,
 } from './localFirstTransport';
-import { pageRuntimePin } from './pageEngines/pageRuntimePin';
+import { pageRuntimePin, remapBuiltInPin } from './pageEngines/pageRuntimePin';
 import { hybridLocalSuccessTurn } from './localSuccess/hybridLocalSuccess';
 import { localSuccessRouterFor, scopedLocalSuccessRouter, type LocalSuccessStore, type LocalSuccessTuning } from './localSuccess/localSuccessRouter';
 import { localSuccessScope, type LocalSuccessFederation } from './localSuccess/localSuccessFederation';
@@ -161,6 +161,13 @@ export interface ModelFallbackEvent {
   from: string;
   /** The failure's message — for a log line; the notice names only the model. */
   reason: string;
+  /**
+   * Set when this is NOT a failure: `PIN_REMAPPED` — a built-in-model pin named another
+   * vendor's model and runs on this browser's (`to`). Absent = a failed pick (above).
+   */
+  code?: 'PIN_REMAPPED';
+  /** The model that answers instead, for `PIN_REMAPPED`. */
+  to?: string;
 }
 
 /**
@@ -178,7 +185,16 @@ const handoffFit = createHandoffFit();
 
 /** The ONE host routing step: see the module comment for the rows it decides. */
 export function createHostModelStream(input: HostModelStreamInput): StreamFn {
-  const resolveLocal = input.localPin ?? pageRuntimePin;
+  const resolvePin = input.localPin ?? pageRuntimePin;
+  /** A local ref's route and the ref it runs as. A built-in-model pin naming another
+   *  vendor's model runs on THIS browser's, and the host is told — a remap is never silent. */
+  const resolveLocal = (ref: string): { pin: HostLocalPin; ref: string; remapped: boolean } | null => {
+    const found = resolvePin(ref);
+    if (!found) return null;
+    const remap = remapBuiltInPin(ref, found);
+    if (remap) input.onFallback?.({ from: ref, to: remap.ref, code: 'PIN_REMAPPED', reason: 'PIN_REMAPPED' });
+    return { pin: remap?.pin ?? found, ref: remap?.ref ?? ref, remapped: remap !== null };
+  };
   const fit = input.fit ?? handoffFit;
   return async (callOpts, handlers = {}) => {
     const mode: InferenceMode = (await input.mode?.()) ?? 'hybrid';
@@ -204,7 +220,12 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     const auto = async (call: CallOpts, h: StreamHandlers): Promise<StreamChatResult> => {
       const localRef = call.model;
       const local = localRef ? resolveLocal(localRef) : null;
-      if (local && localRef) return createLocalStream(local.endpoint, local.model, input.fetch, { ref: localRef, cloud, fit })(call, h);
+      if (local && localRef) {
+        return createLocalStream(local.pin.endpoint, local.pin.model, input.fetch, { ref: local.ref, cloud, fit })(
+          local.remapped ? { ...call, model: local.ref } : call,
+          h,
+        );
+      }
       const probes = input.probes ? await input.probes() : [];
       // Hybrid only: Local only never leaves the device, and Specific makes no Auto attempt.
       const accounts = mode === 'hybrid' && input.accounts ? await input.accounts().catch(accountsUnavailable) : [];
@@ -264,11 +285,14 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     }
 
     const local = resolveLocal(pick);
+    const pickRef = local?.ref ?? pick;
+    // The call may carry the old pin as its model: it names the remapped one now.
+    const pinOpts = local?.remapped && opts.model === pick ? { ...opts, model: pickRef } : opts;
     /** The pick's own route — on its runtime, or at the gateway (strict only under Specific). */
     const pinned = (h: StreamHandlers): Promise<StreamChatResult> => {
       if (local) {
         // Specific hands the pin no cloud: a call naming another model stays on the pin.
-        return createLocalStream(local.endpoint, local.model, input.fetch, { ref: pick, cloud: strict ? null : cloud, fit })(opts, h);
+        return createLocalStream(local.pin.endpoint, local.pin.model, input.fetch, { ref: pickRef, cloud: strict ? null : cloud, fit })(pinOpts, h);
       }
       if (isLocalModelRef(pick) || !cloud) throw new Error(isLocalModelRef(pick) ? NO_LOCAL_MODEL : noModel);
       return cloud({ ...opts, model: pick, modelStrict: strict }, h);
@@ -278,7 +302,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     // nowhere to run — straight to Auto.
     if (!local && (isLocalModelRef(pick) || !cloud)) return auto(unpicked(opts), handlers);
     return pickThenAuto(pinned, () => auto(unpicked(opts), handlers), handlers, opts.signal, {
-      from: pick,
+      from: pickRef,
       local: !!local,
       ...(input.onFallback ? { onFallback: input.onFallback } : {}),
     });

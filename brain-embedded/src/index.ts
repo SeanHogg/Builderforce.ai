@@ -62,7 +62,7 @@ export type { LocalAttemptFit, LocalChatMessage, LocalFetch, LocalFirstStreamInp
 export { createHostModelStream } from './hostModelStream';
 export { isFallbackFailure } from './hostModelStream';
 export { inferenceModeForModelPick } from './inferenceModeForModelPick';
-export { createModelFallbackChannel, modelFallbackText, DEFAULT_MODEL_FALLBACK_TEMPLATE } from './modelFallback';
+export { createModelFallbackChannel, modelFallbackText, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_REMAPPED_TEMPLATE } from './modelFallback';
 export type { ModelFallbackChannel } from './modelFallback';
 export type { HostLocalPin, HostModelStreamInput, ModelFallbackEvent } from './hostModelStream';
 // Hybrid's `run.local-success` predictor (the engine's ML task catalog): the ONE store port
@@ -95,16 +95,15 @@ export { localFallbackTrace, summarizeLocalFirstAttempt } from './localFirstTrac
 export type { LocalFirstAttemptSummary } from './localFirstTraces';
 // The engines that run INSIDE the page (PRD 34): one `PageEngine` contract, one fetch shim
 // that answers each engine's OpenAI chat route, and one model store the picker drives.
-// Chrome's Prompt API model, WebLLM (lazy chunk) and our WebGPU `bfi` (host-vendored
-// wasm) each implement it; `createPageEngineSet` composes them for a host. `promptApi` is
-// the ONE detection of the Prompt API surface.
-export {
-  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
-  BROWSER_ENGINE_MODEL,
-  createBrowserEngineProber,
-  toPromptApiTurn,
-} from './browserEngine';
+// The browser's built-in model (its vendor id from `builtInAi/identity`), WebLLM (lazy
+// chunk) and our WebGPU `bfi` (host-vendored wasm) each implement it;
+// `createPageEngineSet` composes them for a host. `promptApi` is the ONE detection of the
+// Prompt API surface.
+export { createBrowserEngineProber, toPromptApiTurn } from './browserEngine';
 export type { BrowserEngineProber } from './browserEngine';
+// PRD 42 · Part A1 — which built-in model THIS browser ships, as data.
+export { BUILT_IN_MODELS, builtInModelIdentity } from './builtInAi/identity';
+export type { BuiltInAiVendor, BuiltInModelIdentity, NavigatorLike } from './builtInAi/identity';
 export { PageEngineError } from './pageEngines/types';
 export type { ChatCompletionChunk, ChatCompletionsRequest, PageEngine } from './pageEngines/types';
 export { pageEnginesFetch, probePageEngines } from './pageEngines/fetchShim';
@@ -163,13 +162,13 @@ export {
   promptApiInputQuota,
   promptApiMeasure,
   promptStreamDeltas,
-} from './promptApi';
+} from './builtInAi/promptApi';
 export type {
   PromptApiAvailability,
   PromptApiFactory,
   PromptApiMessage,
   PromptApiSession,
-} from './promptApi';
+} from './builtInAi/promptApi';
 // Does this shell call only READ? Shared by the read guard and a read-only sub-agent's gate.
 export { isReadOnlyShellCall } from './readOnlyShell';
 export type {

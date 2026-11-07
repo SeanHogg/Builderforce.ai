@@ -944,6 +944,7 @@
   "{0} needs you to sign in again.": "{0} needs you to sign in again.",
   "Sign in to {0}": "Sign in to {0}",
   "Your pick {0} failed; answered with Auto.": "Your pick {0} failed; answered with Auto.",
+  "Your pick {0} is not available here; used {1} instead.": "Your pick {0} is not available here; used {1} instead.",
   "Hybrid": "Hybrid",
   "This device first, then BuilderForce cloud when it needs to": "This device first, then BuilderForce cloud when it needs to",
   "Local only": "Local only",

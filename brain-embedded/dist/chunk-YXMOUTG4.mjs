@@ -71,7 +71,10 @@ var LOCAL_RUNTIMES = [
   {
     id: "browser",
     automaticRank: 40,
-    label: "Gemini Nano",
+    // PRD 42 · A1 — generic; the probe row carries the vendor's label ("Gemini Nano",
+    // "Phi-4-mini"), so the picker shows "Gemini Nano (Chrome)" / "Phi-4-mini (Edge)".
+    label: "Built-in model",
+    labelFromProbe: true,
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
     catalog: "declared",
@@ -373,6 +376,15 @@ function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
 }
 
+// ../packages/local-inference/src/probe.ts
+function isServableLocalModel(m) {
+  return m.state === void 0 || m.state === "ready";
+}
+function localModelLabel(row, runtimeId) {
+  const runtime = localRuntime(runtimeId);
+  return runtime.labelFromProbe && row?.label || runtime.label;
+}
+
 // ../packages/local-inference/src/bfiLimits.generated.ts
 var BFI_CPU_LIMITS = {
   cpuKvBudgetBytes: 536870912,
@@ -440,7 +452,7 @@ function localFirstPlan(input) {
   const onDevice = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
   const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
   const candidates = input.probes.filter((p) => p.reachable && onDevice.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
-    (p) => p.models.filter((m) => localModelUnfitReason(m, input.workload) === null).map((m) => ({
+    (p) => p.models.filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null).map((m) => ({
       kind: "local",
       ref: m.ref,
       provider: p.provider,
@@ -1336,6 +1348,8 @@ export {
   rewriteToLocalUrl,
   fetchLocal,
   localAuthHeaders,
+  isServableLocalModel,
+  localModelLabel,
   LOCAL_MODEL_CATALOG,
   localCatalogModel,
   localCatalogFor,
@@ -1370,4 +1384,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-QYIJWKQO.mjs.map
+//# sourceMappingURL=chunk-YXMOUTG4.mjs.map

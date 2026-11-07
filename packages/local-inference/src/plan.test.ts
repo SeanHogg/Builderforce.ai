@@ -131,6 +131,18 @@ describe('localFirstPlan', () => {
     expect(refs(localFirstPlan({ probes: [BROWSER], workload: long, cloud: {} }))).toEqual(['cloud:auto']);
   });
 
+  it('never plans a built-in model that is only downloadable — a later ready runtime gets the slot', () => {
+    const pending: LocalRuntimeProbe = {
+      ...BROWSER,
+      models: BROWSER.models.map((m) => ({ ...m, state: 'downloadable' as const })),
+    };
+    expect(refs(localFirstPlan({ probes: [pending], workload: CHAT, cloud: {} }))).toEqual(['cloud:auto']);
+    expect(refs(localFirstPlan({ probes: [pending, OLLAMA], workload: CHAT, cloud: {} }))).toEqual([
+      'local/ollama/gemma:2b',
+      'cloud:auto',
+    ]);
+  });
+
   it('ignores unreachable and hosted runtimes, and plans local-only without a cloud', () => {
     const down = { ...SYNAPSE, reachable: false };
     const kimi: LocalRuntimeProbe = {

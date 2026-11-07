@@ -11,7 +11,14 @@
  * window (the catalog's `contextTokens`) exactly as for any local pin.
  */
 
-import { localRuntime, parseLocalModelRef, type LocalEndpoint, type LocalRuntimeId } from '@builderforce/local-inference';
+import {
+  formatLocalModelRef,
+  localRuntime,
+  parseLocalModelRef,
+  type LocalEndpoint,
+  type LocalRuntimeId,
+} from '@builderforce/local-inference';
+import { builtInModelIdentity } from '../builtInAi/identity';
 
 export interface PageRuntimePin {
   provider: LocalRuntimeId;
@@ -21,12 +28,26 @@ export interface PageRuntimePin {
   endpoint: LocalEndpoint;
 }
 
+/**
+ * The browser's built-in model is whichever one THIS browser ships (PRD 42 · A1), so a
+ * `local/browser/<model>` pin naming another vendor's model (a Chrome-era
+ * `gemini-nano` pin in Edge) resolves to this vendor's model — the caller reports it as
+ * `PIN_REMAPPED`, never a silent swap. Returns the remapped ref + pin, or null when the
+ * pin is not a one-model built-in runtime's or already names the current model.
+ */
+export function remapBuiltInPin<P extends { model: string }>(
+  ref: string,
+  pin: P,
+  identity: BuiltInModelIdentity | undefined = typeof navigator === 'undefined' ? undefined : builtInModelIdentity(),
+): { ref: string; pin: P } | null {
+  // No navigator, or a vendor we cannot name: there is no "this browser's model" to remap to.
+  if (!identity || identity.vendor === 'unknown') return null;
+  const current = identity.model;
+  const parsed = parseLocalModelRef(ref);
+  if (!parsed || !localRuntime(parsed.provider).labelFromProbe || parsed.model === current) return null;
+  return { ref: formatLocalModelRef(parsed.provider, current), pin: { ...pin, model: current } };
+}
+
 /** The pin when `ref` names a model on a PAGE runtime; null for anything else (a gateway
  *  id, an HTTP runtime's model, nothing). */
-export function pageRuntimePin(ref: string | undefined): PageRuntimePin | null {
-  const pin = parseLocalModelRef(ref);
-  if (!pin) return null;
-  const runtime = localRuntime(pin.provider);
-  if (runtime.reach !== 'page' || !runtime.defaultBaseUrl) return null;
-  return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
-}
+export function pageRuntimePin(ref: string | undefined): PageRuntimePin |

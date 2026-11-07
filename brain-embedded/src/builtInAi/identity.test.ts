@@ -19,7 +19,7 @@ describe('builtInModelIdentity', () => {
   it('names Gemini Nano in Chrome', () => {
     expect(
       builtInModelIdentity(nav({ userAgentData: { brands: [{ brand: 'Google Chrome', version: '138' }] } })),
-    ).toEqual({ vendor: 'chrome', model: 'gemini-nano', label: 'Gemini Nano', fallbackContextTokens: 4_096 });
+    ).toEqual({ vendor: 'chrome', model: 'gemini-nano', label: 'Gemini Nano (Chrome)', fallbackContextTokens: 4_096 });
   });
 
   it('names Phi-4-mini in Edge — Edge is matched before Chromium/Chrome', () => {
@@ -34,7 +34,18 @@ describe('builtInModelIdentity', () => {
           },
         }),
       ),
-    ).toEqual({ vendor: 'edge', model: 'phi-4-mini', label: 'Phi-4-mini', fallbackContextTokens: 4_096 });
+    ).toEqual({ vendor: 'edge', model: 'phi-4-mini', label: 'Phi-4-mini (Edge)', fallbackContextTokens: 4_096 });
+  });
+
+  it('trusts userAgentData brands: a Chrome-spoofing UA with no Edge/Chrome brand is unknown', () => {
+    expect(
+      builtInModelIdentity(
+        nav({
+          userAgentData: { brands: [{ brand: 'Brave', version: '1' }, { brand: 'Chromium', version: '138' }] },
+          userAgent: 'Mozilla/5.0 ... Chrome/138.0.0.0 Safari/537.36',
+        }),
+      ).vendor,
+    ).toBe('unknown');
   });
 
   it('falls back to the userAgent regex when userAgentData is absent', () => {

@@ -921,6 +921,10 @@
     "message": "Ihre Auswahl $1 ist fehlgeschlagen; mit Auto beantwortet.",
     "description": "Notice: the picked model failed (Hybrid) and the turn was answered with Auto; $1 = the picked model"
   },
+  "modelRemapped": {
+    "message": "Ihre Auswahl $1 ist in diesem Browser nicht verfügbar; stattdessen wurde $2 verwendet.",
+    "description": "Notice: a pinned built-in model is another browser vendor's, so this browser's own model answered; $1 = the picked model, $2 = the model used"
+  },
   "stLoading": {
     "message": "Konto wird geladen…",
     "description": "Status tab loading"

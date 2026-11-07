@@ -117,7 +117,7 @@ describe('the Prompt API engine probe', () => {
           ref: 'local/browser/gemini-nano',
           provider: 'browser',
           model: 'gemini-nano',
-          label: 'Gemini Nano',
+          label: 'Gemini Nano (Chrome)',
           tools: false,
           contextTokens: 9_216,
           state: 'ready',
@@ -133,7 +133,7 @@ describe('the Prompt API engine probe', () => {
     installEdge();
     installLanguageModel({ quota: 8_192 });
     const probe = await createBrowserEngineProber().probe();
-    expect(probe?.models[0]).toMatchObject({ model: 'phi-4-mini', label: 'Phi-4-mini', state: 'ready' });
+    expect(probe?.models[0]).toMatchObject({ model: 'phi-4-mini', label: 'Phi-4-mini (Edge)', state: 'ready' });
   });
 
   it('reports a not-ready model as a downloadable/downloading row — never offered for a turn, never measured', async () => {

@@ -15,7 +15,7 @@
  * but hosted, so it is reachable by an explicit pin and never by local-first. Pure.
  */
 
-import type { LocalModel, LocalRuntimeProbe } from './probe.js';
+import { isServableLocalModel, type LocalModel, type LocalRuntimeProbe } from './probe.js';
 import { LOCAL_RUNTIMES, type LocalEndpoint, type LocalRuntimeId } from './runtimes.js';
 
 /**
@@ -90,7 +90,7 @@ export function localFirstPlan(input: LocalFirstInput): LocalFirstAttempt[] {
     .sort((a, b) => rank(a.provider) - rank(b.provider))
     .flatMap((p) =>
       p.models
-        .filter((m) => localModelUnfitReason(m, input.workload) === null)
+        .filter((m) => isServableLocalModel(m) && localModelUnfitReason(m, input.workload) === null)
         .map((m): LocalFirstAttempt => ({
           kind: 'local',
           ref: m.ref,

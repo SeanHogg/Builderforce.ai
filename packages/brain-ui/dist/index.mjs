@@ -2329,11 +2329,13 @@ var TITLE_HINT = { display: "none" };
 import { useSyncExternalStore } from "react";
 import {
   DEFAULT_MODEL_FALLBACK_TEMPLATE,
+  DEFAULT_MODEL_REMAPPED_TEMPLATE,
   modelFallbackText
 } from "@seanhogg/builderforce-brain-embedded";
 import { jsx as jsx17, jsxs as jsxs16 } from "react/jsx-runtime";
 var DEFAULT_MODEL_FALLBACK_LABELS = {
   fallback: DEFAULT_MODEL_FALLBACK_TEMPLATE,
+  remapped: DEFAULT_MODEL_REMAPPED_TEMPLATE,
   dismiss: "Dismiss"
 };
 var NO_EVENT = () => null;
@@ -2346,7 +2348,7 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
   if (!event || !channel) return null;
   const labels = { ...DEFAULT_MODEL_FALLBACK_LABELS, ...partial };
   return /* @__PURE__ */ jsxs16("div", { className: ["bf-fallback-notice", className].filter(Boolean).join(" "), role: "status", "aria-live": "polite", children: [
-    /* @__PURE__ */ jsx17("span", { className: "bf-fallback-notice__text", children: modelFallbackText(labels.fallback, event) }),
+    /* @__PURE__ */ jsx17("span", { className: "bf-fallback-notice__text", children: modelFallbackText(event.code === "PIN_REMAPPED" ? labels.remapped : labels.fallback, event) }),
     /* @__PURE__ */ jsx17(
       "button",
       {

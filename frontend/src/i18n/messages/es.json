@@ -12327,6 +12327,7 @@
     },
     "noLocalModel": "Ningún modelo de este dispositivo puede responder. Cambia a Híbrido o descarga un modelo local.",
     "modelFallback": "Tu elección {model} falló; se respondió con Auto.",
+    "modelRemapped": "Tu elección {model} no está disponible en este navegador; se usó {to} en su lugar.",
     "switchToHybrid": "Cambiar a Híbrido",
     "downloadLocalModel": "Descargar un modelo local",
     "noSpecificModel": "«Modelo concreto» está activado, pero no hay ningún modelo elegido. Elige uno o cambia a Híbrido.",
