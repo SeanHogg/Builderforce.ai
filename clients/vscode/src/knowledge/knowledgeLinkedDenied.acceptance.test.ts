@@ -132,6 +132,6 @@ describe("a linked root whose server answers 429 to every request", () => {
     // Nothing was drawn from the server: its graph route was never asked, and the replica is still waiting.
     expect(mocks.requests.some((r) => r.includes("knowledge-graph"))).toBe(false);
     const root = rootForPath(mocks.folder, [{ path: mocks.folder }])!;
-    await vi.waitFor(async () => expect((await replicaStatusOf(root.rootId, { read: async () => undefined, write: async () => undefined })).queued).toBeGreaterThan(0));
+    await vi.waitFor(async () => expect((await replicaStatusOf(root.rootId, { read: async () => undefined, write: async () => undefined })).dirty).toBeGreaterThan(0));
   }, 120_000);
 });

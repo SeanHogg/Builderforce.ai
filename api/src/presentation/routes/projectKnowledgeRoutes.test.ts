@@ -264,6 +264,7 @@ describe('project knowledge routes', () => {
     const markRelationsStale = vi.fn(async () => 1);
     mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
       env: {}, db, tenantId, projectId, store: { markRelationsStale }, extracted: { get: vi.fn(async () => undefined), put },
+      ledger: { index: { drop: vi.fn(async () => undefined) } },
     }));
     const long = 'src:r::' + 'x'.repeat(600); // a deep-path ref a producer emitted over the 512 bound
     const entry = {

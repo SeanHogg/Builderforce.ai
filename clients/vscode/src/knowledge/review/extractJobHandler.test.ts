@@ -8,7 +8,7 @@ import { DEFAULT_MAX_FILE_BYTES, extractJob, sha256Hex, type ExtractJob } from "
 import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
 import { withIndexSymbols } from "./extractPoolHost";
 
-const jobFor = (path: string, text: string, extra: Partial<ExtractJob> = {}): ExtractJob => ({
+const jobFor = (path: string, text: string, extra: Partial<Omit<ExtractJob, "doc" | "readByPool">> = {}): ExtractJob => ({
   rootId: "ws", path, hash: `h-${path}`, knownKeys: [],
   doc: { id: path, tenantId: "t", content: { kind: "text", text } },
   ...extra,
