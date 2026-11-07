@@ -48,7 +48,7 @@ export function satellitesOf(station: Pick<Station, 'refs'>, index: ReadonlyMap<
 export interface SatellitePlace { x: number; y: number; anchor: 'start' | 'end' }
 
 /** A satellite's name is clipped to this many characters, so the arc stays compact. */
-export const SATELLITE_NAME = 18;
+const SATELLITE_NAME = 18;
 export const satelliteName = (s: Pick<Satellite, 'name'>): string => clip(s.name, SATELLITE_NAME);
 
 /** The room each satellite and its name take, for the station labels and the card to keep off. */

@@ -9,10 +9,10 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ReviewProgress as ReviewProgressEvent } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './labels';
 import { packLabel } from './names';
+import { reviewProgressText } from './reviewProgressText';
 import { ReviewFailed } from './ReviewFailed';
 import { SkippedUploads } from './SkippedList';
 import type { ReviewRun } from './useReviewRun';
@@ -29,11 +29,6 @@ export interface ReviewProgressProps {
 
 const formatCost = (usd: number): string =>
     new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: usd < 1 ? 2 : 0 }).format(usd);
-
-/** The running line: "{phase} · {done} of {total}", or the planning words before the first progress arrives. The card and the status pill both say it. */
-export function reviewProgressText(labels: KnowledgeGraphLabels, p: ReviewProgressEvent | undefined): string {
-    return p ? fillTemplate(labels.reviewProgress, { phase: labels.phases[p.phase], done: p.done, total: p.total }) : labels.reviewPlanning;
-}
 
 export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgressProps) {
     const s = run.state;

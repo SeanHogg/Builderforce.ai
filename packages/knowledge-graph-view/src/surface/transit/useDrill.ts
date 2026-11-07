@@ -76,7 +76,9 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     }, [full, world, stack]);
 
     const canEnter = useCallback((id: string): EnterCheck => {
-        const level = stack[stack.length - 1]?.level ?? 'world';
+        // Typed `| undefined` on purpose: an empty stack IS the world level, whatever `noUncheckedIndexedAccess` says of the index.
+        const top: DrillFrame | undefined = stack[stack.length - 1];
+        const level: DrillLevel | 'world' = top?.level ?? 'world';
         const next = NEXT[level];
         if (!next) return { can: false, reason: 'deepest' };
         if (view?.leaves.has(id)) return { can: false, reason: 'leaf' };

@@ -12,7 +12,7 @@ import { Panel } from '../Sheet';
 import type { KnowledgeGraphSource, KnowledgePanelRenderer, ViewMode } from '../types';
 import { HEADER_PANELS, PANELS, type PanelId } from './panels';
 import type { PanelDef, PanelProps, SurfaceEnv } from './registry';
-import type { SyncRead } from './syncPill';
+import type { SyncRead } from './useSyncStatus';
 import { Menu, Segmented } from './ui';
 import type { SurfaceModel } from './useSurface';
 

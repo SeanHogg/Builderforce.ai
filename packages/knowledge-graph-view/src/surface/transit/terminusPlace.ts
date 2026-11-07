@@ -7,8 +7,8 @@ import type { Point } from './geometry';
 import type { Box } from './labelPlacement';
 
 /** The room a glyph and its name take, so labels and stations keep off it. */
-export const TERMINUS_W = 96;
-export const TERMINUS_H = 52;
+const TERMINUS_W = 96;
+const TERMINUS_H = 52;
 /** How far right of its station a line's end stands. */
 const SIDE_OFFSET = 42;
 const VERTICAL_OFFSET = 56;

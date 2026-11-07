@@ -7,19 +7,10 @@ import { cssVar } from '../../scene/themeColors';
 import { muted } from '../../styles';
 import { LEVEL } from '../actModel';
 import { Pin } from '../ui';
-import { isResolved, type FixFlowState } from './fixFlow';
+import { queueState, type FixFlowState } from './fixFlow';
 
 /** Rows drawn at most; the counts above say how many there are. */
 export const QUEUE_ROWS = 30;
-
-export type QueueState = 'open' | 'applied' | 'resolved';
-
-/** Where a finding stands: resolved, applied (checking), or open. Pure. */
-export function queueState(flow: FixFlowState | undefined): QueueState {
-    if (!flow) return 'open';
-    if (isResolved(flow)) return 'resolved';
-    return flow.steps.apply === 'done' || flow.steps.apply === 'agent' ? 'applied' : 'open';
-}
 
 export interface FixQueueListProps {
     findings: readonly Finding[];

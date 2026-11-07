@@ -174,7 +174,7 @@ describe('DescribeLinks and Satellites', () => {
         const first = container.querySelector('[data-satellite="a"]')!;
         expect(first.getAttribute('tabindex')).toBe('0');
         expect(first.getAttribute('aria-label')).toBe('a-very-long-satellite-name-indeed, inside API');
-        expect(first.textContent).toBe('a-very-long-sate…');
+        expect(first.textContent).toBe('a-very-long-satel…');
         fireEvent.keyDown(first, { key: 'Enter' });
         fireEvent.click(container.querySelector('[data-satellite="b"]')!);
         expect(onSelect).toHaveBeenCalledTimes(2);

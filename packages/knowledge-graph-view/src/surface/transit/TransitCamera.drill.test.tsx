@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The transit camera inside a drilled level: the question, the selection and the card work on THAT level's stations. */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../../labels';
 import { LENSES } from '../../lenses';
 import { surfaceFixture } from '../../testing';
@@ -48,8 +48,10 @@ describe('the transit camera in a drilled level', () => {
         fireEvent.click(screen.getByRole('button', { name: L.surface.map.card.whoCalls }));
         expect(seen.surface!.question).toBe('callers');
         expect(seen.surface!.drill.selected).toBe(seen.surface!.drill.view!.stations.stations.find((s) => s.name === 'useCase.ts')!.id);
-        // The question is asked of this level: the file's callers are lit, others dim.
-        const dimmed = [...document.querySelectorAll('[data-station]')].filter((el) => el.getAttribute('opacity') === '0.4');
-        expect(dimmed.length).toBeGreaterThan(0);
+        // A question is asked of THIS level's stations: the files here are covered (dimmed) and the repository beside them is not (lit).
+        act(() => seen.surface!.setQuestion('untested'));
+        const opacityOf = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name},`) }).getAttribute('opacity');
+        expect(opacityOf('useCase.ts')).toBe('0.4');
+        expect(opacityOf('repositories')).toBe('1');
     });
 });

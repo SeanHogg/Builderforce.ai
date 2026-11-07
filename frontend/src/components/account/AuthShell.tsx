@@ -53,7 +53,7 @@ export function AuthShell({
       }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <BrandLockup href="/" label="Builderforce.ai" size={28}>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>
               Builderforce.ai
             </span>
           </BrandLockup>
@@ -69,16 +69,16 @@ export function AuthShell({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
             <div style={{ width: '100%', maxWidth: 420 }}>
               <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
+                <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
                   {heading}
                 </h1>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{subtitle}</p>
+                <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)' }}>{subtitle}</p>
               </div>
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
                 {pills.map(f => (
                   <span key={f} style={{
-                    fontSize: '0.75rem', fontWeight: 600,
+                    fontSize: 'var(--font-size-small)', fontWeight: 600,
                     background: 'var(--surface-coral-soft)',
                     color: 'var(--coral-bright)',
                     border: '1px solid var(--border-accent)',
@@ -90,7 +90,7 @@ export function AuthShell({
 
               {children}
 
-              <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>{footer}</p>
+              <p style={{ textAlign: 'center', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 20 }}>{footer}</p>
             </div>
           </div>
 
@@ -107,7 +107,7 @@ export function AuthShell({
             <div key={panelKey} className="auth-marketing-content">
               <span style={{
                 display: 'inline-block', marginBottom: 12,
-                fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
                 color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
                 border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
                 fontFamily: 'var(--font-display)',
@@ -115,38 +115,38 @@ export function AuthShell({
 
               <MarketingVisual variant={visual} />
 
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
                 {marketing.heading}
               </h2>
-              <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
+              <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
                 {marketing.intro}
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                 {marketing.stats.map(s => (
                   <div key={s.id} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                   </div>
                 ))}
               </div>
 
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {marketing.bullets.map(b => (
-                  <li key={b.id} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <li key={b.id} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                     <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                     <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                   </li>
                 ))}
               </ul>
 
-              <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 var(--radius-lg) var(--radius-lg) 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 var(--radius-lg) var(--radius-lg) 0', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                 &ldquo;{marketing.quote}&rdquo;
               </blockquote>
 
               {/* FAQ section for GEO citability */}
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   {faqHeading}
                 </h3>
                 <MarketingFaq items={marketing.faq} />

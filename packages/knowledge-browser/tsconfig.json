@@ -26,6 +26,8 @@
       "@seanhogg/builderforce-memory/*": ["../../frontend/node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
       "react": ["../../frontend/node_modules/@types/react"],
       "react/*": ["../../frontend/node_modules/@types/react/*"],
+      "react-dom": ["../../frontend/node_modules/@types/react-dom"],
+      "react-dom/*": ["../../frontend/node_modules/@types/react-dom/*"],
       "three": ["../../frontend/node_modules/@types/three"],
       "@react-three/fiber": ["../../frontend/node_modules/@react-three/fiber"],
       "@react-three/drei": ["../../frontend/node_modules/@react-three/drei"],

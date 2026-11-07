@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { KnowledgeGraphSource, SyncStatus } from '../types';
-import { useSyncStatus } from './syncPill';
+import { useSyncStatus } from './useSyncStatus';
 
 const status = (files: number): SyncStatus => ({ local: { files, docs: 0 }, sources: [] });
 const sourceOf = (read: KnowledgeGraphSource['syncStatus']): KnowledgeGraphSource => ({ scopes: async () => [], load: async () => null, ...(read ? { syncStatus: read } : {}) });

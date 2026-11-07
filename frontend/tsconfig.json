@@ -50,6 +50,7 @@
       "@builderforce/agent-tools/prefetch": ["../packages/agent-tools/src/prefetch/index.ts"],
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
       "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"],
       "three": ["./node_modules/@types/three"],
       "@react-three/fiber": ["./node_modules/@react-three/fiber"],
       "@react-three/drei": ["./node_modules/@react-three/drei"],

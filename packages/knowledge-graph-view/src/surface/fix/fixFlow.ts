@@ -132,3 +132,12 @@ export function stepEnabled(state: FixFlowState, step: FixStepId): boolean {
 
 /** True once the finding is resolved (by the host, or its single request went to the agent). */
 export const isResolved = (state: FixFlowState): boolean => state.steps.resolve === 'done';
+
+export type QueueState = 'open' | 'applied' | 'resolved';
+
+/** Where a finding stands: resolved, applied (checking), or open. Pure. */
+export function queueState(flow: FixFlowState | undefined): QueueState {
+    if (!flow) return 'open';
+    if (isResolved(flow)) return 'resolved';
+    return flow.steps.apply === 'done' || flow.steps.apply === 'agent' ? 'applied' : 'open';
+}

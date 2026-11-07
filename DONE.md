@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-11-06 — Knowledge view matches the B-Surface design: station cards and levels, termini, staged fix flow, Try it, Sync and Coverage detail (VS Code 2026.10.132 · memory 2026.10.43)
+
+- **Map.** Station card with Callers/API/Patterns/Enter; drill station → files → symbols (`useDrill`, `drillView`, level path and **Out to**); unfold satellites; termini for data stores and the 8 external services (`EXTERNAL_SERVICE_IDS`, memory 2026.10.42); corridor lanes; label and terminus placement; questions and lenses in drilled levels. No "Loading…" screen: the last-seen graph (24 MB cap) and the outline fill in incrementally.
+- **Outline.** Memory `outlineOf` carries `externals`; the API caches the outline under its own `kg-outline:v1` key; `areaRollup` keeps stations ≤ 400.
+- **Fix flow.** Preview → queue → checks (tsc, tests, knip) → apply → undo by `fixId` only, with a divergence check and literal pathspecs. Simulate steps or runs a path.
+- **Drawers.** API Try it (allow-listed dev origins, SSRF-guarded, bounded body), Sync parity and deltas, Coverage config and test shape, provenance badges and pins. Labels split into `labels/*.ts`.
+- **Security (Opus review).** Every host op resolves its root through `rootById` (`safePath.ts`), closing a rootId traversal; the symbols op reads code files only.
+- **Moved out:** recorded runtime values (Simulate `recordedValues`, `payloadBytes`, Sync Traces) stay on ROADMAP — no trace recorder exists.
+
 ## ✅ RESOLVED 2026-11-06 — Model-call failures name the real destination; a failing pick asks for another model; Kimi sign-in launches itself (VSIX 2026.10.132)
 
 - **The misleading error.** On a `local/kimi-code/k3` pick, the editor calls `api.kimi.ai/coding/v1` directly. A request with no response headers within 240s still said "the gateway sent nothing", and it carried the bare `k3`. That created a phantom `k3: 0 turns · 2 failed` row in triage.

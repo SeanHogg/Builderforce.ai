@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
 import { canApplyKind, codemodOf, CODEMODS } from '../codemods';
-import { checksPassed, fixFlowReducer, initialFlow, isResolved, nextStep, stepEnabled } from './fixFlow';
+import { checksPassed, fixFlowReducer, initialFlow, isResolved, nextStep, queueState, stepEnabled } from './fixFlow';
 import { effectiveMode, fixQueueCounts, fixQueueText, promptRequest, reviewRequest, stepMode, stepRequest, undoBlock } from './fixModes';
-import { queueState } from './FixQueueList';
 
 const f = (kind: string): Finding => ({ id: kind, kind, pack: 'code', nodes: [], severity: 'warn', params: {} });
 const run = (s: ReturnType<typeof initialFlow>, ...a: Parameters<typeof fixFlowReducer>[1][]) => a.reduce(fixFlowReducer, s);

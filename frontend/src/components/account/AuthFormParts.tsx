@@ -13,7 +13,7 @@ export const authInputStyle: CSSProperties = {
   border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)',
   padding: '11px 14px',
-  fontSize: '0.9rem',
+  fontSize: 'var(--font-size-body)',
   outline: 'none',
   transition: 'border-color 0.2s, box-shadow 0.2s',
   fontFamily: 'var(--font-body)',
@@ -21,7 +21,7 @@ export const authInputStyle: CSSProperties = {
 
 export const authLabelStyle: CSSProperties = {
   display: 'block',
-  fontSize: '0.8rem',
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   color: 'var(--text-secondary)',
   marginBottom: 6,
@@ -58,7 +58,7 @@ export function AuthFormCard({ children }: { children: ReactNode }) {
 export function AuthErrorBanner({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: '0.875rem' }}>
+    <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: 'var(--font-size-small)' }}>
       {message}
     </div>
   );
@@ -78,7 +78,7 @@ export function AuthSubmitButton({ disabled, busy, children }: { disabled: boole
         padding: '13px',
         fontFamily: 'var(--font-display)',
         fontWeight: 700,
-        fontSize: '0.95rem',
+        fontSize: 'var(--font-size-body)',
         cursor: busy ? 'wait' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         transition: 'opacity 0.2s, transform 0.2s, box-shadow 0.2s',

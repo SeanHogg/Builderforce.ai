@@ -14,7 +14,18 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 - **Update follows the folder.** Files you deleted leave the pack, and the search cards are rebuilt from what the pack now holds. A moved folder's claims are no longer counted twice.
 - **A pack never overwrites a folder you have open.** Starting the editor no longer replaces that folder's live knowledge with an older pack.
 
-## [NEXT] — The knowledge view matches its design, and big repos draw their whole map
+## [2026.10.132] — The knowledge view matches its design, and big repos draw their whole map
+
+- **Open a station.** Click a station for its card: files, owners, risk, and Callers, API, Patterns and Enter. **Enter** goes down a level, from station to files to symbols. The level path shows where you are, and **Out to** steps back. If the map changes under you, the view steps back out and says why.
+- **Unfold a station in place.** Its files fan out round it as satellites you can tab to and select.
+- **Where lines end.** Data stores and outside services (Postgres, KV, LLM, GitHub, Stripe, mail, Slack, OAuth) are drawn as ends of the lines that reach them. Lines that share stations get their own lanes and never overdraw.
+- **Questions work at every level.** "Who calls this?" and the other questions light up files inside an entered station too.
+- **A staged fix flow.** Preview the change, queue it, run checks (type check, tests and the unused-code report), then apply. Every applied fix can be undone, and undo refuses when the files changed since.
+- **Simulate a path.** Step through a line hop by hop, or run it to the end.
+- **Try an API route.** The API panel sends a request to your local dev server and shows the response. Only the origins you list in the settings are allowed.
+- **Sync shows what differs.** It lists the files that differ from the server and why.
+- **Coverage shows how it is set up.** It reads your coverage config and shows the shape of your tests.
+- **Panels show where each fact comes from**, and you can pin a panel open.
 
 - **No loading screen.** The view opens on the last graph you saw and fills in as the review runs.
 - **The map covers every file.** On a large repo the map used to show one line with one stop. Stations and lines now come from an outline of every file, and folders roll up so the map stays readable. When the outline is capped, the map says how many files it shows.
@@ -24,7 +35,7 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 - **Act cards.** They are numbered actions with Apply, Prompt and Show, plus "Keep this run as a test", "This path is done when…" and the details, open by default.
 - **Paths.** The full-size sequence view is one click from the path strip. Cycles are drawn dashed with ⟲. **Show files** now works for files that were not loaded yet.
 - **Rovr** clears the remembered map on sign-out or when you switch workspaces.
-- Built on builderforce-memory 2026.10.41.
+- Built on builderforce-memory 2026.10.43.
 
 ## [2026.10.131] — Shell scripts are code; the new per-file data reaches every file
 

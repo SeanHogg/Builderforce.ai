@@ -36,7 +36,7 @@ import { muted } from './styles';
 import { CAMERAS } from './surface/cameras';
 import { ActPanel } from './surface/ActPanel';
 import { SceneOverlay } from './surface/SceneOverlay';
-import { useSyncStatus } from './surface/syncPill';
+import { useSyncStatus } from './surface/useSyncStatus';
 import { useZoomHost, ZoomProvider } from './surface/zoom';
 import { LinesPanel } from './surface/LinesPanel';
 import { PanelDrawer } from './surface/PanelDock';
