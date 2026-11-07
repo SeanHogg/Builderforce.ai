@@ -1450,6 +1450,7 @@ packages:
 
   '@seanhogg/builderforce-memory-engine@2026.10.43':
     resolution: {integrity: sha512-X5rAaQwesXxeEskMOGGAPeyOqgJZsM3Iw7ilIcuknZiPcKnzm1kNjvFwHNpb4gFvfwONgG0EvVV5BGEdysPsHw==}
+    engines: {node: '>=18.0.0'}
 
   '@seanhogg/builderforce-memory-engine@2026.10.44':
     resolution: {integrity: sha512-MwP0uKCUVpGp3hiPjg9L6ZSHrc6/YpWuFSzs2VjH5woVel8OIOEFlEUvOzb/sM7W9bq5nE7HVE21BnrhyN6Dbg==}
@@ -1476,6 +1477,9 @@ packages:
 
   '@seanhogg/builderforce-memory@2026.10.43':
     resolution: {integrity: sha512-07dfwK4/5HC9DRTc6sOugVdj2aZK4HsPIDIUvi4cHn7x/vUQ0DyUmHJ2vnoo2J6bYXphsOVqufhuKaWw5IUNDQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.10.43
 
   '@seanhogg/builderforce-memory@2026.10.44':
     resolution: {integrity: sha512-YUWunz5bmuaTTOUVpGTMRoddg6yEitOO6flQYAgQ9ucyEYsk9/OOOhq7vU6BTES3vSWjOkD9O3FjPMiaWrIi9A==}
