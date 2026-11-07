@@ -2,6 +2,15 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.140] — One folder, many systems; reviews map in minutes; sync sends one small pack
+
+- **A folder of many systems reads as many systems.** Each repository or project in the folder is its own system. Lines are grouped by system and shared out fairly, and the header starts at the system you are in. There is no file-count cap.
+- **Stray copies are found, and you choose.** When two systems are near-identical copies, the review names the likely stray and why. It offers a one-click Exclude, so the map shows only the real code.
+- **The map is complete in minutes.** A review now maps every file first, then judges in the background within a budget (500 files by default). A slow file can no longer stall the run: reads time out after 5 s and extraction after 10 s, and five failed judgements in a row stop judging. A new review takes over from one still judging.
+- **Sync sends one compact pack, and only what changed.** The server copy is updated with a single binary pack instead of thousands of per-file requests. The extension works out the exact difference, skips bodies the server already holds, and sends only that difference.
+  - A file whose path contains a control character is skipped and listed as failed, instead of stopping the sync.
+- **The agent files tickets on your device, and a copied chat report fits a paste.** When the agent breaks work into tickets, they are saved locally first and sent to your account in batches when sync is on, so a large plan no longer hits the server's rate limit. "Copy diagnostics" now stays under 48,000 characters, below the 50,000-character paste limit.
+
 ## [2026.10.139] — Watch a review run, in parallel, and keep the map offline
 
 - **Open a review and watch it work.** "Review a folder" and "Re-review this folder" now open a Run panel (Run details):

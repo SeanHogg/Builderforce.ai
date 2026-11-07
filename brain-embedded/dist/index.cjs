@@ -12478,8 +12478,9 @@ var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
-var DEFAULT_MAX_DECODED = 48 * 1024 * 1024;
+var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaPump.ts
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
@@ -12492,20 +12493,20 @@ var EMPTY_ROOT = (0, import_pack4.manifestTree)([]).root;
 var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [

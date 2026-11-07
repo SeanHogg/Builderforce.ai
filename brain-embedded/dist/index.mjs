@@ -10218,7 +10218,7 @@ var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\|
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
-import { canonicalJson, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";
+import { canonicalJson, srcRef } from "@seanhogg/builderforce-memory/knowledge";
 import { areaOfPath } from "@seanhogg/builderforce-memory/working";
 import { hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
 
@@ -10286,14 +10286,14 @@ var CODE_LAYERS = defaultLayerRegistry();
 import { DOCS_PACK } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef3 } from "@seanhogg/builderforce-memory/knowledge";
+import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
 import {
   DEFAULT_REVIEW_MODEL_CALLS,
   planDetail,
   reviewDirectory as reviewDirectory2,
-  srcRef as srcRef5
+  srcRef as srcRef4
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
@@ -10322,7 +10322,7 @@ import {
   isBinaryText,
   knownKeysOfEntities,
   sha256Hex as sha256Hex3,
-  srcRef as srcRef4
+  srcRef as srcRef3
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
@@ -10404,17 +10404,19 @@ import { factLeafKey, fileLeafKey, relationLeafKey } from "@seanhogg/builderforc
 import { factDigest, relationDigest } from "@seanhogg/builderforce-memory/knowledge/pack";
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
+import { srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
 import {
   bucketOf,
   diffEntries,
   encodePack,
   jsonBytesOf,
+  parseRelationLeafKey,
   rootLeaves,
   rootDigestOf,
   ZERO_DIGEST,
   fileLeafKey as fileLeafKey2
 } from "@seanhogg/builderforce-memory/knowledge/pack";
-var DEFAULT_MAX_DECODED = 48 * 1024 * 1024;
+var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaPump.ts
 import { MAX_PART_BYTES, splitParts } from "@seanhogg/builderforce-memory/knowledge/pack";
