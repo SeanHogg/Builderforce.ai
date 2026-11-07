@@ -1,0 +1,84 @@
+/**
+ * Pack sync routes (PRD 41 A11), mounted by `createProjectKnowledgeRoutes` on BOTH doors (tenant JWT under
+ * `/api/projects`, host key under `/api/agent/projects`) next to the other knowledge routes:
+ *
+ *   POST /:projectId/knowledge/sync?syncId=&part=&parts=   one BFKP pack (or one part of one) → { generation, digest }
+ *   GET  /:projectId/knowledge/sync/manifest?root=         the root digest and the 4,096 bucket digests (BFKP)
+ *   POST /:projectId/knowledge/sync/manifest               the leaves of the buckets asked for (BFKP in, BFKP out)
+ *   POST /:projectId/knowledge/sync/have                   a BFKP HASH section in, a bitmap of the held hashes out
+ *
+ * Thin by design: the body is read, its size is checked against the declared length, and the application
+ * use case does the rest. 409 `generation_mismatch` / `digest_mismatch`, 413 `pack_too_large` and 422 `bad_pack`
+ * are the typed answers a client reacts to.
+ */
+import type { Context, Hono } from 'hono';
+import type { HonoEnv } from '../../env';
+import { KPACK_CONTENT_TYPE } from '@seanhogg/builderforce-memory/knowledge/pack';
+import type { KnowledgePorts } from '../../application/knowledge/knowledgeComposition';
+import { applyKnowledgePack } from '../../application/knowledge/sync/applyKnowledgePack';
+import { bucketIdsOf, haveBitmap, manifestLeaves, manifestSummary } from '../../application/knowledge/sync/knowledgeSyncManifest';
+import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES } from '../../application/knowledge/sync/knowledgeSyncPorts';
+
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+const binary = (bytes: Uint8Array, type: string): Response =>
+  new Response(bytes as unknown as BodyInit, { status: 200, headers: { 'Content-Type': type, 'Cache-Control': 'no-store' } });
+
+export interface SyncRouteHelpers {
+  withPorts(c: Context, run: (ports: KnowledgePorts) => Promise<Response>): Promise<Response>;
+  /** The person acting, or null for a host key / machine token. */
+  person(c: Context): string | null;
+}
+
+/** The request body, refused past `MAX_SYNC_BODY_BYTES` by its declared length first and its real length after. */
+async function bodyOf(c: Context): Promise<Uint8Array> {
+  const declared = Number(c.req.header('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_SYNC_BODY_BYTES) {
+    throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
+  }
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length > MAX_SYNC_BODY_BYTES) throw new KnowledgeSyncError(413, 'payload_too_large', `a pack request is at most ${MAX_SYNC_BODY_BYTES} bytes`);
+  return bytes;
+}
+
+const intOf = (v: string | undefined): number | undefined => (v === undefined || v === '' ? undefined : Number(v));
+
+/** Runs a sync handler and answers its typed refusals; anything else is a server fault and rethrows. */
+async function answering(run: () => Promise<Response>): Promise<Response> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof KnowledgeSyncError) return json({ error: error.message, code: error.code, ...(error.detail ?? {}) }, error.status);
+    throw error;
+  }
+}
+
+export function registerKnowledgeSyncRoutes(router: Hono<HonoEnv>, h: SyncRouteHelpers): void {
+  router.post('/:projectId/knowledge/sync', (c) => h.withPorts(c, (p) => answering(async () => {
+    const type = c.req.header('content-type') ?? '';
+    if (!type.startsWith(KPACK_CONTENT_TYPE)) return json({ error: `send ${KPACK_CONTENT_TYPE}`, code: 'unsupported_media_type' }, 415);
+    const syncId = c.req.query('syncId');
+    const parts = intOf(c.req.query('parts'));
+    const part = intOf(c.req.query('part'));
+    const result = await applyKnowledgePack(
+      { ...p, userId: h.person(c), actorRole: (c.get('role') as string | undefined) ?? null },
+      { body: await bodyOf(c), ...(syncId ? { syncId } : {}), ...(part !== undefined ? { part } : {}), ...(parts !== undefined ? { parts } : {}) },
+    );
+    return json({ ok: true, ...result });
+  })));
+
+  router.get('/:projectId/knowledge/sync/manifest', (c) => h.withPorts(c, (p) => answering(async () => {
+    const rootId = c.req.query('root')?.trim();
+    if (!rootId) return json({ error: 'root is required' }, 400);
+    return binary(await manifestSummary(p, rootId), KPACK_CONTENT_TYPE);
+  })));
+
+  router.post('/:projectId/knowledge/sync/manifest', (c) => h.withPorts(c, (p) => answering(async () => {
+    const { rootId, buckets } = await bucketIdsOf(await bodyOf(c));
+    return binary(await manifestLeaves(p, rootId, buckets), KPACK_CONTENT_TYPE);
+  })));
+
+  router.post('/:projectId/knowledge/sync/have', (c) => h.withPorts(c, (p) => answering(async () =>
+    binary(await haveBitmap(p, await bodyOf(c)), 'application/octet-stream'))));
+}

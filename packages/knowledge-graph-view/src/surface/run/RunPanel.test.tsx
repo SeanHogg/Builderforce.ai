@@ -7,7 +7,7 @@ import type { KnowledgeGraphSource, ReviewRunsPort, StoredReviewRun } from '../.
 import type { ReviewRun as ReviewMachine } from '../../useReviewRun';
 import type { PanelProps } from '../registry';
 import { RunPanel } from './RunPanel';
-import { finishedRun, liveRun, summaryOf } from './runFixture';
+import { finishedRun, liveRun, RUN_AT, summaryOf } from './runFixture';
 import { useReviewRunRecord } from './useReviewRunRecord';
 
 const t = L.surface.run;
@@ -50,6 +50,43 @@ describe('the Run panel', () => {
         expect(within(extract).getByText(/^about .* left$/)).toBeTruthy();
         // No phase was invented: nothing for write or index.
         expect(screen.queryByText(L.phases.write)).toBeNull();
+    });
+
+    it('shows "Map complete" after index and judge as its own pass, with the files still waiting to be judged and no judge ETA on other rows (PRD 41 A10)', () => {
+        const { port, push } = portOf();
+        render(<Harness port={port} review={machine()} />);
+        push(liveRun({
+            phases: [
+                { phase: 'plan', startedAt: RUN_AT, endedAt: RUN_AT + 500, done: 1, total: 1 },
+                { phase: 'index', startedAt: RUN_AT + 500, endedAt: RUN_AT + 4000, done: 10, total: 10 },
+                { phase: 'mapped', startedAt: RUN_AT + 4000, endedAt: RUN_AT + 4000, done: 1, total: 1 },
+                { phase: 'judge', startedAt: RUN_AT + 4000, done: 1, total: 4 },
+            ],
+        }));
+        const rows = within(screen.getByTestId('kg-run-timeline')).getAllByRole('listitem');
+        expect(rows.map((r) => r.dataset.phase)).toEqual(['plan', 'index', 'mapped', 'judge']);
+        expect(within(rows[2]!).getByText(L.phases.mapped)).toBeTruthy();
+        expect(rows[3]!.dataset.state).toBe('active');
+        expect(within(rows[1]!).queryByText(/^about .* left$/)).toBeNull();
+        expect(screen.getByTestId('kg-run-awaiting-judge').textContent).toBe('3 files waiting to be judged');
+    });
+
+    it('lists the five slowest steps, longest first, with their reason and the read / lookup / pool split', () => {
+        const { port, push } = portOf();
+        render(<Harness port={port} review={machine()} />);
+        const mk = (n: number, ms: number, extra: Partial<StoredReviewRun['steps'][number]> = {}) => ({ path: `src/f${n}.ts`, phase: 'extract' as const, ms, outcome: 'ok' as const, ...extra });
+        push(liveRun({
+            steps: [
+                mk(1, 10), mk(2, 240_000, { outcome: 'failed', reason: 'timed out', parts: { readMs: 5, lookupMs: 230_000, poolMs: 10 } }),
+                mk(3, 300), mk(4, 20), mk(5, 90), mk(6, 40), mk(7, 50),
+            ],
+        }));
+        const rows = within(screen.getByTestId('kg-run-slowest')).getAllByRole('listitem');
+        expect(rows).toHaveLength(5);
+        expect(within(rows[0]!).getByText('f2.ts')).toBeTruthy();
+        expect(within(rows[0]!).getByText(t.reasons.timeout)).toBeTruthy();
+        expect(within(rows[0]!).getByTestId('kg-run-slowest-parts').textContent).toContain('lookup');
+        expect(within(rows[1]!).getByText('f3.ts')).toBeTruthy();
     });
 
     it('shows one lane per worker of the current phase and follows the run live', () => {

@@ -5,6 +5,12 @@
 export { createKnowledgeClient, DEFAULT_KNOWLEDGE_BASE_PATH, MAX_WRITE_ROWS } from './client.js';
 export {
   KnowledgeApiError,
+  KnowledgeSyncBadPackError,
+  KnowledgeSyncConflictError,
+  KnowledgeSyncTooLargeError,
+  type SyncAck,
+  type SyncManifest,
+  type SyncPart,
   type AnalysisSnapshotPayload,
   type GraphQuery,
   type JudgeEstimate,

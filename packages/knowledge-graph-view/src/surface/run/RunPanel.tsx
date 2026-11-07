@@ -18,6 +18,7 @@ import { TYPE } from '../ui/type';
 import { RunFailures } from './RunFailures';
 import { RunHistory } from './RunHistory';
 import { RunLanes } from './RunLanes';
+import { RunSlowest } from './RunSlowest';
 import { RunSteps } from './RunSteps';
 import { RunTimeline } from './RunTimeline';
 import { kindKey, outcomeKey, runDurationMs, spanText, whenText } from './runModel';
@@ -66,6 +67,7 @@ export function RunPanel({ labels, source, runs, sync }: PanelProps) {
                     </Section>
                     <RunTimeline run={shown} labels={labels} />
                     <RunLanes run={shown} labels={labels} />
+                    <RunSlowest run={shown} labels={labels} />
                     <RunSteps key={shown.id} run={shown} labels={labels} />
                     <RunFailures run={shown} labels={labels} onRetry={source?.review ? retry : undefined} canRetry={canRetry} />
                     {replica && <SyncReplica replica={replica} labels={labels} />}

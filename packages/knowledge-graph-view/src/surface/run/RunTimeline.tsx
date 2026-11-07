@@ -8,18 +8,28 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import type { StoredReviewRun } from '../../types';
 import { Bar, Section } from '../drawers/ui';
+import { counted } from '../plural';
 import { TYPE } from '../ui/type';
-import { phaseRows, rateText, spanText } from './runModel';
+import { awaitingJudgeCount, phaseRows, rateText, spanText } from './runModel';
 
 export function RunTimeline({ run, labels }: { run: StoredReviewRun; labels: KnowledgeGraphLabels }) {
     const t = labels.surface.run;
     const rows = phaseRows(run);
     if (rows.length === 0) return null;
+    const waiting = awaitingJudgeCount(run);
     return (
         <Section title={t.timelineTitle}>
             <ol data-testid="kg-run-timeline" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
                 {rows.map((row) => {
                     const name = labels.phases[row.phase];
+                    if (row.milestone) {
+                        return (
+                            <li key={row.phase} data-phase={row.phase} data-state="done" style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', padding: '2px 8px' }}>
+                                <span aria-hidden="true" style={{ ...TYPE.status, color: cssVar('agrees'), width: 14, textAlign: 'center', flex: 'none' }}>✓</span>
+                                <span style={{ ...TYPE.subtitle, flex: 1, minWidth: 0 }}>{name}</span>
+                            </li>
+                        );
+                    }
                     return (
                         <li
                             key={row.phase} data-phase={row.phase} data-state={row.state} aria-current={row.state === 'active' ? 'step' : undefined}
@@ -44,6 +54,7 @@ export function RunTimeline({ run, labels }: { run: StoredReviewRun; labels: Kno
                     );
                 })}
             </ol>
+            {waiting > 0 && <p data-testid="kg-run-awaiting-judge" style={{ ...TYPE.meta, margin: 0 }}>{counted(labels, 'awaitingJudge', waiting)}</p>}
         </Section>
     );
 }

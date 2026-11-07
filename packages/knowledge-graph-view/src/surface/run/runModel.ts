@@ -35,7 +35,12 @@ export function phaseRows(run: StoredReviewRun): PhaseRow[] {
     const active = live ? reached.find((p) => p.endedAt === undefined)?.phase : undefined;
     return reached.map((p) => {
         const finished = p.endedAt !== undefined;
+        if (p.phase === 'mapped') {
+            // Reaching the milestone is the event: it is done as soon as it appears, whatever `endedAt` says.
+            return { phase: p.phase, done: p.done, total: p.total, frac: 1, state: 'done', rate: 0, etaMs: 0, milestone: true };
+        }
         return {
+            milestone: false,
             phase: p.phase,
             done: p.done,
             total: p.total,
@@ -46,6 +51,26 @@ export function phaseRows(run: StoredReviewRun): PhaseRow[] {
         };
     });
 }
+
+/**
+ * How many files still wait for model judging (PRD 41 A10): the report's `awaitingJudge` once it exists, else, while the run
+ * is judging after the map is complete, the judge phase's total minus done. 0 when nothing waits.
+ */
+export function awaitingJudgeCount(run: StoredReviewRun): number {
+    const owed = run.report?.awaitingJudge?.length ?? 0;
+    if (owed > 0) return owed;
+    if (run.endedAt !== undefined || !run.phases.some((p) => p.phase === 'mapped')) return 0;
+    const judge = run.phases.find((p) => p.phase === 'judge');
+    return judge ? Math.max(0, judge.total - judge.done) : 0;
+}
+
+/** The five slowest steps of the run's ring, longest first (memory's `slowestSteps`). */
+export const SLOWEST_STEP_COUNT = 5;
+export const slowestOf = (run: Pick<StoredReviewRun, 'steps'>): ReviewStep[] => slowestSteps(run as ReviewRun, SLOWEST_STEP_COUNT);
+
+/** A duration in the reader's words: milliseconds under a second, else seconds, minutes or hours. */
+export const durationText = (labels: KnowledgeGraphLabels, ms: number): string =>
+    ms < 1000 ? fillTemplate(labels.surface.run.units.ms, { count: Math.round(ms) }) : spanText(labels, ms);
 
 /** The phase a live run is in, if any. */
 export const activePhase = (run: StoredReviewRun): ReviewPhase | undefined => phaseRows(run).find((r) => r.state === 'active')?.phase;

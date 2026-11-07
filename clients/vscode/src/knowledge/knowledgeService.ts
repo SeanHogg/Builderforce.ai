@@ -241,7 +241,7 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
       recorder.begin();
       return duringReview(root.rootId, open.files, open.pump, async () => {
         // Extraction runs in the worker pool and judging N wide (PRD 41 A8); the caller's options win.
-        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup), judgeFiles: judgeBudgetFiles(), ...opts });
+        const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup, root.rootPath), judgeFiles: judgeBudgetFiles(), ...opts });
         recorder.finish();
         for (const cb of changedListeners) cb(root.rootId);
         return report;

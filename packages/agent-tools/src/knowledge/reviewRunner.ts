@@ -18,7 +18,7 @@ import {
     DEFAULT_REVIEW_MODEL_CALLS, planDetail, reviewDirectory, srcRef,
     type AnalyzerPort, type DirectorySource, type Extracted, type ExtractPool, type JudgementPort, type ReviewStep, type KnowledgeGraph,
     type KnowledgePack, type KnowledgeStore, type LiveOverlay, type NodeRef, type PartitionRegistry, type PlanDetail, type ReviewPlan,
-    type ReviewProgress, type ReviewReport, type SimilarPair,
+    type ReviewArgs, type ReviewProgress, type ReviewReport, type SimilarPair,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import type { CapabilityProvider } from '../capabilities.js';
@@ -40,6 +40,7 @@ import { serialisedByKey } from './serialisedByKey.js';
 import { readSystems, recordSystems } from './systemsRecord.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
+import { runJudgePass } from './reviewJudgePass.js';
 
 /** Judged sections per review before the chip asks again (PRD 38 §8.2). */
 export const KNOWLEDGE_REVIEW_MODEL_CALLS = DEFAULT_REVIEW_MODEL_CALLS;
@@ -117,6 +118,18 @@ export interface KnowledgeReviewOptions {
     judgeConcurrency?: number;
     /** Most model calls in flight across the review. Absent ⇒ memory's default. */
     maxModelCalls?: number;
+    /**
+     * Two passes (PRD 41 A10): given, pass 1 reads, extracts, writes and indexes every owed file with NO model call (the map is
+     * complete, phase `mapped`), then pass 2 judges up to this many files in priority order. Unjudged files stay owed. 0 = map only.
+     * Absent ⇒ one pass, as before.
+     */
+    judgeFiles?: number;
+    /** The pool reads files itself (see memory's `ReviewArgs.deferRead`). */
+    deferRead?: boolean;
+    /** Files read ahead of the writer (memory's default: wider than the pool). */
+    readAhead?: number;
+    /** Per-job ceilings of the extract path (memory's defaults: reads 5 s, extract 10 s). */
+    timeouts?: { readMs?: number; extractMs?: number };
 }
 
 /** The analyzers, recording which root-level outputs the last run produced (for {@link buildStoredGraph}). */
@@ -196,7 +209,7 @@ export function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: KnowledgeR
 async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions): Promise<ReviewReport> {
     // With an index to feed, `done` is memory's last word but not the run's: it waits for the `index` phase.
     const held: { done?: ReviewProgress } = {};
-    const progress: KnowledgeReviewOptions['onProgress'] = ports.index && opts.onProgress
+    const progress: KnowledgeReviewOptions['onProgress'] = (ports.index || opts.judgeFiles !== undefined) && opts.onProgress
         ? (p) => { if (p.phase === 'done') held.done = p; else opts.onProgress!(p); }
         : opts.onProgress;
     // The listener's failure on a phase the runner emits itself (`index`, the held `done`) must not change what the run does: it waits for the end.
@@ -222,11 +235,12 @@ async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOpti
     return outcome.report;
 }
 
-async function reviewAndIndex(
+/** The arguments of one `reviewDirectory` call: pass 1 and pass 2 of a two-pass review, or the single pass. */
+export function directoryArgs(
     ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],
-    tell: (p: ReviewProgress) => void,
-): Promise<ReviewReport> {
-    const report = await reviewDirectory({
+    extra: Pick<ReviewArgs, 'mechanical' | 'only'> = {},
+): ReviewArgs {
+    return {
         source: ports.source,
         store: ports.store,
         packs: reviewPacks(ports, ports.manifest, opts.plan),
@@ -238,15 +252,28 @@ async function reviewAndIndex(
         ...(ports.similar ? { similar: ports.similar } : {}),
         ...(opts.plan ? { plan: opts.plan } : {}),
         ...(opts.force ? { force: true } : {}),
-        budget: { modelCalls: opts.modelCalls ?? KNOWLEDGE_REVIEW_MODEL_CALLS, ms: Number.POSITIVE_INFINITY },
+        // Two-pass: the file budget bounds judging, not the call count (unless the caller set one).
+        budget: { modelCalls: opts.modelCalls ?? (opts.judgeFiles !== undefined ? Number.POSITIVE_INFINITY : KNOWLEDGE_REVIEW_MODEL_CALLS), ms: Number.POSITIVE_INFINITY },
         ...(opts.signal ? { signal: opts.signal } : {}),
         ...(progress ? { onProgress: progress } : {}),
         ...(opts.onStep ? { onStep: opts.onStep } : {}),
         ...(opts.extractPool ? { extractPool: opts.extractPool } : {}),
+        ...(opts.deferRead ? { deferRead: true } : {}),
+        ...(opts.readAhead !== undefined ? { readAhead: opts.readAhead } : {}),
+        ...(opts.timeouts ? { timeouts: opts.timeouts } : {}),
         ...(opts.concurrency !== undefined ? { concurrency: opts.concurrency } : {}),
         ...(opts.judgeConcurrency !== undefined ? { judgeConcurrency: opts.judgeConcurrency } : {}),
         ...(opts.maxModelCalls !== undefined ? { maxModelCalls: opts.maxModelCalls } : {}),
-    });
+        ...extra,
+    };
+}
+
+async function reviewAndIndex(
+    ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],
+    tell: (p: ReviewProgress) => void,
+): Promise<ReviewReport> {
+    const twoPass = opts.judgeFiles !== undefined && !!ports.judgement;
+    const report = await reviewDirectory(directoryArgs(ports, opts, progress, twoPass ? { mechanical: true } : {}));
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);
     // The root's systems (PRD 41 A9): detected from what this review saw, kept with it for the graph build.
@@ -256,8 +283,11 @@ async function reviewAndIndex(
             ...(opts.plan ? { plan: opts.plan } : {}),
         }).catch((error: unknown) => ports.onSystemsError?.(error));
     }
-    await indexReviewed(ports, report.rootId, tell);
-    return report;
+    const graph = await indexReviewed(ports, report.rootId, tell);
+    if (!twoPass || report.aborted) return report;
+    // The map is complete: say so, then judge in the background of the same run (PRD 41 A10).
+    tell({ phase: 'mapped', done: report.extracted, total: report.extracted });
+    return runJudgePass({ ports, opts, mapped: report, graph, tell, directoryArgs, indexReviewed, freshPlan: () => planKnowledgeReviewDetail(ports) });
 }
 
 /**
@@ -266,27 +296,28 @@ async function reviewAndIndex(
  * (`total` = the graph's nodes) so the view can say it is indexing. Only the graph build and the
  * upsert are index work (a failure there is `onIndexError`); `tell` is the progress emitter and never throws.
  */
-async function indexReviewed(ports: KnowledgeReviewPorts, rootId: string, tell: (p: ReviewProgress) => void): Promise<void> {
+async function indexReviewed(ports: KnowledgeReviewPorts, rootId: string, tell: (p: ReviewProgress) => void): Promise<KnowledgeGraph | null> {
     const index = ports.index;
-    if (!index) return;
+    if (!index) return null;
     let graph: KnowledgeGraph | null;
     try {
         graph = (await ports.platformGraph?.(rootId).catch(() => null))
             ?? await buildStoredGraph({ rootId, store: ports.store, manifest: ports.manifest, packs: reviewPacks(ports) });
     } catch (error) {
         ports.onIndexError?.(error);
-        return;
+        return null;
     }
-    if (!graph) return;
+    if (!graph) return null;
     const total = graph.nodes.length;
     tell({ phase: 'index', done: 0, total });
     try {
         await index.upsertFromGraph(graph);
     } catch (error) {
         ports.onIndexError?.(error);
-        return;
+        return graph;
     }
     tell({ phase: 'index', done: total, total });
+    return graph;
 }
 
 export interface StoredGraphArgs {

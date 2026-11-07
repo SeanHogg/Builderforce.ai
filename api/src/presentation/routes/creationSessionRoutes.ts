@@ -16,7 +16,6 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import {
   creationSessionConnections,
-  creationSessionComments,
   creationSessionClaims,
   brainChats,
   creationSessionEvents,
@@ -135,6 +134,16 @@ import {
   grantReadFor, resolveSessionAccess, SESSION_ROLE_RANK, tenantRoleForSessionRole, type SessionRole as SharedSessionRole,
 } from '../../application/creation/sessionAccess';
 import { ensureSessionObject, findSessionObject, type SessionRef } from '../../application/creation/sessionObjectRef';
+// Canvas comments as kernel `annotations` (PRD 39 §2 push 2). The routes below are
+// thin; every comment read/write lives in this module, against `annotations`.
+import {
+  createComment as createCanvasComment,
+  findCommentCreator,
+  listCommentActivity,
+  listComments as listCanvasComments,
+  ParentCommentNotFoundError,
+  setCommentResolved as setCanvasCommentResolved,
+} from '../../application/canvas/canvasComments';
 import {
   collaboratorCapacity as canvasCollaboratorCapacity,
   type CollaboratorArrival,
@@ -1392,18 +1401,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         .leftJoin(users, eq(users.id, creationSessionEvents.actorRef))
         .where(eq(creationSessionEvents.sessionId, access.session.id))
         .orderBy(desc(creationSessionEvents.createdAt)).limit(limit),
-      db.select({
-        id: creationSessionComments.id,
-        objectId: creationSessionComments.objectId,
-        body: creationSessionComments.body,
-        actorRef: creationSessionComments.createdBy,
-        actorName: users.displayName,
-        resolvedAt: creationSessionComments.resolvedAt,
-        createdAt: creationSessionComments.createdAt,
-      }).from(creationSessionComments)
-        .leftJoin(users, eq(users.id, creationSessionComments.createdBy))
-        .where(eq(creationSessionComments.sessionId, access.session.id))
-        .orderBy(desc(creationSessionComments.createdAt)).limit(limit),
+      listCommentActivity(db, access.session, limit),
     ]);
     const activity = [
       ...events.map((event) => ({ ...event, kind: 'event' as const })),
@@ -1479,25 +1477,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found' }, 404);
     const objectId = c.req.query('objectId');
     if (objectId && !UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
-    const where = objectId
-      ? and(eq(creationSessionComments.sessionId, access.session.id), eq(creationSessionComments.objectId, objectId))
-      : eq(creationSessionComments.sessionId, access.session.id);
-    const comments = await db.select({
-      id: creationSessionComments.id,
-      objectId: creationSessionComments.objectId,
-      parentCommentId: creationSessionComments.parentCommentId,
-      body: creationSessionComments.body,
-      mentions: creationSessionComments.mentions,
-      anchor: creationSessionComments.anchor,
-      createdBy: creationSessionComments.createdBy,
-      authorName: users.displayName,
-      resolvedAt: creationSessionComments.resolvedAt,
-      resolvedBy: creationSessionComments.resolvedBy,
-      createdAt: creationSessionComments.createdAt,
-      updatedAt: creationSessionComments.updatedAt,
-    }).from(creationSessionComments)
-      .leftJoin(users, eq(users.id, creationSessionComments.createdBy))
-      .where(where).orderBy(desc(creationSessionComments.createdAt)).limit(200);
+    const comments = await listCanvasComments(db, access.session, objectId ?? null);
     return c.json({ comments });
   });
 
@@ -1672,10 +1652,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     let parentCreator: string | null = null;
     if (parentCommentId) {
       if (!UUID_RE.test(parentCommentId)) return c.json({ error: 'Invalid parent comment id' }, 400);
-      const [parent] = await db.select({ id: creationSessionComments.id, createdBy: creationSessionComments.createdBy }).from(creationSessionComments)
-        .where(and(eq(creationSessionComments.id, parentCommentId), eq(creationSessionComments.sessionId, access.session.id))).limit(1);
-      if (!parent) return c.json({ error: 'Parent comment not found' }, 404);
-      parentCreator = parent.createdBy;
+      parentCreator = await findCommentCreator(db, access.session, parentCommentId);
+      if (parentCreator === null) return c.json({ error: 'Parent comment not found' }, 404);
     }
     const requestedMentions = [...new Set((body.mentions ?? []).filter((id) => typeof id === 'string' && id.length <= 36))].slice(0, 20);
     const memberMentions = requestedMentions.length
@@ -1684,10 +1662,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const anchor = cleanCommentAnchor(body.anchor);
     if (body.anchor !== undefined && !anchor) return c.json({ error: 'Invalid comment anchor' }, 400);
-    const [created] = await db.insert(creationSessionComments).values({
-      sessionId: access.session.id, objectId, parentCommentId, body: content,
-      mentions: memberMentions.map((member) => member.userId), anchor, createdBy: userId,
-    }).returning();
+    let created;
+    try {
+      created = await createCanvasComment(db, c.env, access.session, {
+        objectId, parentCommentId, body: content,
+        mentions: memberMentions.map((member) => member.userId), anchor, createdBy: userId,
+      });
+    } catch (error) {
+      if (error instanceof ParentCommentNotFoundError) return c.json({ error: 'Parent comment not found' }, 404);
+      throw error;
+    }
     await db.update(creationSessions).set({ lastActivityAt: new Date(), updatedAt: new Date(), updatedBy: userId })
       .where(and(eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId)));
     await notifyAttention(c, access.session, {
@@ -1708,11 +1692,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseOptionalBody(c, ResolvedBody);
     if (typeof body.resolved !== 'boolean') return c.json({ error: 'resolved is required' }, 400);
     const userId = c.get('userId') as string;
-    const [updated] = await db.update(creationSessionComments).set({
-      resolvedAt: body.resolved ? new Date() : null,
-      resolvedBy: body.resolved ? userId : null,
-      updatedAt: new Date(),
-    }).where(and(eq(creationSessionComments.id, commentId), eq(creationSessionComments.sessionId, access.session.id))).returning();
+    const updated = await setCanvasCommentResolved(db, access.session, commentId, body.resolved, userId);
     if (!updated) return c.json({ error: 'Comment not found' }, 404);
     return c.json(updated);
   });

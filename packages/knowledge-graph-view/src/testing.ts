@@ -129,7 +129,7 @@ export const FIXTURE_PLAN: ReviewPlan = {
 export const FIXTURE_REPORT: ReviewReport = {
     rootId: 'docs', digest: 'd', extracted: 2, judged: 4, unjudged: 0, invalidJudgements: 0, factsWritten: 3,
     relationsWritten: 2, staleMarked: 2, aborted: false, durationMs: 10, readErrors: 0,
-    extractErrors: 0, failures: [],
+    extractErrors: 0, failures: [], awaitingJudge: [],
 };
 
 export interface FixtureSource extends KnowledgeGraphSource {

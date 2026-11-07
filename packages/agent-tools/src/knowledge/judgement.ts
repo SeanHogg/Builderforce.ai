@@ -97,33 +97,6 @@ export function completionJudgement(complete: JudgeCompletion): JudgementPort {
 export const DEFAULT_JUDGEMENT_TIMEOUT_MS = 60_000;
 
 /**
- * Wrap a `JudgementPort` with a per-request timeout: a request that does not settle within
- * `ms` resolves to an EMPTY result, so the sections it covered are left UNJUDGED and a later
- * run judges them again — the review continues instead of stalling on a hung completion.
- * An already-settled request, or one settled by the caller's abort, is returned as-is.
- */
-export function judgementWithTimeout(port: JudgementPort, ms: number = DEFAULT_JUDGEMENT_TIMEOUT_MS): JudgementPort {
-    return {
-        judge(req: JudgementRequest): Promise<JudgementResult> {
-            return new Promise<JudgementResult>((resolve, reject) => {
-                let settled = false;
-                const timer = setTimeout(() => {
-                    if (settled) return;
-                    settled = true;
-                    // Unjudged, not failed: an empty result keeps the review moving and lets a
-                    // later run pick the section up (memory re-throws a thrown judgement).
-                    resolve(req.kind === 'compare' ? { compare: [], invalid: 0 } : { extract: [], invalid: 0 });
-                }, ms);
-                port.judge(req).then(
-                    (result) => { if (!settled) { settled = true; clearTimeout(timer); resolve(result); } },
-                    (error: unknown) => { if (!settled) { settled = true; clearTimeout(timer); reject(error); } },
-                );
-            });
-        },
-    };
-}
-
-/**
  * The first port that answers: a port that THROWS (no engine running, signed out, a
  * refused call) hands the request to the next; a stopped review stops here. A port that
  * answers with invalid output has answered — that output is counted, not retried.
@@ -141,6 +114,46 @@ export function fallbackJudgement(ports: ReadonlyArray<JudgementPort>): Judgemen
                 }
             }
             throw last;
+        },
+    };
+}/** After the timer fires the real call is aborted; the wrapper waits this long for it to end before it gives up on it (a port that ignores its signal). */
+export const JUDGEMENT_ABORT_GRACE_MS = 10_000;
+
+/** Thrown for a request that did not settle in time: a failed call (the section stays UNJUDGED and owed), never an answer. */
+export class JudgementTimeout extends Error {
+    constructor(ms: number) { super(`judge: timeout after ${Math.round(ms / 1000)}s`); this.name = "JudgementTimeout"; }
+}
+
+/**
+ * Wrap a `JudgementPort` with a per-request timeout (PRD 41 A10 rule 9). A request that does not settle
+ * within `ms` is ABORTED through a signal combined with the caller's, and the wrapper settles only once the
+ * real call has ended (or after {@link JUDGEMENT_ABORT_GRACE_MS}), so the review's model limiter keeps its
+ * slot for as long as the call really runs. It then THROWS {@link JudgementTimeout}: memory counts a thrown
+ * call as an error and leaves the section unjudged — not recorded as judged — so a later run judges it again.
+ * (An empty result used to be recorded as a judgement of nothing, and the section was never retried.)
+ * A caller's abort passes through untouched.
+ */
+export function judgementWithTimeout(port: JudgementPort, ms: number = DEFAULT_JUDGEMENT_TIMEOUT_MS): JudgementPort {
+    return {
+        async judge(req: JudgementRequest): Promise<JudgementResult> {
+            const own = new AbortController();
+            const relay = (): void => own.abort(req.signal?.reason);
+            if (req.signal?.aborted) relay(); else req.signal?.addEventListener("abort", relay, { once: true });
+            const real = port.judge({ ...req, signal: own.signal });
+            const giveUp = new Promise<"gave-up">((resolve) => {
+                const t = setTimeout(() => { own.abort(new JudgementTimeout(ms)); const g = setTimeout(() => resolve("gave-up"), JUDGEMENT_ABORT_GRACE_MS); (g as { unref?: () => void }).unref?.(); }, ms);
+                void real.then(() => clearTimeout(t), () => clearTimeout(t));
+            });
+            try {
+                const out = await Promise.race([real, giveUp]);
+                if (out !== "gave-up") return out;
+            } catch (error) {
+                // The caller's abort, or the call's own failure, passes through; only OUR abort is a timeout.
+                if (!(own.signal.reason instanceof JudgementTimeout) || req.signal?.aborted) throw error;
+            } finally {
+                req.signal?.removeEventListener("abort", relay);
+            }
+            throw new JudgementTimeout(ms);
         },
     };
 }

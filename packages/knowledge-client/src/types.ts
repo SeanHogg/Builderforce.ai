@@ -14,7 +14,6 @@ import type {
   KnowledgeStore,
   ScopeRecord,
   StoredFact,
-  StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 /** `fetch`-compatible; `path` is API-relative (e.g. `/api/projects/12/knowledge/scopes`). */
@@ -124,8 +123,17 @@ export interface KnowledgeClient {
   search(rootId: string, q: string, k?: number): Promise<IndexHit[]>;
   /** PUT …/code-analysis/:sha */
   putAnalysis(sha: string, snapshot: AnalysisSnapshotPayload): Promise<void>;
-  /** POST …/knowledge/write of rows only (≤ 500), stamped with the root but carrying no scope: one chunk of a replica write. */
-  writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
+  /**
+   * POST …/knowledge/sync — one BFKP pack (PRD 41 A11), or one part of one (syncId, part, parts).
+   * Throws {@link KnowledgeSyncConflictError} (409), {@link KnowledgeSyncTooLargeError} (413) or {@link KnowledgeSyncBadPackError} (422).
+   */
+  sync(rootId: string, part: SyncPart): Promise<SyncAck>;
+  /** GET …/knowledge/sync/manifest?root= — the server's generation, root digest and 4,096 bucket digests. */
+  syncManifest(rootId: string): Promise<SyncManifest>;
+  /** POST …/knowledge/sync/manifest — the server's leaves in the given buckets. */
+  syncLeaves(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }>;
+  /** POST …/knowledge/sync/have — which of `hashes` the project already holds (same order as asked). */
+  syncHave(rootId: string, hashes: readonly string[]): Promise<boolean[]>;
   /** PUT …/knowledge/extracted/:hash */
   putExtracted(hash: string, extracted: Extracted[]): Promise<void>;
   /** DELETE …/facts/:key — author or project admin only; also removes the fact's relations. */
@@ -140,4 +148,38 @@ export class KnowledgeApiError extends Error {
     super(message);
     this.name = 'KnowledgeApiError';
   }
+}
+
+/** One request of a sync: the pack's bytes, or one ordered part of them. */
+export interface SyncPart { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }
+
+/** The server's answer to a pack (or to a part that is not the last). */
+export type SyncAck =
+  | { applied: true; generation: number; digest: string }
+  | { applied: false; received: number; parts: number };
+
+export interface SyncManifest {
+  generation: number;
+  /** The server's root digest. */
+  digest: string;
+  /** 4,096 bucket digests, hex. */
+  buckets: string[];
+}
+
+/** 409: the server moved (generation_mismatch), could not reach the digest (digest_mismatch) lacks a prior (prior_missing), lacks bodies (extracted_missing, `hashes` names them) or lost a part (parts_missing). Reconcile or resend. */
+export class KnowledgeSyncConflictError extends KnowledgeApiError {
+  constructor(code: string, message: string, readonly generation?: number, readonly digest?: string, readonly hashes?: string[]) {
+    super(409, code, message);
+    this.name = 'KnowledgeSyncConflictError';
+  }
+}
+
+/** 413: the request is over 8 MB or the pack inflates past 64 MB (pack_too_large). */
+export class KnowledgeSyncTooLargeError extends KnowledgeApiError {
+  constructor(code: string, message: string) { super(413, code, message); this.name = 'KnowledgeSyncTooLargeError'; }
+}
+
+/** 422: the frame is malformed or its CRC failed (bad_pack). A defect, not a retry. */
+export class KnowledgeSyncBadPackError extends KnowledgeApiError {
+  constructor(message: string) { super(422, 'bad_pack', message); this.name = 'KnowledgeSyncBadPackError'; }
 }

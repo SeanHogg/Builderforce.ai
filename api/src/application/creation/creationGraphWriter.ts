@@ -30,10 +30,11 @@
  * writers onto the same revision.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { isCreationConnectionKind, isCreationObjectKind } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import {
+  annotations,
   creationSessionConnections,
   creationSessionEvents,
   creationSessionObjects,
@@ -178,6 +179,21 @@ export function creationGraphStatements(db: Db, write: CreationGraphWrite): unkn
   const statements: unknown[] = [
     db.delete(creationSessionConnections).where(eq(creationSessionConnections.sessionId, sessionId)),
     db.delete(creationSessionObjects).where(eq(creationSessionObjects.sessionId, sessionId)),
+    // PRD 39 §2: the pin lives at anchor.canvasObjectId, which has no FK, so the
+    // old table's ON DELETE SET NULL obligation moves here — every graph save
+    // replaces all object rows, so drop the pin on comments pinned to objects the
+    // new graph no longer carries. `objectId` is the kernel registry id.
+    db.update(annotations)
+      .set({ anchor: sql`${annotations.anchor} - 'canvasObjectId'`, updatedAt: now })
+      .where(and(
+        eq(annotations.tenantId, tenantId),
+        sql`${annotations.objectId} = (select id from objects
+              where tenant_id = ${tenantId}
+                and kind = 'creation_session'
+                and ref_id = ${sessionId}
+              limit 1)`,
+        sql`${annotations.anchor}->>'canvasObjectId' not in (select id::text from creation_session_objects where session_id = ${sessionId})`,
+      )),
   ];
 
   if (objects.length) {

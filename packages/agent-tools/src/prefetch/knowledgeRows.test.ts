@@ -13,7 +13,7 @@ const PLAN: ReviewPlan = {
 const DETAIL: PlanDetail = planDetailOf(PLAN);
 const REPORT: ReviewReport = {
     rootId: 'repo/contracts', digest: 'd', extracted: 7, judged: 30, unjudged: 0, invalidJudgements: 0, factsWritten: 9,
-    relationsWritten: 4, staleMarked: 7, aborted: false, readErrors: 0, extractErrors: 0, failures: [], durationMs: 5,
+    relationsWritten: 4, staleMarked: 7, aborted: false, readErrors: 0, extractErrors: 0, failures: [], awaitingJudge: [], durationMs: 5,
 };
 
 function host(): KnowledgeRowsHost & { opened: string[]; plans: number; reviewedWith: PlanDetail[]; shown: Array<[string, string[]]> } {

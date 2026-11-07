@@ -14,7 +14,8 @@
  *   GET  /:projectId/knowledge/extracted/:hash              extracted output by content hash
  *   POST /:projectId/knowledge/extracted/bulk               extracted outputs for a batch of hashes
  *                                                           (one miss yields entries: null, not 404)
- *   PUT  /:projectId/knowledge/extracted/:hash              … upload (≤ 1 MB)
+ *   PUT  /:projectId/knowledge/extracted/:hash              … upload (≤ 1 MB; the browser and on-prem stores still use it)
+ *   POST /:projectId/knowledge/sync  (+ sync/manifest, sync/have)  pack sync — see projectKnowledgeSyncRoutes.ts (PRD 41 A11)
  *   PUT  /:projectId/code-analysis/:sha?root=               code-pack analyzer snapshot (≤ 2 MB), stored per root
  *                                                           and sha (a root's paths are its own)
  *   POST /:projectId/knowledge/judge                        routed, metered model call
@@ -49,6 +50,7 @@ import { MAX_JUDGE_ITEMS, clientJudgementSpec, judgeKnowledge } from '../../appl
 import { admitClientResult } from './clientResultHttp';
 import { judgeCostFor } from '../../application/knowledge/judgeCostEstimate';
 import { parseBody, z } from './requestBody';
+import { registerKnowledgeSyncRoutes } from './projectKnowledgeSyncRoutes';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -317,6 +319,8 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     const result = await searchKnowledge({ graph: p.graph, index: p.index }, { rootId, query, k });
     return result ? json(result) : json({ error: 'unknown knowledge root' }, 404);
   }));
+
+  registerKnowledgeSyncRoutes(router, { withPorts, person });
 
   return router;
 }

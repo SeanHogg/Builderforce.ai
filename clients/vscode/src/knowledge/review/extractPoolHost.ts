@@ -54,18 +54,20 @@ function poolHandle(): ExtractPoolHandle | undefined {
 export const extractPoolDown = (): string | undefined => downReason;
 
 /** The pool as a review's `extractPool`: each job carries the index's definitions of its file (a hit), as plain data. */
-export function withIndexSymbols(pool: ExtractPool, lookup: SymbolLookup | undefined): ExtractPool {
-  if (!lookup) return pool;
+export function withIndexSymbols(pool: ExtractPool, lookup: SymbolLookup | undefined, rootPath?: string): ExtractPool {
+  if (!lookup && !rootPath) return pool;
   return (job, signal) => {
-    const symbols: readonly CodeSymbol[] | undefined = job.sectionsOnly ? undefined : lookup(job.path);
-    return pool(symbols ? ({ ...job, symbols } as HostExtractJob) : job, signal);
+    const symbols: readonly CodeSymbol[] | undefined = job.sectionsOnly || !lookup ? undefined : lookup(job.path);
+    // A job the review left unread (`readByPool`, PRD 41 A10 rule 8) tells the worker where to read its own file.
+    const readFrom = job.readByPool && rootPath ? { rootPath, path: job.path, hash: job.hash } : undefined;
+    return pool(symbols || readFrom ? ({ ...job, ...(symbols ? { symbols } : {}), ...(readFrom ? { readFrom } : {}) } as HostExtractJob) : job, signal);
   };
 }
 
 /** The parallelism a review runs with: the pool and its width when there is one, always the judge width. */
-export function reviewParallelism(lookup?: SymbolLookup): Pick<KnowledgeReviewOptions, "extractPool" | "concurrency" | "judgeConcurrency"> {
+export function reviewParallelism(lookup?: SymbolLookup, rootPath?: string): Pick<KnowledgeReviewOptions, "extractPool" | "concurrency" | "judgeConcurrency" | "deferRead"> {
   const pool = poolHandle();
-  return { judgeConcurrency: JUDGE_CONCURRENCY, ...(pool ? { extractPool: withIndexSymbols(pool.pool, lookup), concurrency: pool.size } : {}) };
+  return { judgeConcurrency: JUDGE_CONCURRENCY, ...(pool ? { extractPool: withIndexSymbols(pool.pool, lookup, rootPath), concurrency: pool.size, ...(rootPath ? { deferRead: true } : {}) } : {}) };
 }
 
 /** Creates the pool and starts its workers now, so the first file of a confirmed review meets a loaded worker (PRD 41 A10 rule 8). No pool ⇒ nothing. */

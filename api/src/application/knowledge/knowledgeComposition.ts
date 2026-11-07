@@ -13,6 +13,8 @@ import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 import { cloudRepoGraphPort } from './knowledgeRepoGraph';
 import { knowledgeVersion } from './knowledgeVersion';
 import { knowledgeWritePortsFor } from './knowledgeWritePorts';
+import { r2KnowledgeSync } from './sync/knowledgeSyncBlobs';
+import type { KnowledgeSyncPort } from './sync/knowledgeSyncPorts';
 
 export interface KnowledgePorts {
   env: Env;
@@ -23,12 +25,14 @@ export interface KnowledgePorts {
   extracted: ExtractedCachePort;
   graph: KnowledgeGraphDeps;
   index: KnowledgeIndexPort;
+  /** Pack sync's state and staging (PRD 41 A11). */
+  sync: KnowledgeSyncPort;
 }
 
 export function knowledgePortsFor(env: Env, db: Db, tenantId: number, projectId: number): KnowledgePorts {
   const { store, extracted } = knowledgeWritePortsFor(env, db, tenantId, projectId);
   return {
-    env, db, tenantId, projectId, store, extracted,
+    env, db, tenantId, projectId, store, extracted, sync: r2KnowledgeSync(env, tenantId, projectId),
     graph: {
       cacheEnv: env, tenantId, projectId, store, extracted,
       analysis: r2AnalysisSnapshots(env, tenantId, projectId),

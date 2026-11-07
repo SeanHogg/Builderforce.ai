@@ -26,6 +26,8 @@
  *                     a best-effort hint: returned entries are cached per hash and
  *                     `getExtracted` then answers without a round trip; it NEVER throws,
  *                     per-file getExtracted stays the fallback
+ *   sync*             POST …/knowledge/sync (one BFKP pack or one part), GET/POST …/sync/manifest, POST …/sync/have
+ *                     — the replica pump's ONLY upload path (PRD 41 A11); 409/413/422 are typed errors
  *   batched(work)     identity — the server is the single writer and `write()` already puts
  *                     the scope on the last chunk, so there is nothing to flush locally
  *
@@ -50,9 +52,16 @@ import type {
   StoredFact,
   StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
+import { decodePack, encodePack, KPACK_CONTENT_TYPE, ZERO_DIGEST, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
 import {
   KnowledgeApiError,
+  KnowledgeSyncBadPackError,
+  KnowledgeSyncConflictError,
+  KnowledgeSyncTooLargeError,
   type AnalysisSnapshotPayload,
+  type SyncAck,
+  type SyncManifest,
+  type SyncPart,
   type GraphQuery,
   type JudgeEstimate,
   type KnowledgeFacts,
@@ -252,6 +261,73 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
   // answers a cached hash (including cached misses) without a round trip.
   // ---------------------------------------------------------------------------
   const extractedCache = new Map<string, Extracted[] | undefined>();
+  // ── Pack sync (PRD 41 A11): one BFKP request per pack; the pump owns backoff, so no retry here ──
+  /** The sync routes' refusals as typed errors (status and code are kept, so generic handling still works). */
+  const syncFailure = async (res: Response): Promise<KnowledgeApiError> => {
+    const base = await errorOf(res.clone());
+    let detail: { generation?: unknown; digest?: unknown; hashes?: unknown } = {};
+    try { detail = (await res.json()) as typeof detail; } catch { /* a non-JSON body has no detail */ }
+    if (res.status === 409) {
+      return new KnowledgeSyncConflictError(base.code, base.message,
+        typeof detail.generation === 'number' ? detail.generation : undefined, typeof detail.digest === 'string' ? detail.digest : undefined,
+        Array.isArray(detail.hashes) ? detail.hashes.filter((h): h is string => typeof h === 'string') : undefined);
+    }
+    if (res.status === 413 && (base.code === 'pack_too_large' || base.code === 'payload_too_large')) return new KnowledgeSyncTooLargeError(base.code, base.message);
+    if (res.status === 422) return new KnowledgeSyncBadPackError(base.message);
+    return base;
+  };
+
+  const syncCall = async (path: string, init: RequestInit): Promise<Response> => {
+    let res: Response;
+    try {
+      res = await opts.fetch(`${base}${path}`, init);
+    } catch (error) {
+      throw new KnowledgeApiError(0, 'network', error instanceof Error ? error.message : String(error));
+    }
+    if (!res.ok) throw await syncFailure(res);
+    return res;
+  };
+
+  const kpack = async (rootId: string, fields: Partial<Pack>): Promise<BodyInit> =>
+    (await encodePack({ rootId, baseGeneration: 0, targetDigest: ZERO_DIGEST, ...fields })) as unknown as BodyInit;
+
+  async function syncRequest(rootId: string, part: SyncPart): Promise<SyncAck> {
+    const q = new URLSearchParams();
+    if (part.syncId) q.set('syncId', part.syncId);
+    if (part.part !== undefined) q.set('part', String(part.part));
+    if (part.parts !== undefined) q.set('parts', String(part.parts));
+    const query = q.size > 0 ? `?${q.toString()}` : '';
+    const res = await syncCall(`/knowledge/sync${query}`, { method: 'POST', headers: { 'Content-Type': KPACK_CONTENT_TYPE }, body: part.bytes as unknown as BodyInit });
+    const body = (await res.json()) as { applied?: boolean; generation?: number; digest?: string; received?: number; parts?: number };
+    return body.applied
+      ? { applied: true, generation: body.generation ?? 0, digest: body.digest ?? '' }
+      : { applied: false, received: body.received ?? 0, parts: body.parts ?? 0 };
+  }
+
+  async function syncManifestRequest(rootId: string): Promise<SyncManifest> {
+    const res = await syncCall(`/knowledge/sync/manifest?root=${encodeURIComponent(rootId)}`, { method: 'GET', headers: { Accept: KPACK_CONTENT_TYPE } });
+    const pack = await decodePack(new Uint8Array(await res.arrayBuffer()));
+    return { generation: pack.baseGeneration, digest: pack.targetDigest, buckets: pack.buckets ?? [] };
+  }
+
+  async function syncLeavesRequest(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }> {
+    const body = await kpack(rootId, { leaves: bucketIds.map((b) => ({ key: `b:${b}`, digest: ZERO_DIGEST })) });
+    const res = await syncCall('/knowledge/sync/manifest', { method: 'POST', headers: { 'Content-Type': KPACK_CONTENT_TYPE }, body });
+    const pack = await decodePack(new Uint8Array(await res.arrayBuffer()));
+    return { generation: pack.baseGeneration, leaves: pack.leaves ?? [] };
+  }
+
+  async function syncHaveRequest(rootId: string, hashes: readonly string[]): Promise<boolean[]> {
+    if (hashes.length === 0) return [];
+    // The answer's bit i is the i-th hash in the codec's sorted table order; map it back to the order asked.
+    const sorted = [...new Set(hashes)].sort();
+    const body = await kpack(rootId, { hashes: sorted });
+    const res = await syncCall('/knowledge/sync/have', { method: 'POST', headers: { 'Content-Type': KPACK_CONTENT_TYPE }, body });
+    const bits = new Uint8Array(await res.arrayBuffer());
+    const held = new Map(sorted.map((h, i) => [h, ((bits[i >> 3] ?? 0) >> (i & 7) & 1) === 1] as const));
+    return hashes.map((h) => held.get(h) === true);
+  }
+
   const skipped: SkippedUpload[] = [];
 
   // The client store exposes KnowledgeStore plus the skipped-upload list (not part of the
@@ -333,9 +409,10 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
       const out = await orNull(jsonCall<{ hits: IndexHit[] }>(`/knowledge/search?${params.toString()}`));
       return out?.hits ?? [];
     },
-    async writeRows(rootId, rows) {
-      await call('/knowledge/write', send('POST', { root: rootId, facts: rows.facts, relations: rows.relations }));
-    },
+    sync: syncRequest,
+    syncManifest: syncManifestRequest,
+    syncLeaves: syncLeavesRequest,
+    syncHave: syncHaveRequest,
     async putAnalysis(sha: string, snapshot: AnalysisSnapshotPayload) {
       await call(`/code-analysis/${encodeURIComponent(sha)}`, send('PUT', snapshot));
     },
