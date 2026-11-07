@@ -50,9 +50,10 @@ export interface TerminusInfo {
 }
 
 /** The words a rule is tried against: the station name, its files' paths and their `imports` badge. */
-export function terminusHints(station: Pick<Station, 'name' | 'refs'>, graph: Pick<KnowledgeGraph, 'nodes'> | null): string[] {
+export function terminusHints(station: Pick<Station, 'name' | 'refs'> & { path?: string | undefined }, graph: Pick<KnowledgeGraph, 'nodes'> | null): string[] {
     const index = graph ? nodeIndex(graph) : new Map();
-    const hints = [station.name];
+    // The short name lost its parents ("infrastructure/db" -> "db"): the full path still names the store.
+    const hints = station.path ? [station.name, station.path] : [station.name];
     for (const ref of station.refs.slice(0, 40)) {
         const path = pathOf(ref);
         if (path) hints.push(path);

@@ -42,7 +42,7 @@ describe('API drawer detail', () => {
     it('limits contract tests to the ticked endpoints', () => {
         const onCompose = mount(sourceWith());
         fireEvent.click(screen.getByLabelText(fillTemplate(t.selectEndpoint, { route: 'GET /users/:id' })));
-        expect(screen.getByTestId('kg-api-selected').textContent).toBe(fillTemplate(t.selectedCount, { selected: 1, total: 2 }));
+        expect(screen.getByTestId('kg-api-selected').textContent).toBe(fillTemplate(t.selectedCount, { selected: 1, endpoints: '2 endpoints' }));
         fireEvent.click(screen.getByRole('button', { name: t.contractTests }));
         expect(onCompose).toHaveBeenCalledWith(fillTemplate(t.contractTestsText, { routes: 'POST /users' }));
         fireEvent.click(screen.getByLabelText(fillTemplate(t.selectEndpoint, { route: 'POST /users' })));

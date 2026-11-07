@@ -9,6 +9,7 @@ import { useCallback, useMemo, useReducer, useState } from 'react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { fixFlowReducer, initialFlow, type FixFlowAction, type FixFlowState } from './fix/fixFlow';
 import { buildLines, type Line, type LinesModel } from './lines';
+import { dataCoverage, type DataCoverage } from './dataCoverage';
 import { makeOverlay, PRESETS, presetOf, setChannel, type Bindings, type ChannelId, type MetricId, type OverlayModel, type PresetId } from './overlays';
 import { mapEdges } from './outlineGraph';
 import { pathOfLine, pathOfStations, type PathModel } from './path';
@@ -21,6 +22,8 @@ export interface Pin { stationId: string; count: number }
 export interface SurfaceModel {
     stations: StationModel;
     lines: LinesModel;
+    /** Where the map's files came from and which per-file data the graph carries (`dataCoverage`): the reasons behind "Not set up". Null with no graph. */
+    coverage: DataCoverage | null;
     overlay: OverlayModel;
     /** The map's drill: package, class and function levels below the world map. */
     drill: DrillModel;
@@ -30,7 +33,7 @@ export interface SurfaceModel {
     family: string | null;
     /** The line the path strip and the line list show: the chosen one, else the first. */
     line: Line | null;
-    /** True once the person picked a line (the Act scope follows only an explicit pick). */
+    /** True once the person picked a line (the scope's NAME in the chrome follows an explicit pick; the Act scope follows the drawn line). */
     lineChosen: boolean;
     station: Station | null;
     step: number;
@@ -74,6 +77,8 @@ export interface SurfaceOptions {
     changed?: ReadonlySet<string> | undefined;
     /** Reads the definitions of some files, for the map's class and function levels; absent ⇒ those levels show files. */
     symbols?: SymbolLoader | undefined;
+    /** The localized name of the top-level config station (`labels.surface.repoConfig`). */
+    repoConfigName?: string | undefined;
 }
 
 const MAX_PINS = 12;
@@ -92,14 +97,18 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const dispatchFix = useCallback((id: string, action: FixFlowAction) => dispatchFlows({ id, action }), []);
     const historyChanged = opts.changed;
 
+    const repoConfigName = opts.repoConfigName;
     const stations = useMemo<StationModel>(
-        () => (graph ? buildStations(graph, { changed: new Set([...changedRefs(graph, baseline), ...(historyChanged ?? [])]) }) : { stations: [], byId: new Map(), stationOf: new Map() }),
-        [graph, baseline, historyChanged],
+        () => (graph
+            ? buildStations(graph, { changed: new Set([...changedRefs(graph, baseline), ...(historyChanged ?? [])]), ...(repoConfigName ? { repoConfigName } : {}) })
+            : { stations: [], byId: new Map(), stationOf: new Map() }),
+        [graph, baseline, historyChanged, repoConfigName],
     );
     const lines = useMemo<LinesModel>(
         () => (graph ? buildLines(graph, stations) : { lines: [], interchanges: new Map(), omitted: 0 }),
         [graph, stations],
     );
+    const coverage = useMemo(() => (graph ? dataCoverage(graph) : null), [graph]);
     const overlay = useMemo(() => makeOverlay(bindings, stations.stations), [bindings, stations]);
     const drill = useDrill(graph, stations, opts.symbols);
 
@@ -127,7 +136,8 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
             .map((s) => ({ stationId: s.id, count: s.findingIds.length }));
     }, [bindings.pins, stations, lit, line, stationId]);
 
-    const scope = useMemo(() => (station ? new Set([station.id]) : chosen ? new Set(chosen.stops) : null), [station, chosen]);
+    // The Act scope follows what is DRAWN: the station, else the drawn path (the line, or a pinned pinpoint), else the whole graph.
+    const scope = useMemo(() => (station ? new Set([station.id]) : path.stops.length > 0 ? new Set(path.stops.map((x) => x.id)) : null), [station, path]);
 
     const setQuestion = useCallback((id: QuestionId) => { setQuestionId(id); if (id !== 'patterns') setFamilyId(null); }, []);
     const setFamily = useCallback((f: string | null) => { setFamilyId(f); if (f) setQuestionId('patterns'); }, []);
@@ -146,7 +156,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     }, [path]);
 
     return {
-        stations, lines, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
+        stations, lines, coverage, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
         context, pins, scope, pinned, panel, resolving, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),

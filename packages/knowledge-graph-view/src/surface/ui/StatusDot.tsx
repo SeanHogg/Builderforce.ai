@@ -7,8 +7,10 @@
 import type { CSSProperties } from 'react';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL, swatch } from '../../styles';
+import { TYPE } from './type';
 
-export type StatusState = 'synced' | 'syncing' | 'error' | 'idle';
+/** `serverOnly`: reviewed on the server, never on this machine - neutral, not a fault. `partial`: both sides hold files and the counts differ. */
+export type StatusState = 'synced' | 'syncing' | 'error' | 'idle' | 'partial' | 'serverOnly';
 
 export interface StatusDotProps {
     state: StatusState;
@@ -23,11 +25,11 @@ export interface StatusDotProps {
     controls?: string;
 }
 
-const TONE: Record<StatusState, ThemeTone> = { synced: 'agrees', syncing: 'accent', error: 'violation', idle: 'unused' };
+const TONE: Record<StatusState, ThemeTone> = { synced: 'agrees', syncing: 'accent', error: 'violation', idle: 'unused', partial: 'cycle', serverOnly: 'unused' };
 
 const base: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: `calc(${CONTROL} - 6px)`, padding: '0 8px', borderRadius: 999,
-    border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'), font: 'inherit', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
+    border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'), font: 'inherit', ...TYPE.pill, whiteSpace: 'nowrap',
 };
 
 export function StatusDot({ state, label, stateLabel, title, onClick, expanded, controls }: StatusDotProps) {

@@ -8,6 +8,7 @@
 import { memo, useCallback, useMemo, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { counted } from '../surface/plural';
 import { useContainerSize } from '../environment';
 import { fitView } from '../graph2d/layout2d';
 import { useIdleValue } from '../useIdleValue';
@@ -50,10 +51,10 @@ interface LayerProps {
 
 function wording(b: PlacedBranch, p: Pick<LayerProps, 'rootTitle' | 'kinds' | 'labels'>): { text: string; aria: string } {
     const { labels } = p;
-    if (b.kind === 'root') return { text: clip(p.rootTitle), aria: fillTemplate(labels.mapBranch, { name: p.rootTitle, count: b.count }) };
+    if (b.kind === 'root') return { text: clip(p.rootTitle), aria: counted(labels, 'branchFiles', b.count, { name: p.rootTitle }) };
     if (b.kind === 'more') { const t = fillTemplate(labels.mapMore, { count: b.count }); return { text: t, aria: t }; }
     if (b.kind === 'file') return { text: clip(b.name), aria: fillTemplate(labels.nodeAria, { label: b.name, kind: kindLabel(labels, p.kinds.get(b.ref ?? '') ?? 'file') }) };
-    return { text: `${clip(b.name)} (${b.count})`, aria: fillTemplate(labels.mapBranch, { name: b.name, count: b.count }) };
+    return { text: `${clip(b.name)} (${b.count})`, aria: counted(labels, 'branchFiles', b.count, { name: b.name }) };
 }
 
 const Branches = memo(function Branches(p: LayerProps) {

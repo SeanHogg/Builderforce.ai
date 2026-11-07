@@ -12,11 +12,12 @@ import type { SurfaceLayout } from '../layout';
 import type { LensDef } from '../lenses';
 import type { LensId, SyncStatus, ViewMode } from '../types';
 import type { KnowledgeGraphState } from '../useKnowledgeGraph';
-import { buildSpine, type SpineItem } from './path';
-import { entryLabel } from './pathNotes';
+import { buildSpine, withLineCrumb, type SpineItem } from './path';
+import { entryRoute } from './pathNotes';
 import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
 import type { SceneOverlayProps } from './SceneOverlay';
+import type { MapCap } from './ScaleLine';
 import { syncGap } from './drawers/syncModel';
 import { stationOfRef } from './stations';
 import type { SurfaceModel } from './useSurface';
@@ -51,19 +52,28 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     const selected = kg.selected;
 
     const spineStation = surface.station ?? (selected ? surface.stations.byId.get(stationOfRef(surface.stations, selected) ?? '') ?? null : null);
-    const spineItems = buildSpine({
-        rootTitle: i.titleOf(graph.scope.rootId), station: spineStation, node: selected ? index.get(selected) ?? null : null, nodeLabel: (r) => labelFor(index, r),
-    });
+    const lineLabel = surface.line ? fillTemplate(s.lineName, { name: surface.line.name }) : null;
+    // The spine gains the drawn line between the folder and the station; picking it steps back up to the line.
+    const spineItems = withLineCrumb(
+        buildSpine({ rootTitle: i.titleOf(graph.scope.rootId), station: spineStation, node: selected ? index.get(selected) ?? null : null, nodeLabel: (r) => labelFor(index, r) }),
+        surface.pinned ? null : lineLabel,
+    );
     const onSpinePick = (item: SpineItem) => {
-        if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'station') kg.select(null); else if (item.id) i.select(item.id);
+        if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'line') surface.selectStation(null);
+        else if (item.kind === 'station') kg.select(null); else if (item.id) i.select(item.id);
     };
 
-    const lineLabel = surface.line ? fillTemplate(s.lineName, { name: surface.line.name }) : null;
     const scopeName = surface.station ? surface.station.name : surface.lineChosen ? lineLabel : null;
     const lineName = surface.pinned ? null : surface.line?.name ?? null;
-    const entry = entryLabel(graph, surface.stations.byId.get(surface.path.stops[0]?.id ?? ''));
-    const pathTitle = lineName ? fillTemplate(s.path.title, { line: fillTemplate(s.lineName, { name: lineName }), entry }) : null;
+    // The route the line enters by ("GET /users"); a line with no route is titled by its own name, never "X line · X".
+    const entry = entryRoute(graph, surface.stations.byId.get(surface.path.stops[0]?.id ?? ''));
+    const named = lineName ? fillTemplate(s.lineName, { name: lineName }) : null;
+    const pathTitle = named ? (entry && entry !== lineName ? fillTemplate(s.path.title, { line: named, entry }) : named) : null;
     const truncated = graph.stats.truncated || i.visibleNodes < graph.nodes.length;
+
+    // A graph the server cut with no outline (an older server) is drawn from its few files: the scale card says so.
+    const source = surface.coverage?.source;
+    const mapCap: MapCap | undefined = source?.kind === 'cut' ? { shown: source.files, total: source.sources, cut: true } : surface.stations.capped;
 
     const gap = syncGap(i.sync); // ONE reading: the banner's two numbers cannot disagree
     const drilled = surface.drill.canOut && i.mode === 'transit';
@@ -75,7 +85,7 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
         onOut: drilled ? surface.drill.out : () => surface.selectStation(null),
         stations: surface.stations.stations, question: surface.question, onQuestion: i.pickQuestion, lenses: kg.lenses, lens: i.lens.id, onLens: i.pickLens,
         family: surface.family, onClearFamily: () => surface.setFamily(null),
-        stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: surface.stations.capped,
+        stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
         missingFiles: gap.missing, tooLarge: gap.tooLarge, onDiagnose: () => surface.openPanel('sync'),
     };
     return { layout, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };

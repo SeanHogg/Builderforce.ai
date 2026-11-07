@@ -16,6 +16,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { useContainerWidth } from '../environment';
 import { COMPACT_WIDTH } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { counted } from './plural';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { usePanZoom } from '../usePanZoom';
 import { usePanZoomRegistration } from './zoom';
@@ -30,6 +31,7 @@ import { HopPath } from './transit/HopPath';
 import { StationCard } from './transit/StationCard';
 import { StationMark } from './transit/StationMark';
 import { terminusText } from './transit/termini';
+import { byDepth, TowerMark, towerPinY } from './transit/TowerMark';
 import { TerminusMark } from './transit/TerminusMark';
 import { bandTitle, TransitBands } from './transit/TransitBands';
 import { satelliteBoxes, satellitePlaces, satellitesOf } from './transit/unfold';
@@ -37,6 +39,7 @@ import type { EnterCheck } from './transit/useDrill';
 import { useCardAnchor } from './transit/useCardAnchor';
 import { useTransitLabels } from './transit/useTransitLabels';
 import { useTransitModel } from './transit/useTransitModel';
+import { FONT_UI, TYPE } from './ui/type';
 import type { Pin } from './useSurface';
 
 export interface TransitMapProps {
@@ -73,6 +76,8 @@ export interface TransitMapProps {
     onEnter?: ((id: string) => void) | undefined;
     onQuestion?: ((id: QuestionId) => void) | undefined;
     onOpenPanel?: ((id: string) => void) | undefined;
+    /** `tower` is the same map with each station a 2.5D tower and each line a pipe; absent ⇒ `map`. */
+    variant?: 'map' | 'tower' | undefined;
 }
 
 const NO_ENTER: EnterCheck = { can: false, reason: 'deepest' };
@@ -132,6 +137,9 @@ export function TransitMap(p: TransitMapProps) {
     const pinOf = new Map(pins.map((pin) => [pin.stationId, pin.count] as const));
     const undrawn = stations.stations.length - layout.drawn.length;
     const claims = p.question === 'claims';
+    const tower = p.variant === 'tower';
+    const Mark = tower ? TowerMark : StationMark;
+    const marked = useMemo(() => (tower ? byDepth(model.drawn, layout.positions) : model.drawn), [tower, model.drawn, layout.positions]);
 
     // Unfold: the satellites of the unfolded station, which labels and the card keep clear of.
     const unfoldStation = unfoldedId ? stations.byId.get(unfoldedId) : undefined;
@@ -141,7 +149,7 @@ export function TransitMap(p: TransitMapProps) {
     const obstacles = useMemo(() => [...model.obstacles, ...satelliteBoxes(places, satellites)], [model.obstacles, places, satellites]);
     const { placed, notes } = useTransitLabels({
         drawn: model.drawn, positions: layout.positions, styles: model.styles, lit, noteOf: p.noteOf, selectedStation, labels,
-        width: layout.width, height: layout.height, obstacles,
+        width: layout.width, height: layout.height, obstacles, tower,
     });
 
     const cardStation = cardId ? stations.byId.get(cardId) : undefined;
@@ -157,7 +165,7 @@ export function TransitMap(p: TransitMapProps) {
         <StationCard
             key={cardStation.id}
             card={buildCard({
-                station: cardStation, labels, layerName: layerName(cardStation.layer ?? OTHER_LAYER), findings: model.findings, index: model.index,
+                station: cardStation, stations: stations.stations, labels, layerName: layerName(cardStation.layer ?? OTHER_LAYER), findings: model.findings, index: model.index,
                 enter: p.canEnter?.(cardStation.id) ?? NO_ENTER, satellites: cardSatellites.length, unfolded: unfoldedId === cardStation.id, leaf: leaves.has(cardStation.id),
             })}
             labels={labels} compact={compact} at={anchor} boxRef={cardRef} loading={p.loading} onClose={closeCard}
@@ -177,7 +185,7 @@ export function TransitMap(p: TransitMapProps) {
                     // Wider than the container: scroll sideways at full size rather than shrink the labels to a few pixels.
                     style={{ display: 'block', maxWidth: width > 0 && layout.width > width ? 'none' : '100%', color: cssVar('text') }}
                 >
-                    <desc>{fillTemplate(s.mapDescription, { lines: lines.lines.length, stations: layout.drawn.length })}</desc>
+                    <desc>{fillTemplate(s.mapDescription, { lines: counted(labels, 'line', lines.lines.length), stations: counted(labels, 'station', layout.drawn.length) })}</desc>
                     <TransitBands bands={layout.bands} width={layout.width} walls={model.walls} labels={labels} />
                     <DescribeLinks routes={model.describes} emphasised={claims} label={s.map.describes} />
 
@@ -189,7 +197,7 @@ export function TransitMap(p: TransitMapProps) {
                         return (
                             <HopPath
                                 key={`${r.lineId}:${r.index}`} route={r} color={cssVar(lineTone(line.colourIndex))} width={model.widths.get(r.lineId) ?? 6} untested={untested}
-                                cycle={line.hops[r.index]?.cycle === true} dim={off} cycleLabel={p.cycleLabel ?? s.cycleHop} onSelect={() => p.onSelectLine(r.lineId)}
+                                cycle={line.hops[r.index]?.cycle === true} dim={off} cycleLabel={p.cycleLabel ?? s.cycleHop} pipe={tower} onSelect={() => p.onSelectLine(r.lineId)}
                                 flowing={!reducedMotion && !off && !untested && r.lineId === p.lineId}
                             />
                         );
@@ -209,40 +217,41 @@ export function TransitMap(p: TransitMapProps) {
                         />
                     )}
 
-                    {model.drawn.map((station) => {
+                    {marked.map((station) => {
                         const pos = layout.positions.get(station.id), label = placed.get(station.id), style = model.styles.get(station.id);
                         if (!pos || !label || !style) return null;
                         const inter = lines.interchanges.get(station.id);
                         return (
-                            <StationMark
+                            <Mark
                                 key={station.id} id={station.id} at={pos} style={style} selected={station.id === selectedStation} dim={dim(station.id)}
-                                doc={model.docs.has(station.id)} interchange={inter ? fillTemplate(s.interchange, { count: inter.length }) : null} label={label}
-                                aria={fillTemplate(s.stationAria, { name: station.name, layer: layerName(station.layer ?? OTHER_LAYER), files: station.files })}
-                                accentNote={notes.get(station.id)?.accent === true} reducedMotion={reducedMotion} onActivate={() => pick(station.id)}
+                                doc={model.docs.has(station.id)} interchange={inter ? counted(labels, 'interchange', inter.length) : null} label={label}
+                                aria={fillTemplate(s.stationAria, { name: station.name, layer: layerName(station.layer ?? OTHER_LAYER), files: counted(labels, 'file', station.files) })}
+                                accentNote={notes.get(station.id)?.accent === true} reducedMotion={reducedMotion} complexity={station.cx} onActivate={() => pick(station.id)}
                             />
                         );
                     })}
 
                     {model.drawn.filter((station) => pinOf.has(station.id)).map((station) => {
                         const pos = layout.positions.get(station.id)!;
-                        const r = model.styles.get(station.id)?.size ?? 8;
-                        const cx = pos.x + r + 8, cy = pos.y - r - 8;
+                        const style = model.styles.get(station.id);
+                        const r = style?.size ?? 8;
+                        const cx = pos.x + r + 8, cy = tower && style ? towerPinY(pos, style, station.cx) : pos.y - r - 8;
                         const activate = () => pick(station.id);
                         return (
                             <g
                                 key={`pin:${station.id}`} role="button" tabIndex={0} data-pin={station.id} style={{ cursor: 'pointer' }}
-                                aria-label={fillTemplate(s.pinAria, { count: pinOf.get(station.id)!, name: station.name })}
+                                aria-label={counted(labels, 'pinFindings', pinOf.get(station.id)!, { name: station.name })}
                                 onClick={activate} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
                             >
                                 <circle cx={cx} cy={cy} r={11} fill={cssVar(`sev${station.anti}` as ThemeTone)} stroke={cssVar('bg')} strokeWidth={1.5} />
-                                <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill={cssVar('bg')}>{pinOf.get(station.id)}</text>
+                                <text x={cx} y={cy + 4} textAnchor="middle" fontFamily={FONT_UI} fontSize={TYPE.status.fontSize} fontWeight={TYPE.status.fontWeight} fill={cssVar('bg')}>{pinOf.get(station.id)}</text>
                             </g>
                         );
                     })}
                 </svg>
-                {p.levelNote && <p data-level-note style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{p.levelNote}</p>}
-                {undrawn > 0 && <p style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{fillTemplate(s.moreStations, { count: undrawn })}</p>}
-                {layout.hiddenOnLine > 0 && <p data-more-stops style={{ margin: 0, padding: '4px 12px', fontSize: 12, color: cssVar('muted') }}>{fillTemplate(s.map.moreStops, { count: layout.hiddenOnLine })}</p>}
+                {p.levelNote && <p data-level-note style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{p.levelNote}</p>}
+                {undrawn > 0 && <p style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{counted(labels, 'moreStations', undrawn)}</p>}
+                {layout.hiddenOnLine > 0 && <p data-more-stops style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{counted(labels, 'moreStops', layout.hiddenOnLine)}</p>}
             </div>
             {compact && frame && cardNode ? createPortal(cardNode, frame) : cardNode}
         </div>

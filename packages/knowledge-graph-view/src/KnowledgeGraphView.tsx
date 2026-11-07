@@ -42,6 +42,9 @@ import { LinesPanel } from './surface/LinesPanel';
 import { PanelDrawer } from './surface/PanelDock';
 import { canApplyKind } from './surface/codemods';
 import { isResolved } from './surface/fix/fixFlow';
+import { fixQueueCounts } from './surface/fix/fixModes';
+import { docStations } from './surface/transit/docs';
+import { groupTermini } from './surface/transit/termini';
 import { PathStrip } from './surface/PathStrip';
 import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
@@ -115,7 +118,7 @@ export function KnowledgeGraphView({
     useEffect(() => setPicked(null), [kg.rootId]);
     const changed = useMemo(() => new Set(history.commits.find((c) => c.sha === picked)?.refs ?? []), [history, picked]);
     const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? (refs: string[]) => source.symbolsOf!(kg.rootId!, refs) : undefined), [source, kg.rootId]);
-    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols });
+    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, repoConfigName: labels.surface.repoConfig });
     // The question follows the lens in effect: a requested lens the graph cannot show falls back, and the pills must say which one is on.
     const lensInEffect = lens.id, lensAsked = kg.requested.id, setQuestion = surface.setQuestion;
     useEffect(() => {
@@ -137,6 +140,14 @@ export function KnowledgeGraphView({
         status: kg.status, rootId: kg.rootId, graph: real, drawn: { nodes: drawn.nodes.length, edges: drawn.edges.length },
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, time: new Date().toISOString(),
+        // Called on click, after the render below has defined these.
+        ...(real ? {
+            surface: {
+                graph: real, stations: surface.stations, lines: surface.lines, coverage: surface.coverage, scopeName: chrome.scopeName, scope: surface.scope,
+                lensFindings: lensFindings(lens, real).length, listedFindings: listedFindings.length, queue: fixQueueCounts(findings, real.findings.length, resolvedFixes),
+                sync: sync.status, lastReviewedAt: kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt,
+            },
+        } : {}),
     });
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
     const { select, show, pickLens, pickQuestion, pinpointed, unpin } = useSurfaceActions(kg, surface, () => setTracing(false));
@@ -149,12 +160,29 @@ export function KnowledgeGraphView({
 
     const s = labels.surface;
     const hasLines = surface.lines.lines.length > 0;
-    const findings = scopeFindings(lensFindings(lens, graph), surface.stations, surface.scope);
+    // The Act findings are the graph's own, never filtered through a hidden view: scoped by the stations, then (only when a question is asked) by what it lit.
+    const asking = surface.question !== 'where';
+    const findings = useMemo(() => {
+        const scoped = scopeFindings(graph.findings, surface.stations, surface.scope);
+        return asking && surface.lit ? scopeFindings(scoped, surface.stations, surface.lit) : scoped;
+    }, [graph.findings, surface.stations, surface.scope, surface.lit, asking]);
+    // The Details list (the per-lens Insights aside) stays lens-scoped: the Act cards above it never are.
+    // Scoped by the stations, then by the lens - never by what a question lit (the lens pick lights stations, and that must not empty its own list).
+    const listedFindings = useMemo(
+        () => scopeFindings(lensFindings(lens, graph), surface.stations, surface.scope),
+        [lens, graph, surface.stations, surface.scope],
+    );
+    // The marks the map draws beyond the channels, so the legend can explain them.
+    const legendExtras = useMemo(() => ({
+        deadEnd: groupTermini(surface.lines.lines, surface.stations.byId, graph).some((t) => t.deadEnd),
+        docs: docStations(graph, surface.stations).size > 0,
+    }), [surface.lines, surface.stations, graph]);
     const noHits = kg.hits && kg.hits.length === 0 ? kg.query : null;
     const linesPanel = (rail: boolean) => (
         <LinesPanel
             lines={surface.lines} stations={surface.stations} overlay={surface.overlay} labels={labels} lineId={surface.line?.id ?? null} rail={rail}
             selectedStation={surface.station?.id ?? null} onSelectLine={surface.selectLine} onSelectStation={surface.selectStation}
+            coverage={surface.coverage} extras={legendExtras} kinds={mode === 'system' ? graph.findings.map((f) => f.kind) : undefined} findings={graph.findings}
         />
     );
     const overlay = <SceneOverlay {...chrome.overlayProps} />;
@@ -182,12 +210,13 @@ export function KnowledgeGraphView({
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         {layout.phone && overlay}
                         <div style={{ position: 'relative', flex: 1, minHeight: layout.actBelow ? 320 : 0 }}>
-                            <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
+                            {/* Below the floating controls in every camera: `--kg-scene-top` is the measured height `SceneOverlay` publishes on this box (a phone stacks them in flow, so 0). */}
+                            <div data-testid="kg-scene-box" style={{ position: 'absolute', top: layout.phone ? 0 : 'var(--kg-scene-top, 88px)', right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
                                 {real ? (
                                     <ZoomProvider host={zoom}>
                                         <ViewSurface
                                             mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
-                                            selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show}
+                                            selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
                                         />
                                     </ZoomProvider>
@@ -208,9 +237,10 @@ export function KnowledgeGraphView({
                     </div>
                 </div>
                 {real && <ActPanel
-                    graph={graph} findings={findings} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
+                    graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
                     evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
+                    model={surface.stations} onAskUntested={() => pickQuestion('untested')}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />

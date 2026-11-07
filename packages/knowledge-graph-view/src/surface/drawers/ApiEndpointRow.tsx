@@ -7,6 +7,7 @@
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { requestLine, type Endpoint } from './apiModel';
 import { MethodBadge } from './MethodBadge';
 import { StateLabel } from './ui';
@@ -39,7 +40,7 @@ export function ApiEndpointRow({ endpoint: e, labels, included, active, onToggle
                     }}
                 >
                     <MethodBadge method={e.method} />
-                    <code style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{e.path}</code>
+                    <code style={{ ...TYPE.monoValue, overflowWrap: 'anywhere' }}>{e.path}</code>
                     <span style={{ flex: 1 }} />
                     <StateLabel tone={e.documented ? 'agrees' : 'cycle'} data-documented={e.documented}>{e.documented ? t.documented : t.undocumented}</StateLabel>
                 </button>

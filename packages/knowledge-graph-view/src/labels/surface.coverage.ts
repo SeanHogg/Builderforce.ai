@@ -3,8 +3,8 @@
 export interface CoverageLabels {
     /** `{count}`, `{total}`; `{file}`, `{complexity}`, `{coverage}`. */
     coverage: Record<
-        'notSetUpTitle' | 'notSetUpBody' | 'kpiFiles' | 'kpiFilesValue' | 'kpiMean' | 'kpiComplexity' | 'kpiRisky' | 'scatterTitle' | 'scatterAria'
-        | 'axisX' | 'axisY' | 'gapsTitle' | 'gapsNone' | 'gapRow' | 'runWithValues' | 'promptTests' | 'promptText' | 'noComplexity' | 'quadrant' | 'namesMore' | 'shapeTitle' | 'shapeNone' | 'shapeAria' | 'shapeSegment' | 'unit' | 'integration' | 'e2e' | 'configTitle' | 'configNone' | 'configAll' | 'configNowhere' | 'configOnly' | 'applyV8' | 'applyV8Request',
+        'notSetUpTitle' | 'notSetUpBody' | 'kpiFiles' | 'kpiFilesValue' | 'kpiMean' | 'kpiComplexity' | 'kpiRisky' | 'scatterTitle'
+        | 'axisX' | 'axisY' | 'gapsTitle' | 'gapsNone' | 'gapRow' | 'runWithValues' | 'promptTests' | 'promptText' | 'noComplexity' | 'quadrant' | 'namesMore' | 'shapeTitle' | 'shapeNone' | 'shapeAria' | 'shapeSegment' | 'unit' | 'integration' | 'e2e' | 'configTitle' | 'configNone' | 'configAll' | 'configNowhere' | 'configOnly',
         string
     >;
 }
@@ -19,7 +19,6 @@ export const COVERAGE_DEFAULTS: CoverageLabels = {
         kpiComplexity: 'Total complexity',
         kpiRisky: 'Complex and under-tested',
         scatterTitle: 'Complexity against coverage',
-        scatterAria: '{count} files plotted. Complexity runs left to right and coverage bottom to top.',
         axisX: 'Complexity',
         axisY: 'Coverage',
         gapsTitle: 'Riskiest gaps',
@@ -41,8 +40,6 @@ export const COVERAGE_DEFAULTS: CoverageLabels = {
         configAll: 'Coverage is configured in every package.',
         configNowhere: 'Coverage is not configured in any package.',
         configOnly: 'Coverage is configured in {packages} only. Elsewhere no coverage is measured.',
-        applyV8: 'Apply: v8 coverage in {count} packages',
-        applyV8Request: 'Set up v8 coverage in these {count} packages: {packages}. Add the coverage config and a script to each, run the tests with coverage on and report the new coverage.',
         quadrant: 'complex · untested',
         namesMore: '{names} +{count}',
     },

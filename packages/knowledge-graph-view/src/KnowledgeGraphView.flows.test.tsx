@@ -137,7 +137,13 @@ describe('a recreated source (another project)', () => {
 
 describe('finding rows', () => {
   // Findings are nested and lazy: a group's rows render only once the group is expanded.
-  const expandGroup = (name: RegExp) => fireEvent.click(screen.getByRole('button', { name }));
+  // The Findings list lives inside the Act rail's collapsed Details (each finding is an action card at the top of the rail, named "Show: …",
+  // "Prompt: …"), so open Details and look for the group header within the Findings region only.
+  const expandGroup = (name: RegExp) => {
+    const toggle = screen.getByTestId('kg-act-details-toggle');
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+    fireEvent.click(within(screen.getByRole('region', { name: L.findingsTitle })).getByRole('button', { name }));
+  };
 
   it('names the sections a contradiction sets against each other', async () => {
     const graph = docsFixture();

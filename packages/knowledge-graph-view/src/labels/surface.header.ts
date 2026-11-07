@@ -19,8 +19,6 @@ export interface HeaderLabels {
     questionsLabel: string;
     moreQuestions: string;
     questions: Record<QuestionId, string>;
-    /** A question's answer line: `{count}` stations. */
-    answerCount: string;
     answerNone: string;
     /** The question needs data this folder has not collected. */
     answerNotSetUp: string;
@@ -31,13 +29,11 @@ export interface HeaderLabels {
     linesEmpty: string;
     /** `{name}`. */
     lineName: string;
-    /** `{count}`. */
-    lineStops: string;
     /** `{name}`. */
     stationsOn: string;
     stationsPick: string;
-    /** The scene overlay: `{name}` the level above; `{lens}`; `{family}`; `{count}` files missing on the server. */
-    overlay: Record<'outTo' | 'fit' | 'lensSub' | 'familyOnly' | 'clearFamily' | 'missingFiles' | 'diagnose' | 'controls' | 'tooLarge', string>;
+    /** The scene overlay: `{name}` the level above; `{lens}`; `{family}`. (Its file counts are `counts.fileMissing` / `counts.fileTooLarge`.) */
+    overlay: Record<'outTo' | 'fit' | 'lensSub' | 'familyOnly' | 'clearFamily' | 'diagnose' | 'controls', string>;
     /** `{description}`, `{path}`, `{findings}`. */
     pinpoint: Record<
         'label' | 'button' | 'hint' | 'reading' | 'failed' | 'noMatch' | 'thumbAlt' | 'descriptionTitle' | 'anchorsTitle' | 'matchesTitle' | 'diagnose'
@@ -46,11 +42,11 @@ export interface HeaderLabels {
     >;
     pinpointProvenance: Record<'vision' | 'exact' | 'catalog' | 'import', string>;
     /** `{title}`, `{at}`, `{count}`. */
-    time: Record<'label' | 'aria' | 'now' | 'commitAria' | 'changed', string>;
+    time: Record<'label' | 'aria' | 'now' | 'commitAria', string>;
     /** The header: the status strip (`{time}`, `{progress}`, `{count}`, `{local}`, `{server}`), the overflow menu (`{title}`) and the overlay sentence. */
     header: Record<
-        'statusLabel' | 'syncedAt' | 'synced' | 'notSynced' | 'updateFailed' | 'reviewing' | 'reviewPlan' | 'reviewFailed' | 'skippedPill'
-        | 'parityBoth' | 'parityDiffers' | 'parityLocal' | 'moreActions' | 'reReview' | 'overlaysNote' | 'rootsLabel',
+        'statusLabel' | 'syncedAt' | 'synced' | 'notSynced' | 'updateFailed' | 'reviewing' | 'reviewPlan' | 'reviewFailed'
+        | 'parityDiffers' | 'moreActions' | 'reReview' | 'overlaysNote' | 'rootsLabel',
         string
     >;
     /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
@@ -80,7 +76,6 @@ export const HEADER_DEFAULTS: HeaderLabels = {
         changed: 'What changed?', callers: 'Who else calls these?', copied: 'What is copied?', unused: 'What is never called?',
         claims: 'What do the docs claim?', layers: 'How is it layered?', knowledge: 'What do we know about it?',
     },
-    answerCount: '{count} stations',
     answerNone: 'No station matches.',
     answerNotSetUp: 'Not set up: this needs data that has not been collected.',
     notes: {
@@ -91,17 +86,14 @@ export const HEADER_DEFAULTS: HeaderLabels = {
     linesButton: 'Lines',
     linesEmpty: 'No entry points were found, so there are no lines.',
     lineName: '{name} line',
-    lineStops: '{count} stops',
     stationsOn: 'Stations on {name}',
     stationsPick: 'Pick a line to list its stations.',
     overlay: {
         outTo: '↑ Out to {name}',
         fit: 'Fit',
-        lensSub: 'was the {lens} lens',
+        lensSub: 'was the {lens} view',
         familyOnly: '{family} only',
         clearFamily: 'Clear the {family} filter',
-        missingFiles: '{count} files are missing on the server.',
-        tooLarge: '{count} files were too large to store.',
         diagnose: 'Diagnose',
         controls: 'Scene controls',
     },
@@ -130,7 +122,6 @@ export const HEADER_DEFAULTS: HeaderLabels = {
         aria: 'History: pick a commit to mark the stations it changed',
         now: 'Now',
         commitAria: '{title}, {at}',
-        changed: '{count} stations changed in this commit',
     },
     header: {
         statusLabel: 'Sync status',
@@ -141,10 +132,7 @@ export const HEADER_DEFAULTS: HeaderLabels = {
         reviewing: 'Reviewing · {progress}',
         reviewPlan: 'Review plan ready',
         reviewFailed: 'Review failed',
-        skippedPill: '{count} files not stored',
-        parityBoth: '{count} files here and on the server',
         parityDiffers: '{local} here · {server} on the server',
-        parityLocal: '{local} files here · not on the server',
         moreActions: 'More actions',
         reReview: 'Re-review this folder',
         overlaysNote: 'Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.',

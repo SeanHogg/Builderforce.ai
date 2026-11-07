@@ -11,7 +11,9 @@
 
 import { useMemo, useState } from 'react';
 import { fillTemplate } from '../../labels';
-import { button, heading, muted, primaryButton } from '../../styles';
+import { counted } from '../plural';
+import { button, muted, primaryButton } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { PanelProps } from '../registry';
 import { ApiEndpointRow } from './ApiEndpointRow';
 import { endpointKey, referrersOf, selected, splitContract } from './apiDetail';
@@ -44,10 +46,10 @@ export function ApiPanel({ graph, labels, surface, rootTitle, onCompose, onShow,
 
     const bucket = (list: readonly Endpoint[], heading3: string, kind: 'contract' | 'undocumented') => list.length === 0 ? null : (
         <section key={kind} data-bucket={kind} style={{ display: 'grid', gap: 10 }}>
-            <h3 style={heading}>{heading3}</h3>
+            <h3 style={TYPE.sectionHeading}>{heading3}</h3>
             {groupByFile(list).map((g) => (
-                <section key={g.file} aria-label={fillTemplate(t.groupAria, { file: g.fileName, count: g.endpoints.length })} style={{ display: 'grid', gap: 6 }}>
-                    <h4 style={{ ...heading, fontSize: 12, overflowWrap: 'anywhere' }}>{g.fileName}</h4>
+                <section key={g.file} aria-label={counted(labels, 'fileEndpoints', g.endpoints.length, { file: g.fileName })} style={{ display: 'grid', gap: 6 }}>
+                    <h4 style={{ ...TYPE.monoName, margin: 0, overflowWrap: 'anywhere' }}>{g.fileName}</h4>
                     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
                         {g.endpoints.map((e, i) => (
                             <ApiEndpointRow
@@ -80,9 +82,9 @@ export function ApiPanel({ graph, labels, surface, rootTitle, onCompose, onShow,
             </div>
             {!onCompose && <Unavailable labels={labels} label={t.contractTests} testId="kg-api-compose-unavailable" />}
             <p data-testid="kg-api-selected" style={{ ...muted, margin: 0 }}>
-                {chosen.length === 0 ? t.selectAtLeastOne : fillTemplate(t.selectedCount, { selected: chosen.length, total: endpoints.length })}
+                {chosen.length === 0 ? t.selectAtLeastOne : fillTemplate(t.selectedCount, { selected: chosen.length, endpoints: counted(labels, 'endpoint', endpoints.length) })}
             </p>
-            {chosen.length > MAX_TEST_ROUTES && <p data-testid="kg-api-capped" style={{ ...muted, margin: 0 }}>{fillTemplate(labels.surface.testsCapped, { count: MAX_TEST_ROUTES })}</p>}
+            {chosen.length > MAX_TEST_ROUTES && <p data-testid="kg-api-capped" style={{ ...muted, margin: 0 }}>{counted(labels, 'endpointsCapped', MAX_TEST_ROUTES)}</p>}
             {failed && <p role="alert" style={{ ...muted, margin: 0 }}>{t.downloadFailed}</p>}
             <ApiEndpointCard endpoint={activeEndpoint} labels={labels} referrers={referrers} tryRequest={tryRequest} onPickFile={(ref) => onShow([ref])} />
             {bucket(split.inContract, fillTemplate(t.groupInContract, { count: split.inContract.length }), 'contract')}

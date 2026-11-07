@@ -2,6 +2,7 @@
 
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
+import { TYPE } from './type';
 
 export type ChipProps = Omit<HTMLAttributes<HTMLSpanElement>, 'className' | 'style'> & {
     tone: ThemeTone;
@@ -11,7 +12,7 @@ export type ChipProps = Omit<HTMLAttributes<HTMLSpanElement>, 'className' | 'sty
 export function Chip({ tone, children, ...rest }: ChipProps) {
     const color = cssVar(tone);
     return (
-        <span {...rest} style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${color}`, color }}>
+        <span {...rest} style={{ ...TYPE.tag, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${color}`, color }}>
             {children}
         </span>
     );

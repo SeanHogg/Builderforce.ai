@@ -1,9 +1,11 @@
 /** What a deterministic fix would change: the files, and the lines it removes or adds when the host can tell. Lists the finding's files otherwise, and says so. */
 
 import type { FixPreview } from '../../fixPorts';
-import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
+import type { KnowledgeGraphLabels } from '../../labels';
+import { counted } from '../plural';
 import { cssVar } from '../../scene/themeColors';
-import { MONO, muted } from '../../styles';
+import { muted } from '../../styles';
+import { TYPE } from '../ui/type';
 
 const lineTone = (line: string): string => cssVar(line.startsWith('+') ? 'agrees' : line.startsWith('-') ? 'violation' : 'muted');
 
@@ -11,8 +13,8 @@ export function FixPreviewView({ files, fromHost, labels }: { files: FixPreview[
     const t = labels.surface.fix;
     return (
         <section aria-label={t.previewTitle} data-testid="kg-fix-preview" style={{ display: 'grid', gap: 6, minWidth: 0 }}>
-            <span style={muted}>{fillTemplate(t.previewFiles, { count: files.length })}</span>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, fontFamily: MONO, fontSize: 11.5, minWidth: 0 }}>
+            <span style={muted}>{counted(labels, 'file', files.length)}</span>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, ...TYPE.mono, minWidth: 0 }}>
                 {files.map((f) => (
                     <li key={f.path} style={{ display: 'grid', gap: 2, minWidth: 0 }}>
                         <span style={{ overflowWrap: 'anywhere' }}>

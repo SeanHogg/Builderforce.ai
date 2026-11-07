@@ -2,6 +2,38 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.137] — The knowledge view looks like its design and says what you are looking at
+
+- **Every "Not set up" says why and what to do.** Examples: "no file has churn yet — review again to collect it", or "the server sent only 119 of 3,038 files". When the map has only part of the repo, it says so.
+- **Copy diagnostics explains the picture.** It reports:
+  - where the map came from;
+  - how many files carry each kind of data;
+  - files with no layer;
+  - lines and entry points;
+  - scope;
+  - what "0 here" means;
+  - why the findings counts differ.
+- **Tower is a transit map of towers.** It shares the Map's layout and lines, and each part is a tower:
+  - height is size;
+  - fill is coverage, with a dashed shell when nothing is covered;
+  - colour is colour.
+  
+  Lines become pipes, and data stores are tanks. The WebGL view is still there, as **3D**.
+- **The System view.** Each layer is one coloured row of up to six cards, with "+N more" opening List. Arrows say how each layer calls the next, and a row shows the data stores and outside services. Parts with no layer collapse into one "Not layered" row instead of a tile per file.
+- **The Act panel.**
+  - It opens with "At {part} · N issues" or "On this path · N to act on", with the fix queue at the top.
+  - It shows up to three cards. When nothing needs action, a ✓ card points you to a next question.
+  - "This path is done when…" stays at the bottom.
+  - The findings counts agree everywhere, and pins carry the same numbers here as in the left rail.
+  - Importance reads "#3 of 40", and anti-patterns read as words.
+- **Controls no longer cover the map.**
+  - **Names:** stations are named by their last folders ("vscode/src"), and lines by their package.
+  - **Config files:** root config files fold into one station.
+  - **One note:** the ask bar shows one note, not two.
+  - **Status strip:** it says "Out of sync" or "not reviewed on this machine" instead of a green "Synced" next to "0 here".
+- **Coverage from what your tests reach.** With no coverage file, a part counts as reached when a test imports something that calls it, and it is labelled "reached", never "covered".
+- **The design's fonts and colours:** Inter and JetBrains Mono, bundled so they work offline.
+
 ## [2026.10.134] — Copy diagnostics names the workspace, not just the tenant
 
 - **Copy diagnostics now shows the workspace you are acting as, next to the tenant.** The `Tenant:` line came from your token's own claims; the workspace the panel has selected (the one platform writes go to) was never shown. When those two disagree you get 403 "Project belongs to a different workspace" on every ticket/tool write — the report now prints both, and flags the mismatch directly.

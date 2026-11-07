@@ -35880,7 +35880,6 @@
       "edge": "引用"
     },
     "statsLine": "{nodes} 个节点 · {edges} 条边 · {sources} 个来源",
-    "focusedNote": "正在显示前 {count} 个节点。",
     "filesLoaded": "已加载 {loaded} / {total}",
     "showAll": "显示全部",
     "view3d": "3D",
@@ -35901,7 +35900,6 @@
     "viewModesLabel": "视图",
     "graphHint": "滚动或双指缩放，拖动平移，选择节点查看详情。",
     "nodeAria": "{label}，{kind}",
-    "mapBranch": "{name}，{count} 个文件",
     "mapMore": "另有 {count} 个",
     "zoomLabel": "缩放",
     "zoomIn": "放大",
@@ -35954,6 +35952,7 @@
       "docs": "文档"
     },
     "findingsTitle": "发现",
+    "findingsNarrowed": "发现 · {lens}视角（{shown} / {total}）",
     "findingsEmpty": "{scope} 没有未解决的发现。",
     "findingKinds": {
       "cycle": "循环",
@@ -35985,9 +35984,7 @@
     "clearSelection": "清除",
     "fixSelected": "用智能体修复 {count} 项",
     "selectedCount": "已选 {count} 项",
-    "fixBatch": "一并解决这 {count} 个发现，在一次更改中完成：",
     "groupFindingsBy": "类型",
-    "findingsCollapsed": "{count} 个发现 — 展开以加载",
     "copyDiagnostics": "复制诊断信息",
     "fix": {
       "cloneGroup": "合并[[克隆组 {group} 中的]]重复代码：{items}。提取一个共享实现，并让每个副本都指向它。",
@@ -36063,9 +36060,7 @@
     "compareIncomparable": "前后两次的测量方式不同，因此缺失的问题不计为已解决。",
     "revisionLabel": "版本",
     "reviewPlanTitle": "审阅 {title}？",
-    "reviewPlanByPack": "{pack}：{count} 个文件",
     "reviewPlanUnchanged": "{count} 个自上次审阅以来未变更",
-    "reviewPlanModelCalls": "≈ {count} 次模型调用",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "路由确定后将显示费用。",
     "reviewPlanCostLocal": "在您的本地模型上运行，无需费用。",
@@ -36078,7 +36073,6 @@
     "reviewCancelled": "审阅已取消。未写入任何内容。",
     "reviewDoneTitle": "审阅完成",
     "reviewDoneBody": "已读取 {extracted} 个文件 · 已判断 {judged} 个章节 · 已写入 {facts} 条事实",
-    "reviewUnjudged": "受预算限制，有 {count} 个章节留待以后处理。",
     "reviewContinue": "继续",
     "reviewAborted": "审阅已停止。已写入的内容会保留。",
     "reviewFailed": "审阅失败。未再写入更多内容。",
@@ -36144,7 +36138,6 @@
         "layers": "分层如何？",
         "knowledge": "我们对它了解多少？"
       },
-      "answerCount": "{count} 个站点",
       "answerNone": "没有匹配的站点。",
       "answerNotSetUp": "未设置：这需要尚未收集的数据。",
       "notes": {
@@ -36162,21 +36155,17 @@
       "lineName": "{name} 线路",
       "stationsOn": "{name} 上的站点",
       "stationsPick": "选择一条线路以列出其站点。",
-      "omittedLines": "另有 {count} 个入口点未绘制为线路。",
-      "stationMeta": "{files} 个文件 · {layer}",
+      "stationMeta": "{files} · {layer}",
       "legendTitle": "地图图例",
       "legendRow": "{channel}：{metric}",
-      "interchange": "换乘站：{count} 条线路",
       "terminus": {
         "data": "数据存储",
         "external": "外部服务",
         "end": "到此为止"
       },
       "untestedSegment": "虚线：没有测试覆盖",
-      "mapDescription": "{stations} 个站点上共有 {lines} 条线路。选择站点查看详情。",
-      "stationAria": "{name}，{layer}，{files} 个文件",
-      "pinAria": "{name} 处有 {count} 个发现",
-      "moreStations": "另有 {count} 个站点未绘制。",
+      "mapDescription": "{stations}上共有 {lines}。选择站点查看详情。",
+      "stationAria": "{name}，{layer}，{files}",
       "layers": {
         "entry": "入口点",
         "presentation": "表现层",
@@ -36198,18 +36187,16 @@
         "heuristic": "启发式",
         "runtime": "运行时"
       },
-      "resolveFinding": "解决", "resolveFindingAria": "解决：{title}", "pipesCapped": "仅显示前 {count} 条管道。", "kindsLegend": "发现类型", "noDirectReference": "无直接引用", "testsCapped": "请求中仅列出前 {count} 个端点。", "imageTooLarge": "该图片超过 {size} MB。", "historyCapped": "仅显示最近 {count} 个提交。", "skippedUploads": "有 {count} 个文件未被存储。", "skipReasons": {"tooLarge": "太大，无法存储", "unreadable": "无法读取", "rateLimited": "服务器繁忙", "unsupported": "不受支持的文件", "other": "其他原因"},
+      "resolveFinding": "解决", "resolveFindingAria": "解决：{title}", "kindsLegend": "发现类型", "noDirectReference": "无直接引用", "imageTooLarge": "该图片超过 {size} MB。", "skipReasons": {"tooLarge": "太大，无法存储", "unreadable": "无法读取", "rateLimited": "服务器繁忙", "unsupported": "不受支持的文件", "other": "其他原因"},
       "system": {
-        "componentAria": "{name}，{files} 个文件，{findings} 个发现",
+        "componentAria": "{name}，{files}，{findings}",
         "antiBar": "按类型统计的发现",
         "data": "数据与外部服务",
         "dataEmpty": "没有数据存储或外部服务作为线路的终点。",
         "empty": "没有可绘制的组件。",
         "metaOwner": "{files} · {owner}",
         "more": "另外 {count} 个",
-        "moreAria": "在列表中显示 {layer} 的另外 {count} 个",
-        "notLayeredOne": "未分层 · {count} 个部分 → 列表",
-        "notLayeredOther": "未分层 · {count} 个部分 → 列表"
+        "moreAria": "在列表中显示 {layer} 的另外 {count} 个"
       },
       "systemArrows": {
         "entry": "通过 HTTP 或桥接调用 ↓",
@@ -36221,32 +36208,76 @@
       "counts": {
         "fileOne": "{count} 个文件", "fileOther": "{count} 个文件",
         "stationOne": "{count} 站", "stationOther": "{count} 站",
-        "deadEndOne": "{count} 个死路", "deadEndOther": "{count} 个死路"
+        "deadEndOne": "{count} 个死路", "deadEndOther": "{count} 个死路",
+        "findingOne": "{count} 个发现", "findingOther": "{count} 个发现",
+        "lineOne": "{count} 条线路", "lineOther": "{count} 条线路",
+        "layerOne": "{count} 层", "layerOther": "{count} 层",
+        "componentOne": "{count} 个组件", "componentOther": "{count} 个组件",
+        "stopOne": "{count} 个站点", "stopOther": "{count} 个站点",
+        "messageOne": "{count} 条消息", "messageOther": "{count} 条消息",
+        "endpointOne": "{count} 个端点", "endpointOther": "{count} 个端点",
+        "stationChangedOne": "此提交修改了 {count} 个站点", "stationChangedOther": "此提交修改了 {count} 个站点",
+        "fileMissingOne": "服务器上缺少 {count} 个文件。", "fileMissingOther": "服务器上缺少 {count} 个文件。",
+        "fileTooLargeOne": "{count} 个文件过大，无法存储。", "fileTooLargeOther": "{count} 个文件过大，无法存储。",
+        "fileNotStoredOne": "{count} 个文件未存储", "fileNotStoredOther": "{count} 个文件未存储",
+        "fileBothOne": "{count} 个文件，本地与服务器一致", "fileBothOther": "{count} 个文件，本地与服务器一致",
+        "fileChangedOne": "已更改 {count} 个文件", "fileChangedOther": "已更改 {count} 个文件",
+        "fileSkippedOne": "有 {count} 个文件未被存储。", "fileSkippedOther": "有 {count} 个文件未被存储。",
+        "familyLightsOne": "{family} 点亮了 {count} 个站点", "familyLightsOther": "{family} 点亮了 {count} 个站点",
+        "checkFileOne": "该发现涉及 {count} 个文件。", "checkFileOther": "该发现涉及 {count} 个文件。",
+        "checkStationOne": "它涉及 {count} 个站点。", "checkStationOther": "它涉及 {count} 个站点。",
+        "issueAtOne": "在 {scope} · {count} 个问题", "issueAtOther": "在 {scope} · {count} 个问题",
+        "notLayeredOne": "未分层 · {count} 个部分 → 列表", "notLayeredOther": "未分层 · {count} 个部分 → 列表",
+        "branchFilesOne": "{name}，{count} 个文件", "branchFilesOther": "{name}，{count} 个文件",
+        "packFilesOne": "{pack}：{count} 个文件", "packFilesOther": "{pack}：{count} 个文件",
+        "sectionUnjudgedOne": "受预算限制，有 {count} 个章节留待以后处理。", "sectionUnjudgedOther": "受预算限制，有 {count} 个章节留待以后处理。",
+        "fixBatchOne": "在一次更改中解决这 {count} 个发现：", "fixBatchOther": "一并解决这 {count} 个发现，在一次更改中完成：",
+        "findingCollapsedOne": "{count} 个发现 — 展开以加载", "findingCollapsedOther": "{count} 个发现 — 展开以加载",
+        "topNodesOne": "正在显示前 {count} 个节点。", "topNodesOther": "正在显示前 {count} 个节点。",
+        "modelCallsOne": "≈ {count} 次模型调用", "modelCallsOther": "≈ {count} 次模型调用",
+        "endpointsCappedOne": "请求中仅列出前 {count} 个端点。", "endpointsCappedOther": "请求中仅列出前 {count} 个端点。",
+        "commitsCappedOne": "仅显示最近 {count} 个提交。", "commitsCappedOther": "仅显示最近 {count} 个提交。",
+        "moreChecksOne": "另有 {count} 项检查", "moreChecksOther": "另有 {count} 项检查",
+        "fileEndpointsOne": "{file}：{count} 个端点", "fileEndpointsOther": "{file}：{count} 个端点",
+        "filesPlottedOne": "已绘制 {count} 个文件。复杂度自左向右增加，覆盖率自下向上增加。", "filesPlottedOther": "已绘制 {count} 个文件。复杂度自左向右增加，覆盖率自下向上增加。",
+        "applyV8One": "应用：在 {count} 个包中启用 v8 覆盖率", "applyV8Other": "应用：在 {count} 个包中启用 v8 覆盖率",
+        "applyV8RequestOne": "在这 {count} 个包中设置 v8 覆盖率：{packages}。为每个包添加覆盖率配置和脚本，开启覆盖率运行测试并报告新的覆盖率。",
+        "applyV8RequestOther": "在这 {count} 个包中设置 v8 覆盖率：{packages}。为每个包添加覆盖率配置和脚本，开启覆盖率运行测试并报告新的覆盖率。",
+        "entryPointsOmittedOne": "另有 {count} 个入口点未绘制为线路。", "entryPointsOmittedOther": "另有 {count} 个入口点未绘制为线路。",
+        "interchangeOne": "换乘站：{count} 条线路", "interchangeOther": "换乘站：{count} 条线路",
+        "entryPointOne": "{count} 个入口点", "entryPointOther": "{count} 个入口点",
+        "fileServerOnlyOne": "服务器上有 {server} 个文件 · 未在本机审阅", "fileServerOnlyOther": "服务器上有 {server} 个文件 · 未在本机审阅",
+        "fileLocalOnlyOne": "本地 {local} 个文件 · 尚未上传到服务器", "fileLocalOnlyOther": "本地 {local} 个文件 · 尚未上传到服务器",
+        "pinFindingsOne": "{name} 处有 {count} 个发现", "pinFindingsOther": "{name} 处有 {count} 个发现",
+        "moreStationsOne": "另有 {count} 个站点未绘制。", "moreStationsOther": "另有 {count} 个站点未绘制。",
+        "pipesCappedOne": "仅显示前 {count} 条管道。", "pipesCappedOther": "仅显示前 {count} 条管道。",
+        "commitRowOne": "{sha} · {count} 个文件 · {when}", "commitRowOther": "{sha} · {count} 个文件 · {when}",
+        "commitRowAuthorOne": "{sha} · {author} · {count} 个文件 · {when}", "commitRowAuthorOther": "{sha} · {author} · {count} 个文件 · {when}",
+        "moreStopsOne": "还有 {count} 站", "moreStopsOther": "还有 {count} 站",
+        "antiTipOne": "来自 {count} 条警告", "antiTipOther": "来自 {count} 条警告"
       },
       "heat": {
-        "description": "热力网格：{layers} 层，{components} 个组件。选择单元格查看详情。",
-        "cellAria": "{name}，{files} 个文件",
+        "description": "热力网格：{layers}，{components}。选择单元格查看详情。",
+        "cellAria": "{name}，{files}",
         "legend": "单元格大小：{size} · 颜色：{colour} · 条形：{bar}",
         "empty": "没有可绘制的组件。",
         "showMore": "再显示 {count} 个"
       },
       "cycleHop": "循环依赖",
       "explain": {
-        "cutNote": "显示 {total} 个文件中的 {shown} 个。服务器没有发送完整地图；服务器更新后会随之更新。",
+        "cutNote": "显示 {files}中的 {shown} 个。服务器没有发送完整地图；服务器更新后会随之更新。",
         "notSetUpWhy": "未设置 · {reason}",
-        "whyNoOutline": "服务器只发送了 {total} 个文件中的 {shown} 个",
+        "whyNoOutline": "服务器只发送了 {files}中的 {shown} 个",
         "whyNoBadges": "还没有文件带有{metric}；请重新审阅以收集",
         "whyNotCollected": "本次审阅未收集{metric}",
-        "parityServerOnly": "服务器上有 {server} 个文件 · 未在本机审阅",
-        "outOfSync": "不同步",
         "oneStation": "这条线路只有一个站点：无可步进。",
         "legendNotSetUp": "所以每个站点都保持素色",
         "presetNeeds": "需要{metrics}"
       },
-      "scaleSummary": "{stations} 个站点代表 {files} 个文件 · 显示最重要的 {nodes} 个 · 搜索可覆盖全部",
+      "scaleSummary": "{stations}代表 {files} · 显示最重要的 {nodes} 个 · 搜索可覆盖全部",
       "repoConfig": "仓库配置",
       "sequence": {
-        "description": "包含 {stops} 个站点和 {messages} 条消息的时序。",
+        "description": "包含 {stops}和 {messages}的时序。",
         "empty": "时序至少需要两个站点；这条线路只有一个。",
         "messageAria": "{from} 到 {to}：{label}",
         "backToMap": "返回地图"
@@ -36256,7 +36287,8 @@
         "syncing": "同步中",
         "error": "错误",
         "idle": "未同步",
-        "partial": "不同步"
+        "partial": "不同步",
+        "serverOnly": "仅在服务器上"
       },
       "overlay": {
         "outTo": "↑ 返回 {name}",
@@ -36264,8 +36296,6 @@
         "lensSub": "原为{lens}视图",
         "familyOnly": "仅 {family}",
         "clearFamily": "清除 {family} 筛选",
-        "missingFiles": "服务器上缺少 {count} 个文件。",
-        "tooLarge": "{count} 个文件过大，无法存储。",
         "diagnose": "诊断",
         "controls": "场景控制"
       },
@@ -36278,7 +36308,6 @@
         "noSymbolsNote": "此图中没有符号，因此包以下的层级显示文件。",
         "world": "整张地图",
         "drillReset": "地图已更改，因此视图已退出“{name}”。",
-        "moreStops": "还有 {count} 站",
         "satelliteAria": "{name}，位于 {parent} 内",
         "card": {
           "close": "关闭",
@@ -36296,7 +36325,6 @@
         "stats": { "issues": "反模式", "complexity": "复杂度", "coverage": "覆盖率", "reached": "已触达", "usage": "重要性" },
         "statWords": {
           "anti": { "none": "无", "low": "低", "medium": "中", "high": "高", "severe": "严重" },
-          "antiTip": "来自 {count} 条警告",
           "importance": "第 {rank} / 共 {total}",
           "importanceTip": "相对于最繁忙的部分"
         },
@@ -36314,8 +36342,6 @@
       },
       "act": {
         "cardsTitle": "优先修复",
-        "titleAtOne": "在 {scope} · 1 个问题",
-        "titleAtMany": "在 {scope} · {count} 个问题",
         "titlePath": "此路径 · {count} 项待处理",
         "emptyTitle": "这里没有需要处理的内容",
         "emptyStation": "此站点没有未解决的发现。试试“哪些没有测试？”",
@@ -36339,7 +36365,6 @@
         "doneTitle": "当满足以下条件时，这条路径才算完成…",
         "doneCheck": "{title} 已在 {items} 中解决",
         "doneNone": "这条路径上没有未解决的发现。",
-        "doneMore": "另有 {count} 项检查",
         "detailsTitle": "详情",
         "linkCoverage": "覆盖率",
         "linkApi": "API"
@@ -36352,7 +36377,6 @@
         "simulate": "用输入值模拟",
         "sequence": "时序图",
         "noTests": "无测试",
-        "findings": "{count} 项发现",
         "stops": "站点",
         "enlarge": "放大"
       },
@@ -36378,14 +36402,11 @@
         "countPair": "{local} / {server}",
         "parityAll": "服务器已包含全部。",
         "parityMissing": "{count} 项尚未上传到服务器。",
-        "parityTooLarge": "其中 {count} 个因过大而无法存储。",
         "deltaTitle": "上次审查以来的变更",
         "deltaEmpty": "没有可显示的提交。",
         "deltaSummary": "{count} 项尚未体现在图中",
         "deltaPending": "待处理",
         "deltaApplied": "已体现",
-        "deltaRow": "{sha} · {count} 个文件 · {when}",
-        "deltaRowAuthor": "{sha} · {author} · {count} 个文件 · {when}",
         "actionSetUpV8": "设置 v8",
         "actionTurnOn": "开启",
         "actionGenerate": "生成",
@@ -36453,7 +36474,6 @@
         "kpiComplexity": "总复杂度",
         "kpiRisky": "复杂且测试不足",
         "scatterTitle": "复杂度与覆盖率",
-        "scatterAria": "已绘制 {count} 个文件。复杂度自左向右增加，覆盖率自下向上增加。",
         "axisX": "复杂度",
         "axisY": "覆盖率",
         "gapsTitle": "风险最高的缺口",
@@ -36475,8 +36495,6 @@
         "configAll": "每个包都已配置覆盖率。",
         "configNowhere": "没有任何包配置了覆盖率。",
         "configOnly": "仅 {packages} 配置了覆盖率，其他位置未测量覆盖率。",
-        "applyV8": "应用：在 {count} 个包中启用 v8 覆盖率",
-        "applyV8Request": "在这 {count} 个包中设置 v8 覆盖率：{packages}。为每个包添加覆盖率配置和脚本，开启覆盖率运行测试并报告新的覆盖率。",
         "quadrant": "复杂 · 未测试",
         "namesMore": "{names} +{count}"
       },
@@ -36487,13 +36505,11 @@
         "antiRow": "反模式",
         "cellAria": "{family}，{layer}：{count}",
         "listTitle": "发现的模式",
-        "listRow": "{count} 个文件",
         "listHint": "启发式：根据名称、导出、导入和大小推断。",
         "antiTitle": "反模式",
         "antiNone": "未发现反模式。",
         "resolve": "解决",
-        "showInTower": "在塔视图中显示",
-        "lights": "{family} 点亮了 {count} 个站点"
+        "showInTower": "在塔视图中显示"
       },
       "api": {
         "notSetUpTitle": "未找到端点",
@@ -36519,7 +36535,6 @@
         "exportPostman": "导出 Postman 集合",
         "contractTests": "契约测试",
         "contractTestsText": "根据 OpenAPI 骨架为这些端点编写契约测试，运行并报告每项结果：{routes}。",
-        "groupAria": "{file}：{count} 个端点",
 
         "groupInContract": "已在契约中（{count}）",
 
@@ -36527,7 +36542,7 @@
 
         "selectEndpoint": "将 {route} 加入契约测试",
 
-        "selectedCount": "已为契约测试选择 {selected} / {total} 个端点",
+        "selectedCount": "已为契约测试选择 {selected} / {endpoints}",
 
         "selectAtLeastOne": "请至少选择一个端点以生成契约测试。",
 
@@ -36595,8 +36610,6 @@
         "empty": "在某个发现上选择“解决”，即可在此处处理。",
         "provenanceLabel": "来源",
         "checksTitle": "检查",
-        "checkFiles": "该发现涉及 {count} 个文件。",
-        "checkStations": "它涉及 {count} 个站点。",
         "checkReview": "请重新审查该文件夹，以确认该发现已消失。",
         "show": "显示"
       },
@@ -36670,7 +36683,6 @@
         "undoNoRecord": "此宿主没有保存这次修复的记录，因此无法撤销。",
         "permNote": "以你的身份在分支 fix/… 上运行。撤销会还原你原来所在的分支；检查通过且你合并之前，不会有任何内容进入主分支。",
         "previewTitle": "它会更改什么",
-        "previewFiles": "{count} 个文件",
         "previewFromFiles": "此宿主无法预览具体行；以下是该发现涉及的文件。",
         "promptTitle": "提示",
         "promptNote": "发送到唯一的输入框，并附上此发现和四项检查。",
@@ -36692,7 +36704,6 @@
           "agent": "已发送给代理"
         },
         "checkNoReport": "此检查没有给出结果，因此按错误计。",
-        "changedFiles": "已更改 {count} 个文件",
         "appliedOn": "已应用到分支 {branch}。",
         "branchError": "已就地应用：无法创建分支（{reason}）。",
         "branchUnknown": "修复分支",
@@ -36747,8 +36758,7 @@
         "label": "评审",
         "aria": "历史：选择一个提交，标出它修改的站点",
         "now": "现在",
-        "commitAria": "{title}，{at}",
-        "changed": "此提交修改了 {count} 个站点"
+        "commitAria": "{title}，{at}"
       },
       "header": {
         "statusLabel": "同步状态",
@@ -36759,10 +36769,7 @@
         "reviewing": "评审中 · {progress}",
         "reviewPlan": "评审计划已就绪",
         "reviewFailed": "评审失败",
-        "skippedPill": "{count} 个文件未存储",
-        "parityBoth": "{count} 个文件，本地与服务器一致",
         "parityDiffers": "本地 {local} 个 · 服务器 {server} 个",
-        "parityLocal": "本地 {local} 个文件 · 尚未上传到服务器",
         "moreActions": "更多操作",
         "reReview": "重新评审此文件夹",
         "overlaysNote": "任何指标都可以驱动任何通道。地图、系统、图、思维导图、塔、热力、列表和时序都读取同一组绑定，因此覆盖率条同样可以是反模式条。",

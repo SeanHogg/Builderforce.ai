@@ -1,53 +1,54 @@
 /**
- * The right rail, Act (330px, panel background, a border on the scene side): what a person can
- * act on for the current scope (a station, a line the person picked, or the whole graph).
+ * The right rail, Act (330px, panel background, a border on the scene side): what a person can act on
+ * for the current scope (a station, the drawn line, or the whole graph).
  *
- * Top to bottom: the scope; the station's stats as a compact two-column grid ("Not set up"
- * muted); up to three action cards (numbered pin on the heat ramp, title, detail, Apply only
- * where a deterministic fix exists and the host can apply it, Prompt, Show, and where the
- * finding came from: exact / analyzer / model); the Fix queue link; "Keep this run as a test"
- * for a selected path; the full findings list (grouped, lazy, multiselect Fix with agent); a
- * "Details" section (open by default, collapsible) holding the Insights and Lens panels (children); and the footer
- * "This path is done when…" with one checkable line per finding on the path.
+ * Top to bottom: the title ("At {scope} · N issues", or "On this path · N to act on" with a line drawn)
+ * with "Fix queue · N" at its right; the system-wide findings in one compact block; at most three
+ * action cards (pin, title, detail, Apply / Prompt / Show, and where the finding came from) or, when
+ * nothing is open, a check-mark card; "Keep this run as a test" for a path with a hop; a collapsed
+ * "Details" section holding the full findings list, Insights and the view panel (children); and the
+ * footer "This path is done when…" pinned at the bottom. The station's own stats live on its card.
  *
- * Apply goes through the Resolve drawer (`onResolve`), which is where the codemod runs. Nothing
- * here calls a model: Prompt and Keep-as-test put FIXED requests in the host's composer.
+ * Apply goes through the Resolve drawer (`onResolve`), which is where the codemod runs. Nothing here
+ * calls a model: Prompt and Keep-as-test put FIXED requests in the host's composer.
  */
 
-import { useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { useId, useMemo, useState, type ReactNode } from 'react';
+import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { FindingsPanel } from '../FindingsPanel';
-import { findingDetail, findingItems, findingRequest, findingTitle } from '../findingText';
 import { nodeIndex } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
-import { cssVar, type ThemeTone } from '../scene/themeColors';
-import { button, heading, MONO, muted } from '../styles';
+import { counted } from './plural';
+import { cssVar } from '../scene/themeColors';
 import type { FindingEvidence, SourceLocation } from '../types';
+import { actionCards } from './actModel';
+import { Cards, EmptyCard, smallButton, SystemWideBlock } from './ActCards';
+import { DoneWhen, hasHops, KeepTestCard } from './ActFooter';
 import { fixQueueCounts, fixQueueText } from './fix/fixModes';
-import { acceptanceChecks, actionCards, testRequestFor, type ActionCard, type FindingSource } from './actModel';
-import { frac, metricStatus, type MetricId } from './overlays';
 import type { PathModel } from './path';
+import { pinNumbers } from './pinNumbers';
 import { findingProvenance } from './scope';
-import type { Station } from './stations';
-import { Card, Chip, Pin, pillStyle, ProvenanceBadge } from './ui';
+import { systemWideFindings, type Station, type StationModel } from './stations';
+import { pillStyle, ProvenanceBadge } from './ui';
+import { TYPE } from './ui/type';
 
-const SOURCE_TONE: Record<FindingSource, ThemeTone> = { exact: 'agrees', analyzer: 'accent', model: 'cycle' };
-
-/** Where a card's finding comes from: exact / analyzer / model. */
-export function SourceChip({ source, labels }: { source: FindingSource; labels: KnowledgeGraphLabels }) {
-    const t = labels.surface.act;
-    return <Chip tone={SOURCE_TONE[source]} data-source={source}>{source === 'exact' ? t.sourceExact : source === 'analyzer' ? t.sourceAnalyzer : t.sourceModel}</Chip>;
-}
+export { SourceChip } from './ActCards';
 
 export interface ActPanelProps {
     graph: KnowledgeGraph;
-    /** The findings of the scope (already filtered). */
+    /** The findings of the scope: `graph.findings` scoped by the stations and, when a question is on, by what it lit. */
     findings: readonly Finding[];
+    /** The findings the Details list shows: the scope's findings narrowed to what the active LENS surfaces (default: all of `findings`). The cards, count and queue above never narrow. */
+    listedFindings?: readonly Finding[] | undefined;
+    /** The active lens's name: the Findings heading says it when the list is narrower than `findings`. */
+    lensName?: string | undefined;
     labels: KnowledgeGraphLabels;
-    /** The station the person is on, if any; its facts head the panel. */
+    /** The station the person is on, if any; the title names it. */
     station: Station | null;
-    /** Every station, to tell "not set up" from "this station has none". */
+    /** Every station (kept for the host's wiring; the rail reads the station model for system-wide findings). */
     stations: readonly Station[];
+    /** The station model's `systemWide` set: those findings are listed once at the top, not as cards. */
+    model?: Pick<StationModel, 'systemWide'> | undefined;
     /** The scope's name; null = the whole graph. */
     scopeName: string | null;
     /** A phone: the rail is a section under the scene, with Coverage · API · Fix queue as links. */
@@ -67,164 +68,95 @@ export interface ActPanelProps {
     resolved?: ReadonlySet<string> | undefined;
     /** Opens a drawer by PANELS id (`surface.openPanel`): the Fix queue link opens 'resolve'. */
     onOpenPanel?: ((id: string) => void) | undefined;
-    /** The selected line's or pinned path; with stops it offers Keep-as-test and the done-when footer. */
+    /** Asks the "What has no test?" question (the empty state's button). */
+    onAskUntested?: (() => void) | undefined;
+    /** The drawn line's or pinned path; with a hop it offers Keep-as-test and the done-when footer. */
     path?: PathModel | null | undefined;
     /** The path's name in the test request, e.g. "Web line · GET /users"; defaults to the stop names. */
     pathTitle?: string | null | undefined;
-    /** The Insights and Lens panels: held in the collapsed "Details" section. */
+    /** The Insights and view panels: held in the collapsed "Details" section. */
     children?: ReactNode;
-}
-
-const FACT_METRICS: readonly MetricId[] = ['cx', 'cov', 'churn', 'use', 'owner', 'anti'];
-
-function factValue(m: MetricId, st: Station, stations: readonly Station[], labels: KnowledgeGraphLabels): string {
-    const s = labels.surface;
-    if (metricStatus(m, stations) === 'not-set-up') return s.notSetUp;
-    if (m === 'owner') return st.owner ?? s.notSetUp;
-    if (m === 'cov') return st.cov === undefined ? s.notSetUp : `${Math.round(st.cov * 100)}%`;
-    if (m === 'use' || m === 'churn') { const f = frac(m, st); return f === undefined ? s.notSetUp : `${Math.round(f * 100)}%`; }
-    const level = m === 'anti' ? st.anti : st.cx;
-    return level === undefined ? s.notSetUp : fillTemplate(s.levelOf5, { level });
-}
-
-const small: CSSProperties = { ...button, minHeight: `calc(var(--kg-control, 40px) - 4px)`, minWidth: 0, padding: '0 10px', borderRadius: 999, fontSize: 12 };
-
-function Cards({ cards, p, index }: { cards: ActionCard[]; p: ActPanelProps; index: ReadonlyMap<string, KNode> }) {
-    const { labels } = p;
-    const t = labels.surface.act;
-    const act = (action: string, title: string) => fillTemplate(t.cardAction, { action, title });
-    return (
-        <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }} aria-label={t.cardsTitle}>
-            {cards.map(({ finding: f, level, source, canApply }, i) => {
-                const title = findingTitle(f, labels);
-                return (
-                    <Card as="li" key={f.id} style={{ display: 'grid', gap: 6 }}>
-                        <div data-card={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                            <Pin n={i + 1} level={level} />
-                            <strong style={{ flex: 1, minWidth: 0, fontSize: 13, overflowWrap: 'anywhere' }}>{title}</strong>
-                            <SourceChip source={source} labels={labels} />
-                        </div>
-                        <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere', fontFamily: MONO, fontSize: 12 }}>{findingDetail(f, labels, index) ?? findingItems(f, index)}</p>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {canApply && p.onResolve && (
-                                <button type="button" data-act="apply" aria-label={act(t.apply, title)} style={{ ...small, background: cssVar('accent'), color: cssVar('onAccent'), borderColor: cssVar('accent') }} onClick={() => p.onResolve?.(f)}>{t.apply}</button>
-                            )}
-                            {p.onCompose && (
-                                <button type="button" data-act="prompt" aria-label={act(t.prompt, title)} style={small} onClick={() => p.onCompose?.(findingRequest(f, labels, index))}>{t.prompt}</button>
-                            )}
-                            <button type="button" data-act="show" aria-label={act(t.show, title)} style={small} onClick={() => p.onShow([...f.nodes])}>{t.show}</button>
-                        </div>
-                    </Card>
-                );
-            })}
-        </ol>
-    );
 }
 
 export function ActPanel(p: ActPanelProps) {
     const { labels, station, path } = p;
     const s = labels.surface;
     const t = s.act;
-    // Open by default (insights everywhere); the person can collapse it.
-    const [details, setDetails] = useState(true);
+    // Collapsed by default: the cards say what to do; the full list, Insights and the view panel are one click away.
+    const [details, setDetails] = useState(false);
     const detailsId = useId();
     const index = useMemo(() => nodeIndex(p.graph), [p.graph]);
-    const cards = useMemo(() => actionCards(p.findings, p.canApply ?? false), [p.findings, p.canApply]);
-    const hasPath = !!path && path.stops.length > 0;
-    const done = useMemo(() => acceptanceChecks(p.findings, labels, index), [p.findings, labels, index]);
+    const pins = useMemo(() => pinNumbers(p.graph.findings), [p.graph.findings]);
+    const wide = useMemo(() => systemWideFindings(p.model ?? {}, p.findings), [p.model, p.findings]);
+    const local = useMemo(() => { const ids = new Set(wide.map((f) => f.id)); return p.findings.filter((f) => !ids.has(f.id)); }, [p.findings, wide]);
+    const cards = useMemo(() => actionCards(local, p.canApply ?? false), [local, p.canApply]);
+    const drawn = !!path && path.stops.length > 0;
+    const count = p.findings.length;
+    const title = station ? counted(labels, 'issueAt', count, { scope: station.name })
+        : drawn ? fillTemplate(t.titlePath, { count })
+            : counted(labels, 'issueAt', count, { scope: s.actScopeAll });
     const pathName = p.pathTitle || path?.stops.map((x) => x.name).join(' → ') || '';
-    const queue = fillTemplate(t.fixQueue, { count: p.findings.length });
+    const queue = fillTemplate(t.fixQueue, { count });
     const queueCounts = fixQueueText(fixQueueCounts(p.findings, p.graph.findings.length, p.resolved ?? new Set()), labels);
+    const emptyRefs = (): string[] => (station ? station.refs : p.stations.filter((x) => path?.stops.some((stop) => stop.id === x.id)).flatMap((x) => x.refs)).slice(0, 200);
+    const hasDetails = p.showFindings !== false || !!p.children;
 
     return (
         <aside
             aria-label={labels.findingsTitle}
             style={{
-                width: p.compact ? 'auto' : 330, flex: 'none', overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box',
+                width: p.compact ? 'auto' : 330, flex: 'none', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box',
                 background: cssVar('panel'), borderInlineStart: p.compact ? 'none' : `1px solid ${cssVar('border')}`,
                 ...(p.compact ? { borderTop: `1px solid ${cssVar('border')}` } : null),
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <h2 style={{ ...heading, flex: 1 }}>{s.actTitle}</h2>
-                <span style={muted}>{fillTemplate(s.actScope, { scope: p.scopeName ?? s.actScopeAll })}</span>
-                {p.scopeName !== null && <button type="button" style={small} onClick={p.onClearScope}>{s.actScopeAll}</button>}
-            </div>
-
-            {station && (
-                <section aria-label={s.stationFacts} data-testid="kg-station-facts" style={{ display: 'grid', gap: 8 }}>
-                    <h3 style={{ ...heading, fontFamily: MONO, fontSize: 13, overflowWrap: 'anywhere' }}>{station.name}</h3>
-                    <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                        {FACT_METRICS.map((m) => {
-                            const value = factValue(m, station, p.stations, labels);
-                            return (
-                                <div key={m} data-fact={m} style={{ display: 'grid', gap: 1, padding: '6px 8px', borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('bg'), minWidth: 0 }}>
-                                    <dt style={{ ...muted, fontSize: 11 }}>{s.metricNames[m]}</dt>
-                                    <dd style={{ margin: 0, fontFamily: MONO, fontSize: 12, overflowWrap: 'anywhere', color: value === s.notSetUp ? cssVar('muted') : cssVar('text') }}>{value}</dd>
-                                </div>
-                            );
-                        })}
-                    </dl>
-                    <div><button type="button" style={small} onClick={() => p.onShow(station.refs.slice(0, 200))}>{s.showFiles}</button></div>
-                </section>
-            )}
-
-            <section aria-label={t.cardsTitle} style={{ display: 'grid', gap: 8 }}>
-                <h3 style={heading}>{t.cardsTitle}</h3>
-                {cards.length === 0 ? <p style={{ ...muted, margin: 0 }}>{t.noCards}</p> : <Cards cards={cards} p={p} index={index} />}
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <h2 data-testid="kg-act-title" style={{ ...TYPE.sectionHeading, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{title}</h2>
+                    {p.onOpenPanel && (
+                        <button type="button" data-link="resolve" style={{ ...smallButton, ...pillStyle(false), fontWeight: 600 }} onClick={() => p.onOpenPanel?.('resolve')}>{queue}</button>
+                    )}
+                    {p.scopeName !== null && <button type="button" style={smallButton} onClick={p.onClearScope}>{s.actScopeAll}</button>}
+                </div>
                 {p.onOpenPanel && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {p.compact && <button type="button" data-link="coverage" style={small} onClick={() => p.onOpenPanel?.('coverage')}>{t.linkCoverage}</button>}
-                        {p.compact && <button type="button" data-link="api" style={small} onClick={() => p.onOpenPanel?.('api')}>{t.linkApi}</button>}
-                        <button type="button" data-link="resolve" style={{ ...small, ...pillStyle(false), fontWeight: 600 }} onClick={() => p.onOpenPanel?.('resolve')}>{queue}</button>
-                        <span data-testid="kg-act-queue" style={muted}>{queueCounts}</span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: -6 }}>
+                        {p.compact && <button type="button" data-link="coverage" style={smallButton} onClick={() => p.onOpenPanel?.('coverage')}>{t.linkCoverage}</button>}
+                        {p.compact && <button type="button" data-link="api" style={smallButton} onClick={() => p.onOpenPanel?.('api')}>{t.linkApi}</button>}
+                        <span data-testid="kg-act-queue" style={TYPE.meta}>{queueCounts}</span>
                     </div>
                 )}
-            </section>
 
-            {hasPath && p.onCompose && (
-                <Card as="section" label={t.keepTitle} style={{ display: 'grid', gap: 6 }}>
-                    <strong style={{ fontSize: 13 }}>{t.keepTitle}</strong>
-                    <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{fillTemplate(t.keepBody, { path: pathName })}</p>
-                    <div><button type="button" data-act="keep-test" style={small} onClick={() => p.onCompose?.(testRequestFor(path!, pathName, p.findings, labels, index))}>{t.keepButton}</button></div>
-                </Card>
-            )}
+                {wide.length > 0 && <SystemWideBlock findings={wide} labels={labels} onShow={p.onShow} />}
 
-            {p.showFindings !== false && (
-                <FindingsPanel
-                    graph={p.graph} findings={p.findings} labels={labels} onShow={p.onShow} onCompose={p.onCompose} evidence={p.evidence}
-                    onOpenSource={p.onOpenSource} onResolve={p.onResolve} badge={(f) => <ProvenanceBadge provenance={findingProvenance(f)} labels={labels} />}
-                />
-            )}
+                {count === 0
+                    ? <EmptyCard labels={labels} atStation={!!station} onAsk={() => p.onAskUntested?.()} onShow={() => p.onShow(emptyRefs())} />
+                    : cards.length > 0 && <Cards cards={cards} labels={labels} index={index} pins={pins} onShow={p.onShow} onCompose={p.onCompose} onResolve={p.onResolve} />}
 
-            {p.children && (
-                <section aria-label={t.detailsTitle} style={{ display: 'grid', gap: 8 }}>
-                    <button
-                        type="button" aria-expanded={details} aria-controls={detailsId} data-testid="kg-act-details-toggle"
-                        style={{ ...small, width: '100%', justifyContent: 'space-between', display: 'flex', alignItems: 'center', fontWeight: 700 }} onClick={() => setDetails((v) => !v)}
-                    >
-                        <span>{t.detailsTitle}</span><span aria-hidden="true">{details ? '▾' : '▸'}</span>
-                    </button>
-                    <div id={detailsId} hidden={!details} style={{ display: details ? 'grid' : 'none', gap: 12 }}>{p.children}</div>
-                </section>
-            )}
+                {hasHops(path) && p.onCompose && <KeepTestCard path={path} pathName={pathName} findings={p.findings} labels={labels} index={index} onCompose={p.onCompose} />}
 
-            {hasPath && (
-                <footer data-testid="kg-done-when" style={{ marginTop: 'auto', paddingTop: 10, borderTop: `1px solid ${cssVar('border')}`, display: 'grid', gap: 6 }}>
-                    <h3 style={{ ...heading, fontSize: 13 }}>{t.doneTitle}</h3>
-                    {done.checks.length === 0 ? <p style={{ ...muted, margin: 0 }}>{t.doneNone}</p> : (
-                        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 4 }}>
-                            {done.checks.map((c) => (
-                                <li key={c} style={{ display: 'flex', gap: 6, fontSize: 12, alignItems: 'flex-start' }}>
-                                    <span aria-hidden="true" style={{ flex: 'none', width: 12, height: 12, marginTop: 2, borderRadius: 3, border: `1.5px solid ${cssVar('edge')}` }} />
-                                    <span style={{ overflowWrap: 'anywhere' }}>{c}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                    {done.more > 0 && <p style={{ ...muted, margin: 0 }}>{fillTemplate(t.doneMore, { count: done.more })}</p>}
-                </footer>
-            )}
+                {hasDetails && (
+                    <section aria-label={t.detailsTitle} style={{ display: 'grid', gap: 8 }}>
+                        <button
+                            type="button" aria-expanded={details} aria-controls={detailsId} data-testid="kg-act-details-toggle"
+                            style={{ ...smallButton, width: '100%', justifyContent: 'space-between', display: 'flex', alignItems: 'center', fontWeight: 700 }} onClick={() => setDetails((v) => !v)}
+                        >
+                            <span>{t.detailsTitle}</span><span aria-hidden="true">{details ? '▾' : '▸'}</span>
+                        </button>
+                        <div id={detailsId} hidden={!details} style={{ display: details ? 'grid' : 'none', gap: 12 }}>
+                            {p.showFindings !== false && (
+                                <FindingsPanel
+                                    graph={p.graph} findings={p.listedFindings ?? p.findings} total={p.findings.length} lensName={p.lensName} labels={labels} onShow={p.onShow} onCompose={p.onCompose} evidence={p.evidence}
+                                    scope={station?.name ?? (drawn ? pathName : undefined)}
+                                    onOpenSource={p.onOpenSource} onResolve={p.onResolve} badge={(f) => <ProvenanceBadge provenance={findingProvenance(f)} labels={labels} />}
+                                />
+                            )}
+                            {p.children}
+                        </div>
+                    </section>
+                )}
+            </div>
+
+            {hasHops(path) && <DoneWhen findings={p.findings} labels={labels} index={index} />}
         </aside>
     );
 }

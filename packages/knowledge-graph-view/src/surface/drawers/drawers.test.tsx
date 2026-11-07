@@ -152,7 +152,7 @@ describe('PatternsPanel', () => {
         fireEvent.click(document.querySelector('[data-family="repository"]')!);
         expect(seen.surface!.question).toBe('patterns');
         expect(props.onShow).toHaveBeenCalledWith(['src:sys::api/useCase.ts']);
-        expect(screen.getByTestId('kg-patterns-lit').textContent).toBe(fillTemplate(L.surface.patterns.lights, { family: 'repository', count: 1 }));
+        expect(screen.getByTestId('kg-patterns-lit').textContent).toBe('repository lights 1 station');
     });
 
     it('lists the anti-patterns with Resolve (opens the drawer) and Show in Tower (only with a Tower)', () => {

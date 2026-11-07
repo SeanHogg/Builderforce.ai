@@ -7,6 +7,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { LENSES } from '../lenses';
 import { surfaceFixture } from '../testing';
 import { HeatGrid } from './HeatGrid';
+import { counted } from './plural';
 import type { SceneProps } from './registry';
 import { SequenceDiagram } from './SequenceDiagram';
 import { SystemTiers } from './SystemTiers';
@@ -33,7 +34,7 @@ describe('SystemTiers', () => {
     it('draws a row per layer with a card per component, the finding bar by kind and the data row', () => {
         mount(SystemTiers, 'system');
         expect([...document.querySelectorAll('[data-tier]')].map((t) => t.getAttribute('data-tier'))).toEqual(['entry', 'presentation', 'infrastructure', 'data']);
-        const repo = screen.getByRole('button', { name: fillTemplate(L.surface.system.componentAria, { name: 'repositories', files: 1, findings: 1 }) });
+        const repo = screen.getByRole('button', { name: fillTemplate(L.surface.system.componentAria, { name: 'repositories', files: counted(L, 'file', 1), findings: counted(L, 'finding', 1) }) });
         expect(repo.querySelector('[data-kind="clone-group"]')).toBeTruthy();
         expect(document.querySelector('[data-terminus="data"]')!.textContent).toContain('repositories');
     });

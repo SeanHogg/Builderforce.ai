@@ -7,6 +7,7 @@
 
 import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { camelKind, fillTemplate, type KnowledgeGraphLabels } from './labels';
+import { counted } from './surface/plural';
 import { labelFor } from './graphModel';
 
 /** Node labels named in a request, at most. */
@@ -37,7 +38,7 @@ export function findingRequest(f: Finding, labels: KnowledgeGraphLabels, index: 
  * Never a model call.
  */
 export function findingBatchRequest(findings: readonly Finding[], labels: KnowledgeGraphLabels, index: ReadonlyMap<string, KNode>): string {
-    const intro = fillTemplate(labels.fixBatch, { count: findings.length });
+    const intro = counted(labels, 'fixBatch', findings.length);
     const lines = findings.map((f) => `- ${findingRequest(f, labels, index)}`);
     return [intro, ...lines].join('\n');
 }

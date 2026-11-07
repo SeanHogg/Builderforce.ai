@@ -5,6 +5,7 @@
  */
 
 import { fillTemplate, camelKind, type KnowledgeGraphLabels } from './labels';
+import { counted } from './surface/plural';
 import { formatBytes } from './formatBytes';
 import { muted } from './styles';
 import type { SkippedFile } from './types';
@@ -31,7 +32,7 @@ export function SkippedUploads({ items, labels }: { items: readonly SkippedFile[
     if (items.length === 0) return null;
     return (
         <details data-testid="kg-skipped-uploads" style={muted}>
-            <summary style={{ cursor: 'pointer', minHeight: 32 }}>{fillTemplate(labels.surface.skippedUploads, { count: items.length })}</summary>
+            <summary style={{ cursor: 'pointer', minHeight: 32 }}>{counted(labels, 'fileSkipped', items.length)}</summary>
             <SkippedItems items={items} labels={labels} testId="kg-skipped-uploads-list" />
         </details>
     );

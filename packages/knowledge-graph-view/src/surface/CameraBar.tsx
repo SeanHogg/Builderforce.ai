@@ -12,6 +12,7 @@ import { CONTROL } from '../styles';
 import type { ViewMode } from '../types';
 import type { CameraDef } from './registry';
 import { Segmented } from './ui';
+import { TYPE } from './ui/type';
 import type { ZoomApi } from './zoom';
 
 export interface CameraBarProps {
@@ -24,12 +25,10 @@ export interface CameraBarProps {
     onOut?: (() => void) | undefined;
     /** The active camera's zoom; null/absent ⇒ +, − and Fit are disabled. */
     zoom?: ZoomApi | null | undefined;
-    /** The View group scrolls sideways instead of wrapping (a phone). */
-    scroll?: boolean | undefined;
 }
 
 const zoomButton: CSSProperties = {
-    height: CONTROL, minWidth: CONTROL, padding: '0 10px', borderRadius: 8, cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 600,
+    height: CONTROL, minWidth: CONTROL, padding: '0 10px', borderRadius: 8, cursor: 'pointer', font: 'inherit', ...TYPE.pill,
     border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), pointerEvents: 'auto',
 };
 
@@ -45,11 +44,13 @@ function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: Zoo
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, scroll = false }: CameraBarProps) {
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom }: CameraBarProps) {
+    // One line, never wrapped: the scene sits below a MEASURED controls block (`SceneOverlay`), so a bar that wrapped
+    // would only grow it. The View group is what scrolls sideways when the row is too narrow.
     return (
         <div style={{ display: 'grid', gap: 6, padding: '8px 12px', pointerEvents: 'none' }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: scroll ? 'nowrap' : 'wrap' }}>
-                <div style={{ minWidth: 0, maxWidth: '100%', pointerEvents: 'auto', ...(scroll ? { overflowX: 'auto' } : null) }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                <div style={{ minWidth: 0, maxWidth: '100%', pointerEvents: 'auto', overflowX: 'auto' }}>
                     <Segmented
                         label={labels.viewModesLabel}
                         value={mode}

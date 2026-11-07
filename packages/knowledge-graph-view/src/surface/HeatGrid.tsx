@@ -7,8 +7,10 @@
 
 import { useMemo, useState } from 'react';
 import { fillTemplate } from '../labels';
+import { counted } from './plural';
 import { cssVar } from '../scene/themeColors';
-import { muted, heading } from '../styles';
+import { muted } from '../styles';
+import { TYPE } from './ui/type';
 import { Bar } from './drawers/ui';
 import type { SceneProps } from './registry';
 import { NEUTRAL_SIZE } from './overlays';
@@ -40,11 +42,11 @@ export function HeatGrid({ labels, surface }: SceneProps) {
 
     return (
         <div data-testid="kg-heat" role="group" aria-label={labels.regionLabel} style={{ display: 'grid', gap: 12, padding: 12 }}>
-            <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.heat.description, { layers: allTiers.length, components: stations.stations.length })}</p>
+            <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.heat.description, { layers: counted(labels, 'layer', allTiers.length), components: counted(labels, 'component', stations.stations.length) })}</p>
             <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.heat.legend, { size: s.metricNames[b.size], colour: s.metricNames[b.colour], bar: s.metricNames[b.ring] })}</p>
             {tiers.map((tier) => (
                 <section key={tier.layer} aria-label={layerName(tier.layer)} data-tier={tier.layer} style={{ display: 'grid', gap: 6 }}>
-                    <h3 style={{ ...heading, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: cssVar('muted') }}>{layerName(tier.layer)}</h3>
+                    <h3 style={TYPE.sectionHeading}>{layerName(tier.layer)}</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'stretch' }}>
                         {tier.stations.map((st) => {
                             const style = overlay.style(st);
@@ -53,16 +55,16 @@ export function HeatGrid({ labels, surface }: SceneProps) {
                             return (
                                 <button
                                     key={st.id} type="button" data-cell={st.id} aria-pressed={selected}
-                                    aria-label={fillTemplate(s.heat.cellAria, { name: st.name, files: st.files })}
+                                    aria-label={fillTemplate(s.heat.cellAria, { name: st.name, files: counted(labels, 'file', st.files) })}
                                     onClick={() => surface.selectStation(st.id)}
                                     style={{
                                         width: cellWidth(style.size), minHeight: 56, padding: 6, display: 'grid', gap: 4, alignContent: 'space-between', textAlign: 'start',
-                                        font: 'inherit', fontSize: 11, cursor: 'pointer', borderRadius: 8, color: cssVar('text'), opacity: dim ? 0.35 : 1,
+                                        font: 'inherit', ...TYPE.meta, color: cssVar('text'), cursor: 'pointer', borderRadius: 8, opacity: dim ? 0.35 : 1,
                                         border: `2px solid ${selected ? cssVar('accent') : cssVar('border')}`,
                                         background: `color-mix(in srgb, ${cssVar(style.tone)} 45%, ${cssVar('bg')})`,
                                     }}
                                 >
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{st.name}</span>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...TYPE.monoName }}>{st.name}</span>
                                     {style.ring && <Bar frac={style.ring.frac} tone={style.ring.tone} label={s.metricNames[b.ring]} height={4} />}
                                 </button>
                             );
@@ -71,7 +73,7 @@ export function HeatGrid({ labels, surface }: SceneProps) {
                 </section>
             ))}
             {hidden > 0 && (
-                <button type="button" data-heat-more onClick={() => setLimit((n) => n + HEAT_CELL_CAP)} style={{ ...muted, justifySelf: 'start', font: 'inherit', fontSize: 12, cursor: 'pointer', background: 'transparent', border: `1px solid ${cssVar('border')}`, borderRadius: 8, padding: '6px 10px' }}>
+                <button type="button" data-heat-more onClick={() => setLimit((n) => n + HEAT_CELL_CAP)} style={{ ...muted, justifySelf: 'start', font: 'inherit', ...TYPE.bodyMuted, cursor: 'pointer', background: 'transparent', border: `1px solid ${cssVar('border')}`, borderRadius: 8, padding: '6px 10px' }}>
                     {fillTemplate(s.heat.showMore, { count: hidden })}
                 </button>
             )}

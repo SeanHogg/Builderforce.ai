@@ -27,7 +27,7 @@ export function StepControls({ at, last, labels, onStep }: StepControlsProps) {
     const s = labels.surface;
     return (
         <>
-            <Action onClick={() => onStep(0)}>{s.path.reset}</Action>
+            <Action disabled={last <= 0} onClick={() => onStep(0)}>{s.path.reset}</Action>
             <Action disabled={at <= 0} aria-label={s.pathBack} title={s.pathBack} onClick={() => onStep(at - 1)}><span aria-hidden="true">◀ </span>{s.path.step}</Action>
             <Action disabled={at >= last} aria-label={s.pathNext} title={s.pathNext} onClick={() => onStep(at + 1)}>{s.path.step}<span aria-hidden="true"> ▶</span></Action>
             <Action disabled={at >= last} onClick={() => onStep(last)}>{s.path.runToEnd}</Action>

@@ -2,13 +2,13 @@
  * The N-tier reading of the stations: one row per layer (entry to infrastructure, then
  * "other"), the stations of a row busiest first. The System camera draws the rows as cards,
  * the Heat camera as cells; both read this one grouping. Also the two small readings a card
- * carries: its findings by kind, and the data / external termini the lines end in.
+ * carries: its findings by kind. (The data / external termini come from `transit/termini`, the
+ * model the transit map draws, so the two cameras cannot disagree.)
  */
 
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
 import { LAYER_ORDER } from './layers';
-import type { Line } from './lines';
 import type { Station } from './stations';
 import { OTHER_LAYER } from './transitLayout';
 
@@ -35,19 +35,4 @@ export function findingKinds(station: Pick<Station, 'findingIds'>, findings: Rea
         if (f) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
     }
     return [...counts].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count || cmp(a.kind, b.kind));
-}
-
-export interface Terminus { stationId: string; kind: 'data' | 'external' }
-
-/** The stations the lines end in when they end in a store or an external service, each once. */
-export function termini(lines: readonly Line[]): Terminus[] {
-    const seen = new Set<string>();
-    const out: Terminus[] = [];
-    for (const line of lines) {
-        const t = line.terminus;
-        if (t.kind === 'end' || seen.has(t.stationId)) continue;
-        seen.add(t.stationId);
-        out.push({ stationId: t.stationId, kind: t.kind });
-    }
-    return out;
 }

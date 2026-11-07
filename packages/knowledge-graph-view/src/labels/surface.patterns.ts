@@ -3,8 +3,8 @@
 export interface PatternsLabels {
     /** `{family}`, `{layer}`, `{count}`. */
     patterns: Record<
-        'notSetUpTitle' | 'notSetUpBody' | 'matrixTitle' | 'antiRow' | 'cellAria' | 'listTitle' | 'listRow' | 'listHint' | 'antiTitle' | 'antiNone'
-        | 'resolve' | 'showInTower' | 'lights',
+        'notSetUpTitle' | 'notSetUpBody' | 'matrixTitle' | 'antiRow' | 'cellAria' | 'listTitle' | 'listHint' | 'antiTitle' | 'antiNone'
+        | 'resolve' | 'showInTower',
         string
     >;
 }
@@ -17,12 +17,10 @@ export const PATTERNS_DEFAULTS: PatternsLabels = {
         antiRow: 'Anti-pattern',
         cellAria: '{family}, {layer}: {count}',
         listTitle: 'Patterns found',
-        listRow: '{count} files',
         listHint: 'Heuristic: read from names, exports, imports and size.',
         antiTitle: 'Anti-patterns',
         antiNone: 'No anti-patterns were found.',
         resolve: 'Resolve',
         showInTower: 'Show in Tower',
-        lights: '{family} lights {count} stations',
     },
 };

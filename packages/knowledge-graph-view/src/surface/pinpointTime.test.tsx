@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
+import { counted } from './plural';
 import { surfaceFixture } from '../testing';
 import type { Commit, KnowledgeGraphSource, PinpointResult } from '../types';
 import { PinpointInput } from './PinpointInput';
@@ -172,7 +173,7 @@ describe('TimeSlider', () => {
         fireEvent.click(screen.getByRole('button', { name: fillTemplate(L.surface.time.commitAria, { title: 'first', at: '2026-01-01' }) }));
         expect(onPick).toHaveBeenLastCalledWith('a1');
         rerender(<TimeSlider commits={commits} picked="a1" labels={L} onPick={onPick} changedStations={1} />);
-        expect(screen.getByRole('status').textContent).toBe(fillTemplate(L.surface.time.changed, { count: 1 }));
+        expect(screen.getByRole('status').textContent).toBe(counted(L, 'stationChanged', 1));
         fireEvent.keyDown(screen.getByTestId('kg-time'), { key: 'ArrowRight' });
         expect(onPick).toHaveBeenLastCalledWith('b2');
         fireEvent.click(screen.getByRole('button', { name: L.surface.time.now }));
@@ -191,7 +192,7 @@ describe('TimeSlider', () => {
 
     it('says out loud when only the latest commits are drawn', () => {
         render(<TimeSlider commits={commits} capped={commits.length + 60} picked={null} labels={L} onPick={vi.fn()} changedStations={0} />);
-        expect(screen.getByTestId('kg-time-capped').textContent).toBe(fillTemplate(L.surface.historyCapped, { count: commits.length }));
+        expect(screen.getByTestId('kg-time-capped').textContent).toBe(counted(L, 'commitsCapped', commits.length));
         expect(screen.queryByTestId('kg-time-capped')).not.toBeNull();
     });
 });

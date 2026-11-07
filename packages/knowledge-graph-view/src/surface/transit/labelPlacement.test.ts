@@ -41,6 +41,16 @@ describe('placeLabels', () => {
         expect(placed.size).toBe(400);
     });
 
+    it('keeps every label off a mark that is bigger than a circle (a tower body)', () => {
+        const tower = { x: 188, y: 40, w: 24, h: 107 };
+        const circle = placeLabels([item('n', 200, 20), item('tall', 200, 100)], { width: 600 }).get('n')!;
+        expect(circle.side).toBe('bottom');
+        const placed = placeLabels([item('n', 200, 20), item('tall', 200, 100, { mark: tower })], { width: 600 }).get('n')!;
+        expect(placed.side).not.toBe('bottom');
+        const b = placed.box;
+        expect(b.x < tower.x + tower.w && tower.x < b.x + b.w && b.y < tower.y + tower.h && tower.y < b.y + b.h).toBe(false);
+    });
+
     it('does not centre-truncate a name at 16 characters, only past the cap', () => {
         const mid = placeLabels([item('s', 300, 100, { name: 'projectKnowledgeRoutes' })], { width: 600 }).get('s')!;
         expect(mid.text).toBe('projectKnowledgeRoutes');

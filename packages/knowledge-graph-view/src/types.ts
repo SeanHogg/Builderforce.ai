@@ -37,10 +37,12 @@ export type LensId =
     | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
 
 /**
- * How the graph is drawn: the transit map, the 2D graph, the 3D tower (WebGL only), the folder
- * mind map, or the accessible list. A new camera is a value here plus a row in `surface/cameras.tsx`.
+ * How the graph is drawn: the transit map, the 2.5D SVG tower (`tower`, the same map with towers
+ * and pipes), the 2D graph, the WebGL 3D view (`3d`, the id the old tower had, so a stored or
+ * deep-linked `3d` still opens the WebGL view), the folder mind map, or the accessible list. A new
+ * camera is a value here plus a row in `surface/cameras.tsx`.
  */
-export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | 'sequence' | 'list';
+export type ViewMode = 'transit' | 'system' | 'graph' | 'tower' | '3d' | 'map' | 'heat' | 'sequence' | 'list';
 
 /** What a screenshot pinpointed: the AI read the image, the host matched the strings deterministically. */
 export type PinpointResult = {

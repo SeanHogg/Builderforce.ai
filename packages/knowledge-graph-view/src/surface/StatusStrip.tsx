@@ -16,10 +16,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { MONO, muted } from '../styles';
+import { muted } from '../styles';
 import type { ReviewState } from '../useReviewRun';
 import type { SyncPill } from './syncPill';
 import { StatusDot } from './ui';
+import { TYPE } from './ui/type';
 
 export interface StatusStripProps {
     labels: KnowledgeGraphLabels;
@@ -91,7 +92,7 @@ export function StatusStrip({ labels, narrow, pill, parity, reviewStatus, review
                         state={pill.state} label={pill.text} stateLabel={states[pill.state]}
                         {...(onPill ? { onClick: onPill } : {})} {...(hasCard ? { expanded: cardOpen, controls: cardId } : {})}
                     />
-                    {!narrow && parity && <span data-testid="kg-parity" style={{ fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{parity}</span>}
+                    {!narrow && parity && <span data-testid="kg-parity" style={{ ...TYPE.monoValue, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{parity}</span>}
                     {!narrow && time}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>

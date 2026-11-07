@@ -6,7 +6,8 @@
 
 import type { KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
-import { card, MONO } from '../../styles';
+import { card } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { TryRequest, TryResponse } from '../../types';
 import { ApiEndpointDetail } from './ApiEndpointDetail';
 import { ApiSandbox } from './ApiSandbox';
@@ -31,7 +32,7 @@ export function ApiEndpointCard({ endpoint: e, labels, referrers, tryRequest, on
         <section data-testid="kg-api-card" aria-label={`${e.method} ${e.path}`} style={{ ...card, display: 'grid', gap: 12, borderColor: cssVar('accent') }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <MethodBadge method={e.method} />
-                <code style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, overflowWrap: 'anywhere' }}>{e.path}</code>
+                <code style={{ ...TYPE.monoTitle, overflowWrap: 'anywhere' }}>{e.path}</code>
             </div>
             <div style={kpiGrid}>
                 <Kpi label={t.kpiParams} value={detail.params.length} />

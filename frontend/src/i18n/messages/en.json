@@ -35880,7 +35880,6 @@
       "edge": "Reference"
     },
     "statsLine": "{nodes} nodes · {edges} edges · {sources} sources",
-    "focusedNote": "Showing the top {count} nodes.",
     "filesLoaded": "{loaded} of {total} loaded",
     "showAll": "Show all",
     "view3d": "3D",
@@ -35901,7 +35900,6 @@
     "viewModesLabel": "View",
     "graphHint": "Scroll or pinch to zoom, drag to pan, select a node for its details.",
     "nodeAria": "{label}, {kind}",
-    "mapBranch": "{name}, {count} files",
     "mapMore": "+{count} more",
     "zoomLabel": "Zoom",
     "zoomIn": "Zoom in",
@@ -35954,6 +35952,7 @@
       "docs": "Documents"
     },
     "findingsTitle": "Findings",
+    "findingsNarrowed": "Findings · {lens} lens ({shown} of {total})",
     "findingsEmpty": "No open findings at {scope}.",
     "findingKinds": {
       "cycle": "Cycle",
@@ -35985,9 +35984,7 @@
     "clearSelection": "Clear",
     "fixSelected": "Fix {count} with agent",
     "selectedCount": "{count} selected",
-    "fixBatch": "Resolve these {count} findings together, in one change:",
     "groupFindingsBy": "kind",
-    "findingsCollapsed": "{count} findings — expand to load",
     "copyDiagnostics": "Copy diagnostics",
     "fix": {
       "cloneGroup": "Consolidate the duplicated code[[ in clone group {group}]]: {items}. Extract one shared implementation and point every copy at it.",
@@ -36063,9 +36060,7 @@
     "compareIncomparable": "Before and after were measured differently, so a missing finding is not counted as resolved.",
     "revisionLabel": "Revision",
     "reviewPlanTitle": "Review {title}?",
-    "reviewPlanByPack": "{pack}: {count} files",
     "reviewPlanUnchanged": "{count} unchanged since the last review",
-    "reviewPlanModelCalls": "≈ {count} model calls",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "Cost is shown after routing.",
     "reviewPlanCostLocal": "Runs on your local model — no cost.",
@@ -36078,7 +36073,6 @@
     "reviewCancelled": "Review cancelled. Nothing was written.",
     "reviewDoneTitle": "Review finished",
     "reviewDoneBody": "{extracted} files read · {judged} sections judged · {facts} facts written",
-    "reviewUnjudged": "{count} sections were left for later by the budget.",
     "reviewContinue": "Continue",
     "reviewAborted": "Review stopped. What was written stays.",
     "reviewFailed": "The review failed. Nothing more was written.",
@@ -36144,7 +36138,6 @@
         "layers": "How is it layered?",
         "knowledge": "What do we know about it?"
       },
-      "answerCount": "{count} stations",
       "answerNone": "No station matches.",
       "answerNotSetUp": "Not set up: this needs data that has not been collected.",
       "notes": {
@@ -36162,21 +36155,17 @@
       "lineName": "{name} line",
       "stationsOn": "Stations on {name}",
       "stationsPick": "Pick a line to list its stations.",
-      "omittedLines": "{count} more entry points are not drawn as lines.",
-      "stationMeta": "{files} files · {layer}",
+      "stationMeta": "{files} · {layer}",
       "legendTitle": "On the map",
       "legendRow": "{channel}: {metric}",
-      "interchange": "Interchange: {count} lines",
       "terminus": {
         "data": "Data store",
         "external": "External service",
         "end": "Ends here"
       },
       "untestedSegment": "Dashed: no test covers it",
-      "mapDescription": "{lines} lines across {stations} stations. Select a station for its details.",
-      "stationAria": "{name}, {layer}, {files} files",
-      "pinAria": "{count} findings at {name}",
-      "moreStations": "+{count} more stations are not drawn.",
+      "mapDescription": "{lines} across {stations}. Select a station for its details.",
+      "stationAria": "{name}, {layer}, {files}",
       "layers": {
         "entry": "Entry points",
         "presentation": "Presentation",
@@ -36198,18 +36187,16 @@
         "heuristic": "Heuristic",
         "runtime": "Runtime"
       },
-      "resolveFinding": "Resolve", "resolveFindingAria": "Resolve: {title}", "pipesCapped": "Showing only the first {count} pipes.", "kindsLegend": "Finding kinds", "noDirectReference": "no direct reference", "testsCapped": "The request names only the first {count} endpoints.", "imageTooLarge": "That image is larger than {size} MB.", "historyCapped": "Showing only the latest {count} commits.", "skippedUploads": "{count} files were not stored.", "skipReasons": {"tooLarge": "Too large to store", "unreadable": "Could not be read", "rateLimited": "Server was busy", "unsupported": "Not a supported file", "other": "Other reason"},
+      "resolveFinding": "Resolve", "resolveFindingAria": "Resolve: {title}", "kindsLegend": "Finding kinds", "noDirectReference": "no direct reference", "imageTooLarge": "That image is larger than {size} MB.", "skipReasons": {"tooLarge": "Too large to store", "unreadable": "Could not be read", "rateLimited": "Server was busy", "unsupported": "Not a supported file", "other": "Other reason"},
       "system": {
-        "componentAria": "{name}, {files} files, {findings} findings",
+        "componentAria": "{name}, {files}, {findings}",
         "antiBar": "Findings by kind",
         "data": "Data and external services",
         "dataEmpty": "No data store or external service ends a line.",
         "empty": "There are no components to draw.",
         "metaOwner": "{files} · {owner}",
         "more": "+{count} more",
-        "moreAria": "Show {count} more in {layer} in the list",
-        "notLayeredOne": "Not layered · {count} part → List",
-        "notLayeredOther": "Not layered · {count} parts → List"
+        "moreAria": "Show {count} more in {layer} in the list"
       },
       "systemArrows": {
         "entry": "calls over HTTP or a bridge ↓",
@@ -36221,32 +36208,76 @@
       "counts": {
         "fileOne": "{count} file", "fileOther": "{count} files",
         "stationOne": "{count} station", "stationOther": "{count} stations",
-        "deadEndOne": "{count} dead end", "deadEndOther": "{count} dead ends"
+        "deadEndOne": "{count} dead end", "deadEndOther": "{count} dead ends",
+        "findingOne": "{count} finding", "findingOther": "{count} findings",
+        "lineOne": "{count} line", "lineOther": "{count} lines",
+        "layerOne": "{count} layer", "layerOther": "{count} layers",
+        "componentOne": "{count} component", "componentOther": "{count} components",
+        "stopOne": "{count} stop", "stopOther": "{count} stops",
+        "messageOne": "{count} message", "messageOther": "{count} messages",
+        "endpointOne": "{count} endpoint", "endpointOther": "{count} endpoints",
+        "stationChangedOne": "{count} station changed in this commit", "stationChangedOther": "{count} stations changed in this commit",
+        "fileMissingOne": "{count} file is missing on the server.", "fileMissingOther": "{count} files are missing on the server.",
+        "fileTooLargeOne": "{count} file was too large to store.", "fileTooLargeOther": "{count} files were too large to store.",
+        "fileNotStoredOne": "{count} file not stored", "fileNotStoredOther": "{count} files not stored",
+        "fileBothOne": "{count} file here and on the server", "fileBothOther": "{count} files here and on the server",
+        "fileChangedOne": "{count} file changed", "fileChangedOther": "{count} files changed",
+        "fileSkippedOne": "{count} file was not stored.", "fileSkippedOther": "{count} files were not stored.",
+        "familyLightsOne": "{family} lights {count} station", "familyLightsOther": "{family} lights {count} stations",
+        "checkFileOne": "The finding names {count} file.", "checkFileOther": "The finding names {count} files.",
+        "checkStationOne": "It touches {count} station.", "checkStationOther": "It touches {count} stations.",
+        "issueAtOne": "At {scope} · {count} issue", "issueAtOther": "At {scope} · {count} issues",
+        "notLayeredOne": "Not layered · {count} part → List", "notLayeredOther": "Not layered · {count} parts → List",
+        "branchFilesOne": "{name}, {count} file", "branchFilesOther": "{name}, {count} files",
+        "packFilesOne": "{pack}: {count} file", "packFilesOther": "{pack}: {count} files",
+        "sectionUnjudgedOne": "{count} section was left for later by the budget.", "sectionUnjudgedOther": "{count} sections were left for later by the budget.",
+        "fixBatchOne": "Resolve this finding in one change:", "fixBatchOther": "Resolve these {count} findings together, in one change:",
+        "findingCollapsedOne": "{count} finding — expand to load", "findingCollapsedOther": "{count} findings — expand to load",
+        "topNodesOne": "Showing the top {count} node.", "topNodesOther": "Showing the top {count} nodes.",
+        "modelCallsOne": "≈ {count} model call", "modelCallsOther": "≈ {count} model calls",
+        "endpointsCappedOne": "The request names only the first {count} endpoint.", "endpointsCappedOther": "The request names only the first {count} endpoints.",
+        "commitsCappedOne": "Showing only the latest {count} commit.", "commitsCappedOther": "Showing only the latest {count} commits.",
+        "moreChecksOne": "+{count} more check", "moreChecksOther": "+{count} more checks",
+        "fileEndpointsOne": "{file}: {count} endpoint", "fileEndpointsOther": "{file}: {count} endpoints",
+        "filesPlottedOne": "{count} file plotted. Complexity runs left to right and coverage bottom to top.", "filesPlottedOther": "{count} files plotted. Complexity runs left to right and coverage bottom to top.",
+        "applyV8One": "Apply: v8 coverage in {count} package", "applyV8Other": "Apply: v8 coverage in {count} packages",
+        "applyV8RequestOne": "Set up v8 coverage in this {count} package: {packages}. Add the coverage config and a script to it, run the tests with coverage on and report the new coverage.",
+        "applyV8RequestOther": "Set up v8 coverage in these {count} packages: {packages}. Add the coverage config and a script to each, run the tests with coverage on and report the new coverage.",
+        "entryPointsOmittedOne": "{count} more entry point is not drawn as a line.", "entryPointsOmittedOther": "{count} more entry points are not drawn as lines.",
+        "interchangeOne": "Interchange: {count} line", "interchangeOther": "Interchange: {count} lines",
+        "entryPointOne": "{count} entry point", "entryPointOther": "{count} entry points",
+        "fileServerOnlyOne": "{server} file on the server · not reviewed on this machine", "fileServerOnlyOther": "{server} files on the server · not reviewed on this machine",
+        "fileLocalOnlyOne": "{local} file here · not on the server", "fileLocalOnlyOther": "{local} files here · not on the server",
+        "pinFindingsOne": "{count} finding at {name}", "pinFindingsOther": "{count} findings at {name}",
+        "moreStationsOne": "+{count} more station is not drawn.", "moreStationsOther": "+{count} more stations are not drawn.",
+        "pipesCappedOne": "Showing only the first {count} pipe.", "pipesCappedOther": "Showing only the first {count} pipes.",
+        "commitRowOne": "{sha} · {count} file · {when}", "commitRowOther": "{sha} · {count} files · {when}",
+        "commitRowAuthorOne": "{sha} · {author} · {count} file · {when}", "commitRowAuthorOther": "{sha} · {author} · {count} files · {when}",
+        "moreStopsOne": "+{count} more stop", "moreStopsOther": "+{count} more stops",
+        "antiTipOne": "from {count} warning", "antiTipOther": "from {count} warnings"
       },
       "heat": {
-        "description": "Heat grid: {layers} layers, {components} components. Select a cell for its details.",
-        "cellAria": "{name}, {files} files",
+        "description": "Heat grid: {layers}, {components}. Select a cell for its details.",
+        "cellAria": "{name}, {files}",
         "legend": "Cell size: {size} · Colour: {colour} · Bar: {bar}",
         "empty": "There are no components to draw.",
         "showMore": "Show {count} more"
       },
       "cycleHop": "Dependency cycle",
       "explain": {
-        "cutNote": "Showing {shown} of {total} files. The server did not send the full map; it updates when the server is updated.",
+        "cutNote": "Showing {shown} of {files}. The server did not send the full map; it updates when the server is updated.",
         "notSetUpWhy": "Not set up · {reason}",
-        "whyNoOutline": "the server sent only {shown} of {total} files",
+        "whyNoOutline": "the server sent only {shown} of {files}",
         "whyNoBadges": "no file has {metric} yet; review again to collect it",
         "whyNotCollected": "{metric} was not collected in this review",
-        "parityServerOnly": "{server} files on the server · not reviewed on this machine",
-        "outOfSync": "Out of sync",
         "oneStation": "This line has one station: nothing to step through.",
         "legendNotSetUp": "so every station stays plain",
         "presetNeeds": "needs {metrics}"
       },
-      "scaleSummary": "{stations} stations stand for {files} files · showing the {nodes} most important · search reaches all",
+      "scaleSummary": "{stations} stand for {files} · showing the {nodes} most important · search reaches all",
       "repoConfig": "repo config",
       "sequence": {
-        "description": "Sequence of {stops} stops and {messages} messages.",
+        "description": "Sequence of {stops} and {messages}.",
         "empty": "A sequence needs two stations; this line has one.",
         "messageAria": "{from} to {to}: {label}",
         "backToMap": "Back to map"
@@ -36256,7 +36287,8 @@
         "syncing": "Syncing",
         "error": "Error",
         "idle": "Not synced",
-        "partial": "Out of sync"
+        "partial": "Out of sync",
+        "serverOnly": "On the server only"
       },
       "overlay": {
         "outTo": "↑ Out to {name}",
@@ -36264,8 +36296,6 @@
         "lensSub": "was the {lens} view",
         "familyOnly": "{family} only",
         "clearFamily": "Clear the {family} filter",
-        "missingFiles": "{count} files are missing on the server.",
-        "tooLarge": "{count} files were too large to store.",
         "diagnose": "Diagnose",
         "controls": "Scene controls"
       },
@@ -36278,7 +36308,6 @@
         "noSymbolsNote": "This graph has no symbols, so the levels below a package show files.",
         "world": "the whole map",
         "drillReset": "The map changed, so the view went back out of {name}.",
-        "moreStops": "+{count} more stops",
         "satelliteAria": "{name}, inside {parent}",
         "card": {
           "close": "Close",
@@ -36296,7 +36325,6 @@
         "stats": { "issues": "Anti-patterns", "complexity": "Complexity", "coverage": "Coverage", "reached": "Reached", "usage": "Importance" },
         "statWords": {
           "anti": { "none": "none", "low": "low", "medium": "medium", "high": "high", "severe": "severe" },
-          "antiTip": "from {count} warnings",
           "importance": "#{rank} of {total}",
           "importanceTip": "Relative to the busiest part"
         },
@@ -36314,8 +36342,6 @@
       },
       "act": {
         "cardsTitle": "Fix these first",
-        "titleAtOne": "At {scope} · 1 issue",
-        "titleAtMany": "At {scope} · {count} issues",
         "titlePath": "On this path · {count} to act on",
         "emptyTitle": "Nothing to act on here",
         "emptyStation": "No open findings at this station. Try “What has no test?”",
@@ -36339,7 +36365,6 @@
         "doneTitle": "This path is done when…",
         "doneCheck": "{title} is resolved in {items}",
         "doneNone": "No finding is open on this path.",
-        "doneMore": "+{count} more checks",
         "detailsTitle": "Details",
         "linkCoverage": "Coverage",
         "linkApi": "API"
@@ -36352,7 +36377,6 @@
         "simulate": "Simulate with values",
         "sequence": "Sequence",
         "noTests": "no tests",
-        "findings": "{count} findings",
         "stops": "Stops",
         "enlarge": "Enlarge"
       },
@@ -36378,14 +36402,11 @@
         "countPair": "{local} / {server}",
         "parityAll": "The server has all of them.",
         "parityMissing": "{count} not on the server yet.",
-        "parityTooLarge": "{count} were too large to store.",
         "deltaTitle": "Changes since the last review",
         "deltaEmpty": "No commits to show.",
         "deltaSummary": "{count} not in the picture yet",
         "deltaPending": "Pending",
         "deltaApplied": "In the picture",
-        "deltaRow": "{sha} · {count} files · {when}",
-        "deltaRowAuthor": "{sha} · {author} · {count} files · {when}",
         "actionSetUpV8": "Set up v8",
         "actionTurnOn": "Turn on",
         "actionGenerate": "Generate",
@@ -36453,7 +36474,6 @@
         "kpiComplexity": "Total complexity",
         "kpiRisky": "Complex and under-tested",
         "scatterTitle": "Complexity against coverage",
-        "scatterAria": "{count} files plotted. Complexity runs left to right and coverage bottom to top.",
         "axisX": "Complexity",
         "axisY": "Coverage",
         "gapsTitle": "Riskiest gaps",
@@ -36475,8 +36495,6 @@
         "configAll": "Coverage is configured in every package.",
         "configNowhere": "Coverage is not configured in any package.",
         "configOnly": "Coverage is configured in {packages} only. Elsewhere no coverage is measured.",
-        "applyV8": "Apply: v8 coverage in {count} packages",
-        "applyV8Request": "Set up v8 coverage in these {count} packages: {packages}. Add the coverage config and a script to each, run the tests with coverage on and report the new coverage.",
         "quadrant": "complex · untested",
         "namesMore": "{names} +{count}"
       },
@@ -36487,13 +36505,11 @@
         "antiRow": "Anti-pattern",
         "cellAria": "{family}, {layer}: {count}",
         "listTitle": "Patterns found",
-        "listRow": "{count} files",
         "listHint": "Heuristic: read from names, exports, imports and size.",
         "antiTitle": "Anti-patterns",
         "antiNone": "No anti-patterns were found.",
         "resolve": "Resolve",
-        "showInTower": "Show in Tower",
-        "lights": "{family} lights {count} stations"
+        "showInTower": "Show in Tower"
       },
       "api": {
         "notSetUpTitle": "No endpoints found",
@@ -36519,7 +36535,6 @@
         "exportPostman": "Export Postman collection",
         "contractTests": "Contract tests",
         "contractTestsText": "Write contract tests for these endpoints from the OpenAPI skeleton, run them and report each result: {routes}.",
-        "groupAria": "{file}: {count} endpoints",
 
         "groupInContract": "In contract ({count})",
 
@@ -36527,7 +36542,7 @@
 
         "selectEndpoint": "Include {route} in the contract tests",
 
-        "selectedCount": "{selected} of {total} endpoints selected for contract tests",
+        "selectedCount": "{selected} of {endpoints} selected for contract tests",
 
         "selectAtLeastOne": "Select at least one endpoint to generate contract tests.",
 
@@ -36595,8 +36610,6 @@
         "empty": "Choose Resolve on a finding to work on it here.",
         "provenanceLabel": "Source",
         "checksTitle": "Checks",
-        "checkFiles": "The finding names {count} files.",
-        "checkStations": "It touches {count} stations.",
         "checkReview": "Review the folder again to confirm the finding is gone.",
         "show": "Show"
       },
@@ -36670,7 +36683,6 @@
         "undoNoRecord": "This host kept no record of the fix, so it cannot undo it.",
         "permNote": "Runs as you on branch fix/…. Undo restores the branch you were on; nothing reaches the main branch until the checks pass and you merge.",
         "previewTitle": "What it changes",
-        "previewFiles": "{count} files",
         "previewFromFiles": "This host cannot preview lines; these are the files the finding names.",
         "promptTitle": "Prompt",
         "promptNote": "Goes to the one composer, with this finding and the four checks attached.",
@@ -36692,7 +36704,6 @@
           "agent": "Sent to agent"
         },
         "checkNoReport": "This check never reported, so it counts as an error.",
-        "changedFiles": "{count} files changed",
         "appliedOn": "Applied on branch {branch}.",
         "branchError": "Applied in place: the branch could not be created ({reason}).",
         "branchUnknown": "the fix branch",
@@ -36747,8 +36758,7 @@
         "label": "Review",
         "aria": "History: pick a commit to mark the stations it changed",
         "now": "Now",
-        "commitAria": "{title}, {at}",
-        "changed": "{count} stations changed in this commit"
+        "commitAria": "{title}, {at}"
       },
       "header": {
         "statusLabel": "Sync status",
@@ -36759,10 +36769,7 @@
         "reviewing": "Reviewing · {progress}",
         "reviewPlan": "Review plan ready",
         "reviewFailed": "Review failed",
-        "skippedPill": "{count} files not stored",
-        "parityBoth": "{count} files here and on the server",
         "parityDiffers": "{local} here · {server} on the server",
-        "parityLocal": "{local} files here · not on the server",
         "moreActions": "More actions",
         "reReview": "Re-review this folder",
         "overlaysNote": "Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.",

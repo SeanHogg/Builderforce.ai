@@ -9,7 +9,8 @@ import type { RecordedRun } from '../../fixPorts';
 import type { KnowledgeGraphLabels } from '../../labels';
 import { fillTemplate } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
-import { chip, input, MONO, muted } from '../../styles';
+import { chip, input, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { PathModel } from '../path';
 import { argumentNames } from './simulateModel';
 
@@ -43,12 +44,12 @@ export function SimulateInputs({ run, path, labels, edits, stubs, onEdit, onPres
                         {names.map((name) => (
                             <li key={name} style={{ ...columns, alignItems: 'start' }}>
                                 <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-                                    <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, overflowWrap: 'anywhere' }}>{name}</span>
-                                    <span style={{ ...muted, overflowWrap: 'anywhere' }}>{t.colRecorded}: <span style={{ fontFamily: MONO, color: cssVar('text') }}>{recordedOf(name)}</span></span>
+                                    <span style={{ ...TYPE.monoValue, fontWeight: 600, overflowWrap: 'anywhere' }}>{name}</span>
+                                    <span style={{ ...muted, overflowWrap: 'anywhere' }}>{t.colRecorded}: <span style={{ ...TYPE.mono, color: cssVar('text') }}>{recordedOf(name)}</span></span>
                                 </div>
                                 <input
                                     aria-label={fillTemplate(t.editAria, { name })} value={edits[name] ?? ''} placeholder={recordedOf(name)}
-                                    onChange={(e) => onEdit(name, e.target.value === '' ? null : e.target.value)} style={{ ...input, width: '100%', minWidth: 0, boxSizing: 'border-box', fontFamily: MONO }}
+                                    onChange={(e) => onEdit(name, e.target.value === '' ? null : e.target.value)} style={{ ...input, width: '100%', minWidth: 0, boxSizing: 'border-box', ...TYPE.monoValue }}
                                 />
                             </li>
                         ))}
@@ -56,10 +57,10 @@ export function SimulateInputs({ run, path, labels, edits, stubs, onEdit, onPres
                 </>
             )}
             <fieldset style={{ border: 0, margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 4, minWidth: 0 }}>
-                <legend style={{ fontSize: 13, fontWeight: 600, padding: 0 }}>{t.stubsTitle}</legend>
+                <legend style={{ ...TYPE.subtitle, padding: 0 }}>{t.stubsTitle}</legend>
                 <span style={muted}>{t.stubsHint}</span>
                 {path.stops.map((s) => (
-                    <label key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontFamily: MONO, fontSize: 12, minHeight: 28, minWidth: 0, overflowWrap: 'anywhere' }}>
+                    <label key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', ...TYPE.monoValue, minHeight: 28, minWidth: 0, overflowWrap: 'anywhere' }}>
                         <input type="checkbox" checked={stubs.has(s.id)} onChange={() => onStub(s.id)} />{s.name}
                     </label>
                 ))}

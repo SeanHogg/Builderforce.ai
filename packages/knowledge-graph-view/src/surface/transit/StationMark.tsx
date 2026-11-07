@@ -6,7 +6,7 @@
  */
 
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
-import { MONO } from '../../styles';
+import { FONT_MONO, TYPE } from '../ui/type';
 import type { StationStyle } from '../overlays';
 import type { PlacedLabel } from './labelPlacement';
 import type { Point } from './geometry';
@@ -25,6 +25,8 @@ export interface StationMarkProps {
     /** The note is the question's answer, not a plain fact: it reads in the accent colour. */
     accentNote: boolean;
     reducedMotion: boolean;
+    /** The station's complexity level (1-5); the tower reads it for its height while the size channel has no reading. */
+    complexity?: number | undefined;
     onActivate(): void;
 }
 
@@ -63,9 +65,9 @@ export function StationMark(p: StationMarkProps) {
             )}
             {st.outline && <circle cx={at.x} cy={at.y} r={ring + 5} fill="none" stroke={tone('violation')} strokeWidth={1.5} strokeDasharray="2 3" />}
             {p.selected && <circle cx={at.x} cy={at.y} r={ring + 8} fill="none" stroke={tone('accent')} strokeWidth={2.5} />}
-            <text x={label.x} y={label.y} textAnchor={label.anchor} fontFamily={MONO} fontSize={11} fontWeight={p.dim ? 500 : 600} fill={p.dim ? cssVar('muted') : cssVar('text')} {...halo}>{label.text}</text>
+            <text x={label.x} y={label.y} textAnchor={label.anchor} fontFamily={FONT_MONO} fontSize={TYPE.monoName.fontSize} fontWeight={p.dim ? 500 : TYPE.monoName.fontWeight} fill={p.dim ? cssVar('muted') : cssVar('text')} {...halo}>{label.text}</text>
             {label.note && label.noteY !== null && !p.dim && (
-                <text x={label.x} y={label.noteY} textAnchor={label.anchor} fontFamily={MONO} fontSize={10} fill={p.accentNote ? cssVar('accent') : cssVar('muted')} {...halo}>{label.note}</text>
+                <text x={label.x} y={label.noteY} textAnchor={label.anchor} fontFamily={FONT_MONO} fontSize={TYPE.monoMeta.fontSize} fill={p.accentNote ? cssVar('accent') : cssVar('muted')} {...halo}>{label.note}</text>
             )}
         </g>
     );

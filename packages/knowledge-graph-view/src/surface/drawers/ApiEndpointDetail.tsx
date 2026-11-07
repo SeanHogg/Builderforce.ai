@@ -6,7 +6,8 @@
 
 import { fillTemplate } from '../../labels';
 import type { KnowledgeGraphLabels } from '../../labels';
-import { heading, MONO, muted } from '../../styles';
+import { muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { Chip } from '../ui';
 import type { EndpointDetail, FileRef, ParamRow } from './apiDetail';
 import { StateLabel } from './ui';
@@ -21,7 +22,7 @@ function FileChips({ files, onPick, pickLabel }: { files: readonly FileRef[]; on
     return (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {files.slice(0, MAX_FILES).map((f) => {
-                const chip = <Chip tone="muted"><code style={{ fontFamily: MONO, fontSize: 11, overflowWrap: 'anywhere' }}>{f.name}</code></Chip>;
+                const chip = <Chip tone="muted"><code style={{ ...TYPE.monoName, fontWeight: 400, overflowWrap: 'anywhere' }}>{f.name}</code></Chip>;
                 return onPick ? (
                     <button
                         key={f.ref} type="button" data-file={f.ref} aria-label={fillTemplate(pickLabel, { name: f.name })} onClick={() => onPick(f.ref)}
@@ -40,12 +41,12 @@ export function ApiEndpointDetail({ detail, labels, onPickFile }: { detail: Endp
     const t = labels.surface.api;
     return (
         <div data-testid="kg-api-detail" style={{ display: 'grid', gap: 8 }}>
-            <h4 style={{ ...heading, fontSize: 12 }}>{t.detailParams}</h4>
+            <h4 style={TYPE.sectionHeading}>{t.detailParams}</h4>
             {detail.params.length === 0 ? <span style={muted}>{t.noParams}</span> : (
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4 }}>
                     {detail.params.map((p) => (
                         <li key={`${p.where}:${p.name}`} data-param={`${p.where}:${p.name}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(70px, 120px) minmax(0, 1fr)', gap: 8 }}>
-                            <code style={{ fontFamily: MONO, fontSize: 11, overflowWrap: 'anywhere' }}>{p.name}</code>
+                            <code style={{ ...TYPE.monoName, fontWeight: 400, overflowWrap: 'anywhere' }}>{p.name}</code>
                             <span style={muted}>
                                 {p.source === 'unknown-shape' ? fillTemplate(t.paramWithNote, { where: whereLabel(t, p.where), note: t.paramBodyNote }) : whereLabel(t, p.where)}
                             </span>
@@ -53,14 +54,14 @@ export function ApiEndpointDetail({ detail, labels, onPickFile }: { detail: Endp
                     ))}
                 </ul>
             )}
-            <h4 style={{ ...heading, fontSize: 12 }}>{t.detailTested}</h4>
+            <h4 style={TYPE.sectionHeading}>{t.detailTested}</h4>
             <div style={{ display: 'grid', gap: 4 }}>
                 <StateLabel tone={detail.tested ? 'agrees' : 'cycle'} data-tested={detail.tested}>{detail.tested ? t.testedYes : t.testedNo}</StateLabel>
                 {detail.tested
                     ? <FileChips files={detail.testFiles} pickLabel={t.pickFile} />
                     : <span style={muted}>{t.testedNone}</span>}
             </div>
-            <h4 style={{ ...heading, fontSize: 12 }}>{t.detailCallers}</h4>
+            <h4 style={TYPE.sectionHeading}>{t.detailCallers}</h4>
             {detail.callerFiles.length ? <FileChips files={detail.callerFiles} onPick={onPickFile} pickLabel={t.pickFile} /> : <span style={muted}>{t.callerFilesNone}</span>}
         </div>
     );

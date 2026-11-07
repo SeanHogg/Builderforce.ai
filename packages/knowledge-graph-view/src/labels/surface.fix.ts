@@ -3,8 +3,8 @@
 export interface FixLabels {
     /** The staged fix flow. `{open}`, `{shown}`, `{repo}`, `{branch}`, `{count}`, `{step}`, `{title}`, `{items}`. */
     fix: Record<
-        'title' | 'queue' | 'queueTitle' | 'queueAria' | 'sendToAgent' | 'noComposer' | 'undo' | 'undoNoRecord' | 'permNote' | 'previewTitle' | 'previewFiles' | 'previewFromFiles'
-        | 'promptTitle' | 'promptNote' | 'checksTitle' | 'checksList' | 'checkNoReport' | 'changedFiles' | 'appliedOn' | 'branchError' | 'branchUnknown'
+        'title' | 'queue' | 'queueTitle' | 'queueAria' | 'sendToAgent' | 'noComposer' | 'undo' | 'undoNoRecord' | 'permNote' | 'previewTitle' | 'previewFromFiles'
+        | 'promptTitle' | 'promptNote' | 'checksTitle' | 'checksList' | 'checkNoReport' | 'appliedOn' | 'branchError' | 'branchUnknown'
         | 'requestApply' | 'requestChecks' | 'requestResolve' | 'requestUndo' | 'requestPrompt' | 'requestReview',
         string
     > & {
@@ -51,7 +51,6 @@ export const FIX_DEFAULTS: FixLabels = {
         undoNoRecord: 'This host kept no record of the fix, so it cannot undo it.',
         permNote: 'Runs as you on branch fix/…. Undo restores the branch you were on; nothing reaches the main branch until the checks pass and you merge.',
         previewTitle: 'What it changes',
-        previewFiles: '{count} files',
         previewFromFiles: 'This host cannot preview lines; these are the files the finding names.',
         promptTitle: 'Prompt',
         promptNote: 'Goes to the one composer, with this finding and the four checks attached.',
@@ -73,7 +72,6 @@ export const FIX_DEFAULTS: FixLabels = {
             agent: 'Sent to agent',
         },
         checkNoReport: 'This check never reported, so it counts as an error.',
-        changedFiles: '{count} files changed',
         appliedOn: 'Applied on branch {branch}.',
         branchError: 'Applied in place: the branch could not be created ({reason}).',
         branchUnknown: 'the fix branch',

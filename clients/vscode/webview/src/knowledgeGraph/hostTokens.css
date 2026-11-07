@@ -1,8 +1,8 @@
 /*
  * The knowledge graph view's tones (`--kg-*`) are the package's own (`tokens.css`, pulled in
  * by `main.tsx` ahead of this file, with this one after it: one bundle, one stylesheet).
- * Its neutrals already alias the `--bf-*` mapping in `index.css`; only the HUES are re-pointed
- * here onto the editor's own theme colours, so the graph follows whatever light OR dark theme
+ * Its neutrals are the design's own values (set in tokens.css, light/dark via html[data-theme]);
+ * only the HUES are re-pointed here onto the editor's own theme colours, so the graph follows whatever light OR dark theme
  * is active. The hex is only the fallback when a theme omits the token. The package's palette
  * has zero specificity, so this plain `:root` wins wherever the files sit in the cascade.
  *
@@ -26,12 +26,12 @@
   --kg-node-claim: var(--vscode-terminal-ansiBrightGreen, #a3e635);
   --kg-node-fact: var(--vscode-terminal-ansiMagenta, #f472b6);
   --kg-node-missing: color-mix(in srgb, var(--vscode-editorWarning-foreground, #d4a373) 50%, var(--vscode-foreground, #cccccc));
-  --kg-edge: var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #64748b));
+  --kg-edge: var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #7b8698));
   --kg-violation: var(--vscode-charts-red, #f87171);
   --kg-cycle: var(--vscode-charts-orange, #fb923c);
   --kg-duplicate: var(--vscode-charts-yellow, #facc15);
   --kg-contradicts: var(--vscode-terminal-ansiBrightRed, #fb7185);
-  --kg-agrees: var(--vscode-charts-green, #22c55e);
+  --kg-agrees: var(--vscode-charts-green, #34d399);
   /* Stale is TEXT too (the "stale" mark): the editor's description ink, not its disabled ink. */
   --kg-stale: var(--vscode-descriptionForeground, #a8a29e);
   --kg-unused: var(--vscode-editorLineNumber-foreground, #78716c);
@@ -39,10 +39,7 @@
   --kg-plane: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.12));
   --kg-warn-bg: var(--bf-warning-bg);
   --kg-error: var(--vscode-errorForeground, #fca5a5);
-  /* Neutral TEXT: body on --kg-text, secondary on --kg-muted — mapped onto the editor's own
-     foreground so a selected node's panel reads at full contrast on any theme. */
-  --kg-text: var(--vscode-foreground, #cccccc);
-  --kg-muted: var(--vscode-descriptionForeground, #999999);
+  /* The neutrals (bg, panel, text, muted, accent...) are NOT re-pointed here: tokens.css holds the design's values, and light/dark follows html[data-theme] (set from the host's colour theme). */
 }
 
 body.vscode-light,
@@ -53,8 +50,25 @@ body.vscode-high-contrast-light {
   --kg-edge: color-mix(in srgb, var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #939393)) 85%, black);
   --kg-cycle: color-mix(in srgb, var(--vscode-charts-orange, #d18616) 70%, black);
   --kg-duplicate: color-mix(in srgb, var(--vscode-charts-yellow, #bf8803) 75%, black);
-  /* TEXT tones need 4.5:1: muted and stale are the description ink (4.40 on Light+'s #F3F3F3), violation is the red of the stale mark and Delete. */
-  --kg-muted: color-mix(in srgb, var(--vscode-descriptionForeground, #717171) 92%, black);
+  /* TEXT tones need 4.5:1: stale is the description ink (4.40 on Light+'s #F3F3F3), violation is the red of the stale mark and Delete. */
   --kg-stale: color-mix(in srgb, var(--vscode-descriptionForeground, #717171) 92%, black);
   --kg-violation: color-mix(in srgb, var(--vscode-charts-red, #e51400) 90%, black);
+}
+
+/*
+ * High-contrast themes are the one place the host re-points the neutrals: the mockup's literals (tokens.css) are tuned for the
+ * default dark and light themes, and a high-contrast theme exists precisely to override them with the user's own contrast
+ * colours (text, description ink and the contrast border). Every other theme keeps the literals.
+ */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --kg-text: var(--vscode-foreground, #ffffff);
+  --kg-muted: var(--vscode-descriptionForeground, var(--vscode-foreground, #ffffff));
+  --kg-border: var(--vscode-contrastBorder, var(--vscode-panel-border, #6fc3df));
+}
+
+body.vscode-high-contrast-light {
+  --kg-text: var(--vscode-foreground, #292929);
+  --kg-muted: var(--vscode-descriptionForeground, var(--vscode-foreground, #292929));
+  --kg-border: var(--vscode-contrastBorder, var(--vscode-panel-border, #0f4a85));
 }

@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 export const KG_TOKENS = {
     bg: ['--kg-bg', '--bf-surface'],
     panel: ['--kg-panel', '--bf-surface-2'],
+    panel2: ['--kg-panel2', '--bf-surface-2'],
     text: ['--kg-text', '--bf-text'],
     muted: ['--kg-muted', '--bf-text-muted'],
     border: ['--kg-border', '--bf-border'],
@@ -39,6 +40,11 @@ export const KG_TOKENS = {
     plane: ['--kg-plane', '--bf-surface-2'],
     warnBg: ['--kg-warn-bg', '--bf-warning-bg'],
     errorText: ['--kg-error', '--bf-error'],
+    // The tower camera's pipe underlay (a step above the page) and the translucent shadow under a tower.
+    raise: ['--kg-raise', '--bf-border'],
+    scrim: ['--kg-scrim', '--bf-border-strong'],
+    // The darker side face of a tower (the design's `rgba(0,0,0,.22)`, a shade over whatever the body's fill is).
+    towerSide: ['--kg-tower-side', '--bf-border-strong'],
     // The 5-step severity ramp (1 clean … 5 worst) and the line palette of the transit map.
     sev1: ['--kg-sev-1', '--bf-success'],
     sev2: ['--kg-sev-2', '--bf-success'],

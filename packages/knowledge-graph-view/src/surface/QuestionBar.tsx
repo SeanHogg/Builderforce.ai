@@ -28,8 +28,6 @@ export interface QuestionBarProps {
     /** The pattern family the patterns question is narrowed to; null/absent ⇒ no chip. */
     family?: string | null | undefined;
     onClearFamily?: (() => void) | undefined;
-    /** One non-wrapping horizontally scrolling row (a phone). */
-    scroll?: boolean | undefined;
 }
 
 const LENS_PREFIX = 'lens:';
@@ -53,7 +51,7 @@ export function moreItems(labels: KnowledgeGraphLabels, question: QuestionId, le
     return items;
 }
 
-export function QuestionBar({ labels, stations, question, onQuestion, lenses, lens, onLens, family, onClearFamily, scroll = false }: QuestionBarProps) {
+export function QuestionBar({ labels, stations, question, onQuestion, lenses, lens, onLens, family, onClearFamily }: QuestionBarProps) {
     const s = labels.surface;
     const items = moreItems(labels, question, lenses, lens);
     // A lens with no question (Compare) is a More item of its own; while it is the active pick no pill is lit, and the trigger names it.
@@ -71,10 +69,12 @@ export function QuestionBar({ labels, stations, question, onQuestion, lenses, le
     };
 
     return (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, flexWrap: scroll ? 'nowrap' : 'wrap' }}>
+        // One line, never wrapped (the scene sits below a measured controls block): the pills scroll sideways; the More menu
+        // and the family chip stay put, so the menu's popover is not clipped by the scroller.
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, flexWrap: 'nowrap' }}>
             <div
                 role="group" aria-label={s.questionsLabel}
-                style={{ display: 'flex', gap: 6, minWidth: 0, ...(scroll ? { overflowX: 'auto', scrollSnapType: 'x proximity', flex: 1 } : { flexWrap: 'wrap' }) }}
+                style={{ display: 'flex', gap: 6, minWidth: 0, flex: '0 1 auto', overflowX: 'auto', scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}
             >
                 {PRIMARY_QUESTIONS.map((q) => (
                     <Pill

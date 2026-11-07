@@ -8,6 +8,7 @@
 import type { KnowledgeGraphLabels } from '../../labels';
 import type { ThemeTone } from '../../scene/themeColors';
 import { button, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { SyncStatus } from '../../types';
 import { sourceAction } from './syncDeltaModel';
 import { Section, StateLabel, Unavailable } from './ui';
@@ -30,11 +31,11 @@ export function SyncSources({ sources, labels, onCompose, onOpenPanel }: {
                     return (
                         <li key={src.id} data-source={src.id} data-state={src.state} style={{ display: 'grid', gap: 2 }}>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <strong style={{ flex: 1, minWidth: 100, fontSize: 13 }}>{s.syncSources[src.id]}</strong>
+                                <strong style={{ flex: 1, minWidth: 100, ...TYPE.subtitle }}>{s.syncSources[src.id]}</strong>
                                 <StateLabel tone={SOURCE_TONE[src.state]}>{s.sourceStates[src.state]}</StateLabel>
                                 {act.kind !== 'none' && (can ? (
                                     <button
-                                        type="button" data-action={act.label} style={{ ...button, minHeight: 32, padding: '0 10px', fontSize: 12 }}
+                                        type="button" data-action={act.label} style={{ ...button, minHeight: 32, padding: '0 10px' }}
                                         onClick={() => (act.kind === 'panel' ? onOpenPanel(act.panel) : onCompose?.(t[act.request]))}
                                     >
                                         {t[act.label]}

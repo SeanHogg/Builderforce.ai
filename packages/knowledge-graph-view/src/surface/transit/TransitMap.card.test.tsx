@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../../labels';
+import { counted } from '../plural';
 import { buildLines } from '../lines';
 import { makeOverlay, PRESETS } from '../overlays';
 import { buildStations } from '../stations';
@@ -14,7 +15,7 @@ const model = buildStations(graph);
 const lines = buildLines(graph, model);
 const overlay = makeOverlay(PRESETS.risk, model.stations);
 const idOf = (name: string) => model.stations.find((s) => s.name === name)!.id;
-const aria = (name: string, files: number, layer: string) => fillTemplate(L.surface.stationAria, { name, layer, files });
+const aria = (name: string, files: number, layer: string) => fillTemplate(L.surface.stationAria, { name, layer, files: counted(L, 'file', files) });
 
 function map(over: Partial<TransitMapProps> = {}) {
     const props: TransitMapProps = {

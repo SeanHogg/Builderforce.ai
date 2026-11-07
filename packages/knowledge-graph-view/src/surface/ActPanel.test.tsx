@@ -6,19 +6,23 @@ import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { nodeIndex } from '../graphModel';
 import { ActPanel } from './ActPanel';
+import { counted } from './plural';
 import { acceptanceChecks, actionCards, findingSource, testRequestFor } from './actModel';
 import { pathOfLine } from './path';
+import { pinNumbers } from './pinNumbers';
+import { firstFindings } from './rail/stopTag';
 import { graph, lines, model, unusedFinding } from './testFixtures';
 
 const withUnused = { ...graph, findings: [...graph.findings, unusedFinding] };
 const web = model.stations.find((s) => s.name === 'Web app')!;
 const path = pathOfLine(lines.lines[0]!, model.byId);
 
+const base = (over: Partial<Parameters<typeof ActPanel>[0]> = {}) => ({
+    graph: withUnused, findings: withUnused.findings, labels: L, station: null, stations: model.stations, scopeName: null, compact: false,
+    onClearScope: vi.fn(), onShow: vi.fn(), onCompose: vi.fn(), onResolve: vi.fn(), onOpenPanel: vi.fn(), ...over,
+});
 const act = (over: Partial<Parameters<typeof ActPanel>[0]> = {}) => {
-    const p = {
-        graph: withUnused, findings: withUnused.findings, labels: L, station: null, stations: model.stations, scopeName: null, compact: false,
-        onClearScope: vi.fn(), onShow: vi.fn(), onCompose: vi.fn(), onResolve: vi.fn(), onOpenPanel: vi.fn(), ...over,
-    };
+    const p = base(over);
     render(<ActPanel {...p} />);
     return p;
 };
@@ -30,7 +34,10 @@ describe('ActPanel rail', () => {
         act();
         const cards = document.querySelectorAll('[data-card]');
         expect(cards.length).toBe(3);
-        expect([...cards].map((c) => c.querySelector('span')!.textContent)).toEqual(['1', '2', '3']);
+        // The pin is the finding's place in graph.findings (the number the left rail shows), whatever order the cards rank in.
+        const pins = pinNumbers(withUnused.findings);
+        expect([...cards].map((c) => c.querySelector('span')!.textContent)).toEqual([...cards].map((c) => String(pins.get(c.getAttribute('data-card')!))));
+        expect([...cards].map((c) => c.querySelector('span')!.textContent).sort()).toEqual(['1', '2', '3']);
         expect(cards[0]!.textContent).toContain(L.findingKinds.partitionViolation ?? '');
         expect(cardOf('f-unused').querySelector('[data-source="exact"]')).toBeTruthy();
     });
@@ -98,21 +105,92 @@ describe('ActPanel rail', () => {
         expect(within(screen.getByTestId('kg-done-when')).getByText(L.surface.act.doneNone)).toBeTruthy();
     });
 
-    it('shows the station stats as a grid, "Not set up" muted', () => {
+    it('has no metric grid: the station card carries those stats', () => {
         act({ station: web, scopeName: 'Web app' });
-        expect(document.querySelectorAll('[data-fact]')).toHaveLength(6);
-        expect(within(screen.getByTestId('kg-station-facts')).getAllByText(L.surface.notSetUp).length).toBeGreaterThan(0);
+        expect(document.querySelectorAll('[data-fact]')).toHaveLength(0);
+        expect(screen.queryByTestId('kg-station-facts')).toBeNull();
     });
 
-    it('keeps Insights and the Lens panel in a Details section that is OPEN by default and collapses on demand', () => {
-        act({ children: <p>insights and lens</p> });
+    it('keeps the full findings list, Insights and the view panel in a Details section that is COLLAPSED by default and opens on demand', () => {
+        act({ children: <p>insights and view</p> });
         const toggle = screen.getByRole('button', { name: L.surface.act.detailsTitle });
-        expect(toggle.getAttribute('aria-expanded')).toBe('true');
-        expect(toggle.getAttribute('aria-controls')).toBe(screen.getByText('insights and lens').parentElement!.id);
-        expect(screen.getByText('insights and lens').closest('[hidden]')).toBeNull();
-        fireEvent.click(toggle);
         expect(toggle.getAttribute('aria-expanded')).toBe('false');
-        expect(screen.getByText('insights and lens').closest('[hidden]')).not.toBeNull(); // still mounted: its state is kept
+        const panel = screen.getByText('insights and view').parentElement!;
+        expect(toggle.getAttribute('aria-controls')).toBe(panel.id);
+        expect(screen.getByText('insights and view').closest('[hidden]')).not.toBeNull(); // still mounted: its state is kept
+        expect(within(panel).getByRole('region', { name: L.findingsTitle, hidden: true })).toBeTruthy(); // the full list lives inside Details
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(screen.getByText('insights and view').closest('[hidden]')).toBeNull();
+    });
+
+    it('titles the rail "At {scope} · N issues", or "On this path · N to act on" with a line drawn, and the counts agree', () => {
+        const { unmount } = render(<ActPanel {...base({ station: web, scopeName: 'Web app' })} />);
+        expect(screen.getByTestId('kg-act-title').textContent).toBe(counted(L, 'issueAt', 3, { scope: 'Web app' }));
+        // The queue and the Details list say the same number.
+        expect(screen.getByRole('button', { name: fillTemplate(L.surface.act.fixQueue, { count: 3 }) })).toBeTruthy();
+        expect(screen.getByRole('region', { name: L.findingsTitle, hidden: true }).textContent).toContain('(3)');
+        unmount();
+        render(<ActPanel {...base({ path })} />);
+        expect(screen.getByTestId('kg-act-title').textContent).toBe(fillTemplate(L.surface.act.titlePath, { count: 3 }));
+    });
+
+    it('says "1 issue" for one', () => {
+        act({ station: web, findings: [unusedFinding] });
+        expect(screen.getByTestId('kg-act-title').textContent).toBe('At Web app · 1 issue');
+    });
+
+    it('shows a check card when nothing is open: the words, the Ask button and a Show link', () => {
+        const p = act({ station: web, findings: [], onAskUntested: vi.fn() });
+        expect(document.querySelectorAll('[data-card]')).toHaveLength(0);
+        const card = within(screen.getByTestId('kg-act-empty').parentElement as HTMLElement);
+        expect(card.getByText(L.surface.act.emptyTitle)).toBeTruthy();
+        expect(card.getByText(L.surface.act.emptyStation)).toBeTruthy();
+        fireEvent.click(card.getByRole('button', { name: L.surface.act.emptyAsk }));
+        expect(p.onAskUntested).toHaveBeenCalled();
+        fireEvent.click(card.getByRole('button', { name: L.surface.act.emptyShow }));
+        expect(p.onShow).toHaveBeenCalledWith(web.refs.slice(0, 200));
+    });
+
+    it('lists the system-wide findings once at the top and leaves them off the cards, without changing the counts', () => {
+        act({ model: { systemWide: new Set([unusedFinding.id]) } });
+        const wide = within(screen.getByTestId('kg-act-system-wide').parentElement as HTMLElement);
+        expect(wide.getByText(L.findingKinds.unusedExport ?? 'unused-export')).toBeTruthy();
+        expect(document.querySelector('[data-card="f-unused"]')).toBeNull();
+        expect(document.querySelectorAll('[data-card]')).toHaveLength(2);
+        expect(screen.getByTestId('kg-act-title').textContent).toBe(counted(L, 'issueAt', 3, { scope: L.surface.actScopeAll }));
+    });
+
+    it('does not scope a finding through a hidden view: the findings passed are the ones counted', () => {
+        // The rail is handed graph.findings scoped by stations only; nothing here narrows them again.
+        act({ findings: withUnused.findings });
+        expect(screen.getByRole('button', { name: fillTemplate(L.surface.act.fixQueue, { count: 3 }) })).toBeTruthy();
+    });
+
+    it('offers no test card and no footer for a one-stop path (no hops)', () => {
+        act({ path: { stops: [path.stops[0]!], hops: [] } });
+        expect(screen.queryByText(L.surface.act.keepTitle)).toBeNull();
+        expect(screen.queryByTestId('kg-done-when')).toBeNull();
+    });
+
+    it('pins the footer outside the scrolling body', () => {
+        act({ path });
+        const footer = screen.getByTestId('kg-done-when');
+        expect(footer.parentElement!.tagName).toBe('ASIDE');
+    });
+});
+
+describe('shared pin numbering', () => {
+    it('numbers findings by their place in graph.findings: the rail tag and the card agree', () => {
+        const api = model.stations.find((s) => s.name === 'API')!;
+        const reversed = [...withUnused.findings].reverse();
+        const pins = pinNumbers(reversed);
+        const first = firstFindings([api], reversed).get(api.id)!;
+        expect(pins.get(first.finding.id)).toBe(first.n);
+        const g = { ...withUnused, findings: reversed };
+        render(<ActPanel {...{ graph: g, findings: reversed, labels: L, station: null, stations: model.stations, scopeName: null, compact: false, onClearScope: vi.fn(), onShow: vi.fn() }} />);
+        const card = document.querySelector(`[data-card="${first.finding.id}"]`)!;
+        expect(card.querySelector('span')!.textContent).toBe(String(first.n));
     });
 });
 

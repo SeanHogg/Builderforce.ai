@@ -7,7 +7,7 @@
  */
 
 import type { KnowledgeGraphLabels } from '../labels';
-import { fillTemplate } from '../template';
+import { counted } from './plural';
 import type { LensId } from '../types';
 import type { Line, LinesModel } from './lines';
 import { metricStatus, type MetricStatus } from './overlays';
@@ -144,7 +144,7 @@ export function answerLine(answer: Answer, labels: KnowledgeGraphLabels): string
     switch (answer.kind) {
         case 'not-set-up': return s.answerNotSetUp;
         case 'none': return s.answerNone;
-        case 'count': return fillTemplate(s.answerCount, { count: answer.count });
+        case 'count': return counted(labels, 'station', answer.count);
         default: return '';
     }
 }

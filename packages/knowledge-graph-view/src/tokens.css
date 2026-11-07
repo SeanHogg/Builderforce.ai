@@ -10,7 +10,11 @@
  *   VS Code  the node/edge/finding hues, re-pointed at the editor's own theme colours.
  *
  * Every rule here has ZERO specificity (`:where`), so a host's plain `:root { --kg-x: … }`
- * wins wherever it sits in the cascade. The neutrals alias the shared `--bf-*` bridge.
+ * wins wherever it sits in the cascade. The neutrals (bg, panel, panel2, raise, border, text,
+ * muted, accent, accent-soft, on-accent) are the design mockup's own values, set HERE and
+ * nowhere else - a host does not re-point them (the dark set is `.kg`, the light set `.kg.light`).
+ * Neutral contrast (WCAG 2.x): dark text 14:1 on bg, muted 6.4:1 on panel2 / 5.8:1 on raise,
+ * on-accent 6.4:1 on accent; light text 17:1, muted 6.6:1 on raise, on-accent 5.0:1 on accent.
  *
  * The hues are DISTINCT per meaning (a file, a section, a claim, a duplicate and a violation
  * never collapse onto one colour). Dark is the default; the light set is the darker twin of
@@ -22,15 +26,17 @@
  */
 
 :where(:root) {
-  --kg-bg: var(--bf-surface);
-  --kg-panel: var(--bf-surface-2);
-  --kg-text: var(--bf-text);
-  /* Secondary, not muted, in BOTH themes: muted is 3.0:1 on the web's dark surface and 4.3:1 on its light panel; secondary is 5.7:1 and 6.8:1. */
-  --kg-muted: var(--bf-text-secondary);
-  --kg-border: var(--bf-border);
-  --kg-accent: var(--bf-accent);
-  --kg-accent-soft: var(--bf-accent-soft);
-  --kg-on-accent: var(--bf-on-accent);
+  /* The design's neutrals (B-Surface.dc.html `.kg`), literal: the view looks the same on every host. Light is the `.kg.light` set below. */
+  --kg-bg: #14161b;
+  --kg-panel: #1b1e25;
+  --kg-panel2: #22262f;
+  --kg-raise: #2a2f3a;
+  --kg-border: #333947;
+  --kg-text: #e7e9ef;
+  --kg-muted: #a0a9ba;
+  --kg-accent: #5b95ff;
+  --kg-accent-soft: rgba(91, 149, 255, 0.16);
+  --kg-on-accent: #0a1226;
   --kg-node-file: #4d9eff;
   --kg-node-section: #22d3ee;
   --kg-node-symbol: #a78bfa;
@@ -38,16 +44,19 @@
   --kg-node-claim: #a3e635;
   --kg-node-fact: #f472b6;
   --kg-node-missing: #d4a373;
-  --kg-edge: #64748b;
+  --kg-edge: #7b8698;
   --kg-violation: #f87171;
   --kg-cycle: #fb923c;
   --kg-duplicate: #facc15;
   --kg-contradicts: #fb7185;
-  --kg-agrees: #22c55e;
+  --kg-agrees: #34d399;
   --kg-stale: #a8a29e;
   --kg-unused: #78716c;
   --kg-changed: #38bdf8;
   --kg-plane: rgba(148, 163, 184, 0.12);
+  /* Tower camera: the shadow under a tower and the scrim behind a drawer (`--kg-raise`, the pipe underlay, is a neutral above). */
+  --kg-scrim: rgba(0, 0, 0, 0.4);
+  --kg-tower-side: rgba(0, 0, 0, 0.22);
   --kg-warn-bg: rgba(251, 146, 60, 0.16);
   --kg-error: #fca5a5;
   /* Severity ramp, 1 (clean) to 5 (worst): the colour channel of the surface's stations. */
@@ -66,15 +75,15 @@
   --kg-line-7: #fb7185;
   --kg-line-8: #94a3b8;
   /* Surface vocabulary. Hues follow the host theme where it has one (VS Code charts, ANSI), else the literal. */
-  --kg-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The two typefaces are `--kg-font-ui` / `--kg-font-mono`, defined on the view's root (surface/ui/type.ts). */
   /* Control height: 30px on a fine pointer, 40px (a tap target) on a coarse one — see the media query below. */
   --kg-control: 30px;
-  /* Heat ramp w1 (quiet) .. w5 (hot): grey, steel, amber, orange, red. */
-  --kg-w-1: var(--kg-border);
-  --kg-w-2: color-mix(in srgb, var(--kg-node-file) 38%, var(--kg-panel));
-  --kg-w-3: color-mix(in srgb, var(--kg-duplicate) 62%, var(--kg-bg));
-  --kg-w-4: var(--kg-cycle);
-  --kg-w-5: var(--kg-violation);
+  /* Heat ramp w1 (quiet) .. w5 (hot): grey, steel, amber, orange, red (the design's literals). */
+  --kg-w-1: #2f3644;
+  --kg-w-2: #3f5c7a;
+  --kg-w-3: #b07a2a;
+  --kg-w-4: #e0702c;
+  --kg-w-5: #ef4b55;
   /* Route hues l1..l4. */
   --kg-l-1: var(--kg-accent);
   --kg-l-2: var(--vscode-terminal-ansiCyan, #2dd4bf);
@@ -99,6 +108,16 @@
 
 /* Light: a host opts in with `html[data-theme='light']` (the web and the VS Code canvas do; Rovr mirrors its OS scheme onto it). */
 :where(html[data-theme='light']) {
+  --kg-bg: #f1f5f9;
+  --kg-panel: #ffffff;
+  --kg-panel2: #f7f9fc;
+  --kg-raise: #eef2f7;
+  --kg-border: #d6dce6;
+  --kg-text: #0f172a;
+  --kg-muted: #475569;
+  --kg-accent: #2d60ff;
+  --kg-accent-soft: rgba(45, 96, 255, 0.1);
+  --kg-on-accent: #ffffff;
   --kg-node-file: #2d60ff;
   --kg-node-section: #0e7490;
   --kg-node-symbol: #6d28d9;
@@ -106,16 +125,24 @@
   --kg-node-claim: #4d7c0f;
   --kg-node-fact: #be185d;
   --kg-node-missing: #92400e;
-  --kg-edge: #6b7a90;
+  --kg-edge: #7c8799;
   --kg-violation: #b91c1c;
   --kg-cycle: #c2410c;
   --kg-duplicate: #a16207;
   --kg-contradicts: #be123c;
-  --kg-agrees: #15803d;
+  --kg-agrees: #047857;
+  /* Quiet must still read on the page: #8b97aa is 2.7:1 on --kg-bg (the old #dfe5ee was 1.2:1), and steel steps down from it to stay a visible step. */
+  --kg-w-1: #8b97aa;
+  --kg-w-2: #5f86b8;
+  --kg-w-3: #f0b36a;
+  --kg-w-4: #d9671f;
+  --kg-w-5: #b91c1c;
   --kg-stale: #6a645e;
   --kg-unused: #857d75;
   --kg-changed: #0369a1;
   --kg-plane: rgba(100, 116, 139, 0.1);
+  --kg-scrim: rgba(15, 23, 42, 0.18);
+  --kg-tower-side: rgba(15, 23, 42, 0.16);
   --kg-warn-bg: rgba(194, 65, 12, 0.12);
   --kg-error: #991b1b;
   --kg-sev-1: #15803d;

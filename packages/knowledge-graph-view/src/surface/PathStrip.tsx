@@ -11,8 +11,9 @@ import { useState } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../copyText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { CONTROL, MONO, muted } from '../styles';
+import { CONTROL, muted } from '../styles';
 import { Pill, pillStyle, QuietButton } from './ui';
+import { TYPE } from './ui/type';
 import { Action, StepControls } from './StepControls';
 import type { PathModel } from './path';
 import { stationNote } from './pathNotes';
@@ -42,13 +43,15 @@ export interface PathStripProps {
     narrow?: boolean | undefined;
 }
 
-const chipStyle = (on: boolean) => ({ ...pillStyle(on), fontFamily: MONO, fontSize: 11.5 });
+const chipStyle = (on: boolean) => ({ ...pillStyle(on), ...TYPE.mono, fontWeight: on ? TYPE.pillOn.fontWeight : TYPE.monoName.fontWeight });
 
 export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false }: PathStripProps) {
     const s = labels.surface;
     const [sequence, setSequence] = useState(false);
     const copier = useCopyText();
     const last = path.stops.length - 1;
+    // One station has nothing to step through and no sequence to draw.
+    const single = path.stops.length === 1;
     const at = Math.min(Math.max(step, 0), Math.max(last, 0));
     const title = pathTitle || s.pathTitle;
     const mermaid = pathMermaid(path, labels);
@@ -65,17 +68,18 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
             {path.stops.length === 0 ? <p style={{ ...muted, margin: 0 }}>{s.pathEmpty}</p> : (
                 <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <strong style={{ fontSize: 12, fontFamily: MONO, marginInlineEnd: 4, overflowWrap: 'anywhere' }}>{title}</strong>
+                        <strong style={{ ...TYPE.subtitle, marginInlineEnd: 4, overflowWrap: 'anywhere' }}>{title}</strong>
                         <StepControls at={at} last={last} labels={labels} onStep={onStep} />
                         {onOpenPanel && <Action onClick={() => onOpenPanel('simulate')}>{s.path.simulate}</Action>}
-                        <Pill style={ctl} on={sequence} onClick={() => setSequence((v) => !v)}>{s.path.sequence}</Pill>
-                        {sequence && onEnlarge && <Action onClick={onEnlarge}>{s.path.enlarge}</Action>}
+                        <Pill style={ctl} on={sequence && !single} disabled={single} onClick={() => setSequence((v) => !v)}>{s.path.sequence}</Pill>
+                        {sequence && !single && onEnlarge && <Action onClick={onEnlarge}>{s.path.enlarge}</Action>}
                         <QuietButton onClick={() => void copier.copy(mermaid)}>{labels.copyMermaid}</QuietButton>
                         <CopiedNote status={copier.status} labels={labels} />
-                        <span aria-live="polite" style={{ ...muted, fontFamily: MONO }}>{fillTemplate(s.pathStep, { n: at + 1, total: path.stops.length })}</span>
+                        <span aria-live="polite" style={{ ...muted, ...TYPE.monoValue }}>{fillTemplate(s.pathStep, { n: at + 1, total: path.stops.length })}</span>
                     </div>
+                    {single && <p data-testid="kg-path-one-station" style={{ ...muted, margin: 0 }}>{s.explain.oneStation}</p>}
                     <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />
-                    {sequence ? <SequenceView path={path} step={at} onStep={onStep} labels={labels} copy={false} /> : (
+                    {sequence && !single ? <SequenceView path={path} step={at} onStep={onStep} labels={labels} copy={false} /> : (
                         <ol
                             aria-label={s.path.stops}
                             style={{
@@ -90,7 +94,7 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                                 return (
                                     <li key={stop.id} style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'flex-start' : 'center', gap: 6, flex: 'none' }}>
                                         {hop && (
-                                            <span style={{ ...muted, fontFamily: MONO, fontSize: 11, color: cssVar(bad ? 'violation' : 'muted') }} data-hop={hop.verdict ?? 'ok'} data-cycle={hop.cycle || undefined}>
+                                            <span style={{ ...TYPE.monoMeta, color: cssVar(bad ? 'violation' : 'muted') }} data-hop={hop.verdict ?? 'ok'} data-cycle={hop.cycle || undefined}>
                                                 {narrow ? '↓ ' : ''}{hop.cycle && <span aria-hidden="true" data-cycle-mark>⟲ </span>}{hopText(labels, hop)}
                                                 {hop.detail ? ` · ${hop.detail}` : ''}
                                                 {routeLabels?.[i - 1] ? <span data-route={routeLabels[i - 1]}>{` · ${routeLabels[i - 1]}`}</span> : null}
@@ -98,8 +102,8 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, st
                                             </span>
                                         )}
                                         <span style={{ display: 'grid', gap: 2, justifyItems: narrow ? 'start' : 'center' }}>
-                                            <button type="button" aria-current={i === at ? 'step' : undefined} style={chipStyle(i === at)} onClick={() => onStep(i)}>{stop.name}</button>
-                                            {note && <span data-stop-note={stop.id} style={{ ...muted, fontFamily: MONO, fontSize: 10.5 }}>{note}</span>}
+                                            <button type="button" aria-current={i === at ? 'step' : undefined} style={chipStyle(i === at)} title={stations?.get(stop.id)?.path} onClick={() => onStep(i)}>{stop.name}</button>
+                                            {note && <span data-stop-note={stop.id} style={TYPE.monoMeta}>{note}</span>}
                                         </span>
                                     </li>
                                 );

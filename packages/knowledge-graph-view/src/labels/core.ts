@@ -34,10 +34,11 @@ export interface CoreLabels {
     legendLabel: string;
     legend: Record<string, string>;
     statsLine: string;
-    truncatedNote: string;
-    focusedNote: string;
+    /** The Insights Files tile on a truncated graph: `{loaded}` of `{total}`. */
+    filesLoaded: string;
     showAll: string;
     view3d: string;
+    viewTower: string;
     viewList: string;
     /** The camera and drawer names (the switcher's and the header's buttons). */
     viewSystem: string;
@@ -60,8 +61,6 @@ export interface CoreLabels {
     graphHint: string;
     /** A node's accessible name: `{label}`, `{kind}`. */
     nodeAria: string;
-    /** A mind-map folder's accessible name: `{name}`, `{count}` files. */
-    mapBranch: string;
     /** The mind map's "+N more" leaf; `{count}`. */
     mapMore: string;
     zoomLabel: string;
@@ -86,6 +85,9 @@ export interface CoreLabels {
     packs: Record<string, string>;
     // Findings
     findingsTitle: string;
+    /** The Findings heading when the list is narrower than the rail's findings: `{lens}` (its name), `{shown}`, `{total}`. */
+    findingsNarrowed: string;
+    /** `{scope}`: the station, line or whole graph the list is scoped to. */
     findingsEmpty: string;
     findingKinds: FindingKindLabels;
     severity: Record<'error' | 'warn' | 'info', string>;
@@ -101,12 +103,8 @@ export interface CoreLabels {
     fixSelected: string;
     /** Names the selection under the button; `{count}`. */
     selectedCount: string;
-    /** One batch request's intro line; `{count}`. */
-    fixBatch: string;
     /** Grouping of the findings into nested rows. */
     groupFindingsBy: string;
-    /** A lazy group row's collapsed summary; `{count}`. */
-    findingsCollapsed: string;
     // Node panel
     nodePanelTitle: string;
     nodeKind: string;
@@ -163,9 +161,7 @@ export interface CoreLabels {
     revisionLabel: string;
     // Review
     reviewPlanTitle: string;
-    reviewPlanByPack: string;
     reviewPlanUnchanged: string;
-    reviewPlanModelCalls: string;
     reviewPlanCost: string;
     /** Shown in the confirm chip while the host cannot price the judgement pass. */
     reviewPlanCostPending: string;
@@ -180,7 +176,6 @@ export interface CoreLabels {
     reviewCancelled: string;
     reviewDoneTitle: string;
     reviewDoneBody: string;
-    reviewUnjudged: string;
     reviewContinue: string;
     reviewAborted: string;
     reviewFailed: string;
@@ -229,7 +224,7 @@ lensHints: {
     live: 'What changed in this run, and what changed together.',
     compare: 'Before and after: what got better or worse.',
 },
-lensNotApplicable: 'This lens does not apply to this folder.',
+lensNotApplicable: 'This view does not apply to this folder.',
 lensNeedsJudgement: 'Claims appear after a review with a model. Everything else works without one.',
 legendLabel: 'Legend',
 legend: {
@@ -238,10 +233,10 @@ legend: {
     contradicts: 'Contradicts', agrees: 'Agrees', unused: 'Unused', changed: 'Changed', edge: 'Reference',
 },
 statsLine: '{nodes} nodes · {edges} edges · {sources} sources',
-truncatedNote: 'Showing the most important part of a large graph. Search reaches everything.',
-focusedNote: 'Showing the top {count} nodes.',
+filesLoaded: '{loaded} of {total} loaded',
 showAll: 'Show all',
-view3d: 'Tower',
+view3d: '3D',
+viewTower: 'Tower',
 viewList: 'List',
 viewSystem: 'System',
 viewHeat: 'Heat',
@@ -258,7 +253,6 @@ viewTransit: 'Map',
 viewModesLabel: 'View',
 graphHint: 'Scroll or pinch to zoom, drag to pan, select a node for its details.',
 nodeAria: '{label}, {kind}',
-mapBranch: '{name}, {count} files',
 mapMore: '+{count} more',
 zoomLabel: 'Zoom',
 zoomIn: 'Zoom in',
@@ -286,7 +280,8 @@ edgeKinds: {
 },
 packs: { code: 'Code', docs: 'Documents' },
 findingsTitle: 'Findings',
-findingsEmpty: 'Nothing to act on in this lens.',
+findingsNarrowed: 'Findings · {lens} lens ({shown} of {total})',
+findingsEmpty: 'No open findings at {scope}.',
 findingKinds: {
     cycle: 'Cycle', cloneGroup: 'Clone group', nearDuplicate: 'Near-duplicate', partitionViolation: 'Layer violation',
     violation: 'Layer violation', unpartitioned: 'Unlayered files', unlayered: 'Unlayered files', stale: 'Stale knowledge',
@@ -301,9 +296,7 @@ selectAll: 'Select all',
 clearSelection: 'Clear',
 fixSelected: 'Fix {count} with agent',
 selectedCount: '{count} selected',
-fixBatch: 'Resolve these {count} findings together, in one change:',
 groupFindingsBy: 'kind',
-findingsCollapsed: '{count} findings — expand to load',
 fix: {
     cloneGroup: 'Consolidate the duplicated code[[ in clone group {group}]]: {items}. Extract one shared implementation and point every copy at it.',
     violation: 'Fix the layer violation: {items}. Move the dependency behind a port so {from} no longer uses {to} directly.',
@@ -373,9 +366,7 @@ compareResolved: 'Resolved',
 compareIncomparable: 'Before and after were measured differently, so a missing finding is not counted as resolved.',
 revisionLabel: 'Revision',
 reviewPlanTitle: 'Review {title}?',
-reviewPlanByPack: '{pack}: {count} files',
 reviewPlanUnchanged: '{count} unchanged since the last review',
-reviewPlanModelCalls: '≈ {count} model calls',
 reviewPlanCost: '≈ {cost}',
 reviewPlanCostPending: 'Cost is shown after routing.',
 reviewPlanCostLocal: 'Runs on your local model — no cost.',
@@ -388,7 +379,6 @@ reviewStop: 'Stop',
 reviewCancelled: 'Review cancelled. Nothing was written.',
 reviewDoneTitle: 'Review finished',
 reviewDoneBody: '{extracted} files read · {judged} sections judged · {facts} facts written',
-reviewUnjudged: '{count} sections were left for later by the budget.',
 reviewContinue: 'Continue',
 reviewAborted: 'Review stopped. What was written stays.',
 reviewFailed: 'The review failed. Nothing more was written.',

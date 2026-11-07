@@ -65,7 +65,7 @@ describe('SyncPanel (delta, sources, excluded, diagnostics)', () => {
         expect(document.querySelector('[data-step="walk"]')!.textContent).toContain(L.surface.syncStepDetails.walk);
         expect(document.querySelectorAll('[data-step]')).toHaveLength(6);
         expect(screen.getByTestId('kg-parity-note-files').textContent).toContain('2 not on the server yet.');
-        expect(screen.getByTestId('kg-parity-note-files').textContent).toContain('1 were too large to store.');
+        expect(screen.getByTestId('kg-parity-note-files').textContent).toContain('1 file was too large to store.');
         expect(screen.getByTestId('kg-parity-note-docs').textContent).toBe(L.surface.sync.parityAll);
     });
 

@@ -13,6 +13,7 @@
  *
  * No `vitest/config` import: that module, too, only exists in the frontend's install.
  */
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -37,11 +38,33 @@ const peersFromHost = {
   },
 };
 
+/**
+ * `import css from './x.css?raw'` for tests that read a stylesheet's text (`tokens.test.tsx`). Vitest stubs every `.css`
+ * module to an empty string unless CSS processing is on, and that includes `?raw`, so the test would read '' and find no
+ * rule. This plugin serves such an id straight from disk, before the CSS stub sees it.
+ */
+const RAW_CSS_PREFIX = '\0kg-raw-css:';
+// The virtual id must NOT end in `.css`: vitest's CSS plugin matches ids by that suffix at the transform step and would stub it to ''.
+const RAW_CSS_SUFFIX = '.raw.js';
+const rawCss = {
+  name: 'knowledge-graph-view:raw-css',
+  enforce: 'pre' as const,
+  resolveId(source: string, importer: string | undefined) {
+    if (!source.endsWith('.css?raw')) return null;
+    const file = source.slice(0, -'?raw'.length);
+    return RAW_CSS_PREFIX + path.resolve(importer ? path.dirname(importer.split('?')[0]!) : HERE, file) + RAW_CSS_SUFFIX;
+  },
+  load(id: string) {
+    if (!id.startsWith(RAW_CSS_PREFIX)) return null;
+    return `export default ${JSON.stringify(readFileSync(id.slice(RAW_CSS_PREFIX.length, -RAW_CSS_SUFFIX.length), 'utf8'))};`;
+  },
+};
+
 export default {
   root: HERE,
   // No `resolve.dedupe`: it resolves from `root`, which here has no node_modules. The peers'
   // own imports already land on the same (pnpm, realpath) copies the rule above picks.
-  plugins: [peersFromHost],
+  plugins: [rawCss, peersFromHost],
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],

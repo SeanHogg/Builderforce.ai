@@ -9,16 +9,22 @@
  * is not set up shows that state. It never shows invented numbers").
  */
 
-import type { KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import type { Finding, KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
-import { LAYER_ORDER, layerRank } from './layers';
+import { dataCoverage, hasMeasuredCoverage } from './dataCoverage';
+import { LAYER_ORDER, layerRank, type Provenance } from './layers';
 import { rollUpAreas, type Group } from './areaRollup';
 import { fileNodesOf, outlineView } from './outlineGraph';
+import { reachOf, staticReach } from './staticReach';
+import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
 
 export interface Station {
     id: string;
+    /** The short name shown everywhere (`stationName`); the full path is {@link path}. */
     name: string;
+    /** The full path or label the name was cut from: the tooltip and the accessible name. */
+    path?: string;
     kind: 'area' | 'folder';
     /** Holds (or is made of) files of the `entry` partition. */
     entry: boolean;
@@ -32,8 +38,14 @@ export interface Station {
     findingIds: string[];
     /** Complexity, 1–5 by quantile among stations that have it; undefined = no complexity data. */
     cx?: number;
-    /** Mean line coverage 0–1 over the files that report it; undefined = no coverage data. */
+    /**
+     * Mean line coverage 0–1 over the files that report it; undefined = no coverage data. When no
+     * file of the graph carries a coverage badge it is the share of its files a test REACHES over
+     * `references` edges (see `staticReach`), and {@link covProvenance} is `heuristic`.
+     */
     cov?: number;
+    /** `runtime` = measured by a coverage report; `heuristic` = static reach. Set whenever {@link cov} is. */
+    covProvenance?: Provenance;
     /** Importance relative to the busiest station, 0–1. */
     use: number;
     /** Commits in 90 days relative to the most-changed station, 0–1; undefined = no history. */
@@ -54,6 +66,8 @@ export interface StationModel {
     byId: Map<string, Station>;
     /** File ref → station id (also an area ref and the claims and facts about a file). Sections and symbols resolve through {@link stationOfRef}. */
     stationOf: Map<string, string>;
+    /** Ids of the findings that touch more than {@link SYSTEM_WIDE_SHARE} of the stations: counted on no single station (see {@link systemWideFindings}). */
+    systemWide?: ReadonlySet<string>;
     /** Set when the outline itself was capped: the map shows `shown` of about `total` files. */
     capped?: { shown: number; total: number };
 }
@@ -61,9 +75,22 @@ export interface StationModel {
 export interface StationOptions {
     /** Refs known to have changed (from the compare baseline, a live run or the time slider). */
     changed?: ReadonlySet<string>;
+    /** What the top-level config station is called (the host's `surface.repoConfig` label); absent ⇒ the English {@link REPO_CONFIG_NAME}. */
+    repoConfigName?: string;
 }
 
 const SEVERITY_WEIGHT = { error: 3, warn: 2, info: 1 } as const;
+
+/** A finding touching more than this share of the stations is about the system, not about any one station. */
+export const SYSTEM_WIDE_SHARE = 0.25;
+/** The share means nothing on a handful of stations (one finding over two of five is not "system-wide"). */
+export const SYSTEM_WIDE_MIN_STATIONS = 8;
+
+/** The system-wide findings, for the top of the Act rail. THE one rule: stations carry no count for them. */
+export function systemWideFindings(model: Pick<StationModel, 'systemWide'>, findings: readonly Finding[]): Finding[] {
+    const wide = model.systemWide;
+    return wide && wide.size > 0 ? findings.filter((f) => wide.has(f.id)) : [];
+}
 
 const num = (v: number | string | undefined): number | undefined => {
     if (v === undefined || v === '') return undefined;
@@ -93,11 +120,15 @@ const tail = (ref: string): string => {
 };
 
 
-function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>): Map<string, Group> {
+function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfigName: string): Map<string, Group> {
     const groups = new Map<string, Group>();
     for (const n of files) {
         let id: string, name: string, kind: Station['kind'];
-        if (n.area) {
+        const own = pathOf(n.ref) ?? n.label;
+        if (isRepoConfigFile(own)) {
+            // LICENSE, Dockerfile, dotfiles, root docs: ONE station, not one per file.
+            id = 'folder:repo-config'; name = repoConfigName; kind = 'folder';
+        } else if (n.area) {
             id = n.area; name = index.get(n.area)?.label ?? tail(n.area); kind = 'area';
         } else {
             const path = pathOf(n.ref) ?? n.label;
@@ -170,7 +201,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
     const files = fileNodesOf(graph);
     // Past MAX_STATIONS, areas fold into their parent directory so the map stays readable.
-    const groups = splitEntry(rollUpAreas(baseGroups(files, index), (id) => index.get(id)?.label ?? tail(id)));
+    const groups = splitEntry(rollUpAreas(baseGroups(files, index, opts.repoConfigName ?? REPO_CONFIG_NAME),(id) => index.get(id)?.label ?? tail(id)));
     const groupIds = new Set(groups.map((g) => g.id));
     const stationOf = new Map<string, string>();
     for (const g of groups) for (const n of g.nodes) stationOf.set(n.ref, g.id);
@@ -188,11 +219,13 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     }
     const lookupAny = (ref: string) => lookup(ref) ?? elsewhere.get(ref);
 
-    // Findings → the stations they touch, weighted by severity.
-    const score = new Map<string, number>(), found = new Map<string, string[]>();
+    // Findings → the stations they touch, weighted by severity. A system-wide finding (it touches more than a
+    // quarter of the stations) counts on none of them: it is listed once, at the top of the Act rail.
+    const score = new Map<string, number>(), found = new Map<string, string[]>(), systemWide = new Set<string>();
     for (const f of graph.findings) {
         const touched = new Set<string>();
         for (const ref of f.nodes) { const s = lookupAny(ref); if (s) touched.add(s); }
+        if (groups.length >= SYSTEM_WIDE_MIN_STATIONS && touched.size / groups.length > SYSTEM_WIDE_SHARE) { systemWide.add(f.id); continue; }
         for (const s of touched) {
             score.set(s, (score.get(s) ?? 0) + SEVERITY_WEIGHT[f.severity]);
             (found.get(s) ?? found.set(s, []).get(s)!).push(f.id);
@@ -219,6 +252,10 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         || n.badges?.added !== undefined || n.badges?.removed !== undefined || n.badges?.changed !== undefined;
 
     const anyChurn = files.some((n) => num(n.badges?.churn) !== undefined);
+    // No file carries a coverage badge: fall back to the static reach of the test files (a heuristic, said so on the station).
+    const reach = hasMeasuredCoverage(dataCoverage(graph)) ? null : staticReach(graph);
+    const shorts = stationNames(groups.map((g) => g.name));
+    const shortNames = new Map(groups.map((g, i) => [g.id, shorts[i]!] as const));
     const raw = groups.map((g) => {
         const complexities = g.nodes.map((n) => num(n.badges?.complexity)).filter((v): v is number => v !== undefined);
         const covs = g.nodes.map((n) => num(n.badges?.coverage)).filter((v): v is number => v !== undefined);
@@ -227,7 +264,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         return {
             g, importance,
             cxRaw: complexities.length ? Math.max(...complexities) : undefined,
-            cov: covs.length ? covs.reduce((a, b) => a + b, 0) / covs.length : undefined,
+            cov: covs.length ? covs.reduce((a, b) => a + b, 0) / covs.length : reachOf(reach, g.nodes.map((n) => n.ref)),
             churnRaw: anyChurn ? g.nodes.reduce((a, n) => a + (num(n.badges?.churn) ?? 0), 0) : undefined,
         };
     });
@@ -247,7 +284,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
             unused += num(n.badges?.unusedExports) ?? 0;
         }
         const station: Station = {
-            id: g.id, name: g.name, kind: g.kind,
+            id: g.id, name: shortNames.get(g.id) ?? g.name, path: g.name, kind: g.kind,
             entry: g.nodes.some((n) => n.partition === 'entry'),
             // Most important first: Show focuses the first 200 and selects the first.
             refs: [...g.nodes].sort((a, b) => b.importance - a.importance || cmp(a.ref, b.ref)).map((n) => n.ref), files: g.nodes.length,
@@ -263,7 +300,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         if (owner) station.owner = owner;
         const cx = cxLevels.get(g.id);
         if (cx !== undefined) station.cx = cx;
-        if (r.cov !== undefined) station.cov = r.cov;
+        if (r.cov !== undefined) { station.cov = r.cov; station.covProvenance = reach ? 'heuristic' : 'runtime'; }
         if (r.churnRaw !== undefined) station.churn = maxChurn > 0 ? r.churnRaw / maxChurn : 0;
         return station;
     }).sort((a, b) => b.use - a.use || cmp(a.name, b.name) || cmp(a.id, b.id));
@@ -271,7 +308,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     for (const [ref, station] of elsewhere) stationOf.set(ref, station);
     const view = outlineView(graph);
     return {
-        stations, byId: new Map(stations.map((s) => [s.id, s] as const)), stationOf,
+        stations, byId: new Map(stations.map((s) => [s.id, s] as const)), stationOf, systemWide,
         ...(view?.capped ? { capped: { shown: view.shown, total: view.total } } : {}),
     };
 }

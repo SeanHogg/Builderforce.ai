@@ -10,6 +10,7 @@ import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { findingItems, findingTitle } from '../../findingText';
 import { nodeIndex } from '../../graphModel';
 import { muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { PanelProps } from '../registry';
 import { Section } from '../drawers/ui';
 import { Segmented } from '../ui';
@@ -48,7 +49,7 @@ export function FixFlowView({ finding, graph, labels, source, onCompose, onChang
                         <div style={{ display: 'grid', gap: 4 }}>
                             <textarea
                                 readOnly aria-label={t.promptTitle} value={promptRequest(findingTitle(finding, labels), labels, findingItems(finding, index))}
-                                style={{ minHeight: 96, resize: 'none', padding: 8, borderRadius: 8, font: 'inherit', fontSize: 12, minWidth: 0, boxSizing: 'border-box', background: 'transparent', color: 'inherit', border: '1px solid currentColor' }}
+                                style={{ minHeight: 96, resize: 'none', padding: 8, borderRadius: 8, font: 'inherit', ...TYPE.body, minWidth: 0, boxSizing: 'border-box', background: 'transparent', color: 'inherit', border: '1px solid currentColor' }}
                             />
                             <span style={muted}>{t.promptNote}</span>
                         </div>

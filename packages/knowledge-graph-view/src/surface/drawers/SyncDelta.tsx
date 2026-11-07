@@ -6,7 +6,9 @@
  */
 
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
-import { MONO, card, muted } from '../../styles';
+import { counted } from '../plural';
+import { card, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { Commit } from '../../types';
 import { relativeTime } from '../syncPill';
 import { deltaFeed, pendingCount } from './syncDeltaModel';
@@ -34,9 +36,9 @@ export function SyncDelta({ commits, hasHistory, loading = false, lastReviewedAt
                                 {rows.map((r) => (
                                     <li key={r.sha} data-sha={r.sha} data-state={r.state} style={{ ...card, display: 'flex', gap: 8, alignItems: 'flex-start', padding: 8 }}>
                                         <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
-                                            <strong style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{r.title}</strong>
-                                            <span style={{ ...muted, fontFamily: MONO, overflowWrap: 'anywhere' }}>
-                                                {fillTemplate(r.author ? t.deltaRowAuthor : t.deltaRow, { sha: r.sha.slice(0, SHA), author: r.author ?? '', count: r.files, when: relativeTime(r.at) })}
+                                            <strong style={{ ...TYPE.subtitle, overflowWrap: 'anywhere' }}>{r.title}</strong>
+                                            <span style={{ ...TYPE.monoMeta, fontSize: TYPE.meta.fontSize, overflowWrap: 'anywhere' }}>
+                                                {counted(labels, r.author ? 'commitRowAuthor' : 'commitRow', r.files, { sha: r.sha.slice(0, SHA), author: r.author ?? '', when: relativeTime(r.at) })}
                                             </span>
                                         </span>
                                         <StateLabel tone={r.state === 'pending' ? 'cycle' : 'agrees'}>{r.state === 'pending' ? t.deltaPending : t.deltaApplied}</StateLabel>

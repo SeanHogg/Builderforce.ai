@@ -9,14 +9,24 @@
  * box or a sheet (a phone) leaves it off.
  */
 
-import type { CSSProperties } from 'react';
-import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { useMemo } from 'react';
+import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
+import { camelKind, fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { counted } from './plural';
+import { kindTones } from './system/systemModel';
 import { cssVar } from '../scene/themeColors';
-import { heading, layerColor, list, MONO, muted, swatch, type LayerId } from '../styles';
+import { list, muted, swatch } from '../styles';
+import { TYPE } from './ui/type';
 import { LegendGlyph } from './LegendGlyph';
+import { LineRow } from './rail/LineRow';
+import { StopRow } from './rail/StopRow';
+import { firstFindings, stopTag } from './rail/stopTag';
 import type { LinesModel } from './lines';
-import { CHANNELS, lineTone, type OverlayModel } from './overlays';
-import type { Station, StationModel } from './stations';
+import { cmp } from '../order';
+import type { DataCoverage } from './dataCoverage';
+import { notSetUpText } from './notSetUpText';
+import { CHANNELS, LINE_TONES, lineTone, type OverlayModel } from './overlays';
+import type { StationModel } from './stations';
 
 export interface LinesPanelProps {
     lines: LinesModel;
@@ -30,21 +40,27 @@ export interface LinesPanelProps {
     onSelectStation(id: string): void;
     /** Draw the rail chrome: 250px wide, panel background, right border, fills the height. */
     rail?: boolean | undefined;
+    /** What the graph carries (`dataCoverage`): the reason an unset channel gives. Absent ⇒ "Not set up" alone. */
+    coverage?: DataCoverage | null | undefined;
+    /** Which extra marks the map draws, so the legend explains them: a ✕ dead end, a square document. */
+    extras?: { deadEnd: boolean; docs: boolean } | undefined;
+    /** The findings the Act rail lists, in its order: a stop's tag names its first one by place in this list. Absent ⇒ no finding tags. */
+    findings?: readonly Finding[] | undefined;
+    /** The finding kinds of the graph, given only while the System camera is on: the legend names the colour of each bar segment. */
+    kinds?: readonly string[] | undefined;
 }
 
-const LAYERS: ReadonlySet<string> = new Set(['entry', 'presentation', 'application', 'domain', 'infrastructure', 'data']);
-const layerOf = (st: Station): LayerId => (st.layer && LAYERS.has(st.layer) ? (st.layer as LayerId) : 'other');
-
-const row = (on: boolean): CSSProperties => ({
-    width: '100%', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'start', cursor: 'pointer', font: 'inherit', fontSize: 12,
-    minHeight: `calc(var(--kg-control, 40px) - 2px)`, padding: '0 8px', borderRadius: 8, color: cssVar('text'),
-    border: `1px solid ${on ? cssVar('accent') : 'transparent'}`, background: on ? cssVar('accentSoft') : 'transparent',
-});
-
-export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedStation, onSelectLine, onSelectStation, rail = false }: LinesPanelProps) {
+export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedStation, onSelectLine, onSelectStation, rail = false, coverage, extras, findings, kinds }: LinesPanelProps) {
     const s = labels.surface;
+    const kindTone = useMemo(() => kindTones(kinds ?? []), [kinds]);
+    // A coverage number that is a static reach says "Reached", never "Coverage" (it is a heuristic, not a measurement).
+    const reached = stations.stations.some((st) => st.covProvenance === 'heuristic');
+    const metricName = (m: keyof typeof s.metricNames) => (m === 'cov' && reached ? s.map.stats.reached : s.metricNames[m]);
+    // Owner swatches in the colour order the map uses (sorted names, line palette).
+    const ownerNames = [...new Set(stations.stations.map((st) => st.owner).filter((o): o is string => !!o))].sort(cmp).slice(0, LINE_TONES.length);
     const line = lines.lines.find((l) => l.id === lineId) ?? null;
-    const layerName = (st: Station) => s.layers[(st.layer ?? 'other') as keyof typeof s.layers] ?? s.layers.other;
+    // Each stop's first finding, numbered as the Act rail lists them (`findings` is that list).
+    const firstOf = useMemo(() => firstFindings(stations.stations, findings ?? []), [stations, findings]);
     const legend = CHANNELS.filter(({ id }) => overlay.status[id] !== 'off');
     const pins = overlay.bindings.pins === 'on';
     const owners = overlay.status.colour === 'ready' && overlay.bindings.colour === 'owner';
@@ -58,42 +74,29 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
             }}
         >
             <section aria-label={s.linesTitle} style={{ display: 'grid', gap: 6 }}>
-                <h3 style={{ ...heading, fontSize: 13 }}>{s.rail.heading}</h3>
+                <h3 style={TYPE.sectionHeading}>{s.rail.heading}</h3>
                 {lines.lines.length === 0 ? <p style={muted}>{s.linesEmpty}</p> : (
                     <ul style={{ ...list, gap: 2 }}>
                         {lines.lines.map((l) => (
                             <li key={l.id}>
-                                <button type="button" aria-pressed={l.id === lineId} data-line={l.id} onClick={() => onSelectLine(l.id)} style={row(l.id === lineId)}>
-                                    <span aria-hidden="true" style={{ width: 18, height: 6, borderRadius: 3, flex: 'none', background: cssVar(lineTone(l.colourIndex)) }} />
-                                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: l.id === lineId ? 700 : 500 }}>
-                                        {fillTemplate(s.lineName, { name: l.name })}
-                                    </span>
-                                    <span style={{ ...muted, fontFamily: MONO }}>{fillTemplate(s.lineStops, { count: l.stops.length })}</span>
-                                </button>
+                                <LineRow line={l} selected={l.id === lineId} byId={stations.byId} labels={labels} onSelect={onSelectLine} />
                             </li>
                         ))}
                     </ul>
                 )}
-                {lines.omitted > 0 && <p style={{ ...muted, margin: 0 }}>{fillTemplate(s.omittedLines, { count: lines.omitted })}</p>}
+                {lines.omitted > 0 && <p style={{ ...muted, margin: 0 }}>{counted(labels, 'entryPointsOmitted', lines.omitted)}</p>}
             </section>
 
             <section aria-label={line ? fillTemplate(s.stationsOn, { name: line.name }) : s.stationsPick} style={{ display: 'grid', gap: 6 }}>
-                <h3 style={{ ...heading, fontSize: 12, color: cssVar('muted') }}>{line ? fillTemplate(s.stationsOn, { name: line.name }) : s.stationsPick}</h3>
+                <h3 style={TYPE.sectionHeading}>{line ? fillTemplate(s.stationsOn, { name: line.name }) : s.stationsPick}</h3>
                 {line && (
                     <ul style={{ ...list, gap: 2 }}>
                         {line.stops.flatMap((id) => stations.byId.get(id) ?? []).map((st) => (
                             <li key={st.id}>
-                                <button
-                                    type="button" aria-pressed={st.id === selectedStation} data-station-row={st.id} title={fillTemplate(s.stationMeta, { files: st.files, layer: layerName(st) })}
-                                    onClick={() => onSelectStation(st.id)} style={row(st.id === selectedStation)}
-                                >
-                                    <span aria-hidden="true" style={swatch(layerColor(layerOf(st)))} />
-                                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: MONO, fontSize: 11.5 }}>
-                                        {st.name}
-                                        {lines.interchanges.has(st.id) && <span style={{ ...muted, marginInlineStart: 6 }}>{fillTemplate(s.interchange, { count: lines.interchanges.get(st.id)!.length })}</span>}
-                                    </span>
-                                    <span style={{ ...muted, fontFamily: MONO }}>{st.files}</span>
-                                </button>
+                                <StopRow
+                                    station={st} selected={st.id === selectedStation} overlay={overlay} lineColourIndex={line.colourIndex}
+                                    interchange={lines.interchanges.get(st.id)?.length ?? 0} tag={stopTag(st, firstOf.get(st.id), labels)} labels={labels} onSelect={onSelectStation}
+                                />
                             </li>
                         ))}
                     </ul>
@@ -101,26 +104,59 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
             </section>
 
             <section aria-label={s.legendTitle} data-testid="kg-surface-legend" style={{ display: 'grid', gap: 6, marginTop: 'auto', paddingTop: 8, borderTop: `1px solid ${cssVar('border')}` }}>
-                <h3 style={{ ...heading, fontSize: 12 }}>{s.rail.legendHeading}</h3>
+                <h3 style={{ ...TYPE.subtitle, color: cssVar('text') }}>{s.rail.legendHeading}</h3>
                 <ul style={{ ...list, gap: 6 }}>
                     {legend.map(({ id }) => (
-                        <li key={id} data-channel={id} data-status={overlay.status[id]} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <li key={id} data-channel={id} data-status={overlay.status[id]} style={{ ...TYPE.meta, display: 'flex', alignItems: 'center', gap: 8 }}>
                             <LegendGlyph channel={id} metric={overlay.bindings[id]} status={overlay.status[id]} />
-                            <span>{fillTemplate(s.legendRow, { channel: s.channels[id], metric: s.metricNames[overlay.bindings[id]] })}</span>
-                            {overlay.status[id] === 'not-set-up' && <span style={muted}>· {s.notSetUp}</span>}
+                            <span>{fillTemplate(s.legendRow, { channel: s.channels[id], metric: metricName(overlay.bindings[id]) })}</span>
+                            {overlay.status[id] === 'not-set-up' && <span style={muted}>· {notSetUpText(labels, coverage, overlay.bindings[id])}, {s.explain.legendNotSetUp}</span>}
                             {id === 'colour' && owners && <span style={muted}>· {s.rail.ownerSwatches}</span>}
                         </li>
                     ))}
+                    {owners && ownerNames.length > 0 && (
+                        <li data-testid="kg-owner-swatches" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', ...TYPE.meta }}>
+                            {ownerNames.map((name, i) => (
+                                <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                                    <span aria-hidden="true" style={swatch(cssVar(lineTone(i)))} />{name}
+                                </span>
+                            ))}
+                        </li>
+                    )}
+                    {kindTone.size > 0 && (
+                        <li data-testid="kg-kinds-legend" aria-label={s.kindsLegend} style={{ display: 'grid', gap: 4, ...TYPE.meta }}>
+                            <span style={muted}>{s.kindsLegend}</span>
+                            <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px' }}>
+                                {[...kindTone].map(([kind, tone]) => (
+                                    <span key={kind} data-kind={kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                                        <span aria-hidden="true" style={swatch(cssVar(tone))} />{labels.findingKinds[camelKind(kind)] ?? kind}
+                                    </span>
+                                ))}
+                            </span>
+                        </li>
+                    )}
                     {pins && (
-                        <li data-channel="pins" data-status="ready" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <li data-channel="pins" data-status="ready" style={{ ...TYPE.meta, display: 'flex', alignItems: 'center', gap: 8 }}>
                             <LegendGlyph channel="pins" metric="anti" status="ready" />
                             <span>{s.channels.pins}</span>
                         </li>
                     )}
                     <li style={{ ...muted, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <svg width={40} height={16} aria-hidden="true" style={{ flex: 'none' }}><line x1={0} x2={40} y1={8} y2={8} stroke={cssVar('edge')} strokeWidth={3} strokeDasharray="7 5" /></svg>
+                        <svg width={40} height={16} aria-hidden="true" style={{ flex: 'none' }}><line x1={0} x2={40} y1={8} y2={8} stroke={cssVar('violation')} strokeWidth={3} strokeDasharray="7 5" /></svg>
                         {s.untestedSegment}
                     </li>
+                    {extras?.deadEnd && (
+                        <li data-legend="dead-end" style={{ ...muted, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <svg width={40} height={16} aria-hidden="true" style={{ flex: 'none' }}><path d="M14 3 L26 13 M26 3 L14 13" stroke={cssVar('violation')} strokeWidth={2.5} strokeLinecap="round" fill="none" /></svg>
+                            {s.map.deadEnd}
+                        </li>
+                    )}
+                    {extras?.docs && (
+                        <li data-legend="docs" style={{ ...muted, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <svg width={40} height={16} aria-hidden="true" style={{ flex: 'none' }}><rect x={14} y={2} width={12} height={12} rx={2} fill="none" stroke={cssVar('edge')} strokeWidth={2} /></svg>
+                            {s.map.doc}
+                        </li>
+                    )}
                     {legend.length === 0 && !pins && <li style={muted}>{s.rail.legendEmpty}</li>}
                 </ul>
             </section>

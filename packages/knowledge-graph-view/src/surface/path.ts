@@ -59,8 +59,8 @@ export function pathOfStations(
 }
 
 export interface SpineItem {
-    kind: 'root' | 'station' | 'file' | 'symbol';
-    /** The station id or node ref this crumb selects (the root has none). */
+    kind: 'root' | 'line' | 'station' | 'file' | 'symbol';
+    /** The station id or node ref this crumb selects (the root and the line have none). */
     id?: string;
     label: string;
 }
@@ -72,7 +72,17 @@ export interface SpineInput {
     nodeLabel(ref: string): string;
 }
 
-/** station › file › symbol under the reviewed folder; absent levels are left out. */
+/**
+ * Puts the drawn line's crumb ("VS Code line") right after the root: root › line › station. No label ⇒ the items
+ * unchanged. Picking it goes back up to the line (`selectStation(null)`). Applied to `buildSpine`'s items.
+ */
+export function withLineCrumb(items: readonly SpineItem[], line: string | null | undefined): SpineItem[] {
+    if (!line) return [...items];
+    const [root, ...rest] = items;
+    return root ? [root, { kind: 'line', label: line }, ...rest] : [{ kind: 'line', label: line }];
+}
+
+/** station › file › symbol under the reviewed folder; absent levels are left out (the line crumb is `withLineCrumb`). */
 export function buildSpine({ rootTitle, station, node, nodeLabel }: SpineInput): SpineItem[] {
     const items: SpineItem[] = [{ kind: 'root', label: rootTitle }];
     if (station) items.push({ kind: 'station', id: station.id, label: station.name });

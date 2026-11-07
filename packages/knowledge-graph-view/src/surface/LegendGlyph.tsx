@@ -9,6 +9,7 @@
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import type { ChannelId, ChannelStatus, MetricId } from './overlays';
 import { LINE_TONES, SEVERITY_TONES } from './overlays';
+import { FONT_UI, TYPE } from './ui/type';
 
 export type GlyphChannel = ChannelId | 'pins';
 
@@ -67,7 +68,7 @@ export function LegendGlyph({ channel, metric, status }: LegendGlyphProps) {
             body = (
                 <>
                     <circle cx={W / 2} cy={mid} r={7} fill={cssVar('sev5')} />
-                    <text x={W / 2} y={mid + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill={cssVar('bg')}>3</text>
+                    <text x={W / 2} y={mid + 3.5} textAnchor="middle" fontFamily={FONT_UI} fontSize={TYPE.tag.fontSize} fontWeight={TYPE.tag.fontWeight} fill={cssVar('bg')}>3</text>
                 </>
             );
     }

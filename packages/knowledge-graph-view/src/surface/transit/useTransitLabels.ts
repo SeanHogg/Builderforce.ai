@@ -11,6 +11,7 @@ import type { Station } from '../stations';
 import type { Point } from './geometry';
 import { placeLabels, type Box, type LabelItem, type PlacedLabel } from './labelPlacement';
 import type { StationStyle } from '../overlays';
+import { towerBox } from './TowerMark';
 
 export interface StationNote { text: string; accent: boolean }
 
@@ -25,10 +26,12 @@ export interface TransitLabelsInput {
     width: number;
     height: number;
     obstacles: readonly Box[];
+    /** The Tower camera: each station's obstacle is its tower body, not a circle. */
+    tower?: boolean | undefined;
 }
 
 export function useTransitLabels(i: TransitLabelsInput): { placed: Map<string, PlacedLabel>; notes: Map<string, StationNote | null> } {
-    const { drawn, positions, styles, lit, noteOf, selectedStation, labels, width, height, obstacles } = i;
+    const { drawn, positions, styles, lit, noteOf, selectedStation, labels, width, height, obstacles, tower } = i;
     return useMemo(() => {
         const notes = new Map<string, StationNote | null>();
         for (const st of drawn) {
@@ -43,8 +46,10 @@ export function useTransitLabels(i: TransitLabelsInput): { placed: Map<string, P
                 const pos = positions.get(st.id);
                 if (!pos) return [];
                 const note = lit !== null && !lit.has(st.id) ? null : notes.get(st.id)?.text ?? null;
-                return [{ id: st.id, x: pos.x, y: pos.y, r: (styles.get(st.id)?.size ?? 8) + 4, name: st.name, note }];
+                const style = styles.get(st.id);
+                const mark = tower && style ? towerBox(pos, style, st.cx) : undefined;
+                return [{ id: st.id, x: pos.x, y: pos.y, r: (style?.size ?? 8) + 4, mark, name: st.name, note }];
             });
         return { placed: placeLabels(items, { width, height, obstacles }), notes };
-    }, [drawn, positions, styles, lit, noteOf, selectedStation, labels, width, height, obstacles]);
+    }, [drawn, positions, styles, lit, noteOf, selectedStation, labels, width, height, obstacles, tower]);
 }

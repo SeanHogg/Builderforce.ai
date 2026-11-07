@@ -13,6 +13,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
+import { counted } from './surface/plural';
 import { fillTemplate } from './template';
 import { nodeIndex } from './graphModel';
 import { findingBatchRequest, findingDetail, findingItems, findingRequest, findingTitle } from './findingText';
@@ -24,6 +25,9 @@ import { button, card, heading, list, muted, primaryButton, quietButton } from '
 export interface FindingsPanelProps {
     graph: KnowledgeGraph;
     findings: readonly Finding[];
+    /** How many findings the rail holds in all. When the list is narrower and `lensName` is given, the heading says so ("· Structure lens (2 of 5)"). */
+    total?: number | undefined;
+    lensName?: string | undefined;
     labels: KnowledgeGraphLabels;
     onShow(refs: string[]): void;
     onCompose?: ((text: string) => void) | undefined;
@@ -34,6 +38,8 @@ export interface FindingsPanelProps {
     badge?: ((f: Finding) => ReactNode) | undefined;
     /** Opens the Resolve drawer on a finding. Absent ⇒ no Resolve button. */
     onResolve?: ((f: Finding) => void) | undefined;
+    /** Names where the list is scoped to, for the empty line ("No open findings at {scope}"); absent ⇒ the whole graph. */
+    scope?: string | undefined;
 }
 
 const SEVERITY_TONE = { error: 'violation', warn: 'cycle', info: 'muted' } as const;
@@ -86,7 +92,7 @@ function FindingRow({ f, labels, index, checked, onToggle, onShow, onCompose, ev
     );
 }
 
-export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evidence, onOpenSource, badge, onResolve }: FindingsPanelProps) {
+export function FindingsPanel({ graph, findings, total, lensName, labels, onShow, onCompose, evidence, onOpenSource, badge, onResolve, scope }: FindingsPanelProps) {
     const index = useMemo(() => nodeIndex(graph), [graph]);
     // The multiselect Fix-with-agent selection (by finding id; stable within a load).
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -123,9 +129,13 @@ export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evid
 
     return (
         <section aria-label={labels.findingsTitle} style={{ display: 'grid', gap: 8 }}>
-            <h3 style={heading}>{labels.findingsTitle} <span style={muted}>({findings.length})</span></h3>
+            <h3 style={heading}>
+                {total !== undefined && lensName && total > findings.length
+                    ? fillTemplate(labels.findingsNarrowed, { lens: lensName, shown: findings.length, total })
+                    : <>{labels.findingsTitle} <span style={muted}>({findings.length})</span></>}
+            </h3>
             {findings.length === 0 ? (
-                <p style={muted}>{labels.findingsEmpty}</p>
+                <p style={muted}>{fillTemplate(labels.findingsEmpty, { scope: scope ?? labels.surface.actScopeAll })}</p>
             ) : (
                 <>
                     {onCompose && (
@@ -159,7 +169,7 @@ export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evid
                                             {labels.severity[worst]}
                                         </span>
                                         <strong style={{ fontSize: 13 }}>{key}</strong>
-                                        <span style={muted}>{fillTemplate(labels.findingsCollapsed, { count: members.length })}</span>
+                                        <span style={muted}>{counted(labels, 'findingCollapsed', members.length)}</span>
                                     </button>
                                     {expanded && (
                                         <ul style={{ ...list, paddingInlineStart: 20 }}>

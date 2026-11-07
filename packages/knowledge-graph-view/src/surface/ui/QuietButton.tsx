@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, CSSProperties } from 'react';
 import { cssVar } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
+import { TYPE } from './type';
 
 export type QuietButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'type' | 'style'> & {
     style?: CSSProperties;
@@ -10,7 +11,7 @@ export type QuietButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'cl
 
 export const quietStyle: CSSProperties = {
     minHeight: `calc(${CONTROL} - 6px)`, padding: '0 6px', border: 0, borderRadius: 6, background: 'transparent',
-    color: cssVar('muted'), font: 'inherit', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+    color: cssVar('muted'), font: 'inherit', ...TYPE.pill, cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 export function QuietButton({ style, ...rest }: QuietButtonProps) {

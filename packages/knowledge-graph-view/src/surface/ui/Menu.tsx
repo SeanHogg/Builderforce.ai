@@ -8,6 +8,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { cssVar } from '../../scene/themeColors';
 import { muted } from '../../styles';
 import { pillStyle } from './Pill';
+import { TYPE } from './type';
 
 export interface MenuItem {
     id: string;
@@ -42,7 +43,7 @@ interface MenuBase {
 }
 
 const accentStyle = (open: boolean): CSSProperties => ({
-    height: 40, padding: '0 12px', borderRadius: 10, cursor: 'pointer', flex: 'none', font: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+    height: 40, padding: '0 12px', borderRadius: 10, cursor: 'pointer', flex: 'none', font: 'inherit', ...TYPE.pill, whiteSpace: 'nowrap',
     border: `1px solid ${cssVar('accent')}`, background: open ? cssVar('accent') : cssVar('accentSoft'), color: open ? cssVar('onAccent') : cssVar('text'),
 });
 
@@ -60,9 +61,9 @@ const panel = (alignStart: boolean, up: boolean): CSSProperties => ({
 });
 
 const itemStyle = (selected: boolean, disabled: boolean): CSSProperties => ({
-    display: 'grid', gap: 1, textAlign: 'start', padding: '6px 10px', border: 0, borderRadius: 7, font: 'inherit', fontSize: 12,
+    display: 'grid', gap: 1, textAlign: 'start', padding: '6px 10px', border: 0, borderRadius: 7, font: 'inherit', ...(selected ? TYPE.pillOn : TYPE.pill),
     color: cssVar('text'), cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
-    background: selected ? cssVar('accentSoft') : 'transparent', fontWeight: selected ? 700 : 500,
+    background: selected ? cssVar('accentSoft') : 'transparent',
 });
 
 export function Menu(props: MenuProps) {

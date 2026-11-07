@@ -39,6 +39,7 @@ export const PLANE_GAP = 6;
 export function towerHeight(level: number | undefined): number {
     return level === undefined ? 1.2 : round(0.6 + level * 0.5);
 }
+
 export const LAYOUT_ITERATIONS = 40;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const AREA_SPACING = 4.5;

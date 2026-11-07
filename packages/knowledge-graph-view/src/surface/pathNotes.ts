@@ -5,7 +5,8 @@
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import type { KnowledgeGraphLabels } from '../labels';
+import { counted } from './plural';
 import type { Station } from './stations';
 
 /** Below this mean coverage a station reads as "no tests" (the same line the Untested question draws). */
@@ -18,12 +19,12 @@ export function stationNote(st: Station | undefined, labels: KnowledgeGraphLabel
     const parts: string[] = [];
     if (st.cov !== undefined && st.cov < UNTESTED_BELOW) parts.push(t.noTests);
     if (st.patterns[0]) parts.push(st.patterns[0]);
-    if (st.findingIds.length > 0) parts.push(fillTemplate(t.findings, { count: st.findingIds.length }));
+    if (st.findingIds.length > 0) parts.push(counted(labels, 'finding', st.findingIds.length));
     return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-/** The first HTTP route (`GET /users/:id`) of the station's files, else the station's own name. */
-export function entryLabel(graph: Pick<KnowledgeGraph, 'nodes'>, station: Pick<Station, 'name' | 'refs'> | undefined): string {
+/** The first HTTP route (`GET /users/:id`) of the station's files; '' when none (the line's own name says the rest). */
+export function entryRoute(graph: Pick<KnowledgeGraph, 'nodes'>, station: Pick<Station, 'refs'> | undefined): string {
     if (!station) return '';
     const refs = new Set(station.refs);
     for (const n of graph.nodes) {
@@ -31,5 +32,10 @@ export function entryLabel(graph: Pick<KnowledgeGraph, 'nodes'>, station: Pick<S
         const first = String(n.badges?.routes ?? '').split(';').map((r) => r.trim()).find((r) => r !== '');
         if (first) return first;
     }
-    return station.name;
+    return '';
+}
+
+/** The first HTTP route of the station's files, else the station's own name. */
+export function entryLabel(graph: Pick<KnowledgeGraph, 'nodes'>, station: Pick<Station, 'name' | 'refs'> | undefined): string {
+    return station ? entryRoute(graph, station) || station.name : '';
 }

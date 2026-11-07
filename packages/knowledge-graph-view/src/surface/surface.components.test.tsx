@@ -9,7 +9,11 @@ import { ActPanel } from './ActPanel';
 import { CAMERAS } from './cameras';
 import { LinesPanel } from './LinesPanel';
 import { buildLines } from './lines';
+import { dataCoverage } from './dataCoverage';
+import { notSetUpText } from './notSetUpText';
+import { truncatedFixture } from './outlineFixture';
 import { OverlayMenu } from './OverlayMenu';
+import { counted } from './plural';
 import { cssVar } from '../scene/themeColors';
 import { lineTone, makeOverlay, PRESETS } from './overlays';
 import { PanelDrawer, PanelToggle } from './PanelDock';
@@ -38,7 +42,7 @@ function map(over: Partial<Parameters<typeof TransitMap>[0]> = {}) {
 describe('TransitMap', () => {
     it('draws a button per station that selects it', () => {
         const { props } = map();
-        const api = screen.getByRole('button', { name: fillTemplate(L.surface.stationAria, { name: 'API', layer: L.surface.layers.presentation, files: 2 }) });
+        const api = screen.getByRole('button', { name: fillTemplate(L.surface.stationAria, { name: 'API', layer: L.surface.layers.presentation, files: counted(L, 'file', 2) }) });
         fireEvent.click(api);
         expect(props.onSelectStation).toHaveBeenCalledWith(id('API'));
         fireEvent.keyDown(api, { key: 'Enter' });
@@ -55,7 +59,7 @@ describe('TransitMap', () => {
         expect(stubs).toHaveLength(lines.lines.length);
         expect(new Set(stubs)).toEqual(new Set(lines.lines.map((l) => cssVar(lineTone(l.colourIndex)))));
         expect(screen.getByText(L.surface.layers.entry.toUpperCase())).toBeTruthy();
-        expect(container.querySelector(`[data-station="${id('API')}"] title`)?.textContent).toBe(fillTemplate(L.surface.interchange, { count: 2 }));
+        expect(container.querySelector(`[data-station="${id('API')}"] title`)?.textContent).toBe(counted(L, 'interchange', 2));
     });
 
     it('dashes only the segments no test reaches, and only where coverage exists', () => {
@@ -68,7 +72,7 @@ describe('TransitMap', () => {
 
     it('pins findings to their station, and the pin selects it', () => {
         const { props } = map({ pins: [{ stationId: id('API'), count: 2 }] });
-        fireEvent.click(screen.getByRole('button', { name: fillTemplate(L.surface.pinAria, { count: 2, name: 'API' }) }));
+        fireEvent.click(screen.getByRole('button', { name: counted(L, 'pinFindings', 2, { name: 'API' }) }));
         expect(props.onSelectStation).toHaveBeenCalledWith(id('API'));
     });
 
@@ -131,7 +135,7 @@ describe('LinesPanel', () => {
         const bare = buildStations(codeFixture());
         render(<LinesPanel {...base} lines={{ lines: [], interchanges: new Map(), omitted: 2 }} stations={bare} overlay={makeOverlay(PRESETS.risk, bare.stations)} lineId={null} />);
         expect(screen.getByText(L.surface.linesEmpty)).toBeTruthy();
-        expect(screen.getByText(fillTemplate(L.surface.omittedLines, { count: 2 }))).toBeTruthy();
+        expect(screen.getByText(counted(L, 'entryPointsOmitted', 2))).toBeTruthy();
         const legend = within(screen.getByTestId('kg-surface-legend'));
         expect(legend.getByText(new RegExp(fillTemplate(L.surface.legendRow, { channel: L.surface.channels.size, metric: L.surface.metricNames.cx })))).toBeTruthy();
         expect(document.querySelectorAll('[data-status="not-set-up"]').length).toBeGreaterThan(0);
@@ -157,15 +161,11 @@ describe('ActPanel', () => {
         expect(onCompose).toHaveBeenCalledTimes(1);
     });
 
-    it('names its scope, clears it, and shows a station with not-set-up metrics', () => {
-        const onClearScope = vi.fn(), onShow = vi.fn();
+    it('names its scope in the title and clears it', () => {
+        const onClearScope = vi.fn();
         const web = model.stations.find((s) => s.name === 'Web app')!;
-        act({ scopeName: 'Web app', station: web, onClearScope, onShow });
-        expect(screen.getByText(fillTemplate(L.surface.actScope, { scope: 'Web app' }))).toBeTruthy();
-        const facts = within(screen.getByTestId('kg-station-facts'));
-        expect(facts.getAllByText(L.surface.notSetUp).length).toBeGreaterThan(0);
-        fireEvent.click(facts.getByRole('button', { name: L.surface.showFiles }));
-        expect(onShow).toHaveBeenCalledWith(web.refs);
+        act({ scopeName: 'Web app', station: web, onClearScope });
+        expect(screen.getByTestId('kg-act-title').textContent).toBe(counted(L, 'issueAt', graph.findings.length, { scope: 'Web app' }));
         fireEvent.click(screen.getByRole('button', { name: L.surface.actScopeAll }));
         expect(onClearScope).toHaveBeenCalled();
     });
@@ -203,6 +203,16 @@ describe('OverlayMenu', () => {
         expect(within(menu.getByRole('group', { name: L.surface.channels.colour })).getByText(`${L.surface.metricNames.owner} · ${L.surface.notSetUp}`)).toBeTruthy();
     });
 
+    it('says WHY a metric is not set up, from the coverage facts, as the legend does (not a bare "Not set up")', () => {
+        const cutCoverage = dataCoverage(truncatedFixture(false));
+        render(<OverlayMenu labels={L} stations={buildStations(codeFixture()).stations} coverage={cutCoverage} bindings={PRESETS.risk} preset="risk" onPreset={vi.fn()} onChannel={vi.fn()} onPins={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { expanded: false }));
+        const colour = within(within(screen.getByTestId('kg-overlay-menu')).getByRole('group', { name: L.surface.channels.colour }));
+        const reason = notSetUpText(L, cutCoverage, 'owner');
+        expect(reason).not.toBe(L.surface.notSetUp);
+        expect(colour.getByText(`${L.surface.metricNames.owner} · ${reason}`)).toBeTruthy();
+    });
+
     it('closes on Escape', () => {
         open();
         fireEvent.keyDown(screen.getByTestId('kg-overlay-menu'), { key: 'Escape' });
@@ -223,11 +233,12 @@ describe('OverlayMenu', () => {
 
 describe('registries', () => {
     it('orders the cameras and gates them on the environment', () => {
-        expect(CAMERAS.map((c) => c.id)).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', 'sequence', 'list']);
+        expect(CAMERAS.map((c) => c.id)).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', 'sequence', 'list']);
         const ids = (e: Partial<SurfaceEnv>) => CAMERAS.filter((c) => c.available(graph, { ...env, ...e })).map((c) => c.id);
-        expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'heat', 'sequence', 'list']);
+        expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'tower', 'heat', 'sequence', 'list']);
         expect(ids({ hasLines: false })).toEqual(['system', 'graph', 'map', 'heat', 'list']);
-        expect(ids({ webgl: true })).toContain('3d');
+        // Tower is the SVG map (needs lines); 3D is the WebGL view (needs WebGL): both are listed when both are available.
+        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', 'sequence', 'list']);
     });
 
     it('holds the six drawers, and a toggle with no panel available draws nothing', () => {

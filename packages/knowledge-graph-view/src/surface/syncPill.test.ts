@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import type { SyncStatus } from '../types';
 import type { ReviewState } from '../useReviewRun';
+import { counted } from './plural';
 import { parityText, relativeTime, syncPill, type SyncPillInput } from './syncPill';
 
 const h = L.surface.header;
@@ -25,7 +26,22 @@ describe('syncPill', () => {
 
     it('is an error when the host reports skipped files', () => {
         expect(pill({ sync: sync({ skipped: [{ path: 'a.bin', reason: 'too-large' }, { path: 'b.bin', reason: 'unreadable' }] }) }))
-            .toEqual({ state: 'error', text: fillTemplate(h.skippedPill, { count: 2 }) });
+            .toEqual({ state: 'error', text: counted(L, 'fileNotStored', 2) });
+        expect(pill({ sync: sync({ skipped: [{ path: 'a.bin', reason: 'too-large' }] }) }).text).toBe('1 file not stored');
+    });
+
+    it('is synced when both sides hold the same files', () => {
+        expect(pill({ sync: sync() })).toEqual({ state: 'synced', text: h.synced });
+    });
+
+    it('is "Out of sync" (partial) when both sides hold files and the counts differ', () => {
+        expect(pill({ sync: sync({ server: { files: 15971, docs: 0 } }) })).toEqual({ state: 'partial', text: L.surface.pillStates.partial });
+    });
+
+    it('is the neutral "On the server only" when this machine has no snapshot, agreeing with the parity line', () => {
+        const serverOnly = sync({ local: { files: 0, docs: 0 }, server: { files: 2945, docs: 0 } });
+        expect(pill({ sync: serverOnly })).toEqual({ state: 'serverOnly', text: L.surface.pillStates.serverOnly });
+        expect(parityText(L, serverOnly)).toBe(counted(L, 'fileServerOnly', 2945, { server: (2945).toLocaleString() }));
     });
 
     it('says Updating while a fresh read runs and "Couldn’t update" when it failed', () => {
@@ -53,11 +69,11 @@ describe('parityText', () => {
     });
 
     it('says "here and on the server" when the counts agree, both counts when they differ, and local-only without a server', () => {
-        expect(parityText(L, sync())).toBe(fillTemplate(h.parityBoth, { count: (15994).toLocaleString() }));
+        expect(parityText(L, sync())).toBe(counted(L, 'fileBoth', 15994, { count: (15994).toLocaleString() }));
         expect(parityText(L, sync({ server: { files: 15971, docs: 0 } })))
             .toBe(fillTemplate(h.parityDiffers, { local: (15994).toLocaleString(), server: (15971).toLocaleString() }));
         const { server: _server, ...local } = sync();
-        expect(parityText(L, local)).toBe(fillTemplate(h.parityLocal, { local: (15994).toLocaleString() }));
+        expect(parityText(L, local)).toBe(counted(L, 'fileLocalOnly', 15994, { local: (15994).toLocaleString() }));
     });
 });
 

@@ -7,10 +7,11 @@
 import type { CSSProperties } from 'react';
 import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { CONTROL, MONO } from '../styles';
+import { CONTROL } from '../styles';
 import type { KnowledgeScopeSummary } from '../types';
 import type { SpineItem } from './path';
 import { Menu } from './ui';
+import { TYPE } from './ui/type';
 
 export interface SpineRoots {
     scopes: readonly KnowledgeScopeSummary[];
@@ -28,7 +29,7 @@ export interface SpineProps {
 
 const crumb = (current: boolean, mono: boolean): CSSProperties => ({
     minHeight: CONTROL, padding: '0 8px', borderRadius: 7, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
-    fontSize: mono ? 11.5 : 12.5, fontWeight: 600, fontFamily: mono ? MONO : 'inherit',
+    ...(mono ? TYPE.monoName : TYPE.pill),
     color: cssVar('text'), background: current ? cssVar('accentSoft') : 'transparent',
     border: `1px solid ${current ? cssVar('accent') : 'transparent'}`,
 });

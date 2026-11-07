@@ -6,6 +6,7 @@
 
 import { lazy, Suspense, useCallback, useMemo, type ComponentType } from 'react';
 import { fillTemplate } from '../labels';
+import { counted } from './plural';
 import { Graph2D } from '../graph2d/Graph2D';
 import { ListFallback } from '../ListFallback';
 import { MindMap } from '../map/MindMap';
@@ -15,6 +16,7 @@ import { makeOverlay } from './overlays';
 import { litStations, questionDef } from './questions';
 import type { CameraDef, SceneProps } from './registry';
 import type { Station } from './stations';
+import { TYPE } from './ui/type';
 import { HeatGrid } from './HeatGrid';
 import { SequenceDiagram } from './SequenceDiagram';
 import { SystemTiers } from './SystemTiers';
@@ -23,8 +25,8 @@ import { ScaleZoom } from './zoom';
 
 /**
  * The cameras made of HTML (System, Heat, Sequence, List) register their zoom through CSS scale;
- * the SVG ones (Map, Graph, Mind map) register their viewBox pan/zoom themselves. The 3D tower
- * registers none (its orbit controls own the wheel), so the overlay disables +, − and Fit there.
+ * the SVG ones (Map, Tower, Graph, Mind map) register their viewBox pan/zoom themselves. The WebGL
+ * 3D view registers none (its orbit controls own the wheel), so the overlay disables +, − and Fit there.
  * Wrapped once at module level, so a camera keeps its identity (and its state) across renders.
  */
 function scaled(Camera: ComponentType<SceneProps>): ComponentType<SceneProps> {
@@ -44,7 +46,8 @@ function GraphCamera({ graph, drawn, lens, labels, selected, onSelect }: ScenePr
     );
 }
 
-function TowerCamera(p: SceneProps) {
+/** The WebGL 3D view: towers on planes, orbit controls. Its own camera beside the SVG Tower. */
+function Scene3DCamera(p: SceneProps) {
     const { graph, drawn, lens, labels, selected, surface } = p;
     // The overlay channels: height = size, fill band = ring, wireframe = untested, pipe width = width.
     const channels = useMemo(
@@ -63,8 +66,8 @@ function TowerCamera(p: SceneProps) {
                 />
             </Suspense>
             {capped && (
-                <p data-testid="kg-pipes-capped" style={{ position: 'absolute', insetInlineStart: 8, bottom: 8, margin: 0, padding: '2px 8px', borderRadius: 6, fontSize: 11, background: cssVar('panel'), color: cssVar('muted') }}>
-                    {fillTemplate(labels.surface.pipesCapped, { count: MAX_PIPES })}
+                <p data-testid="kg-pipes-capped" style={{ position: 'absolute', insetInlineStart: 8, bottom: 8, margin: 0, padding: '2px 8px', borderRadius: 6, ...TYPE.meta, background: cssVar('panel') }}>
+                    {counted(labels, 'pipesCapped', MAX_PIPES)}
                 </p>
             )}
         </>
@@ -92,7 +95,8 @@ function ListCamera(p: SceneProps) {
 const NO_PINS: readonly never[] = [];
 const noop = (): void => undefined;
 
-function TransitCamera({ surface, labels, reducedMotion, graph }: SceneProps) {
+/** The transit scene; `tower` draws the same stations, lines and ends with towers for stations and pipes for lines. */
+function TransitScene({ surface, labels, reducedMotion, graph, variant }: SceneProps & { variant: 'map' | 'tower' }) {
     const q = questionDef(surface.question);
     // Inside a drilled level the map draws that level's own stations and lines, with the bindings unchanged,
     // and the active question and lens are asked of THAT level's stations and lines.
@@ -120,10 +124,13 @@ function TransitCamera({ surface, labels, reducedMotion, graph }: SceneProps) {
             pins={view ? NO_PINS : surface.pins} noteOf={noteOf} reducedMotion={reducedMotion}
             onSelectStation={view ? drill.select : surface.selectStation} onSelectLine={view ? noop : surface.selectLine} label={labels.regionLabel}
             graph={graph} order={view?.order} leaves={view?.leaves} levelNote={levelNote} question={surface.question} loading={drill.loading}
-            canEnter={drill.canEnter} onEnter={drill.enter} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel}
+            canEnter={drill.canEnter} onEnter={drill.enter} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} variant={variant}
         />
     );
 }
+
+function TransitCamera(p: SceneProps) { return <TransitScene {...p} variant="map" />; }
+function TowerCamera(p: SceneProps) { return <TransitScene {...p} variant="tower" />; }
 
 const SystemCamera = scaled(SystemTiers);
 const HeatCamera = scaled(HeatGrid);
@@ -139,7 +146,8 @@ export const CAMERAS: readonly CameraDef[] = [
     { id: 'system', labelKey: 'viewSystem', component: SystemCamera, available: () => true },
     { id: 'graph', labelKey: 'viewGraph', component: GraphCamera, available: () => true },
     { id: 'map', labelKey: 'viewMap', component: MindCamera, available: () => true },
-    { id: '3d', labelKey: 'view3d', component: TowerCamera, available: (_graph, env) => env.webgl },
+    { id: 'tower', labelKey: 'viewTower', component: TowerCamera, available: (_graph, env) => env.hasLines },
+    { id: '3d', labelKey: 'view3d', component: Scene3DCamera, available: (_graph, env) => env.webgl },
     { id: 'heat', labelKey: 'viewHeat', component: HeatCamera, available: () => true },
     { id: 'sequence', labelKey: 'viewSequence', component: SequenceCamera, available: (_graph, env) => env.hasLines, switcher: false },
     { id: 'list', labelKey: 'viewList', component: ListScaled, available: () => true },

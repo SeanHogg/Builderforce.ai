@@ -5,6 +5,7 @@ import { findingTitle } from '../../findingText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { LEVEL } from '../actModel';
 import { Pin } from '../ui';
 import { queueState, type FixFlowState } from './fixFlow';
@@ -32,12 +33,12 @@ export function FixQueueList({ findings, flows, current, labels, onPick }: FixQu
                         <button
                             type="button" aria-pressed={f.id === current} aria-label={fillTemplate(t.queueAria, { title })} data-queue={f.id} data-state={state} onClick={() => onPick(f)}
                             style={{
-                                display: 'flex', gap: 8, alignItems: 'center', width: '100%', minWidth: 0, minHeight: 36, padding: '4px 8px', textAlign: 'start', cursor: 'pointer', font: 'inherit', fontSize: 12,
+                                display: 'flex', gap: 8, alignItems: 'center', width: '100%', minWidth: 0, minHeight: 36, padding: '4px 8px', textAlign: 'start', cursor: 'pointer', font: 'inherit', ...TYPE.body,
                                 borderRadius: 8, color: cssVar('text'), border: `1px solid ${cssVar(f.id === current ? 'accent' : 'border')}`, background: f.id === current ? cssVar('accentSoft') : 'transparent',
                             }}
                         >
                             <Pin n={i + 1} level={LEVEL[f.severity]} resolved={state === 'resolved'} size={20} />
-                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{title}</span>
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: TYPE.pill.fontWeight }}>{title}</span>
                             <span style={{ ...muted, flex: 'none', color: cssVar(state === 'resolved' ? 'agrees' : state === 'applied' ? 'accent' : 'muted') }}>{t.queueState[state]}</span>
                         </button>
                     </li>

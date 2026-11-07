@@ -11,14 +11,9 @@ export interface ActLabels {
     pathNext: string;
     /** The edge between two stops: `{kind}`, `{count}`. */
     pathHop: string;
-    actTitle: string;
-    /** `{scope}`. */
-    actScope: string;
     actScopeAll: string;
-    showFiles: string;
     /** `{level}` of 5. */
     levelOf5: string;
-    stationFacts: string;
     provenance: Record<Provenance, string>;
     /** Resolve on a finding row. */
     resolveFinding: string;
@@ -28,21 +23,21 @@ export interface ActLabels {
     kindsLegend: string;
     /** A sequence message between stops with no reference between them. */
     noDirectReference: string;
-    /** The contract-tests request names only the first `{count}` endpoints. */
-    testsCapped: string;
     /** A screenshot over the size limit: `{size}` MB. */
     imageTooLarge: string;
-    /** The time slider draws only the latest `{count}` commits. */
-    historyCapped: string;
-    /** The Act rail. `{action}`, `{title}`, `{count}`, `{path}`, `{stops}`, `{checks}`, `{items}`. */
+    /**
+     * The Act rail. `{action}`, `{title}`, `{count}`, `{path}`, `{stops}`, `{checks}`, `{items}`, `{scope}`.
+     * The title is "At {scope} · N issues" (`counts.issueAt`) or, with a line drawn, "On this path · N to act on".
+     */
     act: Record<
-        'cardsTitle' | 'noCards' | 'apply' | 'prompt' | 'show' | 'cardAction' | 'sourceExact' | 'sourceAnalyzer' | 'sourceModel' | 'fixQueue'
-        | 'keepTitle' | 'keepBody' | 'keepButton' | 'testRequest' | 'doneTitle' | 'doneCheck' | 'doneNone' | 'doneMore' | 'detailsTitle'
+        'titlePath' | 'emptyTitle' | 'emptyStation' | 'emptyPath' | 'emptyAsk' | 'emptyShow' | 'systemWide' | 'systemWideNote'
+        | 'cardsTitle' | 'apply' | 'prompt' | 'show' | 'cardAction' | 'sourceExact' | 'sourceAnalyzer' | 'sourceModel' | 'fixQueue'
+        | 'keepTitle' | 'keepBody' | 'keepButton' | 'testRequest' | 'doneTitle' | 'doneCheck' | 'doneNone' | 'detailsTitle'
         | 'linkCoverage' | 'linkApi',
         string
     >;
     /** The path strip. `{line}`, `{entry}`, `{count}`. */
-    path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'findings' | 'stops' | 'enlarge', string>;
+    path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'stops' | 'enlarge', string>;
 }
 
 export const ACT_DEFAULTS: ActLabels = {
@@ -52,23 +47,24 @@ export const ACT_DEFAULTS: ActLabels = {
     pathBack: 'Previous stop',
     pathNext: 'Next stop',
     pathHop: '{kind} · {count}',
-    actTitle: 'Act',
-    actScope: 'Scope: {scope}',
     actScopeAll: 'Whole graph',
-    showFiles: 'Show files',
     levelOf5: '{level} of 5',
-    stationFacts: 'About this station',
     provenance: { deterministic: 'Deterministic', heuristic: 'Heuristic', runtime: 'Runtime' },
     resolveFinding: 'Resolve',
     resolveFindingAria: 'Resolve: {title}',
     kindsLegend: 'Finding kinds',
     noDirectReference: 'no direct reference',
-    testsCapped: 'The request names only the first {count} endpoints.',
     imageTooLarge: 'That image is larger than {size} MB.',
-    historyCapped: 'Showing only the latest {count} commits.',
     act: {
+        titlePath: 'On this path · {count} to act on',
+        emptyTitle: 'Nothing to act on here',
+        emptyStation: 'No open findings at this station. Try “What has no test?”',
+        emptyPath: 'No open findings on this path. Try “What has no test?”',
+        emptyAsk: 'Ask what has no test',
+        emptyShow: 'Show',
+        systemWide: 'System-wide · {count}',
+        systemWideNote: 'These touch most of the system, so no single station carries them.',
         cardsTitle: 'Fix these first',
-        noCards: 'Nothing to fix here.',
         apply: 'Apply',
         prompt: 'Prompt',
         show: 'Show',
@@ -84,7 +80,6 @@ export const ACT_DEFAULTS: ActLabels = {
         doneTitle: 'This path is done when…',
         doneCheck: '{title} is resolved in {items}',
         doneNone: 'No finding is open on this path.',
-        doneMore: '+{count} more checks',
         detailsTitle: 'Details',
         linkCoverage: 'Coverage',
         linkApi: 'API',
@@ -97,7 +92,6 @@ export const ACT_DEFAULTS: ActLabels = {
         simulate: 'Simulate with values',
         sequence: 'Sequence',
         noTests: 'no tests',
-        findings: '{count} findings',
         stops: 'Stops',
         enlarge: 'Enlarge',
     },

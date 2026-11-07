@@ -6,9 +6,11 @@
 
 import { useMemo } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
+import { counted } from '../plural';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { muted, primaryButton } from '../../styles';
+import { TYPE } from '../ui/type';
 import { coverageConfigModel } from './coverageConfigModel';
 import { TEST_SHAPES, testShapeModel, type TestShape } from './testShapeModel';
 import { Section, Unavailable } from './ui';
@@ -30,7 +32,7 @@ export function CoverageShape({ graph, labels, onCompose }: {
             <Section title={t.shapeTitle}>
                 {shape.total === 0 ? <p data-testid="kg-test-shape-none" style={{ ...muted, margin: 0 }}>{t.shapeNone}</p> : (
                     <div
-                        role="img" data-testid="kg-test-shape" style={{ display: 'flex', height: 24, borderRadius: 6, overflow: 'hidden', fontSize: 10, fontWeight: 700 }}
+                        role="img" data-testid="kg-test-shape" style={{ display: 'flex', height: 24, borderRadius: 6, overflow: 'hidden', ...TYPE.tag }}
                         aria-label={fillTemplate(t.shapeAria, { unit: shape.unit, integration: shape.integration, e2e: shape.e2e })}
                     >
                         {TEST_SHAPES.filter((k) => shape[k] > 0).map((k) => (
@@ -52,11 +54,11 @@ export function CoverageShape({ graph, labels, onCompose }: {
                 {config.uncovered.length > 0 && (onCompose ? (
                     <button
                         type="button" data-testid="kg-apply-v8" style={{ ...primaryButton, whiteSpace: 'normal', padding: '6px 14px' }}
-                        onClick={() => onCompose(fillTemplate(t.applyV8Request, { count: config.uncovered.length, packages: config.uncovered.join(', ') }))}
+                        onClick={() => onCompose(counted(labels, 'applyV8Request', config.uncovered.length, { packages: config.uncovered.join(', ') }))}
                     >
-                        {fillTemplate(t.applyV8, { count: config.uncovered.length })}
+                        {counted(labels, 'applyV8', config.uncovered.length)}
                     </button>
-                ) : <Unavailable labels={labels} label={fillTemplate(t.applyV8, { count: config.uncovered.length })} testId="kg-apply-v8-unavailable" />)}
+                ) : <Unavailable labels={labels} label={counted(labels, 'applyV8', config.uncovered.length)} testId="kg-apply-v8-unavailable" />)}
             </Section>
         </>
     );

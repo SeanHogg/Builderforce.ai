@@ -6,6 +6,7 @@
  */
 
 import { cssVar } from '../../scene/themeColors';
+import { FONT_UI, TYPE } from '../ui/type';
 import type { Point } from './geometry';
 import type { TerminusGlyph } from './termini';
 
@@ -58,7 +59,7 @@ export function TerminusMark({ glyph, kind, from, at, lines, text, dim }: Termin
                 );
             })}
             <Glyph glyph={glyph} at={at} color={many ? cssVar('text') : lines[0]?.color ?? cssVar('text')} />
-            <text x={at.x} y={at.y + 25} textAnchor="middle" fontSize={10} fill={glyph === 'cross' ? cssVar('violation') : cssVar('muted')} paintOrder="stroke" stroke={cssVar('bg')} strokeWidth={3}>{text}</text>
+            <text x={at.x} y={at.y + 25} textAnchor="middle" fontFamily={FONT_UI} fontSize={TYPE.caption.fontSize} fill={glyph === 'cross' ? cssVar('violation') : cssVar('muted')} paintOrder="stroke" stroke={cssVar('bg')} strokeWidth={3}>{text}</text>
         </g>
     );
 }

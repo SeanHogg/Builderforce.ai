@@ -11,6 +11,7 @@
 import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
 import { muted } from '../styles';
+import { TYPE } from './ui/type';
 import { SurfaceState, type SurfaceStateProps } from './SurfaceStates';
 
 export function SceneState(props: SurfaceStateProps) {
@@ -39,7 +40,7 @@ export function SceneStatus({ stale, refreshFailed, labels, onRetry }: { stale: 
             <span role="status" style={corner}>
                 <button
                     type="button" onClick={onRetry}
-                    style={{ minHeight: 28, padding: '0 10px', borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), cursor: 'pointer', font: 'inherit', fontSize: 12 }}
+                    style={{ minHeight: 28, padding: '0 10px', borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), cursor: 'pointer', font: 'inherit', ...TYPE.pill }}
                 >
                     {labels.refreshFailed}
                 </button>

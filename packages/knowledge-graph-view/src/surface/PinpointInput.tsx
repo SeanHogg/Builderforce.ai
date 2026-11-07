@@ -13,7 +13,8 @@ import { findingRequest } from '../findingText';
 import { labelFor, nodeIndex } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
-import { card, heading, muted, primaryButton, quietButton } from '../styles';
+import { card, muted, primaryButton, quietButton } from '../styles';
+import { TYPE } from './ui/type';
 import type { KnowledgeGraphSource, PinpointResult } from '../types';
 import { mapEdges } from './outlineGraph';
 import { pathOfStations } from './path';
@@ -44,7 +45,7 @@ export interface PinpointInputProps {
 }
 
 function Badge({ tone, text }: { tone: ThemeTone; text: string }) {
-    return <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${cssVar(tone)}`, color: cssVar(tone) }}>{text}</span>;
+    return <span style={{ ...TYPE.tag, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${cssVar(tone)}`, color: cssVar(tone) }}>{text}</span>;
 }
 
 /** A drag carries files (not text or a link), so only then does the bar show its drop state. */
@@ -118,8 +119,8 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
                             {state.status === 'invalid' && <p role="alert" style={{ margin: 0 }}>{state.reason === 'size' ? fillTemplate(labels.surface.imageTooLarge, { size: MAX_IMAGE_BYTES / (1024 * 1024) }) : t.notImage}</p>}
                             {state.status === 'done' && (
                                 <>
-                                    <h3 style={heading}>{t.descriptionTitle}</h3>
-                                    <p style={{ margin: 0, fontSize: 13 }}>{state.result.description}</p>
+                                    <h3 style={TYPE.sectionHeading}>{t.descriptionTitle}</h3>
+                                    <p style={{ margin: 0, ...TYPE.bodyLarge }}>{state.result.description}</p>
                                 </>
                             )}
                         </div>
@@ -129,10 +130,10 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
                         <>
                             {state.result.anchors.length > 0 && (
                                 <div style={{ display: 'grid', gap: 4 }}>
-                                    <h3 style={heading}>{t.anchorsTitle}</h3>
+                                    <h3 style={TYPE.sectionHeading}>{t.anchorsTitle}</h3>
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                         {state.result.anchors.map((a) => (
-                                            <li key={a.text} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
+                                            <li key={a.text} style={{ display: 'flex', gap: 4, alignItems: 'center', ...TYPE.body }}>
                                                 <q>{a.text}</q><Badge tone={TONE.vision} text={labels.surface.pinpointProvenance.vision} />
                                             </li>
                                         ))}
@@ -141,7 +142,7 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
                             )}
                             {state.result.matches.length === 0 ? <p style={{ ...muted, margin: 0 }}>{t.noMatch}</p> : (
                                 <div style={{ display: 'grid', gap: 4 }}>
-                                    <h3 style={heading}>{t.matchesTitle}</h3>
+                                    <h3 style={TYPE.sectionHeading}>{t.matchesTitle}</h3>
                                     <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 4 }}>
                                         {state.result.matches.map((m) => (
                                             <li key={m.ref} data-match={m.ref} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

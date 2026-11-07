@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { camelKind, type KnowledgeGraphLabels } from '../labels';
+import { camelKind, fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { kindLabel } from '../names';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { heading } from '../styles';
@@ -57,9 +57,13 @@ export function InsightsPanel({ graph, labels, lenses, onLens, onShow, findingKi
             <h3 style={heading}>{labels.insightsTitle}</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 6 }}>
                 {tiles.map((m) => {
+                    // A truncated graph holds only part of its files: say how many of how many are loaded.
+                    const partial = m.id === 'files' && graph.stats.truncated === true && graph.stats.sources > m.value;
                     const body = (
                         <>
-                            <span style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{m.value}</span>
+                            <span style={{ fontSize: partial ? 13 : 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
+                                {partial ? fillTemplate(labels.filesLoaded, { loaded: m.value.toLocaleString(), total: graph.stats.sources.toLocaleString() }) : m.value}
+                            </span>
                             <span style={{ fontSize: 11, color: cssVar('muted') }}>{labels.metrics[m.id] ?? m.id}</span>
                         </>
                     );

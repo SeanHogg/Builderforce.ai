@@ -5,6 +5,7 @@ import { render, renderHook, act, waitFor } from '@testing-library/react';
 import { FIXTURE_REPORT, fixtureSource } from './testing';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from './labels';
 import { ReviewProgress } from './ReviewProgress';
+import { counted } from './surface/plural';
 import { skippedRowText, SkippedUploads } from './SkippedList';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
 import type { KnowledgeGraphSource, SkippedFile } from './types';
@@ -28,7 +29,8 @@ describe('SkippedUploads', () => {
     it('is a count that expands to the list, and draws nothing for an empty one', () => {
         const { container, rerender } = render(<SkippedUploads items={skipped} labels={L} />);
         const details = container.querySelector('details')!;
-        expect(details.querySelector('summary')!.textContent).toBe(fillTemplate(L.surface.skippedUploads, { count: 3 }));
+        expect(details.querySelector('summary')!.textContent).toBe(counted(L, 'fileSkipped', 3));
+        expect(counted(L, 'fileSkipped', 1)).toBe('1 file was not stored.');
         expect(container.querySelectorAll('[data-testid="kg-skipped-uploads-list"] li')).toHaveLength(3);
         rerender(<SkippedUploads items={[]} labels={L} />);
         expect(container.innerHTML).toBe('');

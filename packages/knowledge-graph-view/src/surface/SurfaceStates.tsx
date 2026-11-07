@@ -10,6 +10,7 @@ import { cssVar } from '../scene/themeColors';
 import { button, heading, muted } from '../styles';
 import type { KnowledgeGraphSource } from '../types';
 import type { GraphStatus } from '../useKnowledgeGraph';
+import { TYPE, TYPE_VARS } from './ui/type';
 import type { ReviewState } from '../useReviewRun';
 
 export function SurfaceFrame({ ref, label, children }: { ref: Ref<HTMLElement>; label: string; children: ReactNode }) {
@@ -17,7 +18,7 @@ export function SurfaceFrame({ ref, label, children }: { ref: Ref<HTMLElement>; 
         <section
             ref={ref}
             aria-label={label}
-            style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: cssVar('bg'), color: cssVar('text'), fontSize: 13 }}
+            style={{ ...TYPE_VARS, ...TYPE.body, position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: cssVar('bg'), color: cssVar('text') }}
         >
             {children}
         </section>
@@ -66,7 +67,7 @@ export function SurfaceState({ status, labels, source, review, reviewStatus, sta
             {empty ? (
                 <>
                     <h2 style={heading}>{labels.emptyTitle}</h2>
-                    <p style={{ ...muted, margin: 0, fontSize: 13 }}>{labels.emptyBody}</p>
+                    <p style={{ ...muted, margin: 0, fontSize: TYPE.bodyLarge.fontSize }}>{labels.emptyBody}</p>
                     <ReviewLauncher source={source} labels={labels} targets={targets} start={start} defaultOpen={!!openReview} status={reviewStatus} />
                 </>
             ) : <p role="status" style={muted}>{labels.loading}</p>}

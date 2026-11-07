@@ -7,6 +7,7 @@
 
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { reviewProgressText } from '../reviewProgressText';
+import { counted } from './plural';
 import type { SyncStatus } from '../types';
 import type { ReviewState } from '../useReviewRun';
 import type { StatusState } from './ui';
@@ -51,7 +52,10 @@ export function syncPill({ labels, review, stale, refreshFailed, sync, lastRevie
     if (review.status === 'error') return { state: 'error', text: h.reviewFailed };
     if (refreshFailed) return { state: 'error', text: h.updateFailed };
     if (stale) return { state: 'syncing', text: labels.refreshing };
-    if (sync?.skipped && sync.skipped.length > 0) return { state: 'error', text: fillTemplate(h.skippedPill, { count: sync.skipped.length }) };
+    if (sync?.skipped && sync.skipped.length > 0) return { state: 'error', text: counted(labels, 'fileNotStored', sync.skipped.length) };
+    // No snapshot on this machine is not a fault: the folder was reviewed on the server only (the parity line says the same).
+    if (sync && hasNoLocalSnapshot(sync)) return { state: 'serverOnly', text: labels.surface.pillStates.serverOnly };
+    if (sync?.server && sync.server.files !== sync.local.files) return { state: 'partial', text: labels.surface.pillStates.partial };
     if (sync || lastReviewedAt) {
         const when = lastReviewedAt ? relativeTime(lastReviewedAt, now) : '';
         return { state: 'synced', text: when ? fillTemplate(h.syncedAt, { time: when }) : h.synced };
@@ -59,13 +63,17 @@ export function syncPill({ labels, review, stale, refreshFailed, sync, lastRevie
     return { state: 'idle', text: h.notSynced };
 }
 
+/** This machine holds no snapshot of the folder (a linked project is reviewed on the server only): "0 here" means that. */
+export const hasNoLocalSnapshot = (sync: Pick<SyncStatus, 'local' | 'server'>): boolean => sync.local.files === 0 && (sync.server?.files ?? 0) > 0;
+
 /** The server-parity line; null when the host reports no status. */
 export function parityText(labels: KnowledgeGraphLabels, sync: SyncStatus | null): string | null {
     if (!sync) return null;
     const h = labels.surface.header;
     const fmt = (n: number) => n.toLocaleString();
     const local = sync.local.files;
-    if (!sync.server) return fillTemplate(h.parityLocal, { local: fmt(local) });
-    if (sync.server.files === local) return fillTemplate(h.parityBoth, { count: fmt(local) });
+    if (hasNoLocalSnapshot(sync) && sync.server) return counted(labels, 'fileServerOnly', sync.server.files, { server: fmt(sync.server.files) });
+    if (!sync.server) return counted(labels, 'fileLocalOnly', local, { local: fmt(local) });
+    if (sync.server.files === local) return counted(labels, 'fileBoth', local, { count: fmt(local) });
     return fillTemplate(h.parityDiffers, { local: fmt(local), server: fmt(sync.server.files) });
 }

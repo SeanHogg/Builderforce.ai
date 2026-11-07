@@ -75,7 +75,7 @@ export function SurfaceHeader(p: SurfaceHeaderProps) {
 
     const overlays = (
         <OverlayMenu
-            labels={labels} stations={surface.stations.stations} bindings={surface.overlay.bindings} preset={surface.preset}
+            labels={labels} stations={surface.stations.stations} bindings={surface.overlay.bindings} preset={surface.preset} coverage={surface.coverage}
             onPreset={surface.setPreset} onChannel={surface.setChannel} onPins={surface.setPins} narrow={narrow}
         />
     );

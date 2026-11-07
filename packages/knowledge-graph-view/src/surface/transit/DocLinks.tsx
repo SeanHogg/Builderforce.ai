@@ -7,7 +7,7 @@
 
 import { fillTemplate } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
-import { MONO } from '../../styles';
+import { FONT_MONO, FONT_UI, TYPE } from '../ui/type';
 import type { HopRoute } from './corridors';
 import type { Point } from './geometry';
 import { satelliteName, type Satellite, type SatellitePlace } from './unfold';
@@ -19,7 +19,7 @@ export function DescribeLinks({ routes, emphasised, label }: { routes: readonly 
                 <path key={r.lineId} d={r.d} data-describes-link fill="none" stroke={cssVar('nodeSection')} strokeWidth={1.5} strokeDasharray="2 5" strokeLinecap="round" opacity={emphasised ? 1 : 0.4} />
             ))}
             {emphasised && routes[0] && (
-                <text x={routes[0].mid.x + 6} y={routes[0].mid.y - 5} fontSize={10} fontWeight={500} fill={cssVar('nodeSection')} paintOrder="stroke" stroke={cssVar('bg')} strokeWidth={3}>{label}</text>
+                <text x={routes[0].mid.x + 6} y={routes[0].mid.y - 5} fontFamily={FONT_UI} fontSize={TYPE.caption.fontSize} fontWeight={500} fill={cssVar('nodeSection')} paintOrder="stroke" stroke={cssVar('bg')} strokeWidth={3}>{label}</text>
             )}
         </g>
     );
@@ -52,7 +52,7 @@ export function Satellites({ center, items, places, color, parentName, ariaTempl
                         <line x1={center.x} y1={center.y} x2={p.x} y2={p.y} stroke={color} strokeWidth={1.5} opacity={0.6} />
                         <circle cx={p.x} cy={p.y} r={14} fill="transparent" />
                         <circle cx={p.x} cy={p.y} r={5} fill={color} stroke={cssVar('bg')} strokeWidth={1.5} />
-                        <text x={p.x + (p.anchor === 'start' ? 8 : -8)} y={p.y + 4} textAnchor={p.anchor} fontFamily={MONO} fontSize={10} fill={cssVar('text')} paintOrder="stroke" stroke={cssVar('bg')} strokeWidth={3}>{satelliteName(s)}</text>
+                        <text x={p.x + (p.anchor === 'start' ? 8 : -8)} y={p.y + 4} textAnchor={p.anchor} fontFamily={FONT_MONO} fontSize={TYPE.monoMeta.fontSize} fill={cssVar('text')} paintOrder="stroke" stroke={cssVar('bg')} strokeWidth={3}>{satelliteName(s)}</text>
                     </g>
                 );
             })}

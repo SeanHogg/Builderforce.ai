@@ -42,6 +42,8 @@ export interface SceneProps {
     surface: SurfaceModel;
     onSelect(ref: string): void;
     onShow(refs: string[]): void;
+    /** Switches the camera (the System camera's "+N more" opens the List). Absent = the host cannot switch. */
+    onCamera?: ((mode: ViewMode) => void) | undefined;
     onCompose?: ((text: string) => void) | undefined;
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;

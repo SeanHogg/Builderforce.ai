@@ -1,8 +1,9 @@
 /**
  * The header row under the status strip (56px): the spine, the ask bar (flex), the Panels group
  * and the Risk overlays menu. The ask bar is a 40px rounded search whose placeholder is the
- * active question as a sentence, with the answer mode as a mono note on its right and the
- * screenshot picker inside it. On a narrow container the row stacks: spine, then a full-width
+ * active question as a sentence (its value until something is typed, with the sentence also the
+ * placeholder), with ONE mono note on its right (answer mode · answer, or just "not set up") and
+ * the screenshot picker inside it. On a narrow container the row stacks: spine, then a full-width
  * 44px ask bar, then the Panels group scrolling sideways (the overlays move to the status strip).
  * The cameras, the questions and the lenses are the centre controls (`surface/SceneOverlay.tsx`).
  */
@@ -10,7 +11,8 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { cssVar } from './scene/themeColors';
-import { MONO, muted } from './styles';
+import { muted } from './styles';
+import { TYPE } from './surface/ui/type';
 import type { QuestionId } from './surface/questions';
 
 export interface ToolbarProps {
@@ -45,8 +47,15 @@ const searchIcon = (
 );
 
 export function Toolbar({ labels, onSearch, question, askName, answer, narrow, spine, panels, overlays, askWrap, linesToggle }: ToolbarProps) {
-    const [q, setQ] = useState('');
+    // null = nothing typed: the box shows the active question as its value, in the normal text colour; typing replaces it.
+    const [typed, setTyped] = useState<string | null>(null);
     const s = labels.surface;
+    const sentence = fillTemplate(s.askSentence[question], { name: askName });
+    const q = typed ?? '';
+    // ONE note: a question whose data was never collected says so alone; otherwise the answer mode, then the answer.
+    const notSetUp = answer === s.answerNotSetUp;
+    const showMode = !narrow && !notSetUp;
+    const noteStyle: CSSProperties = { ...muted, ...TYPE.mono, padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', flex: '0 1 auto', whiteSpace: narrow ? 'normal' : 'nowrap' };
     const bar = (picker: ReactNode) => (
         <form
             role="search" onSubmit={(e) => { e.preventDefault(); onSearch(q); }}
@@ -57,12 +66,17 @@ export function Toolbar({ labels, onSearch, question, askName, answer, narrow, s
         >
             {searchIcon}
             <input
-                type="search" aria-label={labels.searchLabel} placeholder={fillTemplate(s.askSentence[question], { name: askName })} value={q}
-                onChange={(e) => setQ(e.target.value)}
-                style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: cssVar('text'), font: 'inherit', fontSize: narrow ? 14 : 13 }}
+                type="search" aria-label={labels.searchLabel} placeholder={sentence} value={typed ?? sentence}
+                onFocus={(e) => { if (typed === null) e.currentTarget.select(); }}
+                onChange={(e) => setTyped(e.target.value)}
+                style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: cssVar('text'), font: 'inherit', ...TYPE.input, ...(narrow ? { fontSize: TYPE.title.fontSize } : null) }}
             />
-            {answer && <span data-testid="kg-answer" role="status" style={{ ...muted, fontFamily: MONO, fontSize: 11, padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', flex: '0 1 auto', whiteSpace: narrow ? 'normal' : 'nowrap' }}>{answer}</span>}
-            {!narrow && <span data-testid="kg-answer-mode" style={{ ...muted, fontFamily: MONO, fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '0 1 auto' }}>{s.answerMode[question]}</span>}
+            {(answer || showMode) && (
+                <span data-testid="kg-answer" role="status" style={noteStyle}>
+                    {showMode && <span data-testid="kg-answer-mode">{s.answerMode[question]}</span>}
+                    {showMode && answer ? ' · ' : ''}{answer}
+                </span>
+            )}
             {picker}
         </form>
     );

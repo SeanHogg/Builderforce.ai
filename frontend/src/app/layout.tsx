@@ -3,8 +3,17 @@ import { Suspense } from 'react';
 import localFont from 'next/font/local';
 import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
-// The knowledge graph view's `--kg-*` palette (aliases `--bf-*`, flips with `html[data-theme]`).
+// The knowledge graph view's `--kg-*` palette: the design mockup's fixed literals (not aliases of `--bf-*`); `html[data-theme='light']` selects the light set.
 import '@builderforce/knowledge-graph-view/tokens.css';
+// ...and its two typefaces, self-hosted (CSP `font-src 'self'`): only the weights its type scale uses.
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-500.css';
+import '@fontsource/jetbrains-mono/latin-600.css';
+import '@fontsource/jetbrains-mono/latin-700.css';
 // KaTeX's own stylesheet. Loaded once, at the root, because mathematics can
 // appear in any markdown on the platform (see lib/markdownPipeline.ts) and an
 // un-styled `.katex` tree renders as a column of stacked fragments rather than

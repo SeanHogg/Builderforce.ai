@@ -8,6 +8,7 @@
 
 import type { CSSProperties } from 'react';
 import { cssVar, type ThemeTone } from './scene/themeColors';
+import { FONT_MONO, TYPE } from './surface/ui/type';
 
 export const TAP = 40;
 
@@ -18,8 +19,8 @@ export const TAP = 40;
  */
 export const CONTROL = 'var(--kg-control, 40px)';
 
-/** The mono stack; hosts may load JetBrains Mono, the package loads nothing. */
-export const MONO = 'var(--kg-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)';
+/** The mono face (JetBrains Mono, bundled by each host): the root's `--kg-font-mono`. */
+export const MONO = FONT_MONO;
 
 export type LayerId = 'entry' | 'presentation' | 'application' | 'domain' | 'infrastructure' | 'data' | 'other';
 
@@ -40,7 +41,7 @@ export const routeColor = (line: number): string => cssVar((['l1', 'l2', 'l3', '
 export const button: CSSProperties = {
     minHeight: TAP, minWidth: TAP, padding: '0 14px', borderRadius: 999, cursor: 'pointer',
     border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'),
-    font: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+    font: 'inherit', fontSize: TYPE.pill.fontSize, fontWeight: TYPE.pill.fontWeight, whiteSpace: 'nowrap',
 };
 
 export const primaryButton: CSSProperties = {
@@ -50,7 +51,7 @@ export const primaryButton: CSSProperties = {
 export const quietButton: CSSProperties = { ...button, background: 'transparent' };
 
 export const chip = (active: boolean): CSSProperties => ({
-    ...button, flex: 'none', fontWeight: active ? 700 : 500,
+    ...button, flex: 'none', fontWeight: active ? TYPE.pillOn.fontWeight : 500,
     background: active ? cssVar('accentSoft') : 'transparent',
     borderColor: active ? cssVar('accent') : cssVar('border'),
     color: cssVar('text'),
@@ -60,13 +61,13 @@ export const card: CSSProperties = {
     border: `1px solid ${cssVar('border')}`, borderRadius: 10, background: cssVar('panel'), padding: 12,
 };
 
-export const muted: CSSProperties = { color: cssVar('muted'), fontSize: 12 };
+export const muted: CSSProperties = { color: cssVar('muted'), fontSize: TYPE.bodyMuted.fontSize };
 
-export const heading: CSSProperties = { margin: 0, fontSize: 14, fontWeight: 700, color: cssVar('text') };
+export const heading: CSSProperties = { ...TYPE.title, color: cssVar('text') };
 
 export const input: CSSProperties = {
     minHeight: TAP, padding: '0 12px', borderRadius: 8, border: `1px solid ${cssVar('border')}`,
-    background: cssVar('bg'), color: cssVar('text'), font: 'inherit', fontSize: 13, minWidth: 0,
+    background: cssVar('bg'), color: cssVar('text'), font: 'inherit', fontSize: TYPE.input.fontSize, minWidth: 0,
 };
 
 export const list: CSSProperties = { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 };

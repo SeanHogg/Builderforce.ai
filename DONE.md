@@ -1,3 +1,44 @@
+## ✅ RESOLVED 2026-11-07 — The knowledge view matches its design and explains what it shows (PRD 38 · VS Code 2026.10.137)
+
+The design audit of 2026-11-07 (the B-Surface mockup compared region by region, 14 items) is closed.
+
+- **Layout.**
+  - The scene starts below the floating controls (`--kg-scene-top`, measured by `useSceneTop`). The bars no longer wrap over content.
+  - The System view is drawn as tier rows. Each row holds up to 6 cards plus "+N more", arrow sentences run between tiers, stores sit in a dashed row, and "Not layered · N parts → List" collects the rest.
+  - The left rail has two-line line rows. Stop rows show the station's colour dot plus a pin tag or a coverage tag.
+  - The legend says what each "Not set up" costs.
+  - The spine carries a line crumb.
+- **Tower and 3D.**
+  - Tower is the transit map with 2.5D station towers (`TowerMark`):
+    - height comes from size, or from complexity when size is missing;
+    - coverage shows as a fill, and a measured 0% shows as a dashed shell;
+    - the side face uses the `--kg-tower-side` token;
+    - labels keep off tower bodies.
+  - The WebGL view stays as its own "3D" camera.
+  - The camera order is `transit · system · graph · map · tower · 3d · heat · list`.
+- **Type and colour.**
+  - Inter and JetBrains Mono (400–700) are bundled through @fontsource in the web, VS Code and Rovr hosts. All text goes through `surface/ui/type.ts` roles.
+  - The neutrals are the mockup's dark and light literals, set in `tokens.css` alone. VS Code high-contrast themes re-point text, muted and border.
+- **Act rail.**
+  - The title reads "At {scope} · N issues" or "On this path · N to act on", with a Fix queue link beside it.
+  - At most 3 cards, a ✓ empty state and a footer.
+  - Findings that touch more than 25% of stations (at least 8) are listed once as system-wide.
+  - Details is collapsed by default.
+  - The Act counts never pass through a hidden lens. When Details is lens-scoped, its heading names the lens and shows "{shown} of {total}".
+- **Words.**
+  - Station names drop the shared prefix. Root config files fold into one "repo config" station.
+  - Every count goes through `counted()`, with singular and plural forms in all five catalogs.
+  - The sync pill reads "On the server only" when nothing is reviewed locally and "Out of sync" on a real mismatch. It never says Synced next to a mismatch.
+  - Importance is shown as a rank. Anti-pattern levels are words.
+- **Explained gaps.**
+  - `dataCoverage` is the single decision for map source and per-channel coverage. The diagnostics, the legend, the overlay menu and `metricStatus` all read it, so they agree.
+  - `staticReach` gives a heuristic coverage fallback, labelled "reached".
+  - Copy diagnostics explains the picture.
+- **Tests.**
+  - `.css?raw` loads real text in the kgv vitest config. Before this, vitest stubbed it as empty.
+  - New suites cover tokens and contrast, plurals, dataCoverage and reach, TowerMark, system tiers, rail rows, labels placement and the sync pill.
+- **Still open.** Offline drawing for linked workspaces (PRD 41 A7 / WS14) stays in the roadmap.
+
 ## ✅ RESOLVED 2026-11-07 — PRD 42: the browser's own model in every modality — on-device first for background work, client-first server routes, and content translation (api 2026.10.99 · brain-embedded 2026.10.79 · brain-ui 2026.10.33 · VS Code 2026.10.136)
 
 Every part of PRD 42 shipped. Section numbers below are the PRD's own, kept intact.

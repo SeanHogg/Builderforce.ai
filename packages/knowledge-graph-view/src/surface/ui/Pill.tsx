@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, CSSProperties } from 'react';
 import { cssVar } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
+import { TYPE } from './type';
 
 export type PillProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'type' | 'style'> & {
     on?: boolean;
@@ -11,8 +12,7 @@ export type PillProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className
 
 export const pillStyle = (on: boolean): CSSProperties => ({
     height: `calc(${CONTROL} - 2px)`, padding: '0 10px', borderRadius: 999, cursor: 'pointer', flex: 'none',
-    font: 'inherit', fontSize: 12, whiteSpace: 'nowrap', color: cssVar('text'),
-    fontWeight: on ? 700 : 500,
+    font: 'inherit', ...(on ? TYPE.pillOn : TYPE.pill), whiteSpace: 'nowrap', color: cssVar('text'),
     border: `1px solid ${on ? cssVar('accent') : cssVar('border')}`,
     background: on ? cssVar('accentSoft') : 'transparent',
 });

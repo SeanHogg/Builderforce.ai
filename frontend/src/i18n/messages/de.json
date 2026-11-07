@@ -35880,7 +35880,6 @@
       "edge": "Verweis"
     },
     "statsLine": "{nodes} Knoten · {edges} Kanten · {sources} Quellen",
-    "focusedNote": "Gezeigt werden die wichtigsten {count} Knoten.",
     "filesLoaded": "{loaded} von {total} geladen",
     "showAll": "Alle anzeigen",
     "view3d": "3D",
@@ -35901,7 +35900,6 @@
     "viewModesLabel": "Ansicht",
     "graphHint": "Scrollen oder Pinch zum Zoomen, Ziehen zum Verschieben, einen Knoten für Details auswählen.",
     "nodeAria": "{label}, {kind}",
-    "mapBranch": "{name}, {count} Dateien",
     "mapMore": "+{count} weitere",
     "zoomLabel": "Zoom",
     "zoomIn": "Vergrößern",
@@ -35954,6 +35952,7 @@
       "docs": "Dokumente"
     },
     "findingsTitle": "Befunde",
+    "findingsNarrowed": "Befunde · Ansicht {lens} ({shown} von {total})",
     "findingsEmpty": "Keine offenen Befunde bei {scope}.",
     "findingKinds": {
       "cycle": "Zyklus",
@@ -35985,9 +35984,7 @@
     "clearSelection": "Auswahl aufheben",
     "fixSelected": "{count} mit Agent beheben",
     "selectedCount": "{count} ausgewählt",
-    "fixBatch": "Behebe diese {count} Befunde gemeinsam in einer Änderung:",
     "groupFindingsBy": "Art",
-    "findingsCollapsed": "{count} Befunde – zum Laden aufklappen",
     "copyDiagnostics": "Diagnose kopieren",
     "fix": {
       "cloneGroup": "Führe den doppelten Code[[ in Klongruppe {group}]] zusammen: {items}. Extrahiere eine gemeinsame Implementierung und lass jede Kopie darauf verweisen.",
@@ -36063,9 +36060,7 @@
     "compareIncomparable": "Vorher und nachher wurden unterschiedlich gemessen, daher gilt ein fehlender Befund nicht als behoben.",
     "revisionLabel": "Stand",
     "reviewPlanTitle": "{title} prüfen?",
-    "reviewPlanByPack": "{pack}: {count} Dateien",
     "reviewPlanUnchanged": "{count} seit der letzten Prüfung unverändert",
-    "reviewPlanModelCalls": "≈ {count} Modellaufrufe",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "Die Kosten werden nach dem Routing angezeigt.",
     "reviewPlanCostLocal": "Läuft auf Ihrem lokalen Modell – keine Kosten.",
@@ -36078,7 +36073,6 @@
     "reviewCancelled": "Prüfung abgebrochen. Es wurde nichts geschrieben.",
     "reviewDoneTitle": "Prüfung abgeschlossen",
     "reviewDoneBody": "{extracted} Dateien gelesen · {judged} Abschnitte beurteilt · {facts} Fakten geschrieben",
-    "reviewUnjudged": "Das Budget hat {count} Abschnitte für später übrig gelassen.",
     "reviewContinue": "Fortsetzen",
     "reviewAborted": "Prüfung gestoppt. Bereits Geschriebenes bleibt erhalten.",
     "reviewFailed": "Die Prüfung ist fehlgeschlagen. Es wurde nichts weiter geschrieben.",
@@ -36144,7 +36138,6 @@
         "layers": "Wie ist es geschichtet?",
         "knowledge": "Was wissen wir darüber?"
       },
-      "answerCount": "{count} Stationen",
       "answerNone": "Keine Station passt.",
       "answerNotSetUp": "Nicht eingerichtet: Dafür fehlen Daten, die nicht erhoben wurden.",
       "notes": {
@@ -36162,21 +36155,17 @@
       "lineName": "Linie {name}",
       "stationsOn": "Stationen auf {name}",
       "stationsPick": "Wählen Sie eine Linie, um ihre Stationen aufzulisten.",
-      "omittedLines": "{count} weitere Einstiegspunkte werden nicht als Linien gezeichnet.",
-      "stationMeta": "{files} Dateien · {layer}",
+      "stationMeta": "{files} · {layer}",
       "legendTitle": "Auf der Karte",
       "legendRow": "{channel}: {metric}",
-      "interchange": "Umstieg: {count} Linien",
       "terminus": {
         "data": "Datenspeicher",
         "external": "Externer Dienst",
         "end": "Endet hier"
       },
       "untestedSegment": "Gestrichelt: kein Test deckt es ab",
-      "mapDescription": "{lines} Linien über {stations} Stationen. Wählen Sie eine Station für Details.",
-      "stationAria": "{name}, {layer}, {files} Dateien",
-      "pinAria": "{count} Befunde bei {name}",
-      "moreStations": "+{count} weitere Stationen werden nicht gezeichnet.",
+      "mapDescription": "{lines} über {stations}. Wählen Sie eine Station für Details.",
+      "stationAria": "{name}, {layer}, {files}",
       "layers": {
         "entry": "Einstiegspunkte",
         "presentation": "Präsentation",
@@ -36198,18 +36187,16 @@
         "heuristic": "Heuristisch",
         "runtime": "Laufzeit"
       },
-      "resolveFinding": "Beheben", "resolveFindingAria": "Beheben: {title}", "pipesCapped": "Es werden nur die ersten {count} Leitungen angezeigt.", "kindsLegend": "Befundarten", "noDirectReference": "keine direkte Referenz", "testsCapped": "Die Anfrage nennt nur die ersten {count} Endpunkte.", "imageTooLarge": "Dieses Bild ist größer als {size} MB.", "historyCapped": "Es werden nur die letzten {count} Commits angezeigt.", "skippedUploads": "{count} Dateien wurden nicht gespeichert.", "skipReasons": {"tooLarge": "Zu groß zum Speichern", "unreadable": "Konnte nicht gelesen werden", "rateLimited": "Server war ausgelastet", "unsupported": "Nicht unterstützte Datei", "other": "Anderer Grund"},
+      "resolveFinding": "Beheben", "resolveFindingAria": "Beheben: {title}", "kindsLegend": "Befundarten", "noDirectReference": "keine direkte Referenz", "imageTooLarge": "Dieses Bild ist größer als {size} MB.", "skipReasons": {"tooLarge": "Zu groß zum Speichern", "unreadable": "Konnte nicht gelesen werden", "rateLimited": "Server war ausgelastet", "unsupported": "Nicht unterstützte Datei", "other": "Anderer Grund"},
       "system": {
-        "componentAria": "{name}, {files} Dateien, {findings} Befunde",
+        "componentAria": "{name}, {files}, {findings}",
         "antiBar": "Befunde nach Art",
         "data": "Daten und externe Dienste",
         "dataEmpty": "Kein Datenspeicher und kein externer Dienst beendet eine Linie.",
         "empty": "Es gibt keine Komponenten zum Zeichnen.",
         "metaOwner": "{files} · {owner}",
         "more": "+{count} weitere",
-        "moreAria": "{count} weitere in {layer} in der Liste anzeigen",
-        "notLayeredOne": "Keiner Ebene zugeordnet · {count} Teil → Liste",
-        "notLayeredOther": "Keiner Ebene zugeordnet · {count} Teile → Liste"
+        "moreAria": "{count} weitere in {layer} in der Liste anzeigen"
       },
       "systemArrows": {
         "entry": "ruft über HTTP oder eine Brücke auf ↓",
@@ -36221,32 +36208,76 @@
       "counts": {
         "fileOne": "{count} Datei", "fileOther": "{count} Dateien",
         "stationOne": "{count} Station", "stationOther": "{count} Stationen",
-        "deadEndOne": "{count} Sackgasse", "deadEndOther": "{count} Sackgassen"
+        "deadEndOne": "{count} Sackgasse", "deadEndOther": "{count} Sackgassen",
+        "findingOne": "{count} Befund", "findingOther": "{count} Befunde",
+        "lineOne": "{count} Linie", "lineOther": "{count} Linien",
+        "layerOne": "{count} Schicht", "layerOther": "{count} Schichten",
+        "componentOne": "{count} Komponente", "componentOther": "{count} Komponenten",
+        "stopOne": "{count} Haltestelle", "stopOther": "{count} Haltestellen",
+        "messageOne": "{count} Nachricht", "messageOther": "{count} Nachrichten",
+        "endpointOne": "{count} Endpunkt", "endpointOther": "{count} Endpunkte",
+        "stationChangedOne": "{count} Station in diesem Commit geändert", "stationChangedOther": "{count} Stationen in diesem Commit geändert",
+        "fileMissingOne": "{count} Datei fehlt auf dem Server.", "fileMissingOther": "{count} Dateien fehlen auf dem Server.",
+        "fileTooLargeOne": "{count} Datei war zu groß zum Speichern.", "fileTooLargeOther": "{count} Dateien waren zu groß zum Speichern.",
+        "fileNotStoredOne": "{count} Datei nicht gespeichert", "fileNotStoredOther": "{count} Dateien nicht gespeichert",
+        "fileBothOne": "{count} Datei hier und auf dem Server", "fileBothOther": "{count} Dateien hier und auf dem Server",
+        "fileChangedOne": "{count} Datei geändert", "fileChangedOther": "{count} Dateien geändert",
+        "fileSkippedOne": "{count} Datei wurde nicht gespeichert.", "fileSkippedOther": "{count} Dateien wurden nicht gespeichert.",
+        "familyLightsOne": "{family} hebt {count} Station hervor", "familyLightsOther": "{family} hebt {count} Stationen hervor",
+        "checkFileOne": "Der Befund nennt {count} Datei.", "checkFileOther": "Der Befund nennt {count} Dateien.",
+        "checkStationOne": "Er betrifft {count} Station.", "checkStationOther": "Er betrifft {count} Stationen.",
+        "issueAtOne": "Bei {scope} · {count} Problem", "issueAtOther": "Bei {scope} · {count} Probleme",
+        "notLayeredOne": "Keiner Ebene zugeordnet · {count} Teil → Liste", "notLayeredOther": "Keiner Ebene zugeordnet · {count} Teile → Liste",
+        "branchFilesOne": "{name}, {count} Datei", "branchFilesOther": "{name}, {count} Dateien",
+        "packFilesOne": "{pack}: {count} Datei", "packFilesOther": "{pack}: {count} Dateien",
+        "sectionUnjudgedOne": "Das Budget hat {count} Abschnitt für später übrig gelassen.", "sectionUnjudgedOther": "Das Budget hat {count} Abschnitte für später übrig gelassen.",
+        "fixBatchOne": "Behebe diesen Befund in einer Änderung:", "fixBatchOther": "Behebe diese {count} Befunde gemeinsam in einer Änderung:",
+        "findingCollapsedOne": "{count} Befund – zum Laden aufklappen", "findingCollapsedOther": "{count} Befunde – zum Laden aufklappen",
+        "topNodesOne": "Gezeigt wird der wichtigste Knoten.", "topNodesOther": "Gezeigt werden die wichtigsten {count} Knoten.",
+        "modelCallsOne": "≈ {count} Modellaufruf", "modelCallsOther": "≈ {count} Modellaufrufe",
+        "endpointsCappedOne": "Die Anfrage nennt nur den ersten Endpunkt.", "endpointsCappedOther": "Die Anfrage nennt nur die ersten {count} Endpunkte.",
+        "commitsCappedOne": "Es wird nur der letzte Commit angezeigt.", "commitsCappedOther": "Es werden nur die letzten {count} Commits angezeigt.",
+        "moreChecksOne": "+{count} weitere Prüfung", "moreChecksOther": "+{count} weitere Prüfungen",
+        "fileEndpointsOne": "{file}: {count} Endpunkt", "fileEndpointsOther": "{file}: {count} Endpunkte",
+        "filesPlottedOne": "{count} Datei dargestellt. Die Komplexität wächst von links nach rechts, die Abdeckung von unten nach oben.", "filesPlottedOther": "{count} Dateien dargestellt. Die Komplexität wächst von links nach rechts, die Abdeckung von unten nach oben.",
+        "applyV8One": "Anwenden: v8-Abdeckung in {count} Paket", "applyV8Other": "Anwenden: v8-Abdeckung in {count} Paketen",
+        "applyV8RequestOne": "Richte die v8-Abdeckung in diesem Paket ein: {packages}. Füge Konfiguration und Skript hinzu, führe die Tests mit Abdeckung aus und melde die neue Abdeckung.",
+        "applyV8RequestOther": "Richte die v8-Abdeckung in diesen {count} Paketen ein: {packages}. Füge jeweils Konfiguration und Skript hinzu, führe die Tests mit Abdeckung aus und melde die neue Abdeckung.",
+        "entryPointsOmittedOne": "{count} weiterer Einstiegspunkt wird nicht als Linie gezeichnet.", "entryPointsOmittedOther": "{count} weitere Einstiegspunkte werden nicht als Linien gezeichnet.",
+        "interchangeOne": "Umstieg: {count} Linie", "interchangeOther": "Umstieg: {count} Linien",
+        "entryPointOne": "{count} Einstiegspunkt", "entryPointOther": "{count} Einstiegspunkte",
+        "fileServerOnlyOne": "{server} Datei auf dem Server · nicht auf diesem Rechner geprüft", "fileServerOnlyOther": "{server} Dateien auf dem Server · nicht auf diesem Rechner geprüft",
+        "fileLocalOnlyOne": "{local} Datei hier · noch nicht auf dem Server", "fileLocalOnlyOther": "{local} Dateien hier · noch nicht auf dem Server",
+        "pinFindingsOne": "{count} Befund bei {name}", "pinFindingsOther": "{count} Befunde bei {name}",
+        "moreStationsOne": "+{count} weitere Station wird nicht gezeichnet.", "moreStationsOther": "+{count} weitere Stationen werden nicht gezeichnet.",
+        "pipesCappedOne": "Es wird nur die erste Leitung angezeigt.", "pipesCappedOther": "Es werden nur die ersten {count} Leitungen angezeigt.",
+        "commitRowOne": "{sha} · {count} Datei · {when}", "commitRowOther": "{sha} · {count} Dateien · {when}",
+        "commitRowAuthorOne": "{sha} · {author} · {count} Datei · {when}", "commitRowAuthorOther": "{sha} · {author} · {count} Dateien · {when}",
+        "moreStopsOne": "+{count} weiterer Halt", "moreStopsOther": "+{count} weitere Halte",
+        "antiTipOne": "aus {count} Warnung", "antiTipOther": "aus {count} Warnungen"
       },
       "heat": {
-        "description": "Hitzeraster: {layers} Schichten, {components} Komponenten. Wählen Sie eine Zelle für Details.",
-        "cellAria": "{name}, {files} Dateien",
+        "description": "Hitzeraster: {layers}, {components}. Wählen Sie eine Zelle für Details.",
+        "cellAria": "{name}, {files}",
         "legend": "Zellgröße: {size} · Farbe: {colour} · Balken: {bar}",
         "empty": "Es gibt keine Komponenten zum Zeichnen.",
         "showMore": "{count} weitere anzeigen"
       },
       "cycleHop": "Zyklische Abhängigkeit",
       "explain": {
-        "cutNote": "Gezeigt werden {shown} von {total} Dateien. Der Server hat nicht die ganze Karte gesendet; sie wird mit dem Server aktualisiert.",
+        "cutNote": "Gezeigt werden {shown} von {files}. Der Server hat nicht die ganze Karte gesendet; sie wird mit dem Server aktualisiert.",
         "notSetUpWhy": "Nicht eingerichtet · {reason}",
-        "whyNoOutline": "der Server hat nur {shown} von {total} Dateien gesendet",
+        "whyNoOutline": "der Server hat nur {shown} von {files} gesendet",
         "whyNoBadges": "noch keine Datei hat {metric}; prüfen Sie erneut, um es zu erfassen",
         "whyNotCollected": "{metric} wurde in dieser Prüfung nicht erfasst",
-        "parityServerOnly": "{server} Dateien auf dem Server · nicht auf diesem Rechner geprüft",
-        "outOfSync": "Nicht synchron",
         "oneStation": "Diese Linie hat nur eine Station: nichts zum Durchschreiten.",
         "legendNotSetUp": "daher bleibt jede Station neutral",
         "presetNeeds": "benötigt {metrics}"
       },
-      "scaleSummary": "{stations} Stationen stehen für {files} Dateien · gezeigt werden die {nodes} wichtigsten · die Suche erreicht alles",
+      "scaleSummary": "{stations} stehen für {files} · gezeigt werden die {nodes} wichtigsten · die Suche erreicht alles",
       "repoConfig": "Repo-Konfiguration",
       "sequence": {
-        "description": "Sequenz aus {stops} Haltestellen und {messages} Nachrichten.",
+        "description": "Sequenz aus {stops} und {messages}.",
         "empty": "Eine Sequenz braucht zwei Stationen; diese Linie hat nur eine.",
         "messageAria": "{from} an {to}: {label}",
         "backToMap": "Zurück zur Karte"
@@ -36256,7 +36287,8 @@
         "syncing": "Synchronisierung läuft",
         "error": "Fehler",
         "idle": "Nicht synchronisiert",
-        "partial": "Nicht synchron"
+        "partial": "Nicht synchron",
+        "serverOnly": "Nur auf dem Server"
       },
       "overlay": {
         "outTo": "↑ Hinaus zu {name}",
@@ -36264,8 +36296,6 @@
         "lensSub": "war die Ansicht {lens}",
         "familyOnly": "Nur {family}",
         "clearFamily": "Filter {family} aufheben",
-        "missingFiles": "{count} Dateien fehlen auf dem Server.",
-        "tooLarge": "{count} Dateien waren zu groß zum Speichern.",
         "diagnose": "Diagnose",
         "controls": "Szenensteuerung"
       },
@@ -36278,7 +36308,6 @@
         "noSymbolsNote": "Dieser Graph hat keine Symbole, daher zeigen die Ebenen unter einem Paket Dateien.",
         "world": "die ganze Karte",
         "drillReset": "Die Karte hat sich geändert, deshalb ist die Ansicht aus {name} herausgegangen.",
-        "moreStops": "+{count} weitere Halte",
         "satelliteAria": "{name}, in {parent}",
         "card": {
           "close": "Schließen",
@@ -36296,7 +36325,6 @@
         "stats": { "issues": "Antimuster", "complexity": "Komplexität", "coverage": "Abdeckung", "reached": "Erreicht", "usage": "Wichtigkeit" },
         "statWords": {
           "anti": { "none": "keine", "low": "niedrig", "medium": "mittel", "high": "hoch", "severe": "schwer" },
-          "antiTip": "aus {count} Warnungen",
           "importance": "Nr. {rank} von {total}",
           "importanceTip": "Relativ zum meistgenutzten Teil"
         },
@@ -36314,8 +36342,6 @@
       },
       "act": {
         "cardsTitle": "Zuerst beheben",
-        "titleAtOne": "Bei {scope} · 1 Problem",
-        "titleAtMany": "Bei {scope} · {count} Probleme",
         "titlePath": "Auf diesem Pfad · {count} zu bearbeiten",
         "emptyTitle": "Hier gibt es nichts zu tun",
         "emptyStation": "Keine offenen Befunde an dieser Station. Fragen Sie z. B. „Was hat keinen Test?“",
@@ -36339,7 +36365,6 @@
         "doneTitle": "Dieser Pfad ist fertig, wenn…",
         "doneCheck": "{title} ist behoben in {items}",
         "doneNone": "Auf diesem Pfad ist kein Befund offen.",
-        "doneMore": "+{count} weitere Prüfungen",
         "detailsTitle": "Details",
         "linkCoverage": "Abdeckung",
         "linkApi": "API"
@@ -36352,7 +36377,6 @@
         "simulate": "Mit Werten simulieren",
         "sequence": "Sequenz",
         "noTests": "keine Tests",
-        "findings": "{count} Befunde",
         "stops": "Halte",
         "enlarge": "Vergrößern"
       },
@@ -36378,14 +36402,11 @@
         "countPair": "{local} / {server}",
         "parityAll": "Der Server hat alle.",
         "parityMissing": "{count} noch nicht auf dem Server.",
-        "parityTooLarge": "{count} waren zu groß zum Speichern.",
         "deltaTitle": "Änderungen seit der letzten Prüfung",
         "deltaEmpty": "Keine Commits vorhanden.",
         "deltaSummary": "{count} noch nicht im Bild",
         "deltaPending": "Ausstehend",
         "deltaApplied": "Im Bild",
-        "deltaRow": "{sha} · {count} Dateien · {when}",
-        "deltaRowAuthor": "{sha} · {author} · {count} Dateien · {when}",
         "actionSetUpV8": "v8 einrichten",
         "actionTurnOn": "Einschalten",
         "actionGenerate": "Erzeugen",
@@ -36453,7 +36474,6 @@
         "kpiComplexity": "Gesamtkomplexität",
         "kpiRisky": "Komplex und kaum getestet",
         "scatterTitle": "Komplexität gegen Abdeckung",
-        "scatterAria": "{count} Dateien dargestellt. Die Komplexität wächst von links nach rechts, die Abdeckung von unten nach oben.",
         "axisX": "Komplexität",
         "axisY": "Abdeckung",
         "gapsTitle": "Riskanteste Lücken",
@@ -36475,8 +36495,6 @@
         "configAll": "Die Abdeckung ist in jedem Paket konfiguriert.",
         "configNowhere": "In keinem Paket ist die Abdeckung konfiguriert.",
         "configOnly": "Die Abdeckung ist nur in {packages} konfiguriert. Anderswo wird sie nicht gemessen.",
-        "applyV8": "Anwenden: v8-Abdeckung in {count} Paketen",
-        "applyV8Request": "Richte die v8-Abdeckung in diesen {count} Paketen ein: {packages}. Füge jeweils Konfiguration und Skript hinzu, führe die Tests mit Abdeckung aus und melde die neue Abdeckung.",
         "quadrant": "komplex · ungetestet",
         "namesMore": "{names} +{count}"
       },
@@ -36487,13 +36505,11 @@
         "antiRow": "Anti-Muster",
         "cellAria": "{family}, {layer}: {count}",
         "listTitle": "Gefundene Muster",
-        "listRow": "{count} Dateien",
         "listHint": "Heuristik: aus Namen, Exporten, Importen und Größe abgeleitet.",
         "antiTitle": "Anti-Muster",
         "antiNone": "Es wurden keine Anti-Muster gefunden.",
         "resolve": "Beheben",
-        "showInTower": "Im Turm zeigen",
-        "lights": "{family} hebt {count} Stationen hervor"
+        "showInTower": "Im Turm zeigen"
       },
       "api": {
         "notSetUpTitle": "Keine Endpunkte gefunden",
@@ -36519,7 +36535,6 @@
         "exportPostman": "Postman-Collection exportieren",
         "contractTests": "Vertragstests",
         "contractTestsText": "Schreibe Vertragstests für diese Endpunkte anhand des OpenAPI-Gerüsts, führe sie aus und melde jedes Ergebnis: {routes}.",
-        "groupAria": "{file}: {count} Endpunkte",
 
         "groupInContract": "Im Vertrag ({count})",
 
@@ -36527,7 +36542,7 @@
 
         "selectEndpoint": "{route} in die Vertragstests aufnehmen",
 
-        "selectedCount": "{selected} von {total} Endpunkten für Vertragstests ausgewählt",
+        "selectedCount": "{selected} von {endpoints} für Vertragstests ausgewählt",
 
         "selectAtLeastOne": "Wähle mindestens einen Endpunkt, um Vertragstests zu erzeugen.",
 
@@ -36595,8 +36610,6 @@
         "empty": "Wählen Sie bei einem Befund „Beheben“, um hier daran zu arbeiten.",
         "provenanceLabel": "Quelle",
         "checksTitle": "Prüfungen",
-        "checkFiles": "Der Befund nennt {count} Dateien.",
-        "checkStations": "Er betrifft {count} Stationen.",
         "checkReview": "Prüfen Sie den Ordner erneut, um zu bestätigen, dass der Befund verschwunden ist.",
         "show": "Anzeigen"
       },
@@ -36670,7 +36683,6 @@
         "undoNoRecord": "Dieser Host hat keine Aufzeichnung der Korrektur und kann sie daher nicht rückgängig machen.",
         "permNote": "Läuft als Sie auf dem Branch fix/…. Rückgängig kehrt zum vorherigen Branch zurück; nichts erreicht den Hauptbranch, bevor die Prüfungen bestehen und Sie zusammenführen.",
         "previewTitle": "Was sich ändert",
-        "previewFiles": "{count} Dateien",
         "previewFromFiles": "Dieser Host kann keine Zeilen vorab anzeigen; dies sind die Dateien, die der Befund nennt.",
         "promptTitle": "Prompt",
         "promptNote": "Geht an den einen Composer, mit diesem Befund und den vier Prüfungen im Anhang.",
@@ -36692,7 +36704,6 @@
           "agent": "An Agent gesendet"
         },
         "checkNoReport": "Diese Prüfung hat nie berichtet und zählt daher als Fehler.",
-        "changedFiles": "{count} Dateien geändert",
         "appliedOn": "Auf Branch {branch} angewendet.",
         "branchError": "Direkt angewendet: Der Branch konnte nicht erstellt werden ({reason}).",
         "branchUnknown": "der Korrektur-Branch",
@@ -36747,8 +36758,7 @@
         "label": "Prüfung",
         "aria": "Verlauf: Wählen Sie einen Commit, um die von ihm geänderten Stationen zu markieren",
         "now": "Jetzt",
-        "commitAria": "{title}, {at}",
-        "changed": "{count} Stationen in diesem Commit geändert"
+        "commitAria": "{title}, {at}"
       },
       "header": {
         "statusLabel": "Synchronisierungsstatus",
@@ -36759,10 +36769,7 @@
         "reviewing": "Review läuft · {progress}",
         "reviewPlan": "Review-Plan bereit",
         "reviewFailed": "Review fehlgeschlagen",
-        "skippedPill": "{count} Dateien nicht gespeichert",
-        "parityBoth": "{count} Dateien hier und auf dem Server",
         "parityDiffers": "{local} hier · {server} auf dem Server",
-        "parityLocal": "{local} Dateien hier · noch nicht auf dem Server",
         "moreActions": "Weitere Aktionen",
         "reReview": "Diesen Ordner erneut prüfen",
         "overlaysNote": "Jede Kennzahl kann jeden Kanal steuern. Karte, System, Graph, Mindmap, Turm, Heat, Liste und Sequenz lesen dieselben Zuordnungen, ein Abdeckungsbalken kann also genauso gut ein Anti-Pattern-Balken sein.",

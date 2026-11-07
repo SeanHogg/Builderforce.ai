@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../../labels';
+import { counted } from '../plural';
 import { LENSES } from '../../lenses';
 import { surfaceFixture } from '../../testing';
 import { CAMERAS } from '../cameras';
@@ -11,7 +12,7 @@ import { useSurface, type SurfaceModel } from '../useSurface';
 const graph = surfaceFixture();
 const Transit = CAMERAS.find((c) => c.id === 'transit')!.component;
 const seen: { surface?: SurfaceModel } = {};
-const aria = (name: string, files: number, layer: string) => fillTemplate(L.surface.stationAria, { name, layer, files });
+const aria = (name: string, files: number, layer: string) => fillTemplate(L.surface.stationAria, { name, layer, files: counted(L, 'file', files) });
 
 function mount() {
     function Harness() {

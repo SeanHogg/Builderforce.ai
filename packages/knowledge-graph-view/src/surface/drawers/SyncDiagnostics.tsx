@@ -8,7 +8,8 @@
 import { CopiedNote, CopyFallback, useCopyText } from '../../copyText';
 import type { KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
-import { MONO, button, muted } from '../../styles';
+import { button, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { Section, Unavailable } from './ui';
 
 export function SyncDiagnostics({ text, labels, skippedCount, onResend }: {
@@ -24,7 +25,7 @@ export function SyncDiagnostics({ text, labels, skippedCount, onResend }: {
             {text !== undefined && (
                 <pre
                     data-testid="kg-sync-diagnostics"
-                    style={{ margin: 0, padding: 10, borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('bg'), color: cssVar('text'), fontFamily: MONO, fontSize: 11, lineHeight: '16px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+                    style={{ margin: 0, padding: 10, borderRadius: 8, border: `1px solid ${cssVar('border')}`, background: cssVar('bg'), color: cssVar('text'), ...TYPE.monoName, fontWeight: 400, lineHeight: '16px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
                 >
                     {text}
                 </pre>

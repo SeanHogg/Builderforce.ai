@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from './labels';
+import { counted } from './surface/plural';
 import { QUESTIONS } from './surface/questions';
 import { Toolbar } from './Toolbar';
 import { fixtureSource, surfaceFixture } from './testing';
@@ -45,13 +46,13 @@ describe('the sync pill and the parity line', () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
         const pill = await strip().findByRole('button', { name: /^Synced/ });
         expect(pill.getAttribute('data-state')).toBe('synced');
-        expect((await screen.findByTestId('kg-parity')).textContent).toBe(fillTemplate(h.parityBoth, { count: (120).toLocaleString() }));
+        expect((await screen.findByTestId('kg-parity')).textContent).toBe(counted(L, 'fileBoth', 120, { count: (120).toLocaleString() }));
     });
 
     it('shows both counts when the server differs, and an error pill when files were skipped', async () => {
         await mount(sourceOf({ syncStatus: async () => sync({ server: { files: 100, docs: 0 }, skipped: [{ path: 'big.bin', reason: 'too-large' }] }) }));
         expect((await screen.findByTestId('kg-parity')).textContent).toBe(fillTemplate(h.parityDiffers, { local: '120', server: '100' }));
-        const pill = await strip().findByRole('button', { name: startsWith(fillTemplate(h.skippedPill, { count: 1 })) });
+        const pill = await strip().findByRole('button', { name: startsWith(counted(L, 'fileNotStored', 1)) });
         expect(pill.getAttribute('data-state')).toBe('error');
     });
 
@@ -222,6 +223,32 @@ describe('the ask bar', () => {
         render(<Toolbar labels={L} narrow={false} onSearch={vi.fn()} question={question(id)} askName="Web" />);
         expect(askBox().placeholder).toBe(fillTemplate(L.surface.askSentence[id], { name: 'Web' }));
         expect(screen.getByTestId('kg-answer-mode').textContent).toBe(L.surface.answerMode[id]);
+    });
+
+    it('shows the question as the value (not a placeholder hint) until something is typed, which replaces it', () => {
+        const onSearch = vi.fn();
+        const { rerender } = render(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="where" askName="Web" />);
+        const sentence = fillTemplate(L.surface.askSentence.where, { name: 'Web' });
+        expect(askBox().value).toBe(sentence);
+        rerender(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="wrong" askName="Web" />);
+        expect(askBox().value).toBe(fillTemplate(L.surface.askSentence.wrong, { name: 'Web' })); // follows the question
+        fireEvent.change(askBox(), { target: { value: 'invoice' } });
+        expect(askBox().value).toBe('invoice');
+        rerender(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="where" askName="Web" />);
+        expect(askBox().value).toBe('invoice'); // what was typed stays
+    });
+
+    it('renders ONE note: "not set up" alone, without the answer mode', () => {
+        render(<Toolbar labels={L} narrow={false} onSearch={vi.fn()} question="untested" askName="Web" answer={L.surface.answerNotSetUp} />);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByTestId('kg-answer').textContent).toBe(L.surface.answerNotSetUp);
+        expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
+    });
+
+    it('renders ONE note: the answer mode, then the answer', () => {
+        render(<Toolbar labels={L} narrow={false} onSearch={vi.fn()} question="wrong" askName="Web" answer="3 stations" />);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByTestId('kg-answer').textContent).toBe(`${L.surface.answerMode.wrong} · 3 stations`);
     });
 
     it('submits the typed text as a search', () => {

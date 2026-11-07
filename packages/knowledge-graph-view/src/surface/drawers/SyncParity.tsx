@@ -6,6 +6,8 @@
 
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { muted } from '../../styles';
+import { counted } from '../plural';
+import { TYPE } from '../ui/type';
 import type { SyncStatus } from '../../types';
 import { COUNTS, parityNote, serverShare, syncGap } from './syncModel';
 import { Bar, Section } from './ui';
@@ -20,7 +22,7 @@ export function SyncParity({ status, labels }: { status: SyncStatus; labels: Kno
                 const local = status.local[k], server = status.server?.[k];
                 if (local === undefined) {
                     return (
-                        <div key={k} data-count={k} data-measured="false" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <div key={k} data-count={k} data-measured="false" style={{ display: 'flex', justifyContent: 'space-between', ...TYPE.body }}>
                             <strong>{t[k]}</strong>
                             <span style={muted}>{t.edgesNotMeasured}</span>
                         </div>
@@ -29,7 +31,7 @@ export function SyncParity({ status, labels }: { status: SyncStatus; labels: Kno
                 const note = parityNote(local, server);
                 return (
                     <div key={k} data-count={k} style={{ display: 'grid', gap: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', ...TYPE.body }}>
                             <strong>{t[k]}</strong>
                             <span style={muted}>{server === undefined ? local : fillTemplate(t.countPair, { local, server })}</span>
                         </div>
@@ -40,7 +42,7 @@ export function SyncParity({ status, labels }: { status: SyncStatus; labels: Kno
                         {note && (
                             <span data-testid={`kg-parity-note-${k}`} style={muted}>
                                 {note.kind === 'all' ? t.parityAll : fillTemplate(t.parityMissing, { count: note.count })}
-                                {k === 'files' && gap.tooLarge > 0 ? ` ${fillTemplate(t.parityTooLarge, { count: Math.min(gap.tooLarge, gap.missing) })}` : ''}
+                                {k === 'files' && gap.tooLarge > 0 ? ` ${counted(labels, 'fileTooLarge', Math.min(gap.tooLarge, gap.missing))}` : ''}
                             </span>
                         )}
                     </div>

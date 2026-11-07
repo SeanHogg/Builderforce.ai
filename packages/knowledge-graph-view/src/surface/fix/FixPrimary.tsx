@@ -6,8 +6,10 @@
 
 import type { KnowledgeGraphLabels } from '../../labels';
 import { fillTemplate } from '../../labels';
+import { counted } from '../plural';
 import { cssVar } from '../../scene/themeColors';
 import { button, muted, primaryButton } from '../../styles';
+import { TYPE } from '../ui/type';
 import { isResolved, type FixFlowState } from './fixFlow';
 import type { FixFlow } from './useFixFlow';
 import { FixBeforeAfter, type FixRevision } from './FixBeforeAfter';
@@ -53,12 +55,12 @@ export function FixPrimary({ flow, labels, hasComposer, revision }: FixPrimaryPr
             {applied?.branchError && <p role="status" data-testid="kg-fix-branch-error" style={{ ...muted, margin: 0 }}>{fillTemplate(t.branchError, { reason: applied.branchError })}</p>}
             {applied && applied.changed.length > 0 && (
                 <div data-testid="kg-resolve-done" style={{ display: 'grid', gap: 2 }}>
-                    <span style={muted}>{fillTemplate(t.changedFiles, { count: applied.changed.length })}</span>
-                    <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12 }}>{applied.changed.map((p) => <li key={p} style={{ overflowWrap: 'anywhere' }}>{p}</li>)}</ul>
+                    <span style={muted}>{counted(labels, 'fileChanged', applied.changed.length)}</span>
+                    <ul style={{ margin: 0, paddingInlineStart: 18, ...TYPE.body }}>{applied.changed.map((p) => <li key={p} style={{ overflowWrap: 'anywhere' }}>{p}</li>)}</ul>
                 </div>
             )}
-            {error && <p role="alert" data-testid="kg-fix-error" style={{ margin: 0, fontSize: 12, color: cssVar('violation'), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{error}</p>}
-            <span style={{ ...muted, fontSize: 11, lineHeight: '16px' }}>{t.permNote}</span>
+            {error && <p role="alert" data-testid="kg-fix-error" style={{ margin: 0, ...TYPE.body, color: cssVar('violation'), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{error}</p>}
+            <span style={{ ...TYPE.meta, lineHeight: '16px' }}>{t.permNote}</span>
         </div>
     );
 }

@@ -8,8 +8,10 @@
 import { useMemo, useState } from 'react';
 import { findingTitle } from '../../findingText';
 import { fillTemplate } from '../../labels';
+import { counted } from '../plural';
 import { cssVar } from '../../scene/themeColors';
 import { button, card, chip, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { ProvenanceBadge } from '../ui';
 import { findingProvenance } from '../scope';
 import { stationOfRef } from '../stations';
@@ -17,7 +19,7 @@ import type { PanelProps } from '../registry';
 import { patternMatrix, topAntiPatterns } from './patternsModel';
 import { NotSetUp, Section } from './ui';
 
-const cell = { textAlign: 'center', padding: '6px 8px', fontSize: 12, borderBottom: `1px solid ${cssVar('border')}` } as const;
+const cell = { textAlign: 'center', padding: '6px 8px', fontSize: TYPE.body.fontSize, borderBottom: `1px solid ${cssVar('border')}` } as const;
 
 export function PatternsPanel({ graph, labels, surface, onShow, onCamera, cameras }: PanelProps) {
     const s = labels.surface, t = s.patterns;
@@ -75,14 +77,14 @@ export function PatternsPanel({ graph, labels, surface, onShow, onCamera, camera
                     </table>
                 </div>
             </Section>
-            {active && <p role="status" data-testid="kg-patterns-lit" style={{ ...muted, margin: 0 }}>{fillTemplate(t.lights, { family: active.family, count: active.stations })}</p>}
+            {active && <p role="status" data-testid="kg-patterns-lit" style={{ ...muted, margin: 0 }}>{counted(labels, 'familyLights', active.stations, { family: active.family })}</p>}
             {matrix.families.length > 0 && (
                 <Section title={t.listTitle}>
                     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
                         {matrix.families.map((fam) => (
                             <li key={fam.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <strong style={{ fontSize: 13 }}>{fam.id}</strong>
-                                <span style={muted}>{fillTemplate(t.listRow, { count: fam.refs.length })}</span>
+                                <strong style={TYPE.subtitle}>{fam.id}</strong>
+                                <span style={muted}>{counted(labels, 'file', fam.refs.length)}</span>
                                 <ProvenanceBadge provenance="heuristic" labels={labels} />
                             </li>
                         ))}
@@ -96,7 +98,7 @@ export function PatternsPanel({ graph, labels, surface, onShow, onCamera, camera
                         {antis.map((f) => (
                             <li key={f.id} data-anti={f.id} style={{ ...card, display: 'grid', gap: 6 }}>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <strong style={{ fontSize: 13 }}>{findingTitle(f, labels)}</strong>
+                                    <strong style={TYPE.subtitle}>{findingTitle(f, labels)}</strong>
                                     <ProvenanceBadge provenance={findingProvenance(f)} labels={labels} />
                                 </div>
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

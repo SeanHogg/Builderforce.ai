@@ -11,6 +11,7 @@
 import type { ReactNode } from 'react';
 import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './labels';
+import { counted } from './surface/plural';
 import { packLabel } from './names';
 import { reviewProgressText } from './reviewProgressText';
 import { ReviewFailed } from './ReviewFailed';
@@ -48,12 +49,12 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                 <h3 style={heading}>{fillTemplate(labels.reviewPlanTitle, { title: titleOf(plan.rootId) })}</h3>
                 <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13, display: 'grid', gap: 2 }}>
                     {Object.entries(plan.byPack).map(([pack, count]) => (
-                        <li key={pack}>{fillTemplate(labels.reviewPlanByPack, { pack: packLabel(labels, pack), count })}</li>
+                        <li key={pack}>{counted(labels, 'packFiles', count, { pack: packLabel(labels, pack) })}</li>
                     ))}
                     <li>{fillTemplate(labels.reviewPlanUnchanged, { count: plan.unchanged })}</li>
                     {plan.skipped.length > 0 && <li>{fillTemplate(labels.reviewPlanSkipped, { count: plan.skipped.length })}</li>}
                     <li>
-                        {fillTemplate(labels.reviewPlanModelCalls, { count: calls })}
+                        {counted(labels, 'modelCalls', calls)}
                         {estimate?.costUsd !== undefined && !estimate.local && ` · ${fillTemplate(labels.reviewPlanCost, { cost: formatCost(estimate.costUsd) })}`}
                     </li>
                     {estimate?.local
@@ -93,7 +94,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                 <p style={{ margin: 0, fontSize: 13 }}>
                     {fillTemplate(labels.reviewDoneBody, { extracted: r.extracted, judged: r.judged, facts: r.factsWritten })}
                 </p>
-                {r.unjudged > 0 && <p style={{ ...muted, margin: 0 }}>{fillTemplate(labels.reviewUnjudged, { count: r.unjudged })}</p>}
+                {r.unjudged > 0 && <p style={{ ...muted, margin: 0 }}>{counted(labels, 'sectionUnjudged', r.unjudged)}</p>}
                 {s.skipped && <SkippedUploads items={s.skipped} labels={labels} />}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {r.unjudged > 0 && <button type="button" style={primaryButton} onClick={() => onContinue(s.rootId)}>{labels.reviewContinue}</button>}

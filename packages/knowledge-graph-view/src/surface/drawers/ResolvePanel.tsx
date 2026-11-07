@@ -8,8 +8,9 @@
 import { useMemo } from 'react';
 import { findingRequest, findingTitle } from '../../findingText';
 import { nodeIndex } from '../../graphModel';
-import { fillTemplate } from '../../labels';
-import { button, card, heading, muted } from '../../styles';
+import { counted } from '../plural';
+import { button, card, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { ProvenanceBadge } from '../ui';
 import { FixFlowView } from '../fix/FixFlowView';
 import { findingProvenance, scopeFindings } from '../scope';
@@ -29,7 +30,7 @@ export function ResolvePanel({ graph, labels, surface, source, revision, onShow,
     return (
         <div data-testid="kg-resolve" style={{ display: 'grid', gap: 16 }}>
             <section style={{ ...card, display: 'grid', gap: 6 }}>
-                <h3 style={heading}>{findingTitle(finding, labels)}</h3>
+                <h3 style={TYPE.title}>{findingTitle(finding, labels)}</h3>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={muted}>{t.provenanceLabel}</span>
                     <ProvenanceBadge provenance={findingProvenance(finding)} labels={labels} />
@@ -41,9 +42,9 @@ export function ResolvePanel({ graph, labels, surface, source, revision, onShow,
             <FixFlowView key={finding.id} finding={finding} graph={graph} labels={labels} source={source} onCompose={onCompose} onChanged={onChanged} queue={queue} revision={revision} surface={surface} />
 
             <Section title={t.checksTitle}>
-                <ul style={{ margin: 0, paddingInlineStart: 18, display: 'grid', gap: 4, fontSize: 13 }}>
-                    <li>{fillTemplate(t.checkFiles, { count: finding.nodes.length })}</li>
-                    <li>{fillTemplate(t.checkStations, { count: stations.size })}</li>
+                <ul style={{ margin: 0, paddingInlineStart: 18, display: 'grid', gap: 4, fontSize: TYPE.bodyLarge.fontSize }}>
+                    <li>{counted(labels, 'checkFile', finding.nodes.length)}</li>
+                    <li>{counted(labels, 'checkStation', stations.size)}</li>
                     <li>{t.checkReview}</li>
                 </ul>
             </Section>

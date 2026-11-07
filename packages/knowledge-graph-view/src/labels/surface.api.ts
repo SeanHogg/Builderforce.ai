@@ -4,7 +4,7 @@ export interface ApiLabels {
     /** `{file}`, `{count}`, `{names}`, `{routes}`. */
     api: Record<
         'notSetUpTitle' | 'notSetUpBody' | 'kpiEndpoints' | 'kpiParams' | 'kpiCallers' | 'kpiTests' | 'kpiContract' | 'pickFile' | 'paramWithNote' | 'kpiUndocumented' | 'contractMissing' | 'documented' | 'undocumented' | 'callers'
-        | 'noCallers' | 'downloadFailed' | 'tryIt' | 'requestLine' | 'copyCurl' | 'exportOpenapi' | 'exportPostman' | 'contractTests' | 'contractTestsText' | 'groupAria'
+        | 'noCallers' | 'downloadFailed' | 'tryIt' | 'requestLine' | 'copyCurl' | 'exportOpenapi' | 'exportPostman' | 'contractTests' | 'contractTestsText'
         | 'groupInContract' | 'groupUndocumented' | 'selectEndpoint' | 'selectedCount' | 'selectAtLeastOne' | 'detailParams' | 'paramPath' | 'paramQuery' | 'paramBody'
         | 'paramBodyNote' | 'noParams' | 'detailTested' | 'testedYes' | 'testedNo' | 'testedBy' | 'testedNone' | 'detailCallers' | 'callerFilesNone' | 'sandboxTitle'
         | 'baseUrl' | 'baseUrlInvalid' | 'baseUrlRemote' | 'paramValue' | 'paramMissing' | 'bodyInvalid' | 'bodyLabel' | 'send' | 'sending' | 'sendUnavailable'
@@ -38,11 +38,10 @@ export const API_DEFAULTS: ApiLabels = {
         exportPostman: 'Export Postman collection',
         contractTests: 'Contract tests',
         contractTestsText: 'Write contract tests for these endpoints from the OpenAPI skeleton, run them and report each result: {routes}.',
-        groupAria: '{file}: {count} endpoints',
         groupInContract: 'In contract ({count})',
         groupUndocumented: 'Undocumented ({count})',
         selectEndpoint: 'Include {route} in the contract tests',
-        selectedCount: '{selected} of {total} endpoints selected for contract tests',
+        selectedCount: '{selected} of {endpoints} selected for contract tests',
         selectAtLeastOne: 'Select at least one endpoint to generate contract tests.',
         detailParams: 'Parameters',
         paramPath: 'path',

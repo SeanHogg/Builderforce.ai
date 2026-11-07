@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { codeFixture, docsFixture, surfaceFixture } from '../testing';
-import { antiLevel, buildStations, changedRefs, quantileLevels, stationOfRef } from './stations';
+import { antiLevel, buildStations, changedRefs, quantileLevels, stationOfRef, systemWideFindings } from './stations';
 
 const byName = (name: string, graph = surfaceFixture()) => buildStations(graph).stations.find((s) => s.name === name)!;
 
@@ -97,6 +97,34 @@ describe('buildStations', () => {
 
     it('is deterministic', () => {
         expect(buildStations(surfaceFixture()).stations).toEqual(buildStations(surfaceFixture()).stations);
+    });
+});
+
+describe('system-wide findings', () => {
+    // Nine area-less folders, one file each: nine stations.
+    const folders = Array.from({ length: 9 }, (_, i) => `f${i}`);
+    const file = (d: string) => ({ ref: `src:s::${d}/a.ts`, kind: 'file', label: `${d}/a.ts`, pack: 'code', importance: 0.5, origin: 'extracted', sourceHash: d, partition: 'domain' }) as never;
+    const finding = (id: string, dirs: string[]) => ({ id, kind: 'cycle', pack: 'code', nodes: dirs.map((d) => `src:s::${d}/a.ts`), severity: 'warn', params: {} }) as never;
+    const build = (findings: unknown[]) => {
+        const g = { ...surfaceFixture(), nodes: folders.map(file), edges: [], findings } as never;
+        return { g, model: buildStations(g) };
+    };
+
+    it('leaves a finding that touches more than a quarter of the stations out of every station, and lists it once', () => {
+        const { g, model } = build([finding('wide', ['f0', 'f1', 'f2']), finding('local', ['f0', 'f3'])]);
+        expect([...model.systemWide!]).toEqual(['wide']);
+        expect(model.stations.find((s) => s.path === 'f0')!.findingIds).toEqual(['local']);
+        expect(model.stations.find((s) => s.path === 'f1')!.findingIds).toEqual([]);
+        expect(model.stations.find((s) => s.path === 'f1')!.anti).toBe(1);
+        expect(systemWideFindings(model, (g as { findings: never[] }).findings).map((f) => (f as { id: string }).id)).toEqual(['wide']);
+    });
+
+    it('treats a finding under a quarter as local, and never applies the rule to a handful of stations', () => {
+        expect(build([finding('edge', ['f0', 'f1'])]).model.systemWide!.size).toBe(0); // 2 of 9 = 22%
+        const small = buildStations(surfaceFixture());
+        expect(small.systemWide!.size).toBe(0);
+        expect(systemWideFindings(small, surfaceFixture().findings)).toEqual([]);
+        expect(systemWideFindings({}, surfaceFixture().findings)).toEqual([]);
     });
 });
 

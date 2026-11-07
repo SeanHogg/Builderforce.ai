@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { surfaceFixture } from '../testing';
 import { buildLines } from './lines';
-import { buildSpine, EMPTY_PATH, pathOfLine } from './path';
+import { buildSpine, EMPTY_PATH, pathOfLine, withLineCrumb } from './path';
 import { findingProvenance, scopeFindings } from './scope';
 import { buildStations } from './stations';
 
@@ -49,6 +49,17 @@ describe('buildSpine', () => {
         const api = model.stations.find((s) => s.name === 'API')!;
         expect(buildSpine({ rootTitle: 'Sys', station: api, node: null, nodeLabel: label }).map((i) => i.label)).toEqual(['Sys', 'API']);
         expect(buildSpine({ rootTitle: 'Sys', station: api, node: node('src:sys::api/useCase.ts'), nodeLabel: label }).map((i) => i.kind)).toEqual(['root', 'station', 'file']);
+    });
+    it('puts the drawn line between the folder and the station, and leaves the items alone without one', () => {
+        const api = model.stations.find((s) => s.name === 'API')!;
+        const base = buildSpine({ rootTitle: 'Sys', station: api, node: null, nodeLabel: label });
+        const withLine = withLineCrumb(base, 'VS Code line');
+        expect(withLine.map((i) => i.kind)).toEqual(['root', 'line', 'station']);
+        expect(withLine.map((i) => i.label)).toEqual(['Sys', 'VS Code line', 'API']);
+        expect(withLine[1]!.id).toBeUndefined(); // picking it selects no node: the view steps back up to the line
+        expect(withLineCrumb(base, null)).toEqual(base);
+        expect(withLineCrumb(base, '')).toEqual(base);
+        expect(withLineCrumb(buildSpine({ rootTitle: 'Sys', station: null, node: null, nodeLabel: label }), 'VS Code line').map((i) => i.kind)).toEqual(['root', 'line']);
     });
     it('puts a symbol under its file', () => {
         const symbol = { ...node('src:sys::api/useCase.ts'), ref: 'src:sys::api/useCase.ts#run' as const, kind: 'symbol', label: 'run' };

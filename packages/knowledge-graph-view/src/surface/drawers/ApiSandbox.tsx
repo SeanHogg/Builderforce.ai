@@ -9,7 +9,8 @@ import { useState } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../../copyText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
-import { button, heading, input, MONO, muted, primaryButton } from '../../styles';
+import { button, input, muted, primaryButton } from '../../styles';
+import { TYPE } from '../ui/type';
 import type { TryRequest, TryResponse } from '../../types';
 import { paramKey, type ParamRow } from './apiDetail';
 import { bodyMethod, curlOf, type Endpoint } from './apiModel';
@@ -25,18 +26,18 @@ function Result({ res, t }: { res: TryResponse; t: ApiLabels }) {
     const headers = Object.entries(res.headers);
     return (
         <div data-testid="kg-api-result" style={{ display: 'grid', gap: 6 }}>
-            <strong data-ok={isSuccess(res.status)} style={{ fontFamily: MONO, fontSize: 12, color: cssVar(isSuccess(res.status) ? 'agrees' : 'cycle') }}>
+            <strong data-ok={isSuccess(res.status)} style={{ ...TYPE.monoValue, fontWeight: 700, color: cssVar(isSuccess(res.status) ? 'agrees' : 'cycle') }}>
                 {fillTemplate(t.resultStatus, { status: res.status, ms: Math.round(res.ms) })}
             </strong>
             {headers.length > 0 && (
                 <details>
                     <summary style={muted}>{t.resultHeaders}</summary>
-                    <pre style={{ margin: 0, fontFamily: MONO, fontSize: 11, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{headers.map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>
+                    <pre style={{ margin: 0, ...TYPE.monoName, fontWeight: 400, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{headers.map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>
                 </details>
             )}
             <span style={muted}>{t.resultBody}</span>
             {text ? (
-                <pre style={{ margin: 0, fontFamily: MONO, fontSize: 11, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 240, overflow: 'auto', padding: 8, borderRadius: 6, border: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>{text}</pre>
+                <pre style={{ margin: 0, ...TYPE.monoName, fontWeight: 400, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 240, overflow: 'auto', padding: 8, borderRadius: 6, border: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>{text}</pre>
             ) : <span style={muted}>{t.resultEmpty}</span>}
             {shortened && <span style={muted}>{fillTemplate(t.resultTruncated, { count: text.length })}</span>}
         </div>
@@ -77,9 +78,9 @@ export function ApiSandbox({ endpoint, params, labels, tryRequest }: ApiSandboxP
 
     return (
         <div data-testid="kg-api-sandbox" style={{ display: 'grid', gap: 8 }}>
-            <h4 style={{ ...heading, fontSize: 12 }}>{t.sandboxTitle}</h4>
+            <h4 style={TYPE.sectionHeading}>{t.sandboxTitle}</h4>
             <span style={muted}>{t.requestLine}</span>
-            <code style={{ fontFamily: MONO, fontSize: 12, overflowWrap: 'anywhere' }}>{curl}</code>
+            <code style={{ ...TYPE.monoValue, overflowWrap: 'anywhere' }}>{curl}</code>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button type="button" style={button} onClick={() => void copier.copy(curl)}>{t.copyCurl}</button>
                 <CopiedNote status={copier.status} labels={labels} />
@@ -89,7 +90,7 @@ export function ApiSandbox({ endpoint, params, labels, tryRequest }: ApiSandboxP
                 <div style={{ display: 'grid', gap: 8 }}>
                     <label style={{ display: 'grid', gap: 4 }}>
                         <span style={muted}>{t.baseUrl}</span>
-                        <input value={baseUrl} onChange={(e) => edit(() => setBaseUrl(e.target.value))} inputMode="url" spellCheck={false} style={{ ...input, fontFamily: MONO, width: '100%', boxSizing: 'border-box' }} />
+                        <input value={baseUrl} onChange={(e) => edit(() => setBaseUrl(e.target.value))} inputMode="url" spellCheck={false} style={{ ...input, ...TYPE.monoValue, width: '100%', boxSizing: 'border-box' }} />
                     </label>
                     {base && !isLocalBase(base) && <span role="status" style={muted}>{t.baseUrlRemote}</span>}
                     {fields.map((p) => (
@@ -98,14 +99,14 @@ export function ApiSandbox({ endpoint, params, labels, tryRequest }: ApiSandboxP
                             <input
                                 value={values[paramKey(p)] ?? ''} spellCheck={false}
                                 onChange={(e) => edit(() => setValues((v) => ({ ...v, [paramKey(p)]: e.target.value })))}
-                                style={{ ...input, fontFamily: MONO, width: '100%', boxSizing: 'border-box' }}
+                                style={{ ...input, ...TYPE.monoValue, width: '100%', boxSizing: 'border-box' }}
                             />
                         </label>
                     ))}
                     {bodyMethod(endpoint.method) && (
                         <label style={{ display: 'grid', gap: 4 }}>
                             <span style={muted}>{t.bodyLabel}</span>
-                            <textarea value={body} onChange={(e) => edit(() => setBody(e.target.value))} rows={4} spellCheck={false} style={{ ...input, padding: 8, fontFamily: MONO, width: '100%', boxSizing: 'border-box' }} />
+                            <textarea value={body} onChange={(e) => edit(() => setBody(e.target.value))} rows={4} spellCheck={false} style={{ ...input, padding: 8, ...TYPE.monoValue, width: '100%', boxSizing: 'border-box' }} />
                         </label>
                     )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

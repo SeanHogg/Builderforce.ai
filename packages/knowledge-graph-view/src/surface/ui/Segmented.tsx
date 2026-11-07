@@ -7,6 +7,7 @@
 import { useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import { cssVar } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
+import { TYPE } from './type';
 
 export interface SegmentedItem {
     id: string;
@@ -34,7 +35,7 @@ const group: CSSProperties = {
 
 const segment = (on: boolean): CSSProperties => ({
     height: CONTROL, padding: '0 10px', borderRadius: 7, border: 0, cursor: 'pointer', font: 'inherit',
-    fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+    ...TYPE.pill, whiteSpace: 'nowrap',
     background: on ? cssVar('accent') : 'transparent', color: on ? cssVar('onAccent') : cssVar('text'),
 });
 

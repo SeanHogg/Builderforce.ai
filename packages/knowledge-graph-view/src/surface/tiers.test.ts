@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { surfaceFixture } from '../testing';
-import { buildLines } from './lines';
 import { buildStations } from './stations';
-import { buildTiers, findingKinds, termini } from './tiers';
+import { buildTiers, findingKinds } from './tiers';
 
 const graph = surfaceFixture();
 const model = buildStations(graph);
-const lines = buildLines(graph, model);
 
 describe('buildTiers', () => {
     it('groups the stations in layer order, busiest first', () => {
@@ -29,13 +27,5 @@ describe('findingKinds', () => {
         const api = model.stations.find((s) => s.name === 'API')!;
         expect(findingKinds(api, byId)).toEqual([{ kind: 'clone-group', count: 1 }, { kind: 'partition-violation', count: 1 }]);
         expect(findingKinds({ findingIds: ['gone'] }, byId)).toEqual([]);
-    });
-});
-
-describe('termini', () => {
-    it('lists the data and external stations lines end in, once each, never an "ends here"', () => {
-        const out = termini(lines.lines);
-        expect(out.map((t) => t.kind)).toEqual(['data']);
-        expect(model.byId.get(out[0]!.stationId)!.name).toBe('repositories');
     });
 });

@@ -7,8 +7,10 @@
 
 import { useMemo } from 'react';
 import { fillTemplate } from '../../labels';
+import { counted } from '../plural';
 import { cssVar } from '../../scene/themeColors';
 import { button, card, muted } from '../../styles';
+import { TYPE } from '../ui/type';
 import { UNTESTED_BELOW } from '../../scene/channels';
 import { coverageTone } from '../overlays';
 import { stationOfRef } from '../stations';
@@ -56,13 +58,13 @@ export function CoveragePanel({ graph, labels, surface, onCompose }: PanelProps)
             </div>
             <Section title={t.scatterTitle}>
                 {m.points.length === 0 ? <p style={{ ...muted, margin: 0 }}>{t.noComplexity}</p> : (
-                    <svg role="img" aria-label={fillTemplate(t.scatterAria, { count: m.points.length })} viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 360, ...card, padding: 4 }}>
+                    <svg role="img" aria-label={counted(labels, 'filesPlotted', m.points.length)} viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 360, ...card, padding: 4 }}>
                         <rect data-testid="kg-risk-quadrant" x={x(m.maxComplexity / 2)} y={y(UNTESTED_BELOW)} width={W - 8 - x(m.maxComplexity / 2)} height={H - PAD - y(UNTESTED_BELOW)} fill={cssVar('violation')} fillOpacity={0.12} />
-                        <text x={x(m.maxComplexity / 2) + 4} y={H - PAD - 4} fontSize={9} fontWeight={600} fill={cssVar('violation')}>{t.quadrant}</text>
+                        <text x={x(m.maxComplexity / 2) + 4} y={H - PAD - 4} fontSize={TYPE.caption.fontSize} fontWeight={TYPE.pill.fontWeight} fill={cssVar('violation')}>{t.quadrant}</text>
                         <line x1={PAD} y1={H - PAD} x2={W - 8} y2={H - PAD} stroke={cssVar('border')} />
                         <line x1={PAD} y1={8} x2={PAD} y2={H - PAD} stroke={cssVar('border')} />
-                        <text x={W / 2} y={H - 6} textAnchor="middle" fontSize={10} fill={cssVar('muted')}>{t.axisX}</text>
-                        <text x={10} y={H / 2} fontSize={10} fill={cssVar('muted')} transform={`rotate(-90 10 ${H / 2})`} textAnchor="middle">{t.axisY}</text>
+                        <text x={W / 2} y={H - 6} textAnchor="middle" fontSize={TYPE.caption.fontSize} fill={cssVar('muted')}>{t.axisX}</text>
+                        <text x={10} y={H / 2} fontSize={TYPE.caption.fontSize} fill={cssVar('muted')} transform={`rotate(-90 10 ${H / 2})`} textAnchor="middle">{t.axisY}</text>
                         {m.points.map((p) => (
                             <circle key={p.ref} data-point={p.ref} cx={x(p.complexity)} cy={y(p.coverage)} r={4} fill={cssVar(coverageTone(p.coverage))} fillOpacity={0.8} stroke={cssVar('bg')} />
                         ))}
@@ -74,7 +76,7 @@ export function CoveragePanel({ graph, labels, surface, onCompose }: PanelProps)
                     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
                         {m.gaps.map((g) => (
                             <li key={g.ref} data-gap={g.ref} style={{ ...card, display: 'grid', gap: 6 }}>
-                                <strong style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{g.name}</strong>
+                                <strong style={{ ...TYPE.monoTitle, overflowWrap: 'anywhere' }}>{g.name}</strong>
                                 <span style={muted}>{fillTemplate(t.gapRow, { complexity: g.complexity, coverage: pct(g.coverage) })}</span>
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                     <button type="button" style={button} onClick={() => simulate(g.ref)}>{t.runWithValues}</button>

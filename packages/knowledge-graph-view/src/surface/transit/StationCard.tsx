@@ -10,7 +10,8 @@ import { useCallback, useEffect, useRef, type CSSProperties, type RefObject } fr
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { Sheet } from '../../Sheet';
 import { cssVar } from '../../scene/themeColors';
-import { CONTROL, MONO } from '../../styles';
+import { CONTROL } from '../../styles';
+import { TYPE } from '../ui/type';
 import { CARD_WIDTH } from './cardPlacement';
 import type { CardModel } from './cardModel';
 
@@ -36,7 +37,7 @@ export interface StationCardProps extends CardActions {
 }
 
 const action: CSSProperties = {
-    minHeight: CONTROL, padding: '0 10px', borderRadius: 7, cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 600,
+    minHeight: CONTROL, padding: '0 10px', borderRadius: 7, cursor: 'pointer', font: 'inherit', ...TYPE.pill,
     border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'),
 };
 const primary: CSSProperties = { ...action, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent') };
@@ -46,19 +47,19 @@ function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, 
     const noSymbols = !card.enter.can && card.enter.reason === 'noSymbols';
     return (
         <div style={{ display: 'grid', gap: 8 }}>
-            <span style={{ fontSize: 11, color: cssVar('muted') }}>{card.meta}{card.leaf ? ` · ${t.leaf}` : ''}</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 4, fontSize: 11 }}>
+            <span style={TYPE.meta}>{card.meta}{card.leaf ? ` · ${t.leaf}` : ''}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 4 }}>
                 {card.stats.map((k) => (
-                    <span key={k.key} data-stat={k.key} style={{ display: 'flex', flexDirection: 'column', padding: '4px 6px', borderRadius: 6, background: cssVar('plane'), minWidth: 0 }}>
-                        <b style={{ color: k.tone ? cssVar(k.tone) : cssVar('text'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.value}</b>
-                        <span style={{ color: cssVar('muted'), fontSize: 10 }}>{k.label}</span>
+                    <span key={k.key} data-stat={k.key} title={k.title} style={{ display: 'flex', flexDirection: 'column', padding: '4px 6px', borderRadius: 6, background: cssVar('panel2'), minWidth: 0 }}>
+                        <b style={{ ...TYPE.status, color: k.tone ? cssVar(k.tone) : cssVar('text'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.value}</b>
+                        <span style={TYPE.caption}>{k.label}</span>
                     </span>
                 ))}
             </div>
             {card.issues.length > 0 && (
                 <ul data-card-issues style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 2 }}>
-                    {card.issues.map((issue, i) => <li key={i} style={{ fontSize: 11, fontWeight: 600, color: cssVar('violation') }}>{issue}</li>)}
-                    {card.issueMore > 0 && <li style={{ fontSize: 11, color: cssVar('muted') }}>{fillTemplate(t.issueMore, { count: card.issueMore })}</li>}
+                    {card.issues.map((issue, i) => <li key={i} style={{ ...TYPE.status, color: cssVar('violation') }}>{issue}</li>)}
+                    {card.issueMore > 0 && <li style={TYPE.meta}>{fillTemplate(t.issueMore, { count: card.issueMore })}</li>}
                 </ul>
             )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -68,7 +69,7 @@ function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, 
                 {card.hasApi && <button type="button" data-action="api" style={action} onClick={onApi}>{t.apiContract}</button>}
                 {card.hasPatterns && <button type="button" data-action="patterns" style={action} onClick={onPatterns}>{t.patterns}</button>}
             </div>
-            {noSymbols && <span data-card-reason role="status" style={{ fontSize: 11, color: cssVar('muted') }}>{loading ? t.loading : t.noSymbols}</span>}
+            {noSymbols && <span data-card-reason role="status" style={TYPE.meta}>{loading ? t.loading : t.noSymbols}</span>}
         </div>
     );
 }
@@ -121,7 +122,7 @@ export function StationCard(props: StationCardProps) {
             }}
         >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <b style={{ fontFamily: MONO, fontSize: 13, overflowWrap: 'anywhere' }}>{card.name}</b>
+                <b style={{ ...TYPE.monoTitle, overflowWrap: 'anywhere' }}>{card.name}</b>
                 <button type="button" aria-label={labels.surface.map.card.close} onClick={close} style={{ ...action, border: 0, minHeight: 24, minWidth: 24, padding: 0, color: cssVar('muted') }}><span aria-hidden="true">×</span></button>
             </div>
             {body}

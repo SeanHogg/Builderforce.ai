@@ -1,15 +1,13 @@
 /** The sync words of the surface: the interface and its English defaults (a host overrides them per key). */
 
 export interface SyncLabels {
-    /** The done card: `{count}` files were not stored (the list says which and why). */
-    skippedUploads: string;
     /** Why a file was skipped, by reason id (`too-large` is `tooLarge`); a reason this build has no words for shows as sent. */
     skipReasons: Record<'tooLarge' | 'unreadable' | 'rateLimited' | 'unsupported' | 'other', string>;
     /** The sync pill's state in words, read after its text (never colour alone). */
-    pillStates: Record<'synced' | 'syncing' | 'error' | 'idle', string>;
+    pillStates: Record<'synced' | 'syncing' | 'error' | 'idle' | 'partial' | 'serverOnly', string>;
     sync: Record<
         'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
-        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh' | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'deltaRow' | 'deltaRowAuthor' | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate'  | 'setUpV8Request' | 'turnOnRequest' | 'excludedNone' | 'excludedFolder' | 'diagnosticsTitle' | 'resend' | 'resendNote' | 'deltaLoading' | 'parityTitle' | 'countPair' | 'parityAll' | 'parityMissing' | 'parityTooLarge',
+        | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh' | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate'  | 'setUpV8Request' | 'turnOnRequest' | 'excludedNone' | 'excludedFolder' | 'diagnosticsTitle' | 'resend' | 'resendNote' | 'deltaLoading' | 'parityTitle' | 'countPair' | 'parityAll' | 'parityMissing',
         string
     >;
     syncSteps: Record<'walk' | 'graph' | 'upload' | 'match' | 'analyse' | 'skipped', string>;
@@ -24,9 +22,8 @@ export interface SyncLabels {
 }
 
 export const SYNC_DEFAULTS: SyncLabels = {
-    skippedUploads: '{count} files were not stored.',
     skipReasons: { tooLarge: 'Too large to store', unreadable: 'Could not be read', rateLimited: 'Server was busy', unsupported: 'Not a supported file', other: 'Other reason' },
-    pillStates: { synced: 'Synced', syncing: 'Syncing', error: 'Error', idle: 'Not synced' },
+    pillStates: { synced: 'Synced', syncing: 'Syncing', error: 'Error', idle: 'Not synced', partial: 'Out of sync', serverOnly: 'On the server only' },
     sync: {
         loading: 'Reading the sync status…',
         failed: 'The sync status could not be read.',
@@ -53,8 +50,6 @@ export const SYNC_DEFAULTS: SyncLabels = {
         deltaSummary: '{count} not in the picture yet',
         deltaPending: 'Pending',
         deltaApplied: 'In the picture',
-        deltaRow: '{sha} · {count} files · {when}',
-        deltaRowAuthor: '{sha} · {author} · {count} files · {when}',
         actionSetUpV8: 'Set up v8',
         actionTurnOn: 'Turn on',
         actionGenerate: 'Generate',
@@ -70,7 +65,6 @@ export const SYNC_DEFAULTS: SyncLabels = {
         countPair: '{local} / {server}',
         parityAll: 'The server has all of them.',
         parityMissing: '{count} not on the server yet.',
-        parityTooLarge: '{count} were too large to store.',
         refresh: 'Refresh',
     },
     syncSteps: { walk: 'Files walked', graph: 'Graph built', upload: 'Uploaded', match: 'Server matches local', analyse: 'Sources collected', skipped: 'Nothing skipped' },

@@ -2,7 +2,7 @@
 
 export interface ResolveLabels {
     /** `{branch}`, `{count}`. */
-    resolve: Record<'empty' | 'provenanceLabel' | 'checksTitle' | 'checkFiles' | 'checkStations' | 'checkReview' | 'show', string>;
+    resolve: Record<'empty' | 'provenanceLabel' | 'checksTitle' | 'checkReview' | 'show', string>;
     /** `{path}`, `{values}`. */
     simulate: Record<
         'pathTitle' | 'pathEmpty' | 'valuesLabel' | 'run' | 'requestText' | 'noValues' | 'sent' | 'noComposer' | 'note'
@@ -17,8 +17,6 @@ export const RESOLVE_DEFAULTS: ResolveLabels = {
         empty: 'Choose Resolve on a finding to work on it here.',
         provenanceLabel: 'Source',
         checksTitle: 'Checks',
-        checkFiles: 'The finding names {count} files.',
-        checkStations: 'It touches {count} stations.',
         checkReview: 'Review the folder again to confirm the finding is gone.',
         show: 'Show',
     },

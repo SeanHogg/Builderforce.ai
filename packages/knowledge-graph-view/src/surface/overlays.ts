@@ -103,7 +103,11 @@ export interface StationStyle {
     tone: ThemeTone;
     /** Marker radius. */
     size: number;
-    ring: { frac: number; tone: ThemeTone } | null;
+    /**
+     * null = no reading (the station has no data for the ring metric: no fill, and no shell either - the legend says why).
+     * `zeroCoverage`: the ring is the coverage metric and it MEASURED 0% (not "no data"); the Tower draws that as a dashed shell.
+     */
+    ring: { frac: number; tone: ThemeTone; zeroCoverage?: boolean } | null;
     pulse: boolean;
     outline: boolean;
 }
@@ -143,7 +147,7 @@ export function makeOverlay(bindings: Bindings, stations: readonly Station[]): O
             return {
                 tone,
                 size: sizeLevel === undefined ? NEUTRAL_SIZE : 5 + sizeLevel * 2,
-                ring: f === undefined ? null : { frac: f, tone: bindings.ring === 'cov' ? coverageTone(f) : 'accent' },
+                ring: f === undefined ? null : { frac: f, tone: bindings.ring === 'cov' ? coverageTone(f) : 'accent', ...(bindings.ring === 'cov' && f === 0 ? { zeroCoverage: true } : {}) },
                 pulse: high('pulse', s),
                 outline: high('outline', s),
             };

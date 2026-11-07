@@ -14,6 +14,7 @@ import type { KEdge, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowle
 import { cmp } from '../order';
 import { layerRank, type Provenance } from './layers';
 import { mapEdges } from './outlineGraph';
+import { packageNameOf } from './stationName';
 import { stationOfRef, type Station, type StationModel } from './stations';
 
 export const MAX_LINES = 8;
@@ -87,7 +88,7 @@ function stationEdges(edges: readonly KEdge[], model: StationModel): Map<string,
 
 function terminusOf(station: Station | undefined, id: string): Terminus {
     if (station?.layer !== 'infrastructure') return { kind: 'end', stationId: id, provenance: 'heuristic' };
-    return { kind: EXTERNAL.test(station.name) ? 'external' : 'data', stationId: id, provenance: 'heuristic' };
+    return { kind: EXTERNAL.test(station.path ?? station.name) ? 'external' : 'data', stationId: id, provenance: 'heuristic' };
 }
 
 export function buildLines(graph: KnowledgeGraph, model: StationModel): LinesModel {
@@ -119,7 +120,7 @@ export function buildLines(graph: KnowledgeGraph, model: StationModel): LinesMod
         }
         const last = stops[stops.length - 1]!;
         lines.push({
-            id: `line:${lines.length + 1}`, name: entry.name, colourIndex: lines.length, stops, hops,
+            id: `line:${lines.length + 1}`, name: packageNameOf(entry.name), colourIndex: lines.length, stops, hops,
             terminus: terminusOf(model.byId.get(last), last),
         });
     }

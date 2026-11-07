@@ -8,8 +8,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { counted } from './plural';
 import { cssVar } from '../scene/themeColors';
-import { CONTROL, MONO, muted } from '../styles';
+import { CONTROL, muted } from '../styles';
+import { TYPE } from './ui/type';
 import type { Commit, KnowledgeGraphSource } from '../types';
 import { QuietButton } from './ui';
 
@@ -84,10 +86,10 @@ export function TimeSlider({ commits, capped, picked, labels, onPick, changedSta
                     );
                 })}
             </div>
-            {capped !== undefined && capped > commits.length && <span data-testid="kg-time-capped" style={{ flex: 'none' }}>{fillTemplate(labels.surface.historyCapped, { count: commits.length })}</span>}
+            {capped !== undefined && capped > commits.length && <span data-testid="kg-time-capped" style={{ flex: 'none' }}>{counted(labels, 'commitsCapped', commits.length)}</span>}
             <QuietButton aria-pressed={picked === null} style={{ color: cssVar(picked === null ? 'text' : 'muted'), fontWeight: picked === null ? 700 : 500 }} onClick={() => onPick(null)}>{t.now}</QuietButton>
-            <span style={{ flex: 'none', fontFamily: MONO, color: cssVar('text') }}>{shown}</span>
-            {picked !== null && <span role="status" style={{ flex: 'none' }}>{fillTemplate(t.changed, { count: changedStations })}</span>}
+            <span style={{ flex: 'none', ...TYPE.monoValue, color: cssVar('text') }}>{shown}</span>
+            {picked !== null && <span role="status" style={{ flex: 'none' }}>{counted(labels, 'stationChanged', changedStations)}</span>}
         </div>
     );
 }

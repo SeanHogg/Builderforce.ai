@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
+import { counted } from './plural';
 import { ScaleLine, type ScaleLineProps } from './ScaleLine';
 
 const props = (over: Partial<ScaleLineProps> = {}): ScaleLineProps => ({
@@ -15,12 +16,13 @@ describe('ScaleLine', () => {
         expect(container.textContent).toBe(fillTemplate(L.statsLine, { nodes: 452, edges: 67, sources: 3 }));
     });
 
-    it('says a large graph shows its most important part; on a compact screen it names the focus and offers Show all', () => {
+    it('reads a large graph as "{stations} stations stand for {files} files · showing the {nodes} most important · search reaches all"; on a compact screen it names the focus and offers Show all', () => {
         const onShowAll = vi.fn();
-        const { container, rerender } = draw({ truncated: true });
-        expect(container.textContent).toContain(L.truncatedNote);
+        const { container, rerender } = draw({ truncated: true, stations: 20, files: 15994 });
+        expect(container.textContent).toBe(fillTemplate(L.surface.scaleSummary, { stations: '20 stations', files: '15,994 files', nodes: '60' }));
+        expect(container.textContent).toBe('20 stations stand for 15,994 files · showing the 60 most important · search reaches all');
         rerender(<p><ScaleLine {...props({ truncated: true, compact: true, onShowAll })} /></p>);
-        expect(container.textContent).toContain(fillTemplate(L.focusedNote, { count: 60 }));
+        expect(container.textContent).toContain(counted(L, 'topNodes', 60));
         fireEvent.click(screen.getByRole('button', { name: L.showAll }));
         expect(onShowAll).toHaveBeenCalled();
     });
@@ -30,9 +32,9 @@ describe('ScaleLine', () => {
         expect(screen.queryByRole('button', { name: L.showAll })).toBeNull();
     });
 
-    it('notes how much of the files the map shows when the station model was capped', () => {
-        draw({ capped: { shown: 3000, total: 16000 } });
-        expect(screen.getByTestId('kg-map-capped').textContent).toBe('Map shows 3000 of 16000 files');
+    it('names the files the stations stand for when the station model was capped', () => {
+        draw({ capped: { shown: 3000, total: 16000 }, stations: 20, files: 3000 });
+        expect(screen.getByTestId('kg-map-capped').textContent).toBe('20 stations stand for 16,000 files · showing the 60 most important · search reaches all');
     });
 
     it('has no map note without a cap', () => {

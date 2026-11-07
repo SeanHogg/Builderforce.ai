@@ -9,6 +9,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from './order';
 import { reviewDiagnosticsText } from './reviewDiagnostics';
 import type { ReviewState } from './useReviewRun';
+import { surfaceDiagnosticLines, type SurfaceDiagnosticsInput } from './surfaceDiagnostics';
 import type { LensId, ViewMode } from './types';
 
 export interface GraphDiagnosticsInput {
@@ -27,6 +28,8 @@ export interface GraphDiagnosticsInput {
     lens: LensId;
     review: ReviewState;
     lastPhase?: string | undefined;
+    /** The surface's facts (map source, data coverage, lines, scope, sync, findings); absent ⇒ that section is left out. */
+    surface?: SurfaceDiagnosticsInput | undefined;
     /** ISO time. */
     time: string;
 }
@@ -78,6 +81,7 @@ export function graphDiagnosticsText(i: GraphDiagnosticsInput): string {
         const perSecond = r.durationMs > 0 ? (r.extracted / (r.durationMs / 1000)).toFixed(1) : 'n/a';
         lines.push(`report: extracted=${r.extracted} judged=${r.judged} readErrors=${r.readErrors} duration=${r.durationMs}ms files/s=${perSecond}`);
     }
+    if (i.surface) lines.push(...surfaceDiagnosticLines(i.surface));
     lines.push(`time: ${i.time}`);
     if (s.status === 'error') lines.push('', reviewDiagnosticsText(s));
     return lines.join('\n');

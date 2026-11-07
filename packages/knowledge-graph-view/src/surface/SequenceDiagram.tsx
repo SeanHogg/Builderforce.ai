@@ -9,8 +9,10 @@
 import { useId, useMemo } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../copyText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { counted } from './plural';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { button, muted } from '../styles';
+import { FONT_MONO, FONT_UI, TYPE } from './ui/type';
 import type { PathHop, PathModel } from './path';
 import type { SceneProps } from './registry';
 import { sequenceOf } from './sequenceModel';
@@ -56,7 +58,7 @@ export function SequenceView({ path, step, onStep: setStep, labels, copy = true 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {copy && <button type="button" style={button} onClick={() => void copier.copy(mermaid)}>{labels.copyMermaid}</button>}
                 {copy && <CopiedNote status={copier.status} labels={labels} />}
-                <span style={muted}>{fillTemplate(s.sequence.description, { stops: seq.lifelines.length, messages: seq.messages.length })}</span>
+                <span style={muted}>{fillTemplate(s.sequence.description, { stops: counted(labels, 'stop', seq.lifelines.length), messages: counted(labels, 'message', seq.messages.length) })}</span>
             </div>
             {copy && <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />}
             <div style={{ overflowX: 'auto' }}>
@@ -76,7 +78,7 @@ export function SequenceView({ path, step, onStep: setStep, labels, copy = true 
                         >
                             <line x1={x(i)} x2={x(i)} y1={HEAD_H} y2={height} stroke={cssVar(i === at ? 'accent' : 'edge')} strokeWidth={i === at ? 2.5 : 1} strokeDasharray={i === at ? undefined : '4 4'} />
                             <rect x={x(i) - COL_W / 2 + 8} y={4} width={COL_W - 16} height={HEAD_H - 10} rx={8} fill={i === at ? cssVar('accentSoft') : cssVar('panel')} stroke={cssVar(i === at ? 'accent' : 'border')} />
-                            <text x={x(i)} y={4 + (HEAD_H - 10) / 2 + 4} textAnchor="middle" fontSize={12} fontWeight={i === at ? 700 : 500} fill={cssVar('text')}>
+                            <text x={x(i)} y={4 + (HEAD_H - 10) / 2 + 4} textAnchor="middle" fontFamily={FONT_UI} fontSize={TYPE.body.fontSize} fontWeight={i === at ? TYPE.pillOn.fontWeight : TYPE.pill.fontWeight} fill={cssVar('text')}>
                                 {stop.name.length > 18 ? `${stop.name.slice(0, 17)}…` : stop.name}
                             </text>
                         </g>
@@ -98,7 +100,7 @@ export function SequenceView({ path, step, onStep: setStep, labels, copy = true 
                                     x1={x(m.from)} x2={x(m.to) - 4} y1={y} y2={y} stroke={color} strokeWidth={active ? 2.5 : 1.5}
                                     strokeDasharray={none ? '5 4' : undefined} markerEnd={`url(#${uid}-${tone})`}
                                 />
-                                <text x={(x(m.from) + x(m.to)) / 2} y={y - 6} textAnchor="middle" fontSize={11} fill={color} fontWeight={active ? 700 : 400}>{text}</text>
+                                <text x={(x(m.from) + x(m.to)) / 2} y={y - 6} textAnchor="middle" fontFamily={FONT_MONO} fontSize={TYPE.mono.fontSize} fill={color} fontWeight={active ? TYPE.monoTitle.fontWeight : TYPE.mono.fontWeight}>{text}</text>
                             </g>
                         );
                     })}

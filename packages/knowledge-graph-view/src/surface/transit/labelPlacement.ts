@@ -7,6 +7,7 @@
  */
 
 import { round } from '../../order';
+import { clipName } from '../stationName';
 
 export type Side = 'right' | 'left' | 'bottom' | 'top';
 export interface Box { x: number; y: number; w: number; h: number }
@@ -17,6 +18,8 @@ export interface LabelItem {
     y: number;
     /** The mark's radius. */
     r: number;
+    /** The space the mark really takes, when it is not a circle of radius `r` (a tower's body): other labels keep off all of it. */
+    mark?: Box | undefined;
     name: string;
     note: string | null;
 }
@@ -78,7 +81,7 @@ export interface PlaceOptions {
 }
 
 export function placeLabels(items: readonly LabelItem[], opts: PlaceOptions): Map<string, PlacedLabel> {
-    const marks: Box[] = items.map((i) => ({ x: i.x - i.r - 3, y: i.y - i.r - 3, w: (i.r + 3) * 2, h: (i.r + 3) * 2 }));
+    const marks: Box[] = items.map((i) => i.mark ?? { x: i.x - i.r - 3, y: i.y - i.r - 3, w: (i.r + 3) * 2, h: (i.r + 3) * 2 });
     const fixed = [...marks, ...(opts.obstacles ?? [])];
     const placed = new Map<string, PlacedLabel>();
     const taken: Box[] = [];
@@ -94,7 +97,7 @@ export function placeLabels(items: readonly LabelItem[], opts: PlaceOptions): Ma
         return c;
     };
     items.forEach((item, own) => {
-        const text = clip(item.name, MAX_NAME), note = item.note ? clip(item.note, MAX_NOTE) : null;
+        const text = clipName(item.name, MAX_NAME), note = item.note ? clip(item.note, MAX_NOTE) : null;
         let best: PlacedLabel | null = null, bestCost = Infinity;
         for (const side of SIDES) {
             const candidate = place(item, side, text, note);

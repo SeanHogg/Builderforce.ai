@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 /** The scene overlay: the View group, the zoom buttons, "Out to", the scale note and the sync banner. */
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { CAMERAS } from './cameras';
-import { SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
+import { counted } from './plural';
+import { SCENE_TOP_VAR, SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
 import { missingFilesOf } from './drawers/syncModel';
 import { lenses, model } from './testFixtures';
 import { useZoomHost, ZoomProvider, type ZoomApi } from './zoom';
@@ -23,7 +24,7 @@ describe('SceneOverlay', () => {
         const p = overlayProps();
         render(<SceneOverlay {...p} />);
         const view = within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
-        expect(view.getAllByRole('radio').map((r) => r.textContent)).toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.view3d, L.viewHeat, L.viewList]);
+        expect(view.getAllByRole('radio').map((r) => r.textContent)).toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewTower, L.view3d, L.viewHeat, L.viewList]);
         fireEvent.click(view.getByRole('radio', { name: L.viewHeat }));
         expect(p.onMode).toHaveBeenCalledWith('heat');
     });
@@ -83,16 +84,16 @@ describe('SceneOverlay', () => {
 
     it('draws the scale note, with Show all on a compact screen', () => {
         const onShowAll = vi.fn();
-        render(<SceneOverlay {...overlayProps({ compact: true, onShowAll })} />);
+        render(<SceneOverlay {...overlayProps({ compact: true, onShowAll, truncated: false })} />);
         const note = within(screen.getByTestId('kg-scale-note'));
         expect(note.getByText(new RegExp(fillTemplate(L.statsLine, { nodes: 452, edges: 67, sources: 3 })))).toBeTruthy();
         fireEvent.click(note.getByRole('button', { name: L.showAll }));
         expect(onShowAll).toHaveBeenCalled();
     });
 
-    it('says the map shows only part of the files when the station model was capped', () => {
+    it('says how many stations stand for how many files when the station model was capped', () => {
         render(<SceneOverlay {...overlayProps({ capped: { shown: 3000, total: 16000 } })} />);
-        expect(screen.getByTestId('kg-map-capped').textContent).toBe(fillTemplate(L.surface.mapShows, { shown: 3000, total: 16000 }));
+        expect(screen.getByTestId('kg-map-capped').textContent).toBe(fillTemplate(L.surface.scaleSummary, { stations: counted(L, 'station', model.stations.length, { count: model.stations.length.toLocaleString() }), files: '16,000 files', nodes: '100' }));
     });
 
     it('draws the sync error banner with Diagnose only when files are missing', () => {
@@ -100,7 +101,7 @@ describe('SceneOverlay', () => {
         const { rerender } = render(<SceneOverlay {...overlayProps({ missingFiles: 0 })} />);
         expect(screen.queryByTestId('kg-sync-banner')).toBeNull();
         rerender(<SceneOverlay {...overlayProps({ missingFiles: 23, onDiagnose })} />);
-        expect(within(screen.getByTestId('kg-sync-banner')).getByText(fillTemplate(L.surface.overlay.missingFiles, { count: 23 }))).toBeTruthy();
+        expect(within(screen.getByTestId('kg-sync-banner')).getByText(counted(L, 'fileMissing', 23))).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: L.surface.overlay.diagnose }));
         expect(onDiagnose).toHaveBeenCalled();
     });
@@ -108,13 +109,60 @@ describe('SceneOverlay', () => {
     it('names the files too large to store with the real count, ahead of the missing files', () => {
         render(<SceneOverlay {...overlayProps({ missingFiles: 23, tooLarge: 2 })} />);
         const banner = screen.getByTestId('kg-sync-banner');
-        expect(within(banner).getByText(fillTemplate(L.surface.overlay.tooLarge, { count: 2 }))).toBeTruthy();
-        expect(banner.textContent).toContain(fillTemplate(L.surface.overlay.missingFiles, { count: 23 }));
+        expect(within(banner).getByText(counted(L, 'fileTooLarge', 2))).toBeTruthy();
+        expect(banner.textContent).toContain(counted(L, 'fileMissing', 23));
     });
 
     it('stacks in flow on a phone', () => {
         render(<SceneOverlay {...overlayProps({ narrow: true })} />);
         expect(screen.getByTestId('kg-scene-overlay').style.position).not.toBe('absolute');
+    });
+});
+
+describe('the scene top', () => {
+    afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+    const stubHeight = (height: number) => vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height, top: 0, left: 0, right: 800, bottom: height, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
+
+    it('publishes the measured controls height as --kg-scene-top on the scene box, and follows it as it changes', () => {
+        stubHeight(96);
+        let resize: () => void = () => undefined;
+        vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { resize = cb; } observe() {} disconnect() {} });
+        const { container } = render(<SceneOverlay {...overlayProps()} />);
+        const host = container; // the overlay's parent: the scene's box
+        expect(host.style.getPropertyValue(SCENE_TOP_VAR)).toBe('96px');
+        stubHeight(131.4); // a banner appeared
+        resize();
+        expect(host.style.getPropertyValue(SCENE_TOP_VAR)).toBe('132px');
+    });
+
+    it('measures the block holding the bars and the banner, not the whole overlay', () => {
+        stubHeight(40);
+        render(<SceneOverlay {...overlayProps({ missingFiles: 3 })} />);
+        const controls = screen.getByTestId('kg-scene-controls');
+        expect(within(controls).getByTestId('kg-sync-banner')).toBeTruthy();
+        expect(within(controls).getByRole('radiogroup', { name: L.viewModesLabel })).toBeTruthy();
+        expect(within(controls).queryByTestId('kg-scale-note')).toBeNull(); // the scale note floats at the bottom, over the scene
+    });
+
+    it('publishes nothing on a phone, where the controls stack in flow', () => {
+        stubHeight(96);
+        const { container } = render(<SceneOverlay {...overlayProps({ narrow: true })} />);
+        expect(container.style.getPropertyValue(SCENE_TOP_VAR)).toBe('');
+    });
+
+    it('removes the variable when it unmounts', () => {
+        stubHeight(96);
+        const { container, unmount } = render(<SceneOverlay {...overlayProps()} />);
+        expect(container.style.getPropertyValue(SCENE_TOP_VAR)).toBe('96px');
+        unmount();
+        expect(container.style.getPropertyValue(SCENE_TOP_VAR)).toBe('');
+    });
+
+    it('keeps the question bar on one line, its pills scrolling sideways', () => {
+        render(<SceneOverlay {...overlayProps()} />);
+        const pills = screen.getByRole('group', { name: L.surface.questionsLabel });
+        expect(pills.parentElement!.style.flexWrap).toBe('nowrap');
+        expect(pills.style.overflowX).toBe('auto');
     });
 });
 

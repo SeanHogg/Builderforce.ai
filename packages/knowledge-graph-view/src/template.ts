@@ -13,8 +13,9 @@ const isEmpty = (v: string | number | undefined): boolean => v === undefined || 
  * name has no dangling "clone group :". The part's own words stay in the catalog, so each
  * language decides where its connectors go.
  */
-export function fillTemplate(template: string, params: Params): string {
-    const withOptional = template.replace(/\[\[([\s\S]*?)\]\]/g, (_, part: string) => {
+export function fillTemplate(template: string | undefined, params: Params): string {
+    // A label a host's catalog lacks (and the defaults somehow miss) reads empty, never crashes the render.
+    const withOptional = (template ?? '').replace(/\[\[([\s\S]*?)\]\]/g, (_, part: string) => {
         const names = [...part.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!);
         return names.every((n) => !isEmpty(params[n])) ? part : '';
     });
