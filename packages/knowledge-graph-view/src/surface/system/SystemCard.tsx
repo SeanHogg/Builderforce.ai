@@ -56,7 +56,10 @@ export function SystemCard({ station: st, labels, overlay, found, tones, selecte
                 <span aria-hidden="true" data-dot style={{ width: 10, height: 10, borderRadius: 999, flex: 'none', background: cssVar(style.tone) }} />
                 <b style={{ ...ellipsis, ...TYPE.monoName }}>{st.name}</b>
             </span>
-            <span style={{ ...ellipsis, ...TYPE.caption }}>{st.owner ? fillTemplate(s.system.metaOwner, { files, owner: st.owner }) : files}</span>
+            <span style={{ ...ellipsis, ...TYPE.caption }}>
+                {st.owner ? fillTemplate(s.system.metaOwner, { files, owner: st.owner }) : files}
+                {st.copy !== undefined && <span data-copy={st.copy} title={st.copy}> · {s.systems.copyMark}</span>}
+            </span>
             <span
                 role="img" aria-label={s.system.antiBar} data-stack title={found.map((k) => `${findingTitle({ kind: k.kind }, labels)} · ${k.count}`).join('\n') || undefined}
                 style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: cssVar('plane'), marginTop: 'auto' }}

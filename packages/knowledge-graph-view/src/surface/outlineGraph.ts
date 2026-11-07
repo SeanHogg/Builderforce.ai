@@ -44,6 +44,16 @@ function badgesOf(badges: Record<string, number | string> | undefined): KNode['b
     return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/** The system, app and stray-copy tags an outline file carries as indexes into the outline's pools (PRD 41 A9), resolved onto its node. */
+function tagsOf(outline: GraphOutline, f: object): { system?: string; app?: string; copyOf?: string } {
+    const o = outline as GraphOutline & { systems?: string[]; apps?: string[] };
+    const t = f as { system?: number; app?: number; copyOf?: number };
+    const system = t.system !== undefined ? o.systems?.[t.system] : undefined;
+    const app = t.app !== undefined ? o.apps?.[t.app] : undefined;
+    const copyOf = t.copyOf !== undefined ? o.systems?.[t.copyOf] : undefined;
+    return { ...(system !== undefined ? { system } : {}), ...(app ? { app } : {}), ...(copyOf !== undefined ? { copyOf } : {}) };
+}
+
 function decode(outline: GraphOutline): Decoded {
     const files: KNode[] = outline.files.map((f) => {
         const badges = badgesOf(f.badges);
@@ -53,6 +63,7 @@ function decode(outline: GraphOutline): Decoded {
             ...(f.area !== undefined && outline.areas[f.area] !== undefined ? { area: outline.areas[f.area]! } : {}),
             ...(f.partition !== undefined && outline.partitions[f.partition] !== undefined ? { partition: outline.partitions[f.partition]! } : {}),
             ...(badges ? { badges } : {}),
+            ...tagsOf(outline, f),
         };
     });
     const edges: KEdge[] = [];

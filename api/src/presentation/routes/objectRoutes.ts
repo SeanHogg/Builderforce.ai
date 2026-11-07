@@ -125,26 +125,26 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
 
   // ── activity ─────────────────────────────────────────────────────────────
 
-  router.get('/:id/activity', async (c) => {
+  router.get('/:id/activity', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     return c.json(
-      await registry.activity(tenantId, c.req.param('id'), parseLimit(c.req.query('limit'))),
+      await registry.activity(tenantId, c.req.param('id'), c.get('userId') as string | undefined, parseLimit(c.req.query('limit'))),
     );
-  });
+  }));
 
   // ── annotations ──────────────────────────────────────────────────────────
 
-  router.get('/:id/annotations', async (c) => {
+  router.get('/:id/annotations', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     return c.json(
-      await registry.annotations(tenantId, c.req.param('id'), {
+      await registry.annotations(tenantId, c.req.param('id'), c.get('userId') as string | undefined, {
         kind: c.req.query('kind'),
         limit: parseLimit(c.req.query('limit')),
       }),
     );
-  });
+  }));
 
-  router.post('/:id/annotations', async (c) => {
+  router.post('/:id/annotations', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     const objectId = c.req.param('id');
     // 404 before writing: an annotation on an unregistered object would be an
@@ -165,7 +165,7 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
       parentId: body.parentId ?? null,
     });
     return c.json(row, 201);
-  });
+  }));
 
   // ── members ──────────────────────────────────────────────────────────────
 

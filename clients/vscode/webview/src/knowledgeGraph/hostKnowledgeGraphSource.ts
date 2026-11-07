@@ -220,6 +220,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         return { commits: out.commits.map((c) => ({ sha: c.sha, title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
     },
     syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
+    // Exclude from review (PRD 41 A9): the host appends the folder to the root's `.builderforce/ignore`; the view then runs its normal Re-review.
+    folders: { exclude: async (rootId: string, path: string) => { await t.call({ op: 'excludeFromReview', rootId, path }); } },
     // The extension builds every graph from the local store, linked or not (PRD 41 A7).
     mapSource: 'local',
     applyFix(finding: Finding): Promise<KnowledgeFixResult> {

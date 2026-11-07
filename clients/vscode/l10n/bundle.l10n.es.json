@@ -1183,5 +1183,7 @@
   "Show original": "Mostrar original",
   "Show translation": "Mostrar traducción",
   "Translating…": "Traduciendo…",
-  "Translation needs this browser's built-in translator": "La traducción necesita el traductor integrado de este navegador"
+  "A review of this folder is already running.": "Ya hay una revisión en curso de esta carpeta.",
+  "That path cannot be excluded from review.": "Esa ruta no se puede excluir de la revisión.",
+  "Translation needs this browser's built-in translator":"La traducción necesita el traductor integrado de este navegador"
 }

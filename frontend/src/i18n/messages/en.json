@@ -35976,6 +35976,7 @@
       "unusedDependency": "Unused dependencies",
       "unused": "Unused code",
       "contradiction": "Contradiction",
+      "duplicateCopy": "Stray copy of a project",
       "other": "Finding"
     },
     "severity": {
@@ -36003,6 +36004,7 @@
       "brokenLink": "Repair the broken links in {file}: {items}.",
       "orphan": "Link these orphan documents from the documents that should reference them, or archive them: {items}.",
       "contradiction": "Reconcile [[§{sectionA} of ]]{fileA} with [[§{sectionB} of ]]{fileB}.",
+      "duplicateCopy": "{copy} looks like a stray copy of {original}. Check it, then delete it or add it to .builderforce/ignore.",
       "nearDuplicate": "Merge or differentiate these near-duplicate sections: {items}.",
       "possibleSame": "Check whether these are the same thing, and merge them if they are: {items}.",
       "stale": "Re-check the stale knowledge about {items} against the current source.",
@@ -36546,6 +36548,33 @@
         "antiNone": "No anti-patterns were found.",
         "resolve": "Resolve",
         "showInTower": "Show in Tower"
+      },
+      "stopReasons": {
+        "noReferences": "No further references",
+        "onlyUpward": "Only upward references",
+        "onlyVisited": "Only loops back",
+        "onlyHigherLayer": "Only higher-layer references",
+        "maxStops": "Cut at the stop limit"
+      },
+      "systems": {
+        "loose": "Loose files",
+        "copyMark": "copy",
+        "groupAria": "{name} system"
+      },
+      "duplicateCopy": {
+        "title": "Stray copy of a project",
+        "body": "{copy} looks like a stray copy of {original} ({similarity}% of the sampled files match).",
+        "reasonNoGit": "It has no .git folder and the original does.",
+        "reasonNameMismatch": "Its folder name differs from the project name.",
+        "reasonLaterName": "The two look alike, so the later name is taken as the copy.",
+        "exclude": "Exclude from review",
+        "excludeAria": "Exclude {copy} from review",
+        "excluding": "Excluding…",
+        "failed": "The folder could not be excluded.",
+        "note": "Until you exclude it, the copy stays on the map, marked as a copy, and its lines and findings are folded under the original."
+      },
+      "partitionPicker": {
+        "label": "Show the files of a partition"
       },
       "api": {
         "notSetUpTitle": "No endpoints found",

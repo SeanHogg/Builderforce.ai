@@ -35976,6 +35976,7 @@
       "unusedDependency": "Ungenutzte Abhängigkeiten",
       "unused": "Ungenutzter Code",
       "contradiction": "Widerspruch",
+      "duplicateCopy": "Verwaiste Kopie eines Projekts",
       "other": "Befund"
     },
     "severity": {
@@ -36003,6 +36004,7 @@
       "brokenLink": "Repariere die defekten Links in {file}: {items}.",
       "orphan": "Verlinke diese verwaisten Dokumente aus den Dokumenten, die auf sie verweisen sollten, oder archiviere sie: {items}.",
       "contradiction": "Gleiche [[§{sectionA} von ]]{fileA} mit [[§{sectionB} von ]]{fileB} ab.",
+      "duplicateCopy": "{copy} sieht aus wie eine verwaiste Kopie von {original}. Prüfe sie und lösche sie oder nimm sie in .builderforce/ignore auf.",
       "nearDuplicate": "Führe diese nahezu doppelten Abschnitte zusammen oder grenze sie ab: {items}.",
       "possibleSame": "Prüfe, ob dies dasselbe ist, und führe es gegebenenfalls zusammen: {items}.",
       "stale": "Prüfe das veraltete Wissen über {items} erneut gegen die aktuelle Quelle.",
@@ -36546,6 +36548,33 @@
         "antiNone": "Es wurden keine Anti-Muster gefunden.",
         "resolve": "Beheben",
         "showInTower": "Im Turm zeigen"
+      },
+      "stopReasons": {
+        "noReferences": "Keine weiteren Verweise",
+        "onlyUpward": "Nur Verweise nach oben",
+        "onlyVisited": "Nur Rückverweise",
+        "onlyHigherLayer": "Nur Verweise auf eine höhere Schicht",
+        "maxStops": "Am Haltelimit abgeschnitten"
+      },
+      "systems": {
+        "loose": "Lose Dateien",
+        "copyMark": "Kopie",
+        "groupAria": "System {name}"
+      },
+      "duplicateCopy": {
+        "title": "Verwaiste Kopie eines Projekts",
+        "body": "{copy} sieht aus wie eine verwaiste Kopie von {original} ({similarity} % der geprüften Dateien stimmen überein).",
+        "reasonNoGit": "Sie hat keinen .git-Ordner, das Original schon.",
+        "reasonNameMismatch": "Ihr Ordnername weicht vom Projektnamen ab.",
+        "reasonLaterName": "Beide sehen gleich aus, daher gilt der spätere Name als Kopie.",
+        "exclude": "Von der Prüfung ausschließen",
+        "excludeAria": "{copy} von der Prüfung ausschließen",
+        "excluding": "Wird ausgeschlossen…",
+        "failed": "Der Ordner konnte nicht ausgeschlossen werden.",
+        "note": "Bis du sie ausschließt, bleibt die Kopie auf der Karte, als Kopie markiert, und ihre Linien und Befunde werden unter dem Original zusammengefasst."
+      },
+      "partitionPicker": {
+        "label": "Dateien einer Partition anzeigen"
       },
       "api": {
         "notSetUpTitle": "Keine Endpunkte gefunden",

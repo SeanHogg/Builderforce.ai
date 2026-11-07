@@ -35976,6 +35976,7 @@
       "unusedDependency": "Dépendances inutilisées",
       "unused": "Code inutilisé",
       "contradiction": "Contradiction",
+      "duplicateCopy": "Copie parasite d'un projet",
       "other": "Constat"
     },
     "severity": {
@@ -36003,6 +36004,7 @@
       "brokenLink": "Répare les liens cassés dans {file} : {items}.",
       "orphan": "Relie ces documents orphelins depuis les documents qui devraient les citer, ou archive-les : {items}.",
       "contradiction": "Résous la contradiction entre [[§{sectionA} de ]]{fileA} et [[§{sectionB} de ]]{fileB}.",
+      "duplicateCopy": "{copy} ressemble à une copie parasite de {original}. Vérifie-la, puis supprime-la ou ajoute-la à .builderforce/ignore.",
       "nearDuplicate": "Fusionne ou différencie ces sections quasi dupliquées : {items}.",
       "possibleSame": "Vérifie s’il s’agit de la même chose et, si oui, fusionne-les : {items}.",
       "stale": "Revérifie les connaissances obsolètes sur {items} par rapport à la source actuelle.",
@@ -36546,6 +36548,33 @@
         "antiNone": "Aucun anti-motif trouvé.",
         "resolve": "Résoudre",
         "showInTower": "Afficher dans la Tour"
+      },
+      "stopReasons": {
+        "noReferences": "Plus aucune référence",
+        "onlyUpward": "Uniquement des références vers le haut",
+        "onlyVisited": "Uniquement des retours en arrière",
+        "onlyHigherLayer": "Uniquement des références vers une couche supérieure",
+        "maxStops": "Coupée à la limite d'arrêts"
+      },
+      "systems": {
+        "loose": "Fichiers isolés",
+        "copyMark": "copie",
+        "groupAria": "Système {name}"
+      },
+      "duplicateCopy": {
+        "title": "Copie parasite d'un projet",
+        "body": "{copy} ressemble à une copie parasite de {original} ({similarity} % des fichiers échantillonnés correspondent).",
+        "reasonNoGit": "Elle n'a pas de dossier .git, contrairement à l'original.",
+        "reasonNameMismatch": "Le nom de son dossier diffère du nom du projet.",
+        "reasonLaterName": "Les deux se ressemblent, donc le nom le plus tardif est pris pour la copie.",
+        "exclude": "Exclure de la revue",
+        "excludeAria": "Exclure {copy} de la revue",
+        "excluding": "Exclusion…",
+        "failed": "Le dossier n'a pas pu être exclu.",
+        "note": "Tant que tu ne l'exclus pas, la copie reste sur la carte, marquée comme copie, et ses lignes et constats sont regroupés sous l'original."
+      },
+      "partitionPicker": {
+        "label": "Afficher les fichiers d'une partition"
       },
       "api": {
         "notSetUpTitle": "Aucun endpoint trouvé",

@@ -336,6 +336,43 @@ This test is the gate for claiming offline in release notes.
 
 ---
 
+### A9. A folder of many systems reads as many systems, and the map says what is wrong with the folder
+
+**Why (2026-11-07, `c:/code/agentic`).** The review root was a plain folder holding five git repositories (`Builderforce.ai`, `builderforce-memory`, …) and two loose copies of `Builderforce.ai` (`bf-verify-fdc`, `bf-membump`, no `.git`). The map treated it as ONE project:
+- every line was "1 station · ends here";
+- 20,635 "partition violations" were counted, three times over for the copies;
+- lines were named after the copies;
+- the reference graph was capped at 6,000 files for the whole tree (`MAX_GRAPH_FILES`), so most of the 15,885 files had no references.
+
+The folder's problems are the user's to decide. **The visualizer must find them, explain them and offer the fix. It never silently fixes the folder, and the fix is never done by hand outside the product.**
+
+Rules:
+1. **Systems.** A review root is divided into *systems*, each detected from the files:
+   - a child folder with its own `.git` (directory or file);
+   - else a folder whose manifest names a project (`package.json` with a `name`, `Cargo.toml`, `pyproject.toml`, `go.mod`) and that is not inside another system;
+   - inside a system, its workspace packages (`workspaces`, `pnpm-workspace.yaml`) are *apps* of that system.
+
+   A root that is itself a repository is one system. Every file node carries `system` (and `app` when it has one). This is pure and deterministic, from the listing.
+2. **Copies are findings, not data.** Two systems whose manifests name the same project, and whose sampled file hashes match at least 90%, are a `duplicate-copy` finding. The copy is the one without `.git`; else the one whose folder name differs from the manifest/remote name; else the later name. The finding says which folder looks like a stray copy and why, and offers **Exclude from review**. That action appends the folder to `.builderforce/ignore` at the review root and starts the normal plan → estimate → confirm Re-review. Until the user acts, the copy stays in the graph, marked as a copy, and its lines and findings are folded under the original.
+3. **Per-system analysis.**
+   - The reference graph has no file-count cap. Files are read in bounded batches, and the builder keeps only what it parses (imports, symbols), never source text. Only the per-file size limit (256 KB) remains. Every skipped file is counted per system and named in diagnostics; none is dropped silently.
+   - Layer verdicts and `partition-violation` are computed within a system only. A reference across systems is `external`, never `upward` or `skips`.
+   - A truncated system says so in diagnostics.
+4. **Systems in the view.**
+   - The rail groups lines by system (then app). Lines are allotted round-robin across systems, largest first, so one system cannot take all `MAX_LINES`.
+   - A line is named `system › package`.
+   - The header crumb starts at the system.
+   - The System camera shows a tier per system when the root holds more than one.
+5. **Lines explain where they stop.** Each line records why it stopped: `no-references` (the entry station references nothing on the map), `only-upward`, `only-visited`, `only-higher-layer`, or `max-stops`. The rail shows the reason as text, and diagnostics list it per line. "Ends here" is shown only for a true terminus.
+6. **The partition picker is a themed popover.** It uses the overlay surface token, sits above the drawer and closes on outside click and Escape. It never draws as transparent text over other content.
+
+Accept:
+- Reviewing a plain folder of two repos plus one loose copy gives 2 systems plus 1 `duplicate-copy` finding.
+- Exclude from review writes `.builderforce/ignore` and, after the Re-review, the copy is gone.
+- No `partition-violation` crosses systems.
+- Each system gets lines, and every line either has more than one stop or states a stop reason.
+- Diagnostics show systems, copies, per-system graph caps and per-line stop reasons.
+
 ## Part B — Incremental, deterministic understanding
 
 ### B1. Model: a content-addressed fact graph with early cutoff
@@ -1851,6 +1888,7 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 | WS21 | **Ranking and similar runs** (D10), plus the card's Predicted block (D11), localized | WS10, WS16 | Sonnet |
 | WS22 | **People scores** (D14): role attribution; the contributor-to-identity mapping; `mayViewPersonScore`; the `case_mix` model (its own, not WS18's); Gamma–Poisson shrinkage; funnel plot and table on the team People view; audit; enterprise default-off with the DPIA notice; access, export and erasure; `person_score.viewed` telemetry. Localized; both themes; 360 px. | WS16 | **Opus** (auth/RBAC, privacy) |
 | WS23 | **Review run view and parallel review** (A8): memory — per-file extraction failure is a step not a fatal error, `extractPool` port, N-wide judging with one ordered writer, `onStep` events, byte-equal parallel vs sequential test; host — `worker_threads` extract pool (its own esbuild worker entry), `ReviewRun` recorder and `runs/` persistence, `run` events, Retry; view — Run panel (`SlideOutPanel`), history, localized, both themes, 360 px | — (ships with WS14) | Sonnet; Opus review (concurrency, storage) |
+| WS24 | **Systems and folder findings** (A9): agent-tools — `systems.ts` (detect systems/apps from the listing), `duplicate-copy` finding with an Exclude action, per-system repo-graph cap and cross-system `external` verdict; view — rail/lines by system with round-robin allotment, line stop reasons, themed partition popover, diagnostics; host — Exclude writes `.builderforce/ignore` then plan/confirm | — | Sonnet; Opus review (cross-package) |
 | WS14 | **Ship.** This is a new capability, so: a `release_notes` row (category `new`); an Idea-to-Real blog post on the template in `frontend/src/content/blog/run-your-app-on-the-canvas.md`, placing the delta in the **Measure** act of the arc (proof that a run made things better, not just different); DONE.md moves by section number. | WS10, WS13 | Session model |
 
 Version bumps and ROADMAP/DONE entries stay with the session model.

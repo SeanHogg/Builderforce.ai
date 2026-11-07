@@ -27,6 +27,9 @@ import { rootSymbols, SymbolsGate } from "./knowledgeSymbols";
 import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
+import { excludeFromReview } from "./knowledgeExclude";
+import { rootIgnoreFile } from "./knowledgeFs";
+import { isRootReviewing } from "./knowledgeReplica";
 import { subscribeLiveGraph } from "./knowledgeLive";
 import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
@@ -144,6 +147,9 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "runs": return listRuns(rootKnowledgeFiles(this.rootOf(call.rootId)), call.rootId);
       case "runRecord": return getRun(this.workspaceRoots().map(rootKnowledgeFiles), call.runId);
       case "stopRun": this.reviews.stopRun(call.runId); return null;
+      case "excludeFromReview":
+        await excludeFromReview({ rootId: call.rootId, path: call.path, file: rootIgnoreFile(this.rootOf(call.rootId).rootPath), isReviewing: isRootReviewing });
+        return null;
       case "symbols": {
         const rootPath = this.rootOf(call.rootId).rootPath;
         return this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs));

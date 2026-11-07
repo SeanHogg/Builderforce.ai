@@ -24,6 +24,8 @@ import type { FindingEvidence, SourceLocation } from '../types';
 import { actionCards } from './actModel';
 import { Cards, EmptyCard, smallButton, SystemWideBlock } from './ActCards';
 import { DoneWhen, hasHops, KeepTestCard } from './ActFooter';
+import { DuplicateCopyCards, type CopyFix } from './fix/DuplicateCopyCard';
+import { isDuplicateCopy } from './fix/duplicateCopy';
 import { fixQueueCounts, fixQueueText } from './fix/fixModes';
 import type { PathModel } from './path';
 import { pinNumbers } from './pinNumbers';
@@ -74,6 +76,8 @@ export interface ActPanelProps {
     path?: PathModel | null | undefined;
     /** The path's name in the test request, e.g. "Web line · GET /users"; defaults to the stop names. */
     pathTitle?: string | null | undefined;
+    /** Stray-copy cards' Exclude from review (`source.folders`); absent ⇒ the host cannot exclude a folder and those cards are drawn as ordinary ones. */
+    copyFix?: CopyFix | undefined;
     /** The Insights and view panels: held in the collapsed "Details" section. */
     children?: ReactNode;
 }
@@ -89,7 +93,9 @@ export function ActPanel(p: ActPanelProps) {
     const pins = useMemo(() => pinNumbers(p.graph.findings), [p.graph.findings]);
     const wide = useMemo(() => systemWideFindings(p.model ?? {}, p.findings), [p.model, p.findings]);
     const local = useMemo(() => { const ids = new Set(wide.map((f) => f.id)); return p.findings.filter((f) => !ids.has(f.id)); }, [p.findings, wide]);
-    const cards = useMemo(() => actionCards(local, p.canApply ?? false), [local, p.canApply]);
+    // A stray copy has its own card (with Exclude from review) wherever the host can exclude a folder; elsewhere it is an ordinary card.
+    const copies = useMemo(() => (p.copyFix ? local.filter(isDuplicateCopy) : []), [local, p.copyFix]);
+    const cards = useMemo(() => actionCards(copies.length > 0 ? local.filter((f) => !isDuplicateCopy(f)) : local, p.canApply ?? false), [local, copies, p.canApply]);
     const drawn = !!path && path.stops.length > 0;
     const count = p.findings.length;
     const title = station ? counted(labels, 'issueAt', count, { scope: station.name })
@@ -127,6 +133,8 @@ export function ActPanel(p: ActPanelProps) {
                 )}
 
                 {wide.length > 0 && <SystemWideBlock findings={wide} labels={labels} onShow={p.onShow} />}
+
+                <DuplicateCopyCards findings={copies} labels={labels} fix={p.copyFix} onShow={p.onShow} />
 
                 {count === 0
                     ? <EmptyCard labels={labels} atStation={!!station} onAsk={() => p.onAskUntested?.()} onShow={() => p.onShow(emptyRefs())} />

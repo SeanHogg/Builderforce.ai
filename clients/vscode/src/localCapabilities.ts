@@ -26,6 +26,7 @@ import type {
   CapabilityProvider,
   RepoDeleteResult,
   RepoEditResult,
+  RepoListOptions,
   RepoListResult,
   RepoReadResult,
   RepoSearchResult,
@@ -125,12 +126,13 @@ function summarizeDirs(paths: string[], subdir?: string): string[] {
  * not exist). Output is sorted for stable, scan-able results. Mirrors the on-prem
  * Node provider's walk so the two behave identically.
  */
-async function walkFiles(start: string, root: string, glob?: string, scope?: string): Promise<{ paths: string[]; truncated: boolean }> {
+async function walkFiles(start: string, root: string, glob?: string, scope?: string, unbounded = false): Promise<{ paths: string[]; truncated: boolean }> {
+  const cap = unbounded ? Number.POSITIVE_INFINITY : LIST_MAX_FILES;
   const out: string[] = [];
   const queue: string[] = [start];
   let truncated = false;
   while (queue.length > 0) {
-    if (out.length >= LIST_MAX_FILES) { truncated = true; break; }
+    if (out.length >= cap) { truncated = true; break; }
     const dir = queue.shift()!;
     let entries: import("fs").Dirent[];
     try {
@@ -152,7 +154,7 @@ async function walkFiles(start: string, root: string, glob?: string, scope?: str
         // first and globbing the survivors made "0 matches" mean "not in the first
         // 5,000 paths", which the tool's own note then reported as "no such file".
         if (glob && !matchGlobInScope(rel, glob, scope)) continue;
-        if (out.length >= LIST_MAX_FILES) { truncated = true; break; }
+        if (out.length >= cap) { truncated = true; break; }
         out.push(rel);
       }
     }
@@ -191,7 +193,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   const symbols = options.symbols ?? workspaceSymbolIndex(rootResolved);
 
   const repoRead = {
-    async listFiles(subdir?: string, glob?: string): Promise<RepoListResult> {
+    async listFiles(subdir?: string, glob?: string, opts?: RepoListOptions): Promise<RepoListResult> {
       const start = subdir ? resolveInRoot(rootResolved, subdir) : rootResolved;
       // A glob is an explicit "find these files" — return the full matches (never the
       // directory summary), so a named file is always surfaced even in a big repo. The
@@ -199,7 +201,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       // candidates, and it resolves against the scope so a glob written for the folder
       // you asked about matches (see `matchGlobInScope`).
       if (glob) {
-        const found = await walkFiles(start, rootResolved, glob, subdir);
+        const found = await walkFiles(start, rootResolved, glob, subdir, opts?.unbounded === true);
         return { ok: true, paths: found.paths, truncated: found.truncated };
       }
       const { paths, truncated } = await walkFiles(start, rootResolved);

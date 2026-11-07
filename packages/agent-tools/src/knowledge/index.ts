@@ -92,3 +92,9 @@ export {
     checkPinpointDataUrl, checkPinpointImage, cleanTexts, isCatalogPath, keysOfValue, matchAnchors, parseVisionReply, pinpointVisionRequest,
     type PinpointHit, type PinpointMatch, type PinpointMatchResult, type PinpointPorts, type PinpointProvenance, type VisionContentPart,
 } from './pinpointMatch.js';
+export {
+    COPY_SAMPLE, COPY_SIMILARITY, detectSystems, duplicateCopies, manifestProjectName,
+    type CopyReason, type DetectedApp, type DetectedSystem, type DetectedSystems, type DuplicateCopy, type ReadManifest, type SystemsListing,
+} from './systems.js';
+export { graphSystems, readSystems, recordSystems, systemsManifestKey } from './systemsRecord.js';
+export { GraphReadTally, noteGraphReads, takeGraphReads, type GraphSkipReason, type SystemGraphRead } from './graphReads.js';

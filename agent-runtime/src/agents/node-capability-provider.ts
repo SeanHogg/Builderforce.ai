@@ -85,12 +85,14 @@ async function walkFiles(
   scope: string,
   glob?: string,
   scopeArg?: string,
+  unbounded = false,
 ): Promise<{ paths: string[]; truncated: boolean }> {
+  const cap = unbounded ? Number.POSITIVE_INFINITY : LIST_MAX_FILES;
   const out: string[] = [];
   const queue: string[] = [scope];
   let truncated = false;
   while (queue.length > 0) {
-    if (out.length >= LIST_MAX_FILES) {
+    if (out.length >= cap) {
       truncated = true;
       break;
     }
@@ -121,7 +123,7 @@ async function walkFiles(
         if (glob && !matchGlobInScope(rel, glob, scopeArg)) {
           continue;
         }
-        if (out.length >= LIST_MAX_FILES) {
+        if (out.length >= cap) {
           truncated = true;
           break;
         }
@@ -256,7 +258,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
       },
     },
     repoRead: {
-      async listFiles(sub, glob): Promise<RepoListResult> {
+      async listFiles(sub, glob, opts): Promise<RepoListResult> {
         const scope = sub ? resolveInside(root, sub) : root;
         if (!scope) {
           return { ok: false, error: escaped(sub ?? "") };
@@ -264,7 +266,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         // The glob is applied DURING the walk (so the file budget counts matches) and
         // resolved against the scope, because a glob is naturally written relative to
         // the folder you asked about ("path": "src", "glob": "**\/*.ts").
-        const { paths, truncated } = await walkFiles(root, scope, glob, sub);
+        const { paths, truncated } = await walkFiles(root, scope, glob, sub, opts?.unbounded === true);
         return { ok: true, paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {

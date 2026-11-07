@@ -18,10 +18,12 @@ import { cssVar } from '../scene/themeColors';
 import { list, muted, swatch } from '../styles';
 import { TYPE } from './ui/type';
 import { LegendGlyph } from './LegendGlyph';
+import { LineGroups } from './rail/LineGroups';
 import { LineRow } from './rail/LineRow';
 import { StopRow } from './rail/StopRow';
 import { firstFindings, stopTag } from './rail/stopTag';
-import type { LinesModel } from './lines';
+import type { Line, LinesModel } from './lines';
+import { isMultiSystem } from './systems';
 import { cmp } from '../order';
 import type { DataCoverage } from './dataCoverage';
 import { notSetUpText } from './notSetUpText';
@@ -61,6 +63,9 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
     const line = lines.lines.find((l) => l.id === lineId) ?? null;
     // Each stop's first finding, numbered as the Act rail lists them (`findings` is that list).
     const firstOf = useMemo(() => firstFindings(stations.stations, findings ?? []), [stations, findings]);
+    // A root of several systems groups its lines by system (PRD 41 A9); one system reads as the flat list it always was.
+    const grouped = isMultiSystem(lines.systems);
+    const renderLine = (l: Line) => <LineRow line={l} selected={l.id === lineId} byId={stations.byId} labels={labels} onSelect={onSelectLine} />;
     const legend = CHANNELS.filter(({ id }) => overlay.status[id] !== 'off');
     const pins = overlay.bindings.pins === 'on';
     const owners = overlay.status.colour === 'ready' && overlay.bindings.colour === 'owner';
@@ -75,13 +80,11 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
         >
             <section aria-label={s.linesTitle} style={{ display: 'grid', gap: 6 }}>
                 <h3 style={TYPE.sectionHeading}>{s.rail.heading}</h3>
-                {lines.lines.length === 0 ? <p style={muted}>{s.linesEmpty}</p> : (
+                {lines.lines.length === 0 ? <p style={muted}>{s.linesEmpty}</p> : grouped ? (
+                    <LineGroups lines={lines.lines} systems={lines.systems ?? []} labels={labels} renderLine={renderLine} />
+                ) : (
                     <ul style={{ ...list, gap: 2 }}>
-                        {lines.lines.map((l) => (
-                            <li key={l.id}>
-                                <LineRow line={l} selected={l.id === lineId} byId={stations.byId} labels={labels} onSelect={onSelectLine} />
-                            </li>
-                        ))}
+                        {lines.lines.map((l) => <li key={l.id}>{renderLine(l)}</li>)}
                     </ul>
                 )}
                 {lines.omitted > 0 && <p style={{ ...muted, margin: 0 }}>{counted(labels, 'entryPointsOmitted', lines.omitted)}</p>}

@@ -1183,5 +1183,7 @@
   "Show original": "显示原文",
   "Show translation": "显示译文",
   "Translating…": "正在翻译…",
-  "Translation needs this browser's built-in translator": "翻译需要此浏览器的内置翻译器"
+  "A review of this folder is already running.": "此文件夹的审查正在进行中。",
+  "That path cannot be excluded from review.": "无法将该路径排除在审查之外。",
+  "Translation needs this browser's built-in translator":"翻译需要此浏览器的内置翻译器"
 }

@@ -225,6 +225,12 @@ export interface KnowledgeGraphSource {
     pinpoint?(image: Blob, rootId: string): Promise<PinpointResult>;
     /** The commits of the root, for the time slider and the changed set. Absent ⇒ no slider. */
     history?(rootId: string): Promise<{ commits: Commit[] }>;
+    /**
+     * Folder actions on a review root (PRD 41 A9). `exclude` appends the folder to the root's `.builderforce/ignore` and nothing else;
+     * the view then starts the normal plan, estimate, confirm Re-review itself. A refusal rejects with a message already in the person's
+     * language. Absent ⇒ the stray-copy card is not drawn.
+     */
+    folders?: { exclude(rootId: string, path: string): Promise<void> };
     /** Local against server counts, skipped files and data sources. Absent ⇒ no Sync panel. */
     syncStatus?(rootId: string): Promise<SyncStatus>;
     /** Where this host builds the graph it hands `load`: its own store (`local`, an editor: PRD 41 A7) or the platform (`server`). Named in the copied diagnostics; a server map in an editor is a defect they flag. Absent ⇒ not said. */

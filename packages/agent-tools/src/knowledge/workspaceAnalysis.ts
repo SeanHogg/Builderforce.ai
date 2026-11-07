@@ -25,7 +25,10 @@ import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { runCodeAnalysis } from './codeAnalyzers.js';
 import type { SerializedRepoGraphShape } from './codeExtracted.js';
 import { isSkippedPath } from './fsDirectorySource.js';
+import { GraphReadTally, type SystemGraphRead } from './graphReads.js';
+import { folderPrefix, underFolder } from './rootRelative.js';
 import { createShaCache } from './shaCache.js';
+import { detectSystems } from './systems.js';
 import { fingerprintSha, forgetWorkspaceFingerprints, workspaceFingerprint, type WorkspaceFingerprint } from './workspaceFingerprint.js';
 
 /** What the repo map offers, structurally (`RepoGraphBuilder` + `isMapCandidate`). */
@@ -34,8 +37,7 @@ export interface RepoGraphPort {
     accepts(path: string, size: number): boolean;
 }
 
-/** Files the repo graph reads at most, and the bytes of any one (the map's own caps). */
-const MAX_GRAPH_FILES = 6_000;
+/** The bytes of any one file the repo graph reads (the map's own cap). There is no cap on the NUMBER of files. */
 const MAX_GRAPH_FILE_BYTES = 256 * 1024;
 /** Files read at once. */
 const READ_BATCH = 16;
@@ -56,18 +58,22 @@ export interface WorkspaceAnalysisDeps {
     path?: string;
     /** The repo map; absent ⇒ no `references` edges (the analyzers' imports still draw the graph). */
     repoGraph?: RepoGraphPort;
-    /** Told when the analysis is partial (a truncated listing, files past the cap). */
+    /** Told when the analysis is partial (a truncated listing). */
     onWarn?(message: string): void;
+    /** Told what the repo graph read of each system (and left out, by reason), root-relative. */
+    onReads?(reads: SystemGraphRead[]): void;
 }
 
 export interface WorkspaceAnalysis {
     snapshot: CodeAnalysisSnapshot | null;
     repoGraph: SerializedRepoGraphShape | null;
+    /** What the repo graph read of each system, and skipped by reason (empty when no graph was read). */
+    graphReads?: SystemGraphRead[];
 }
 
 /** The repo map's file graph over `path`, read through `repoRead`; null when it cannot list files. A truncated listing gives a partial graph, said so via `onWarn`. */
 export async function readRepoGraph(
-    deps: Pick<WorkspaceAnalysisDeps, 'caps' | 'path' | 'repoGraph' | 'onWarn'>,
+    deps: Pick<WorkspaceAnalysisDeps, 'caps' | 'path' | 'repoGraph' | 'onWarn' | 'onReads'>,
     signal?: AbortSignal,
 ): Promise<SerializedRepoGraphShape | null> {
     const read = deps.caps.repoRead;
@@ -76,22 +82,38 @@ export async function readRepoGraph(
     const listed = await read.listFiles(deps.path || undefined, ALL_FILES_GLOB).catch(() => undefined);
     if (!listed?.ok || !listed.paths) return null;
     if (listed.truncated) deps.onWarn?.(`The file listing was truncated at ${listed.paths.length} files: the repo graph is partial.`);
-    const accepted = listed.paths
-        .map((p) => p.replace(/\\/g, '/'))
-        .filter((p) => !isSkippedPath(p) && port.accepts(p, 0));
-    if (accepted.length > MAX_GRAPH_FILES) deps.onWarn?.(`${accepted.length} files qualify: the repo graph reads the first ${MAX_GRAPH_FILES}.`);
-    const paths = accepted.slice(0, MAX_GRAPH_FILES);
+    const all = listed.paths.map((p) => p.replace(/\\/g, '/'));
+    // Systems are found from the listing, with each manifest read through the same port; paths are root-relative for them.
+    const prefix = folderPrefix(deps.path);
+    const rootRel = (p: string): string => underFolder(p, prefix) ?? p;
+    const detected = await detectSystems(
+        { rootName: prefix.slice(prefix.lastIndexOf('/') + 1) || 'workspace', paths: all.flatMap((p) => underFolder(p, prefix) ?? []) },
+        async (p) => {
+            const file = await read.readFile(prefix ? `${prefix}/${p}` : p).catch(() => undefined);
+            return file?.ok && typeof file.content === 'string' ? file.content : undefined;
+        },
+    );
+    const tally = new GraphReadTally();
+    const systemOf = (p: string): string => detected.systemOf(rootRel(p)) ?? '';
+    const paths = all.filter((p) => !isSkippedPath(p) && port.accepts(p, 0));
+    for (const p of paths) tally.expect(systemOf(p));
+    if (listed.truncated) for (const s of new Set(paths.map(systemOf))) tally.skip(s, 'listing-truncated', 0);
+    // No file-count cap: files are read in bounded concurrent batches and fed to the builder as they arrive,
+    // which keeps only what it parsed (imports, symbols), so memory follows the graph, not the source.
     const builder = port.create();
     for (let i = 0; i < paths.length; i += READ_BATCH) {
         if (signal?.aborted) return null;
         const batch = await Promise.all(paths.slice(i, i + READ_BATCH).map((p) => read.readFile(p).catch(() => undefined)));
         batch.forEach((file, j) => {
-            if (file?.ok && typeof file.content === 'string' && !file.truncated && file.content.length <= MAX_GRAPH_FILE_BYTES) {
-                // The listing is scope-relative to the workspace, exactly as the analyzers' paths are.
-                builder.addFile(paths[i + j]!, file.content);
-            }
+            const system = systemOf(paths[i + j]!);
+            if (!file?.ok || typeof file.content !== 'string') tally.skip(system, 'unreadable');
+            else if (file.truncated || file.content.length > MAX_GRAPH_FILE_BYTES) tally.skip(system, 'too-large');
+            // The listing is scope-relative to the workspace, exactly as the analyzers' paths are.
+            else if (builder.addFile(paths[i + j]!, file.content)) tally.read(system);
+            else tally.skip(system, 'unsupported');
         });
     }
+    deps.onReads?.(tally.result());
     return builder.build();
 }
 
@@ -135,16 +157,17 @@ export async function analyseWorkspace(deps: WorkspaceAnalysisDeps, signal?: Abo
     const key = [sha ?? '~', ...scopeOf(deps, fp)].join('|');
     const held = await cache.getOrRun(key, async (shared) => {
         const ctx = { caps: deps.caps, ...(shared ? { signal: shared } : {}) };
+        let graphReads: SystemGraphRead[] = [];
         const [snapshot, repoGraph] = await Promise.all([
             runCodeAnalysis(ctx, { ...(deps.path ? { path: deps.path } : {}), ...(deps.partitions ? { partitions: deps.partitions } : {}) }),
-            readRepoGraph(deps, shared),
+            readRepoGraph({ ...deps, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),
         ]);
         // A run every asker stopped is nothing: neither part is trustworthy, and none is kept.
         if (shared?.aborted) return { analysis: { snapshot: null, repoGraph: null }, retainMs: 0 };
-        if (snapshot === null) return { analysis: { snapshot, repoGraph }, retainMs: 0 };
+        if (snapshot === null) return { analysis: { snapshot, repoGraph, graphReads }, retainMs: 0 };
         const healthy = snapshot.tools.every((t) => t.status === 'complete');
         const retain = [healthy ? undefined : FAILED_RETAIN_MS, sha ? undefined : UNIDENTIFIED_RETAIN_MS].filter((n): n is number => n !== undefined);
-        return { analysis: { snapshot, repoGraph }, ...(retain.length ? { retainMs: Math.min(...retain) } : {}) };
+        return { analysis: { snapshot, repoGraph, graphReads }, ...(retain.length ? { retainMs: Math.min(...retain) } : {}) };
     }, signal);
     // The asker who stopped gets nothing, whoever else the run served.
     return signal?.aborted ? { snapshot: null, repoGraph: null } : held.analysis;

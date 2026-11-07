@@ -1,43 +1,30 @@
 /**
  * Lines: the transit-map reading of a code graph (PRD 38, Option B+). Each entry point (a
  * station holding files of the `entry` partition) starts a line, which follows `references`
- * between stations down through the layers, always to the strongest unvisited next station.
- * A station on more than one line is an interchange. The last station is the terminus: a
- * data store or an external service when it is infrastructure, otherwise an "ends here"
- * marker. Both are heuristics from names and layers and are marked as such.
+ * between stations down through the layers (`lineRoute`). A station on more than one line is an
+ * interchange. The last station is the terminus: a data store or an external service when it is
+ * infrastructure, otherwise an "ends here" marker; the line also records WHY it stopped. Both
+ * are heuristics from names and layers and are marked as such.
  *
- * Bounded (MAX_LINES lines of at most MAX_STOPS stations) and deterministic: ties break on
- * the use metric, then the name, then the id.
+ * A root of several systems (PRD 41 A9) allots its MAX_LINES round-robin across the systems,
+ * largest first (`lineAllot`), and names each line `system › package`. A stray copy's entries
+ * get no line of their own: the copy is folded under its original.
+ *
+ * Bounded (MAX_LINES lines of at most MAX_STOPS stations) and deterministic.
  */
 
-import type { KEdge, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { cmp } from '../order';
-import { layerRank, type Provenance } from './layers';
+import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { allotEntries } from './lineAllot';
+import { followRoute, stationEdges, terminusOf, type LineHop, type StopReason, type Terminus } from './lineRoute';
 import { mapEdges } from './outlineGraph';
 import { packageNameOf } from './stationName';
-import { stationOfRef, type Station, type StationModel } from './stations';
+import type { StationModel } from './stations';
+import { isMultiSystem, primarySystems, systemName, systemsOf, type SystemInfo } from './systems';
+
+export { MAX_STOPS } from './lineRoute';
+export type { LineHop, StopReason, Terminus, Verdict } from './lineRoute';
 
 export const MAX_LINES = 8;
-export const MAX_STOPS = 10;
-
-export type Verdict = 'allowed' | 'same' | 'skips' | 'upward';
-
-export interface LineHop {
-    from: string;
-    to: string;
-    /** File-level references aggregated into this hop. */
-    count: number;
-    /** The worst layer verdict among them, when the pack gave any. */
-    verdict?: Verdict;
-    /** Part of a dependency cycle: drawn with a non-colour mark. */
-    cycle?: boolean;
-}
-
-export interface Terminus {
-    kind: 'data' | 'external' | 'end';
-    stationId: string;
-    provenance: Provenance;
-}
 
 export interface Line {
     id: string;
@@ -47,6 +34,11 @@ export interface Line {
     stops: string[];
     hops: LineHop[];
     terminus: Terminus;
+    /** Why the line stops where it does; shown instead of "Ends here" unless it is a real terminus. */
+    stopReason: StopReason;
+    /** The system (folder) and app the entry station belongs to; absent on a single-system root. */
+    system?: string;
+    app?: string;
 }
 
 export interface LinesModel {
@@ -55,78 +47,33 @@ export interface LinesModel {
     interchanges: Map<string, string[]>;
     /** Entry points past MAX_LINES that were not given a line. */
     omitted: number;
-}
-
-const VERDICT_RANK: Record<Verdict, number> = { allowed: 0, same: 0, skips: 1, upward: 2 };
-const EXTERNAL = /adapter|client|provider|gateway|http|\bapi\b|sdk|github|stripe|oauth|webhook|llm|mail|slack/i;
-
-interface Edge { to: string; count: number; /** Any aggregated reference is a cycle, or the stations reference each other. */ cycle?: boolean; /** The worst verdict, for display on the hop. */ verdict?: Verdict; /** References per verdict (no verdict counts as allowed): the majority decides whether a line follows the hop. */ tally: Record<Verdict, number> }
-
-/** The verdict most of a hop's file-level references carry; a tie reads as the milder one. */
-function majorityVerdict(edge: Edge): Verdict {
-    return (Object.keys(VERDICT_RANK) as Verdict[]).reduce((best, v) => (edge.tally[v] > edge.tally[best] || (edge.tally[v] === edge.tally[best] && VERDICT_RANK[v] < VERDICT_RANK[best]) ? v : best), 'allowed' as Verdict);
-}
-
-function stationEdges(edges: readonly KEdge[], model: StationModel): Map<string, Map<string, Edge>> {
-    const out = new Map<string, Map<string, Edge>>();
-    for (const e of edges) {
-        if (e.kind !== 'references') continue;
-        const a = stationOfRef(model, e.from), b = stationOfRef(model, e.to);
-        if (!a || !b || a === b) continue;
-        const row = out.get(a) ?? out.set(a, new Map()).get(a)!;
-        const edge = row.get(b) ?? { to: b, count: 0, tally: { allowed: 0, same: 0, skips: 0, upward: 0 } };
-        edge.count += 1;
-        edge.tally[e.verdict ?? 'allowed'] += 1;
-        if (e.verdict && (!edge.verdict || VERDICT_RANK[e.verdict] > VERDICT_RANK[edge.verdict])) edge.verdict = e.verdict;
-        if (e.cycle) edge.cycle = true;
-        row.set(b, edge);
-    }
-    // Stations that reference each other are a cycle at the station level too.
-    for (const [a, row] of out) for (const [b, edge] of row) if (out.get(b)?.has(a)) edge.cycle = true;
-    return out;
-}
-
-function terminusOf(station: Station | undefined, id: string): Terminus {
-    if (station?.layer !== 'infrastructure') return { kind: 'end', stationId: id, provenance: 'heuristic' };
-    return { kind: EXTERNAL.test(station.path ?? station.name) ? 'external' : 'data', stationId: id, provenance: 'heuristic' };
+    /** The systems that stand on their own, largest first; absent when the root is not divided into systems. */
+    systems?: SystemInfo[];
 }
 
 export function buildLines(graph: KnowledgeGraph, model: StationModel): LinesModel {
     // A truncated graph's routes follow the outline's links (verdict codes decoded by the adapter), not the cut graph's edges.
     const edges = stationEdges(mapEdges(graph), model);
-    const entries = model.stations.filter((s) => s.entry);
+    const systems = primarySystems(systemsOf(graph));
+    const multi = isMultiSystem(systems);
+    const entries = model.stations.filter((s) => s.entry && !s.copy);
+    const { chosen, omitted } = allotEntries(entries, systems.map((s) => s.path), MAX_LINES);
     const lines: Line[] = [];
 
-    for (const entry of entries.slice(0, MAX_LINES)) {
-        const stops = [entry.id], hops: LineHop[] = [], seen = new Set(stops);
-        while (stops.length < MAX_STOPS) {
-            const here = model.byId.get(stops[stops.length - 1]!);
-            const hereRank = layerRank(here?.layer);
-            const next = [...(edges.get(stops[stops.length - 1]!)?.values() ?? [])]
-                .filter((e) => {
-                    if (seen.has(e.to) || majorityVerdict(e) === 'upward') return false;
-                    const rank = layerRank(model.byId.get(e.to)?.layer);
-                    return hereRank === undefined || rank === undefined || rank >= hereRank;
-                })
-                .sort((a, b) =>
-                    b.count - a.count
-                    || (model.byId.get(b.to)?.use ?? 0) - (model.byId.get(a.to)?.use ?? 0)
-                    || cmp(model.byId.get(a.to)?.name ?? '', model.byId.get(b.to)?.name ?? '')
-                    || cmp(a.to, b.to))[0];
-            if (!next) break;
-            hops.push({ from: stops[stops.length - 1]!, to: next.to, count: next.count, ...(next.verdict ? { verdict: next.verdict } : {}), ...(next.cycle ? { cycle: true } : {}) });
-            stops.push(next.to);
-            seen.add(next.to);
-        }
-        const last = stops[stops.length - 1]!;
+    for (const entry of chosen) {
+        const route = followRoute(entry.id, edges, model);
+        const last = route.stops[route.stops.length - 1]!;
+        const pkg = packageNameOf(entry.name);
+        const sys = multi ? systemName(systems, entry.system) : undefined;
         lines.push({
-            id: `line:${lines.length + 1}`, name: packageNameOf(entry.name), colourIndex: lines.length, stops, hops,
-            terminus: terminusOf(model.byId.get(last), last),
+            id: `line:${lines.length + 1}`, name: sys ? `${sys} › ${pkg}` : pkg, colourIndex: lines.length,
+            stops: route.stops, hops: route.hops, terminus: terminusOf(model.byId.get(last), last), stopReason: route.stopReason,
+            ...(entry.system ? { system: entry.system } : {}), ...(entry.app ? { app: entry.app } : {}),
         });
     }
 
     const onLines = new Map<string, string[]>();
     for (const line of lines) for (const id of line.stops) (onLines.get(id) ?? onLines.set(id, []).get(id)!).push(line.id);
     const interchanges = new Map([...onLines].filter(([, ids]) => ids.length > 1));
-    return { lines, interchanges, omitted: Math.max(0, entries.length - MAX_LINES) };
+    return { lines, interchanges, omitted, ...(systems.length > 0 ? { systems } : {}) };
 }

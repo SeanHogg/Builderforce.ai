@@ -34,8 +34,10 @@ import type { HistoryPort } from './historyPort.js';
 import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
 import { judgementWithTimeout, DEFAULT_JUDGEMENT_TIMEOUT_MS } from './judgement.js';
+import { noteGraphReads } from './graphReads.js';
 import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
 import { serialisedByKey } from './serialisedByKey.js';
+import { readSystems, recordSystems } from './systemsRecord.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 
@@ -85,6 +87,8 @@ export interface KnowledgeReviewPorts {
     platformGraph?(rootId: string): Promise<KnowledgeGraph | null>;
     /** A failed index update is reported, never a failed review. Must not throw (the runner calls it from its cleanup). */
     onIndexError?(error: unknown): void;
+    /** A failure to record the root's systems is reported, never a failed review. Must not throw. */
+    onSystemsError?(error: unknown): void;
 }
 
 export interface KnowledgeReviewOptions {
@@ -245,6 +249,13 @@ async function reviewAndIndex(
     });
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);
+    // The root's systems (PRD 41 A9): detected from what this review saw, kept with it for the graph build.
+    if (!report.aborted) {
+        await recordSystems({
+            rootId: report.rootId, rootName: ports.source.title, source: ports.source, manifest: ports.manifest,
+            ...(opts.plan ? { plan: opts.plan } : {}),
+        }).catch((error: unknown) => ports.onSystemsError?.(error));
+    }
     await indexReviewed(ports, report.rootId, tell);
     return report;
 }
@@ -311,11 +322,12 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
         const hit = (await store.getExtracted?.(w.hash))?.find((e) => e.sourceRef === w.ref);
         if (hit) extracted.push(hit);
     }
-    const [facts, relations] = await Promise.all([store.facts({ rootId }), store.relations({ rootId })]);
+    const [facts, relations, systems] = await Promise.all([store.facts({ rootId }), store.relations({ rootId }), readSystems(manifest, rootId)]);
     // The ONE graph builder for code: the default layers are resolved over the whole file graph (folder, name, import direction).
     return buildCodeGraph(
         {
             rootId, extracted, facts, relations, packs: args.packs,
+            ...(systems.length > 0 ? { systems } : {}),
             ...(args.live ? { live: args.live } : {}),
             ...(args.nearDuplicates ? { nearDuplicates: args.nearDuplicates } : {}),
         },
@@ -355,7 +367,7 @@ export interface WorkspaceAnalyzersDeps {
 export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPort {
     return codeAnalyzers({
         async run(rootId, signal) {
-            const { snapshot, repoGraph } = await analyseWorkspace(
+            const { snapshot, repoGraph, graphReads } = await analyseWorkspace(
                 {
                     caps: deps.caps,
                     rootId,
@@ -366,6 +378,8 @@ export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPo
                 },
                 signal,
             );
+            // What the repo graph read of each system goes to the systems record the review writes (see `recordSystems`).
+            noteGraphReads(rootId, graphReads ?? []);
             // The analyzers name files relative to the workspace; this root's files (its manifest,
             // its refs, the platform's graph of it) are relative to the root itself — the upload too.
             const scoped = snapshot && deps.path ? snapshotUnder(snapshot, deps.path) : snapshot;

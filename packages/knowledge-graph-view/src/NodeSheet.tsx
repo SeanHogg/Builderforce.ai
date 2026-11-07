@@ -26,9 +26,10 @@ export interface NodeSheetProps {
     onTrace(): void;
     onSelect(ref: string): void;
     onChanged(): void;
+    onShow?: ((refs: string[]) => void) | undefined;
 }
 
-export function NodeSheet({ graph, index, selected, tracing, labels, source, confirm, renderPanel, compact, onClose, onTrace, onSelect, onChanged }: NodeSheetProps) {
+export function NodeSheet({ graph, index, selected, tracing, labels, source, confirm, renderPanel, compact, onClose, onTrace, onSelect, onChanged, onShow }: NodeSheetProps) {
     return (
         <Panel
             render={renderPanel} open={!!selected && index.has(selected)} compact={compact} closeLabel={labels.close}
@@ -36,7 +37,7 @@ export function NodeSheet({ graph, index, selected, tracing, labels, source, con
         >
             {selected && (
                 <>
-                    <NodePanel graph={graph} nodeRef={selected} labels={labels} source={source} confirm={confirm} onTrace={onTrace} onSelect={onSelect} onChanged={onChanged} />
+                    <NodePanel graph={graph} nodeRef={selected} labels={labels} source={source} confirm={confirm} onTrace={onTrace} onSelect={onSelect} onChanged={onChanged} onShow={onShow} />
                     {tracing && <TracePanel graph={graph} from={selected} labels={labels} />}
                 </>
             )}

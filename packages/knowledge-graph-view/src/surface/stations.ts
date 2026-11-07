@@ -18,6 +18,7 @@ import { rollUpAreas, type Group } from './areaRollup';
 import { fileNodesOf, outlineView } from './outlineGraph';
 import { reachOf, staticReach } from './staticReach';
 import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
+import { appOfNode, copyMap, foldedSystem, systemOfNode, systemsOf } from './systems';
 
 export interface Station {
     id: string;
@@ -59,6 +60,12 @@ export interface Station {
     /** Facts and claims remembered about its files. */
     facts: number;
     claims: number;
+    /** The system most of its files belong to (PRD 41 A9); a stray copy reads as its original. Absent on a single-system root. */
+    system?: string;
+    /** The app (workspace package) of that system most of its files belong to. */
+    app?: string;
+    /** Set when the station is in a stray copy of a system: the copy's own folder. */
+    copy?: string;
 }
 
 export interface StationModel {
@@ -254,6 +261,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     const anyChurn = files.some((n) => num(n.badges?.churn) !== undefined);
     // No file carries a coverage badge: fall back to the static reach of the test files (a heuristic, said so on the station).
     const reach = hasMeasuredCoverage(dataCoverage(graph)) ? null : staticReach(graph);
+    const copies = copyMap(systemsOf(graph));
     const shorts = stationNames(groups.map((g) => g.name));
     const shortNames = new Map(groups.map((g, i) => [g.id, shorts[i]!] as const));
     const raw = groups.map((g) => {
@@ -298,6 +306,13 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         if (layer) station.layer = layer;
         const owner = dominant(g.nodes.map((n) => (n.badges?.owner === undefined ? undefined : String(n.badges.owner))), () => 0);
         if (owner) station.owner = owner;
+        const own = dominant(g.nodes.map((n) => systemOfNode(n) || undefined), () => 0);
+        if (own) {
+            station.system = foldedSystem(copies, own);
+            if (copies.has(own)) station.copy = own;
+            const app = dominant(g.nodes.map((n) => appOfNode(n) || undefined), () => 0);
+            if (app) station.app = app;
+        }
         const cx = cxLevels.get(g.id);
         if (cx !== undefined) station.cx = cx;
         if (r.cov !== undefined) { station.cov = r.cov; station.covProvenance = reach ? 'heuristic' : 'runtime'; }

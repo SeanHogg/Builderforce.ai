@@ -190,6 +190,7 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, record
     // No `platformGraph`: the knowledge index is fed from the LOCAL graph too, so nothing the editor
     // shows or searches depends on the server's version (PRD 41 A7).
     onIndexError: (error) => log("index upsert", error),
+    onSystemsError: (error) => log("systems", error),
   };
 }
 

@@ -35976,6 +35976,7 @@
       "unusedDependency": "Dependencias sin usar",
       "unused": "Código sin usar",
       "contradiction": "Contradicción",
+      "duplicateCopy": "Copia suelta de un proyecto",
       "other": "Hallazgo"
     },
     "severity": {
@@ -36003,6 +36004,7 @@
       "brokenLink": "Repara los enlaces rotos en {file}: {items}.",
       "orphan": "Enlaza estos documentos huérfanos desde los documentos que deberían referenciarlos, o archívalos: {items}.",
       "contradiction": "Concilia [[§{sectionA} de ]]{fileA} con [[§{sectionB} de ]]{fileB}.",
+      "duplicateCopy": "{copy} parece una copia suelta de {original}. Compruébalo y elimínala, o añádela a .builderforce/ignore.",
       "nearDuplicate": "Fusiona o diferencia estas secciones casi duplicadas: {items}.",
       "possibleSame": "Comprueba si son lo mismo y, si lo son, fusiónalos: {items}.",
       "stale": "Vuelve a comprobar el conocimiento obsoleto sobre {items} con la fuente actual.",
@@ -36546,6 +36548,33 @@
         "antiNone": "No se encontraron antipatrones.",
         "resolve": "Resolver",
         "showInTower": "Mostrar en la Torre"
+      },
+      "stopReasons": {
+        "noReferences": "Sin más referencias",
+        "onlyUpward": "Solo referencias hacia arriba",
+        "onlyVisited": "Solo vuelve atrás",
+        "onlyHigherLayer": "Solo referencias a una capa superior",
+        "maxStops": "Cortada en el límite de paradas"
+      },
+      "systems": {
+        "loose": "Archivos sueltos",
+        "copyMark": "copia",
+        "groupAria": "Sistema {name}"
+      },
+      "duplicateCopy": {
+        "title": "Copia suelta de un proyecto",
+        "body": "{copy} parece una copia suelta de {original} (coincide el {similarity}% de los archivos muestreados).",
+        "reasonNoGit": "No tiene carpeta .git y el original sí.",
+        "reasonNameMismatch": "El nombre de su carpeta difiere del nombre del proyecto.",
+        "reasonLaterName": "Ambas se parecen, así que se toma como copia la de nombre posterior.",
+        "exclude": "Excluir de la revisión",
+        "excludeAria": "Excluir {copy} de la revisión",
+        "excluding": "Excluyendo…",
+        "failed": "No se pudo excluir la carpeta.",
+        "note": "Hasta que la excluyas, la copia sigue en el mapa, marcada como copia, y sus líneas y hallazgos se pliegan bajo el original."
+      },
+      "partitionPicker": {
+        "label": "Mostrar los archivos de una partición"
       },
       "api": {
         "notSetUpTitle": "No se encontraron endpoints",

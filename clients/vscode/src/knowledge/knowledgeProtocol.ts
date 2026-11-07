@@ -83,7 +83,9 @@ export type KnowledgeCall =
   // A retry of failed files is not an op: it is a normal review request (`KnowledgeReviewRequest.retry`).
   | { op: "runs"; rootId: string }
   | { op: "runRecord"; runId: string }
-  | { op: "stopRun"; runId: string };
+  | { op: "stopRun"; runId: string }
+  // Exclude from review (PRD 41 A9): appends `path/` to the root's `.builderforce/ignore`. It writes that file only; the view then runs its normal Re-review (plan, estimate, confirm). Refused while a review of the root runs.
+  | { op: "excludeFromReview"; rootId: string; path: string };
 
 /** How a run ended; `interrupted` is the host's own word for a record left `running` by a window that closed. */
 export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupted";

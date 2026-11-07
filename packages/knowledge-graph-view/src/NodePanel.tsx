@@ -11,6 +11,7 @@ import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowle
 import type { KnowledgeGraphLabels } from './labels';
 import { knowledgeAbout, nodeIndex } from './graphModel';
 import { kindLabel, packLabel } from './names';
+import { PartitionPicker } from './PartitionPicker';
 import { cssVar } from './scene/themeColors';
 import { button, input, list, muted, primaryButton, quietButton } from './styles';
 import type { FactActions, KnowledgeConfirm, KnowledgeGraphSource } from './types';
@@ -24,6 +25,8 @@ export interface NodePanelProps {
     onTrace(): void;
     onSelect(ref: string): void;
     onChanged(): void;
+    /** Shows the files of a partition (the Partition row's picker). Absent ⇒ the row is plain text. */
+    onShow?: ((refs: string[]) => void) | undefined;
 }
 
 function Row({ name, value }: { name: string; value: string }) {
@@ -54,7 +57,7 @@ function KnowledgeList({ title, nodes, labels, onSelect }: { title: string; node
     );
 }
 
-export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, onSelect, onChanged }: NodePanelProps) {
+export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, onSelect, onChanged, onShow }: NodePanelProps) {
     const node = useMemo(() => nodeIndex(graph).get(nodeRef), [graph, nodeRef]);
     const about = useMemo(() => knowledgeAbout(graph, nodeRef), [graph, nodeRef]);
     const [draft, setDraft] = useState('');
@@ -138,7 +141,14 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
             <dl style={{ margin: 0, display: 'grid', gap: 4 }}>
                 <Row name={labels.nodeKind} value={kindLabel(labels, node.kind)} />
                 <Row name={labels.nodePack} value={packLabel(labels, node.pack)} />
-                <Row name={labels.nodePartition} value={node.partition ?? labels.partitionNone} />
+                {onShow
+                    ? (
+                        <div style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'center' }}>
+                            <dt style={{ ...muted, minWidth: 88 }}>{labels.nodePartition}</dt>
+                            <dd style={{ margin: 0 }}><PartitionPicker graph={graph} value={node.partition} labels={labels} onShow={onShow} /></dd>
+                        </div>
+                    )
+                    : <Row name={labels.nodePartition} value={node.partition ?? labels.partitionNone} />}
                 <Row name={labels.nodeOrigin} value={labels.origins[node.origin]} />
             </dl>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

@@ -16,6 +16,16 @@ import { clip, railRow } from './railRow';
 export const deadEndsOf = (line: Line, byId: StationModel['byId']): number =>
     line.terminus.kind === 'end' && (byId.get(line.terminus.stationId)?.findingIds.length ?? 0) === 0 ? 1 : 0;
 
+const REASON_KEY = {
+    'no-references': 'noReferences', 'only-upward': 'onlyUpward', 'only-visited': 'onlyVisited', 'only-higher-layer': 'onlyHigherLayer', 'max-stops': 'maxStops',
+} as const;
+
+/** Where a line ends, in words: why it stopped, unless it ends at a real store or service (or the line records no reason). */
+export function endText(line: Line, labels: KnowledgeGraphLabels): string {
+    const reason = line.stopReason;
+    return reason && reason !== 'terminus' ? labels.surface.stopReasons[REASON_KEY[reason]] : labels.surface.terminus[line.terminus.kind];
+}
+
 export interface LineRowProps {
     line: Line;
     selected: boolean;
@@ -33,8 +43,8 @@ export function LineRow({ line, selected, byId, labels, onSelect }: LineRowProps
             <span aria-hidden="true" style={{ width: 10, height: 26, borderRadius: 5, flex: 'none', background: cssVar(lineTone(line.colourIndex)) }} />
             <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <b style={{ ...clip, ...TYPE.subtitle, fontWeight: selected ? 700 : 600 }}>{fillTemplate(s.lineName, { name: line.name })}</b>
-                <span data-line-detail style={{ ...clip, ...TYPE.meta }}>
-                    {fillTemplate(s.rail.lineDetail, { stations: counted(labels, 'station', line.stops.length), files: counted(labels, 'file', files), end: s.terminus[line.terminus.kind] })}
+                <span data-line-detail data-stop-reason={line.stopReason} style={{ ...clip, ...TYPE.meta }}>
+                    {fillTemplate(s.rail.lineDetail, { stations: counted(labels, 'station', line.stops.length), files: counted(labels, 'file', files), end: endText(line, labels) })}
                 </span>
             </span>
             <span data-dead-ends={dead} style={{ ...TYPE.status, whiteSpace: 'nowrap', color: cssVar(dead > 0 ? 'violation' : 'muted') }}>{counted(labels, 'deadEnd', dead)}</span>

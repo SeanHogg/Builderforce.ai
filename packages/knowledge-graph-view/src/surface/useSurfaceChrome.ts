@@ -12,7 +12,8 @@ import type { SurfaceLayout } from '../layout';
 import type { LensDef } from '../lenses';
 import type { LensId, SyncStatus, ViewMode } from '../types';
 import type { KnowledgeGraphState } from '../useKnowledgeGraph';
-import { buildSpine, withLineCrumb, type SpineItem } from './path';
+import { buildSpine, withLineCrumb, withSystemCrumb, type SpineItem } from './path';
+import { isMultiSystem, systemName } from './systems';
 import { entryRoute } from './pathNotes';
 import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
@@ -54,12 +55,14 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     const spineStation = surface.station ?? (selected ? surface.stations.byId.get(stationOfRef(surface.stations, selected) ?? '') ?? null : null);
     const lineLabel = surface.line ? fillTemplate(s.lineName, { name: surface.line.name }) : null;
     // The spine gains the drawn line between the folder and the station; picking it steps back up to the line.
-    const spineItems = withLineCrumb(
+    // A root of several systems starts the crumb at the system the line or station is in.
+    const systemCrumb = isMultiSystem(surface.lines.systems) ? systemName(surface.lines.systems, spineStation?.system ?? surface.line?.system) : undefined;
+    const spineItems = withSystemCrumb(withLineCrumb(
         buildSpine({ rootTitle: i.titleOf(graph.scope.rootId), station: spineStation, node: selected ? index.get(selected) ?? null : null, nodeLabel: (r) => labelFor(index, r) }),
         surface.pinned ? null : lineLabel,
-    );
+    ), systemCrumb);
     const onSpinePick = (item: SpineItem) => {
-        if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'line') surface.selectStation(null);
+        if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'line' || item.kind === 'system') surface.selectStation(null);
         else if (item.kind === 'station') kg.select(null); else if (item.id) i.select(item.id);
     };
 

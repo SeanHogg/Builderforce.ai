@@ -11,6 +11,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS } from './labels';
 import { counted } from './surface/plural';
 import { COVERAGE_KEYS, type DataCoverage, type GapReason } from './surface/dataCoverage';
 import type { LinesModel } from './surface/lines';
+import { stopDiagnostic, systemDiagnosticLines } from './surface/systemDiagnostics';
 import type { StationModel } from './surface/stations';
 import { replicaPhase, replicaPhaseEnglish } from './surface/drawers/replicaState';
 import { hasNoLocalSnapshot } from './surface/syncPill';
@@ -86,6 +87,7 @@ export function surfaceDiagnosticLines(i: SurfaceDiagnosticsInput): string[] {
     const out: string[] = [];
     out.push(...mapSourceLines(c, model.stations.length, i.mapFrom));
     out.push(...coverageLines(c));
+    out.push(...systemDiagnosticLines(i.graph));
 
     if (c) out.push(`partitions: files without a partition=${c.noPartition}/${c.files} (${pct(c.noPartition, c.files)})`);
     const tiers = buildTiers(model.stations);
@@ -93,7 +95,7 @@ export function surfaceDiagnosticLines(i: SurfaceDiagnosticsInput): string[] {
 
     const entries = model.stations.filter((s) => s.entry).length;
     out.push(`lines: drawn=${lm.lines.length} · entry points found=${entries}${lm.omitted ? ` · not drawn=${lm.omitted}` : ''}`);
-    for (const l of lm.lines) out.push(`  line ${l.name}: stops=${l.stops.length}`);
+    for (const l of lm.lines) out.push(`  line ${l.name}: stops=${l.stops.length}${stopDiagnostic(l)}`);
     if (lm.lines.length <= 1) out.push(`lines note: ${lm.lines.length} line because ${entries === 0 ? 'no entry point was found' : `${counted(DEFAULT_KNOWLEDGE_GRAPH_LABELS, 'entryPoint', entries)} found`}${c?.source.kind === 'cut' ? ' (in the cut graph\'s files only)' : ''}`);
 
     const inScope = i.scope ? [...i.scope].reduce((n, id) => n + (model.byId.get(id)?.files ?? 0), 0) : i.graph.nodes.length;

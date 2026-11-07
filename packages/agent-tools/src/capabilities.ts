@@ -161,7 +161,7 @@ export interface RepoReadCapability {
    *  (e.g. `ROADMAP.md`, `**\/*.test.ts`) — case-insensitive, and a slash-free glob
    *  matches the basename at any depth. A `glob` also bypasses the big-repo directory
    *  summary so a matched file is always returned in full. */
-  listFiles(subdir?: string, glob?: string): Promise<RepoListResult>;
+  listFiles(subdir?: string, glob?: string, opts?: RepoListOptions): Promise<RepoListResult>;
   readFile(path: string): Promise<RepoReadResult>;
   /** Search the tree for `query`. Pass `scope` (a repo-relative subdirectory) to
    *  restrict the search — essential on a large monorepo where an unscoped walk can
@@ -581,6 +581,12 @@ export interface CapabilityProvider {
 // `repo.search` (it greps via its shell), so the two must be decoupled.
 
 // ── Result shapes (shared so both runtimes return identical tool output) ──────────
+
+/** How a listing is taken. */
+export interface RepoListOptions {
+  /** Return EVERY matching file (no file-count cap). For a consumer that streams the list (the repo graph), never for a model-facing tool. A surface that cannot honour it still answers with its usual cap and `truncated: true`. */
+  unbounded?: boolean;
+}
 
 export interface RepoListResult {
   ok: boolean;

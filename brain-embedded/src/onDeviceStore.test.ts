@@ -1,12 +1,18 @@
 /**
  * The store loader partitions by scope and degrades gracefully. The SSM runtime is
  * stubbed — these tests are about WHICH cache an answer lands in, not about WebGPU.
+ *
+ * WebGPU presence is faked by defining `navigator.gpu`, the same signal `hasWebGPU()`
+ * reads at call time, rather than a relative-path `vi.mock`. The relative-path mock of
+ * `./pageEngines/webgpu` stopped intercepting the static import (vitest 4 resolves the
+ * aliased drive-letter path differently from the test's relative specifier), so the real
+ * module — which reports `false` under jsdom — leaked in and every store came back null.
+ * Stubbing the global keeps the seam on the public `hasWebGPU()` contract instead of the
+ * module graph, which is what these tests actually exercise.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const created: Array<{ embed: (text: string) => Promise<Float32Array>; threshold: number }> = [];
-
-vi.mock('./pageEngines/webgpu', () => ({ hasWebGPU: () => true }));
 
 vi.mock('@seanhogg/builderforce-memory', () => {
   class SemanticCache {
@@ -22,21 +28,25 @@ vi.mock('@seanhogg/builderforce-memory', () => {
   };
 });
 
-// Static imports keep vitest's mocks on the loader's graph. Without them the dynamic
-// `import('@seanhogg/builderforce-memory')` and the WebGPU check resolve to the real
-// modules, and every store comes back null.
-import { hasWebGPU } from './pageEngines/webgpu';
+// The static import keeps vitest's mock of `@seanhogg/builderforce-memory` on the loader's
+// graph; without it the dynamic `import('@seanhogg/builderforce-memory')` in the store
+// resolves to the real module and every store comes back null. WebGPU presence is provided
+// by the `navigator.gpu` stub in beforeEach instead — see the note at the top of the file.
 import { SSM } from '@seanhogg/builderforce-memory';
 import { loadOnDeviceAnswerStore, resetOnDeviceStoresForTests } from './onDeviceStore';
 
 beforeEach(() => {
-  expect(hasWebGPU(), 'WebGPU mock did not apply').toBe(true);
+  // Pretend this page has WebGPU: `hasWebGPU()` is `navigator.gpu != null`, read at call
+  // time, so defining the global is enough and needs no module mock.
+  vi.stubGlobal('navigator', { ...navigator, gpu: {} });
+  expect(globalThis.navigator?.gpu, 'WebGPU stub did not apply').toBeTruthy();
   expect(SSM.create, 'memory mock did not apply').toEqual(expect.any(Function));
   created.length = 0;
   resetOnDeviceStoresForTests();
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 

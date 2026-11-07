@@ -59,7 +59,7 @@ export function pathOfStations(
 }
 
 export interface SpineItem {
-    kind: 'root' | 'line' | 'station' | 'file' | 'symbol';
+    kind: 'root' | 'system' | 'line' | 'station' | 'file' | 'symbol';
     /** The station id or node ref this crumb selects (the root and the line have none). */
     id?: string;
     label: string;
@@ -80,6 +80,16 @@ export function withLineCrumb(items: readonly SpineItem[], line: string | null |
     if (!line) return [...items];
     const [root, ...rest] = items;
     return root ? [root, { kind: 'line', label: line }, ...rest] : [{ kind: 'line', label: line }];
+}
+
+/**
+ * A root of several systems starts its crumb at the system (PRD 41 A9): root › system › line › station. No name ⇒ the items
+ * unchanged. Picking it steps back up to the line list like the line crumb. Applied after `withLineCrumb`.
+ */
+export function withSystemCrumb(items: readonly SpineItem[], system: string | null | undefined): SpineItem[] {
+    if (!system) return [...items];
+    const [root, ...rest] = items;
+    return root ? [root, { kind: 'system', label: system }, ...rest] : [{ kind: 'system', label: system }];
 }
 
 /** station › file › symbol under the reviewed folder; absent levels are left out (the line crumb is `withLineCrumb`). */

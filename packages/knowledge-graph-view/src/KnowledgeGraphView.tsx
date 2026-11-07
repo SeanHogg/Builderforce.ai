@@ -160,6 +160,10 @@ export function KnowledgeGraphView({
     const openRun = useRef(setPanel);
     openRun.current = setPanel;
     const reviewStatus = kg.review.state.status;
+    // Exclude from review (PRD 41 A9): the host writes the ignore file, then the normal plan, estimate, confirm review starts.
+    const copyFix = source.folders && kg.rootId
+        ? { exclude: (copy: string) => source.folders!.exclude(kg.rootId!, copy), rereview: () => kg.review.start({ rootId: kg.rootId! }), busy: reviewStatus === 'planning' || reviewStatus === 'confirm' || reviewStatus === 'running' }
+        : undefined;
     // Opened when the run starts (after the plan is confirmed), never over the confirm card.
     useEffect(() => { if (reviewStatus === 'running' && source.runs) openRun.current('run'); }, [reviewStatus, source.runs]);
     const chrome = useSurfaceChrome({
@@ -250,7 +254,7 @@ export function KnowledgeGraphView({
                     graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
                     evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}
-                    model={surface.stations} onAskUntested={() => pickQuestion('untested')}
+                    model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')}
                 >
                     <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
                     <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
@@ -267,7 +271,7 @@ export function KnowledgeGraphView({
             />
             <NodeSheet
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
-                compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload}
+                compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload} onShow={show}
             />
         </SurfaceFrame>
     );

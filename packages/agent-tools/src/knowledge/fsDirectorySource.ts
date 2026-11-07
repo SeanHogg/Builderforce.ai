@@ -95,6 +95,8 @@ export function listsFile(rel: string): boolean {
 export type FsDirectorySource = DirectorySource & {
     /** Folders the latest `list()` skipped by rule (nested checkouts, `.worktrees/`, `*.local/`, `_*_src/`), with the reason. */
     skippedFolders(): SkippedFolder[];
+    /** Folders (root-relative, "" = the root) the latest `list()` saw hold a `.git` entry, directory or file: the systems of the root (PRD 41 A9). */
+    gitRoots?(): string[];
 };
 
 export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirectorySource {
@@ -106,6 +108,7 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
         return !isSkippedDirName(name, skipDirs) && !isVcsMetadataName(name);
     };
     let skipped: SkippedFolder[] = [];
+    const gitRoots = new Set<string>();
     const nested = new Set<string>();
     const underWalked = (rel: string): boolean => !isSkippedPath(rel, skipDirs, nested);
 
@@ -123,6 +126,7 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
         let listed = 0;
         skipped = [];
         nested.clear();
+        gitRoots.clear();
         let rootIsRepo = false;
         while (queue.length > 0) {
             const dir = queue.shift()!;
@@ -135,6 +139,7 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
             // A root that is itself a git work tree skips a child folder with its own `.git` DIRECTORY (a vendored clone). A `.git` FILE
             // is a submodule / worktree link inside this repository: its files are this repository's. A root that is no work tree (a
             // folder of several repositories) keeps every child.
+            if (entries.some(([name]) => name === '.git')) gitRoots.add(dir);
             if (!dir) rootIsRepo = entries.some(([name]) => name === '.git');
             else if (rootIsRepo && entries.some(([name, kind]) => name === '.git' && kind === 'dir')) {
                 nested.add(dir);
@@ -179,5 +184,5 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
         })
         : undefined;
 
-    return { rootId, title, list, read, skippedFolders: () => [...skipped], ...(watch ? { watch } : {}) };
+    return { rootId, title, list, read, skippedFolders: () => [...skipped], gitRoots: () => [...gitRoots].sort(), ...(watch ? { watch } : {}) };
 }

@@ -58,11 +58,11 @@ importers:
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.44
-        version: 2026.10.44(@seanhogg/builderforce-memory-engine@2026.10.44)
+        specifier: ^2026.10.45
+        version: 2026.10.45(@seanhogg/builderforce-memory-engine@2026.10.45)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.10.44
-        version: 2026.10.44
+        specifier: ^2026.10.45
+        version: 2026.10.45
       '@seanhogg/builderforce-quality':
         specifier: ^2026.7.5
         version: 2026.7.5
@@ -1390,15 +1390,15 @@ packages:
   '@schummar/icu-type-parser@1.21.5':
     resolution: {integrity: sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.10.44':
-    resolution: {integrity: sha512-MwP0uKCUVpGp3hiPjg9L6ZSHrc6/YpWuFSzs2VjH5woVel8OIOEFlEUvOzb/sM7W9bq5nE7HVE21BnrhyN6Dbg==}
+  '@seanhogg/builderforce-memory-engine@2026.10.45':
+    resolution: {integrity: sha512-LZLmIOy82r5OMLn2MCpfyEb0BCBPlX0wqECoHco0zRITFdIu0bOgO2hoZrZ2C2P1omwPwiNHz+dK/DDXATz4Ng==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.10.44':
-    resolution: {integrity: sha512-YUWunz5bmuaTTOUVpGTMRoddg6yEitOO6flQYAgQ9ucyEYsk9/OOOhq7vU6BTES3vSWjOkD9O3FjPMiaWrIi9A==}
+  '@seanhogg/builderforce-memory@2026.10.45':
+    resolution: {integrity: sha512-XyyDfXarpE6odu3xFZjlsCpx/++IOUXfjN5kLpdlzQeeFzbEWI7PrJHvj2SX27E2gBUpLNJGbMvLriqGCIencQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.44
+      '@seanhogg/builderforce-memory-engine': ^2026.10.45
 
   '@seanhogg/builderforce-quality@2026.7.5':
     resolution: {integrity: sha512-TPI+SVch4YxgaYuIGSupP3RlvdB2N1kYbxFH5e1cdGsrYJZunR5wN2PYcj4WtanThy28kLSWXVsU+I9XQ9iiiA==}
@@ -6718,11 +6718,11 @@ snapshots:
 
   '@schummar/icu-type-parser@1.21.5': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.10.44': {}
+  '@seanhogg/builderforce-memory-engine@2026.10.45': {}
 
-  '@seanhogg/builderforce-memory@2026.10.44(@seanhogg/builderforce-memory-engine@2026.10.44)':
+  '@seanhogg/builderforce-memory@2026.10.45(@seanhogg/builderforce-memory-engine@2026.10.45)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.10.44
+      '@seanhogg/builderforce-memory-engine': 2026.10.45
 
   '@seanhogg/builderforce-quality@2026.7.5': {}
 

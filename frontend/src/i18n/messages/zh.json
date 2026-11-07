@@ -35976,6 +35976,7 @@
       "unusedDependency": "未使用的依赖",
       "unused": "未使用的代码",
       "contradiction": "矛盾",
+      "duplicateCopy": "项目的多余副本",
       "other": "发现"
     },
     "severity": {
@@ -36003,6 +36004,7 @@
       "brokenLink": "修复 {file} 中的失效链接：{items}。",
       "orphan": "从应当引用这些孤立文档的文档中链接它们，或将其归档：{items}。",
       "contradiction": "调和 {fileA}[[ 的 §{sectionA}]] 与 {fileB}[[ 的 §{sectionB}]] 之间的矛盾。",
+      "duplicateCopy": "{copy} 看起来是 {original} 的多余副本。请核对后将其删除，或把它加入 .builderforce/ignore。",
       "nearDuplicate": "合并或区分这些近似重复的章节：{items}。",
       "possibleSame": "检查这些是否是同一事物，如果是则合并：{items}。",
       "stale": "对照当前来源重新核对关于 {items} 的过期知识。",
@@ -36546,6 +36548,33 @@
         "antiNone": "未发现反模式。",
         "resolve": "解决",
         "showInTower": "在塔视图中显示"
+      },
+      "stopReasons": {
+        "noReferences": "没有更多引用",
+        "onlyUpward": "仅有向上的引用",
+        "onlyVisited": "仅回到已有站点",
+        "onlyHigherLayer": "仅引用更高层",
+        "maxStops": "已达站点上限"
+      },
+      "systems": {
+        "loose": "零散文件",
+        "copyMark": "副本",
+        "groupAria": "{name} 系统"
+      },
+      "duplicateCopy": {
+        "title": "项目的多余副本",
+        "body": "{copy} 看起来是 {original} 的多余副本（抽样文件中有 {similarity}% 相同）。",
+        "reasonNoGit": "它没有 .git 文件夹，而原件有。",
+        "reasonNameMismatch": "它的文件夹名与项目名称不同。",
+        "reasonLaterName": "两者很相似，因此按名称靠后者视为副本。",
+        "exclude": "从审查中排除",
+        "excludeAria": "将 {copy} 从审查中排除",
+        "excluding": "正在排除…",
+        "failed": "无法排除该文件夹。",
+        "note": "在你排除之前，副本会留在地图上并标记为副本，其线路和发现会归并到原件之下。"
+      },
+      "partitionPicker": {
+        "label": "显示某个分区的文件"
       },
       "api": {
         "notSetUpTitle": "未找到端点",

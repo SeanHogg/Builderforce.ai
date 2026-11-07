@@ -654,11 +654,19 @@ export function createObjectRegistry(db: Db, env: Env, readGates: RelationReadGa
       getRecents(db, env, tenantId, actorRef, opts),
     register: (input: Parameters<typeof registerObject>[2]) => registerObject(db, env, input),
 
-    activity: (tenantId: number, id: string, limit?: number) => getObjectActivity(db, env, tenantId, id, limit),
+    activity: async (tenantId: number, id: string, viewerRef: string | null | undefined, limit?: number) => {
+      await readable(tenantId, id, viewerRef);
+      return getObjectActivity(db, env, tenantId, id, limit);
+    },
 
-    annotations: (tenantId: number, id: string, opts?: { kind?: string; limit?: number }) =>
-      getObjectAnnotations(db, env, tenantId, id, opts),
-    addAnnotation: (input: Parameters<typeof addAnnotation>[2]) => addAnnotation(db, env, input),
+    annotations: async (tenantId: number, id: string, viewerRef: string | null | undefined, opts?: { kind?: string; limit?: number }) => {
+      await readable(tenantId, id, viewerRef);
+      return getObjectAnnotations(db, env, tenantId, id, opts);
+    },
+    addAnnotation: async (input: Parameters<typeof addAnnotation>[2]) => {
+      await writable(input.tenantId, input.objectId);
+      return addAnnotation(db, env, input);
+    },
 
     members: async (tenantId: number, id: string, viewerRef: string | null | undefined, limit?: number) => {
       await readable(tenantId, id, viewerRef);

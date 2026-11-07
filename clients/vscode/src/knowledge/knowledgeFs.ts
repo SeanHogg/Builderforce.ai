@@ -12,6 +12,7 @@
 import * as vscode from "vscode";
 import type { KnowledgeFs } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
+import type { IgnoreFilePort } from "./knowledgeExclude";
 
 /** Changes a watcher batches before reporting them. */
 const WATCH_DEBOUNCE_MS = 400;
@@ -89,6 +90,28 @@ export function workspaceKnowledgeFiles(folderPath: string): KnowledgeFiles {
     },
     async rename(from, to) {
       await fs.rename(vscode.Uri.joinPath(dir, from), vscode.Uri.joinPath(dir, to), { overwrite: true });
+    },
+  };
+}
+
+/** A root's `.builderforce/ignore` through the workspace fs; a write goes to a temp file first and replaces the ignore file by rename (atomic). */
+export function rootIgnoreFile(rootPath: string): IgnoreFilePort {
+  const dir = vscode.Uri.joinPath(uriOf(rootPath), ".builderforce");
+  const target = vscode.Uri.joinPath(dir, "ignore");
+  const temp = vscode.Uri.joinPath(dir, "ignore.tmp");
+  const fs = vscode.workspace.fs;
+  return {
+    async read() {
+      try {
+        return new TextDecoder().decode(await fs.readFile(target));
+      } catch {
+        return undefined;
+      }
+    },
+    async write(text) {
+      await fs.createDirectory(dir);
+      await fs.writeFile(temp, new TextEncoder().encode(text));
+      await fs.rename(temp, target, { overwrite: true });
     },
   };
 }
