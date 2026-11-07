@@ -23,6 +23,7 @@ import { requestedReadWindow, trimToolResult } from '../toolResultBudget';
 import { stillInWorkingContext } from '@seanhogg/builderforce-memory/working';
 import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
+import { isTicketRecordingTool } from '../chatWorkLinking';
 import { attachDeltaToRunTicket, autoLinkCreatedItem } from './runBackstops';
 import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
@@ -114,7 +115,11 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         // …and the goal, in the user's words: a child sees none of this conversation.
         request: run.goal,
         ...(req.projectId != null ? { projectId: req.projectId } : {}),
-        afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool!, toolName, out),
+        afterCreate: async (toolName, out) => {
+          // A hand-off ticket filed with the editor's own create tool is recorded work too.
+          if (isTicketRecordingTool(toolName)) c.ticketRecorded = true;
+          await autoLinkCreatedItem(run.serverChatId, c, runTool!, toolName, out);
+        },
         step: (label, args, out, durationMs) => pushTrace(c, {
           ts: nowIso(), category: 'tool', label, durationMs, args, result: out ?? null, isError: isFailedToolResult(out),
         }),

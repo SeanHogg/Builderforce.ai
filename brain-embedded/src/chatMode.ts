@@ -30,6 +30,7 @@
  */
 
 import { chatWorkLinkingDirective } from './chatWorkLinking';
+import type { TicketToolVocabulary } from './ticketToolVocabulary';
 
 /** The modes a conversation can be in. Order is display order. */
 export const CHAT_MODES = ['chat', 'work'] as const;
@@ -149,6 +150,8 @@ export interface ChatWorkDirectiveOptions {
   canFanOut?: boolean;
   /** The agents invited into this chat. Non-empty INVERTS the do-it-here ordering. */
   roster?: readonly ChatRosterAgent[];
+  /** Which tools file a ticket on this surface (`ticketToolVocabulary`). Absent ⇒ the account's. */
+  ticketTools?: TicketToolVocabulary;
 }
 
 /**
@@ -270,7 +273,7 @@ export function chatWorkDirective(chatId: number | null, opts?: ChatWorkDirectiv
     : ' If the work is something you could do here, do it instead.';
   return (
     `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\n` +
-    `${chatWorkLinkingDirective(chatId)}\n` +
+    `${chatWorkLinkingDirective(chatId, opts?.ticketTools)}\n` +
     whoIsHere +
     ordering +
     finish +

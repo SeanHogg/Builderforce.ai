@@ -6,23 +6,17 @@
  * (`builtin_tasks_create`, …) are not offered (`localDomainToolRouting.ts`). A write
  * lands on this device and the journal event it appended is what the batched
  * local-first sync later carries to the account; no ticket is ever one API request.
- * (The injected `platformPolicy`/`platformTool` path below is for other hosts and
- * tests; the editor host never wires it.)
  *
  * Rules this module owns:
  *
  *   • No network. `bfApi`, `platformTools`, the gateway, `vscode` and `fetch` are
- *     NOT imported. The platform path exists only as an INJECTED caller, so a
- *     denied run cannot reach one by accident — and there is no code path that
- *     turns a local write into a platform request.
+ *     NOT imported, and there is no code path that turns a local write into a
+ *     platform request.
  *   • The repository is a PORT (`LocalWorkRepositoryPort`), not an import of a
  *     live singleton: the host passes the G05 repository
  *     (`createLocalWorkRepository`, or the `localWorkManagement` adapter another
  *     slice owns) and a test passes a fake. Nothing here constructs a store or
  *     reads global state.
- *   • Local is the DEFAULT. `platformPolicy` is optional; omitting it — or an
- *     `allows()` that throws, or returns anything but `true` — keeps the write local.
- *     The editor host omits it entirely.
  *   • A server MCP tool, cloud execution, meeting join and remote session read are
  *     CONNECTED-ONLY: refused with a code, never queued as offline history, and
  *     never silently substituted with a local write (G06's "classify the rest").
@@ -57,12 +51,8 @@ import {
   type TicketTaskType,
   type TicketValue,
 } from "@builderforce/local-first";
-import {
-  DEFAULT_TICKET_STATUS,
-  LOCAL_TICKET_STATUSES,
-  createLocalWorkRepository,
-  type LocalWorkRepositoryOptions,
-} from "./localWorkRepository";
+import { createLocalWorkRepository, type LocalWorkRepositoryOptions } from "./localWorkRepository";
+import { DEFAULT_TICKET_STATUS, LOCAL_TICKET_STATUSES } from "./localWorkShared";
 
 // The classification table is the package's (`packages/local-first/src/domainToolClass.ts`),
 // the ONE copy. This host performs only the names it has a repository write for
@@ -86,9 +76,9 @@ export function classifyLocalDomainTool(name: string): LocalDomainToolMode {
 export type LocalDomainToolErrorCode =
   | "unknown_domain_tool"
   | "connected_only_tool"
-  | "platform_tool_required"
   | "tool_arguments_required"
   | "invalid_arguments"
+  | "server_only_ticket"
   | "invalid_status";
 
 export class LocalDomainToolError extends Error {
@@ -121,6 +111,7 @@ export interface LocalTicketPatch {
   description?: string;
   priority?: string;
   assignedUserId?: string;
+  taskType?: TicketTaskType;
 }
 
 /**
@@ -177,17 +168,6 @@ export function createInMemoryLocalSyncQueue(): LocalDomainSyncQueue & { readonl
   };
 }
 
-// ── Policy and the platform caller ───────────────────────────────────────────
-
-export interface LocalDomainPlatformPolicy {
-  allows(tool: LocalDomainToolName): boolean;
-}
-
-export type LocalDomainPlatformCaller = (
-  tool: LocalDomainToolName,
-  args: Readonly<Record<string, unknown>>,
-) => Promise<unknown>;
-
 // ── Results ──────────────────────────────────────────────────────────────────
 
 export interface LocalDomainToolResult {
@@ -199,25 +179,19 @@ export interface LocalDomainToolResult {
   record?: LocalRecord;
   /** The journal event this write produced and queued for sync. */
   syncEvent: QueuedLocalSyncEvent;
+  /** The account's numeric id for this record, once a sync receipt mapped it (normally absent at creation). */
+  serverId?: string;
+  /** What the id is and when builtin_* tools accept it. */
+  note?: string;
 }
 
-export interface PlatformDomainToolResult {
-  kind: "platform";
-  tool: LocalDomainToolName;
-  result: unknown;
-}
-
-export type LocalDomainToolExecution = LocalDomainToolResult | PlatformDomainToolResult;
+export type LocalDomainToolExecution = LocalDomainToolResult;
 
 export interface LocalDomainToolsOptions {
   repository: LocalWorkRepositoryPort;
   /** Reads back the journal event the repository's transaction appended. */
   store: LocalFirstStore;
   syncQueue: LocalDomainSyncQueue;
-  /** Omitted ⇒ every domain tool is denied. An `allows()` returning non-true denies. */
-  platformPolicy?: LocalDomainPlatformPolicy;
-  /** Only ever called when policy allows. Denied runs never reach it. */
-  platformTool?: LocalDomainPlatformCaller;
 }
 
 // ── Argument validation (before the store is touched) ─────────────────────────
@@ -306,6 +280,23 @@ async function resolveLocalReference(
   return raw;
 }
 
+/**
+ * The local id a `ticket-*` write targets. A numeric id is mapped to its local mirror by
+ * the same rule as `resolveLocalReference`; with no mirror the ticket exists only on the
+ * account, which these tools cannot edit — the model is told the tool that can.
+ */
+async function localTicketId(store: LocalFirstStore, args: Readonly<Record<string, unknown>>): Promise<string> {
+  const given = requireString(args, "id");
+  const id = await resolveLocalReference(store, "ticket", given);
+  if (SERVER_ID_NUMERIC.test(id.trim())) {
+    fail(
+      "server_only_ticket",
+      `Ticket ${given} exists only on the account (no local copy on this device). Use builtin_tasks_update for it; ticket-* tools edit tickets created on this device.`,
+    );
+  }
+  return id;
+}
+
 async function writeLocally(
   tool: LocalDomainToolName,
   repository: LocalWorkRepositoryPort,
@@ -364,7 +355,7 @@ async function writeLocally(
       return { entityType: "ticket", id: record.id, record };
     }
     case "ticket-update": {
-      const id = requireString(args, "id");
+      const id = await localTicketId(store, args);
       const patch: LocalTicketPatch = {};
       const title = optionalString(args, "title");
       if (args.title !== undefined && !title) fail("tool_arguments_required", "title must not be blank.");
@@ -377,20 +368,22 @@ async function writeLocally(
       if (args.priority !== undefined) patch.priority = priority ?? "";
       const assignedUserId = optionalString(args, "assignedUserId");
       if (assignedUserId !== undefined) patch.assignedUserId = assignedUserId;
+      const taskType = taskTypeOf(args).taskType;
+      if (taskType) patch.taskType = taskType;
       if (Object.keys(patch).length === 0) fail("tool_arguments_required", "Nothing to update.");
       return { entityType: "ticket", id, record: await repository.updateTicket(id, patch) };
     }
     case "ticket-move": {
-      const id = requireString(args, "id");
+      const id = await localTicketId(store, args);
       return { entityType: "ticket", id, record: await repository.changeTicketStatus(id, statusOf(args)) };
     }
     case "ticket-archive": {
-      const id = requireString(args, "id");
+      const id = await localTicketId(store, args);
       const archived = optionalFlag(args, "archived", true);
       return { entityType: "ticket", id, record: await repository.setTicketArchived(id, archived) };
     }
     case "ticket-delete": {
-      const id = requireString(args, "id");
+      const id = await localTicketId(store, args);
       await repository.deleteTicket(id);
       return { entityType: "ticket", id };
     }
@@ -438,29 +431,21 @@ async function queuedEventFor(
 
 // ── The factory ──────────────────────────────────────────────────────────────
 
-/** The frozen argument record handed to a platform caller. Never the local one. */
-function platformArgs(
-  tool: LocalDomainToolName,
-  args: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> {
-  return Object.freeze({ tool, ...args });
+/** The account id a sync receipt gave a record, when it has one yet. */
+async function serverIdOf(store: LocalFirstStore, record: LocalRecord | undefined): Promise<string | undefined> {
+  if (!record) return undefined;
+  const mapping = await store.read((tx) => tx.mapping(record.entityType, record.id, record.destination));
+  return mapping?.serverId;
 }
+
+const CREATE_NOTE =
+  "This is a LOCAL id (a UUID): use it with the ticket-* / project-* tools and as parentTicketId. It syncs to the account in the background; builtin_* tools accept it once synced.";
 
 /**
  * Build the local domain tool set. `execute` is the tool-catalog seam a host
  * binds; nothing here reaches a platform client.
  */
 export function createLocalDomainTools(options: LocalDomainToolsOptions) {
-  const allows = (tool: LocalDomainToolName): boolean => {
-    if (!options.platformPolicy) return false;
-    try {
-      return options.platformPolicy.allows(tool) === true;
-    } catch {
-      // A policy that cannot answer is not a grant.
-      return false;
-    }
-  };
-
   async function execute(
     tool: string,
     args: Readonly<Record<string, unknown>> = {},
@@ -475,17 +460,10 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
     }
     const name = normalizeDomainToolName(tool) as LocalDomainToolName;
 
-    // Resolved BEFORE the write: an explicit grant delegates to the platform and
-    // does not write locally, a denial takes the local path and never reaches a
-    // platform caller — not even after a local failure.
-    if (allows(name)) {
-      if (!options.platformTool) fail("platform_tool_required", `${name} is allowed but no platform caller is wired.`);
-      return { kind: "platform", tool: name, result: await options.platformTool(name, platformArgs(name, args)) };
-    }
-
     const write = await writeLocally(name, options.repository, options.store, args);
     const syncEvent = await queuedEventFor(options.store, write.entityType, write.id);
     options.syncQueue.enqueue([syncEvent]);
+    const serverId = await serverIdOf(options.store, write.record);
     return Object.freeze({
       kind: "local",
       tool: name,
@@ -493,6 +471,8 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
       id: write.id,
       ...(write.record ? { record: write.record } : {}),
       syncEvent,
+      ...(serverId ? { serverId } : {}),
+      ...(name === "ticket-create" || name === "project-create" ? { note: CREATE_NOTE } : {}),
     } as LocalDomainToolResult);
   }
 
@@ -501,8 +481,6 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
     /** The names a host may advertise as local adapters. */
     localTools: LOCAL_DOMAIN_TOOL_NAMES,
     classify: classifyLocalDomainTool,
-    /** True only when policy explicitly allows this tool right now. */
-    isPlatformAllowed: allows,
   };
 }
 
@@ -510,8 +488,8 @@ export type LocalDomainTools = ReturnType<typeof createLocalDomainTools>;
 
 /**
  * Convenience for a host that has a store and a device id but no repository yet:
- * build the G05 repository and the tool set together. Still no platform caller
- * and still not wired into activation — see the module header.
+ * build the G05 repository and the tool set together. Still not wired into
+ * activation — see the module header.
  */
 export function createLocalDomainToolsWithRepository(
   options: Omit<LocalDomainToolsOptions, "repository"> & {

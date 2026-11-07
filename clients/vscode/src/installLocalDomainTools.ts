@@ -18,8 +18,6 @@ import type { LocalFirstStore } from "@builderforce/local-first";
 import {
   createInMemoryLocalSyncQueue,
   createLocalDomainToolsWithRepository,
-  type LocalDomainPlatformCaller,
-  type LocalDomainPlatformPolicy,
   type LocalDomainSyncQueue,
   type LocalDomainTools,
   type LocalWorkRepositoryPort,
@@ -36,10 +34,6 @@ export interface LocalDomainToolPorts {
   localFirstStore?: LocalFirstStore;
   repository?: LocalWorkRepositoryPort;
   syncQueue?: LocalDomainSyncQueue;
-  platformPolicy?: LocalDomainPlatformPolicy;
-  /** Explicit grant for every landed domain tool. Omitted means denied. */
-  policyAllows?: boolean;
-  platformTool?: LocalDomainPlatformCaller;
 }
 
 export interface InstalledLocalDomainTools {
@@ -73,12 +67,6 @@ function storeOf(ports: LocalDomainToolPorts): LocalFirstStore {
   return ports.localFirstStore;
 }
 
-function policyOf(ports: LocalDomainToolPorts): LocalDomainPlatformPolicy | undefined {
-  if (ports.platformPolicy) return ports.platformPolicy;
-  if (ports.policyAllows === undefined) return undefined;
-  return { allows: () => ports.policyAllows === true };
-}
-
 export function installLocalDomainTools(
   ctx: object,
   ports: LocalDomainToolPorts = {},
@@ -88,14 +76,11 @@ export function installLocalDomainTools(
   const store = storeOf(ports);
   const deviceId = deviceIdOf(ports);
   const syncQueue = ports.syncQueue ?? createInMemoryLocalSyncQueue();
-  const platformPolicy = policyOf(ports);
   const tools = createLocalDomainToolsWithRepository({
     store,
     deviceId,
     syncQueue,
     ...(ports.repository ? { repository: ports.repository } : {}),
-    ...(platformPolicy ? { platformPolicy } : {}),
-    ...(ports.platformTool ? { platformTool: ports.platformTool } : {}),
   });
   const installed: InstalledLocalDomainTools = {
     tools,

@@ -125,7 +125,7 @@ export class Transaction implements LocalFirstTransaction {
 
   /** The pending event a key names, as of this transaction (committed minus acknowledged, plus appended). */
   private pendingForKey(key: string): JournalEvent | undefined {
-    const live = (event: JournalEvent): boolean => this.events.get(event.eventId) === event;
+    const live = (event: JournalEvent): boolean => !event.deadLetter && this.events.get(event.eventId) === event;
     return this.addedKeys.latest(key, live) ?? this.base.pendingKeys.latest(key, live);
   }
 
@@ -169,6 +169,13 @@ export class Transaction implements LocalFirstTransaction {
       this.events.delete(id);
       this.addedKeys.remove(event);
     }
+  }
+
+  async deadLetter(eventId: string, reason: string, at: string): Promise<void> {
+    this.assertMutable();
+    const event = this.events.get(eventId);
+    if (!event || event.deadLetter) return;
+    this.events.set(eventId, { ...event, deadLetter: { reason, at } });
   }
 
   async putMapping(mapping: ServerMapping): Promise<void> {

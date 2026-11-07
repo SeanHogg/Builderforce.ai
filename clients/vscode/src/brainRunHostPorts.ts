@@ -30,6 +30,7 @@ import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
 import { routeToLocalDomainTools } from "./localDomainToolRouting";
+import { ticketServerIdLookup } from "./localTicketIdBridge";
 import type { ToolDef } from "./fileTools";
 import { changeTouches, type LocalFirstStore } from "@builderforce/local-first";
 import type { LocalModelsConfig } from "./localModels";
@@ -94,7 +95,7 @@ function routeDomainToolsLocal(
   chatClientId?: string,
 ): readonly ToolDef[] {
   installHostDomainTools(ctx, store);
-  return routeToLocalDomainTools(tools, (request) => runInstalledDomainTool(ctx, request), chatClientId);
+  return routeToLocalDomainTools(tools, (request) => runInstalledDomainTool(ctx, request), chatClientId, ticketServerIdLookup(store));
 }
 
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {

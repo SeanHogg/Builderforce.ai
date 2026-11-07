@@ -24,6 +24,7 @@
  *
  * Kept framework-free (pure strings + Sets) so it is safe in every bundle.
  */
+import { LOCAL_TICKET_CREATE_TOOL, SERVER_TICKET_LINK_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
 
 /**
  * Advertised (gateway `builtin_*`) names of the platform tools that RECORD work
@@ -34,6 +35,8 @@ export const TICKET_RECORDING_TOOLS: ReadonlySet<string> = new Set([
   'builtin_tickets_from_delta',
   'builtin_chats_link_ticket',
   'builtin_reviews_record',
+  // The editor's device-local create: it IS the recording (it links its own chat once synced).
+  LOCAL_TICKET_CREATE_TOOL,
 ]);
 
 /**
@@ -268,20 +271,31 @@ export function codeChangeFile(args: unknown): string | null {
  * change → from_delta tied to this chat. Uses the advertised `builtin_*` tool names
  * the model actually sees on the gateway MCP relay.
  */
-export function chatWorkLinkingDirective(chatId: number | null): string {
+export function chatWorkLinkingDirective(chatId: number | null, tickets: TicketToolVocabulary = SERVER_TICKET_TOOLS): string {
   // An unbound local chat (PRD 36) has no platform chat to link to: it gets the same
   // obligations without a chatId — never a made-up one, which named someone else's chat.
   const linked = chatId != null;
+  // How a ticket is FILED depends on the surface (`ticketToolVocabulary.ts`): the account's
+  // create + link + kanban-scoping tools, or the editor's one device-local `ticket-create`.
+  const createBullet = tickets.local
+    ? `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically — do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.\n`
+    : `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked && tickets.needsLinkStep ? ` AND link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}, linkType="created")` : ''}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n`;
+  const scopingBullet = tickets.kanbanScoping
+    ? `• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n`
+    : `• A ticket filed with ${tickets.createName} is on this device first. The builtin_kanban_* resource-scoping tools address the account's tickets, so use them on a ticket only once it has synced (they answer plainly when it has not); file the work first and scope, staff and coordinate it afterwards.\n`;
+  const statusTool = tickets.local
+    ? `ticket-move (id=<its local id>, status="in_progress") for a ticket filed here, or builtin_tasks_update (id=<the ticket's ref>, status="in_progress") for one that exists only on the account`
+    : `builtin_tasks_update (id=<the ticket's ref>, status="in_progress")`;
   return (
     (linked
       ? `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:\n`
       : `This conversation lives only on this machine — it has no platform chat to link work to, so never pass a chatId and do not call builtin_chats_link_ticket or builtin_chats_list_tickets. Still make the work visible on the board:\n`) +
-    `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked ? ` AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created")` : ''}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n` +
-    `• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n` +
+    createBullet +
+    scopingBullet +
     (linked
       ? `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n`
       : `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.\n`) +
-    `• Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? 'linked ' : ''}task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` +
+    `• Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? 'linked ' : ''}task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with ${statusTool}. When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` +
     (linked
       ? `\n• Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`
       : `\n• Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`)

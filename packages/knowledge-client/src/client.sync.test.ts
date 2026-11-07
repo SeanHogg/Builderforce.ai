@@ -60,6 +60,18 @@ describe('client.sync (PRD 41 A11)', () => {
     expect(await client.syncHave('r', asked)).toEqual([true, true, false]);
   });
 
+  it('keeps the error code of a 422 (bad_pack, not_owned) so the pump can tell a defect from a refusal', async () => {
+    const { client } = clientWith(() => json({ error: 'a tombstone names a key this root never synced', code: 'not_owned' }, 422));
+    await expect(client.sync('r', { bytes: new Uint8Array([1]) })).rejects.toMatchObject({ status: 422, code: 'not_owned' });
+  });
+
+  it('writeRows posts rows only, stamped with the root, to the single writer', async () => {
+    const { client, calls } = clientWith(() => json({ ok: true }));
+    await client.writeRows('r', { facts: [{ key: 'note:1', content: 'c', source: 's', importance: 0.5, origin: 'human', fileAnchors: [] }], relations: [] });
+    expect(calls[0]!.path).toBe('/api/projects/5/knowledge/write');
+    expect(JSON.parse(calls[0]!.init!.body as string)).toMatchObject({ root: 'r', facts: [{ key: 'note:1' }], relations: [] });
+  });
+
   it('reads leaves back', async () => {
     const body = await encodePack({ rootId: 'r', baseGeneration: 2, targetDigest: ZERO_DIGEST, leaves: [{ key: 'f:a', digest: 'd'.repeat(64) }] });
     const { client } = clientWith(() => reply(body as unknown as BodyInit));

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore, UNBOUND_DESTINATION } from "@builderforce/local-first";
 import { LOCAL_DOMAIN_TOOL_NAMES, LocalDomainToolError, classifyLocalDomainTool } from "./localDomainTools";
+import { LOCAL_DOMAIN_TOOL_SPECS } from "./localDomainToolRouting";
 import {
   HOST_DOMAIN_TOOL_LINE,
   installLocalDomainTools,
@@ -11,19 +12,16 @@ import {
 function deniedHost(deviceId = "device-1") {
   const store = createMemoryLocalFirstStore();
   const ctx = { id: `host-${deviceId}-${Math.random()}` };
-  const platformTool = vi.fn(async () => ({ platform: true }));
   const installed = installLocalDomainTools(ctx, {
     getConfig: (key) => (key === "builderforce.localDeviceId" ? deviceId : undefined),
     localFirstStore: store,
-    policyAllows: false,
-    platformTool,
   });
-  return { store, installed, platformTool };
+  return { store, installed };
 }
 
 describe("installLocalDomainTools", () => {
   it("installs the landed domain tools and writes a local project and ticket when the platform is denied", async () => {
-    const { store, installed, platformTool } = deniedHost();
+    const { store, installed } = deniedHost();
     expect([...installed.tools.localTools]).toEqual([...LOCAL_DOMAIN_TOOL_NAMES]);
 
     const project = await installed.execute({
@@ -37,7 +35,6 @@ describe("installLocalDomainTools", () => {
       title: "Ship offline",
     });
 
-    expect(platformTool).not.toHaveBeenCalled();
     expect(ticket.kind).toBe("local");
     if (ticket.kind !== "local") return;
     expect(ticket.record?.payload).toMatchObject({
@@ -61,32 +58,11 @@ describe("installLocalDomainTools", () => {
     ]);
   });
 
-  it("calls the platform tool and writes nothing when policy allows", async () => {
-    const store = createMemoryLocalFirstStore();
-    const platformTool = vi.fn(async () => ({ platform: true }));
-    const installed = installLocalDomainTools({ id: "allowed" }, {
-      localDeviceId: "device-1",
-      localFirstStore: store,
-      policyAllows: true,
-      platformTool,
-    });
-    const outcome = await installed.execute({
-      tool: "project-create",
-      args: { name: "Online" },
-    });
-    expect(outcome).toMatchObject({ kind: "platform", tool: "project-create", result: { platform: true } });
-    expect(platformTool).toHaveBeenCalledTimes(1);
-    expect(await store.read((tx) => tx.pending())).toEqual([]);
-    expect(await store.read((tx) => tx.list("project"))).toEqual([]);
-    expect(installed.syncQueue).toMatchObject({ queued: [] });
-  });
-
-  it("refuses an unknown tool without calling the platform", async () => {
-    const { installed, platformTool, store } = deniedHost();
+  it("refuses an unknown or connected-only tool and writes nothing", async () => {
+    const { installed, store } = deniedHost();
     const request = { tool: "not-a-tool", args: {} } satisfies DomainToolRequest;
     await expect(installed.execute(request)).rejects.toBeInstanceOf(LocalDomainToolError);
     await expect(installed.execute("cloud-execution", {})).rejects.toMatchObject({ code: "connected_only_tool" });
-    expect(platformTool).not.toHaveBeenCalled();
     expect(await store.read((tx) => tx.pending())).toEqual([]);
   });
 
@@ -162,30 +138,14 @@ describe("the run host installs the local domain tools", () => {
     // The tool list the run actually executes is wrapped, not merely built.
     expect(source).toMatch(/routeDomainToolsLocal\(\s*ctx\s*,\s*local\.store\s*,\s*catalog\s*,/);
     expect(source).toMatch(/function routeDomainToolsLocal/);
-    // Local is unconditional in the editor: no platform policy decides it, and the
-    // adapter is never given a platform caller.
-    expect(source).not.toMatch(/platformPolicy|allows\(\s*"synchronize"\s*\)/);
-    expect(source).not.toMatch(/platformTool|policyAllows/);
-    // Only a name the landed classifier calls "local" is repointed at the writer.
-    const routing = readFileSync(new URL("./localDomainToolRouting.ts", import.meta.url), "utf8");
-    expect(routing).toMatch(/classifyLocalDomainTool\(\s*tool\.name\s*\)\s*===\s*"local"/);
   });
 
   it("advertises only tool names the landed library actually implements", () => {
-    const source = readFileSync(new URL("./localDomainToolRouting.ts", import.meta.url), "utf8");
-    const block = source.slice(
-      source.indexOf("export const LOCAL_DOMAIN_TOOL_SPECS"),
-      source.indexOf("/** The tools whose request is stamped"),
-    );
-    expect(block).not.toBe("");
-    const advertised = [...block.matchAll(/name:\s*"([^"]+)"/g)].map((match) => match[1]);
+    const advertised = LOCAL_DOMAIN_TOOL_SPECS.map((spec) => spec.name as string);
     expect(advertised.length).toBeGreaterThan(0);
-    // memory-recall is not landed: classifyLocalDomainTool answers "unknown", so
-    // advertising it would offer the model a tool that always throws.
+    // memory-recall is not landed: advertising it would offer the model a tool that always throws.
     expect(advertised).not.toContain("memory-recall");
-    for (const name of advertised) {
-      expect(classifyLocalDomainTool(name)).toBe("local");
-    }
+    for (const name of advertised) expect(classifyLocalDomainTool(name)).toBe("local");
   });
 
   it("binds the adapter lazily so a fresh install cannot crash the host", () => {

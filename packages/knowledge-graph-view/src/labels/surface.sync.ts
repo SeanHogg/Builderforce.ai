@@ -8,7 +8,7 @@ export interface SyncLabels {
     sync: Record<
         'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
         | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh' | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate'  | 'setUpV8Request' | 'turnOnRequest' | 'excludedNone' | 'excludedFolder' | 'diagnosticsTitle' | 'resend' | 'resendNote' | 'deltaLoading' | 'parityTitle' | 'countPair' | 'parityAll' | 'parityMissing'
-        | 'replicaTitle' | 'replicaIdle' | 'replicaSending' | 'replicaWaiting' | 'replicaWhy429' | 'replicaWhyNetwork' | 'replicaWhyServer' | 'replicaFailedRow' | 'replicaLastSync' | 'replicaPack' | 'replicaParts'
+        | 'replicaTitle' | 'replicaIdle' | 'replicaSending' | 'replicaWaiting' | 'replicaWhy429' | 'replicaWhyNetwork' | 'replicaWhyServer' | 'replicaFailedRow' | 'replicaLastSync' | 'replicaPack' | 'replicaParts' | 'replicaUnitB' | 'replicaUnitKB' | 'replicaUnitMB'
         | 'replicaPausedAuth' | 'replicaPausedUnreachable' | 'replicaPausedProject'
         | 'replicaReasonAuth' | 'replicaReasonBadRequest' | 'replicaReasonTooLarge' | 'replicaReasonRate' | 'replicaReasonServer' | 'replicaReasonNetwork' | 'replicaReasonOther',
         string
@@ -81,6 +81,10 @@ export const SYNC_DEFAULTS: SyncLabels = {
         replicaPack: 'Last pack: {size}, {percent}% of its JSON size ({files} files).',
         /** {sent} of {total} parts the server has, {left} still to send. */
         replicaParts: 'Sending part {sent} of {total} ({left} left).',
+        /** A byte size, `{value}` already formatted for the reader's locale. */
+        replicaUnitB: '{value} B',
+        replicaUnitKB: '{value} KB',
+        replicaUnitMB: '{value} MB',
         replicaPausedAuth: 'Paused: sign in again to continue sending.',
         replicaPausedUnreachable: 'Paused: the server cannot be reached.',
         replicaPausedProject: 'Paused: this workspace is linked to another project.',

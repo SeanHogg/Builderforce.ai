@@ -176,13 +176,39 @@ export function wireDependencies(events: readonly JournalEvent[], allPending: re
   });
 }
 
-function batchEvents(events: readonly JournalEvent[], maxEvents: number, maxBytes: number): { batch: JournalEvent[]; bytes: number } {
+/**
+ * A refusal that is the server's fault, not the event's: retrying later can succeed, so the
+ * event is held (sent last, never dead-lettered) instead of given up on.
+ */
+const RETRYABLE_REJECTION = /_(write|insert)_failed$/;
+
+/**
+ * Pick the next batch. `held` are events the server last answered `dependency_pending` or
+ * `conflict`: they are re-sent LAST so they cannot fill the batch ahead of independent work, and
+ * their dependents (transitively) are skipped this round, since the server would only hold them
+ * too. Dead-lettered events are never sent.
+ */
+function batchEvents(
+  events: readonly JournalEvent[],
+  maxEvents: number,
+  maxBytes: number,
+  held: ReadonlySet<string> = new Set(),
+): { batch: JournalEvent[]; bytes: number } {
   const pending = new Set(events.map((event) => event.eventId));
+  const behindHeld = new Set<string>();
+  for (const event of events) {
+    if (event.dependsOn.some((id) => held.has(id) || behindHeld.has(id))) behindHeld.add(event.eventId);
+  }
+  const ordered = [
+    ...events.filter((event) => !held.has(event.eventId)),
+    ...events.filter((event) => held.has(event.eventId)),
+  ];
   const selected: JournalEvent[] = [];
   const selectedIds = new Set<string>();
   let bytes = 0;
-  for (const event of events) {
-    if (selected.length >= maxEvents || event.deadLetter) continue;
+  for (const event of ordered) {
+    if (selected.length >= maxEvents) break;
+    if (event.deadLetter || behindHeld.has(event.eventId)) continue;
     if (event.dependsOn.some((id) => pending.has(id) && !selectedIds.has(id))) continue;
     const size = jsonBytes(event);
     if (selected.length > 0 && bytes + size > maxBytes) break;
@@ -198,6 +224,28 @@ function batchEvents(events: readonly JournalEvent[], maxEvents: number, maxByte
   return { batch: selected, bytes };
 }
 
+/**
+ * Give up on `event` and on every pending event that (transitively) depends on it: the server
+ * will never hold the parent, so a dependent would be answered `dependency_pending` forever.
+ * `selectPending` is in sequence order, so one pass reaches the whole chain.
+ */
+async function deadLetterWithDependents(
+  tx: LocalFirstTransaction,
+  destination: EntityDestination,
+  event: JournalEvent,
+  reason: string,
+  at: string,
+): Promise<void> {
+  await tx.deadLetter(event.eventId, reason, at);
+  const dead = new Set([event.eventId, ...(event.idempotencyKey !== undefined ? [event.idempotencyKey] : [])]);
+  for (const next of await selectPending(tx, undefined, destination)) {
+    if (!next.dependsOn.some((id) => dead.has(id))) continue;
+    await tx.deadLetter(next.eventId, 'dependency_dead_lettered', at);
+    dead.add(next.eventId);
+    if (next.idempotencyKey !== undefined) dead.add(next.idempotencyKey);
+  }
+}
+
 export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const maxEvents = options.maxEvents ?? 100;
   const maxBytes = options.maxBytes ?? 512 * 1024;
@@ -205,6 +253,8 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const newId = options.newId ?? (() => crypto.randomUUID());
   const now = options.now ?? (() => new Date());
   const owner = `local-first:${options.deviceId}`;
+  /** Events the server last held (`dependency_pending`, `conflict`, a retryable refusal): sent after fresh work. */
+  const held = new Set<string>();
 
   const pull = async (
     destination: EntityDestination,
@@ -259,7 +309,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     // coordinator's own destination argument is already bound, so this is
     // the per-record check the destination argument cannot express.
     const { syncable, refused } = partitionUnboundPending(pending);
-    const { batch, bytes } = batchEvents(syncable, maxEvents, maxBytes);
+    const { batch, bytes } = batchEvents(syncable, maxEvents, maxBytes, held);
     const summary: SyncSummary = {
       pulled: pulled.count,
       pushed: 0,
@@ -305,6 +355,16 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
           });
         }
         if (receipt.status === 'accepted' || receipt.status === 'duplicate') acknowledged.push(event.eventId);
+        if (receipt.status === 'rejected' && !RETRYABLE_REJECTION.test(receipt.detail ?? '')) {
+          // A permanent refusal: dead-letter it so it is neither re-sent first forever nor counted
+          // as pending work. Its dependents go with it.
+          await deadLetterWithDependents(tx, destination, event, receipt.detail ?? 'rejected', now().toISOString());
+        }
+        const holds = receipt.status === 'dependency_pending'
+          || receipt.status === 'conflict'
+          || (receipt.status === 'rejected' && RETRYABLE_REJECTION.test(receipt.detail ?? ''));
+        if (holds) held.add(event.eventId);
+        else held.delete(event.eventId);
       }
       await tx.acknowledge(acknowledged);
     });

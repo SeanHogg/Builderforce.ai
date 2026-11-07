@@ -30,6 +30,7 @@ import {
   ticketWaitsOn,
   type DestinationBinding,
   type EntityDestination,
+  type LocalFirstStore,
   type LocalFirstTransaction,
   type LocalRecord,
   type ProjectValue,
@@ -299,3 +300,12 @@ export async function commitRecord<T>(
   return next;
 }
 
+
+/** What each part of the repository is built from: the store, the clock, ids and the default stamp. */
+export interface WorkRepoContext extends CommitContext {
+  store: LocalFirstStore;
+  deviceId: string;
+  newId(): string;
+  /** The destination a new record takes: the explicit call, else the repository default. */
+  stampFor(proposed?: EntityDestination | DestinationBinding): EntityDestination;
+}

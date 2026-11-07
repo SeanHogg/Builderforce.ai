@@ -50,7 +50,12 @@ export async function selectRecords<T = unknown>(
   return clone(matches);
 }
 
-/** Pending events for which `where` holds, in sequence order, cloned — only the matches. */
+/**
+ * Pending events for which `where` holds, in sequence order, cloned — only the matches.
+ * A dead-lettered event (a permanent refusal the server will never accept) is NOT pending
+ * work: it stays in the journal for audit and status, but is skipped here so it can neither
+ * be re-sent nor starve the events behind it.
+ */
 export async function selectPending(
   tx: LocalFirstTransaction,
   where?: (event: Readonly<JournalEvent>) => boolean,
@@ -58,10 +63,21 @@ export async function selectPending(
 ): Promise<JournalEvent[]> {
   const matches: JournalEvent[] = [];
   await tx.scanPending((event) => {
+    if (event.deadLetter) return;
     if (!where || where(event)) matches.push(event as JournalEvent);
   }, destination);
   matches.sort((a, b) => a.localSequence - b.localSequence);
   return clone(matches);
+}
+
+/**
+ * How many events still have work to do for `destination` (all when omitted): the pending
+ * journal minus the dead-lettered. What a drain loop compares to know it is finished.
+ */
+export async function countPending(tx: LocalFirstTransaction, destination?: EntityDestination): Promise<number> {
+  let count = 0;
+  await tx.scanPending((event) => { if (!event.deadLetter) count += 1; }, destination);
+  return count;
 }
 
 export interface MemoryLocalFirstStoreOptions {

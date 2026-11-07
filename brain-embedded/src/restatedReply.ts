@@ -14,6 +14,7 @@
  */
 
 import type { ChatCompletionMessage } from './streamChatCompletion';
+import { SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
 
 /** Replies shorter than this many words are never judged — too little to be a loop. */
 export const RESTATED_MIN_WORDS = 40;
@@ -66,11 +67,11 @@ export function isRestatedReply(current: string, previous: string): boolean {
 }
 
 /** The correction the run is sent back with. */
-export function restatedReplyNudge(): string {
+export function restatedReplyNudge(tickets: TicketToolVocabulary = SERVER_TICKET_TOOLS): string {
   return [
     'Your reply repeats the status you already gave the user last turn — they have it. Do not restate it.',
     'Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.',
-    'If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.',
+    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName}${tickets.needsLinkStep ? ', linked to this chat' : ' — it links this chat itself'}) so the status lives on the board instead of in a repeated summary.`,
     'End with only what CHANGED this turn.',
   ].join('\n');
 }

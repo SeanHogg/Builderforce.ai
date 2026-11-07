@@ -111,6 +111,36 @@ describe('replica dirty set', () => {
         expect((await queue.snapshot()).analysis).toBeUndefined();
     });
 
+    it('keeps the pending analysis in its own file, never in the dirty file, and removes the file once a pack carried it', async () => {
+        let dirty: string | undefined, analysis: string | undefined;
+        const queue = createReplicaQueue(
+            { read: async () => dirty, write: async (t) => { dirty = t; } },
+            { analysis: { read: async () => analysis, write: async (t) => { analysis = t; }, remove: async () => { analysis = undefined; } } },
+        );
+        queue.markDirty(['f:a']);
+        queue.setAnalysis({ sha: 's1', snapshot: { blob: 'x'.repeat(5000) } });
+        await queue.flush();
+        expect(dirty).not.toContain('blob');
+        expect(JSON.parse(analysis!)).toMatchObject({ sha: 's1' });
+        // A new process finds it again.
+        const again = createReplicaQueue({ read: async () => dirty, write: async (t) => { dirty = t; } }, { analysis: { read: async () => analysis, write: async (t) => { analysis = t; }, remove: async () => { analysis = undefined; } } });
+        expect((await again.snapshot()).analysis?.sha).toBe('s1');
+        await again.settle(await again.snapshot(), { generation: 1, digest: 'd' }, [], true);
+        await again.flush();
+        expect(analysis).toBeUndefined();
+    });
+
+    it('moves an analysis found in the dirty file into its own file', async () => {
+        let dirty: string | undefined = JSON.stringify({ version: 2, dirty: [], analysis: { sha: 'old', snapshot: { n: 1 } } });
+        let analysis: string | undefined;
+        const queue = createReplicaQueue({ read: async () => dirty, write: async (t) => { dirty = t; } }, { analysis: { read: async () => analysis, write: async (t) => { analysis = t; }, remove: async () => { analysis = undefined; } } });
+        expect((await queue.snapshot()).analysis?.sha).toBe('old');
+        queue.markDirty(['f:x']);
+        await queue.flush();
+        expect(JSON.parse(dirty!).analysis).toBeUndefined();
+        expect(JSON.parse(analysis!)).toMatchObject({ sha: 'old' });
+    });
+
     it('replaceDirty makes the set exactly what a reconcile decided', async () => {
         const queue = createReplicaQueue(memoryReplicaPersistence());
         queue.markDirty(['f:a', 'f:b', 'f:c']);

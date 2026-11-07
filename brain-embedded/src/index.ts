@@ -384,6 +384,13 @@ export {
   planMessage,
 } from './planHandoff';
 export type { BriefContext, HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome } from './planHandoff';
+export {
+  LOCAL_TICKET_CREATE_TOOL,
+  SERVER_TICKET_CREATE_TOOL,
+  SERVER_TICKET_TOOLS,
+  ticketToolVocabulary,
+  type TicketToolVocabulary,
+} from './ticketToolVocabulary';
 // The run-driver seam: a host whose UI process is disposable (the VS Code webview)
 // executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
 export { applyRemoteRun } from './brainRunStore';

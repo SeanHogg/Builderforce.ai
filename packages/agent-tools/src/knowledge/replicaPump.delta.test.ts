@@ -105,6 +105,7 @@ describe('reconcile', () => {
         await pump(w, srv.client);
         // Another machine adds a file the server now holds; this one edits file 7.
         srv.s.files.set('other/new.ts', hashOf(900));
+        srv.s.leaves.set('f:other/new.ts', hashOf(900));      // the other machine's leaf: this root's, on the server
         srv.s.generation += 1;
         await w.review(7, 8, 1);
         srv.log.length = 0;

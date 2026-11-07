@@ -123,4 +123,4 @@ export {
   queueImport,
   type JournalWriteOptions,
 } from './journalRules.js';
-export { bindWorkForSync } from './workBinding.js';
+export { bindWorkForSync, ticketWaitsOn } from './workBinding.js';

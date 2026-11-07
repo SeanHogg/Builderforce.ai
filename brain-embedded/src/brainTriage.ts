@@ -23,6 +23,7 @@ import { formatStaffingSummary, staffingSummaryInTrace, workFiledNotStaffedVerdi
 import { parseMessageProvenance } from './provenance';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
+import { LOCAL_TICKET_CREATE_LABEL } from './ticketToolVocabulary';
 import { MAX_TOOL_RESULT_CHARS, READ_FILE_TOOL } from './toolResultBudget';
 import { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
 
@@ -156,7 +157,10 @@ const FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\
 /** Tool labels that CREATE or LINK a board work item. A "filed/created/linked the
  *  ticket" claim is only honest if one of these SUCCEEDED this run. Covers the create
  *  tools (tasks/objectives/specs/…) and the chat-link + from-delta tools. */
-const TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
+const TICKET_WRITE_TOOL = new RegExp(
+  `(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta|${LOCAL_TICKET_CREATE_LABEL.source}`,
+  'i',
+);
 
 /** Assistant prose that CLAIMS a ticket/gap/task was created, filed, or linked. */
 const TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;

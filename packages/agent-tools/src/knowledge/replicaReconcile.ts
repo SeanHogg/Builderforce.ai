@@ -58,10 +58,10 @@ export async function planReconcile(args: {
             ? { kind: 'equal', ack: { generation: server.generation, digest: server.digest } }
             : { kind: 'delta', touched: pending, baseGeneration: server.generation, owned: new Set() };
     }
-    // Every local row goes (the digest covers only the tree's leaves; the rest reach the project through side rows).
+    // Every LEAF goes — model rows and files. A person's note, an agent's fact or a row seeded from the project is
+    // not sent here: only those the dirty set names (written locally since) reach the project, through their own writer.
     if (server.digest === EMPTY_ROOT) {
-        const files = [...treeKeys].filter((k) => k.startsWith('f:'));
-        return { kind: 'full', touched: [...files, ...rowKeys], baseGeneration: server.generation };
+        return { kind: 'full', touched: [...new Set([...treeKeys, ...pending])], baseGeneration: server.generation };
     }
 
     const differing = differingBuckets(tree.buckets, server.buckets);

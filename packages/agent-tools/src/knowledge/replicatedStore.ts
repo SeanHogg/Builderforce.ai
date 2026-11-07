@@ -23,6 +23,7 @@
 
 import type { Extracted, KnowledgeStore, NodeRef, Scope, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { factDigest, relationDigest } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { pathOfRef } from './replicaPack.js';
 import { factKey, fileKey, relationKey, type ReplicaQueue } from './replicaQueue.js';
 
 /** The server's copy, read-only (a client store satisfies the first two). */
@@ -94,20 +95,13 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
         }
         return rowDigests;
     };
-    /** The source path of a ref of this root (the root id may itself contain colons). */
-    const pathOf = (ref: string, rootId: string | undefined): string => {
-        const prefix = rootId ? `src:${rootId}::` : undefined;
-        if (prefix && ref.startsWith(prefix)) return ref.slice(prefix.length);
-        const at = ref.indexOf('::');
-        return at >= 0 ? ref.slice(at + 2) : ref;
-    };
     /** Marks the file when its hash differs from the one held before ('' = removed). */
     const fileChanged = async (ref: string, rootId: string | undefined, hash: string): Promise<string[]> => {
         if (!replica) return [];
         const known = await knownHashes();
         if (known.get(ref) === hash) return [];
         if (hash) known.set(ref, hash); else known.delete(ref);
-        return [fileKey(pathOf(ref, rootId), hash)];
+        return [fileKey(pathOfRef(rootId ?? '', ref), hash)];
     };
 
     let humanSeeded = false;

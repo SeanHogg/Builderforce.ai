@@ -21,7 +21,8 @@
  */
 
 import type { DomainToolRequest } from "./installLocalDomainTools";
-import { classifyLocalDomainTool, type LocalDomainToolName } from "./localDomainTools";
+import type { LocalDomainToolName } from "./localDomainTools";
+import { bridgeLocalTicketIds, type TicketServerIdLookup } from "./localTicketIdBridge";
 import type { ToolDef } from "./fileTools";
 
 /**
@@ -85,7 +86,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
   {
     name: "ticket-create",
     description:
-      "Create a ticket on this device; it syncs to the account in the background (batched) when sync is on, and is linked to this chat automatically. Returns the local ticket id — use it as parentTicketId for children. File an epic first (taskType epic), then its tasks under it.",
+      "Create a ticket on this device; it syncs to the account in the background (batched) when sync is on. The returned id is a LOCAL id (a UUID): use it as parentTicketId for children and with the ticket-* tools. The ticket is linked to this chat automatically, but only when this run has a chat identity and sync is on. Once synced, the builtin_* ticket tools (builtin_tasks_update, builtin_kanban_*, dispatch) accept the local id too. File an epic first (taskType epic), then its tasks under it.",
     parameters: {
       type: "object",
       properties: {
@@ -110,11 +111,12 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
   {
     name: "ticket-update",
     description:
-      "Patch a ticket created on this device (local id); the change syncs to the account in the background (batched). For a ticket that exists only on the server (numeric id) use builtin_tasks_update.",
+      "Patch a ticket created on this device (its local UUID, or the numeric id once synced); the change syncs to the account in the background (batched). For a ticket that exists only on the server (numeric id) use builtin_tasks_update.",
     parameters: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Local ticket id to patch." },
+        id: { type: "string", description: "Local ticket id (UUID) to patch." },
+        taskType: { type: "string", enum: ["task", "epic", "gap"], description: "Reclassify the ticket." },
         title: { type: "string", description: "New ticket title." },
         description: { type: "string", description: "New ticket description." },
         priority: { type: "string", description: "New ticket priority." },
@@ -127,7 +129,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
   {
     name: "ticket-move",
     description:
-      "Change the status of a ticket created on this device (local id); the change syncs to the account in the background (batched). For a ticket that exists only on the server (numeric id) use builtin_tasks_update.",
+      "Change the status of a ticket created on this device (its local UUID, or the numeric id once synced); the change syncs to the account in the background (batched). For a ticket that exists only on the server (numeric id) use builtin_tasks_update.",
     parameters: {
       type: "object",
       properties: {
@@ -195,15 +197,18 @@ export function routeToLocalDomainTools(
   tools: readonly ToolDef[],
   run: (request: DomainToolRequest) => Promise<unknown>,
   chatClientId?: string,
+  ticketServerId?: TicketServerIdLookup,
 ): readonly ToolDef[] {
   const localExecute = (name: LocalDomainToolName): ToolDef["execute"] => async (args) =>
     JSON.stringify(await run({ tool: name, args: stampedArgs(name, args, chatClientId) }));
-  // A catalog entry is a domain tool only if the landed classifier says so; a
-  // name that merely looks like one is never repointed at the local writer.
+  // Only a name this module implements (LOCAL_DOMAIN_TOOL_SPECS) is repointed at the local
+  // writer; a catalog tool the package classifier merely calls "local" (memory-recall,
+  // project-move, …) has no repository write behind it and is left alone.
+  const specNames: ReadonlySet<string> = new Set(LOCAL_DOMAIN_TOOL_SPECS.map((spec) => spec.name));
   const routed = tools
     .filter((tool) => !SERVER_TWIN_TOOL_NAMES.has(tool.name))
     .map((tool) =>
-      classifyLocalDomainTool(tool.name) === "local"
+      specNames.has(tool.name)
         ? { ...tool, remote: false, execute: localExecute(tool.name as LocalDomainToolName) }
         : tool,
     );
@@ -211,5 +216,7 @@ export function routeToLocalDomainTools(
   const added = LOCAL_DOMAIN_TOOL_SPECS.filter((spec) => !present.has(spec.name)).map(
     (spec): ToolDef => ({ ...spec, execute: localExecute(spec.name) }),
   );
-  return added.length === 0 ? routed : [...routed, ...added];
+  const all = added.length === 0 ? routed : [...routed, ...added];
+  // The account's own ticket tools take numeric ids; translate a local id to its server id.
+  return ticketServerId ? bridgeLocalTicketIds(all, ticketServerId) : all;
 }

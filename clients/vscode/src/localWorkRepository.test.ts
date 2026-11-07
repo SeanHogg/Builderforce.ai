@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryLocalFirstStore, UNBOUND_DESTINATION } from "@builderforce/local-first";
 import {
-  createLocalWorkRepository,
-  creationDestination,
-  isSignedInTenantLure,
-  LocalWorkRepositoryError,
-} from "./localWorkRepository";
+  bindWorkForSync,
+  createMemoryLocalFirstStore,
+  importKey,
+  newLocalRecord,
+  queueImport,
+  UNBOUND_DESTINATION,
+} from "@builderforce/local-first";
+import { createLocalWorkRepository } from "./localWorkRepository";
+import { creationDestination, isSignedInTenantLure, LocalWorkRepositoryError } from "./localWorkShared";
 
 /** A VS Code authentication session, the shape `auth.ts` actually builds. */
 const SIGNED_IN_SESSION = {
@@ -258,5 +261,63 @@ describe("localWorkRepository", () => {
     expect(plain.payload).not.toHaveProperty("taskType");
     expect(plain.payload).not.toHaveProperty("chatClientId");
     expect((await repo.getTicket(plain.id)).payload.title).toBe("Plain");
+  });
+
+  it("persists a taskType patch on update", async () => {
+    const { repo } = harness();
+    const project = await repo.createProject({ name: "Board" });
+    const ticket = await repo.createTicket({ projectId: project.id, title: "Grows up" });
+    const updated = await repo.updateTicket(ticket.id, { taskType: "epic" });
+    expect(updated.payload.taskType).toBe("epic");
+    expect((await repo.getTicket(ticket.id)).payload.taskType).toBe("epic");
+  });
+
+  describe("a row bound by the sync pass whose import has not been received yet", () => {
+    const boundTo = { kind: "bound", accountId: "acct-1", tenantId: "tenant-a" } as const;
+    const CHAT = "22222222-2222-4222-8222-222222222222";
+
+    async function boundHarness() {
+      const { store, repo } = harness();
+      const project = await repo.createProject({ name: "Board" });
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Original", chatClientId: CHAT });
+      await bindWorkForSync(store, "device-1", boundTo);
+      return { store, repo, project, ticket };
+    }
+    const pendingFor = async (store: ReturnType<typeof harness>["store"], id: string) =>
+      (await store.read((tx) => tx.pending())).filter((event) => event.clientEntityId === id);
+
+    it("REPLACES the pending import with the newest state instead of appending a local-baseVersion update", async () => {
+      const { store, repo, project, ticket } = await boundHarness();
+      await repo.updateTicket(ticket.id, { title: "Edited in the window" });
+      await repo.changeTicketStatus(ticket.id, "done");
+      const pending = await pendingFor(store, ticket.id);
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({ operation: "import", idempotencyKey: importKey("ticket", ticket.id) });
+      expect(pending[0]?.payload).toMatchObject({ title: "Edited in the window", status: "done" });
+      // It keeps the waits the bind gave it: the chat and the project.
+      expect(pending[0]?.dependsOn).toEqual([importKey("chat", CHAT), importKey("project", project.id)]);
+    });
+
+    it("sends nothing for a ticket deleted before the server ever saw it", async () => {
+      const { store, repo, ticket } = await boundHarness();
+      await repo.deleteTicket(ticket.id);
+      expect(await pendingFor(store, ticket.id)).toEqual([]);
+    });
+
+    it("makes a ticket created now wait on the project's and the chat's CURRENT pending event (the import)", async () => {
+      const { store, repo, project } = await boundHarness();
+      await store.transact(async (tx) => {
+        const chat = newLocalRecord<unknown>({
+          id: CHAT, entityType: "chat", payload: { clientId: CHAT }, deviceId: "device-1", destination: boundTo,
+          occurredAt: "2026-11-07T00:00:00.000Z",
+        });
+        await tx.put(chat);
+        await queueImport(tx, chat);
+      });
+      const child = await repo.createTicket({ projectId: project.id, title: "Created after bind", chatClientId: CHAT });
+      const [event] = await pendingFor(store, child.id);
+      expect(event?.operation).toBe("create");
+      expect(event?.dependsOn).toEqual([importKey("project", project.id), importKey("chat", CHAT)]);
+    });
   });
 });

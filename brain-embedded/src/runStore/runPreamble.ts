@@ -17,6 +17,7 @@ import { chatModeDirective, normalizeChatMode } from '../chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from '../turnOptimization';
 import { selfReviewShipDirective } from '../selfReviewShip';
 import { previewReviewDirective } from '../previewReview';
+import { ticketToolVocabulary } from '../ticketToolVocabulary';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
 import { CacheServedStreak } from '@builderforce/agent-run';
@@ -204,7 +205,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // capability separately — and a host that gains or loses the file tools stays
   // consistent with the post-run backstop, which reads the same set.
   const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster })}\n\n${turnOptimizationDirective()}`;
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster, ticketTools: ticketToolVocabulary(catalogToolNames) })}\n\n${turnOptimizationDirective()}`;
   // A session that can commit AND push holds the only copy of its change — nobody else
   // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
   // Rides both modes: it only binds a turn that changes code.
@@ -212,7 +213,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(serverChatId)}`;
   // The Studio's twin: its change lives in a preview no one else can reach, so the
   // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(serverChatId)}`;
+  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
   // The tool work of this chat's earlier turns, which a transcript seeded from history
   // does not carry — so "continue" builds on what was read instead of reading it again.
   if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;

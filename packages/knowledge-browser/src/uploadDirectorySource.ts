@@ -49,6 +49,8 @@ export function createUploadDirectorySource(files: readonly File[], host: string
   return {
     rootId,
     title,
+    // list() hashes a text file with contentHash(file.text()); the review re-hashes the text read() returns.
+    hashOf: contentHash,
     async *list() {
       for (const [path, file] of byPath(picked)) {
         const hash = hashesByContent(path, file.size)

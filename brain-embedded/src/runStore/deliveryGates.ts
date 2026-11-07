@@ -7,6 +7,7 @@
 
 import { undelegatedRequestNudge } from '@builderforce/agent-run';
 import { isRestatedReply, restatedReplyNudge } from '../restatedReply';
+import { ticketToolVocabulary } from '../ticketToolVocabulary';
 import { leftChangeUnreviewed, unreviewedChangeNudge } from '../previewReview';
 import { leftChangeUnshipped, unshippedChangeNudge } from '../selfReviewShip';
 import { runLeftDelegationUndone } from './earlyDelegation';
@@ -68,7 +69,7 @@ export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
       id: 'brain.restate',
       entersVerify: false,
       applies: (text) => !run.restateRecoveryUsed && isRestatedReply(text, priorReply),
-      nudge: restatedReplyNudge,
+      nudge: () => restatedReplyNudge(ticketToolVocabulary(catalogToolNames)),
       trace: { label: 'loop.recover_restated_reply', args: () => ({}), result: "Final reply repeated the previous turn's answer — re-prompted to act on the next unfinished item instead of restating it." },
       spend: () => { run.restateRecoveryUsed = true; },
     },

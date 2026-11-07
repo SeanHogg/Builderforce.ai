@@ -23,8 +23,9 @@ describe('the replica row reads the pack (PRD 41 A11 rule 6)', () => {
     });
 
     it('sizes read in B, KB and MB', () => {
-        expect(packBytes(312)).toMatch(/312 B/);
-        expect(packBytes(2048)).toMatch(/2 KB/);
+        expect(packBytes(L, 312)).toMatch(/312 B/);
+        expect(packBytes(L, 2048)).toMatch(/2 KB/);
+        expect(packBytes({ ...L, surface: { ...L.surface, sync: { ...L.surface.sync, replicaUnitKB: '{value} Ko' } } }, 2048)).toMatch(/2 Ko/);
     });
 
     it('the phase counts dirty keys, and the pill shows the parts while a pack goes', () => {

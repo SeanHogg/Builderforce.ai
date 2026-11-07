@@ -24,6 +24,7 @@
 
 import type { BrainToolSpec } from './streamChatCompletion';
 import { RESOLVE_OPEN_ISSUES, VERIFY_DELEGATION_STEP, VERIFY_STEP, overlappingScopes } from '@builderforce/agent-tools';
+import { ticketToolVocabulary } from './ticketToolVocabulary';
 
 export const HAND_OFF_TOOL = 'hand_off';
 
@@ -38,7 +39,8 @@ export const FAN_OUT_BATCH = 4;
 /** Tasks one plan may carry. Beyond this the plan is a roadmap, not a hand-off. */
 export const MAX_HAND_OFF_TASKS = 12;
 
-const TASK_CREATE_TOOL = 'builtin_tasks_create';
+/** A ticket's reference: the account's numeric id, or the editor's local id (a UUID). */
+export type TicketRef = number | string;
 
 export const HAND_OFF_TOOL_SPEC: BrainToolSpec = {
   type: 'function',
@@ -156,7 +158,7 @@ const MAX_REQUEST_CHARS = 2_000;
  * how it is accepted, the planner's summary of the research and the run's record of what
  * was already read. How it REPORTS is its standing instructions (`subagentSystemPrompt`).
  */
-export function childTaskBrief(task: HandOffTask, ctx: BriefContext, ticketId?: number): string {
+export function childTaskBrief(task: HandOffTask, ctx: BriefContext, ticketId?: TicketRef): string {
   const request = ctx.request?.trim();
   return [
     ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
@@ -183,7 +185,7 @@ export function canRunInParallel(tasks: readonly HandOffTask[]): boolean {
 }
 
 /** The plan as the user reads it in the chat. */
-export function planMessage(plan: HandOffPlan, ticketIds: ReadonlyArray<number | undefined>, parallel: boolean): string {
+export function planMessage(plan: HandOffPlan, ticketIds: ReadonlyArray<TicketRef | undefined>, parallel: boolean): string {
   const lines = plan.tasks.map((t, i) => {
     const id = ticketIds[i];
     return `${i + 1}. ${id != null ? `#${id} ` : ''}${t.title}${t.paths.length ? ` — ${t.paths.join(', ')}` : ''}`;
@@ -219,7 +221,7 @@ export interface HandOffPorts {
 export interface HandOffOutcome {
   ok: boolean;
   mode: 'parallel' | 'inline';
-  tickets: Array<{ title: string; id?: number }>;
+  tickets: Array<{ title: string; id?: TicketRef }>;
   workstreams?: unknown[];
   changedFiles?: string[];
   /** Placeholders the children wrote, for the run's placeholder guard. */
@@ -249,19 +251,27 @@ async function call(ports: HandOffPorts, name: string, args: Record<string, unkn
 
 /** File one ticket per task. A task whose ticket fails still runs — the work matters more
  *  than its card, and the run's own delta backstop will still record what changed. */
-async function fileTickets(plan: HandOffPlan, ports: HandOffPorts): Promise<Array<number | undefined>> {
-  if (ports.projectId == null || !ports.toolNames.has(TASK_CREATE_TOOL)) return plan.tasks.map(() => undefined);
-  const ids: Array<number | undefined> = [];
+async function fileTickets(plan: HandOffPlan, ports: HandOffPorts): Promise<Array<TicketRef | undefined>> {
+  // Whichever create tool the catalog carries: the account's (numeric ids) or the editor's
+  // device-local `ticket-create` (local ids; it links its chat itself).
+  const vocabulary = ticketToolVocabulary(ports.toolNames);
+  const createTool = vocabulary.createTool;
+  if (ports.projectId == null || !createTool) return plan.tasks.map(() => undefined);
+  const ids: Array<TicketRef | undefined> = [];
   for (const task of plan.tasks) {
-    const out = await call(ports, TASK_CREATE_TOOL, {
-      projectId: ports.projectId,
+    const out = await call(ports, createTool, {
+      // The local tool takes its project as text; the account's takes the number.
+      projectId: vocabulary.local ? String(ports.projectId) : ports.projectId,
       title: task.title,
       description: ticketDescription(task, plan.summary),
       taskType: 'task',
     });
-    const id = !isFailed(out) ? (out as { id?: unknown }).id : undefined;
-    ids.push(typeof id === 'number' ? id : undefined);
-    if (!isFailed(out)) await ports.afterCreate?.(TASK_CREATE_TOOL, out).catch(() => undefined);
+    // A host may hand the result back as JSON text.
+    const record = asRecord(out);
+    const failed = isFailed(record ?? out);
+    const id = !failed ? record?.id : undefined;
+    ids.push(typeof id === 'number' || (vocabulary.local && typeof id === 'string' && id) ? id : undefined);
+    if (!failed) await ports.afterCreate?.(createTool, out).catch(() => undefined);
   }
   return ids;
 }

@@ -29,6 +29,7 @@
  */
 
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import { SERVER_TICKET_LINK_TOOL, SERVER_TICKET_TOOLS, type TicketToolVocabulary } from './ticketToolVocabulary';
 import { canReviewInPreview, isCodeChangeTool, PREVIEW_REVIEW_TOOL } from './localWorkspaceTools';
 
 const REVIEW_RECORD_TOOL = 'builtin_reviews_record';
@@ -37,10 +38,11 @@ const REVIEW_RECORD_TOOL = 'builtin_reviews_record';
  * The directive. Uses the names the model sees: `canvas_*` for the Studio's own tools,
  * `builtin_*` for the platform ones (which also pins those into the advertised set).
  */
-export function previewReviewDirective(chatId: number | null): string {
+export function previewReviewDirective(chatId: number | null, tickets: TicketToolVocabulary = SERVER_TICKET_TOOLS): string {
   // The Studio's chats are server chats; an unbound one (PRD 36) names its ticket directly.
   const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : 'the ticket you recorded the change against';
-  const linkFirst = chatId != null ? ` If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first.` : '';
+  // A ticket filed with the editor's `ticket-create` is linked to its chat by the create itself.
+  const linkFirst = chatId != null && tickets.needsLinkStep ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : '';
   return (
     'REVIEW YOUR OWN CHANGE — in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute — even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:\n' +
     '1. VERIFY — `canvas_read_build_diagnostics` must show no current failures. Then call `canvas_inspect_preview` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card\'s height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (`occludedBy`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.\n' +

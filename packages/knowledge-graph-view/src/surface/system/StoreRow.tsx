@@ -58,7 +58,6 @@ export interface NotLayeredRowProps {
 
 /** "Not layered · N parts → List": one button, never a tile per station. */
 export function NotLayeredRow({ stations, labels, onOpen }: NotLayeredRowProps) {
-    const s = labels.surface.system;
     if (stations.length === 0) return null;
     const text = counted(labels, 'notLayered', stations.length);
     return (

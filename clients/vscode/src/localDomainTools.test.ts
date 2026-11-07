@@ -14,9 +14,7 @@ import {
 /** A destination an explicit Connect would bind to. The tools never invent one. */
 const ACCOUNT = Object.freeze({ kind: "bound", accountId: "acct-1", tenantId: "tenant-a" } as const);
 
-function harness(
-  overrides: { policyAllows?: boolean } = {},
-) {
+function harness() {
   const store: LocalFirstStore = createMemoryLocalFirstStore();
   let tick = 0;
   let ids = 0;
@@ -28,14 +26,7 @@ function harness(
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
   });
   const syncQueue = createInMemoryLocalSyncQueue();
-  // A denied policy is the default (G01) and the DEFAULT here: no policy object
-  // at all means every domain tool runs locally.
-  const tools: LocalDomainTools = createLocalDomainTools({
-    repository,
-    store,
-    syncQueue,
-    ...(overrides.policyAllows === undefined ? {} : { platformPolicy: { allows: () => overrides.policyAllows! } }),
-  });
+  const tools: LocalDomainTools = createLocalDomainTools({ repository, store, syncQueue });
   return { store, repository, syncQueue, tools };
 }
 
@@ -69,27 +60,17 @@ describe("localDomainTools", () => {
     expect(classifyLocalDomainTool("")).toBe("unknown");
   });
 
-  describe("with the platform denied", () => {
-    it("writes the local repository, queues a sync event, and never calls the platform", async () => {
-      const platformTool = vi.fn().mockRejectedValue(new Error("the platform must not be called"));
+  describe("local writes", () => {
+    it("writes the local repository and queues a sync event, with no network", async () => {
       const fetchSpy = vi
         .spyOn(globalThis, "fetch")
         .mockRejectedValue(new Error("network must not be used"));
 
-      // No platformPolicy at all — the G01 default. A platform caller IS wired,
-      // so a denied run that reached it would fail this test loudly.
       const { store, repository, syncQueue, tools } = harness();
-      const toolsWithCaller = createLocalDomainTools({
-        repository,
-        store,
-        syncQueue,
-        platformTool,
-      });
 
       try {
-        const created = await toolsWithCaller.execute("project-create", { name: "  Offline  ", key: "OFF" });
+        const created = await tools.execute("project-create", { name: "  Offline  ", key: "OFF" });
         expect(created.kind).toBe("local");
-        expect(platformTool).not.toHaveBeenCalled();
         expect(fetchSpy).not.toHaveBeenCalled();
 
         if (created.kind !== "local") throw new Error("expected a local result");
@@ -121,7 +102,6 @@ describe("localDomainTools", () => {
           entityType: "project",
           operation: "create",
         });
-        expect(tools.isPlatformAllowed("project-create")).toBe(false);
       } finally {
         fetchSpy.mockRestore();
       }
@@ -248,95 +228,13 @@ describe("localDomainTools", () => {
       expect(syncQueue.queued).toEqual([]);
     });
 
-    it("a refused write is not queued and does not fall back to the platform", async () => {
-      const platformTool = vi.fn().mockResolvedValue({ ok: true });
+    it("a refused write is not queued", async () => {
       const { repository, store, syncQueue } = harness();
-      const tools = createLocalDomainTools({ repository, store, syncQueue, platformTool });
+      const tools = createLocalDomainTools({ repository, store, syncQueue });
 
       await expect(tools.execute("ticket-create", { projectId: "no-such-project", title: "Orphan" })).rejects.toThrow(
         /no such local project/i,
       );
-      expect(platformTool).not.toHaveBeenCalled();
-      expect(syncQueue.queued).toEqual([]);
-    });
-
-    it("denies when the policy cannot answer, and when it grants only one tool", async () => {
-      const platformTool = vi.fn().mockResolvedValue({ ok: true });
-      const { repository, store, syncQueue } = harness();
-
-      const throwing = createLocalDomainTools({
-        repository,
-        store,
-        syncQueue,
-        platformTool,
-        platformPolicy: {
-          allows() {
-            throw new Error("policy store unreadable");
-          },
-        },
-      });
-      const denied = await throwing.execute("project-create", { name: "Still local" });
-      expect(denied.kind).toBe("local");
-      expect(platformTool).not.toHaveBeenCalled();
-
-      const partial = createLocalDomainTools({
-        repository,
-        store,
-        syncQueue,
-        platformTool,
-        platformPolicy: { allows: (tool) => tool === "ticket-create" },
-      });
-      const queuedAtStart = syncQueue.queued.length;
-      const local = await partial.execute("project-create", { name: "Local write" });
-      expect(local.kind).toBe("local");
-      const queuedAfterLocal = syncQueue.queued.length;
-      expect(queuedAfterLocal).toBe(queuedAtStart + 1);
-
-      const remote = await partial.execute("ticket-create", { projectId: "p", title: "t" });
-      expect(remote.kind).toBe("platform");
-      expect(platformTool).toHaveBeenCalledTimes(1);
-      expect(platformTool).toHaveBeenCalledWith("ticket-create", expect.objectContaining({ tool: "ticket-create" }));
-      // The granted platform call queued NOTHING: the platform owns that write,
-      // so there is no local record and no offline event to replay.
-      expect(syncQueue.queued).toHaveLength(queuedAfterLocal);
-    });
-  });
-
-  describe("with the platform allowed", () => {
-    it("delegates to the platform caller and does not write locally", async () => {
-      const { store, repository, syncQueue, tools } = harness({ policyAllows: true });
-      const platformTool = vi.fn().mockResolvedValue({ id: 7 });
-
-      const remote = await createLocalDomainTools({
-        repository,
-        store,
-        syncQueue,
-        platformPolicy: { allows: () => true },
-        platformTool,
-      }).execute("project-create", { name: "Server project" });
-
-      expect(remote).toEqual({ kind: "platform", tool: "project-create", result: { id: 7 } });
-      expect(platformTool).toHaveBeenCalledWith("project-create", { tool: "project-create", name: "Server project" });
-      // The platform path owns the write; nothing local, nothing queued.
-      expect(await repository.listProjects()).toEqual([]);
-      expect(syncQueue.queued).toEqual([]);
-      expect((await store.export()).events).toEqual([]);
-    });
-
-    it("fails closed when policy allows but no platform caller is wired", async () => {
-      const { repository, store, syncQueue } = harness({ policyAllows: true });
-      const tools = createLocalDomainTools({
-        repository,
-        store,
-        syncQueue,
-        platformPolicy: { allows: () => true },
-      });
-
-      await expect(tools.execute("project-create", { name: "Nowhere" })).rejects.toMatchObject({
-        code: "platform_tool_required",
-      });
-      // It did NOT quietly fall back to a local write.
-      expect(await repository.listProjects()).toEqual([]);
       expect(syncQueue.queued).toEqual([]);
     });
   });
@@ -455,5 +353,29 @@ describe("localDomainTools", () => {
       name: "LocalDomainToolError",
       code: "unknown_domain_tool",
     });
+  });
+});
+describe("ticket-* tools and numeric ids", () => {
+  it("maps a numeric id to the local mirror, and tells the model to use builtin_tasks_update for a server-only ticket", async () => {
+    const { store, repository, tools } = harness();
+    const project = await repository.createProject({ name: "P" });
+    const ticket = await repository.createTicket({ projectId: project.id, title: "Mirrored" });
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: ACCOUNT, entityType: "ticket", clientEntityId: ticket.id, serverId: "321", serverVersion: 1 });
+    });
+    const moved = await tools.execute("ticket-move", { id: "321", status: "done" });
+    expect(moved.id).toBe(ticket.id);
+    await tools.execute("ticket-update", { id: "321", taskType: "epic" });
+    expect((await repository.getTicket(ticket.id)).payload).toMatchObject({ status: "done", taskType: "epic" });
+    await expect(tools.execute("ticket-delete", { id: "999" })).rejects.toMatchObject({ code: "server_only_ticket" });
+    await expect(tools.execute("ticket-update", { id: "999", title: "x" })).rejects.toThrow(/builtin_tasks_update/);
+  });
+
+  it("reports the server id and a note on a create result", async () => {
+    const { tools } = harness();
+    const project = await tools.execute("project-create", { name: "P" });
+    const created = await tools.execute("ticket-create", { projectId: project.id, title: "T" });
+    expect(created.note).toMatch(/LOCAL id/);
+    expect(created.serverId).toBeUndefined();
   });
 });

@@ -60,6 +60,12 @@ export interface LocalFirstTransaction {
    */
   scanPending(visit: ScanPendingVisit, destination?: EntityDestination): Promise<void>;
   acknowledge(eventIds: readonly string[]): Promise<void>;
+  /**
+   * Give up on a pending event the server permanently refused: it stays in the journal (audit,
+   * sync status `dead-letter`) but is no longer pending work — `selectPending` skips it, a
+   * later append under its idempotency key is a new event. Idempotent; an unknown id is a no-op.
+   */
+  deadLetter(eventId: string, reason: string, at: string): Promise<void>;
   putMapping(mapping: ServerMapping): Promise<void>;
   mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
   /**

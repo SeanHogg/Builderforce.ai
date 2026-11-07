@@ -24,6 +24,7 @@ import * as vscode from "vscode";
 import {
   SCAN_STOP,
   bindWorkForSync,
+  countPending,
   createDeviceStoreCoordinatorLease,
   createHttpSyncTransport,
   type LocalFirstChange,
@@ -84,11 +85,7 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     // One synchronize pushes one batch; drain so a big program of tickets goes up in this pass.
     await drainSync({
       round: () => installed.coordinator.synchronize(destination),
-      pending: () => local.store.read(async (tx) => {
-        let count = 0;
-        await tx.scanPending(() => { count += 1; }, destination);
-        return count;
-      }),
+      pending: () => local.store.read((tx) => countPending(tx, destination)),
     });
     // A receipt moved usage onto the platform: re-read its figure rather than serve the
     // cached one, which the device's own estimate no longer covers for those rows.
@@ -137,9 +134,9 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     if (!destination) return;
     void local.store.read(async (tx) => {
       let pending = false;
-      await tx.scanPending(() => { pending = true; return SCAN_STOP; }, destination);
+      await tx.scanPending((event) => { if (!event.deadLetter) { pending = true; return SCAN_STOP; } }, destination);
       if (!pending) {
-        await tx.scanPending((event) => { if (SYNC_SLICE.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
+        await tx.scanPending((event) => { if (!event.deadLetter && SYNC_SLICE.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
       }
       return pending;
     })

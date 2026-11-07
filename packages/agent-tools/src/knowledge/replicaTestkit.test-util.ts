@@ -110,6 +110,7 @@ export function fakeServer() {
                 ...(pack.deletes?.files ?? []).map((id) => `f:${id}`), ...(pack.deletes?.facts ?? []).map(factLeafKey), ...(pack.deletes?.relations ?? []).map(relationLeafKey),
             ];
             if (tomb.some((k) => !s.leaves.has(k))) throw fail(422, 'not_owned');
+            const saved = { files: new Map(s.files), facts: new Map(s.facts), relations: new Map(s.relations), leaves: new Map(s.leaves), bodies: new Map(s.bodies) };
             for (const x of pack.extracted ?? []) {
                 s.bodies.set(x.hash, x.kind === 'full' ? x.entries : applyEntryDiffs(s.bodies.get(x.prior) ?? [], x.entries));
             }
@@ -120,12 +121,22 @@ export function fakeServer() {
             for (const k of pack.deletes?.facts ?? []) s.facts.delete(k);
             for (const r of pack.deletes?.relations ?? []) s.relations.delete(relationKey(r));
             for (const k of tomb) s.leaves.delete(k);
+            if (pack.targetDigest !== ZERO_DIGEST && tree().root !== pack.targetDigest) {
+                // A transaction: nothing the pack did is kept.
+                s.files = saved.files; s.facts = saved.facts; s.relations = saved.relations; s.leaves = saved.leaves; s.bodies = saved.bodies;
+                throw fail(409, 'digest_mismatch');
+            }
             s.generation += 1;
             return { applied: true as const, generation: s.generation, digest: tree().root };
         },
         syncManifest: async () => { log.push({ kind: 'manifest' }); const t = tree(); return { generation: s.generation, digest: t.root, buckets: t.buckets }; },
         syncLeaves: async (_r, ids) => { log.push({ kind: 'leaves' }); const t = tree(); return { generation: s.generation, leaves: ids.flatMap((b) => t.leaves.get(b) ?? []) }; },
         syncHave: async (_r, hashes) => { log.push({ kind: 'have' }); return hashes.map((h) => s.bodies.has(h)); },
+        writeRows: async (_r, rows) => {
+            s.sideWrites.push({ facts: [...rows.facts], relations: [...rows.relations] });
+            for (const f of rows.facts) s.facts.set(f.key, f);
+            for (const r of rows.relations) s.relations.set(relationKey(r), r);
+        },
     };
     return { s, client, log, tree, syncs: () => log.filter((l) => l.kind === 'sync') };
 }
