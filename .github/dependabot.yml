@@ -89,6 +89,10 @@ updates:
       # `@types/vscode` must not exceed `engines.vscode` (vsce refuses to package):
       # it moves only together with the engines floor, by hand.
       - dependency-name: '@types/vscode'
+      # docs-site is on Astro 5; Starlight 0.35+ requires a newer Astro (peer
+      # ERESOLVE breaks `npm ci`). Move Starlight only together with Astro, by hand.
+      - dependency-name: '@astrojs/starlight'
+        update-types: [version-update:semver-minor, version-update:semver-major]
     commit-message:
       prefix: 'chore(deps)'
       prefix-development: 'chore(dev-deps)'
