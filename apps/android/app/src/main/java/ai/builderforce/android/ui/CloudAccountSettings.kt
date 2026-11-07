@@ -44,6 +44,7 @@ fun CloudAccountSettings(account: CloudAccount) {
   val workspaceId by account.workspaceId.collectAsState()
   val baseUrlOverride by account.baseUrlOverride.collectAsState()
   val problem by account.problem.collectAsState()
+  val workspaceSignInNeeded by account.workspaceSignInNeeded.collectAsState()
   var server by remember(baseUrlOverride) { mutableStateOf(baseUrlOverride) }
 
   LaunchedEffect(signedIn) {
@@ -79,6 +80,13 @@ fun CloudAccountSettings(account: CloudAccount) {
           }
         },
       )
+      if (workspaceSignInNeeded) {
+        Text(
+          stringResource(R.string.settings_account_workspace_signin_needed),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error,
+        )
+      }
       OutlinedButton(onClick = account::signOut) { Text(stringResource(R.string.settings_account_sign_out)) }
     } else {
       Text(stringResource(R.string.settings_account_signed_out), color = MaterialTheme.colorScheme.onSurfaceVariant)

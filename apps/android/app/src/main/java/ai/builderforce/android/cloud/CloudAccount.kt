@@ -37,6 +37,7 @@ class CloudAccount(
   val signedIn: StateFlow<Boolean> = session.signedIn
   val expired: StateFlow<Boolean> = session.expired
   val workspaceId: StateFlow<Long?> = session.workspaceId
+  val workspaceSignInNeeded: StateFlow<Boolean> = session.workspaceSignInNeeded
   val baseUrlOverride: StateFlow<String> = config.baseUrlOverride
 
   private val _signIn = MutableStateFlow<SignInState>(SignInState.Idle)

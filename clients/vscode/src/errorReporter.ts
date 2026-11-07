@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 
 import { classifyQueue, isDurableUserWorkQueue, isTelemetryQueue } from "@builderforce/write-outbox";
-import { authedRaw } from "./bfApi";
+import { authedRaw, isWorkspaceParked } from "./bfApi";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "./outboxStorage";
 import { getSelectedProject } from "./projectState";
 
@@ -154,6 +154,8 @@ export async function reportExtensionError(
   const message = error instanceof Error ? error.message : String(error);
   logLine(`[${details.operation}] ${message}`);
 
+  // Expected and self-healing (the selected workspace's re-scope is parked): logged, never filed.
+  if (isWorkspaceParked(error)) return;
   if (!isErrorReportingEnabled()) return;
 
   reports.enqueue(laneOf(getSelectedProject()?.id ?? null), {

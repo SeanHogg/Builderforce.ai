@@ -40,6 +40,14 @@ const http = (status: number): never => {
   throw Object.assign(new Error(`HTTP ${status}`), { status });
 };
 
+describe("errorReporter skips the parked-workspace refusal", () => {
+  it("returns before enqueueing when the error is a parked workspace", () => {
+    const skip = reporter.indexOf("if (isWorkspaceParked(error)) return;");
+    expect(skip).toBeGreaterThan(-1);
+    expect(skip).toBeLessThan(reporter.indexOf("reports.enqueue(laneOf("));
+  });
+});
+
 describe("errorReporter drop-on-failure", () => {
   it("wires error-reports to the classifier's drop-on-failure, and does not register a dead letter", () => {
     expect(classifyQueue("error-reports")?.onFailure).toBe("drop-on-failure");

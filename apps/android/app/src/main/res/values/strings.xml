@@ -197,6 +197,7 @@
     <string name="settings_account_signed_out">Not signed in. Open Chat to sign in.</string>
     <string name="settings_account_workspace">Workspace</string>
     <string name="settings_account_workspace_none">Choose a workspace</string>
+    <string name="settings_account_workspace_signin_needed">This sign-in cannot switch workspaces. Sign out and sign in again to switch.</string>
     <string name="settings_account_sign_out">Sign out</string>
     <string name="settings_account_server">Server (developer)</string>
     <string name="settings_account_server_note">Leave blank for builderforce.ai.</string>

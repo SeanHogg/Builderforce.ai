@@ -1,3 +1,9 @@
+## ✅ RESOLVED 2026-11-06 — Every VS Code `/api` call acts in the selected workspace or fails; mobile handles the workspace-switch refusals (VS Code 2026.10.135)
+
+- **VS Code.** `fetchAuthed`/`authed` default to `asTenant: "current"` — a call whose token isn't the selected workspace's throws `WorkspaceParkedError` (`workspace_parked`, localized "can't be reached right now, will retry"; `reportExtensionError` skips it) instead of silently reading/writing the key's workspace. Opt-out `"any"` only for person-level calls (`/api/vscode/me`, `GET`/`POST /api/tenants`). The dead `rescopeUnsupported` 404 latch is retired, so the workspace header and the acting tenant can't disagree.
+- **Android / iOS `CloudSession`.** One classifier for the switch response: 401 → key rejected (sign-out); `session_stale` → re-mint once, then fall back keeping the selection; `editor_key_required` → drop the selection, raise `workspaceSignInNeeded` (Android shows a localized line under the picker; no sign-out — deliberately unlike VS Code); other 403/404 → drop. A stale in-flight exchange can no longer wipe a newer selection.
+- **Not compiled here:** the Android Kotlin build (no SDK on this machine) and the Swift build (no toolchain) — reviewed by Opus, compile in CI/on device. iOS has no workspace picker yet (ROADMAP).
+
 ## ✅ RESOLVED 2026-11-06 — VS Code model turns and platform tools ran in the editor key's workspace, not the selected one; BYO turns failed `byo_unavailable` (VS Code 2026.10.135 · api 2026.10.98)
 
 - **The bug (chat #47863).** `/api/*` re-scoped to the selected workspace through the minted JWT, but every gateway call (`/llm/v1/*`: model turns, the `builtin_*` MCP relay, models, run outcomes) sent the raw `bfk_` key, and `requireTenantAccess` pinned it to the key's tenant. The selected workspace's connected accounts read `other-workspace`, BYO turns 503'd, and platform tools 403'd on its projects.

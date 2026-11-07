@@ -195,6 +195,7 @@
     <string name="settings_account_signed_out">未登录。打开聊天即可登录。</string>
     <string name="settings_account_workspace">工作区</string>
     <string name="settings_account_workspace_none">选择工作区</string>
+    <string name="settings_account_workspace_signin_needed">此登录无法切换工作区。请退出后重新登录以切换。</string>
     <string name="settings_account_sign_out">退出登录</string>
     <string name="settings_account_server">服务器（开发者）</string>
     <string name="settings_account_server_note">留空则使用 builderforce.ai。</string>

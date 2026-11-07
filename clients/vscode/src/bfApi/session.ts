@@ -17,7 +17,6 @@ import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../gatewayAuth
 let baseJwt: { token: string; exp: number; tenantId: number } | undefined;
 let scopedJwt: { token: string; exp: number; tenantId: number } | undefined;
 let selectedTenantId: number | undefined;
-let rescopeUnsupported = false; // set once the switch endpoint 404s (not deployed) — stop retrying
 
 /** Set the active workspace (tenant) to act as. `undefined` = the key's own tenant. */
 export function setSelectedWorkspace(tenantId: number | undefined): void {
@@ -87,13 +86,10 @@ export function signedInTenantId(): number | undefined {
   return baseJwt ? selectedTenantId ?? baseJwt.tenantId : undefined;
 }
 
-/**
- * The tenant calls actually act as: the selected workspace, unless re-scoping is not
- * deployed (then the key's own tenant). `undefined` until known.
- */
+/** The tenant calls are meant to act as: the selected workspace, else the key's own. `undefined` until known. */
 function effectiveTenantId(): number | undefined {
   if (!baseJwt) return selectedTenantId;
-  return rescopeUnsupported ? baseJwt.tenantId : selectedTenantId ?? baseJwt.tenantId;
+  return selectedTenantId ?? baseJwt.tenantId;
 }
 
 /** The workspace (tenant) `/api/*` calls act as right now — undefined until signed in.
@@ -242,12 +238,12 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
   let base = await exchangeBaseJwt(secrets, force);
   if (!base) return undefined;
   const target = selectedTenantId ?? base.tenantId;
-  if (target === base.tenantId || rescopeUnsupported) return base.token;
+  if (target === base.tenantId) return base.token;
   if (!force && scopedJwt && scopedJwt.tenantId === target && Date.now() < scopedJwt.exp - 60_000) {
     return scopedJwt.token;
   }
-  // Re-scope to another of the user's workspaces. Degrades to the base token: 404 =
-  // endpoint not deployed (latch off), 403 = no longer a member (drop the selection).
+  // Re-scope to another of the user's workspaces. Degrades to the base token:
+  // 403 = no longer a member (drop the selection); any other refusal parks.
   try {
     // A stale base token (minted before the server stamped its key id, or its key just
     // renewed) is answered 401 / `session_stale`: re-mint the base ONCE and ask again.
@@ -259,11 +255,6 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
       });
       // Signed out or re-keyed meanwhile (as in `exchangeBaseJwt`): nothing here is ours to keep.
       if (epoch !== jwtEpoch) return undefined;
-      if (res.status === 404) {
-        rescopeUnsupported = true;
-        syncOutboxScope();
-        return base.token;
-      }
       const errorBody = res.status === 403 || res.status === 401 ? await res.json().catch(() => null) : null;
       const stale = res.status === 401 || (res.status === 403 && (errorBody as { code?: unknown } | null)?.code === "session_stale");
       if (stale && attempt === 0) {
@@ -317,7 +308,6 @@ export function clearJwt(): void {
   delete exchanges.forced;
   baseJwt = undefined;
   scopedJwt = undefined;
-  rescopeUnsupported = false;
   // Signed out (or re-keying): durable writes hold until the next identity is known.
   setOutboxScope({ workspace: undefined });
   // The SELECTION survives a re-key: gateway calls keep naming it until the next exchange.

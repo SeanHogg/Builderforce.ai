@@ -47,6 +47,9 @@ public actor CloudSession {
     nonisolated let http: any CloudHTTPClient
     private var workspaceID: Int?
     private var token: Token?
+    /// This sign-in cannot switch workspaces (a legacy key): a fresh sign-in fixes it. Non-fatal —
+    /// the key still works in its own workspace. Surfaces say `ChatStrings.workspaceSignInNeeded`.
+    public private(set) var workspaceSignInNeeded = false
 
     public init(apiKey: String, config: CloudConfig, http: any CloudHTTPClient, workspaceID: Int? = nil) {
         self.apiKey = apiKey
@@ -58,6 +61,7 @@ public actor CloudSession {
     /// Work in `id` from now on (`nil` = the workspace the key was minted for).
     public func setWorkspace(_ id: Int?) {
         self.workspaceID = id
+        self.workspaceSignInNeeded = false
         self.token = nil
     }
 
@@ -147,36 +151,78 @@ public actor CloudSession {
         if let token = self.token, token.expiresAt > Date().addingTimeInterval(Self.refreshMargin) {
             return token.value
         }
-        let fresh = try await self.exchange()
-        self.token = fresh
-        return fresh.value
+        while true {
+            let selected = self.workspaceID
+            let fresh = try await self.exchange()
+            // Actor reentrancy: a token minted for a superseded selection is discarded.
+            if self.workspaceID != selected { continue }
+            self.token = fresh
+            return fresh.value
+        }
     }
 
     /// A fresh token for the chosen workspace.
     private func exchange() async throws -> Token {
-        let keyBody = try CloudJSON.encode(["apiKey": self.apiKey])
-        let base: Minted
-        do {
-            base = try await self.mint(path: "/api/auth/tenant-api-key-token", bearer: nil, body: keyBody)
-        } catch CloudError.status(let code, _, _) where code == 400 || code == 401 {
-            throw CloudError.keyRejected
-        }
+        let base = try await self.mintBase()
         var minted = base
         if let wanted = self.workspaceID, wanted != base.tenantId {
-            do {
-                minted = try await self.mint(
-                    path: "/api/vscode/tenants/\(wanted)/token",
-                    bearer: base.token,
-                    body: Data("{}".utf8))
-            } catch CloudError.status(let code, _, _) where code == 403 || code == 404 {
-                // No longer a member there: fall back to the key's own workspace.
-                self.workspaceID = nil
-            }
+            minted = try await self.switchWorkspace(to: wanted, base: base)
         }
         return Token(
             value: minted.token,
             tenantID: minted.tenantId,
             expiresAt: Date().addingTimeInterval(TimeInterval(minted.expiresIn ?? 900)))
+    }
+
+    private func mintBase() async throws -> Minted {
+        let keyBody = try CloudJSON.encode(["apiKey": self.apiKey])
+        do {
+            return try await self.mint(path: "/api/auth/tenant-api-key-token", bearer: nil, body: keyBody)
+        } catch CloudError.status(let code, _, _) where code == 400 || code == 401 {
+            throw CloudError.keyRejected
+        }
+    }
+
+    /// The ONE classifier for the workspace switch (`/api/vscode/tenants/{id}/token`):
+    /// - 401: the key behind the token is dead -> `keyRejected`.
+    /// - 403 `session_stale`: the base token predates the server change; re-mint it once, and
+    ///   if that repeats work in the key's own workspace but KEEP the saved selection.
+    /// - 403 `editor_key_required`: this sign-in cannot switch; fall back, forget the selection
+    ///   and raise `workspaceSignInNeeded` (the key still works, so no sign-out).
+    /// - other 403/404: no longer a member; drop the selection and fall back.
+    private func switchWorkspace(to wanted: Int, base: Minted) async throws -> Minted {
+        var from = base
+        var retried = false
+        while true {
+            do {
+                return try await self.mint(
+                    path: "/api/vscode/tenants/\(wanted)/token",
+                    bearer: from.token,
+                    body: Data("{}".utf8))
+            } catch CloudError.status(let code, let message, let reason) {
+                switch (code, reason) {
+                case (401, _):
+                    throw CloudError.keyRejected
+                case (403, "session_stale"):
+                    if retried { return from }
+                    retried = true
+                    from = try await self.mintBase()
+                case (403, "editor_key_required"):
+                    // Deliberately unlike VS Code (which signs out): mobile keeps the session and drops the selection.
+                    // Actor reentrancy: only act if the selection was not changed during the await.
+                    if self.workspaceID == wanted {
+                        self.workspaceID = nil
+                        self.workspaceSignInNeeded = true
+                    }
+                    return base
+                case (403, _), (404, _):
+                    if self.workspaceID == wanted { self.workspaceID = nil }
+                    return base
+                default:
+                    throw CloudError.status(code: code, message: message, reason: reason)
+                }
+            }
+        }
     }
 
     private func mint(path: String, bearer: String?, body: Data) async throws -> Minted {

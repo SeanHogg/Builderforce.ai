@@ -20,7 +20,7 @@ export {
 } from "./bfApi/session";
 
 // Transport: the authenticated fetch every domain rides.
-export { authed, authedRaw, fetchAuthed } from "./bfApi/transport";
+export { authed, authedRaw, fetchAuthed, isWorkspaceParked, WorkspaceParkedError } from "./bfApi/transport";
 export type { AuthedInit } from "./bfApi/transport";
 
 // Identity and workspaces.

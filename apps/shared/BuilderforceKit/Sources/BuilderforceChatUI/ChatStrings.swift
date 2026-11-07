@@ -110,6 +110,13 @@ public enum ChatStrings {
         String(localized: "chat.error.server", defaultValue: "Builderforce answered with an error: \(message)", bundle: self.bundle)
     }
 
+    /// Shown where workspaces are switched when `CloudSession.workspaceSignInNeeded` is set.
+    public static var workspaceSignInNeeded: String {
+        text(
+            "chat.workspace.signInNeeded",
+            "This sign-in cannot switch workspaces. Sign out and sign in again to switch.")
+    }
+
     /// An error as a person reads it.
     public static func describe(_ error: any Error) -> String {
         switch error {

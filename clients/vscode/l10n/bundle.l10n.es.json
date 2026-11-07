@@ -1173,5 +1173,6 @@
   "The fix could not be undone cleanly: {0} Check the work tree with git status.": "La corrección no se pudo deshacer limpiamente: {0} Revisa el árbol de trabajo con git status.",
   "Git status could not be read after the fix.": "No se pudo leer el estado de Git después de la corrección.",
   "git {0} failed{1}": "git {0} falló{1}",
-  "knip removes every unused export in each of these files, not only the one the finding names.": "knip quita todas las exportaciones sin usar de cada uno de estos archivos, no solo la que nombra el hallazgo."
+  "knip removes every unused export in each of these files, not only the one the finding names.": "knip quita todas las exportaciones sin usar de cada uno de estos archivos, no solo la que nombra el hallazgo.",
+  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "El espacio de trabajo seleccionado no está disponible en este momento. BuilderForce lo reintentará automáticamente."
 }

@@ -284,8 +284,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### LLM gateway and routing `[agents]`
 
-- **VS Code `/api` calls that don't pin `asTenant` fall back to the key's tenant when the re-scope parks.** `bfApi/session.ts` `mintJwt` returns the base (key-tenant) token on 403/5xx/timeout; only ~16 call sites pass `asTenant`, so the rest read/write tenant A while B is selected. Next: default `fetchAuthed` to `asTenant: "current"` (fail closed). *Blocker: operator decision — a parked re-scope would then fail every unpinned `/api` call instead of degrading to A.*
-- **Mobile `CloudSession` doesn't handle `editor_key_required` from `POST /api/vscode/tenants/:id/token`.** Legacy NULL-client mobile keys silently lose workspace switching. Next: map the code to a re-sign-in prompt, as the VSIX `editorKeyGuard` does.
+- **iOS has no workspace picker.** `CloudAccount.swift` builds `CloudSession` without a `workspaceID` and nothing calls `setWorkspace`, so the shared kit's workspace switch (and its `workspaceSignInNeeded` flag + `chat.workspace.signInNeeded` string) never runs on iOS. Next: add a switcher to the iOS account screen that lists `workspaces()`, calls `setWorkspace`, and shows the sign-in-needed message — parity with Android `CloudAccountSettings`.
 - **Who may replace workspace subscriptions.** `/llm/provider-keys` and subscription OAuth routes check membership, not role, including PUT and DELETE. *Blocker: operator role policy.*
 - **Code turns resolved to MiniMax Flash with Grok and Kimi connected (chat #6).** Read the recorded `failovers` + `gateway.byo_seed`, then fix the account or the seed rule.
 - **Cloud runs have no C8 compression.** *Blocker: an ONNX image build.*

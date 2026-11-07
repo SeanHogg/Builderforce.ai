@@ -841,6 +841,41 @@
         }
       }
     },
+    "chat.workspace.signInNeeded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sign-in cannot switch workspaces. Sign out and sign in again to switch."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit dieser Anmeldung kann der Workspace nicht gewechselt werden. Melde dich ab und erneut an, um zu wechseln."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este inicio de sesión no puede cambiar de espacio de trabajo. Cierra sesión y vuelve a iniciarla para cambiar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette connexion ne permet pas de changer d’espace de travail. Déconnectez-vous puis reconnectez-vous pour changer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此登录无法切换工作区。请退出后重新登录以切换。"
+          }
+        }
+      }
+    },
     "chat.error.server": {
       "extractionState": "manual",
       "localizations": {

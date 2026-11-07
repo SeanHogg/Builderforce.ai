@@ -197,6 +197,7 @@
     <string name="settings_account_signed_out">Nicht angemeldet. Öffne den Chat, um dich anzumelden.</string>
     <string name="settings_account_workspace">Workspace</string>
     <string name="settings_account_workspace_none">Workspace auswählen</string>
+    <string name="settings_account_workspace_signin_needed">Mit dieser Anmeldung kann der Workspace nicht gewechselt werden. Melde dich ab und erneut an, um zu wechseln.</string>
     <string name="settings_account_sign_out">Abmelden</string>
     <string name="settings_account_server">Server (Entwickler)</string>
     <string name="settings_account_server_note">Leer lassen für builderforce.ai.</string>

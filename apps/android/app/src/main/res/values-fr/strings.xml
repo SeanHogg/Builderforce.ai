@@ -199,6 +199,7 @@
     <string name="settings_account_signed_out">Non connecté. Ouvrez le chat pour vous connecter.</string>
     <string name="settings_account_workspace">Espace de travail</string>
     <string name="settings_account_workspace_none">Choisir un espace de travail</string>
+    <string name="settings_account_workspace_signin_needed">Cette connexion ne permet pas de changer d\'espace de travail. Déconnectez-vous puis reconnectez-vous pour changer.</string>
     <string name="settings_account_sign_out">Se déconnecter</string>
     <string name="settings_account_server">Serveur (développeur)</string>
     <string name="settings_account_server_note">Laissez vide pour builderforce.ai.</string>

@@ -1,4 +1,4 @@
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { getBaseUrl } from "../gateway";
 import { trackReachability } from "../outboxStorage";
@@ -8,19 +8,45 @@ import { exchangeJwt, tenantOfToken, workspaceTenantId } from "./session";
  * A request init that may pin the tenant it must act as. A durable outbox replaying a
  * write passes the tenant the write was queued for; if the token at hand acts as any
  * other tenant the request is NOT sent — it fails (retriably) and the write waits.
+ *
+ * Omitted means `"current"` (fail closed): the request acts as the workspace selected NOW or
+ * is not sent, so a parked re-scope can never leave a call silently acting in the key's
+ * tenant while the UI shows another. `"any"` is the explicit opt-out for a call that is
+ * person-level / key-level (workspace list, create workspace, identity, key connection) and
+ * so is correct under whichever token is at hand. An EXPLICIT `asTenant: undefined` is the
+ * same as omitting it: it means "current" (an outbox replay with a null scope therefore
+ * requires the current workspace rather than escaping the check).
  */
-export type AuthedInit = RequestInit & { asTenant?: number | "current" };
+export type AuthedInit = RequestInit & { asTenant?: number | "current" | "any" };
+
+/**
+ * The selected workspace cannot be acted in right now (its re-scope is parked: refused,
+ * unreachable or timed out), so the request was NOT sent. Expected and self-healing — the
+ * next exchange retries — so error reporting skips it ({@link isWorkspaceParked}).
+ */
+export class WorkspaceParkedError extends Error {
+  readonly code = "workspace_parked";
+  constructor() {
+    super(vscode.l10n.t("The workspace you selected can't be reached right now. BuilderForce will retry automatically."));
+    this.name = "WorkspaceParkedError";
+  }
+}
+
+/** Is this the expected parked-workspace refusal (not a defect worth filing)? */
+export function isWorkspaceParked(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "workspace_parked";
+}
 
 function assertActsAs(token: string, asTenant: number | undefined): void {
   if (asTenant !== undefined && tenantOfToken(token) !== asTenant) {
-    throw new Error(`tenant ${asTenant} is not the current workspace — write parked`);
+    throw new WorkspaceParkedError();
   }
 }
 
 /** The workspace selected NOW; unknown means the request cannot be pinned to it, so it is refused. */
 export function currentWorkspaceOrThrow(): number {
   const current = workspaceTenantId();
-  if (current === undefined) throw new Error("no current workspace is known — request not sent");
+  if (current === undefined) throw new WorkspaceParkedError();
   return current;
 }
 
@@ -37,13 +63,17 @@ export async function fetchAuthed(
   path: string,
   authedInit?: AuthedInit,
 ): Promise<Response | undefined> {
-  const { asTenant: requestedTenant, ...init } = authedInit ?? {};
+  const { asTenant: requested, ...init } = authedInit ?? {};
+  const requestedTenant = requested ?? "current";
   let token = await exchangeJwt(secrets);
   if (!token) return undefined;
   const call = (t: string) => {
     // "current": the workspace selected NOW. A token that still acts as another tenant (a
     // re-scope that failed and fell back to the key's) must not be used.
-    assertActsAs(t, requestedTenant === "current" ? currentWorkspaceOrThrow() : requestedTenant);
+    assertActsAs(
+      t,
+      requestedTenant === "any" ? undefined : requestedTenant === "current" ? currentWorkspaceOrThrow() : requestedTenant,
+    );
     return trackReachability(fetch(`${getBaseUrl()}${path}`, {
       ...init,
       // Unbounded, a server that never answers holds the caller for undici's 300 s default;

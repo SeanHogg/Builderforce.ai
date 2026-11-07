@@ -40,6 +40,13 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
   private val _workspaceId = MutableStateFlow(prefs.getString(WORKSPACE_KEY)?.toLongOrNull())
   val workspaceId: StateFlow<Long?> = _workspaceId.asStateFlow()
 
+  /**
+   * This sign-in cannot switch workspaces (a legacy key): a fresh sign-in fixes it. Non-fatal —
+   * the key still works in its own workspace, so nobody is signed out.
+   */
+  private val _workspaceSignInNeeded = MutableStateFlow(false)
+  val workspaceSignInNeeded: StateFlow<Boolean> = _workspaceSignInNeeded.asStateFlow()
+
   private fun savedKey(): String? = prefs.getString(KEY)?.trim()?.takeIf { it.isNotEmpty() }
 
   private fun requireKey(): String = savedKey() ?: throw CloudException.SignedOut()
@@ -51,6 +58,7 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
     token = null
     _workspaceId.value = null
     _expired.value = false
+    _workspaceSignInNeeded.value = false
     _signedIn.value = true
   }
 
@@ -73,6 +81,7 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
     token = null
     _workspaceId.value = null
     _signedIn.value = false
+    _workspaceSignInNeeded.value = false
     _expired.value = expired
   }
 
@@ -84,6 +93,7 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
   /** Work in workspace [id] from now on (remembered across launches). */
   suspend fun selectWorkspace(id: Long) {
     prefs.putString(WORKSPACE_KEY, id.toString())
+    _workspaceSignInNeeded.value = false
     token = null
     guard { bearer() }
   }
@@ -163,35 +173,78 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
       if (current != null && current.base == base && current.expiresAtNanos > System.nanoTime() + REFRESH_MARGIN_NANOS) {
         return@withLock current.value
       }
-      val fresh = exchange(base)
-      token = fresh
-      _workspaceId.value = fresh.tenantId
-      fresh.value
+      var minted: String? = null
+      while (minted == null) {
+        val selected = prefs.getString(WORKSPACE_KEY)?.toLongOrNull()
+        val fresh = exchange(base)
+        // selectWorkspace runs outside the mutex: a token minted for a superseded selection is discarded.
+        // (A selection the exchange itself dropped also re-runs once, then is stable.)
+        if (prefs.getString(WORKSPACE_KEY)?.toLongOrNull() != selected) continue
+        token = fresh
+        _workspaceId.value = fresh.tenantId
+        minted = fresh.value
+      }
+      minted
     }
+
+  /** Forget the saved selection only while it is still [wanted] (a newer selection is kept). */
+  private fun dropSelection(wanted: Long): Boolean {
+    if (prefs.getString(WORKSPACE_KEY)?.toLongOrNull() != wanted) return false
+    prefs.remove(WORKSPACE_KEY)
+    return true
+  }
+
+  private suspend fun mintBase(base: String, key: String): Minted =
+    try {
+      mint(base, "/api/auth/tenant-api-key-token", null, buildJsonObject { put("apiKey", JsonPrimitive(key)) })
+    } catch (e: CloudException.Status) {
+      if (e.code == 400 || e.code == 401) throw CloudException.KeyRejected()
+      throw e
+    }
+
+  /**
+   * The ONE classifier for the workspace switch (`/api/vscode/tenants/:id/token`):
+   * - 401: the key behind the token is dead -> [CloudException.KeyRejected] (signs out).
+   * - 403 `session_stale`: the base token predates the server change; re-mint it once, and
+   *   if that repeats work in the key's own workspace but KEEP the saved selection.
+   * - 403 `editor_key_required`: this sign-in cannot switch; fall back, forget the selection
+   *   and raise [workspaceSignInNeeded] (the key still works, so no sign-out).
+   * - other 403/404: no longer a member; drop the selection and fall back.
+   */
+  private suspend fun switchWorkspace(base: String, key: String, wanted: Long, baseToken: Minted): Minted {
+    var from = baseToken
+    var retried = false
+    while (true) {
+      try {
+        return mint(base, "/api/vscode/tenants/$wanted/token", from.value, JsonObject(emptyMap()))
+      } catch (e: CloudException.Status) {
+        when {
+          e.code == 401 -> throw CloudException.KeyRejected()
+          e.code == 403 && e.reason == REASON_SESSION_STALE -> {
+            if (retried) return from
+            retried = true
+            from = mintBase(base, key)
+          }
+          e.code == 403 && e.reason == REASON_EDITOR_KEY_REQUIRED -> {
+            // Deliberately unlike VS Code (which signs out): mobile keeps the session and drops the selection.
+            if (dropSelection(wanted)) _workspaceSignInNeeded.value = true
+            return baseToken
+          }
+          e.code == 403 || e.code == 404 -> {
+            dropSelection(wanted)
+            return baseToken
+          }
+          else -> throw e
+        }
+      }
+    }
+  }
 
   private suspend fun exchange(base: String): Token {
     val key = requireKey()
-    val minted =
-      try {
-        mint(base, "/api/auth/tenant-api-key-token", null, buildJsonObject { put("apiKey", JsonPrimitive(key)) })
-      } catch (e: CloudException.Status) {
-        if (e.code == 400 || e.code == 401) throw CloudException.KeyRejected()
-        throw e
-      }
+    val minted = mintBase(base, key)
     val wanted = prefs.getString(WORKSPACE_KEY)?.toLongOrNull()
-    val scoped =
-      if (wanted != null && wanted != minted.tenantId) {
-        try {
-          mint(base, "/api/vscode/tenants/$wanted/token", minted.value, JsonObject(emptyMap()))
-        } catch (e: CloudException.Status) {
-          // No longer a member there: fall back to the key's own workspace.
-          if (e.code != 403 && e.code != 404) throw e
-          prefs.remove(WORKSPACE_KEY)
-          minted
-        }
-      } else {
-        minted
-      }
+    val scoped = if (wanted != null && wanted != minted.tenantId) switchWorkspace(base, key, wanted, minted) else minted
     return Token(
       value = scoped.value,
       tenantId = scoped.tenantId,
@@ -214,6 +267,8 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
   private companion object {
     const val KEY = "cloud.apiKey"
     const val WORKSPACE_KEY = "cloud.workspaceId"
+    const val REASON_SESSION_STALE = "session_stale"
+    const val REASON_EDITOR_KEY_REQUIRED = "editor_key_required"
     const val DEFAULT_TOKEN_TTL_S = 900L
     const val REFRESH_MARGIN_NANOS = 60_000_000_000L
   }

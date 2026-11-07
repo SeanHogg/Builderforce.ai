@@ -199,6 +199,7 @@
     <string name="settings_account_signed_out">No has iniciado sesión. Abre el chat para iniciar sesión.</string>
     <string name="settings_account_workspace">Espacio de trabajo</string>
     <string name="settings_account_workspace_none">Elige un espacio de trabajo</string>
+    <string name="settings_account_workspace_signin_needed">Este inicio de sesión no puede cambiar de espacio de trabajo. Cierra sesión y vuelve a iniciarla para cambiar.</string>
     <string name="settings_account_sign_out">Cerrar sesión</string>
     <string name="settings_account_server">Servidor (desarrolladores)</string>
     <string name="settings_account_server_note">Déjalo vacío para usar builderforce.ai.</string>

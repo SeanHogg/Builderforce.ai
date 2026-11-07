@@ -12,7 +12,9 @@ let currentUserName: string | null | undefined;
 
 async function loadIdentity(secrets: vscode.SecretStorage): Promise<void> {
   try {
-    const r = await authed<{ userId?: string; displayName?: string }>(secrets, "/api/vscode/me");
+    const r = await authed<{ userId?: string; displayName?: string }>(secrets, "/api/vscode/me", {
+      asTenant: "any", // person-level: the signed-in user, identical under any workspace token
+    });
     currentUserId = r?.userId ?? null;
     // The display name only: an email is never written into a pack a person shares.
     currentUserName = r?.displayName || null;
@@ -111,7 +113,9 @@ export interface BfWorkspace {
  * onboarding deep-link.
  */
 export async function listWorkspaces(secrets: vscode.SecretStorage): Promise<BfWorkspace[]> {
-  const r = await authed<{ tenants: BfWorkspace[] }>(secrets, "/api/tenants");
+  const r = await authed<{ tenants: BfWorkspace[] }>(secrets, "/api/tenants", {
+    asTenant: "any", // person-level list: the choices the selection is made from
+  });
   return r?.tenants ?? [];
 }
 
@@ -122,6 +126,7 @@ export async function createWorkspace(
 ): Promise<BfWorkspace> {
   const t = await authed<BfWorkspace>(secrets, "/api/tenants", {
     method: "POST",
+    asTenant: "any", // creates a NEW workspace for the person; not acting inside any existing one
     body: JSON.stringify({ name }),
   });
   if (!t) throw new Error("not signed in");
