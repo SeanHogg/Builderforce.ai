@@ -176,6 +176,9 @@ services:
       - ./packages/canvas-widget-protocol/src:/repo/packages/canvas-widget-protocol/src:ro
       - ./packages/ide-templates/src:/repo/packages/ide-templates/src:ro
       - ./packages/ide-file-contract/src:/repo/packages/ide-file-contract/src:ro
+      - ./packages/resume-ai/src:/repo/packages/resume-ai/src:ro
+      - ./packages/score-math/src:/repo/packages/score-math/src:ro
+      - ./packages/json-schema/src:/repo/packages/json-schema/src:ro
     depends_on:
       db-proxy:
         condition: service_healthy
@@ -229,6 +232,9 @@ services:
       - ./builderforce-embedded:/repo/builderforce-embedded:ro
       - ./voice:/repo/voice:ro
       # tsconfig path aliases (not npm deps) that frontend/src imports.
+      - ./packages/resume-ai/src:/repo/packages/resume-ai/src:ro
+      - ./packages/score-math/src:/repo/packages/score-math/src:ro
+      - ./packages/json-schema/src:/repo/packages/json-schema/src:ro
       - ./packages/creation-canvas-contract/src:/repo/packages/creation-canvas-contract/src:ro
       - ./packages/interaction-contract/src:/repo/packages/interaction-contract/src:ro
       - ./packages/canvas-widget-protocol/src:/repo/packages/canvas-widget-protocol/src:ro

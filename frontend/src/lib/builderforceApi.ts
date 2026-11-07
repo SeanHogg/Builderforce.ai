@@ -14,6 +14,7 @@ import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
+import { lazyBrowserClientFirst, summarizeMeetingClientFirst } from './brain/webClientFirst';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
@@ -425,6 +426,7 @@ export const brain = {
     baseUrl: AUTH_API_URL,
     request,
     getToken: getStoredTenantToken,
+    clientFirst: lazyBrowserClientFirst(),
     // No `uploadFile` override: `apiRequest` already leaves Content-Type unset for
     // a FormData body, so the multipart boundary survives.
   }),
@@ -5759,8 +5761,7 @@ export const meetingsApi = {
   agentTurn: (id: string, agentRef: string, prompt?: string): Promise<{ text: string; atMs: number; agentRef: string; agentName: string }> =>
     request(`${MEETINGS_BASE}/${id}/agent-turn`, { method: 'POST', body: JSON.stringify({ agentRef, prompt }) }),
   /** Generate + store meeting minutes from the transcript (posts into the team chat). */
-  summarize: (id: string): Promise<{ summary: string; meeting: MeetingDetail }> =>
-    request(`${MEETINGS_BASE}/${id}/summarize`, { method: 'POST' }),
+  summarize: (id: string): Promise<{ summary: string; meeting: MeetingDetail }> => summarizeMeetingClientFirst(`${MEETINGS_BASE}/${id}`, request),
 
   // Availability (bookable working hours) + "find a time".
   myAvailability: (): Promise<AvailabilityProfile> => request(`${MEETINGS_BASE}/availability/me`),

@@ -289,6 +289,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const stream: BrainStreamFn = ports.recordUsage
       ? ports.recordUsage(routed, { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) })
       : routed;
+    const onDeviceTasks = ports.onDeviceTasksFor?.({ chatId, runKey: key }) ?? ports.onDeviceTasks;
     const surface = p.modelSurface ?? null;
     // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
     // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
@@ -316,6 +317,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
           cloud: gatewayModelWindows(surface),
           ...(ports.localProbes ? { probes: ports.localProbes } : {}),
         },
+        // Summaries (the fold, the hand-off note) try Synapse / the local engines first (PRD 42 · C2).
+        ...(onDeviceTasks ? { onDeviceTasks } : {}),
         ...(p.maxTokens ? { maxTokens: p.maxTokens } : {}),
         ...(p.reasoning ? { reasoning: p.reasoning } : {}),
         runTool,

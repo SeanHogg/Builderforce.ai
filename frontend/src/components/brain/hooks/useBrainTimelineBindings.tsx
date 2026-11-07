@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import type { useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
+import { TranslatableText, type useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { parseSuggestedActions, type useBrainActions, type useBrainChats, type useBrainConversation } from '@/lib/brain';
@@ -73,11 +73,19 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
   });
 
   const renderTimelineMessage = useCallback(
-    (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (
-      <ChatMessageContent
-        content={ctx.role === 'assistant' ? parseSuggestedActions(msg.content).content : ctx.text}
-        onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-        onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+    (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string; translate: boolean }) => (
+      // What OTHER people typed is shown in the reader's language when it is in another one; replies and the reader's own words are left as written.
+      <TranslatableText
+        text={ctx.text}
+        contentId={`msg:${msg.id}`}
+        enabled={ctx.translate}
+        render={(shown) => (
+          <ChatMessageContent
+            content={ctx.role === 'assistant' ? parseSuggestedActions(msg.content).content : shown}
+            onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+            onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+          />
+        )}
       />
     ),
     [hasTool, runTool],

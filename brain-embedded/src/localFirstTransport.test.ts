@@ -193,6 +193,15 @@ describe('createLocalFirstStream', () => {
     expect(cloud.mock.calls[0]![0].model).toBe('openai/gpt-5');
   });
 
+  it("a utility call the device declines goes to the cloud on the run's model, not gateway Auto", async () => {
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 500 }));
+    const cloud = cloudStream();
+    const result = await createLocalFirstStream({ probes, cloud, fetch: fetchImpl })({ ...hello, role: 'utility', model: 'openai/gpt-5' });
+    expect(result.text).toBe('from-cloud');
+    expect(fetchImpl).toHaveBeenCalled(); // the device was asked first
+    expect(cloud.mock.calls[0]![0].model).toBe('openai/gpt-5');
+  });
+
   it('honours an explicit local model by sending it to that runtime', async () => {
     const seen: Array<{ url: string; model: string }> = [];
     const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {

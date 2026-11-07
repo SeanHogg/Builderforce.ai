@@ -8,9 +8,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   condenseTranscript: vi.fn(),
   syncMinutesForMeeting: vi.fn(async () => {}),
+  recordClientResultUsage: vi.fn(async () => {}),
+  mayAuthorMeetingMinutes: vi.fn(async () => true),
 }));
 
 vi.mock('../llm/condense', () => ({ condenseTranscript: mocks.condenseTranscript }));
+vi.mock('../llm/clientResultUsage', () => ({ recordClientResultUsage: mocks.recordClientResultUsage }));
+vi.mock('./meetingMinutesAuthority', () => ({ mayAuthorMeetingMinutes: mocks.mayAuthorMeetingMinutes }));
 vi.mock('../ceremony/ceremonyMinutesToCanvas', () => ({ syncMinutesForMeeting: mocks.syncMinutesForMeeting }));
 vi.mock('../agent/agentPrompt', () => ({ resolveWorkforceModel: vi.fn(), WORKFORCE_MODEL_REF_PREFIX: 'workforce:' }));
 vi.mock('../../infrastructure/relay/broadcastRoom', () => ({ broadcastRoom: vi.fn() }));
@@ -34,6 +38,7 @@ const meeting = { id: 'm1', tenantId: 7, title: 'Standup', kind: 'standup', chat
 beforeEach(() => {
   mocks.condenseTranscript.mockReset();
   mocks.syncMinutesForMeeting.mockClear();
+  mocks.recordClientResultUsage.mockClear();
 });
 
 describe('summarizeMeeting', () => {
@@ -47,6 +52,27 @@ describe('summarizeMeeting', () => {
       header: 'Meeting: "Standup" (standup).',
     }));
     expect(updates[0]).toMatchObject({ summary: '**Summary** done' });
+  });
+
+  it('PRD 42 Part D: stores a client-supplied minutes text with no model call and records usage', async () => {
+    const { db, updates } = fakeDb([{ speakerName: 'Ana', text: 'Shipped it' }]);
+    const provenance = { engine: 'bfi' as const, model: 'bfi-1' };
+    const out = await summarizeMeeting(db, {} as never, meeting, { userId: 'u1', client: { value: '**Summary** local', provenance } });
+    expect(out).toEqual({ summary: '**Summary** local' });
+    expect(mocks.condenseTranscript).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({ summary: '**Summary** local' });
+    expect(mocks.recordClientResultUsage).toHaveBeenCalledWith(db, {}, expect.objectContaining({ tenantId: 7, userId: 'u1', provenance }));
+  });
+
+  it("PRD 42 principle 6: a non-organizer attendee's client minutes are ignored and the server path runs", async () => {
+    mocks.mayAuthorMeetingMinutes.mockResolvedValueOnce(false);
+    mocks.condenseTranscript.mockResolvedValueOnce({ text: '**Summary** server' });
+    const { db, updates } = fakeDb([{ speakerName: 'Ana', text: 'Shipped it' }]);
+    const provenance = { engine: 'bfi' as const, model: 'bfi-1' };
+    const out = await summarizeMeeting(db, {} as never, meeting, { userId: 'attendee', client: { value: 'forged minutes', provenance } });
+    expect(out).toEqual({ summary: '**Summary** server' });
+    expect(updates[0]).toMatchObject({ summary: '**Summary** server' });
+    expect(mocks.recordClientResultUsage).not.toHaveBeenCalled();
   });
 
   it('never calls the model for an empty transcript', async () => {

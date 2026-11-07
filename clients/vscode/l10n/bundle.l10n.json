@@ -724,6 +724,9 @@
   "Math": "Math",
   "All models ({count})": "All models ({count})",
   "Fewer models": "Fewer models",
+  "Download": "Download",
+  "Downloading…": "Downloading…",
+  "Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.": "Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.",
   "Try again": "Try again",
   "A question asked before was answered from memory — no model call": "A question asked before was answered from memory — no model call",
   "AI spend · last {days} days": "AI spend · last {days} days",
@@ -1174,5 +1177,10 @@
   "Git status could not be read after the fix.": "Git status could not be read after the fix.",
   "git {0} failed{1}": "git {0} failed{1}",
   "knip removes every unused export in each of these files, not only the one the finding names.": "knip removes every unused export in each of these files, not only the one the finding names.",
-  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "The workspace you selected can't be reached right now. BuilderForce will retry automatically."
-}
+  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "The workspace you selected can't be reached right now. BuilderForce will retry automatically.",
+  "Translated from {0}": "Translated from {0}",
+  "Show original": "Show original",
+  "Show translation": "Show translation",
+  "Translating…": "Translating…",
+  "Translation needs this browser's built-in translator": "Translation needs this browser's built-in translator"
+}

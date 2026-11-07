@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/score-math",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Clamp helpers for 0..100 scores and 0..1 ratios, shared by the API's scorers and the shared résumé analysis (`@builderforce/resume-ai`) that the web client also runs. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

@@ -23,7 +23,7 @@ import { useId } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { EMPTY_GATEWAY_MODEL_OPTIONS } from '@seanhogg/builderforce-brain-embedded';
-import { BrainTimeline, ChatErrorBanner, SurfaceEmptyState, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, ChatErrorBanner, SurfaceEmptyState, SurfaceHeader, TranslationPickerScope, requestComposerMenu } from '@seanhogg/builderforce-brain-ui';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
@@ -132,6 +132,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           // so it is named like any participant. Somebody ELSE's turn streams as
           // theirs, captioned.
           <div className="gb-messages">
+            <TranslationPickerScope openModelPicker={() => requestComposerMenu(composerId, 'model')}>
             <BrainTimeline
               conversationKey={s.activeChatId}
               messages={conv.messages}
@@ -153,6 +154,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 </>
               )}
             />
+            </TranslationPickerScope>
           </div>
         )}
         notices={gate ? undefined : (

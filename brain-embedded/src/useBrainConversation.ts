@@ -37,6 +37,7 @@ import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
+import type { OnDeviceTasks } from './onDevice/onDeviceTasks';
 import { useComposerAttachments } from './useComposerAttachments';
 import { useContinuation } from './useContinuation';
 import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
@@ -92,6 +93,8 @@ export interface UseBrainConversationOptions {
   pickFallbackModel?: (tried: readonly string[]) => string | undefined;
   /** Where the run's window fit learns a model's window — `BrainRunRequest.windowSources`. */
   windowSources?: RunWindowSources;
+  /** The host's on-device task port — `BrainRunRequest.onDeviceTasks` (summaries try the device first). */
+  onDeviceTasks?: OnDeviceTasks;
   /**
    * `max_tokens` for this conversation's completions — the host's Effort control
    * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
@@ -337,6 +340,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     routingMode,
     pickFallbackModel,
     windowSources,
+    onDeviceTasks,
     maxTokens,
     reasoning,
     toolSpecs,
@@ -436,6 +440,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       routingMode,
       pickFallbackModel,
       ...(windowSources ? { windowSources } : {}),
+      ...(onDeviceTasks ? { onDeviceTasks } : {}),
       maxTokens,
       reasoning,
       runTool,
@@ -456,7 +461,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       chatRoster,
       };
     },
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, onDeviceTasks, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
   const bindContinuation = useContinuation(persistence, prepareRun);

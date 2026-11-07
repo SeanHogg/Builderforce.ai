@@ -58,6 +58,19 @@ export function useSignedIn(): boolean {
   );
 }
 
+/** The signed-in user's id (cached from the key->JWT exchange), kept current across contexts. Null until the
+ *  first exchange - which this hook triggers once when signed in without one. */
+export function useViewerId(): string | null {
+  const { session } = useServices();
+  const id = useSyncExternalStore(
+    (listener) => session.subscribe(listener),
+    () => session.userId(),
+  );
+  const signedIn = useSignedIn();
+  useEffect(() => { if (signedIn && id === null) void session.jwt(); }, [signedIn, id, session]);
+  return id;
+}
+
 /** Where models run (Local only · Hybrid · Specific), kept current across contexts. */
 export function useInferenceModeState(): RovrInferenceModeState {
   const { policy } = useServices();

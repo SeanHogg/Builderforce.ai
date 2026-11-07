@@ -32,6 +32,9 @@ import { TenantAiService } from '../llm/tenantProxy';
 import { completeJson, JSON_OBJECT_FORMAT } from '../llm/completeJson';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
+import type { ClientSupplied } from '../llm/clientResult';
+import { clientResultModelRef, recordClientResultUsage } from '../llm/clientResultUsage';
 import { scoreResume, type ResumeScore } from './resumeAnalysis';
 import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 import {
@@ -90,8 +93,26 @@ interface ModelReply {
  * exists to prevent.
  */
 export class ResumeAiService extends TenantAiService {
-  constructor(env: Env) {
+  /** `db` is only needed to record an accepted client result in the usage ledger. */
+  constructor(env: Env, private readonly db?: Db) {
     super(env);
+  }
+
+  /**
+   * PRD 42 Part D: the device already produced the model's reply. It takes the place of
+   * `ask` and goes through the SAME parse + invented-number verification afterwards, so a
+   * client cannot assert a metric the résumé does not contain.
+   */
+  private async clientReply(
+    tenantId: number,
+    useCase: string,
+    client: ClientSupplied<Record<string, unknown>>,
+    userId?: string | null,
+  ): Promise<ModelReply> {
+    if (this.db) {
+      await recordClientResultUsage(this.db, this.aiEnv, { tenantId, userId: userId ?? null, useCase, provenance: client.provenance });
+    }
+    return { content: JSON.stringify(client.value), model: clientResultModelRef(client.provenance), cached: false, failure: null };
   }
 
   /**
@@ -101,7 +122,7 @@ export class ResumeAiService extends TenantAiService {
    * its verb, carries a number and names a method is left completely alone: rewriting it
    * would spend a model call to move words around a line that already works.
    */
-  async rewriteToXyz(tenantId: number, resumeText: string, opts?: { limit?: number; userId?: string | null }): Promise<XyzRewriteOutcome> {
+  async rewriteToXyz(tenantId: number, resumeText: string, opts?: { limit?: number; userId?: string | null; client?: ClientSupplied<Record<string, unknown>> }): Promise<XyzRewriteOutcome> {
     const brief = planXyzRewrite(resumeText, opts?.limit == null ? undefined : { limit: opts.limit });
     if (brief.candidates.length === 0) {
       return {
@@ -115,7 +136,9 @@ export class ResumeAiService extends TenantAiService {
     }
 
     const prompt = buildXyzRewritePrompt(brief);
-    const reply = await this.ask(tenantId, 'resume_xyz_rewrite', prompt, [resumeText, String(brief.candidates.length)], opts?.userId);
+    const reply = opts?.client
+      ? await this.clientReply(tenantId, 'resume_xyz_rewrite', opts.client, opts.userId)
+      : await this.ask(tenantId, 'resume_xyz_rewrite', prompt, [resumeText, String(brief.candidates.length)], opts?.userId);
     if (reply.failure) {
       return { brief, result: parseXyzRewriteResponse('', brief), model: null, degraded: true, degradedReason: reply.failure, cached: false };
     }
@@ -129,7 +152,7 @@ export class ResumeAiService extends TenantAiService {
    * the second half is the one a hand-merge loses and no model is asked about it. Only
    * the merged WORDING of a group needs writing.
    */
-  async mergeBullets(tenantId: number, resumeTexts: readonly string[], opts?: { userId?: string | null }): Promise<BulletMergeOutcome> {
+  async mergeBullets(tenantId: number, resumeTexts: readonly string[], opts?: { userId?: string | null; client?: ClientSupplied<Record<string, unknown>> }): Promise<BulletMergeOutcome> {
     const brief = planBulletMerge(resumeTexts);
     if (brief.groups.length === 0) {
       return {
@@ -145,7 +168,9 @@ export class ResumeAiService extends TenantAiService {
     }
 
     const prompt = buildBulletMergePrompt(brief);
-    const reply = await this.ask(tenantId, 'resume_bullet_merge', prompt, resumeTexts, opts?.userId);
+    const reply = opts?.client
+      ? await this.clientReply(tenantId, 'resume_bullet_merge', opts.client, opts.userId)
+      : await this.ask(tenantId, 'resume_bullet_merge', prompt, resumeTexts, opts?.userId);
     if (reply.failure) {
       return { brief, result: parseBulletMergeResponse('', brief), model: null, degraded: true, degradedReason: reply.failure, cached: false };
     }

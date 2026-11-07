@@ -9,6 +9,7 @@
  */
 
 import { useMemo } from 'react';
+import { pageClientFirst } from '@seanhogg/builderforce-brain-embedded';
 import { t } from '../../i18n/t';
 import { useServices, useSetting, useSignedIn } from '../hooks';
 import { rovrKnowledgeLabels } from './knowledgeLabels';
@@ -31,7 +32,7 @@ export default function KnowledgeDestination({ onCompose, onOpenSettings, intent
   const labels = useMemo(() => rovrKnowledgeLabels(), []);
   const gap: KnowledgeGap | null = !signedIn ? 'signedOut' : projectId === null ? 'noProject' : null;
   const source = useMemo(
-    () => (gap || projectId == null ? null : createRovrKnowledgeSource({ projectId, fetch: services.apiFetch, reportError: services.reportError })),
+    () => (gap || projectId == null ? null : createRovrKnowledgeSource({ projectId, fetch: services.apiFetch, reportError: services.reportError, clientFirst: pageClientFirst(services.onDeviceTasks) })),
     [gap, projectId, services],
   );
 

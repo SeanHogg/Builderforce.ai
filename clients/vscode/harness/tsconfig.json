@@ -26,6 +26,7 @@
       "@builderforce/provider-connect/accounts": ["../../../packages/provider-connect/src/connectedAccounts.ts"],
       "@builderforce/run-context": ["../../../packages/run-context/src/index.ts"],
       "@builderforce/write-outbox": ["../../../packages/write-outbox/src/index.ts"],
+      "@builderforce/json-schema": ["../../../packages/json-schema/src/index.ts"],
       "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],
       "@builderforce/run-guards": ["../../../packages/run-guards/src/index.ts"]
     }

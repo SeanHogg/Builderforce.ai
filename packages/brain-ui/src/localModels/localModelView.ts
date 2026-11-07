@@ -6,7 +6,7 @@
  * download size reads "1.2 GB" in English and "1,2 GB" in German without a catalog
  * entry per unit.
  */
-import type { LocalModelRow } from '@seanhogg/builderforce-brain-embedded';
+import { BUILT_IN_REQUIREMENT_KEY, type LocalModelRow } from '@seanhogg/builderforce-brain-embedded';
 import { fill } from '../spend/format';
 import { LOCAL_BACKEND_LABEL, LOCAL_UNSUPPORTED_LABEL, type LocalModelLabels } from './labels';
 
@@ -33,8 +33,20 @@ export function formatContextTokens(tokens: number): string {
   return `${Math.round(tokens / 1024)}K`;
 }
 
-/** The secondary line of a row: params · context window. */
+/** The browser's own model: the browser owns its bytes, size and removal (PRD 42 · A2). */
+export const isBuiltInRow = (row: Pick<LocalModelRow, 'source'>): boolean => row.source.kind === 'browser';
+
+/** The download action's text: a sized download, or the built-in model's plain "Download". */
+export function downloadActionLabel(row: LocalModelRow, labels: LocalModelLabels, locale?: string): string {
+  return isBuiltInRow(row)
+    ? labels.localDownloadBuiltIn
+    : fill(labels.localDownload, { size: formatDownloadSize(row.bytes, locale) });
+}
+
+/** The secondary line of a row: params · context window — or, for the built-in model
+ *  (no parameter count), the browser's stated hardware requirement. */
 export function localModelMeta(row: LocalModelRow, labels: LocalModelLabels, locale?: string): string {
+  if (isBuiltInRow(row)) return labels[BUILT_IN_REQUIREMENT_KEY];
   return [formatParams(row.params, locale), fill(labels.localContext, { tokens: formatContextTokens(row.contextTokens) })].join(' · ');
 }
 

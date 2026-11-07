@@ -35,6 +35,9 @@ import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agen
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 import { syncMinutesForMeeting } from '../ceremony/ceremonyMinutesToCanvas';
 import { condenseTranscript } from '../llm/condense';
+import type { ClientSupplied } from '../llm/clientResult';
+import { recordClientResultUsage } from '../llm/clientResultUsage';
+import { mayAuthorMeetingMinutes } from './meetingMinutesAuthority';
 import { bumpChatMessages, bumpUnreadForChatAudience } from '../brain/chatCacheVersions';
 
 type Meeting = typeof meetings.$inferSelect;
@@ -190,17 +193,29 @@ export async function summarizeMeeting(
   db: Db,
   env: Env,
   meeting: Meeting,
+  opts: { client?: ClientSupplied<string>; userId?: string | null } = {},
 ): Promise<{ summary: string } | { error: string }> {
   const segments = await loadTranscript(db, meeting.id, SUMMARY_MAX_LINES);
   if (segments.length === 0) return { error: 'No transcript to summarize yet.' };
 
-  const condensed = await condenseTranscript(env, meeting.tenantId, {
-    transcript: segments.map((s) => `${s.speakerName}: ${s.text}`).join('\n'),
-    header: `Meeting: "${meeting.title}" (${meeting.kind}).`,
-    shape: 'You write concise, faithful meeting minutes. Given a raw transcript, produce short minutes in Markdown with, in order: a one-paragraph **Summary**; a **Decisions** section as a bullet list (omit the section entirely if there were none); and an **Action items** section as a checklist ("- [ ] Owner — task", omit if none).',
-  });
-  if ('error' in condensed) return { error: condensed.error };
-  const summary = condensed.text;
+  // PRD 42 principle 6: a device's result replaces only the caller's OWN content. Anyone
+  // but the organizer (or the sole human attendee) gets the server path; not a refusal.
+  const client = opts.client && await mayAuthorMeetingMinutes(db, meeting, opts.userId) ? opts.client : undefined;
+
+  let summary: string;
+  if (client) {
+    // PRD 42 Part D: the device already wrote the minutes — no server model call.
+    summary = client.value;
+    await recordClientResultUsage(db, env, { tenantId: meeting.tenantId, userId: opts.userId ?? null, useCase: 'meeting_minutes', provenance: client.provenance });
+  } else {
+    const condensed = await condenseTranscript(env, meeting.tenantId, {
+      transcript: segments.map((s) => `${s.speakerName}: ${s.text}`).join('\n'),
+      header: `Meeting: "${meeting.title}" (${meeting.kind}).`,
+      shape: 'You write concise, faithful meeting minutes. Given a raw transcript, produce short minutes in Markdown with, in order: a one-paragraph **Summary**; a **Decisions** section as a bullet list (omit the section entirely if there were none); and an **Action items** section as a checklist ("- [ ] Owner — task", omit if none).',
+    });
+    if ('error' in condensed) return { error: condensed.error };
+    summary = condensed.text;
+  }
 
   const now = new Date();
   await db.update(meetings).set({ summary, summaryGeneratedAt: now, updatedAt: now }).where(eq(meetings.id, meeting.id));

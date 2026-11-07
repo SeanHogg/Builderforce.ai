@@ -366,6 +366,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - **`sessions` and `ai_usage_records` have no writer.** `table-adoption.mjs` rules them superseded. Drop them.
 - **Steps 6–7 moving the wrong way:** 155 application folders (target 16), 286 route files, 204 `page.tsx`. Needs an owning lane.
 - **Merged-product behaviour missing:** the ATS funnel and growth workflows.
+- **Three representations of a message's author.** `brain_chat_messages.author_user_id` (PRD 42, human turns), kernel threads' `authorKind`/`authorRef`, and meeting lines' `metadata.authoredBy`. One fact, three shapes. Consolidate onto one author reference so translation, attribution and audit read the same field.
 - **Legacy routes register into `objects` only on the sweep.**
 - **Table families straddle modules;** needs an ownership manifest.
 - **Migration numbering:** 8 collisions, five ledger rows with no file, 78 drift-allowlist entries.

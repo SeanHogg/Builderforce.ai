@@ -28,6 +28,12 @@ export interface LocalModelLabels {
   /** The context window, e.g. "32K context". */
   localContext: string;
   localDownloadFailed: string;
+  /** The built-in browser model's download action (its size is the browser's, unknown). */
+  localDownloadBuiltIn: string;
+  /** Progress line when the percentage is unknown (a download started before a reload). */
+  localDownloadingUnknown: string;
+  /** The browser's stated hardware requirement for its built-in model (a row's meta line). */
+  localBuiltInRequirement: string;
   localReasonWebgpu: string;
   localReasonF16: string;
   localReasonBuffer: string;
@@ -60,6 +66,9 @@ export const DEFAULT_LOCAL_MODEL_LABELS: LocalModelLabels = {
   localTools: 'Tools',
   localContext: '{tokens} context',
   localDownloadFailed: 'Download failed — try again.',
+  localDownloadBuiltIn: 'Download',
+  localDownloadingUnknown: 'Downloading…',
+  localBuiltInRequirement: 'Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.',
   localReasonWebgpu: 'Needs WebGPU, which this browser or GPU does not offer.',
   localReasonF16: 'Needs WebGPU 16-bit shaders, which this GPU does not offer.',
   localReasonBuffer: 'Needs larger GPU buffers than this device allows.',

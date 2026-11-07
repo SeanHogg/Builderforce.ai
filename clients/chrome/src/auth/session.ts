@@ -23,6 +23,7 @@ import { revokeKey } from '@builderforce/device-auth';
 export const SESSION_CREDENTIAL_KEY = 'session.key';
 const KEY = SESSION_CREDENTIAL_KEY;
 const TENANT = 'session.tenantId';
+const USER = 'session.userId';
 
 export interface SessionDeps {
   storage: KeyValueStore;
@@ -39,6 +40,8 @@ export interface Session {
   /** `tenant:<id>` while signed in, else null. Synchronous — read by the outboxes. */
   scope(): string | null;
   tenantId(): number | null;
+  /** The signed-in user's id, learned from the key->JWT exchange (`userId` in its response) and cached. Null until the first exchange. */
+  userId(): string | null;
   signIn(input: { accessKey: string; tenantId: number | null }): Promise<void>;
   signOut(): Promise<void>;
   /** A tenant JWT for `/api/*`, or null signed out / unreachable. */
@@ -49,6 +52,7 @@ export interface Session {
 export function createSession(deps: SessionDeps): Session {
   let key: string | null = null;
   let tenant: number | null = null;
+  let user: string | null = null;
   let jwtCache: { token: string; exp: number } | null = null;
   const listeners = new Set<() => void>();
   const notify = () => {
@@ -58,20 +62,23 @@ export function createSession(deps: SessionDeps): Session {
   const load = async (): Promise<void> => {
     key = (await deps.storage.get<string>(KEY)) ?? null;
     tenant = (await deps.storage.get<number>(TENANT)) ?? null;
+    user = (await deps.storage.get<string>(USER)) ?? null;
     jwtCache = null;
   };
   const loaded = load();
   // Another context signed in or out — follow it.
   deps.storage.subscribe((keys) => {
-    if (keys.includes(KEY) || keys.includes(TENANT)) void load().then(notify);
+    if (keys.includes(KEY) || keys.includes(TENANT) || keys.includes(USER)) void load().then(notify);
   });
 
   const clear = async (): Promise<void> => {
     key = null;
     tenant = null;
+    user = null;
     jwtCache = null;
     await deps.storage.remove(KEY);
     await deps.storage.remove(TENANT);
+    await deps.storage.remove(USER);
     notify();
   };
 
@@ -84,9 +91,12 @@ export function createSession(deps: SessionDeps): Session {
     isSignedIn: () => key !== null,
     scope: () => (key !== null && tenant !== null ? `tenant:${tenant}` : null),
     tenantId: () => tenant,
+    userId: () => user,
     async signIn(input) {
       key = input.accessKey;
       tenant = input.tenantId;
+      user = null; // a new key may be another person's - relearned on the next exchange
+      await deps.storage.remove(USER);
       jwtCache = null;
       await deps.storage.set(KEY, input.accessKey);
       if (input.tenantId !== null) await deps.storage.set(TENANT, input.tenantId);
@@ -117,9 +127,14 @@ export function createSession(deps: SessionDeps): Session {
         return null;
       }
       if (!res.ok) return null;
-      const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number };
+      const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number; userId?: string };
       if (!body.token) return null;
       jwtCache = { token: body.token, exp: deps.now() + (body.expiresIn ?? 3600) * 1000 };
+      if (typeof body.userId === 'string' && body.userId !== user) {
+        user = body.userId;
+        await deps.storage.set(USER, body.userId);
+        notify();
+      }
       if (typeof body.tenantId === 'number' && body.tenantId !== tenant) {
         tenant = body.tenantId;
         await deps.storage.set(TENANT, body.tenantId);

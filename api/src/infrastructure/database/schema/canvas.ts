@@ -19,6 +19,7 @@ import {
   bigserial,
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -296,6 +297,8 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   metadata:  text('metadata'),
   /** Optional producer idempotency key (for example executionId:phase). */
   eventKey:  varchar('event_key', { length: 160 }),
+  /** Who sent a role='user' message (1296) - stamped server-side from the authenticated caller; NULL for agent/system rows and legacy rows. */
+  authorUserId: varchar('author_user_id', { length: 36 }),
   seq:       integer('seq').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
@@ -304,6 +307,9 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   // Migration 1231: per-chat seq range scans (unread counts, max(seq) on mark-read).
   // Replaces the chat_id-only index, which is a prefix of this one.
   index('idx_brain_chat_messages_chat_seq').on(t.chatId, t.seq),
+  // Migration 1296: author FK (named, added NOT VALID) + partial index over stamped human turns.
+  foreignKey({ columns: [t.authorUserId], foreignColumns: [users.id], name: 'brain_chat_messages_author_user_id_fkey' }).onDelete('set null'),
+  index('brain_chat_messages_author_user_id_idx').on(t.authorUserId).where(sql`author_user_id IS NOT NULL`),
 ]);
 
 /**

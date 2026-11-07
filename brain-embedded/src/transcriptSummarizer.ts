@@ -9,6 +9,9 @@
 import { answerTextOf, stripReasoningTagsFromText, thoughtTextOf } from '@builderforce/agent-loop';
 import { summarizeTranscript, type SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 import type { ChatCompletionMessage, StreamChatOptions, StreamChatResult } from './streamChatCompletion';
+import type { OnDeviceTasks } from './onDevice/onDeviceTasks';
+import { onDeviceFirst } from './onDevice/utilitySummary';
+import { UTILITY_ROLE } from './localFirstTransport';
 
 /**
  * The slice of the run's streaming transport the summarizer uses — typed structurally so
@@ -28,20 +31,27 @@ export type SummaryStreamFn = (
  *  that is nothing but reasoning (or a block the output ceiling cut off) keeps that
  *  reasoning's TEXT, untagged: it usually holds the facts, and an empty note would make
  *  the window re-run this whole call on every turn, since a failed fold is not memoized. */
-export function streamSummaryCompletion(stream: SummaryStreamFn, model: string | undefined): SummaryCompletion {
-  return async ({ system, user, maxTokens, signal }) => {
+export function streamSummaryCompletion(
+  stream: SummaryStreamFn,
+  model: string | undefined,
+  /** The host's on-device port: asked FIRST, whatever model the run is pinned to (PRD 42 · C2). */
+  onDeviceTasks?: OnDeviceTasks,
+): SummaryCompletion {
+  return onDeviceFirst(async ({ system, user, maxTokens, signal }) => {
     const res = await stream({
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
       model,
       maxTokens,
       reasoning: { level: 'off' },
+      // A utility completion: the device may serve it before the pin (`localFirstApplies`).
+      role: UTILITY_ROLE,
       signal,
     });
     const text = res.text ?? '';
     // Stripped once more: a reply whose every block is empty comes back from the
     // splitter as the raw markup it was, and markup is no note.
     return stripReasoningTagsFromText(answerTextOf(text) || thoughtTextOf(text));
-  };
+  }, onDeviceTasks);
 }
 
 /** Compress `msgs` into a memory note with the run's model. Null on any failure/empty, so
@@ -51,6 +61,7 @@ export function summarizeMiddle(
   model: string | undefined,
   msgs: ChatCompletionMessage[],
   signal: AbortSignal | undefined,
+  onDeviceTasks?: OnDeviceTasks,
 ): Promise<string | null> {
-  return summarizeTranscript(streamSummaryCompletion(stream, model), msgs, signal);
+  return summarizeTranscript(streamSummaryCompletion(stream, model, onDeviceTasks), msgs, signal);
 }

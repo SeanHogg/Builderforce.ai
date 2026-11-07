@@ -120,6 +120,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
         ratings={surface.ratings}
         guestSignup={surface.guestSignup}
         refusal={surface.refusal ?? null}
+        composerId={surface.composerId}
       />
     </section>
     </BrainSurfaceViewProvider>

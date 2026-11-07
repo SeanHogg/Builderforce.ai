@@ -10,6 +10,7 @@ import {
   type BrainRunActivity,
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
+import { TranslatableText } from './translation';
 import { buildSettledTimeline, strandedReplyKey, streamingNode } from './timelineModel';
 import { pendingUserNode } from './timelineNodes';
 import { LiveActivity } from './LiveActivity';
@@ -66,7 +67,13 @@ export interface BrainTimelineProps {
   emptyState?: React.ReactNode;
   /** Render a message's text. Defaults to the shared <Markdown>. The web app
    *  passes its richer ChatMessageBubble here so no feature is lost. */
-  renderMessage?: (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => React.ReactNode;
+  renderMessage?: (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string; /** True only for a message someone ELSE wrote — the only text worth translating. */ translate: boolean }) => React.ReactNode;
+  /**
+   * Whether the viewer wrote this message. A message is offered for translation only when the
+   * host affirms someone else wrote it (`false`); unknown (`undefined`) is treated as the
+   * reader's own, so their own words are never run through a translator.
+   */
+  isOwnMessage?: (msg: BrainMessage) => boolean | undefined;
   /** Render the live streaming assistant bubble. Defaults to <Markdown>. */
   renderStreaming?: (text: string) => React.ReactNode;
   /** Host-specific EXTRAS on an assistant message (feedback, export, suggestions).
@@ -136,6 +143,7 @@ function BrainTimelineInner({
   assistantName,
   emptyState,
   renderMessage,
+  isOwnMessage,
   renderStreaming,
   renderAssistantActions,
   onReplayMessage,
@@ -173,14 +181,22 @@ function BrainTimelineInner({
   // Stable, so the memoized rows below are not re-rendered on every streamed token.
   const renderMsg = useCallback((msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
     renderMessage ? (
-      renderMessage(msg, { role, text })
+      renderMessage(msg, { role, text, translate: role === 'user' && isOwnMessage?.(msg) === false })
     ) : (
-      <Markdown
-        content={text}
-        onInternalLink={onInternalLink}
-        onApplyCode={role === 'assistant' ? onApplyCode : undefined}
-        onCreateFile={role === 'assistant' ? onCreateFile : undefined}
-        labels={labels}
+      <TranslatableText
+        text={text}
+        contentId={`msg:${msg.id}`}
+        // Replies are written in the reader's language, and so are the reader's own words; only what another person typed may need translating.
+        enabled={role === 'user' && isOwnMessage?.(msg) === false}
+        render={(shown) => (
+          <Markdown
+            content={shown}
+            onInternalLink={onInternalLink}
+            onApplyCode={role === 'assistant' ? onApplyCode : undefined}
+            onCreateFile={role === 'assistant' ? onCreateFile : undefined}
+            labels={labels}
+          />
+        )}
       />
     ), [renderMessage, onInternalLink, onApplyCode, onCreateFile, labels]);
 

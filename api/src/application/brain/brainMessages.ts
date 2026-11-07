@@ -13,6 +13,7 @@ import { markChatRead } from './chatReadState';
 import { messageColumns, type AppendMessagesDto, type MessageFeedback } from './brainChatShapes';
 import { canAccessChat, ensureMembership } from './brainChatGuards';
 import { appendRaw, appendRawOutcome } from './brainMessageStore';
+import { messageAuthorFor } from './messageAuthor';
 import { mergeSteps } from './chatStepStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -72,6 +73,8 @@ export async function appendMessages(
   tenantId: number,
   userId: string,
   dto: AppendMessagesDto,
+  /** `authorUnknown`: the turns were not all sent by `userId` (a claimed multi-speaker guest room) - stamp none. */
+  opts?: { authorUnknown?: boolean },
 ) {
   // Owner, member, or (for shared chats) any teammate may post — migration 0288.
   const chat = await canAccessChat(db, chatId, tenantId, userId);
@@ -85,7 +88,10 @@ export async function appendMessages(
   // Best-effort and independent of the message write, so the two run together.
   const [, outcome] = await Promise.all([
     ensureMembership(db, chatId, tenantId, userId, (chat as unknown as { ownerId: string | null }).ownerId),
-    appendRawOutcome(db, chatId, dto.messages),
+    // The author is the authenticated caller, stamped here on human turns - never read from the request body.
+    appendRawOutcome(db, chatId, dto.messages.map(({ role, content, metadata, eventKey }) => ({
+      role, content, metadata, eventKey, authorUserId: opts?.authorUnknown ? null : messageAuthorFor(role, userId),
+    }))),
   ]);
   // `written`: the messages stored NOW. A retry of one that already committed answers its original row (`messages`)
   // but is not in `written` - the route's effects (ticket activity, pings, agent replies, learning) run for `written` only.

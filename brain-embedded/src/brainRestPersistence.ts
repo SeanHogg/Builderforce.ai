@@ -31,6 +31,9 @@
  * adapter interface structurally, which the compiler checks at each call site.
  */
 import { subscribeToChatMessages } from './chatMessageSubscription';
+import { withClientResult, type ClientFirstHost } from './onDevice/clientFirst';
+import { onDeviceTranscriptSummary } from './onDevice/clientFirstSummary';
+import { transcriptSeedOf } from './transcriptSeed';
 import { attachEvermindLearn } from './types';
 import type { BrainChat, BrainMessage, EvermindLearnOutcome } from './types';
 import { BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainFileUrl } from './uploadUrls';
@@ -44,7 +47,12 @@ import { BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainF
  * passes, which is exactly what the web app's `apiRequest` (whose `headers` is a
  * plain record) would have hit.
  */
-export type BrainRestInit = { method?: string; body?: BodyInit };
+export type BrainRestInit = {
+  method?: string;
+  body?: BodyInit;
+  /** Statuses the caller handles itself (a host transport may suppress its error toast for them). */
+  expectedErrors?: number[];
+};
 export type BrainRestRequest = <T>(path: string, init?: BrainRestInit) => Promise<T>;
 
 export interface BrainRestOptions {
@@ -65,6 +73,11 @@ export interface BrainRestOptions {
    * shared implementation look impossible; naming it makes it one line.
    */
   uploadFile?: (file: File) => Promise<{ key: string; name: string; type: string }>;
+  /**
+   * The host's on-device port (PRD 42 · D). When set, `summarizeChat` summarizes the
+   * transcript on the device first and sends it as `clientResult`. Absent ⇒ the server path.
+   */
+  clientFirst?: ClientFirstHost;
 }
 
 /** Build the `?a=b` suffix for a chat listing, or '' when nothing is set. */
@@ -79,6 +92,11 @@ function listQuery(params?: { projectId?: string; limit?: number; offset?: numbe
 
 export function createBrainRestPersistence(opts: BrainRestOptions) {
   const { baseUrl, request, getToken } = opts;
+
+  const getMessages = (chatId: number, limit?: number) =>
+    request<{ messages: BrainMessage[] }>(
+      `/api/brain/chats/${chatId}/messages${limit != null ? `?limit=${limit}` : ''}`,
+    ).then((r) => r.messages);
 
   return {
     listChats: (params?: { projectId?: string; limit?: number; offset?: number }) =>
@@ -124,13 +142,21 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
       request<{ archived: boolean }>(`/api/brain/chats/${id}`, { method: 'DELETE' }),
 
     /** Summarize a chat and store the summary on it. */
-    summarizeChat: (id: number) =>
-      request<{ summary: string } | { error: string }>(`/api/brain/chats/${id}/summarize`, { method: 'POST' }),
+    summarizeChat: (id: number) => {
+      const path = `/api/brain/chats/${id}/summarize`;
+      const send = (clientResult?: unknown) => request<{ summary: string } | { error: string }>(path, {
+        method: 'POST',
+        ...(clientResult ? { body: JSON.stringify({ clientResult }), expectedErrors: [400] } : {}),
+      });
+      const host = opts.clientFirst;
+      if (!host) return send();
+      return withClientResult(
+        async () => onDeviceTranscriptSummary(host, transcriptSeedOf(await getMessages(id)).messages),
+        send,
+      );
+    },
 
-    getMessages: (chatId: number, limit?: number) =>
-      request<{ messages: BrainMessage[] }>(
-        `/api/brain/chats/${chatId}/messages${limit != null ? `?limit=${limit}` : ''}`,
-      ).then((r) => r.messages),
+    getMessages,
 
     subscribeMessages: (chatId: number, onChanged: () => void) =>
       subscribeToChatMessages(baseUrl, getToken, chatId, onChanged),

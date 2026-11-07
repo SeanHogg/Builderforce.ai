@@ -42,6 +42,8 @@ import { chatChangedFiles } from '../../application/delta/chatChangedFiles';
 import { limitParam, offsetParam } from './queryParams';
 import { inviteAdvisorToAdvisoryThread } from '../../application/commerce/advisoryReservation';
 import { parseBody, parseOptionalBody } from './requestBody';
+import { admitBodyClientResult } from './clientResultHttp';
+import { CLIENT_SUMMARY_SPEC } from '../../application/llm/clientResult';
 import {
   AgentReplyBody,
   AppendMessagesBody,
@@ -377,15 +379,18 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
+    const { client, rejection } = await admitBodyClientResult(c, CLIENT_SUMMARY_SPEC);
+    if (rejection) return rejection;
+
     const apiKey = c.env.OPENROUTER_API_KEY;
-    if (!apiKey) return c.json({ error: 'LLM not configured' }, 503);
+    if (!apiKey && !client) return c.json({ error: 'LLM not configured' }, 503);
 
     const result = await brainService.summarizeChat(
       id,
       c.get('tenantId') as number,
       c.get('userId') as string,
       c.env,
-      { executionCtx: c.executionCtx },
+      { executionCtx: c.executionCtx, ...(client ? { client } : {}) },
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
@@ -524,7 +529,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
     const result = await brainService.appendMessages(chat.id, tenantId, userId, {
       messages: claim.messages.map((m) => ({ role: m.role, content: m.content, metadata: m.metadata ?? undefined })),
-    });
+    }, // A guest room holds several human speakers (maxParticipants) and its transcript records no speaker per turn,
+    // so no turn is provably the claimer's: stamp none (unknown author is never translated).
+    { authorUnknown: true });
     if ('error' in result) return c.json({ error: result.error }, 400);
     return c.json({ claimed: true, chat, messageCount: result.messages.length }, 201);
   });
@@ -782,14 +789,17 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid session id' }, 400);
 
+    const { client, rejection } = await admitBodyClientResult(c, CLIENT_SUMMARY_SPEC);
+    if (rejection) return rejection;
+
     const apiKey = c.env.OPENROUTER_API_KEY;
-    if (!apiKey) return c.json({ error: 'LLM not configured' }, 503);
+    if (!apiKey && !client) return c.json({ error: 'LLM not configured' }, 503);
 
     const result = await brainService.summarizeAgentHostSession(
       id,
       c.get('tenantId') as number,
       c.env,
-      { executionCtx: c.executionCtx },
+      { executionCtx: c.executionCtx, userId: c.get('userId') as string, ...(client ? { client } : {}) },
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);

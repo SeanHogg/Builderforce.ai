@@ -324,6 +324,9 @@
     "localTools": "Tools",
     "localContext": "{tokens} Kontext",
     "localDownloadFailed": "Download fehlgeschlagen — bitte erneut versuchen.",
+    "localDownloadBuiltIn": "Herunterladen",
+    "localDownloadingUnknown": "Wird heruntergeladen…",
+    "localBuiltInRequirement": "Benötigt etwa 22 GB freien Speicherplatz und eine GPU mit über 4 GB Videospeicher oder 16 GB RAM und 4 CPU-Kerne. Der Browser verwaltet dieses Modell.",
     "localReasonWebgpu": "Erfordert WebGPU, das dieser Browser oder diese GPU nicht bietet.",
     "localReasonF16": "Erfordert WebGPU-16-Bit-Shader, die diese GPU nicht bietet.",
     "localReasonBuffer": "Erfordert größere GPU-Puffer, als dieses Gerät zulässt.",
@@ -3902,6 +3905,11 @@
       "verdictNoPr": "In den letzten {days} Tagen hat der Cache {cache} der Prompt-Tokens geliefert; in diesem Zeitraum hat noch kein Lauf einen PR gemergt.",
       "basis": "Token-Zahlen meldet der Anbieter; die Kosten sind der Betrag, der beim Protokollieren jedes Aufrufs erfasst wurde.",
       "unattributed": "Nicht zugeordnet",
+      "engine": {
+        "cloud": "Cloud",
+        "browser": "Integriertes Modell"
+      },
+      "utilityShare": "{pct} der Hilfsaufrufe liefen auf diesem Gerät",
       "metric": {
         "cacheHitRate": "Cache-Trefferquote",
         "outputInputRatio": "Ausgabe / Eingabe",
@@ -3937,7 +3945,8 @@
         "actionType": "Arbeitstyp",
         "role": "Rolle",
         "model": "Modell",
-        "route": "Pipeline-Route"
+        "route": "Pipeline-Route",
+        "utilityEngine": "Hilfsaufrufe nach Engine"
       },
       "route": {
         "full": "Vollständige Pipeline",
@@ -35849,7 +35858,7 @@
       "live": "Was sich in diesem Lauf geändert hat und was sich gemeinsam geändert hat.",
       "compare": "Vorher und nachher: was besser oder schlechter wurde."
     },
-    "lensNotApplicable": "Diese Linse gilt nicht für diesen Ordner.",
+    "lensNotApplicable": "Diese Ansicht gilt nicht für diesen Ordner.",
     "lensNeedsJudgement": "Aussagen erscheinen nach einer Prüfung mit einem Modell. Alles andere funktioniert ohne.",
     "legendLabel": "Legende",
     "legend": {
@@ -35871,10 +35880,11 @@
       "edge": "Verweis"
     },
     "statsLine": "{nodes} Knoten · {edges} Kanten · {sources} Quellen",
-    "truncatedNote": "Gezeigt wird der wichtigste Teil eines großen Graphen. Die Suche erreicht alles.",
     "focusedNote": "Gezeigt werden die wichtigsten {count} Knoten.",
+    "filesLoaded": "{loaded} von {total} geladen",
     "showAll": "Alle anzeigen",
-    "view3d": "Turm",
+    "view3d": "3D",
+    "viewTower": "Turm",
     "viewList": "Liste",
     "viewSystem": "System",
     "viewHeat": "Hitze",
@@ -35944,7 +35954,7 @@
       "docs": "Dokumente"
     },
     "findingsTitle": "Befunde",
-    "findingsEmpty": "In dieser Linse gibt es nichts zu tun.",
+    "findingsEmpty": "Keine offenen Befunde bei {scope}.",
     "findingKinds": {
       "cycle": "Zyklus",
       "cloneGroup": "Klongruppe",
@@ -36150,7 +36160,6 @@
       "linesButton": "Linien",
       "linesEmpty": "Es wurden keine Einstiegspunkte gefunden, daher gibt es keine Linien.",
       "lineName": "Linie {name}",
-      "lineStops": "{count} Halte",
       "stationsOn": "Stationen auf {name}",
       "stationsPick": "Wählen Sie eine Linie, um ihre Stationen aufzulisten.",
       "omittedLines": "{count} weitere Einstiegspunkte werden nicht als Linien gezeichnet.",
@@ -36182,12 +36191,8 @@
       "pathBack": "Voriger Halt",
       "pathNext": "Nächster Halt",
       "pathHop": "{kind} · {count}",
-      "actTitle": "Handeln",
-      "actScope": "Bereich: {scope}",
       "actScopeAll": "Ganzer Graph",
-      "showFiles": "Dateien anzeigen",
       "levelOf5": "{level} von 5",
-      "stationFacts": "Über diese Station",
       "provenance": {
         "deterministic": "Deterministisch",
         "heuristic": "Heuristisch",
@@ -36195,12 +36200,28 @@
       },
       "resolveFinding": "Beheben", "resolveFindingAria": "Beheben: {title}", "pipesCapped": "Es werden nur die ersten {count} Leitungen angezeigt.", "kindsLegend": "Befundarten", "noDirectReference": "keine direkte Referenz", "testsCapped": "Die Anfrage nennt nur die ersten {count} Endpunkte.", "imageTooLarge": "Dieses Bild ist größer als {size} MB.", "historyCapped": "Es werden nur die letzten {count} Commits angezeigt.", "skippedUploads": "{count} Dateien wurden nicht gespeichert.", "skipReasons": {"tooLarge": "Zu groß zum Speichern", "unreadable": "Konnte nicht gelesen werden", "rateLimited": "Server war ausgelastet", "unsupported": "Nicht unterstützte Datei", "other": "Anderer Grund"},
       "system": {
-        "description": "Systemansicht: {tiers} Ebenen, {components} Komponenten. Wählen Sie eine Komponente für Details.",
         "componentAria": "{name}, {files} Dateien, {findings} Befunde",
         "antiBar": "Befunde nach Art",
         "data": "Daten und externe Dienste",
         "dataEmpty": "Kein Datenspeicher und kein externer Dienst beendet eine Linie.",
-        "empty": "Es gibt keine Komponenten zum Zeichnen."
+        "empty": "Es gibt keine Komponenten zum Zeichnen.",
+        "metaOwner": "{files} · {owner}",
+        "more": "+{count} weitere",
+        "moreAria": "{count} weitere in {layer} in der Liste anzeigen",
+        "notLayeredOne": "Keiner Ebene zugeordnet · {count} Teil → Liste",
+        "notLayeredOther": "Keiner Ebene zugeordnet · {count} Teile → Liste"
+      },
+      "systemArrows": {
+        "entry": "ruft über HTTP oder eine Brücke auf ↓",
+        "presentation": "nutzt einen Anwendungsport ↓",
+        "application": "arbeitet auf der Domäne ↓",
+        "domain": "wird umgesetzt durch ↓",
+        "infrastructure": "liest und schreibt ↓"
+      },
+      "counts": {
+        "fileOne": "{count} Datei", "fileOther": "{count} Dateien",
+        "stationOne": "{count} Station", "stationOther": "{count} Stationen",
+        "deadEndOne": "{count} Sackgasse", "deadEndOther": "{count} Sackgassen"
       },
       "heat": {
         "description": "Hitzeraster: {layers} Schichten, {components} Komponenten. Wählen Sie eine Zelle für Details.",
@@ -36210,10 +36231,23 @@
         "showMore": "{count} weitere anzeigen"
       },
       "cycleHop": "Zyklische Abhängigkeit",
-      "mapShows": "Die Karte zeigt {shown} von {total} Dateien",
+      "explain": {
+        "cutNote": "Gezeigt werden {shown} von {total} Dateien. Der Server hat nicht die ganze Karte gesendet; sie wird mit dem Server aktualisiert.",
+        "notSetUpWhy": "Nicht eingerichtet · {reason}",
+        "whyNoOutline": "der Server hat nur {shown} von {total} Dateien gesendet",
+        "whyNoBadges": "noch keine Datei hat {metric}; prüfen Sie erneut, um es zu erfassen",
+        "whyNotCollected": "{metric} wurde in dieser Prüfung nicht erfasst",
+        "parityServerOnly": "{server} Dateien auf dem Server · nicht auf diesem Rechner geprüft",
+        "outOfSync": "Nicht synchron",
+        "oneStation": "Diese Linie hat nur eine Station: nichts zum Durchschreiten.",
+        "legendNotSetUp": "daher bleibt jede Station neutral",
+        "presetNeeds": "benötigt {metrics}"
+      },
+      "scaleSummary": "{stations} Stationen stehen für {files} Dateien · gezeigt werden die {nodes} wichtigsten · die Suche erreicht alles",
+      "repoConfig": "Repo-Konfiguration",
       "sequence": {
         "description": "Sequenz aus {stops} Haltestellen und {messages} Nachrichten.",
-        "empty": "Wählen Sie eine Linie oder eine Station, um ihre Sequenz zu zeichnen.",
+        "empty": "Eine Sequenz braucht zwei Stationen; diese Linie hat nur eine.",
         "messageAria": "{from} an {to}: {label}",
         "backToMap": "Zurück zur Karte"
       },
@@ -36221,12 +36255,13 @@
         "synced": "Synchronisiert",
         "syncing": "Synchronisierung läuft",
         "error": "Fehler",
-        "idle": "Nicht synchronisiert"
+        "idle": "Nicht synchronisiert",
+        "partial": "Nicht synchron"
       },
       "overlay": {
         "outTo": "↑ Hinaus zu {name}",
         "fit": "Einpassen",
-        "lensSub": "war die Linse {lens}",
+        "lensSub": "war die Ansicht {lens}",
         "familyOnly": "Nur {family}",
         "clearFamily": "Filter {family} aufheben",
         "missingFiles": "{count} Dateien fehlen auf dem Server.",
@@ -36258,7 +36293,13 @@
           "leaf": "Außerhalb dieser Ebene",
           "loading": "Symbole werden gelesen…"
         },
-        "stats": { "issues": "Probleme", "complexity": "Komplexität", "coverage": "Abdeckung", "usage": "Nutzung" },
+        "stats": { "issues": "Antimuster", "complexity": "Komplexität", "coverage": "Abdeckung", "reached": "Erreicht", "usage": "Wichtigkeit" },
+        "statWords": {
+          "anti": { "none": "keine", "low": "niedrig", "medium": "mittel", "high": "hoch", "severe": "schwer" },
+          "antiTip": "aus {count} Warnungen",
+          "importance": "Nr. {rank} von {total}",
+          "importanceTip": "Relativ zum meistgenutzten Teil"
+        },
         "bands": { "symbol": "Klasse", "methods": "Methoden", "errors": "Fehler und Tests", "leaves": "Verlässt diese Ebene", "body": "Diese Funktion", "callees": "Was sie aufruft" },
         "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "LLM-Anbieter", "github": "GitHub-API", "stripe": "Zahlungen", "mail": "E-Mail", "slack": "Slack", "oauth": "Anmeldeanbieter" }
       },
@@ -36266,11 +36307,23 @@
         "heading": "Linien von den Einstiegspunkten",
         "legendHeading": "So liest sich das Bild jetzt",
         "ownerSwatches": "Eine Farbe pro Eigentümer",
-        "legendEmpty": "Dem Bild ist nichts zugeordnet."
+        "legendEmpty": "Dem Bild ist nichts zugeordnet.",
+        "lineDetail": "{stations} · {files} · {end}",
+        "pinTag": "{n} · {title}",
+        "reachedTag": "{percent} % erreicht"
       },
       "act": {
         "cardsTitle": "Zuerst beheben",
-        "noCards": "Hier gibt es nichts zu beheben.",
+        "titleAtOne": "Bei {scope} · 1 Problem",
+        "titleAtMany": "Bei {scope} · {count} Probleme",
+        "titlePath": "Auf diesem Pfad · {count} zu bearbeiten",
+        "emptyTitle": "Hier gibt es nichts zu tun",
+        "emptyStation": "Keine offenen Befunde an dieser Station. Fragen Sie z. B. „Was hat keinen Test?“",
+        "emptyPath": "Keine offenen Befunde auf diesem Pfad. Fragen Sie z. B. „Was hat keinen Test?“",
+        "emptyAsk": "Fragen, was keinen Test hat",
+        "emptyShow": "Anzeigen",
+        "systemWide": "Systemweit · {count}",
+        "systemWideNote": "Sie betreffen den Großteil des Systems, daher trägt keine einzelne Station sie.",
         "apply": "Anwenden",
         "prompt": "Auftrag",
         "show": "Zeigen",
@@ -36750,5 +36803,17 @@
         "simulate": "den Pfad mit echten Werten ausführen"
       }
     }
+  },
+  "translation": {
+    "translatedFrom": "Übersetzt aus {language}",
+    "showOriginal": "Original anzeigen",
+    "showTranslation": "Übersetzung anzeigen",
+    "translating": "Wird übersetzt…",
+    "needsTranslator": "Für die Übersetzung wird der integrierte Übersetzer dieses Browsers benötigt",
+    "getTranslator": "Herunterladen",
+    "importDetected": "Diese Datei scheint auf {language} geschrieben zu sein.",
+    "importTranslateTo": "Nach {language} übersetzen",
+    "importDismiss": "Schließen",
+    "importFailed": "Diese Datei konnte nicht übersetzt werden. Sie bleibt wie importiert."
   }
 }

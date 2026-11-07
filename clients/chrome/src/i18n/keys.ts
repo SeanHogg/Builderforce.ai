@@ -153,6 +153,9 @@ export const MESSAGE_KEYS = [
   'lmTools',
   'lmContext',
   'lmDownloadFailed',
+  'lmDownloadBuiltIn',
+  'lmDownloadingUnknown',
+  'lmBuiltInRequirement',
   'lmReasonWebgpu',
   'lmReasonF16',
   'lmReasonBuffer',
@@ -489,6 +492,13 @@ export const MESSAGE_KEYS = [
   'prefetchActionKnowledgeGraph',
   'prefetchActionKnowledgeReview',
   'prefetchActionKnowledgeAsk',
+  // Content translation (PRD 42 · E): the shared TranslatableText's copy.
+  'translationTranslatedFrom',
+  'translationShowOriginal',
+  'translationShowTranslation',
+  'translationTranslating',
+  'translationNeedsTranslator',
+  'translationGetTranslator',
 ] as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[number];

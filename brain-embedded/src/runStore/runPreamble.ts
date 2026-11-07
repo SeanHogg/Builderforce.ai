@@ -268,7 +268,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // The summarizer reads the run's LIVE policy, so it is resolved per request.
   const windowFit = createRunWindowFit({
     workingBudgetTokens: HISTORY_TOKEN_BUDGET,
-    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal }),
+    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal, ...(req.onDeviceTasks ? { onDeviceTasks: req.onDeviceTasks } : {}) }),
     ...(evermind?.recall ? { recall: (q: string) => evermind.recall(q), priorRecall } : {}),
     ...(req.windowSources ? { windowSources: req.windowSources } : {}),
     trace: (ev) => pushTrace(c, ev),

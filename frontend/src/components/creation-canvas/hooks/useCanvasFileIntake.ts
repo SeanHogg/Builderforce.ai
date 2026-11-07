@@ -5,7 +5,8 @@ import { type CanvasHostCapture, canvasSurface } from '@/lib/canvasHost';
 import type { CreationNodeData, CreationObjectKind } from '../types';
 import { IMPORT_COLUMN_GAP, IMPORT_ROW_GAP, MAX_DROPPED_FILES, nextPaint } from '../canvasFileDrop';
 import { newNode } from '../canvasNodeHelpers';
-import { type AttachmentBytesStrategy, importCanvasFile } from '@/domains/canvas/application/ImportCanvasFile';
+import { useCanvasImportTranslation } from './useCanvasImportTranslation';
+import { type AttachmentBytesStrategy, type ImportedCanvasObject, importCanvasFile } from '@/domains/canvas/application/ImportCanvasFile';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { trackActivity } from '@/lib/activity/tracker';
 import type { useTranslations } from 'next-intl';
@@ -36,6 +37,9 @@ export interface UseCanvasFileIntakeDeps {
 }
 
 export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t }: UseCanvasFileIntakeDeps) {
+  // The "Translate to <locale>" offer for each imported document (PRD 42 · E2).
+  const importTranslation = useCanvasImportTranslation(setNodes, placeAppendedRef);
+  const { offerFor: onImported } = importTranslation;
   // The keyboard half of §3.3. Only the board actually on the stage answers —
   // hidden cached boards hear the same event and must not quietly seat someone
   // on a canvas nobody is looking at.
@@ -128,6 +132,7 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
             : node),
           ...extras,
         ]);
+        void onImported(stub.id, first);
         objectKinds.push(first.kind, ...rest.map((object) => object.kind));
         notices.push(imported.notice);
         if (!suggestion) suggestion = imported.suggestedPrompt;
@@ -146,11 +151,11 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
     // Never overwrite something the person is part-way through typing.
     if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds, source } });
-  }, [attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t]);
+  }, [attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, onImported, openBrainDock, placeAppendedRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t]);
 
   const attachCanvasArtifact = useCallback(
     (file: File) => addFilesToCanvas([file], undefined, 'composer_attachment'),
     [addFilesToCanvas],
   );
-  return { addFilesToCanvas, attachCanvasArtifact, addHostCapture };
+  return { addFilesToCanvas, attachCanvasArtifact, addHostCapture, importTranslation };
 }

@@ -62,13 +62,17 @@ import { gatewayIntentRefiner } from '../../application/dashboards/gatewayIntent
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { IntentRefiner } from '../../application/dashboards/nlQuery';
 import { parseOptionalBody, z, zNumberLike } from './requestBody';
+import { admitClientResult } from './clientResultHttp';
+import { CLIENT_INTENT_SPEC, clientIntentRefiner } from '../../application/dashboards/clientIntentRefiner';
+import { recordClientResultUsage } from '../../application/llm/clientResultUsage';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
 // Bodies. Free-text fields the handler `.toString()`s / `String()`s accept a number,
 // as they always did; required-looking fields stay optional so the handler's own
 // "X is required" answer still wins.
-const AskQueryBody = z.object({ question: zNumberLike.nullish(), refine: z.boolean().nullish() });
+/** `clientResult` (PRD 42 Part D) is validated by `admitClientResult`, never here. */
+const AskQueryBody = z.object({ question: zNumberLike.nullish(), refine: z.boolean().nullish(), clientResult: z.unknown().optional() });
 const CreateDashboardBody = z.object({ name: zNumberLike.nullish(), isDefault: z.boolean().nullish() });
 const PatchDashboardBody = z.object({ name: z.string().nullish(), isDefault: z.boolean().nullish() });
 /** `config` is stored as the widget's JSON document, so it keeps every key. */
@@ -132,12 +136,20 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseOptionalBody(c, AskQueryBody);
     const question = (body.question ?? '').toString().trim();
     if (!question) return c.json({ error: 'question is required' }, 400);
+    const { client, rejection } = admitClientResult(c, body.clientResult, CLIENT_INTENT_SPEC);
+    if (rejection) return rejection;
 
     let refiner: IntentRefiner | undefined;
     if (body.refine !== false) {
       // A plan lookup failure means no refiner, not a failed query.
       const plan = await resolveTenantPlan(c.env as Env, tenantId).catch(() => null);
       if (plan) refiner = gatewayIntentRefiner(c.env as Env, plan.effectivePlan, plan.premiumOverride);
+      // PRD 42 Part D: a device-picked key wins only when it is a whitelisted key; else the server refiner runs.
+      if (client) {
+        refiner = clientIntentRefiner(client, refiner, () => recordClientResultUsage(db, c.env as Env, {
+          tenantId, userId: (c.get('userId') as string | undefined) ?? null, useCase: 'dashboard_intent', provenance: client.provenance,
+        }));
+      }
     }
 
     const composed = await composeAnswer(db, tenantId, question, { refiner, cache: metricCache(c.env as Env) });

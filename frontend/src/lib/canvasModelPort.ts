@@ -17,6 +17,7 @@ import type { CanvasRun } from '@/lib/canvasAiRun';
 import { servedOnDevice, servedRef } from '@builderforce/local-inference';
 import { cachedModelWindow } from '@/lib/llmModelWindow';
 import { toChatMessages } from '@/lib/canvasRunMessages';
+import { browserOnDeviceTasks } from '@/lib/brain/onDeviceTasks';
 
 /** The gateway's usage report as the agent's `ModelUsage` (prompt/completion → input/output). */
 function modelUsageOf(usage: NonNullable<CanvasTurn['usage']>): ModelUsage {
@@ -128,6 +129,8 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
           metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
         }),
         request.model,
+        // The browser's own model first (PRD 42 · C2); resolved here, per call, so no import cycle at load.
+        browserOnDeviceTasks(),
       )({ system, user, maxTokens: request.maxTokens ?? DEFAULT_SUMMARY_TOKENS, signal: signal ?? options.signal });
       // No note is a failed summary, not an empty one: it takes the failure path, so the policy
       // falls back to its recall note instead of folding a blank "memory" into the transcript.

@@ -63,6 +63,8 @@ export const AiDraftBody = z.object({
   docType: z.string().nullish(),
   title: z.string().nullish(),
   existingContent: z.string().nullish(),
+  /** PRD 42 Part D — validated by `admitClientResult`, never here. */
+  clientResult: z.unknown().optional(),
 });
 
 /** `POST /documents/:id/list` — the price is `Number(...)`ed; absent fields take their defaults. */

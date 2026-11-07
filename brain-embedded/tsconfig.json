@@ -37,6 +37,7 @@
       "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],
       "@builderforce/difficulty-router": ["../packages/difficulty-router/src/index.ts"],
       "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],
+      "@builderforce/json-schema": ["../packages/json-schema/src/index.ts"],
       "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/local-first": ["../packages/local-first/src/index.ts"],
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],

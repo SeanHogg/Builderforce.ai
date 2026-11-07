@@ -13,7 +13,7 @@ import { bumpChatMessages, bumpUnreadForChatAudience } from './chatCacheVersions
 import { isStepRow } from '@builderforce/agent-loop';
 import { anchorStepSeqs, appendSteps } from './chatStepStore';
 
-type AppendInput = { role: string; content: string; metadata?: string | null; eventKey?: string | null };
+type AppendInput = { role: string; content: string; metadata?: string | null; eventKey?: string | null; authorUserId?: string | null };
 
 /** Append messages to a chat (seq-managed insert + touch), NO access check —
  *  callers must have already verified access. Shared by `appendMessages`
@@ -97,7 +97,7 @@ export async function appendRawOutcome<M extends AppendInput>(db: Db, chatId: nu
 async function insertTurns(
   db: Db,
   chatId: number,
-  valid: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null; createdAt: Date }>,
+  valid: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null; authorUserId?: string | null; createdAt: Date }>,
 ): Promise<{ rows: BrainChatMessageRow[]; fresh: boolean[]; written: BrainChatMessageRow[] }> {
   if (valid.length === 0) return { rows: [], fresh: [], written: [] };
 
@@ -119,6 +119,7 @@ async function insertTurns(
       content: msg.content,
       metadata: msg.metadata ?? null,
       eventKey: msg.eventKey ?? null,
+      authorUserId: msg.role === 'user' ? (msg.authorUserId ?? null) : null,
       createdAt: msg.createdAt,
     })))
     // `where` restates the index's predicate: `uq_brain_chat_messages_event` is

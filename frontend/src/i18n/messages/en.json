@@ -324,6 +324,9 @@
     "localTools": "Tools",
     "localContext": "{tokens} context",
     "localDownloadFailed": "Download failed — try again.",
+    "localDownloadBuiltIn": "Download",
+    "localDownloadingUnknown": "Downloading…",
+    "localBuiltInRequirement": "Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.",
     "localReasonWebgpu": "Needs WebGPU, which this browser or GPU does not offer.",
     "localReasonF16": "Needs WebGPU 16-bit shaders, which this GPU does not offer.",
     "localReasonBuffer": "Needs larger GPU buffers than this device allows.",
@@ -3902,6 +3905,11 @@
       "verdictNoPr": "Over the last {days} days the cache served {cache} of prompt tokens; no run in this window has merged a PR yet.",
       "basis": "Token figures are provider-reported; spend is the cost stamped when each call was logged.",
       "unattributed": "Unattributed",
+      "engine": {
+        "cloud": "Cloud",
+        "browser": "Built-in model"
+      },
+      "utilityShare": "{pct} of utility calls ran on this device",
       "metric": {
         "cacheHitRate": "Cache hit rate",
         "outputInputRatio": "Output / input",
@@ -3937,7 +3945,8 @@
         "actionType": "Work type",
         "role": "Role",
         "model": "Model",
-        "route": "Pipeline route"
+        "route": "Pipeline route",
+        "utilityEngine": "Utility calls by engine"
       },
       "route": {
         "full": "Full pipeline",
@@ -35849,7 +35858,7 @@
       "live": "What changed in this run, and what changed together.",
       "compare": "Before and after: what got better or worse."
     },
-    "lensNotApplicable": "This lens does not apply to this folder.",
+    "lensNotApplicable": "This view does not apply to this folder.",
     "lensNeedsJudgement": "Claims appear after a review with a model. Everything else works without one.",
     "legendLabel": "Legend",
     "legend": {
@@ -35871,10 +35880,11 @@
       "edge": "Reference"
     },
     "statsLine": "{nodes} nodes · {edges} edges · {sources} sources",
-    "truncatedNote": "Showing the most important part of a large graph. Search reaches everything.",
     "focusedNote": "Showing the top {count} nodes.",
+    "filesLoaded": "{loaded} of {total} loaded",
     "showAll": "Show all",
-    "view3d": "Tower",
+    "view3d": "3D",
+    "viewTower": "Tower",
     "viewList": "List",
     "viewSystem": "System",
     "viewHeat": "Heat",
@@ -35944,7 +35954,7 @@
       "docs": "Documents"
     },
     "findingsTitle": "Findings",
-    "findingsEmpty": "Nothing to act on in this lens.",
+    "findingsEmpty": "No open findings at {scope}.",
     "findingKinds": {
       "cycle": "Cycle",
       "cloneGroup": "Clone group",
@@ -36150,7 +36160,6 @@
       "linesButton": "Lines",
       "linesEmpty": "No entry points were found, so there are no lines.",
       "lineName": "{name} line",
-      "lineStops": "{count} stops",
       "stationsOn": "Stations on {name}",
       "stationsPick": "Pick a line to list its stations.",
       "omittedLines": "{count} more entry points are not drawn as lines.",
@@ -36182,12 +36191,8 @@
       "pathBack": "Previous stop",
       "pathNext": "Next stop",
       "pathHop": "{kind} · {count}",
-      "actTitle": "Act",
-      "actScope": "Scope: {scope}",
       "actScopeAll": "Whole graph",
-      "showFiles": "Show files",
       "levelOf5": "{level} of 5",
-      "stationFacts": "About this station",
       "provenance": {
         "deterministic": "Deterministic",
         "heuristic": "Heuristic",
@@ -36195,12 +36200,28 @@
       },
       "resolveFinding": "Resolve", "resolveFindingAria": "Resolve: {title}", "pipesCapped": "Showing only the first {count} pipes.", "kindsLegend": "Finding kinds", "noDirectReference": "no direct reference", "testsCapped": "The request names only the first {count} endpoints.", "imageTooLarge": "That image is larger than {size} MB.", "historyCapped": "Showing only the latest {count} commits.", "skippedUploads": "{count} files were not stored.", "skipReasons": {"tooLarge": "Too large to store", "unreadable": "Could not be read", "rateLimited": "Server was busy", "unsupported": "Not a supported file", "other": "Other reason"},
       "system": {
-        "description": "System view: {tiers} tiers, {components} components. Select a component for its details.",
         "componentAria": "{name}, {files} files, {findings} findings",
         "antiBar": "Findings by kind",
         "data": "Data and external services",
         "dataEmpty": "No data store or external service ends a line.",
-        "empty": "There are no components to draw."
+        "empty": "There are no components to draw.",
+        "metaOwner": "{files} · {owner}",
+        "more": "+{count} more",
+        "moreAria": "Show {count} more in {layer} in the list",
+        "notLayeredOne": "Not layered · {count} part → List",
+        "notLayeredOther": "Not layered · {count} parts → List"
+      },
+      "systemArrows": {
+        "entry": "calls over HTTP or a bridge ↓",
+        "presentation": "takes an application port ↓",
+        "application": "works on the domain ↓",
+        "domain": "is implemented by ↓",
+        "infrastructure": "reads and writes ↓"
+      },
+      "counts": {
+        "fileOne": "{count} file", "fileOther": "{count} files",
+        "stationOne": "{count} station", "stationOther": "{count} stations",
+        "deadEndOne": "{count} dead end", "deadEndOther": "{count} dead ends"
       },
       "heat": {
         "description": "Heat grid: {layers} layers, {components} components. Select a cell for its details.",
@@ -36210,10 +36231,23 @@
         "showMore": "Show {count} more"
       },
       "cycleHop": "Dependency cycle",
-      "mapShows": "Map shows {shown} of {total} files",
+      "explain": {
+        "cutNote": "Showing {shown} of {total} files. The server did not send the full map; it updates when the server is updated.",
+        "notSetUpWhy": "Not set up · {reason}",
+        "whyNoOutline": "the server sent only {shown} of {total} files",
+        "whyNoBadges": "no file has {metric} yet; review again to collect it",
+        "whyNotCollected": "{metric} was not collected in this review",
+        "parityServerOnly": "{server} files on the server · not reviewed on this machine",
+        "outOfSync": "Out of sync",
+        "oneStation": "This line has one station: nothing to step through.",
+        "legendNotSetUp": "so every station stays plain",
+        "presetNeeds": "needs {metrics}"
+      },
+      "scaleSummary": "{stations} stations stand for {files} files · showing the {nodes} most important · search reaches all",
+      "repoConfig": "repo config",
       "sequence": {
         "description": "Sequence of {stops} stops and {messages} messages.",
-        "empty": "Pick a line or a station to draw its sequence.",
+        "empty": "A sequence needs two stations; this line has one.",
         "messageAria": "{from} to {to}: {label}",
         "backToMap": "Back to map"
       },
@@ -36221,12 +36255,13 @@
         "synced": "Synced",
         "syncing": "Syncing",
         "error": "Error",
-        "idle": "Not synced"
+        "idle": "Not synced",
+        "partial": "Out of sync"
       },
       "overlay": {
         "outTo": "↑ Out to {name}",
         "fit": "Fit",
-        "lensSub": "was the {lens} lens",
+        "lensSub": "was the {lens} view",
         "familyOnly": "{family} only",
         "clearFamily": "Clear the {family} filter",
         "missingFiles": "{count} files are missing on the server.",
@@ -36258,7 +36293,13 @@
           "leaf": "Outside this level",
           "loading": "Reading symbols…"
         },
-        "stats": { "issues": "Issues", "complexity": "Complexity", "coverage": "Coverage", "usage": "Usage" },
+        "stats": { "issues": "Anti-patterns", "complexity": "Complexity", "coverage": "Coverage", "reached": "Reached", "usage": "Importance" },
+        "statWords": {
+          "anti": { "none": "none", "low": "low", "medium": "medium", "high": "high", "severe": "severe" },
+          "antiTip": "from {count} warnings",
+          "importance": "#{rank} of {total}",
+          "importanceTip": "Relative to the busiest part"
+        },
         "bands": { "symbol": "Class", "methods": "Methods", "errors": "Errors and tests", "leaves": "Leaves this level", "body": "This function", "callees": "What it calls" },
         "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "LLM providers", "github": "GitHub API", "stripe": "Payments", "mail": "Email", "slack": "Slack", "oauth": "Sign-in provider" }
       },
@@ -36266,11 +36307,23 @@
         "heading": "Lines from the entry points",
         "legendHeading": "Reading the picture now",
         "ownerSwatches": "One colour per owner",
-        "legendEmpty": "Nothing is bound to the picture."
+        "legendEmpty": "Nothing is bound to the picture.",
+        "lineDetail": "{stations} · {files} · {end}",
+        "pinTag": "{n} · {title}",
+        "reachedTag": "{percent}% reached"
       },
       "act": {
         "cardsTitle": "Fix these first",
-        "noCards": "Nothing to fix here.",
+        "titleAtOne": "At {scope} · 1 issue",
+        "titleAtMany": "At {scope} · {count} issues",
+        "titlePath": "On this path · {count} to act on",
+        "emptyTitle": "Nothing to act on here",
+        "emptyStation": "No open findings at this station. Try “What has no test?”",
+        "emptyPath": "No open findings on this path. Try “What has no test?”",
+        "emptyAsk": "Ask what has no test",
+        "emptyShow": "Show",
+        "systemWide": "System-wide · {count}",
+        "systemWideNote": "These touch most of the system, so no single station carries them.",
         "apply": "Apply",
         "prompt": "Prompt",
         "show": "Show",
@@ -36750,5 +36803,17 @@
         "simulate": "run the path with real values"
       }
     }
+  },
+  "translation": {
+    "translatedFrom": "Translated from {language}",
+    "showOriginal": "Show original",
+    "showTranslation": "Show translation",
+    "translating": "Translating…",
+    "needsTranslator": "Translation needs this browser's built-in translator",
+    "getTranslator": "Download",
+    "importDetected": "This file looks like it is written in {language}.",
+    "importTranslateTo": "Translate to {language}",
+    "importDismiss": "Dismiss",
+    "importFailed": "Could not translate this file. It stays as imported."
   }
 }

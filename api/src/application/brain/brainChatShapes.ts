@@ -156,6 +156,8 @@ export const messageColumns = {
   role: brainChatMessages.role,
   content: brainChatMessages.content,
   metadata: brainChatMessages.metadata,
+  /** The author of a human message, as stamped; NULL (unknown) for legacy rows and non-human turns. */
+  authorUserId: brainChatMessages.authorUserId,
   seq: brainChatMessages.seq,
   createdAt: brainChatMessages.createdAt,
 } as const;
@@ -166,6 +168,7 @@ export interface BrainChatMessageRow {
   role: string;
   content: string;
   metadata: string | null;
+  authorUserId: string | null;
   seq: number;
   createdAt: Date;
 }

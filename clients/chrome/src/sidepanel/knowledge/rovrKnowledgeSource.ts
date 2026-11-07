@@ -8,6 +8,7 @@
  */
 
 import { gatewayErrorMessage, pinpointVisionRequest } from '@builderforce/agent-tools/knowledge';
+import { judgeClientFirstFor, type ClientFirstHost } from '@seanhogg/builderforce-brain-embedded';
 import { createKnowledgeClient } from '@builderforce/knowledge-client';
 import {
   canPickDirectory, createKnowledgeSource, fsAccessDirectoryProvider, uploadDirectoryProvider, type DirectoryProvider, type PinpointHost,
@@ -38,6 +39,8 @@ export interface RovrKnowledgeDeps {
   projectId: number;
   fetch: AuthenticatedFetch;
   reportError(error: unknown, operation: string): void;
+  /** The panel's on-device port (`pageClientFirst(services.onDeviceTasks)`); absent ⇒ judged on the server. */
+  clientFirst?: ClientFirstHost;
 }
 
 /**
@@ -58,8 +61,11 @@ export function rovrPinpointHost(fetch: AuthenticatedFetch): PinpointHost {
   };
 }
 
-export function createRovrKnowledgeSource({ projectId, fetch, reportError }: RovrKnowledgeDeps): KnowledgeGraphSource {
-  const client = createKnowledgeClient({ projectId, fetch });
+export function createRovrKnowledgeSource({ projectId, fetch, reportError, clientFirst }: RovrKnowledgeDeps): KnowledgeGraphSource {
+  // The device judges first when the panel lends its port (PRD 42 · D2); else the server path.
+  const client = createKnowledgeClient({
+    projectId, fetch, ...(clientFirst ? { judgeClientFirst: judgeClientFirstFor(clientFirst) } : {}),
+  });
   return createKnowledgeSource({
     projectId,
     client,

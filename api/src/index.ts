@@ -214,6 +214,7 @@ import { createReportRoutes } from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
+import { createTranslateRoutes }   from './presentation/routes/translateRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
 import { canonicalApexRedirect } from './application/ide/siteHosting';
@@ -1176,6 +1177,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/eval',            createEvalRoutes(db));
   app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
+  app.route('/api/translate', createTranslateRoutes());           // PRD 42 E4 — cloud translation fallback
   // Owned web corpus: crawl/frontier/index administration plus authenticated search.
   app.route('/api/search',    createWebSearchRoutes(db));
   // Order matters: the team-memory mesh lives at the static /api/teams/memory and

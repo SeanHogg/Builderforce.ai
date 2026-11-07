@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
+import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type ModelFallbackEvent, utilityUsageObserver } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -16,7 +16,7 @@ import { editorRunSettings } from "./editorRunSettings";
 import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
-import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
+import { localWindowProbes, onDeviceTasks, onDeviceTasksObserving, resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
 import { editorRunSetupPorts } from "./runSetupPorts";
 import { recordEditorRunEnd } from "./editorRunEnd";
@@ -291,6 +291,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     workspaceRoot,
     stream: streamForRoute,
     localProbes: localWindowProbes,
+    onDeviceTasks,
+    // Each served task call is a `utility` row in the run's chat (the same ledger as its model calls).
+    onDeviceTasksFor: (run) => onDeviceTasksObserving(utilityUsageObserver(local.usage, run, (error) => hostLog(`[usage ledger] utility write failed: ${String(error)}`))),
     persistence: {
       sendMessages: (chatId, messages) => local.persistence.sendMessages(chatId, messages),
     },

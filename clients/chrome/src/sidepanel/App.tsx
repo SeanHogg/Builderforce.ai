@@ -15,6 +15,7 @@ import { type BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import { ActionsView } from './ActionsView';
 import { ChatView } from './ChatView';
 import { RovrChatHistory } from './RovrChatHistory';
+import { RovrTranslationProvider } from './RovrTranslationProvider';
 import { ServicesContext, useLoaded, useOnline, useServices, useSignedIn, useSyncStats } from './hooks';
 import { PlaybooksView } from './PlaybooksView';
 import { SettingsView } from './SettingsView';
@@ -208,6 +209,7 @@ function Shell() {
   };
 
   return (
+    <RovrTranslationProvider onOpenModelPicker={openSettings}>
     <div className="rovr-shell">
       <Header
         history={{ open: showingHistory, onToggle: toggleHistory, controls: HISTORY_ID }}
@@ -231,6 +233,7 @@ function Shell() {
         }))}
       />
     </div>
+    </RovrTranslationProvider>
   );
 }
 

@@ -48,7 +48,7 @@ export async function consolidateChats(
 
   // Gather source messages, ordered chronologically across all sources.
   const srcMsgs = await db
-    .select({ chatId: brainChatMessages.chatId, role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, eventKey: brainChatMessages.eventKey, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
+    .select({ chatId: brainChatMessages.chatId, role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, eventKey: brainChatMessages.eventKey, authorUserId: brainChatMessages.authorUserId, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
     .from(brainChatMessages)
     .where(inArray(brainChatMessages.chatId, sources))
     .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
@@ -74,7 +74,7 @@ export async function consolidateChats(
   for (let i = 0; i < srcMsgs.length; i += CONSOLIDATE_INSERT_CHUNK) {
     const inserted = await db.insert(brainChatMessages).values(srcMsgs.slice(i, i + CONSOLIDATE_INSERT_CHUNK).map((m) => ({
       chatId: input.targetChatId, role: m.role, content: m.content,
-      metadata: m.metadata, eventKey: m.eventKey, createdAt: m.createdAt,
+      metadata: m.metadata, eventKey: m.eventKey, authorUserId: m.authorUserId, createdAt: m.createdAt,
     }))).onConflictDoNothing().returning({ id: brainChatMessages.id });
     messagesMoved += inserted.length;
   }

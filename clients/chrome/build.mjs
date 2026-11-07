@@ -135,7 +135,9 @@ await Promise.all([
     chunkNames: 'chunks/[name]-[hash]',
     outdir: outDir,
     jsx: 'automatic',
-    loader: { '.css': 'css' },
+    // The view's bundled typefaces (`@fontsource/*` CSS points at .woff2/.woff): emitted beside the bundle, referenced by the one stylesheet.
+    loader: { '.css': 'css', '.woff2': 'file', '.woff': 'file' },
+    assetNames: 'fonts/[name]-[hash]',
   }),
 ]);
 

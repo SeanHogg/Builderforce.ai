@@ -54,6 +54,8 @@ export interface RovrRunHostPorts {
   reportOutcome?: BrainRunRequest['reportOutcome'];
   /** The uniform record of a run that made no coder grade; the same door. */
   reportRunRecord?: BrainRunRequest['reportRunRecord'];
+  /** The panel's on-device task port: the run's summaries try it before the run's model (PRD 42 · C2). */
+  onDeviceTasks?: BrainRunRequest['onDeviceTasks'];
 }
 
 export interface RovrRunHost {
@@ -92,6 +94,7 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
         entryPoint: 'rovr',
         ...(ports.reportOutcome ? { reportOutcome: ports.reportOutcome } : {}),
         ...(ports.reportRunRecord ? { reportRunRecord: ports.reportRunRecord } : {}),
+        ...(ports.onDeviceTasks ? { onDeviceTasks: ports.onDeviceTasks } : {}),
       };
     },
     confirm(chatId, ok) {

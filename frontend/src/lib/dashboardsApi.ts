@@ -1,4 +1,6 @@
+import { withClientResult } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequest } from './apiClient';
+import { dashboardIntentResult } from './brain/clientFirstTasks';
 
 /**
  * Custom Dashboards + AI-Powered Queries — client mirror of
@@ -145,10 +147,11 @@ export interface ApplyPresetResult {
   addedWidgets: number;
 }
 
+const fetchMetricCatalog = (): Promise<{ metrics: MetricCatalogEntry[] }> => apiRequest('/api/dashboards/metrics');
+
 export const dashboardsApi = {
   // ── Metric catalogue ───────────────────────────────────────────────────────
-  metrics: (): Promise<{ metrics: MetricCatalogEntry[] }> =>
-    apiRequest('/api/dashboards/metrics'),
+  metrics: fetchMetricCatalog,
 
   // ── Dashboards CRUD ──────────────────────────────────────────────────────────
   list: (): Promise<{ dashboards: SavedDashboard[] }> =>
@@ -214,9 +217,14 @@ export const dashboardsApi = {
 
   // ── AI-Powered Query ─────────────────────────────────────────────────────────
   query: (question: string): Promise<ComposedAnswer> =>
-    apiRequest('/api/dashboards/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    }),
+    // The device picks the metric key first (PRD 42 · D2); the server ignores one it does not whitelist.
+    withClientResult(
+      () => dashboardIntentResult(question, async () => (await fetchMetricCatalog()).metrics.map((m) => m.key)),
+      (clientResult) => apiRequest('/api/dashboards/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, ...(clientResult ? { clientResult } : {}) }),
+        ...(clientResult ? { expectedErrors: [400] } : {}),
+      }),
+    ),
 };

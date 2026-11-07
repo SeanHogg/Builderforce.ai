@@ -11,7 +11,7 @@ import { useState } from 'react';
 import type { LocalModelRow as LocalModelRowData } from '@seanhogg/builderforce-brain-embedded';
 import type { LocalModelLabels } from './labels';
 import { fill } from '../spend/format';
-import { backendBadge, formatDownloadSize, localModelMeta, progressPercent, unsupportedReason } from './localModelView';
+import { backendBadge, downloadActionLabel, isBuiltInRow, localModelMeta, progressPercent, unsupportedReason } from './localModelView';
 
 export interface LocalModelRowProps {
   row: LocalModelRowData;
@@ -32,8 +32,13 @@ export function LocalModelRow({ row, labels, active, failed, locale, onSelect, o
   const [menuOpen, setMenuOpen] = useState(false);
   const ready = row.state === 'ready';
   /** Its bytes are here: Remove is offered (an unfit model the person downloaded too). */
-  const removable = ready || (row.state === 'unsupported' && row.downloaded === true);
+  const builtIn = isBuiltInRow(row);
+  /** The browser owns the built-in model's bytes — there is nothing to remove here. */
+  const removable = !builtIn && (ready || (row.state === 'unsupported' && row.downloaded === true));
   const percent = progressPercent(row);
+  /** No progress known (a download that began before a reload): show an indeterminate bar. */
+  const indeterminate = row.progress === undefined;
+  const progressText = indeterminate ? labels.localDownloadingUnknown : fill(labels.localDownloading, { percent });
   const meta = localModelMeta(row, labels, locale);
   const backend = backendBadge(row, labels);
 
@@ -58,26 +63,29 @@ export function LocalModelRow({ row, labels, active, failed, locale, onSelect, o
 
       {row.state === 'absent' && (
         <button type="button" className="bf-lmodel__action" onClick={() => onDownload(row.ref)}>
-          {fill(labels.localDownload, { size: formatDownloadSize(row.bytes, locale) })}
+          {downloadActionLabel(row, labels, locale)}
         </button>
       )}
 
       {row.state === 'downloading' && (
         <div className="bf-lmodel__progress">
           <div
-            className="bf-lmodel__bar"
+            className={`bf-lmodel__bar${indeterminate ? ' is-indeterminate' : ''}`}
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={percent}
-            aria-label={fill(labels.localDownloading, { percent })}
+            {...(indeterminate ? {} : { 'aria-valuenow': percent })}
+            aria-label={progressText}
           >
-            <span className="bf-lmodel__fill" style={{ width: `${percent}%` }} />
+            <span className="bf-lmodel__fill" style={indeterminate ? undefined : { width: `${percent}%` }} />
           </div>
-          <span className="bf-lmodel__pct">{fill(labels.localDownloading, { percent })}</span>
-          <button type="button" className="bf-lmodel__action" onClick={() => onCancel(row.ref)}>
-            {labels.localCancel}
-          </button>
+          <span className="bf-lmodel__pct">{progressText}</span>
+          {/* A download the browser runs itself (started before a reload) cannot be cancelled from here. */}
+          {!(indeterminate && builtIn) && (
+            <button type="button" className="bf-lmodel__action" onClick={() => onCancel(row.ref)}>
+              {labels.localCancel}
+            </button>
+          )}
         </div>
       )}
 

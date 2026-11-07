@@ -324,6 +324,9 @@
     "localTools": "工具",
     "localContext": "{tokens} 上下文",
     "localDownloadFailed": "下载失败，请重试。",
+    "localDownloadBuiltIn": "下载",
+    "localDownloadingUnknown": "正在下载…",
+    "localBuiltInRequirement": "需要约 22 GB 可用磁盘空间，以及显存超过 4 GB 的 GPU，或 16 GB 内存和 4 个 CPU 核心。该模型由浏览器管理。",
     "localReasonWebgpu": "需要 WebGPU，但此浏览器或 GPU 不支持。",
     "localReasonF16": "需要 WebGPU 16 位着色器，但此 GPU 不支持。",
     "localReasonBuffer": "所需的 GPU 缓冲区超出此设备的上限。",
@@ -3902,6 +3905,11 @@
       "verdictNoPr": "过去 {days} 天，缓存提供了 {cache} 的提示词令牌；此窗口内尚无运行合并 PR。",
       "basis": "令牌数据由提供商上报；支出为每次调用记录时标记的成本。",
       "unattributed": "未归属",
+      "engine": {
+        "cloud": "云端",
+        "browser": "内置模型"
+      },
+      "utilityShare": "{pct} 的辅助调用在本设备上运行",
       "metric": {
         "cacheHitRate": "缓存命中率",
         "outputInputRatio": "输出 / 输入",
@@ -3937,7 +3945,8 @@
         "actionType": "工作类型",
         "role": "角色",
         "model": "模型",
-        "route": "流水线路由"
+        "route": "流水线路由",
+        "utilityEngine": "按引擎统计的辅助调用"
       },
       "route": {
         "full": "完整流水线",
@@ -35849,7 +35858,7 @@
       "live": "本次运行中变更了什么，以及哪些一起变更。",
       "compare": "前后对比：哪些变好了，哪些变差了。"
     },
-    "lensNotApplicable": "此视角不适用于该文件夹。",
+    "lensNotApplicable": "此视图不适用于该文件夹。",
     "lensNeedsJudgement": "论断会在使用模型审阅后出现。其他功能无需模型即可使用。",
     "legendLabel": "图例",
     "legend": {
@@ -35871,10 +35880,11 @@
       "edge": "引用"
     },
     "statsLine": "{nodes} 个节点 · {edges} 条边 · {sources} 个来源",
-    "truncatedNote": "正在显示大型图谱中最重要的部分。搜索可覆盖全部内容。",
     "focusedNote": "正在显示前 {count} 个节点。",
+    "filesLoaded": "已加载 {loaded} / {total}",
     "showAll": "显示全部",
-    "view3d": "塔楼",
+    "view3d": "3D",
+    "viewTower": "塔楼",
     "viewList": "列表",
     "viewSystem": "系统",
     "viewHeat": "热力",
@@ -35944,7 +35954,7 @@
       "docs": "文档"
     },
     "findingsTitle": "发现",
-    "findingsEmpty": "此视角下没有需要处理的内容。",
+    "findingsEmpty": "{scope} 没有未解决的发现。",
     "findingKinds": {
       "cycle": "循环",
       "cloneGroup": "克隆组",
@@ -36150,7 +36160,6 @@
       "linesButton": "线路",
       "linesEmpty": "没有找到入口点，因此没有线路。",
       "lineName": "{name} 线路",
-      "lineStops": "{count} 站",
       "stationsOn": "{name} 上的站点",
       "stationsPick": "选择一条线路以列出其站点。",
       "omittedLines": "另有 {count} 个入口点未绘制为线路。",
@@ -36182,12 +36191,8 @@
       "pathBack": "上一站",
       "pathNext": "下一站",
       "pathHop": "{kind} · {count}",
-      "actTitle": "处理",
-      "actScope": "范围：{scope}",
       "actScopeAll": "整个图谱",
-      "showFiles": "显示文件",
       "levelOf5": "{level} / 5",
-      "stationFacts": "关于此站点",
       "provenance": {
         "deterministic": "确定性",
         "heuristic": "启发式",
@@ -36195,12 +36200,28 @@
       },
       "resolveFinding": "解决", "resolveFindingAria": "解决：{title}", "pipesCapped": "仅显示前 {count} 条管道。", "kindsLegend": "发现类型", "noDirectReference": "无直接引用", "testsCapped": "请求中仅列出前 {count} 个端点。", "imageTooLarge": "该图片超过 {size} MB。", "historyCapped": "仅显示最近 {count} 个提交。", "skippedUploads": "有 {count} 个文件未被存储。", "skipReasons": {"tooLarge": "太大，无法存储", "unreadable": "无法读取", "rateLimited": "服务器繁忙", "unsupported": "不受支持的文件", "other": "其他原因"},
       "system": {
-        "description": "系统视图：{tiers} 层，{components} 个组件。选择组件查看详情。",
         "componentAria": "{name}，{files} 个文件，{findings} 个发现",
         "antiBar": "按类型统计的发现",
         "data": "数据与外部服务",
         "dataEmpty": "没有数据存储或外部服务作为线路的终点。",
-        "empty": "没有可绘制的组件。"
+        "empty": "没有可绘制的组件。",
+        "metaOwner": "{files} · {owner}",
+        "more": "另外 {count} 个",
+        "moreAria": "在列表中显示 {layer} 的另外 {count} 个",
+        "notLayeredOne": "未分层 · {count} 个部分 → 列表",
+        "notLayeredOther": "未分层 · {count} 个部分 → 列表"
+      },
+      "systemArrows": {
+        "entry": "通过 HTTP 或桥接调用 ↓",
+        "presentation": "使用应用端口 ↓",
+        "application": "作用于领域 ↓",
+        "domain": "由下层实现 ↓",
+        "infrastructure": "读写 ↓"
+      },
+      "counts": {
+        "fileOne": "{count} 个文件", "fileOther": "{count} 个文件",
+        "stationOne": "{count} 站", "stationOther": "{count} 站",
+        "deadEndOne": "{count} 个死路", "deadEndOther": "{count} 个死路"
       },
       "heat": {
         "description": "热力网格：{layers} 层，{components} 个组件。选择单元格查看详情。",
@@ -36210,10 +36231,23 @@
         "showMore": "再显示 {count} 个"
       },
       "cycleHop": "循环依赖",
-      "mapShows": "地图显示 {total} 个文件中的 {shown} 个",
+      "explain": {
+        "cutNote": "显示 {total} 个文件中的 {shown} 个。服务器没有发送完整地图；服务器更新后会随之更新。",
+        "notSetUpWhy": "未设置 · {reason}",
+        "whyNoOutline": "服务器只发送了 {total} 个文件中的 {shown} 个",
+        "whyNoBadges": "还没有文件带有{metric}；请重新审阅以收集",
+        "whyNotCollected": "本次审阅未收集{metric}",
+        "parityServerOnly": "服务器上有 {server} 个文件 · 未在本机审阅",
+        "outOfSync": "不同步",
+        "oneStation": "这条线路只有一个站点：无可步进。",
+        "legendNotSetUp": "所以每个站点都保持素色",
+        "presetNeeds": "需要{metrics}"
+      },
+      "scaleSummary": "{stations} 个站点代表 {files} 个文件 · 显示最重要的 {nodes} 个 · 搜索可覆盖全部",
+      "repoConfig": "仓库配置",
       "sequence": {
         "description": "包含 {stops} 个站点和 {messages} 条消息的时序。",
-        "empty": "选择一条线路或一个站点以绘制其时序。",
+        "empty": "时序至少需要两个站点；这条线路只有一个。",
         "messageAria": "{from} 到 {to}：{label}",
         "backToMap": "返回地图"
       },
@@ -36221,12 +36255,13 @@
         "synced": "已同步",
         "syncing": "同步中",
         "error": "错误",
-        "idle": "未同步"
+        "idle": "未同步",
+        "partial": "不同步"
       },
       "overlay": {
         "outTo": "↑ 返回 {name}",
         "fit": "适应",
-        "lensSub": "原为{lens}视角",
+        "lensSub": "原为{lens}视图",
         "familyOnly": "仅 {family}",
         "clearFamily": "清除 {family} 筛选",
         "missingFiles": "服务器上缺少 {count} 个文件。",
@@ -36258,7 +36293,13 @@
           "leaf": "不在此层级内",
           "loading": "正在读取符号…"
         },
-        "stats": { "issues": "问题", "complexity": "复杂度", "coverage": "覆盖率", "usage": "使用量" },
+        "stats": { "issues": "反模式", "complexity": "复杂度", "coverage": "覆盖率", "reached": "已触达", "usage": "重要性" },
+        "statWords": {
+          "anti": { "none": "无", "low": "低", "medium": "中", "high": "高", "severe": "严重" },
+          "antiTip": "来自 {count} 条警告",
+          "importance": "第 {rank} / 共 {total}",
+          "importanceTip": "相对于最繁忙的部分"
+        },
         "bands": { "symbol": "类", "methods": "方法", "errors": "错误与测试", "leaves": "离开此层级", "body": "此函数", "callees": "它调用的内容" },
         "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "LLM 提供商", "github": "GitHub API", "stripe": "支付", "mail": "电子邮件", "slack": "Slack", "oauth": "登录提供商" }
       },
@@ -36266,11 +36307,23 @@
         "heading": "从入口出发的线路",
         "legendHeading": "现在如何读这幅图",
         "ownerSwatches": "每位负责人一种颜色",
-        "legendEmpty": "图上没有绑定任何内容。"
+        "legendEmpty": "图上没有绑定任何内容。",
+        "lineDetail": "{stations} · {files} · {end}",
+        "pinTag": "{n} · {title}",
+        "reachedTag": "已触达 {percent}%"
       },
       "act": {
         "cardsTitle": "优先修复",
-        "noCards": "这里没有需要修复的内容。",
+        "titleAtOne": "在 {scope} · 1 个问题",
+        "titleAtMany": "在 {scope} · {count} 个问题",
+        "titlePath": "此路径 · {count} 项待处理",
+        "emptyTitle": "这里没有需要处理的内容",
+        "emptyStation": "此站点没有未解决的发现。试试“哪些没有测试？”",
+        "emptyPath": "此路径上没有未解决的发现。试试“哪些没有测试？”",
+        "emptyAsk": "询问哪些没有测试",
+        "emptyShow": "显示",
+        "systemWide": "全系统 · {count}",
+        "systemWideNote": "这些发现涉及系统的大部分，因此没有单个站点承载它们。",
         "apply": "应用",
         "prompt": "交给智能体",
         "show": "显示",
@@ -36750,5 +36803,17 @@
         "simulate": "用真实值运行该路径"
       }
     }
+  },
+  "translation": {
+    "translatedFrom": "译自{language}",
+    "showOriginal": "显示原文",
+    "showTranslation": "显示译文",
+    "translating": "正在翻译…",
+    "needsTranslator": "翻译需要此浏览器的内置翻译器",
+    "getTranslator": "下载",
+    "importDetected": "此文件似乎是用{language}撰写的。",
+    "importTranslateTo": "翻译为{language}",
+    "importDismiss": "忽略",
+    "importFailed": "无法翻译此文件，将保持导入时的原样。"
   }
 }

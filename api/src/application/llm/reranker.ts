@@ -16,7 +16,7 @@
  */
 import { executeVendorPost } from './vendors/types';
 import { VendorFatalError, VendorRetryableError } from './embeddingVendors/types';
-import { workersAiCredentials, workersAiRunEndpoint } from './embeddingVendors/cloudflare';
+import { workersAiCredentials, workersAiRunEndpoint } from '../../infrastructure/workersAi/workersAiEndpoint';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export const RERANK_MODEL = '@cf/baai/bge-reranker-base';

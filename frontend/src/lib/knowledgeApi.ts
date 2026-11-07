@@ -5,6 +5,8 @@
  */
 import { apiRequest, apiRequestStream } from './apiClient';
 import { readSseDataPayloads } from '@seanhogg/builderforce-memory/wire';
+import { withClientResult } from '@seanhogg/builderforce-brain-embedded';
+import { documentDraftResult } from './brain/clientFirstTasks';
 
 export type DocType = 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error';
 export type DocStatus = 'draft' | 'published' | 'archived';
@@ -353,11 +355,21 @@ export const knowledgeApi = {
     input: { prompt: string; docType?: DocType; title?: string; existingContent?: string },
     onDelta: (accumulated: string) => void,
   ): Promise<string> => {
-    const res = await apiRequestStream(`${BASE}/ai/draft`, { method: 'POST', ...jsonBody(input) });
-    if (!res.ok) {
-      const msg = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(msg.error || `AI generation failed (${res.status})`);
-    }
+    // The device drafts first (PRD 42 · D2); the server's SSE stream answers when it declines or refuses.
+    const res = await withClientResult(
+      () => documentDraftResult(input),
+      async (clientResult) => {
+        const r = await apiRequestStream(`${BASE}/ai/draft`, {
+          method: 'POST', ...jsonBody(clientResult ? { ...input, clientResult } : input),
+          ...(clientResult ? { expectedErrors: [400] } : {}),
+        });
+        if (!r.ok) {
+          const msg = (await r.json().catch(() => ({}))) as { error?: string };
+          throw Object.assign(new Error(msg.error || `AI generation failed (${r.status})`), { status: r.status });
+        }
+        return r;
+      },
+    );
     let acc = '';
     for await (const data of readSseDataPayloads(res.body)) {
       try {

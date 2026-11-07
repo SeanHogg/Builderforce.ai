@@ -17,6 +17,7 @@ import type {
   EvermindRunHooks,
   ModelFallbackEvent,
   ModelPreflightResult,
+  OnDeviceTasks,
   ServedRead,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { LocalRuntimeProbe } from "@builderforce/local-inference";
@@ -70,6 +71,12 @@ export interface BrainRunHostPorts {
   /** The live on-device runtimes, asked only when a turn moves onto a local model so the
    *  window gate packs for that runtime's real window. Omitted ⇒ the catalog row. */
   localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
+  /** The editor's on-device task port (`modelRouting.ts`): a run's summaries try it before
+   *  the run's model (PRD 42 · C2). Omitted ⇒ they go through `stream` as before. */
+  onDeviceTasks?: OnDeviceTasks;
+  /** The same port bound to ONE run's chat, so each served task call lands in that chat's usage
+   *  ledger as a `utility` row (PRD 42 · Part F). Preferred over {@link onDeviceTasks} when present. */
+  onDeviceTasksFor?(run: { chatId: number; runKey: number }): OnDeviceTasks;
   /** Where the loop persists its turns — the same Brain store the panel reads. */
   persistence: BrainRunPersistence;
   /**

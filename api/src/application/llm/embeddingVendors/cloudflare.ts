@@ -27,6 +27,7 @@ import {
   type EmbeddingVendorModelEntry,
   type EmbeddingVendorModule,
 } from './types';
+import { workersAiCredentials, workersAiRunEndpoint } from '../../../infrastructure/workersAi/workersAiEndpoint';
 
 /** Multilingual, 8K-token context, 1024 dimensions — the default. */
 export const DEFAULT_CLOUDFLARE_EMBEDDING_MODEL = '@cf/baai/bge-m3';
@@ -37,19 +38,6 @@ const CATALOG: ReadonlyArray<EmbeddingVendorModelEntry> = [
   { id: '@cf/baai/bge-base-en-v1.5',         label: 'BGE Base EN v1.5 (Cloudflare)',  brand: 'BAAI', dimensions: 768 },
   { id: '@cf/baai/bge-small-en-v1.5',        label: 'BGE Small EN v1.5 (Cloudflare)', brand: 'BAAI', dimensions: 384 },
 ];
-
-/** The Workers AI credential pair, or null when either half is unset. Shared with the
- *  reranker (`application/llm/reranker.ts`), which runs on the same account quota. */
-export function workersAiCredentials(env: { CLOUDFLARE_AI_API_TOKEN?: string | null; CLOUDFLARE_ACCOUNT_ID?: string | null }): { token: string; accountId: string } | null {
-  const token = env.CLOUDFLARE_AI_API_TOKEN ?? null;
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? null;
-  return token && accountId ? { token, accountId } : null;
-}
-
-/** The native `/ai/run/<model>` endpoint for one account. */
-export function workersAiRunEndpoint(accountId: string, model: string): string {
-  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
-}
 
 export function buildCloudflareEmbeddingBody(params: EmbeddingGenParams): Record<string, unknown> {
   return {

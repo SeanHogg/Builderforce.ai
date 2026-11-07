@@ -42,6 +42,8 @@ import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 import { iceServers } from '../../application/meetings/iceServers';
 import { boundedIntParam } from './queryParams';
 import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
+import { admitBodyClientResult } from './clientResultHttp';
+import { CLIENT_SUMMARY_SPEC } from '../../application/llm/clientResult';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review', 'advisory']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
@@ -418,7 +420,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const res = await loadForAccess(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
-    const out = await summarizeMeeting(db, c.env as Env, res.meeting);
+    const { client, rejection } = await admitBodyClientResult(c, CLIENT_SUMMARY_SPEC);
+    if (rejection) return rejection;
+    const out = await summarizeMeeting(db, c.env as Env, res.meeting, { userId: (c.get('userId') as string | undefined) ?? null, ...(client ? { client } : {}) });
     if ('error' in out) return c.json({ error: out.error }, 422);
     return c.json({ summary: out.summary, meeting: await hydrate(tenantId, res.meeting.id) });
   });

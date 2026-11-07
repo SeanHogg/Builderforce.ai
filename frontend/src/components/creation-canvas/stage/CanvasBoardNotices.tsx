@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
+import { languageDisplayName } from '@seanhogg/builderforce-brain-ui';
+import type { ImportTranslationOffer, ImportTranslationStatus, useCanvasImportTranslation } from '../hooks/useCanvasImportTranslation';
 import type { CreationFlowNode } from '../CreationNode';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import styles from '../styles/stage.module.css';
@@ -17,6 +19,16 @@ export const CanvasFileDropOverlay = memo(function CanvasFileDropOverlay({ activ
           </div>
         </div>;
 });
+
+/** Notices for files arriving on the board: the drag overlay and the import-translation offer. */
+export function CanvasIntakeNotices({ dragging, importTranslation }: { dragging: boolean; importTranslation: ReturnType<typeof useCanvasImportTranslation> }) {
+  return (
+    <>
+      <CanvasFileDropOverlay active={dragging} />
+      <CanvasImportTranslateNotice offer={importTranslation.offer} status={importTranslation.status} locale={importTranslation.locale} onAccept={importTranslation.accept} onDismiss={importTranslation.dismiss} />
+    </>
+  );
+}
 
 export interface CanvasFrameFocusBarProps {
   /** The section being worked on alone, or null on the whole board. */
@@ -55,4 +67,33 @@ export const CanvasLargeSessionNotice = memo(function CanvasLargeSessionNotice({
   const t = useTranslations('creationCanvas');
   if (!objectsOnScreen || count <= LARGE_SESSION_OBJECTS) return null;
   return <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={onFrame}>{t('frame')}</button></div>;
+});
+
+/**
+ * "This file looks like Spanish · Translate to English" — the explicit step before an imported
+ * document is translated into a new document beside it. The board's notice surface, so it sits
+ * with the other board notices rather than over the prompt; the hook queues offers and this
+ * shows the head of the queue.
+ */
+export const CanvasImportTranslateNotice = memo(function CanvasImportTranslateNotice({ offer, status, locale, onAccept, onDismiss }: {
+  offer: ImportTranslationOffer | null;
+  status: ImportTranslationStatus;
+  locale: string;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const t = useTranslations('translation');
+  if (!offer) return null;
+  const working = status === 'working';
+  return (
+    <div className={`${styles.performanceNotice} ${styles.importNotice}`} role="status">
+      <span style={status === 'failed' ? { color: 'var(--error-text)' } : undefined}>
+        {status === 'failed' ? t('importFailed') : t('importDetected', { language: languageDisplayName(offer.from, locale) })}
+      </span>
+      <button type="button" disabled={working} onClick={onAccept}>
+        {working ? t('translating') : t('importTranslateTo', { language: languageDisplayName(locale, locale) })}
+      </button>
+      <button type="button" disabled={working} onClick={onDismiss}>{t('importDismiss')}</button>
+    </div>
+  );
 });

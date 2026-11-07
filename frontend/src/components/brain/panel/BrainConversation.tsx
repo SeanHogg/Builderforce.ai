@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { BrainTimeline, StarterGroup, StarterTile, SurfaceEmptyState } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, StarterGroup, StarterTile, SurfaceEmptyState, TranslationPickerScope, requestComposerMenu } from '@seanhogg/builderforce-brain-ui';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Icon } from '@/components/ui/Icon';
@@ -11,6 +11,7 @@ import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { REPLAY_MASK } from '@/lib/replaySensitive';
 import { AiDisclosure } from '../AiDisclosure';
 import { BrainErrorBanner } from '../BrainErrorBanner';
+import { useOwnMessage } from '@/lib/brain/hooks/useOwnMessage';
 import { useBrainPanel } from './BrainPanelContext';
 import { BrainComposer } from './BrainComposer';
 import { BrainConversationHeader } from './BrainConversationHeader';
@@ -146,6 +147,10 @@ export function BrainConversation() {
     </>
   ) : undefined;
 
+  // The translator hint under a message opens THIS panel's model menu.
+  const openModelMenu = () => requestComposerMenu(composerId, 'model');
+  const isOwnMessage = useOwnMessage();
+
   return (
     <>
       <WebAiSurface
@@ -155,6 +160,7 @@ export function BrainConversation() {
         empty={empty}
         thread={(
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <TranslationPickerScope openModelPicker={openModelMenu}>
             <BrainTimeline
               conversationKey={chats.activeChatId}
               messages={conv.messages}
@@ -167,6 +173,7 @@ export function BrainConversation() {
               liveAccount={conv.servedBy?.account}
               loading={conv.loadingMessages}
               labels={timeline.timelineLabels}
+              isOwnMessage={isOwnMessage}
               modelIdentity={modelIdentity}
               onApplyCode={timeline.timelineApplyCode}
               onCreateFile={timeline.timelineCreateFile}
@@ -185,6 +192,7 @@ export function BrainConversation() {
               // A PreFetch answer's chips (Open in graph, Choose a folder to review).
               prefetch={timelinePrefetch}
             />
+            </TranslationPickerScope>
           </div>
         )}
         // What went wrong reads next to the box you answer it from. The verdict (Upgrade

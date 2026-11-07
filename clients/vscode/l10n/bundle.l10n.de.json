@@ -724,6 +724,9 @@
   "Math": "Mathematik",
   "All models ({count})": "Alle Modelle ({count})",
   "Fewer models": "Weniger Modelle",
+  "Download": "Herunterladen",
+  "Downloading…": "Wird heruntergeladen…",
+  "Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.": "Benötigt etwa 22 GB freien Speicherplatz und eine GPU mit über 4 GB Videospeicher oder 16 GB RAM und 4 CPU-Kerne. Der Browser verwaltet dieses Modell.",
   "Try again": "Erneut versuchen",
   "A question asked before was answered from memory — no model call": "Eine bereits gestellte Frage wurde aus dem Gedächtnis beantwortet – kein Modellaufruf",
   "AI spend · last {days} days": "KI-Ausgaben · letzte {days} Tage",
@@ -1174,5 +1177,10 @@
   "Git status could not be read after the fix.": "Der Git-Status konnte nach der Korrektur nicht gelesen werden.",
   "git {0} failed{1}": "git {0} ist fehlgeschlagen{1}",
   "knip removes every unused export in each of these files, not only the one the finding names.": "knip entfernt in jeder dieser Dateien alle ungenutzten Exporte, nicht nur den, den der Befund nennt.",
-  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "Der ausgewählte Arbeitsbereich ist derzeit nicht erreichbar. BuilderForce versucht es automatisch erneut."
-}
+  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "Der ausgewählte Arbeitsbereich ist derzeit nicht erreichbar. BuilderForce versucht es automatisch erneut.",
+  "Translated from {0}": "Übersetzt aus {0}",
+  "Show original": "Original anzeigen",
+  "Show translation": "Übersetzung anzeigen",
+  "Translating…": "Wird übersetzt…",
+  "Translation needs this browser's built-in translator": "Für die Übersetzung wird der integrierte Übersetzer dieses Browsers benötigt"
+}

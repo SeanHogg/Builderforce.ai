@@ -8,9 +8,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { INFERENCE_MODE_LABEL_FIELDS, LOCAL_MODEL_LABEL_FIELDS } from '@seanhogg/builderforce-brain-ui';
+import { INFERENCE_MODE_LABEL_FIELDS, LOCAL_MODEL_LABEL_FIELDS, TRANSLATION_LABEL_FIELDS } from '@seanhogg/builderforce-brain-ui';
 import { composerMessageKey } from '../sidepanel/labels/composerLabels';
 import { rovrLocalModelKey } from '../sidepanel/labels/localModelLabels';
+import { rovrTranslationKey } from '../sidepanel/labels/translationLabels';
 import { TOOL_LABEL_KEYS } from '../sidepanel/toolLabels';
 import { MESSAGE_KEYS } from './keys';
 
@@ -66,6 +67,10 @@ describe('Rovr locale catalogs', () => {
 
   it('every on-device list label key resolves', () => {
     for (const field of LOCAL_MODEL_LABEL_FIELDS) expect(MESSAGE_KEYS).toContain(rovrLocalModelKey(field));
+  });
+
+  it('every content-translation label key resolves', () => {
+    for (const field of TRANSLATION_LABEL_FIELDS) expect(MESSAGE_KEYS).toContain(rovrTranslationKey(field));
   });
 
   it('every inference-mode label key resolves (the `/` Model tab and the first-run question)', () => {

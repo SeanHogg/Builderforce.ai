@@ -449,6 +449,18 @@
     "message": "La descarga falló: inténtalo de nuevo.",
     "description": "A model download failed"
   },
+  "lmDownloadBuiltIn": {
+    "message": "Descargar",
+    "description": "Download action for the browser's built-in model (size unknown)"
+  },
+  "lmDownloadingUnknown": {
+    "message": "Descargando…",
+    "description": "Download progress line when the percentage is unknown"
+  },
+  "lmBuiltInRequirement": {
+    "message": "Requiere unos 22 GB de disco libre y una GPU con más de 4 GB de memoria de vídeo, o 16 GB de RAM y 4 núcleos de CPU. El navegador gestiona este modelo.",
+    "description": "The browser's stated hardware requirement for its built-in model"
+  },
   "lmReasonWebgpu": {
     "message": "Requiere WebGPU, que este navegador o GPU no ofrece.",
     "description": "Why a model cannot run: no WebGPU"
@@ -1762,5 +1774,29 @@
   "prefetchActionKnowledgeAsk": {
     "message": "Consulta de conocimiento",
     "description": "Chat: name of the knowledge-lookup action"
+  },
+  "translationTranslatedFrom": {
+    "message": "Traducido del {language}",
+    "description": "Chat: caption under a translated message; {language} is the source language's name"
+  },
+  "translationShowOriginal": {
+    "message": "Mostrar original",
+    "description": "Chat: toggle back to the original text of a translated message"
+  },
+  "translationShowTranslation": {
+    "message": "Mostrar traducción",
+    "description": "Chat: toggle to the translation again"
+  },
+  "translationTranslating": {
+    "message": "Traduciendo…",
+    "description": "Chat: shown while a message is being translated"
+  },
+  "translationNeedsTranslator": {
+    "message": "La traducción necesita el traductor integrado de este navegador",
+    "description": "Chat: muted hint when nothing on this device can translate a message"
+  },
+  "translationGetTranslator": {
+    "message": "Descargar",
+    "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

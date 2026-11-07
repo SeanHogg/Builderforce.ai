@@ -1898,6 +1898,12 @@
   background: var(--bf-surface-2, rgba(128, 128, 128, 0.2));
 }
 .bf-lmodel__fill { position: absolute; inset: 0 auto 0 0; background: var(--bf-accent, #4f80ff); transition: width 0.2s ease; }
+/* Progress unknown (a download that began before a reload): a sliding segment. */
+.bf-lmodel__bar.is-indeterminate .bf-lmodel__fill { width: 40%; transition: none; animation: bf-lmodel-slide 1.2s ease-in-out infinite; }
+@keyframes bf-lmodel-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) {
+  .bf-lmodel__bar.is-indeterminate .bf-lmodel__fill { animation: none; width: 100%; opacity: 0.5; }
+}
 .bf-lmodel__pct { flex: 0 0 auto; font-size: 10px; color: var(--bf-text-muted, #8a8a8a); font-variant-numeric: tabular-nums; }
 
 /* Narrow panels (a 300px editor sidebar, a phone): let the popover use the full
@@ -2764,3 +2770,24 @@
 @media (prefers-reduced-motion: reduce) {
   .bf-ctx-meter__fill { transition: none; }
 }
+
+/* Content translation (TranslatableText) */
+.bf-tr { min-width: 0; }
+.bf-tr__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bf-tr__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--bf-text-muted, var(--text-secondary, #8a8a8a));
+  overflow-wrap: anywhere;
+}
+.bf-tr__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--bf-accent, var(--accent, #9085e9));
+  text-decoration: underline;
+  cursor: pointer;
+}
+.bf-tr__link:focus-visible { outline: 2px solid var(--bf-accent, var(--accent, #9085e9)); outline-offset: 2px; }

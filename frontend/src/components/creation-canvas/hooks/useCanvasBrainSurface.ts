@@ -288,10 +288,11 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     ...(persistence === 'server' ? { onRateMessage: rateBrainMessage, ratings: brainRatings } : {}),
     guestSignup: guestSignupPrompt,
     refusal: brainRefusal,
+    composerId: refusalComposerId,
     onOpen: (nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock(); },
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
-  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, brainRefusal, replayBrainMessage, answerBrainQuestion, runSnapshot.pendingTurn, runSnapshot.servedBy, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
+  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, brainRefusal, refusalComposerId, replayBrainMessage, answerBrainQuestion, runSnapshot.pendingTurn, runSnapshot.servedBy, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
   return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies, brainRefusal, brainContextUsage };
 }

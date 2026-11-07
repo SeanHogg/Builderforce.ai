@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/json-schema",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The ONE minimal JSON-Schema validator: the gateway checks `response_format: json_schema` output with it, and the on-device tasks (`@seanhogg/builderforce-brain-embedded`) check a small model's JSON with it. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

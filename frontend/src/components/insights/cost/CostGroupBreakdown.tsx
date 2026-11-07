@@ -6,7 +6,7 @@ import { PmEmpty, PmError } from '@/components/pm/pmShared';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
-import { COST_GROUPINGS, type CostGrouping, type CostMetricsReport } from '@/lib/costMetricsApi';
+import { COST_GROUPINGS, onDeviceUtilitySeries, type CostGrouping, type CostMetricsReport } from '@/lib/costMetricsApi';
 import { useInsightFormat } from '../format';
 import { lensSelectStyle } from '../LensShell';
 import { useCostMetricFormat } from './costMetricFormat';
@@ -17,10 +17,14 @@ export const GROUPING_LABEL_KEY: Record<CostGrouping, string> = {
   role: 'grouping.role',
   model: 'grouping.model',
   route: 'grouping.route',
+  utilityEngine: 'grouping.utilityEngine',
 };
 
 /** The pipeline routes the wire names, and their labels (under `insights.cost`). */
 export const ROUTE_LABEL_KEY: Readonly<Record<string, string>> = { full: 'route.full', quick: 'route.quick' };
+
+/** Engines that are product names, spelled the same in every language. */
+const ENGINE_BRAND: Readonly<Record<string, string>> = { synapse: 'Synapse', bfi: 'BFI', webllm: 'WebLLM' };
 
 /** The wire's "no attribution" bucket — the one group key the UI names itself. */
 const UNATTRIBUTED = 'unattributed';
@@ -44,19 +48,35 @@ export function CostGroupBreakdown({
   const tc = useTranslations('common');
   const nameOf = (g: string): string => {
     if (g === UNATTRIBUTED) return t('unattributed');
+    if (grouping === 'utilityEngine') {
+      if (g === 'cloud') return t('engine.cloud');
+      if (g === 'browser') return t('engine.browser');
+      return ENGINE_BRAND[g] ?? g;
+    }
     const routeKey = grouping === 'route' ? ROUTE_LABEL_KEY[g] : undefined;
     return routeKey ? t(routeKey as never) : g;
   };
 
+  // The "On-device utility" series (PRD 42 · F) drops the non-utility bucket; every other grouping shows all groups.
+  const utility = grouping === 'utilityEngine' ? onDeviceUtilitySeries(report) : null;
+  const rows = utility ? utility.groups : (report?.groups ?? []);
+
   let body: ReactNode;
   if (error) body = <PmError message={t('loadFailed')} />;
   else if (!report) body = <PmEmpty message={tc('loading')} />;
-  else if (report.groups.length === 0) body = <PmEmpty message={t('empty')} />;
+  else if (rows.length === 0) body = <PmEmpty message={t('empty')} />;
   else {
-    const bars = report.groups.map((g) => ({ key: g.group, label: nameOf(g.group), value: g.costUsd }));
+    // On-device utility is counted in calls (a device's own call costs nothing), the rest in spend.
+    const byEngine = grouping === 'utilityEngine';
+    const bars = rows.map((g) => ({ key: g.group, label: nameOf(g.group), value: byEngine ? g.calls : g.costUsd }));
     body = (
       <>
-        <BarChart data={bars} maxRows={8} labelWidth={120} formatValue={(v) => f.approxUsd(v)} ariaLabel={t('group.aria')} />
+        <BarChart data={bars} maxRows={8} labelWidth={120} formatValue={(v) => (byEngine ? int(v) : f.approxUsd(v))} ariaLabel={t('group.aria')} />
+        {utility?.share != null && (
+          <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+            {t('utilityShare', { pct: `${Math.round(utility.share * 100)}%` })}
+          </p>
+        )}
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
             <thead>
@@ -71,7 +91,7 @@ export function CostGroupBreakdown({
               </tr>
             </thead>
             <tbody>
-              {report.groups.map((g) => (
+              {rows.map((g) => (
                 <tr key={g.group} style={trStyle}>
                   <td style={{ ...tdStyle, wordBreak: 'break-word' }}>{nameOf(g.group)}</td>
                   <td style={tdMutedStyle}>{int(g.calls)}</td>
@@ -87,7 +107,7 @@ export function CostGroupBreakdown({
         </div>
         {report.truncated && (
           <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-            {t('group.truncated', { n: int(report.groups.length) })}
+            {t('group.truncated', { n: int(rows.length) })}
           </p>
         )}
       </>

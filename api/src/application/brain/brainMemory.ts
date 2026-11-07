@@ -16,9 +16,12 @@ import { readTimelineTail } from '../../domain/shared/timelineTail';
 // cannot reach a row we consolidate.
 import { answerTextOf as displayAnswerTextOf, stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { readProxyChoice } from '../llm/LlmProxyService';
+import type { ClientSupplied } from '../llm/clientResult';
+import { recordClientResultUsage } from '../llm/clientResultUsage';
 import { writeProjectFact } from '../knowledge/writeProjectFact';
 import { currentRequestScope } from '../shared/requestScope';
-import { canAccessChat, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
+import { canAccessChat, chatOwnedBy, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
+import { agentHostSessionOwnedBy } from './agentHostSessionAuthority';
 import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
 import { ADVISORY_THREAD_AI_CONTEXT_ERROR, advisoryChatAdmittedToAiContext } from '../commerce/advisoryReservation';
 import { buildTenantLlmService, completeTraced } from './brainLlmCall';
@@ -204,7 +207,7 @@ export async function archiveChat(db: Db, chatId: number, tenantId: number, user
 
 /** `opts.executionCtx` is the request context the trace write rides on. Optional:
  *  a caller without one (cron/internal) still traces, best-effort. */
-export async function summarizeChat(db: Db, chatId: number, tenantId: number, userId: string, env: Env, opts?: { executionCtx?: ExecutionContext }) {
+export async function summarizeChat(db: Db, chatId: number, tenantId: number, userId: string, env: Env, opts?: { executionCtx?: ExecutionContext; client?: ClientSupplied<string> }) {
   const apiKey = env.OPENROUTER_API_KEY;
   const chat = await canAccessChat(db, chatId, tenantId, userId, {
     projectId: brainChats.projectId,
@@ -229,30 +232,42 @@ export async function summarizeChat(db: Db, chatId: number, tenantId: number, us
     return { summary: null, reason: 'Not enough messages to summarize' };
   }
 
-  const transcript = msgs.map(m => `${m.role}: ${m.content}`).join('\n\n');
+  // PRD 42 principle 6: a device's result replaces only the caller's OWN content. In a
+  // shared chat the summary (and its `chat-summary:<id>` project fact) belongs to the chat's
+  // owner; a participant's result is ignored and the server path runs (not a refusal).
+  const client = opts?.client && await chatOwnedBy(db, tenantId, userId, chatId) ? opts.client : undefined;
 
-  const systemPrompt = [
-    'You are a summarization assistant. Compress the following conversation into a concise memory.',
-    'Focus on: key decisions, action items, ideas proposed, context established, and important details.',
-    'Output only the summary, no preamble.',
-  ].join('\n');
+  let rawSummary: string;
+  if (client) {
+    // PRD 42 Part D: the device already summarized this transcript — no server model call.
+    rawSummary = client.value;
+    await recordClientResultUsage(db, env, { tenantId, userId, projectId: chat.projectId, useCase: 'brain_summary', provenance: client.provenance });
+  } else {
+    const transcript = msgs.map(m => `${m.role}: ${m.content}`).join('\n\n');
 
-  const service = await buildTenantLlmService(env, tenantId);
+    const systemPrompt = [
+      'You are a summarization assistant. Compress the following conversation into a concise memory.',
+      'Focus on: key decisions, action items, ideas proposed, context established, and important details.',
+      'Output only the summary, no preamble.',
+    ].join('\n');
 
-  const result = await completeTraced(db, service, {
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: transcript },
-    ],
-    temperature: 0.2,
-    max_tokens: 800,
-  } as never, {
-    env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
-    apiKey, tenantId, userId, useCase: 'brain_summary',
-    chatId, projectId: chat.projectId,
-  });
+    const service = await buildTenantLlmService(env, tenantId);
 
-  const { content: rawSummary } = await readProxyChoice(result);
+    const result = await completeTraced(db, service, {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: transcript },
+      ],
+      temperature: 0.2,
+      max_tokens: 800,
+    } as never, {
+      env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
+      apiKey, tenantId, userId, useCase: 'brain_summary',
+      chatId, projectId: chat.projectId,
+    });
+
+    ({ content: rawSummary } = await readProxyChoice(result));
+  }
 
   // The model's raw content can carry its `<think>` reasoning — see `answerTextOf`.
   // It is stripped ONCE here and every materialisation below uses that one text, so
@@ -507,7 +522,7 @@ async function storeAgentHostSessionSummary(
 /** `opts.executionCtx` is the request context the trace write rides on. Optional:
  *  a caller without one (cron/internal) still traces, best-effort. Deferred by default —
  *  see {@link BackgroundMemoryOptions}. */
-export async function summarizeAgentHostSession(db: Db, sessionId: number, tenantId: number, env: Env, opts?: BackgroundMemoryOptions) {
+export async function summarizeAgentHostSession(db: Db, sessionId: number, tenantId: number, env: Env, opts?: BackgroundMemoryOptions & { client?: ClientSupplied<string>; userId?: string | null }) {
   const apiKey = env.OPENROUTER_API_KEY;
   // Verify session belongs to tenant
   const [session] = await db
@@ -531,6 +546,17 @@ export async function summarizeAgentHostSession(db: Db, sessionId: number, tenan
 
   if (msgs.length < 2) {
     return { summary: null, reason: 'Not enough messages to summarize' };
+  }
+
+  // PRD 42 principle 6: only the owner of the session's host may replace its summary with a
+  // device result; anyone else's is ignored and the server path runs (not a refusal).
+  const client = opts?.client && await agentHostSessionOwnedBy(db, tenantId, sessionId, opts.userId) ? opts.client : undefined;
+  if (client) {
+    // PRD 42 Part D: the device already summarized this session — no deferral, no model call.
+    const summary = await storeAgentHostSessionSummary(db, tenantId, sessionId, session.projectId, client.value);
+    if (!summary) return { summary: null, reason: 'LLM returned empty response' };
+    await recordClientResultUsage(db, env, { tenantId, userId: opts?.userId ?? null, projectId: session.projectId, useCase: 'brain_summary', provenance: client.provenance });
+    return { summary, projectId: session.projectId };
   }
 
   const request = agentHostSessionRequest(msgs);

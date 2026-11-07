@@ -17,6 +17,7 @@ import { useCallback, useEffect, useId, useMemo } from 'react';
 import {
   AiSurface,
   BrainTimeline,
+  ownMessageOf,
   ChatErrorBanner,
   DEFAULT_ASK_USER_LABELS,
   ModelFallbackNotice,
@@ -44,7 +45,7 @@ import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
 import { connectRequiredProvider } from '../inference/connectedAccount';
 import { KimiConnectCard } from './KimiConnect';
-import { useInferenceModeState, useRun, useServices } from './hooks';
+import { useInferenceModeState, useRun, useServices, useViewerId } from './hooks';
 import { rovrLookup } from './labels/rovrLookup';
 import { RovrComposer } from './RovrComposer';
 import { ROVR_STARTERS } from './rovrStarters';
@@ -74,6 +75,9 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // A deterministic answer's line and chips, in Rovr's words; its knowledge chips open the tab.
   const prefetch = useMemo(() => (onOpenKnowledge ? rovrPrefetchTimeline(t, onOpenKnowledge) : undefined), [onOpenKnowledge]);
   const services = useServices();
+  // A teammate's message is offered for translation; the viewer's own never. Unknown author / viewer: never.
+  const viewerId = useViewerId();
+  const isOwnMessage = useMemo(() => ownMessageOf(viewerId), [viewerId]);
   const inferenceMode = useInferenceModeState();
   // The notice names the chat it happened in; opening another chat retires it.
   useEffect(() => { services.modelFallback.clear(); }, [chatId, services.modelFallback]);
@@ -230,6 +234,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       thread={(
         <BrainTimeline
           conversationKey={chatId}
+          isOwnMessage={isOwnMessage}
           messages={messages}
           trace={conv.trace}
           streamingText={conv.streamingText}

@@ -69,7 +69,7 @@ describe('appendRaw — steps never land in the transcript table', () => {
 });
 
 describe('interleaveByTime', () => {
-  const row = (id: number, at: number): BrainChatMessageRow => ({ id, role: 'user', content: '', metadata: null, seq: id, createdAt: new Date(at) });
+  const row = (id: number, at: number): BrainChatMessageRow => ({ id, role: 'user', content: '', metadata: null, authorUserId: null, seq: id, createdAt: new Date(at) });
 
   it('orders steps between the messages they happened between', () => {
     const merged = interleaveByTime([row(1, 0), row(2, 30)], [row(101, 10), row(102, 20)]);
@@ -91,8 +91,8 @@ describe('interleaveByTime', () => {
 });
 
 describe('anchorStepSeqs', () => {
-  const msg = (id: number, seq: number): BrainChatMessageRow => ({ id, role: 'user', content: '', metadata: null, seq, createdAt: new Date(0) });
-  const step = (id: number): BrainChatMessageRow => ({ id: 1_000_000_000_000 + id, role: 'tool', content: '', metadata: null, seq: 0, createdAt: new Date(0) });
+  const msg = (id: number, seq: number): BrainChatMessageRow => ({ id, role: 'user', content: '', metadata: null, authorUserId: null, seq, createdAt: new Date(0) });
+  const step = (id: number): BrainChatMessageRow => ({ id: 1_000_000_000_000 + id, role: 'tool', content: '', metadata: null, authorUserId: null, seq: 0, createdAt: new Date(0) });
 
   it('gives trailing steps the last message seq, or `before` when the batch has none', () => {
     expect(anchorStepSeqs([msg(1, 4), step(1)], 0).map((r) => r.seq)).toEqual([4, 4]);

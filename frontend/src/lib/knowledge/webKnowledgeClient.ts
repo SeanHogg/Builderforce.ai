@@ -6,7 +6,9 @@
  */
 
 import { createKnowledgeClient, type KnowledgeClient, type KnowledgeFetch } from '@builderforce/knowledge-client';
+import { judgeClientFirstFor } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequestStream } from '@/lib/apiClient';
+import { browserClientFirst } from '@/lib/brain/onDeviceTasks';
 
 /** Statuses the knowledge client turns into a typed result (404 → null/miss, 4xx → KnowledgeApiError). */
 const HANDLED_BY_CLIENT = [400, 403, 404, 409, 413, 422];
@@ -21,5 +23,6 @@ export const webKnowledgeFetch: KnowledgeFetch = (path, init = {}) => {
 };
 
 export function createWebKnowledgeClient(projectId: number): KnowledgeClient {
-  return createKnowledgeClient({ projectId, fetch: webKnowledgeFetch });
+  // The device judges first (PRD 42 · D2); the server judges what it declines or refuses.
+  return createKnowledgeClient({ projectId, fetch: webKnowledgeFetch, judgeClientFirst: judgeClientFirstFor(browserClientFirst()) });
 }

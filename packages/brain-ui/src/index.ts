@@ -8,6 +8,7 @@
  */
 
 export { BrainTimeline, DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
+export { ownMessageOf } from './ownMessage';
 export type { BrainTimelineProps, BrainTimelineLabels, MessageRating, TimelinePrefetch } from './BrainTimeline';
 // The ONE catalog → label table every host reads its transcript copy through.
 export { timelineCatalogLookup, timelineLabelsFrom, liveActivityLabelsFrom, chatActivityLabelsFrom } from './timelineCatalog';
@@ -441,3 +442,6 @@ export type { FullBrainComposerLabels } from './composer/brainComposerLabels';
 // pending entitlement and the pin → choice rule, once for every host.
 export { composerModel, composerCatalogLoaded, withLocalModels, modelSelectionFrom } from './composer/composerModel';
 export type { ComposerModelCatalog, ComposerModelInput } from './composer/composerModel';
+
+// Content translation (PRD 42 - Part E): one TranslatableText, one provider per host.
+export * from './translation';

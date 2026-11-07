@@ -12,6 +12,7 @@
 
 import type { LocalRuntimeProbe } from '@builderforce/local-inference';
 import { promptApiEngine } from '../browserEngine';
+import { createBuiltInModels } from '../builtInAi/builtInModels';
 import type { LocalFetch } from '../localFirstTransport';
 import { createBfiWorkerEngine, type BfiWorkerEngineOptions } from './bfiWorkerEngine';
 import { pageEnginesFetch, probePageEngines } from './fetchShim';
@@ -53,6 +54,9 @@ export function createPageEngineSet(options: PageEngineSetOptions = {}): PageEng
     webllm: webllm.models,
     support: { webllm: () => webGpuSupport(), ...(bfi ? { bfi: bfi.support } : {}) },
     engines,
+    // The browser's own model: listed from the prober's `state`, downloaded through this
+    // same store (a successful download invalidates the prober via `engines` above).
+    builtIn: createBuiltInModels(promptApiEngine),
   });
   return {
     engines,

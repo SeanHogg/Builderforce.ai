@@ -45,6 +45,18 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +3 files (2026-11-07, PRD 42 on-device translation / client-first) — each is a thin
+ *     shell whose heavy deps are all behind `import()`:
+ *     `components/translation/WebTranslationProvider.tsx` (~50 lines) wraps the shell in
+ *       ConditionalAppShell so every string on screen can be translated; the on-device port,
+ *       the cloud client (`lib/translateApi.ts`) and the dock menu (`lib/brain/dockModelMenu.ts`)
+ *       load lazily, so none of them is in the closure.
+ *     `lib/localFirst/useWebInferenceMode.ts` (~one hook over `webInferenceMode.ts`, already
+ *       here): the provider must read the mode synchronously to decide whether the cloud
+ *       fallback may be handed over at all (Local only never sends text anywhere).
+ *     `lib/brain/webClientFirst.ts` (~45 lines): `builderforceApi.ts` (already here) builds the
+ *       Brain persistence with a client-first host; this holds a lazy proxy, and
+ *       `onDeviceTasks` / `clientFirstTasks` stay behind `import()`.
  *   +2 files (2026-10-21, Local-only socket gate) — `lib/localFirst/webRequestGate.ts`
  *     (~154 lines) and `lib/localFirst/webInferenceMode.ts` (~65 lines); every module they
  *     import (`auth`, `storage`, `apiOrigin`, `@builderforce/local-first`) is already here.

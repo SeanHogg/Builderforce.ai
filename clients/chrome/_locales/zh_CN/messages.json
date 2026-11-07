@@ -449,6 +449,18 @@
     "message": "下载失败，请重试。",
     "description": "A model download failed"
   },
+  "lmDownloadBuiltIn": {
+    "message": "下载",
+    "description": "Download action for the browser's built-in model (size unknown)"
+  },
+  "lmDownloadingUnknown": {
+    "message": "正在下载…",
+    "description": "Download progress line when the percentage is unknown"
+  },
+  "lmBuiltInRequirement": {
+    "message": "需要约 22 GB 可用磁盘空间，以及显存超过 4 GB 的 GPU，或 16 GB 内存和 4 个 CPU 核心。该模型由浏览器管理。",
+    "description": "The browser's stated hardware requirement for its built-in model"
+  },
   "lmReasonWebgpu": {
     "message": "需要 WebGPU，但此浏览器或 GPU 不支持。",
     "description": "Why a model cannot run: no WebGPU"
@@ -1762,5 +1774,29 @@
   "prefetchActionKnowledgeAsk": {
     "message": "知识查询",
     "description": "Chat: name of the knowledge-lookup action"
+  },
+  "translationTranslatedFrom": {
+    "message": "译自{language}",
+    "description": "Chat: caption under a translated message; {language} is the source language's name"
+  },
+  "translationShowOriginal": {
+    "message": "显示原文",
+    "description": "Chat: toggle back to the original text of a translated message"
+  },
+  "translationShowTranslation": {
+    "message": "显示译文",
+    "description": "Chat: toggle to the translation again"
+  },
+  "translationTranslating": {
+    "message": "正在翻译…",
+    "description": "Chat: shown while a message is being translated"
+  },
+  "translationNeedsTranslator": {
+    "message": "翻译需要此浏览器的内置翻译器",
+    "description": "Chat: muted hint when nothing on this device can translate a message"
+  },
+  "translationGetTranslator": {
+    "message": "下载",
+    "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

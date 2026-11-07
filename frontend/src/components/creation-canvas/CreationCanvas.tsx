@@ -148,7 +148,7 @@ import { CanvasAccountGateDialog } from './stage/CanvasAccountGateDialog';
 import { CanvasDrawingToolbar } from './stage/CanvasDrawingToolbar';
 import { CanvasPresentBar } from './stage/CanvasPresentBar';
 import { CanvasSelectionToolbar } from './stage/CanvasSelectionToolbar';
-import { CanvasFileDropOverlay, CanvasFrameFocusBar, CanvasLargeSessionNotice, CanvasLoadingSkeleton } from './stage/CanvasBoardNotices';
+import { CanvasFrameFocusBar, CanvasIntakeNotices, CanvasLargeSessionNotice, CanvasLoadingSkeleton } from './stage/CanvasBoardNotices';
 import { CanvasBoardFlow, canvasMinimapColor } from './stage/CanvasBoardFlow';
 import { CanvasShell } from './stage/CanvasShell';
 import { CanvasBoardStage } from './stage/CanvasBoardStage';
@@ -566,7 +566,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { addAtCenter, choiceSeed, captureIdeaFromComposer, pickObject, appendAtCenter } = useCanvasObjectPlacement({ canEdit, cardsEditable, connectionKind, flowRef, localizedTourDefaults, nodes, openNodeInspector, placeAppendedRef, sessionId, setEdges, setNodes, setNotice, setObjectPicker, setPrompt, setSelectedId, setSelectedIds, t, tStep, timeline });
   const { socialAccountGate, buildSocialFeedNode, importMiroBoard, addSocialFeedToBoard, addSocialCampaignToBoard, boardMedia } = useCanvasConnectedSources({ canEdit, connectedAccountGate, layoutViewportRef, nodes, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, stage, t, tMiro, tSocial });
   const { seatTeammate } = useCanvasTeammates({ addAtCenter, canEdit, nodesRef, placeAppendedRef, revealObjectRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t });
-  const { addFilesToCanvas, attachCanvasArtifact, addHostCapture } = useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t });
+  const { addFilesToCanvas, attachCanvasArtifact, addHostCapture, importTranslation } = useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t });
   const { applyTemplate, applyServerTemplate, addFramePreset, saveFramePreset } = useCanvasTemplates({ commitRevision, canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revisionRef, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText });
   const { createBranch, prepareMerge, applyMerge } = useCanvasBranching({ branchParentId, edges, mergeReview, nodes, persistence, requireAccount, sessionId, setMergeReview, setNotice, t, title });
   const { expandProject, compareProjects, expandMockupSet, deliverMockup, loadProjectQuality } = useCanvasProjectActions({ errorText, nodes, openNodeInspector, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, t });
@@ -820,7 +820,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
         onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPointsRef.current = []; sendPresence({ cursor: null }); }}
         onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDrop={onDrop}
       >
-        <CanvasFileDropOverlay active={fileDragging} />
+        <CanvasIntakeNotices dragging={fileDragging} importTranslation={importTranslation} />
         <CanvasDrawingToolbar drawing={drawing} setDrawing={setDrawing} />
         <CanvasPresentBar presentMode={presentMode} steps={presentationSteps} step={presentStep} onMove={movePresentation} setPresentMode={setPresentMode} />
         <CanvasSelectionToolbar

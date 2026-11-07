@@ -25,6 +25,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@builderforce/resume-ai": ["../packages/resume-ai/src/index.ts"],
+      "@builderforce/resume-ai/analysis": ["../packages/resume-ai/src/analysis.ts"],
+      "@builderforce/score-math": ["../packages/score-math/src/index.ts"],
       "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"],
       "@builderforce/creation-canvas-contract/objectKinds": ["../packages/creation-canvas-contract/src/objectKinds.ts"],
       "@builderforce/creation-canvas-contract/creativeCapabilities": ["../packages/creation-canvas-contract/src/creativeCapabilities.ts"],
@@ -63,6 +66,7 @@
       "@builderforce/local-first/indexed-db": ["../packages/local-first/src/indexedDb.ts"],
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/provider-connect": ["../packages/provider-connect/src/index.ts"],
+      "@builderforce/json-schema": ["../packages/json-schema/src/index.ts"],
       "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],

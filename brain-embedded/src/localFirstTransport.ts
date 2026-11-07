@@ -502,6 +502,9 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // From here the call names no model (a local ref no probe serves cannot be sent
     // anywhere by name, so it is dropped): the plan routes it.
     const routed: Omit<StreamChatOptions, 'transport'> = opts.model ? { ...opts, model: undefined } : opts;
+    // The device plan never sees a model name, but the cloud leg of a UTILITY call goes to the
+    // run's model exactly as before (not gateway Auto): a non-local model stays on it.
+    const cloudOpts = opts.model && !isLocalModelRef(opts.model) ? opts : routed;
     const probes = accountPool ? [] : input.probes;
     const failedAccounts: LocalFirstAttemptRecord[] = [];
     const planned = localFirstPlan({
@@ -526,7 +529,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
         async (attempt, commit) => {
           if (attempt.kind === 'cloud') {
             cloudStarted = true;
-            return input.cloud!(routed, committingHandlers(handlers, commit));
+            return input.cloud!(cloudOpts, committingHandlers(handlers, commit));
           }
           const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
           const messages = await fittedFor(attempt, routed, input.fit, probes);

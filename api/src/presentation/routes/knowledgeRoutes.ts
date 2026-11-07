@@ -63,6 +63,9 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, parseOptionalBody } from './requestBody';
+import { admitClientResult, clientTextAsSseResponse } from './clientResultHttp';
+import { CLIENT_DOCUMENT_SPEC } from '../../application/llm/clientResult';
+import { recordClientResultUsage } from '../../application/llm/clientResultUsage';
 import {
   AddCollaboratorBody,
   AiDraftBody,
@@ -890,6 +893,14 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const body = await parseBody(c, AiDraftBody);
     if (!body.prompt?.trim()) return c.json({ error: 'prompt is required' }, 400);
+
+    // PRD 42 Part D: a draft the device already wrote is returned as one SSE chunk — no model call.
+    const { client, rejection } = admitClientResult(c, body.clientResult, CLIENT_DOCUMENT_SPEC);
+    if (rejection) return rejection;
+    if (client) {
+      await recordClientResultUsage(db, c.env as Env, { tenantId, userId, useCase: 'knowledge_ai_draft', provenance: client.provenance });
+      return clientTextAsSseResponse(client.value);
+    }
 
     const docType: DocType = (DOC_TYPES as readonly string[]).includes(body.docType ?? '')
       ? (body.docType as DocType)

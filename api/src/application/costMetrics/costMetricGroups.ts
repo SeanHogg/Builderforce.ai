@@ -7,7 +7,7 @@
  * Aliases the fragments may use: `u` = llm_usage_log, `o` = run_model_outcomes (LEFT
  * JOINed on execution id), `la` = the lever-arm lateral (lever grouping only).
  */
-export const COST_METRIC_GROUP_BYS = ['none', 'actionType', 'role', 'model', 'route', 'lever', 'day'] as const;
+export const COST_METRIC_GROUP_BYS = ['none', 'actionType', 'role', 'model', 'route', 'utilityEngine', 'lever', 'day'] as const;
 export type CostMetricGroupBy = (typeof COST_METRIC_GROUP_BYS)[number];
 
 export const COST_METRIC_WINDOWS = { '7d': 7, '30d': 30 } as const;
@@ -37,6 +37,14 @@ export const COST_METRIC_GROUPS: Readonly<Record<CostMetricGroupBy, CostMetricGr
   model:      { key: `COALESCE(NULLIF(u.model, ''), 'unattributed')`, arm: `''`, join: '' },
   // The run's pipeline route (`full` / `quick`, 1277); rows from unrouted runs are unattributed.
   route:      { key: `COALESCE(u.pipeline_route, 'unattributed')`, arm: `''`, join: '' },
+  // PRD 42 · Part F — "On-device utility": utility calls by who served them. A device's own
+  // call is a `local/<engine>/<model>` row (synced as `local` usage); anything else a utility
+  // call went to is `cloud`. Rows of any other role are `other` (the UI leaves that bucket out).
+  utilityEngine: {
+    key: `CASE WHEN u.role = 'utility' THEN CASE WHEN u.model LIKE 'local/%' THEN split_part(u.model, '/', 2) ELSE 'cloud' END ELSE 'other' END`,
+    arm: `''`,
+    join: '',
+  },
   // A row stamped with the A/B arms appears once per partially-rolled-out lever, in the
   // arm it ran under. Rows written before the stamp carry none and drop out here only.
   lever: {

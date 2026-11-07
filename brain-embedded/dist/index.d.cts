@@ -1,18 +1,19 @@
 import * as react from 'react';
 import { ReactNode, SetStateAction, Dispatch } from 'react';
-import { C as ChatInputAttachment, B as BrainMessage, a as BrainTraceEvent, b as BrainRunActivity, R as RunKey, c as BrainRunPersistence, d as BrainRunRequest, e as BrainTransport, f as BrainChat, g as BrainStreamFn, S as SpendSavingsSummary, h as RunEndOutcome, i as CompletionUsage, j as ChatCompletionMessage, L as LocalFirstAccount, k as StreamChatOptions, l as StreamHandlers, m as StreamChatResult, n as LocalFirstAttemptRecord, o as LocalFirstAttempt, p as LocalFirstWorkload, P as ProjectMemoryRequest, E as Effort, q as EvermindRunHooks, r as BrainToolSpec, s as BrainModality, t as ChatMode, u as RunWindowSources, v as ReasoningIntent, w as ChatRosterAgent, x as ContentPart, y as RunProgress, z as BrainDiagnostics, A as StaffingSummary, U as UsageSurface } from './pendingWords-CS3iT53_.cjs';
-export { D as ASK_USER_TOOL, F as ASK_USER_TOOL_SPEC, G as AnswerOriginCost, H as AskUserMessageLike, I as AskUserOption, J as AskUserPayload, K as AskUserToolSpec, M as AssembledToolCall, N as AvoidedRunCall, O as BrainDiagnosticsContext, Q as BrainRunOutcome, T as BrainRunPhase, V as BuildBrainTriageOptions, W as ByoUnresolvedEntry, X as CHAT_MODES, Y as CHAT_MODE_ICON, Z as ChatWorkDirectiveOptions, _ as CompletionMetadata, $ as DispatchRefusal, a0 as EffortProfile, a1 as EvermindLearnOutcome, a2 as EvermindLearnTarget, a3 as ImageUrlContentPart, a4 as LocalFirstAttemptSummary, a5 as MAX_STOP_HOOK_ROUNDS, a6 as MemoryAnswerOptions, a7 as MemoryFirstAnswer, a8 as MemorySurface, a9 as ModelPreflightResult, aa as ModelScore, ab as ModelTurn, ac as ModelWindowSources, ad as NEW_CHAT_MODE, ae as PendingAskUser, af as PersonaSubagent, ag as PrefetchResult, ah as RESTING_CHAT_MODE, ai as ROLE_GATE_REMEDIATION, aj as ReasoningLevel, ak as RepeatStreak, al as RepeatedTarget, am as RepetitionLoopError, an as RunLineage, ao as RunOutcomeReport, ap as RunPipelineSettings, aq as RunStageModels, ar as RunStopHook, as as RunStopInput, at as STEP_MESSAGE_ROLE, au as SUBAGENT_OF_META_KEY, av as SavingsBreakdown, aw as SavingsBySource, ax as SavingsSourceKey, ay as ServedRead, az as SpendBreakdown, aA as StreamFailureDetail, aB as StreamInterruptedError, aC as SubagentOrigin, aD as TextContentPart, aE as ToolExposure, aF as TransportError, aG as UNBACKED_TICKET_CLAIM_NOTICE, aH as UNBACKED_WRITE_CLAIM_NOTICE, aI as USAGE_SURFACES, aJ as USAGE_SURFACE_HEADER, aK as UpstreamTurnEvidence, aL as accountUsedInTrace, aM as activityTarget, aN as answeredInProseInTrace, aO as askStopHook, aP as askUserAnchorId, aQ as askUserBlock, aR as attachEvermindLearn, aS as buildBrainTriageReport, aT as byoReasonHint, aU as byoUnresolvedInTrace, aV as byoUnresolvedSummary, aW as chatConversationDirective, aX as chatModeDirective, aY as chatRosterFromParticipants, aZ as chatWorkDirective, a_ as clearPendingWords, a$ as coerceAskUserPayload, b0 as computeBrainDiagnostics, b1 as computeRunProgress, b2 as contextWindowOf, b3 as describeLiveStep, b4 as describeStreamFailure, b5 as detectAnnouncedButUnmadeToolCall, b6 as detectUnbackedTicketClaim, b7 as detectUnbackedWriteClaim, b8 as effortProfile, b9 as formatBrainDiagnostics, ba as formatBrainProvenance, bb as formatBytes, bc as formatDispatchRefusals, bd as formatEvermindLearnStep, be as formatModelScorecard, bf as formatModelTurnLog, bg as formatStaffingSummary, bh as hasEditIntent, bi as isChatMode, bj as isDispatchTool, bk as isEffort, bl as isEvermindModel, bm as isFailedToolResult, bn as isMutationTool, bo as isStepMessage, bp as isTicketWriteTool, bq as isUsageSurface, br as localFallbackTrace, bs as midRunNotice, bt as modelFailoversInTrace, bu as modelScorecard, bv as modelTurnLog, bw as modelsUsedInTrace, bx as narratedUnadvertisedInTrace, by as normalizeChatMode, bz as parseAskUser, bA as parseByoUnresolved, bB as parseRoleGateRefusal, bC as parseSubagentOrigin, bD as projectMemoryHooks, bE as reasoningForRun, bF as resolveContextWindow, bG as savedChatOf, bH as selectPendingAskUser, bI as serializeAskUser, bJ as serverChatIdOf, bK as setPendingWordsOwner, bL as shortenTarget, bM as staffingSummaryInTrace, bN as stallRecoveriesInTrace, bO as stallUnrecoveredInTrace, bP as streamChatCompletion, bQ as stripAskUser, bR as summarizeLocalFirstAttempt, bS as toolActivity, bT as toolExposureInTrace, bU as workFiledNotStaffedVerdict } from './pendingWords-CS3iT53_.cjs';
+import { C as ChatInputAttachment, B as BrainMessage, a as BrainTraceEvent, b as BrainRunActivity, R as RunKey, c as BrainRunPersistence, d as BrainRunRequest, e as BrainTransport, f as BrainChat, g as BrainStreamFn, S as SpendSavingsSummary, h as RunEndOutcome, i as CompletionUsage, j as ChatCompletionMessage, L as LocalFirstAccount, k as StreamChatOptions, l as StreamHandlers, m as StreamChatResult, n as LocalFirstAttemptRecord, o as LocalFirstAttempt, p as LocalFirstWorkload, P as ProjectMemoryRequest, O as OnDeviceTasks, q as OnDeviceObserver, r as OnDeviceTaskKind, s as ServedBy, t as SummarizeOptions, u as RewriteOptions, W as WriteOptions, D as DetectedLanguage, T as TranslateOptions, J as JsonTaskOptions, v as JsonSchema, E as Effort, w as EvermindRunHooks, x as BrainToolSpec, y as BrainModality, z as ChatMode, A as RunWindowSources, F as ReasoningIntent, G as ChatRosterAgent, H as ContentPart, I as RunProgress, K as BrainDiagnostics, M as StaffingSummary, U as UsageSurface } from './pendingWords-BvxxC0a6.cjs';
+export { N as ASK_USER_TOOL, Q as ASK_USER_TOOL_SPEC, V as AnswerOriginCost, X as AskUserMessageLike, Y as AskUserOption, Z as AskUserPayload, _ as AskUserToolSpec, $ as AssembledToolCall, a0 as AvoidedRunCall, a1 as BrainDiagnosticsContext, a2 as BrainRunOutcome, a3 as BrainRunPhase, a4 as BuildBrainTriageOptions, a5 as ByoUnresolvedEntry, a6 as CHAT_MODES, a7 as CHAT_MODE_ICON, a8 as ChatWorkDirectiveOptions, a9 as CompletionMetadata, aa as DispatchRefusal, ab as EffortProfile, ac as EvermindLearnOutcome, ad as EvermindLearnTarget, ae as ImageUrlContentPart, af as LocalFirstAttemptSummary, ag as MAX_STOP_HOOK_ROUNDS, ah as MemoryAnswerOptions, ai as MemoryFirstAnswer, aj as MemorySurface, ak as ModelPreflightResult, al as ModelScore, am as ModelTurn, an as ModelWindowSources, ao as NEW_CHAT_MODE, ap as OnDeviceEngine, aq as OnDeviceTaskEvent, ar as PendingAskUser, as as PersonaSubagent, at as PrefetchResult, au as RESTING_CHAT_MODE, av as ROLE_GATE_REMEDIATION, aw as ReasoningLevel, ax as RepeatStreak, ay as RepeatedTarget, az as RepetitionLoopError, aA as RunLineage, aB as RunOutcomeReport, aC as RunPipelineSettings, aD as RunStageModels, aE as RunStopHook, aF as RunStopInput, aG as STEP_MESSAGE_ROLE, aH as SUBAGENT_OF_META_KEY, aI as SavingsBreakdown, aJ as SavingsBySource, aK as SavingsSourceKey, aL as ServedOption, aM as ServedRead, aN as SpendBreakdown, aO as StreamFailureDetail, aP as StreamInterruptedError, aQ as SubagentOrigin, aR as TextContentPart, aS as ToolExposure, aT as TransportError, aU as UNBACKED_TICKET_CLAIM_NOTICE, aV as UNBACKED_WRITE_CLAIM_NOTICE, aW as USAGE_SURFACES, aX as USAGE_SURFACE_HEADER, aY as UpstreamTurnEvidence, aZ as accountUsedInTrace, a_ as activityTarget, a$ as answeredInProseInTrace, b0 as askStopHook, b1 as askUserAnchorId, b2 as askUserBlock, b3 as attachEvermindLearn, b4 as buildBrainTriageReport, b5 as byoReasonHint, b6 as byoUnresolvedInTrace, b7 as byoUnresolvedSummary, b8 as chatConversationDirective, b9 as chatModeDirective, ba as chatRosterFromParticipants, bb as chatWorkDirective, bc as clearPendingWords, bd as coerceAskUserPayload, be as computeBrainDiagnostics, bf as computeRunProgress, bg as contextWindowOf, bh as describeLiveStep, bi as describeStreamFailure, bj as detectAnnouncedButUnmadeToolCall, bk as detectUnbackedTicketClaim, bl as detectUnbackedWriteClaim, bm as effortProfile, bn as formatBrainDiagnostics, bo as formatBrainProvenance, bp as formatBytes, bq as formatDispatchRefusals, br as formatEvermindLearnStep, bs as formatModelScorecard, bt as formatModelTurnLog, bu as formatStaffingSummary, bv as hasEditIntent, bw as isChatMode, bx as isDispatchTool, by as isEffort, bz as isEvermindModel, bA as isFailedToolResult, bB as isMutationTool, bC as isStepMessage, bD as isTicketWriteTool, bE as isUsageSurface, bF as localFallbackTrace, bG as midRunNotice, bH as modelFailoversInTrace, bI as modelScorecard, bJ as modelTurnLog, bK as modelsUsedInTrace, bL as narratedUnadvertisedInTrace, bM as normalizeChatMode, bN as parseAskUser, bO as parseByoUnresolved, bP as parseRoleGateRefusal, bQ as parseSubagentOrigin, bR as projectMemoryHooks, bS as reasoningForRun, bT as resolveContextWindow, bU as savedChatOf, bV as selectPendingAskUser, bW as serializeAskUser, bX as serverChatIdOf, bY as setPendingWordsOwner, bZ as shortenTarget, b_ as staffingSummaryInTrace, b$ as stallRecoveriesInTrace, c0 as stallUnrecoveredInTrace, c1 as streamChatCompletion, c2 as stripAskUser, c3 as summarizeLocalFirstAttempt, c4 as toolActivity, c5 as toolExposureInTrace, c6 as workFiledNotStaffedVerdict } from './pendingWords-BvxxC0a6.cjs';
 import { SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 export { CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, ConsolidationMarkerMeta, HISTORY_TOKEN_BUDGET, consolidationMarkerContent, consolidationMarkerOf, consolidationMetadata, isConsolidationMarker, lastConsolidationIndex, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { L as LocalRuntimeId, a as LocalRuntimeProbe, b as LocalEndpoint } from './probe-DkPrGnWT.cjs';
 import { DeltaLearnPayload, LocalSuccessOutcome } from '@seanhogg/builderforce-memory-engine';
-import { L as LocalBackend, a as LocalModelUnfit, P as PageEngine, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-DgaDXBxo.cjs';
-export { b as BfiEngineInstance, c as BfiEngineStatic, d as BfiModelInfo, e as BfiModule, f as BfiWorkerEngine, C as ChatCompletionChunk, g as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, h as ENGINE_WORKER_IDLE_MS, i as ENGINE_WORKER_INVALIDATE, j as EngineWorker, k as EngineWorkerEndpoint, l as EngineWorkerEvents, m as EngineWorkerHandle, n as EngineWorkerOptions, o as PAGE_ENGINE_REPLY_TYPES, p as PAGE_ENGINE_REQUEST_TYPES, q as PageEngineClient, r as PageEngineClientOptions, s as PageEngineError, t as PageEnginePort, u as PageEngineReply, v as PageEngineRequest, w as PageEngineServerIo, W as WorkerLike, x as createBfiWorkerEngine, y as createEngineWorker, z as createPageEngineClient, A as isPageEngineReply, D as isPageEngineRequest, F as isWasmTrap, G as serveEngineWorker, I as servePageEngines } from './bfiWorkerEngine-DgaDXBxo.cjs';
+import { L as LocalBackend, a as LocalModelUnfit, P as PageEngine, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-FdP55x3_.cjs';
+export { b as BfiEngineInstance, c as BfiEngineStatic, d as BfiModelInfo, e as BfiModule, f as BfiWorkerEngine, C as ChatCompletionChunk, g as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, h as ENGINE_WORKER_IDLE_MS, i as ENGINE_WORKER_INVALIDATE, j as EngineWorker, k as EngineWorkerEndpoint, l as EngineWorkerEvents, m as EngineWorkerHandle, n as EngineWorkerOptions, o as PAGE_ENGINE_REPLY_TYPES, p as PAGE_ENGINE_REQUEST_TYPES, q as PageEngineClient, r as PageEngineClientOptions, s as PageEngineError, t as PageEnginePort, u as PageEngineReply, v as PageEngineRequest, w as PageEngineServerIo, W as WorkerLike, x as createBfiWorkerEngine, y as createEngineWorker, z as createPageEngineClient, A as isPageEngineReply, D as isPageEngineRequest, F as isWasmTrap, G as serveEngineWorker, I as servePageEngines } from './bfiWorkerEngine-FdP55x3_.cjs';
 import { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 export { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import { HandoffPack } from '@seanhogg/builderforce-memory/handoff';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 export { EvermindRecallItem, EvermindRecallResult, countReconciledMemories, formatEvermindMemoryBlock } from '@seanhogg/builderforce-memory/evermind';
+import { JudgementRequest } from '@seanhogg/builderforce-memory/knowledge';
 import { ChatErrorAction } from './chatError.cjs';
 export { BrainRequestError, ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, PlatformRefusedCapability, brainRequestError, chatErrorAction } from './chatError.cjs';
 
@@ -431,6 +432,12 @@ type LocalModelSource =
  | {
     kind: 'webllm';
     modelId: string;
+}
+/** The browser's own built-in model (Gemini Nano / Phi-4-mini): the browser downloads
+ *  and caches it, and it cannot be removed from here. Not in `LOCAL_MODEL_CATALOG` —
+ *  the vendor is only known at runtime — so the page-engine store builds the row. */
+ | {
+    kind: 'browser';
 };
 interface LocalCatalogModel {
     /** The full `local/<runtime>/<model>` ref. */
@@ -2459,17 +2466,23 @@ declare function localFirstWorkload(call: {
  * outright, and so does an explicit "use my connected accounts" (`byo_pool`); only "let
  * the gateway route" may be served on this device first. The ONE statement of the rule:
  * the editor's route and the web app's stream both read it.
+ *
+ * Device runtimes stay out of `byo_pool` here. The pool's one exception is not a device
+ * model: the connected ACCOUNTS a host calls itself (Kimi) are tried before the gateway's
+ * pool, with no probes (see {@link createLocalFirstStream}).
  */
 declare function localFirstApplies(call: {
     model?: string;
     routingMode?: 'auto' | 'byo_pool';
+    role?: string;
 }): boolean;
 /** What {@link createLocalFirstStream} needs from its host. */
 interface LocalFirstStreamInput {
     /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
     probes: readonly LocalRuntimeProbe[];
     /** Connected accounts this host calls itself (Kimi), tried after the device and before
-     *  the cloud — Hybrid only (`createHostModelStream`). */
+     *  the cloud — Hybrid Auto, and "use my connected accounts" (`byo_pool`, device excluded)
+     *  in Hybrid and Specific (`createHostModelStream`). */
     accounts?: readonly LocalFirstAccount[];
     /** The gateway stream, or null when signed out (local-only). */
     cloud: StreamFn$1 | null;
@@ -2749,7 +2762,9 @@ declare function webStorageLocalSuccessStore(key?: string): LocalSuccessStore;
  *    run, so the turn goes straight to Auto.
  *  - **Specific with a pick:** exactly that route, hard-pinned (`modelStrict`) — no local
  *    attempt and no fallback. "Use my connected accounts" (`routingMode: 'byo_pool'`) is
- *    a pick of the BYO pool: exactly the pool, at the gateway.
+ *    a pick of the person's ACCOUNTS, in Hybrid too: the ones this host calls itself
+ *    (`accounts` — Kimi) first, then the gateway's BYO pool, which stays strict. Never a
+ *    device runtime and never the free pool; with no host accounts, exactly the pool.
  *  - **Specific with no pick:** fails `no_specific_model` — never a silent Hybrid.
  *
  * When no model can serve a turn, the error says WHY: `not_signed_in` only for a person
@@ -2782,8 +2797,9 @@ interface HostModelStreamInput {
     /** The runtimes to try local-first, probed WITH capabilities; absent = gateway only. */
     probes?: () => Promise<readonly LocalRuntimeProbe[]>;
     /**
-     * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call — never
-     * prompting; an account that is not connected is simply absent. Absent = none (the web
+     * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call and per
+     * "use my connected accounts" call (Hybrid or Specific) — never prompting; an account
+     * that is not connected is simply absent. Absent = none (the web
      * app, which cannot reach Kimi).
      */
     accounts?: () => Promise<readonly LocalFirstAccount[]>;
@@ -3424,7 +3440,9 @@ type SummaryStreamFn = (opts: Omit<StreamChatOptions, 'transport'>) => Promise<P
  *  that is nothing but reasoning (or a block the output ceiling cut off) keeps that
  *  reasoning's TEXT, untagged: it usually holds the facts, and an empty note would make
  *  the window re-run this whole call on every turn, since a failed fold is not memoized. */
-declare function streamSummaryCompletion(stream: SummaryStreamFn, model: string | undefined): SummaryCompletion;
+declare function streamSummaryCompletion(stream: SummaryStreamFn, model: string | undefined, 
+/** The host's on-device port: asked FIRST, whatever model the run is pinned to (PRD 42 · C2). */
+onDeviceTasks?: OnDeviceTasks): SummaryCompletion;
 
 /**
  * The Brain's binding of `@seanhogg/builderforce-memory/handoff` — fit a working
@@ -3463,6 +3481,8 @@ interface WindowFitSummarizer {
     stream: SummaryStreamFn;
     model?: string;
     signal?: AbortSignal;
+    /** The host's on-device port, asked before `stream` (PRD 42 · C2). */
+    onDeviceTasks?: OnDeviceTasks;
 }
 /** An Evermind recall — structurally `EvermindRunHooks['recall']`. */
 type WindowFitRecall = (query: string) => Promise<EvermindRecallResult | null>;
@@ -3677,6 +3697,355 @@ declare const BUILT_IN_MODELS: Record<BuiltInAiVendor, BuiltInModelIdentity>;
  * any host without a readable navigator reads as `unknown`.
  */
 declare function builtInModelIdentity(nav?: NavigatorLike | undefined): BuiltInModelIdentity;
+
+/**
+ * The ONE place the browser's built-in model is downloaded (PRD 42 · A2).
+ *
+ * A download starts only when `create()` is called on a model that is not yet
+ * `available`, and the browser requires that call to happen inside a USER ACTIVATION
+ * (a click). So this function is reached from exactly one place: the "On this device"
+ * picker's Download button, through the ONE model store (`pageEngines/modelStore.ts`,
+ * whose `browser` backend delegates here). It is never called from routing, from a chat
+ * turn or from a probe — those only ask `availability()`, which never downloads.
+ *
+ * Call it synchronously from the click handler's task (no long awaits first): the
+ * activation is transient. This function itself issues `create()` before any await.
+ */
+/**
+ * The label field (brain-ui `LocalModelLabels`) that states the browser's hardware
+ * requirement for its built-in model — a KEY, not text, so each host renders its own
+ * localized copy.
+ */
+declare const BUILT_IN_REQUIREMENT_KEY: "localBuiltInRequirement";
+interface BuiltInDownloadOptions {
+    /** Called with 0..1 as bytes arrive. */
+    onProgress?: (fraction: number) => void;
+    /** Aborts the download; the promise rejects with the abort reason. */
+    signal?: AbortSignal;
+    /** The viewer's locale for the Translator pair; defaults to `navigator.language`. */
+    locale?: string;
+}
+/**
+ * Download the built-in model — and the task-API models (Summarizer, Translator for the
+ * viewer's pair, LanguageDetector) — reporting ONE combined progress, and resolve
+ * `'available'` once the chat model is ready, or `'unavailable'` when this browser has no
+ * such model or refuses to fetch it. A task model the browser refuses is skipped; it never
+ * fails the chat model. An aborted download REJECTS (a cancel is not a refusal).
+ *
+ * Every `create()` starts synchronously (before any await) so each is inside the click's
+ * activation; the awaiting happens together afterwards.
+ */
+declare function downloadBuiltInModel(options?: BuiltInDownloadOptions): Promise<'available' | 'unavailable'>;
+
+/**
+ * An on-device TASK call as a usage row (PRD 42 · Part F). Every served utility call —
+ * a fold's summary, a hand-off note — is one ordinary local row in the chat's run usage
+ * ledger (`usageLedger.ts`): route `local`, role `utility`, the engine's model ref, the
+ * call's estimated tokens. The ledger's own `local` rule prices what the chat's paid route
+ * would have charged (the saving) and journals the row for sync; nothing new is stored or sent.
+ *
+ * A declined or replaced call books nothing here: no model ran on this device for it.
+ */
+
+/** The observer that books each SERVED task call into `ledger` under `run`'s chat. A failed write goes to `onError`. */
+declare function utilityUsageObserver(ledger: Pick<RunUsageLedger, 'record'>, run: {
+    chatId: number;
+    runKey: number;
+    mode?: 'chat' | 'work';
+}, onError?: (error: unknown) => void): OnDeviceObserver;
+
+/**
+ * Measured, not assumed (PRD 42 · Part F): the ONE wrapper that turns a port call into an
+ * {@link OnDeviceTaskEvent}. Both port factories (`pageOnDeviceTasks`, `completionOnDeviceTasks`)
+ * run every method through it, so a served / declined call is reported the same way everywhere
+ * and the engine that served THIS call reaches the caller through `onServed` — per call, never
+ * through shared "last call" state.
+ */
+
+interface ObservedTaskContext {
+    kind: OnDeviceTaskKind;
+    /** The host's sink; absent ⇒ nothing is reported (the caller's own `onServed` still fires). */
+    observe: OnDeviceObserver | undefined;
+    /** The caller's per-call provenance hook (`ServedOption.onServed`). */
+    onServed: ((by: ServedBy) => void) | undefined;
+    /** The call's input text, for the token estimate. */
+    input: string;
+}
+/**
+ * Run `run`, handing it a `served` callback to call with whoever answered. A non-null result
+ * reports `served` (when someone said they served it); `null` reports `declined`. An abort is
+ * rethrown unreported. Observer failures never reach the call.
+ */
+declare function observedTask<R>(ctx: ObservedTaskContext, run: (served: (by: ServedBy) => void) => Promise<R | null>): Promise<R | null>;
+
+/**
+ * The shared shape of a built-in task adapter and the ONE way its sessions are opened
+ * (PRD 42 · Part B2). This file reads NO global — each API is detected in exactly one
+ * adapter file, which hands its factory here.
+ *
+ * Rules every adapter inherits from here, so none re-implements them:
+ *   - availability is asked, never acted on: anything but `available` (including
+ *     `downloadable`/`downloading`) reads as "not here" — a task NEVER starts a download;
+ *   - any failure is `null`; only an `AbortError` is rethrown;
+ *   - a session never outlives the call that opened it (except a budget's, until released).
+ */
+
+type AdapterId = 'summarizer' | 'rewriter' | 'writer' | 'proofreader' | 'languageDetector' | 'translator' | 'prompt' | 'pageEngine';
+/** A session's input window and a way to measure text against it. */
+interface InputBudget {
+    /** Input tokens the session accepts. */
+    limit: number;
+    /** Tokens `text` would use; ≈4 chars per token when the build cannot measure. */
+    measure(text: string, signal?: AbortSignal): Promise<number>;
+    /** Frees the session behind the budget. */
+    release(): void;
+}
+/** One built-in API as the port sees it. Each method is optional: absent = not this API's task. */
+interface BuiltInAdapter {
+    readonly id: AdapterId;
+    /** Which task kinds this adapter serves. */
+    readonly kinds: readonly OnDeviceTaskKind[];
+    /** True when the API is present AND its model is `available`. Never starts a download. */
+    ready(): Promise<boolean>;
+    /** The input window for a summary, or null when it cannot be opened. */
+    budget?(signal?: AbortSignal): Promise<InputBudget | null>;
+    summarize?(text: string, o: SummarizeOptions): Promise<string | null>;
+    rewrite?(text: string, o: RewriteOptions): Promise<string | null>;
+    write?(task: string, o?: WriteOptions): Promise<string | null>;
+    proofread?(text: string, o?: {
+        signal?: AbortSignal;
+    }): Promise<string | null>;
+    detectLanguage?(text: string): Promise<DetectedLanguage | null>;
+    translate?(text: string, o: TranslateOptions): Promise<string | null>;
+    /**
+     * Fetch this API's model (PRD 42 · A2). Calls `create()` SYNCHRONOUSLY (inside the user
+     * activation); resolves when done or when the browser refuses (a refusal is not an
+     * error here); rejects only on abort. Only the picker's Download reaches this.
+     */
+    download?(o: AdapterDownloadOptions): Promise<void>;
+    /** The parsed JSON the model produced, UNVALIDATED — the port validates it. */
+    json?(o: JsonTaskOptions): Promise<unknown | null>;
+}
+/** What an adapter's `download` is given (PRD 42 · A2). */
+interface AdapterDownloadOptions {
+    /** This model's own 0..1 fraction. */
+    onProgress(fraction: number): void;
+    signal?: AbortSignal;
+    /** The viewer's locale (BCP-47), for the Translator's language pair. */
+    locale?: string;
+}
+
+/**
+ * Which adapter answers which task, in order — DATA, not branches (PRD 42 · B2). A new
+ * browser API or a demoted task kind is a row here plus (at most) an adapter. `pageEngine`
+ * is the tail: the page's bfi / WebLLM engines through the page fetch shim.
+ *
+ * `translate` has NO generic-model fallback: a small chat model's translation is not good
+ * enough to show unlabelled. `detectLanguage` never asks a chat model either: its tail is
+ * the deterministic `heuristicLanguage` (en / de / es / fr / zh), so it works without any
+ * model on browsers lacking `LanguageDetector`.
+ */
+
+declare const ON_DEVICE_TASK_ROUTES: Readonly<Record<OnDeviceTaskKind, readonly AdapterId[]>>;
+/** Past this many leaf chunks a transcript is not summarized on the device (B3). */
+declare const MAX_SUMMARY_CHUNKS = 8;
+
+/**
+ * Chunked summaries (PRD 42 · B3): a small window takes a long transcript.
+ *
+ *   1. measure the budget (the session's own measure, else ≈4 chars/token upstream);
+ *   2. split on message / paragraph boundaries into chunks under 80% of the window;
+ *   3. summarize each chunk with the same instruction;
+ *   4. summarize the concatenated summaries, recursing while that is still over budget;
+ *   5. past `MAX_SUMMARY_CHUNKS` leaf chunks → null (the caller's existing path takes it).
+ *
+ * Pure over an injected budget and an injected one-chunk summarizer: it knows no API.
+ */
+
+interface ChunkedSummaryInput {
+    text: string;
+    budget: Pick<InputBudget, 'limit' | 'measure'>;
+    /** Summarizes one in-window piece; null = the device declined. */
+    summarizeChunk(chunk: string): Promise<string | null>;
+    /** Tokens each call spends outside the chunk (instruction + expected reply); see {@link summaryReserveTokens}. */
+    reserveTokens?: number;
+    signal?: AbortSignal;
+}
+declare function chunkedSummary(input: ChunkedSummaryInput, depth?: number): Promise<string | null>;
+
+/**
+ * `OnDeviceTasks` over ANY on-device chat completion (PRD 42 · B2): VS Code binds it to
+ * Synapse (`completeOnDevice`), and the web / Rovr port uses it as the tail behind the
+ * built-in APIs (bfi / WebLLM through the page fetch shim). The host injects the one
+ * completion; this file owns the prompts, the chunking and the validation.
+ *
+ * `translate` returns null: a chat model's translation is not shown unlabelled, and there
+ * is no cloud here (the caller's own fallback takes it). `detectLanguage` is the
+ * deterministic `heuristicLanguage`, never the model.
+ */
+
+interface CompletionMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+}
+/** A completion on the device only: its text, or null when it declined. Non-abort throws read as null. */
+type OnDeviceCompletion = (messages: readonly CompletionMessage[], signal?: AbortSignal, 
+/** Told the model ref that served it (a review records which model judged). */
+onServed?: (modelRef: string) => void) => Promise<string | null>;
+interface CompletionOnDeviceOptions {
+    complete: OnDeviceCompletion;
+    /** Whether the completion could serve right now (the host's memoized probe). */
+    available(): Promise<boolean>;
+    /**
+     * The engine's input window when known (a function is asked per summary, for a host whose
+     * serving model is probed); 4,096 otherwise (the smallest built-in window).
+     */
+    contextTokens?: number | (() => Promise<number | undefined>);
+    /** Told every call's outcome (PRD 42 · Part F). Absent ⇒ nothing is reported. */
+    observe?: OnDeviceObserver;
+}
+interface CompletionOnDeviceTasks extends OnDeviceTasks {
+    /** The raw completion, for callers that parse their own reply (judgement, research). */
+    complete: OnDeviceCompletion;
+}
+/** Who a served model ref (`local/<runtime>/<model>`) is, or null for a ref that is not an on-device engine. */
+declare function servedByRef(kind: OnDeviceTaskKind, ref: string): ServedBy | null;
+declare function completionOnDeviceTasks(options: CompletionOnDeviceOptions): CompletionOnDeviceTasks;
+
+/**
+ * `OnDeviceTasks` for a page host — web and Rovr (PRD 42 · B2). Each task walks its
+ * `ON_DEVICE_TASK_ROUTES` row over the built-in adapters, then falls to the page engines
+ * (bfi / WebLLM through the ONE page fetch shim) via {@link completionOnDeviceTasks}.
+ * The adapters and the route table are data; nothing here names a browser API.
+ */
+
+interface PageOnDeviceTasksOptions {
+    /** The page engines' completion (see {@link pageEngineCompletion}); null = no page engine here. */
+    pageCompletion: OnDeviceCompletion | null;
+    /** Whether a page engine has a ready model (the page probe). */
+    pageAvailable?: () => Promise<boolean>;
+    /** Override the adapters / routes (tests); default = every built-in adapter and the PRD table. */
+    adapters?: readonly BuiltInAdapter[];
+    routes?: Readonly<Record<OnDeviceTaskKind, readonly AdapterId[]>>;
+    /** How long `available()` is reused. */
+    availableTtlMs?: number;
+    /** Told every call's outcome and who served it (PRD 42 · Part F). Absent ⇒ nothing is reported. */
+    observe?: OnDeviceObserver;
+}
+/** True when a page engine has a model that can be served right now (never a download). */
+declare function pageEnginesReady(probe: () => Promise<readonly LocalRuntimeProbe[]>): Promise<boolean>;
+/** The page engines as an {@link OnDeviceCompletion}: local only (no cloud), null on any refusal. */
+declare function pageEngineCompletion(page: {
+    probe(): Promise<readonly LocalRuntimeProbe[]>;
+    fetch: LocalFetch;
+}): OnDeviceCompletion;
+declare function pageOnDeviceTasks(options: PageOnDeviceTasksOptions): OnDeviceTasks;
+
+/**
+ * Client-first server routes (PRD 42 · Part D1) — the ONE client helper.
+ *
+ * A route that spends a server model call on the user's own content (a summary, a rewrite,
+ * a judgement) first asks the device. A result rides the request as `clientResult` with a
+ * provenance stamp, and the server validates and stores it instead of calling a model. When
+ * the device declines (`null`) the request is sent exactly as it was before. When the server
+ * rejects the result (`400 invalid_client_result`), the request is sent once more WITHOUT it.
+ *
+ * Nothing here names a host, a browser API or a transport: the host supplies the port and
+ * its provenance, the caller supplies how to send.
+ */
+
+type ClientResultEngine = 'browser' | 'bfi' | 'webllm' | 'synapse';
+/** Who produced a client result — the server whitelists the engine and stores both. */
+interface ClientResultProvenance {
+    engine: ClientResultEngine;
+    model: string;
+}
+/** The `clientResult` request field (the fixed server contract). */
+interface ClientResultPayload {
+    text?: string;
+    json?: unknown;
+    provenance: ClientResultProvenance;
+}
+/**
+ * A host's on-device port and the stamp its results carry.
+ *
+ * `tasks` must NOT be an observing port (one built with an `observe` sink): an accepted
+ * client result is metered by the SERVER's row, so a call this host also counted locally
+ * would be double-counted. A client-first host wires `observe` only here, below, where it
+ * reports `replaced` when the server refuses a result.
+ */
+interface ClientFirstHost {
+    tasks: OnDeviceTasks;
+    /** The stamp for a result whose serving engine is unknown (a host that does not trace calls). */
+    provenance(): ClientResultProvenance;
+    /** The host's measuring sink (PRD 42 · Part F): told `replaced` when the server refuses a result. */
+    observe?: OnDeviceObserver;
+}
+/**
+ * A per-request capture of who served a call: hand `onServed` to the port's calls, read `served()`
+ * when stamping the result. Local to ONE request (never module state), so concurrent requests
+ * cannot cross; with several calls (chunks) the last server wins.
+ */
+declare function capturingServed(): {
+    onServed(by: ServedBy): void;
+    served(): ServedBy | undefined;
+};
+/**
+ * A text result, or `null` when the device declined or produced nothing. `served` is who
+ * answered THIS call (the port's `onServed`); it sets the provenance stamp.
+ */
+declare function textClientResult(text: string | null, host: Pick<ClientFirstHost, 'provenance' | 'observe'>, served?: ServedBy): ClientResultPayload | null;
+/** A structured result, or `null` when the device declined. */
+declare function jsonClientResult(json: unknown, host: Pick<ClientFirstHost, 'provenance' | 'observe'>, served?: ServedBy): ClientResultPayload | null;
+/** True when a failed request is the server rejecting `clientResult` (HTTP 400 `invalid_client_result`). */
+declare function isInvalidClientResult(error: unknown): boolean;
+/**
+ * Try the device, send with its result, and retry once without it when the server refuses it.
+ * `produce` may only throw an abort; any other failure of `produce` is treated as a decline.
+ */
+declare function withClientResult<T>(produce: () => Promise<ClientResultPayload | null>, send: (clientResult?: ClientResultPayload) => Promise<T>): Promise<T>;
+/**
+ * A page host's (web, Rovr) client-first pair over its `OnDeviceTasks`. A result is stamped by
+ * whoever served that call (`textClientResult(…, served)`); the `browser` + built-in model stamp
+ * is only the fallback for a result with no trace.
+ */
+declare function pageClientFirst(tasks: OnDeviceTasks, observe?: OnDeviceObserver): ClientFirstHost;
+
+/**
+ * The knowledge judge, client-first (PRD 42 · D2): `POST …/knowledge/judge` carries the
+ * device's own judgement as `clientResult.json`.
+ *
+ * It runs the SAME core the server runs — agent-tools' `judgeWith`, so the prompts, the
+ * per-item bounds and the validators are shared — with `OnDeviceTasks.json` as the `ask`.
+ * If the device declines ANY question the whole request is left to the server (`null`):
+ * a half-judged batch would be stored as if it were complete.
+ */
+
+/** The reply shape per question — the server re-validates items with the memory validators. */
+declare const JUDGEMENT_SCHEMAS: Readonly<Record<'extract' | 'compare', JsonSchema>>;
+/** The device's judgement of `req` as a `clientResult`, or `null` to use the server. */
+declare function onDeviceJudgement(host: ClientFirstHost, req: Pick<JudgementRequest, 'kind' | 'items'> & {
+    signal?: AbortSignal;
+}): Promise<ClientResultPayload | null>;
+/**
+ * The knowledge client's `judgeClientFirst` option for a host (web, Rovr): the device judges
+ * first, `send` carries the result, and a refused result is re-sent without it.
+ */
+declare function judgeClientFirstFor(host: ClientFirstHost): <R>(req: Pick<JudgementRequest, "kind" | "items"> & {
+    signal?: AbortSignal;
+}, send: (clientResult?: ClientResultPayload) => Promise<R>) => Promise<R>;
+
+/**
+ * A chat transcript summarized on the device, as a `clientResult` (PRD 42 · D2:
+ * `POST /api/brain/chats/:id/summarize`, Consolidate and Fork).
+ *
+ * It is the ONE transcript summarizer (`summarizeTranscript`: the prompt, the rendering and
+ * the budget are the memory package's — the same call a fold and a local Consolidate make)
+ * over the host's `OnDeviceTasks.summarize`, chunked by the port. A decline is `null`, and
+ * the caller sends the request without a result, exactly as before.
+ */
+
+declare function onDeviceTranscriptSummary(host: ClientFirstHost, seed: ChatCompletionMessage[], signal?: AbortSignal): Promise<ClientResultPayload | null>;
 
 /**
  * THE fetch shim for every in-page engine — one `fetch` that answers
@@ -4844,6 +5213,8 @@ interface UseBrainConversationOptions {
     pickFallbackModel?: (tried: readonly string[]) => string | undefined;
     /** Where the run's window fit learns a model's window — `BrainRunRequest.windowSources`. */
     windowSources?: RunWindowSources;
+    /** The host's on-device task port — `BrainRunRequest.onDeviceTasks` (summaries try the device first). */
+    onDeviceTasks?: OnDeviceTasks;
     /**
      * `max_tokens` for this conversation's completions — the host's Effort control
      * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
@@ -5114,6 +5485,8 @@ declare function subscribeToChatMessages(baseUrl: string, getToken: () => string
 type BrainRestInit = {
     method?: string;
     body?: BodyInit;
+    /** Statuses the caller handles itself (a host transport may suppress its error toast for them). */
+    expectedErrors?: number[];
 };
 type BrainRestRequest = <T>(path: string, init?: BrainRestInit) => Promise<T>;
 interface BrainRestOptions {
@@ -5138,6 +5511,11 @@ interface BrainRestOptions {
         name: string;
         type: string;
     }>;
+    /**
+     * The host's on-device port (PRD 42 · D). When set, `summarizeChat` summarizes the
+     * transcript on the device first and sends it as `clientResult`. Absent ⇒ the server path.
+     */
+    clientFirst?: ClientFirstHost;
 }
 declare function createBrainRestPersistence(opts: BrainRestOptions): {
     listChats: (params?: {
@@ -8403,4 +8781,4 @@ interface ChatCreation {
 }
 declare function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArmedNewChat, type ArtifactKind, AttachmentRefusedError, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, BUILDERFORCE_PRODUCT_NAME, BUILT_IN_MODELS, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, BrainDiagnostics, BrainMessage, BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, BrainRunActivity, type BrainRunDriver, type BrainRunEngine, BrainRunPersistence, BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, BrainStreamFn, BrainToolSpec, BrainTraceEvent, BrainTransport, type BriefContext, type BrowserEngineProber, type BuildChatDiagnosticsReportInput, type BuiltInAiVendor, type BuiltInModelIdentity, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, ChatInputAttachment, ChatMode, type ChatModelOptions, type ChatModelSelection, ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ComposerDirectiveOptions, type ComposerDraft, type ComposerDraftStore, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_MODEL_REMAPPED_TEMPLATE, DEFAULT_PERSONA, DEFAULT_ROUTE_THRESHOLD, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DraftBinding, type DraftOutcome, type DraftToken, EMPTY_GATEWAY_MODEL_OPTIONS, Effort, EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GateReport, type GateRouteStats, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageEncodeDecision, type ImagePrepOptions, type IndexedDbStepDurabilityOptions, type InferenceMode, type InlinedAttachments, type KeyedSlot, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_INLINE_TEXT_BYTES, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NOT_STARTED_TASK_STATUSES, type NavigatorLike, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingTurn, type PersistedStep, type PersonaModalityId, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PrefetchConfirm, type PreparedImage, ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, ReasoningIntent, type RecipientChoice, type RecordAvoidedCallInput, type RestorableTurn, type RouteReport, type RouteRunRecord, type RoutedProduct, RunEndOutcome, type RunEngineControl, RunKey, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunOutcomeValue, RunProgress, type RunServedBy, type RunSteerMessage, type RunTurn, type RunUsageLedger, type RunUsageValue, RunWindowSources, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, type ScoreBin, type SendContext, type ServedModelLabel, SpendSavingsSummary, StaffingSummary, type SteerTurn, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, StreamChatOptions, StreamChatResult, StreamHandlers, StreamIdleError, type SubagentDiagnosticsInput, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UsagePipelineRoute, UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, brainUploadUrl, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, builtInModelIdentity, byoVendorLabel, callCostOrUnknown, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatDoorLiveness, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, completeLocal, completeLocalFirst, composeEvermindHooks, contextUsageOf, createBrainRestPersistence, createBrowserEngineProber, createComposerDraftStore, createComposingActivity, createDraftBinding, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeNetworkError, describeTool, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatRunProgress, formatSubagentDiagnostics, gateAcceptedSince, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isFallbackFailure, isInferenceMode, isLive, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStoppedBeforeStart, isStoppedTurn, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, joinRestorableTurns, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, modalityPersonaChoice, modelCategoryLabel, modelFallbackText, modelInUse, nextFallbackModel, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, prefetchConfirmOf, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, repeatedFailureAdvisory, requeueRunSteering, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveRecipient, resolveRunConfirm, restoreTurn, retryOnConnectFailure, revealsModelId, revisitAdvisory, routeRunRecords, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runOutcomesSince, runProgressVerdict, savePendingPrompt, selfReviewShipDirective, servedModelLabel, setLastResolvedModel, setMcpToolStatus, setPendingRunTurn, setRunServedBy, shippedToBaseBranch, signedBrainFileUrl, slotKeyedRows, stableStringify, startEngineRun, startRun, startsRun, steerModelContent, steersByDefault, stepRow, stepSig, stopBeforeStart, stopRun, stoppedBeforeStartRow, stoppedTurnMetadata, streamSummaryCompletion, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeGateRuns, summarizeRouteRuns, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolCallArgBytes, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, usageRowsSince, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft, useComposerDraftStore, useDraftIsEmpty, useDraftSelector, useDraftText, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArmedNewChat, type ArtifactKind, AttachmentRefusedError, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, BUILDERFORCE_PRODUCT_NAME, BUILT_IN_MODELS, BUILT_IN_REQUIREMENT_KEY, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, BrainDiagnostics, BrainMessage, BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, BrainRunActivity, type BrainRunDriver, type BrainRunEngine, BrainRunPersistence, BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, BrainStreamFn, BrainToolSpec, BrainTraceEvent, BrainTransport, type BriefContext, type BrowserEngineProber, type BuildChatDiagnosticsReportInput, type BuiltInAiVendor, type BuiltInModelIdentity, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, ChatInputAttachment, ChatMode, type ChatModelOptions, type ChatModelSelection, ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChunkedSummaryInput, type ClientFirstHost, type ClientResultEngine, type ClientResultPayload, type ClientResultProvenance, type CompletionMessage, type CompletionOnDeviceOptions, type CompletionOnDeviceTasks, type ComposerDirectiveOptions, type ComposerDraft, type ComposerDraftStore, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_MODEL_REMAPPED_TEMPLATE, DEFAULT_PERSONA, DEFAULT_ROUTE_THRESHOLD, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, DetectedLanguage, type DirectedGroup, type DirectedRecipient, type DraftBinding, type DraftOutcome, type DraftToken, EMPTY_GATEWAY_MODEL_OPTIONS, Effort, EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GateReport, type GateRouteStats, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageEncodeDecision, type ImagePrepOptions, type IndexedDbStepDurabilityOptions, type InferenceMode, type InlinedAttachments, JUDGEMENT_SCHEMAS, JsonSchema, JsonTaskOptions, type KeyedSlot, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_INLINE_TEXT_BYTES, MAX_SUMMARY_CHUNKS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NOT_STARTED_TASK_STATUSES, type NavigatorLike, ON_DEVICE_ANSWER_THRESHOLD, ON_DEVICE_TASK_ROUTES, type ObservedTaskContext, type OnDeviceAnswerStore, type OnDeviceCompletion, OnDeviceObserver, type OnDeviceStoreScope, OnDeviceTaskKind, OnDeviceTasks, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageOnDeviceTasksOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingTurn, type PersistedStep, type PersonaModalityId, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PrefetchConfirm, type PreparedImage, ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, ReasoningIntent, type RecipientChoice, type RecordAvoidedCallInput, type RestorableTurn, RewriteOptions, type RouteReport, type RouteRunRecord, type RoutedProduct, RunEndOutcome, type RunEngineControl, RunKey, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunOutcomeValue, RunProgress, type RunServedBy, type RunSteerMessage, type RunTurn, type RunUsageLedger, type RunUsageValue, RunWindowSources, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, type ScoreBin, type SendContext, ServedBy, type ServedModelLabel, SpendSavingsSummary, StaffingSummary, type SteerTurn, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, StreamChatOptions, StreamChatResult, StreamHandlers, StreamIdleError, type SubagentDiagnosticsInput, SummarizeOptions, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, TranslateOptions, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UsagePipelineRoute, UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, WriteOptions, XmlToolCallFilter, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, brainUploadUrl, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, builtInModelIdentity, byoVendorLabel, callCostOrUnknown, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, capturingServed, catalogToolNamesMentionedIn, chatActivityText, chatDoorLiveness, chatWorkLinkingDirective, childTaskBrief, chunkedSummary, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, completeLocal, completeLocalFirst, completionOnDeviceTasks, composeEvermindHooks, contextUsageOf, createBrainRestPersistence, createBrowserEngineProber, createComposerDraftStore, createComposingActivity, createDraftBinding, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeNetworkError, describeTool, directedAgentRecipients, dirtyPathsOf, displayModelName, downloadBuiltInModel, drainRunSteering, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatRunProgress, formatSubagentDiagnostics, gateAcceptedSince, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isFallbackFailure, isInferenceMode, isInvalidClientResult, isLive, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStoppedBeforeStart, isStoppedTurn, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, joinRestorableTurns, jsonClientResult, judgeClientFirstFor, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, modalityPersonaChoice, modelCategoryLabel, modelFallbackText, modelInUse, nextFallbackModel, noteRunStep, observedTask, onDeviceJudgement, onDeviceMemoryHooks, onDeviceTranscriptSummary, packForModel, pageClientFirst, pageEngineCompletion, pageEnginesFetch, pageEnginesReady, pageOnDeviceTasks, pageRuntimePin, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, prefetchConfirmOf, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, repeatedFailureAdvisory, requeueRunSteering, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveRecipient, resolveRunConfirm, restoreTurn, retryOnConnectFailure, revealsModelId, revisitAdvisory, routeRunRecords, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runOutcomesSince, runProgressVerdict, savePendingPrompt, selfReviewShipDirective, servedByRef, servedModelLabel, setLastResolvedModel, setMcpToolStatus, setPendingRunTurn, setRunServedBy, shippedToBaseBranch, signedBrainFileUrl, slotKeyedRows, stableStringify, startEngineRun, startRun, startsRun, steerModelContent, steersByDefault, stepRow, stepSig, stopBeforeStart, stopRun, stoppedBeforeStartRow, stoppedTurnMetadata, streamSummaryCompletion, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeGateRuns, summarizeRouteRuns, takePendingPrompt, textClientResult, ticketsReviewedInPreview, toPromptApiTurn, toolCallArgBytes, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, usageRowsSince, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft, useComposerDraftStore, useDraftIsEmpty, useDraftSelector, useDraftText, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, utilityUsageObserver, webStorageLocalSuccessStore, withAdvisory, withClientResult, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workItemLinkFromCreate };

@@ -449,6 +449,18 @@
     "message": "Download fehlgeschlagen — bitte erneut versuchen.",
     "description": "A model download failed"
   },
+  "lmDownloadBuiltIn": {
+    "message": "Herunterladen",
+    "description": "Download action for the browser's built-in model (size unknown)"
+  },
+  "lmDownloadingUnknown": {
+    "message": "Wird heruntergeladen…",
+    "description": "Download progress line when the percentage is unknown"
+  },
+  "lmBuiltInRequirement": {
+    "message": "Benötigt etwa 22 GB freien Speicherplatz und eine GPU mit über 4 GB Videospeicher oder 16 GB RAM und 4 CPU-Kerne. Der Browser verwaltet dieses Modell.",
+    "description": "The browser's stated hardware requirement for its built-in model"
+  },
   "lmReasonWebgpu": {
     "message": "Erfordert WebGPU, das dieser Browser oder diese GPU nicht bietet.",
     "description": "Why a model cannot run: no WebGPU"
@@ -1762,5 +1774,29 @@
   "prefetchActionKnowledgeAsk": {
     "message": "Wissenssuche",
     "description": "Chat: name of the knowledge-lookup action"
+  },
+  "translationTranslatedFrom": {
+    "message": "Übersetzt aus {language}",
+    "description": "Chat: caption under a translated message; {language} is the source language's name"
+  },
+  "translationShowOriginal": {
+    "message": "Original anzeigen",
+    "description": "Chat: toggle back to the original text of a translated message"
+  },
+  "translationShowTranslation": {
+    "message": "Übersetzung anzeigen",
+    "description": "Chat: toggle to the translation again"
+  },
+  "translationTranslating": {
+    "message": "Wird übersetzt…",
+    "description": "Chat: shown while a message is being translated"
+  },
+  "translationNeedsTranslator": {
+    "message": "Für die Übersetzung wird der integrierte Übersetzer dieses Browsers benötigt",
+    "description": "Chat: muted hint when nothing on this device can translate a message"
+  },
+  "translationGetTranslator": {
+    "message": "Herunterladen",
+    "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

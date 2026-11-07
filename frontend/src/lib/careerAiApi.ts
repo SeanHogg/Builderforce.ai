@@ -16,7 +16,9 @@
  * thrown away for asserting a figure the résumé does not contain. A client that typed
  * only the happy shape would render a fabricated metric as a suggestion.
  */
+import { withClientResult } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequest } from '@/lib/apiClient';
+import { resumeMergeResult, resumeRewriteResult } from './brain/resumeClientFirst';
 
 /** "accomplished [X] as measured by [Y], by doing [Z]". */
 export type XyzPart = 'X' | 'Y' | 'Z';
@@ -188,13 +190,26 @@ export interface ResumeReviewThread extends ResumeReviewSummary {
 }
 
 export const careerAiApi = {
+  // Rewrite / merge ask the device first (PRD 42 · D2); the server verifies whatever it is sent.
   rewriteBullets: (resumeText: string, limit?: number): Promise<XyzRewriteOutcome> =>
-    apiRequest('/api/career-ai/rewrite-bullets', {
-      method: 'POST', body: JSON.stringify({ resumeText, ...(limit == null ? {} : { limit }) }),
-    }),
+    withClientResult(
+      () => resumeRewriteResult(resumeText, limit),
+      (clientResult) => apiRequest('/api/career-ai/rewrite-bullets', {
+        method: 'POST',
+        body: JSON.stringify({ resumeText, ...(limit == null ? {} : { limit }), ...(clientResult ? { clientResult } : {}) }),
+        ...(clientResult ? { expectedErrors: [400] } : {}),
+      }),
+    ),
 
   mergeBullets: (resumeTexts: string[]): Promise<BulletMergeOutcome> =>
-    apiRequest('/api/career-ai/merge-bullets', { method: 'POST', body: JSON.stringify({ resumeTexts }) }),
+    withClientResult(
+      () => resumeMergeResult(resumeTexts),
+      (clientResult) => apiRequest('/api/career-ai/merge-bullets', {
+        method: 'POST',
+        body: JSON.stringify({ resumeTexts, ...(clientResult ? { clientResult } : {}) }),
+        ...(clientResult ? { expectedErrors: [400] } : {}),
+      }),
+    ),
 
   grade: (resumeText: string, jobDescription?: string): Promise<ResumeGradeOutcome> =>
     apiRequest('/api/career-ai/grade', {

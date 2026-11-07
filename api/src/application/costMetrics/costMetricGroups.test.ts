@@ -10,3 +10,14 @@ describe('cost metric groupings — model and pipeline route', () => {
     expect(COST_METRIC_GROUPS.route.key).toContain("'unattributed'");
   });
 });
+
+describe('cost metric grouping — on-device utility (PRD 42 · F)', () => {
+  it('splits utility calls by serving engine, with cloud and other buckets', () => {
+    expect(isCostMetricGroupBy('utilityEngine')).toBe(true);
+    const key = COST_METRIC_GROUPS.utilityEngine.key;
+    expect(key).toContain("u.role = 'utility'");
+    expect(key).toContain("split_part(u.model, '/', 2)");
+    expect(key).toContain("'cloud'");
+    expect(key).toContain("'other'");
+  });
+});

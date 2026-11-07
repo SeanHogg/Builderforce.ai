@@ -28,6 +28,7 @@ import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens as schemaTok
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { summarizeMiddle, type SummaryStreamFn } from '../transcriptSummarizer';
 import type { LocalAttemptFit } from '../localFirstTransport';
+import type { OnDeviceTasks } from '../onDevice/onDeviceTasks';
 import { packMemoOf, reusePack, type PackMemo } from './packMemo';
 
 /** Ceiling on each of the summarize / recall calls — a hand-off never waits longer. */
@@ -49,6 +50,8 @@ export interface WindowFitSummarizer {
   stream: SummaryStreamFn;
   model?: string;
   signal?: AbortSignal;
+  /** The host's on-device port, asked before `stream` (PRD 42 · C2). */
+  onDeviceTasks?: OnDeviceTasks;
 }
 
 /** An Evermind recall — structurally `EvermindRunHooks['recall']`. */
@@ -132,7 +135,7 @@ export async function packForModel(input: PackForModelInput): Promise<PackForMod
     ...(summarizer
       ? {
           summarize: async (dropped: readonly HandoffMessage[]) =>
-            (await summarizeMiddle(summarizer.stream, summarizer.model, dropped as ChatCompletionMessage[], summarizer.signal)) ?? '',
+            (await summarizeMiddle(summarizer.stream, summarizer.model, dropped as ChatCompletionMessage[], summarizer.signal, summarizer.onDeviceTasks)) ?? '',
         }
       : {}),
     ...(input.recall ? { recall: recallBlock(input.recall) } : {}),

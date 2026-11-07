@@ -104,6 +104,31 @@ export type { BrowserEngineProber } from './browserEngine';
 // PRD 42 · Part A1 — which built-in model THIS browser ships, as data.
 export { BUILT_IN_MODELS, builtInModelIdentity } from './builtInAi/identity';
 export type { BuiltInAiVendor, BuiltInModelIdentity, NavigatorLike } from './builtInAi/identity';
+// PRD 42 · Part A2 — the opt-in download (picker only) and its hardware-requirement label key.
+export { BUILT_IN_REQUIREMENT_KEY, downloadBuiltInModel } from './builtInAi/download';
+// PRD 42 · Part B — the ONE on-device task port (summarize / rewrite / write / proofread /
+// detect / translate / json): the contract, the route table, and the two implementations
+// (web/Rovr over the built-in APIs + page engines; any host over an on-device completion).
+export type {
+  DetectedLanguage, JsonSchema, JsonTaskOptions, OnDeviceEngine, OnDeviceObserver, OnDeviceTaskEvent, OnDeviceTaskKind,
+  OnDeviceTasks, RewriteOptions, ServedBy, ServedOption, SummarizeOptions, TranslateOptions, WriteOptions,
+} from './onDevice/onDeviceTasks';
+export { utilityUsageObserver } from './localChat/utilityUsage';
+export { observedTask, type ObservedTaskContext } from './onDevice/observedTask';
+export { MAX_SUMMARY_CHUNKS, ON_DEVICE_TASK_ROUTES } from './onDevice/taskRoutes';
+export { chunkedSummary, type ChunkedSummaryInput } from './onDevice/chunkedSummary';
+export {
+  completionOnDeviceTasks, servedByRef,
+  type CompletionMessage, type CompletionOnDeviceOptions, type CompletionOnDeviceTasks, type OnDeviceCompletion,
+} from './onDevice/completionOnDeviceTasks';
+export { pageEngineCompletion, pageEnginesReady, pageOnDeviceTasks, type PageOnDeviceTasksOptions } from './onDevice/pageOnDeviceTasks';
+// PRD 42 · Part D — client-first server routes: try the device, attach `clientResult`, retry once without.
+export {
+  capturingServed, isInvalidClientResult, jsonClientResult, pageClientFirst, textClientResult, withClientResult,
+  type ClientFirstHost, type ClientResultEngine, type ClientResultPayload, type ClientResultProvenance,
+} from './onDevice/clientFirst';
+export { JUDGEMENT_SCHEMAS, judgeClientFirstFor, onDeviceJudgement } from './onDevice/clientFirstJudgement';
+export { onDeviceTranscriptSummary } from './onDevice/clientFirstSummary';
 export { PageEngineError } from './pageEngines/types';
 export type { ChatCompletionChunk, ChatCompletionsRequest, PageEngine } from './pageEngines/types';
 export { pageEnginesFetch, probePageEngines } from './pageEngines/fetchShim';

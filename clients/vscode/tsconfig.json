@@ -32,6 +32,7 @@
       "@builderforce/spend-contract": ["../../packages/spend-contract/src/index.ts"],
       "@builderforce/tool-output-policy": ["../../packages/tool-output-policy/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../packages/kimi-oauth/src/index.ts"],
+      "@builderforce/json-schema": ["../../packages/json-schema/src/index.ts"],
       "@builderforce/local-inference": ["../../packages/local-inference/src/index.ts"],
       "@builderforce/model-catalog": ["../../packages/model-catalog/src/index.ts"],
       "@builderforce/pipeline-route": ["../../packages/pipeline-route/src/index.ts"],

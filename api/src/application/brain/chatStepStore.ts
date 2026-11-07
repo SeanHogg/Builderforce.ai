@@ -35,7 +35,7 @@ type StepRow = typeof brainChatSteps.$inferSelect;
 
 /** A stored step, as the transcript row clients have always received. */
 export function toMessageRow(step: Pick<StepRow, 'id' | 'metadata' | 'createdAt'>): BrainChatMessageRow {
-  return { id: step.id, role: 'tool', content: '', metadata: step.metadata, seq: 0, createdAt: step.createdAt };
+  return { id: step.id, role: 'tool', content: '', metadata: step.metadata, authorUserId: null, seq: 0, createdAt: step.createdAt };
 }
 
 /** Whether a message id names a step (ids above the floor live in `brain_chat_steps`). */

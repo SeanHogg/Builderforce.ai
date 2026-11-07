@@ -55,5 +55,6 @@ export function useCanvasConversationProps({ brain, showExecutionDetail, updateB
     ratings: brainSurface.ratings,
     guestSignup: guestSignupPrompt,
     refusal,
-  }), [refusal, brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.pendingRunTurn, brainSurface.ratings, brainSurface.runKey, brainSurface.runServedBy, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
+    composerId: brainSurface.composerId,
+  }), [refusal, brainSurface.composerId, brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.pendingRunTurn, brainSurface.ratings, brainSurface.runKey, brainSurface.runServedBy, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
 }

@@ -39,6 +39,7 @@
       "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],
       "@builderforce/workload": ["../packages/workload/src/index.ts"],
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
+      "@builderforce/json-schema": ["../packages/json-schema/src/index.ts"],
       "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],

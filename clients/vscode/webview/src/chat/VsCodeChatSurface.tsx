@@ -59,9 +59,11 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   AiSurface, BrainTimeline, PendingQuestionBanner, SurfaceFooter, ToolConfirmBar,
-  selectPendingAskUser,
+  selectPendingAskUser, ownMessageOf,
 } from '@seanhogg/builderforce-brain-ui';
+import { useViewerId } from './useViewerId';
 import { authedFetch } from '../authedFetch';
+import { VsCodeTranslationProvider } from './VsCodeTranslationProvider';
 import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
 import { setHostRunContext } from '../hostRunDriver';
 import { autoApprovePersistence } from '../autoApprove';
@@ -120,6 +122,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Stable reference so a keystroke does not hand <BrainTimeline> a fresh `labels` object
   // and defeat its React.memo (every message's markdown re-parsing per character).
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
+  // The signed-in user (the token's subject) is the viewer: a teammate's message is offered for translation, the viewer's own never.
+  const viewerId = useViewerId();
+  const isOwnMessage = useMemo(() => ownMessageOf(viewerId), [viewerId]);
   const confirmLabels = useMemo(() => toolConfirmLabels(init.labels), [init.labels]);
   // The PreFetch chips: a write action's confirm chip (in the confirm slot) and the
   // next-step chips under a tool's answer, whose command the HOST runs.
@@ -311,6 +316,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         />
       ) : chatId == null && !conv.pendingTurn ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
       thread={(
+        <VsCodeTranslationProvider init={init}>
         <BrainTimeline
           messages={conv.messages}
           trace={conv.trace}
@@ -325,6 +331,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
           labels={tlLabels}
+          isOwnMessage={isOwnMessage}
           modelIdentity={composerModels?.identity}
           onAnswerQuestion={answerQuestion}
           onReplayMessage={replayMessage}
@@ -334,6 +341,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           conversationKey={chatId}
           prefetch={prefetchChips}
         />
+        </VsCodeTranslationProvider>
       )}
       notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}
       footer={(

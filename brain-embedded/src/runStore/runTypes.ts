@@ -13,6 +13,7 @@ import type { RunLineage } from '../runLineage';
 import type { ChatMode, ChatRosterAgent } from '../chatMode';
 import type { EvermindRunHooks } from '../evermindMemory';
 import type { RunWindowSources } from '../windowFit/modelWindow';
+import type { OnDeviceTasks } from '../onDevice/onDeviceTasks';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import type { ServedRead } from './hostRunContext';
 import type { PrefetchPort } from '@builderforce/prefetch';
@@ -84,6 +85,12 @@ export interface BrainRunRequest {
    * shipped local catalog answers — a cloud move keeps the working budget.
    */
   windowSources?: RunWindowSources;
+  /**
+   * The host's on-device task port (PRD 42 · C2). The run's summaries — the compaction
+   * fold and the hand-off note — ask it FIRST, whatever model the run is pinned to; on
+   * `null` they run through `stream` as before. Omit and nothing changes.
+   */
+  onDeviceTasks?: OnDeviceTasks;
   /** `signal` is passed for a call the person's steer may interrupt (a foreground
    *  command); otherwise the host lends the call the run's own Stop. */
   runTool?: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;

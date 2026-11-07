@@ -30,7 +30,11 @@ export type LocalModelSource =
    *  into its own cache (the `bfi` engine loads it from there). */
   | { kind: 'hf-file'; repo: string; file: string }
   /** A WebLLM prebuilt — WebLLM downloads and caches it itself. */
-  | { kind: 'webllm'; modelId: string };
+  | { kind: 'webllm'; modelId: string }
+  /** The browser's own built-in model (Gemini Nano / Phi-4-mini): the browser downloads
+   *  and caches it, and it cannot be removed from here. Not in `LOCAL_MODEL_CATALOG` —
+   *  the vendor is only known at runtime — so the page-engine store builds the row. */
+  | { kind: 'browser' };
 
 export interface LocalCatalogModel {
   /** The full `local/<runtime>/<model>` ref. */

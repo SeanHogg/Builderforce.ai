@@ -44,6 +44,15 @@
       // owns their imports too — and `vite.canvas.config.ts` already aliases the
       // whole registry, so a package missing here is a typecheck that disagrees
       // with the bundle it is meant to be checking.
+      "@builderforce/resume-ai": [
+        "../../../packages/resume-ai/src/index.ts"
+      ],
+      "@builderforce/resume-ai/analysis": [
+        "../../../packages/resume-ai/src/analysis.ts"
+      ],
+      "@builderforce/score-math": [
+        "../../../packages/score-math/src/index.ts"
+      ],
       "@builderforce/creation-canvas-contract": [
         "../../../packages/creation-canvas-contract/src/index.ts"
       ],
@@ -101,6 +110,7 @@
       "@builderforce/local-first": ["../../../packages/local-first/src/index.ts"],
       // `WorkspaceApp.tsx` reaches the page engines (`src/pageEngines.ts`), and through
       // them the page-engine bridge protocol, which names catalog types.
+      "@builderforce/json-schema": ["../../../packages/json-schema/src/index.ts"],
       "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],
       // The three Next couplings, resolved to the shims the bundler also uses —
       // so types and runtime agree on what `useTranslations` / `useRouter` are.

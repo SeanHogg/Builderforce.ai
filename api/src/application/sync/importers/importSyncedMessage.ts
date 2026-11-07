@@ -28,6 +28,7 @@ import { bumpChatMessages } from '../../brain/chatCacheVersions';
 import { isStepId } from '../../brain/chatStepStore';
 import { isStepRow } from '@builderforce/agent-loop';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStepStore, SyncStoreSet } from '../syncPorts';
+import { messageAuthorFor } from '../../brain/messageAuthor';
 import {
   appliedExisting,
   appliedNew,
@@ -143,6 +144,7 @@ async function createMessage(
       content: fields.content,
       metadata: fields.metadata,
       eventKey: fields.eventKey,
+      authorUserId: messageAuthorFor(fields.role, ctx.auth.userId),
       createdAt: clampedClientTime(fields.createdAt, ctx.now),
     }).onConflictDoNothing({
       // Restates the partial index's predicate (`check:conflict-targets`).

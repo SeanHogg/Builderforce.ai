@@ -567,6 +567,18 @@
     "message": "Download failed — try again.",
     "description": "A model download failed"
   },
+  "lmDownloadBuiltIn": {
+    "message": "Download",
+    "description": "Download action for the browser's built-in model (size unknown)"
+  },
+  "lmDownloadingUnknown": {
+    "message": "Downloading…",
+    "description": "Download progress line when the percentage is unknown"
+  },
+  "lmBuiltInRequirement": {
+    "message": "Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.",
+    "description": "The browser's stated hardware requirement for its built-in model"
+  },
   "lmReasonWebgpu": {
     "message": "Needs WebGPU, which this browser or GPU does not offer.",
     "description": "Why a model cannot run: no WebGPU"
@@ -1882,5 +1894,29 @@
   "prefetchActionKnowledgeAsk": {
     "message": "Knowledge lookup",
     "description": "Chat: name of the knowledge-lookup action"
+  },
+  "translationTranslatedFrom": {
+    "message": "Translated from {language}",
+    "description": "Chat: caption under a translated message; {language} is the source language's name"
+  },
+  "translationShowOriginal": {
+    "message": "Show original",
+    "description": "Chat: toggle back to the original text of a translated message"
+  },
+  "translationShowTranslation": {
+    "message": "Show translation",
+    "description": "Chat: toggle to the translation again"
+  },
+  "translationTranslating": {
+    "message": "Translating…",
+    "description": "Chat: shown while a message is being translated"
+  },
+  "translationNeedsTranslator": {
+    "message": "Translation needs this browser's built-in translator",
+    "description": "Chat: muted hint when nothing on this device can translate a message"
+  },
+  "translationGetTranslator": {
+    "message": "Download",
+    "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

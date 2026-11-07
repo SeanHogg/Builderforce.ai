@@ -724,6 +724,9 @@
   "Math": "数学",
   "All models ({count})": "全部模型（{count}）",
   "Fewer models": "收起模型",
+  "Download": "下载",
+  "Downloading…": "正在下载…",
+  "Needs about 22 GB of free disk and a GPU with over 4 GB of video memory, or 16 GB of RAM and 4 CPU cores. The browser manages this model.": "需要约 22 GB 可用磁盘空间，以及显存超过 4 GB 的 GPU，或 16 GB 内存和 4 个 CPU 核心。该模型由浏览器管理。",
   "Try again": "重试",
   "A question asked before was answered from memory — no model call": "之前问过的问题由记忆作答——未调用模型",
   "AI spend · last {days} days": "AI 花费 · 最近 {days} 天",
@@ -1174,5 +1177,10 @@
   "Git status could not be read after the fix.": "修复之后无法读取 Git 状态。",
   "git {0} failed{1}": "git {0} 失败{1}",
   "knip removes every unused export in each of these files, not only the one the finding names.": "knip 会移除这些文件中所有未使用的导出，而不只是该发现所指的那一个。",
-  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "当前无法访问所选工作区。BuilderForce 将自动重试。"
-}
+  "The workspace you selected can't be reached right now. BuilderForce will retry automatically.": "当前无法访问所选工作区。BuilderForce 将自动重试。",
+  "Translated from {0}": "译自{0}",
+  "Show original": "显示原文",
+  "Show translation": "显示译文",
+  "Translating…": "正在翻译…",
+  "Translation needs this browser's built-in translator": "翻译需要此浏览器的内置翻译器"
+}

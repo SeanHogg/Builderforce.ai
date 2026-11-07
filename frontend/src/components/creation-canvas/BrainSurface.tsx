@@ -1,6 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import { Avatar, BrainTimeline, TranslationPickerScope, requestComposerMenu } from '@seanhogg/builderforce-brain-ui';
+import { useOwnMessage } from '@/lib/brain/hooks/useOwnMessage';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -92,6 +93,8 @@ export interface BrainSurfaceBodyProps {
    * bubble be clicked twice. Absent ⇒ the transcript does not jump.
    */
   revealMessage?: { id: number; nonce: number } | null;
+  /** The id of THE canvas prompt: a translated message's "download a model" hint opens that composer's model menu. */
+  composerId?: string;
 }
 
 /** What a placement adds around the shared conversation. */
@@ -118,6 +121,7 @@ export function BrainSurface({
   guestSignup = null,
   refusal = null,
   revealMessage = null,
+  composerId,
 }: BrainSurfaceProps) {
   const t = useTranslations('creationCanvas');
   // Shared with the header's Context toggle — see `brainSurfaceView`.
@@ -126,6 +130,7 @@ export function BrainSurface({
   // surface renders in three placements and inside a guest session, and each of those
   // would otherwise have to remember to thread the same fact through.
   const modelIdentity = useModelIdentity();
+  const isOwnMessage = useOwnMessage();
   // THE run's in-flight step (the run store's `activity`, by `runKey`) — the same reading
   // the panel and VS Code animate their transcript's live row off.
   const activity = useCanvasRunActivity(runKey, running, runStartedAt);
@@ -179,7 +184,9 @@ export function BrainSurface({
       </div> : undefined}
       thread={tab === 'chat'
         ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
+          <TranslationPickerScope openModelPicker={() => { if (composerId) requestComposerMenu(composerId, 'model'); }}>
           <BrainTimeline
+            isOwnMessage={isOwnMessage}
             conversationKey={runKey ?? null}
             messages={messages}
             trace={showExecutionDetail ? trace : []}
@@ -198,6 +205,7 @@ export function BrainSurface({
             ratings={ratings}
             revealMessage={revealMessage}
           />
+          </TranslationPickerScope>
         </div>
         : <div className={styles.brainDockContext}>
           <BrainContextPanel node={node} nodes={nodes} edges={edges} transcript={messages} />

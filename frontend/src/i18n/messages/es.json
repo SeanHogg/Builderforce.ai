@@ -324,6 +324,9 @@
     "localTools": "Herramientas",
     "localContext": "Contexto de {tokens}",
     "localDownloadFailed": "La descarga falló: inténtalo de nuevo.",
+    "localDownloadBuiltIn": "Descargar",
+    "localDownloadingUnknown": "Descargando…",
+    "localBuiltInRequirement": "Requiere unos 22 GB de disco libre y una GPU con más de 4 GB de memoria de vídeo, o 16 GB de RAM y 4 núcleos de CPU. El navegador gestiona este modelo.",
     "localReasonWebgpu": "Requiere WebGPU, que este navegador o GPU no ofrece.",
     "localReasonF16": "Requiere sombreadores WebGPU de 16 bits, que esta GPU no ofrece.",
     "localReasonBuffer": "Requiere búferes de GPU más grandes de los que permite este dispositivo.",
@@ -3902,6 +3905,11 @@
       "verdictNoPr": "En los últimos {days} días la caché sirvió el {cache} de los tokens de prompt; ninguna ejecución de este periodo ha fusionado un PR todavía.",
       "basis": "Las cifras de tokens las informa el proveedor; el gasto es el coste registrado al anotar cada llamada.",
       "unattributed": "Sin atribuir",
+      "engine": {
+        "cloud": "Nube",
+        "browser": "Modelo integrado"
+      },
+      "utilityShare": "{pct} de las llamadas auxiliares se ejecutaron en este dispositivo",
       "metric": {
         "cacheHitRate": "Tasa de aciertos de caché",
         "outputInputRatio": "Salida / entrada",
@@ -3937,7 +3945,8 @@
         "actionType": "Tipo de trabajo",
         "role": "Rol",
         "model": "Modelo",
-        "route": "Ruta del pipeline"
+        "route": "Ruta del pipeline",
+        "utilityEngine": "Llamadas auxiliares por motor"
       },
       "route": {
         "full": "Pipeline completo",
@@ -35849,7 +35858,7 @@
       "live": "Qué cambió en esta ejecución y qué cambió a la vez.",
       "compare": "Antes y después: qué mejoró o empeoró."
     },
-    "lensNotApplicable": "Esta lente no se aplica a esta carpeta.",
+    "lensNotApplicable": "Esta vista no se aplica a esta carpeta.",
     "lensNeedsJudgement": "Las afirmaciones aparecen tras una revisión con un modelo. Todo lo demás funciona sin él.",
     "legendLabel": "Leyenda",
     "legend": {
@@ -35871,10 +35880,11 @@
       "edge": "Referencia"
     },
     "statsLine": "{nodes} nodos · {edges} aristas · {sources} fuentes",
-    "truncatedNote": "Se muestra la parte más importante de un grafo grande. La búsqueda llega a todo.",
     "focusedNote": "Se muestran los {count} nodos principales.",
+    "filesLoaded": "{loaded} de {total} cargados",
     "showAll": "Mostrar todo",
-    "view3d": "Torre",
+    "view3d": "3D",
+    "viewTower": "Torre",
     "viewList": "Lista",
     "viewSystem": "Sistema",
     "viewHeat": "Calor",
@@ -35944,7 +35954,7 @@
       "docs": "Documentos"
     },
     "findingsTitle": "Hallazgos",
-    "findingsEmpty": "No hay nada que resolver en esta lente.",
+    "findingsEmpty": "No hay hallazgos abiertos en {scope}.",
     "findingKinds": {
       "cycle": "Ciclo",
       "cloneGroup": "Grupo de clones",
@@ -36150,7 +36160,6 @@
       "linesButton": "Líneas",
       "linesEmpty": "No se encontraron puntos de entrada, así que no hay líneas.",
       "lineName": "Línea {name}",
-      "lineStops": "{count} paradas",
       "stationsOn": "Estaciones de {name}",
       "stationsPick": "Elige una línea para ver sus estaciones.",
       "omittedLines": "{count} puntos de entrada más no se dibujan como líneas.",
@@ -36182,12 +36191,8 @@
       "pathBack": "Parada anterior",
       "pathNext": "Parada siguiente",
       "pathHop": "{kind} · {count}",
-      "actTitle": "Actuar",
-      "actScope": "Alcance: {scope}",
       "actScopeAll": "Todo el grafo",
-      "showFiles": "Mostrar archivos",
       "levelOf5": "{level} de 5",
-      "stationFacts": "Sobre esta estación",
       "provenance": {
         "deterministic": "Determinista",
         "heuristic": "Heurístico",
@@ -36195,12 +36200,28 @@
       },
       "resolveFinding": "Resolver", "resolveFindingAria": "Resolver: {title}", "pipesCapped": "Solo se muestran las primeras {count} tuberías.", "kindsLegend": "Tipos de hallazgo", "noDirectReference": "sin referencia directa", "testsCapped": "La solicitud nombra solo los primeros {count} endpoints.", "imageTooLarge": "Esa imagen supera los {size} MB.", "historyCapped": "Solo se muestran los últimos {count} commits.", "skippedUploads": "{count} archivos no se guardaron.", "skipReasons": {"tooLarge": "Demasiado grande para guardar", "unreadable": "No se pudo leer", "rateLimited": "El servidor estaba ocupado", "unsupported": "Archivo no compatible", "other": "Otro motivo"},
       "system": {
-        "description": "Vista de sistema: {tiers} niveles, {components} componentes. Selecciona un componente para ver sus detalles.",
         "componentAria": "{name}, {files} archivos, {findings} hallazgos",
         "antiBar": "Hallazgos por tipo",
         "data": "Datos y servicios externos",
         "dataEmpty": "Ningún almacén de datos ni servicio externo cierra una línea.",
-        "empty": "No hay componentes que dibujar."
+        "empty": "No hay componentes que dibujar.",
+        "metaOwner": "{files} · {owner}",
+        "more": "+{count} más",
+        "moreAria": "Mostrar {count} más de {layer} en la lista",
+        "notLayeredOne": "Sin capa · {count} parte → Lista",
+        "notLayeredOther": "Sin capa · {count} partes → Lista"
+      },
+      "systemArrows": {
+        "entry": "llama por HTTP o un puente ↓",
+        "presentation": "toma un puerto de aplicación ↓",
+        "application": "trabaja sobre el dominio ↓",
+        "domain": "lo implementa ↓",
+        "infrastructure": "lee y escribe ↓"
+      },
+      "counts": {
+        "fileOne": "{count} archivo", "fileOther": "{count} archivos",
+        "stationOne": "{count} estación", "stationOther": "{count} estaciones",
+        "deadEndOne": "{count} callejón sin salida", "deadEndOther": "{count} callejones sin salida"
       },
       "heat": {
         "description": "Cuadrícula de calor: {layers} capas, {components} componentes. Selecciona una celda para ver sus detalles.",
@@ -36210,10 +36231,23 @@
         "showMore": "Mostrar {count} más"
       },
       "cycleHop": "Dependencia cíclica",
-      "mapShows": "El mapa muestra {shown} de {total} archivos",
+      "explain": {
+        "cutNote": "Se muestran {shown} de {total} archivos. El servidor no envió el mapa completo; se actualizará cuando se actualice el servidor.",
+        "notSetUpWhy": "Sin configurar · {reason}",
+        "whyNoOutline": "el servidor envió solo {shown} de {total} archivos",
+        "whyNoBadges": "ningún archivo tiene {metric} todavía; vuelve a revisar para recopilarlo",
+        "whyNotCollected": "{metric} no se recopiló en esta revisión",
+        "parityServerOnly": "{server} archivos en el servidor · no revisado en este equipo",
+        "outOfSync": "Desincronizado",
+        "oneStation": "Esta línea tiene una estación: no hay nada que recorrer.",
+        "legendNotSetUp": "así que todas las estaciones se ven lisas",
+        "presetNeeds": "necesita {metrics}"
+      },
+      "scaleSummary": "{stations} estaciones representan {files} archivos · se muestran los {nodes} más importantes · la búsqueda llega a todo",
+      "repoConfig": "configuración del repo",
       "sequence": {
         "description": "Secuencia de {stops} paradas y {messages} mensajes.",
-        "empty": "Elige una línea o una estación para dibujar su secuencia.",
+        "empty": "Una secuencia necesita dos estaciones; esta línea tiene una.",
         "messageAria": "{from} a {to}: {label}",
         "backToMap": "Volver al mapa"
       },
@@ -36221,12 +36255,13 @@
         "synced": "Sincronizado",
         "syncing": "Sincronizando",
         "error": "Error",
-        "idle": "Sin sincronizar"
+        "idle": "Sin sincronizar",
+        "partial": "Desincronizado"
       },
       "overlay": {
         "outTo": "↑ Salir a {name}",
         "fit": "Ajustar",
-        "lensSub": "era la lente {lens}",
+        "lensSub": "era la vista {lens}",
         "familyOnly": "Solo {family}",
         "clearFamily": "Quitar el filtro {family}",
         "missingFiles": "Faltan {count} archivos en el servidor.",
@@ -36258,7 +36293,13 @@
           "leaf": "Fuera de este nivel",
           "loading": "Leyendo símbolos…"
         },
-        "stats": { "issues": "Problemas", "complexity": "Complejidad", "coverage": "Cobertura", "usage": "Uso" },
+        "stats": { "issues": "Antipatrones", "complexity": "Complejidad", "coverage": "Cobertura", "reached": "Alcanzado", "usage": "Importancia" },
+        "statWords": {
+          "anti": { "none": "ninguno", "low": "bajo", "medium": "medio", "high": "alto", "severe": "grave" },
+          "antiTip": "de {count} advertencias",
+          "importance": "n.º {rank} de {total}",
+          "importanceTip": "Relativa a la parte más activa"
+        },
         "bands": { "symbol": "Clase", "methods": "Métodos", "errors": "Errores y pruebas", "leaves": "Sale de este nivel", "body": "Esta función", "callees": "A qué llama" },
         "names": { "postgres": "Postgres", "kv": "KV · R2", "llm": "Proveedores de LLM", "github": "API de GitHub", "stripe": "Pagos", "mail": "Correo", "slack": "Slack", "oauth": "Proveedor de inicio de sesión" }
       },
@@ -36266,11 +36307,23 @@
         "heading": "Líneas desde los puntos de entrada",
         "legendHeading": "Cómo se lee la imagen ahora",
         "ownerSwatches": "Un color por responsable",
-        "legendEmpty": "No hay nada asignado a la imagen."
+        "legendEmpty": "No hay nada asignado a la imagen.",
+        "lineDetail": "{stations} · {files} · {end}",
+        "pinTag": "{n} · {title}",
+        "reachedTag": "{percent} % alcanzado"
       },
       "act": {
         "cardsTitle": "Corregir primero",
-        "noCards": "Aquí no hay nada que corregir.",
+        "titleAtOne": "En {scope} · 1 problema",
+        "titleAtMany": "En {scope} · {count} problemas",
+        "titlePath": "En esta ruta · {count} por resolver",
+        "emptyTitle": "Aquí no hay nada que resolver",
+        "emptyStation": "No hay hallazgos abiertos en esta estación. Prueba «¿Qué no tiene pruebas?»",
+        "emptyPath": "No hay hallazgos abiertos en esta ruta. Prueba «¿Qué no tiene pruebas?»",
+        "emptyAsk": "Preguntar qué no tiene pruebas",
+        "emptyShow": "Mostrar",
+        "systemWide": "Todo el sistema · {count}",
+        "systemWideNote": "Afectan a la mayor parte del sistema, así que ninguna estación los lleva.",
         "apply": "Aplicar",
         "prompt": "Pedir",
         "show": "Mostrar",
@@ -36750,5 +36803,17 @@
         "simulate": "ejecuta el recorrido con valores reales"
       }
     }
+  },
+  "translation": {
+    "translatedFrom": "Traducido del {language}",
+    "showOriginal": "Mostrar original",
+    "showTranslation": "Mostrar traducción",
+    "translating": "Traduciendo…",
+    "needsTranslator": "La traducción necesita el traductor integrado de este navegador",
+    "getTranslator": "Descargar",
+    "importDetected": "Este archivo parece estar escrito en {language}.",
+    "importTranslateTo": "Traducir al {language}",
+    "importDismiss": "Descartar",
+    "importFailed": "No se pudo traducir este archivo. Se queda tal como se importó."
   }
 }

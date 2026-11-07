@@ -8,6 +8,8 @@ import type {
   Extracted,
   IndexHit,
   JudgementPort,
+  JudgementRequest,
+  JudgementResult,
   KnowledgeGraph,
   KnowledgeStore,
   ScopeRecord,
@@ -25,6 +27,16 @@ export interface KnowledgeClientOptions {
    * `/api/agent/projects` for an on-prem agent host's key (`Bearer` + `X-AgentHost-Id`).
    */
   basePath?: string;
+  /**
+   * Client-first judgement (PRD 42 · D2). The host lends a function that tries the device
+   * first and calls `send(clientResult)` with its result (or `send()` when it declines, or
+   * once more without it when the server refuses it). This package holds no on-device code;
+   * the web and Rovr hosts build it with `withClientResult` + `onDeviceJudgement`.
+   */
+  judgeClientFirst?: (
+    req: JudgementRequest,
+    send: (clientResult?: unknown) => Promise<JudgementResult>,
+  ) => Promise<JudgementResult>;
 }
 
 /** Who is reading, as the server decides it: the person (null for a machine caller) and

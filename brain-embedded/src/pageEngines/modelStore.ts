@@ -21,6 +21,7 @@ import {
   type LocalModelUnfit,
   type LocalRuntimeId,
 } from '@builderforce/local-inference';
+import type { BuiltInModels } from '../builtInAi/builtInModels';
 import { reportPageEngineFailure } from './engineFailure';
 import type { HfModelStore } from './hfModelStore';
 import type { PageEngine } from './types';
@@ -63,7 +64,14 @@ export interface LocalModelStoreOptions {
   /** Engines whose probes a download or removal invalidates. */
   engines?: readonly Pick<PageEngine, 'invalidate'>[];
   catalog?: readonly LocalCatalogModel[];
+  /** The browser's own model (PRD 42 · A2): listed beside the catalog from the browser
+   *  prober's `state`, downloaded through this same store. Absent = this host has none. */
+  builtIn?: BuiltInModels;
 }
+
+/** How often a `downloading` built-in row (a download another tab or an earlier page load
+ *  started, so no progress events reach us) is re-probed while someone is listening. */
+const BUILT_IN_POLL_MS = 3000;
 
 /** One backend's view of a model, by the row's source. */
 interface Backend {
@@ -73,7 +81,13 @@ interface Backend {
 }
 
 function backendFor(row: LocalCatalogModel, options: LocalModelStoreOptions): Backend | undefined {
-  const { hf, webllm } = options;
+  const { hf, webllm, builtIn } = options;
+  if (row.source.kind === 'browser') {
+    // The browser owns the model's bytes: it is downloaded here, never removed here.
+    return builtIn
+      ? { ready: async () => (await builtIn.entry())?.state === 'ready', download: (_r, onProgress, signal) => builtIn.download(onProgress, signal), remove: async () => undefined }
+      : undefined;
+  }
   if (row.source.kind === 'hf-file') {
     return hf
       ? {
@@ -104,8 +118,12 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
     for (const engine of options.engines ?? []) engine.invalidate();
     emit();
   };
+  /** The built-in row last listed — `download` runs synchronously inside the click's user
+   *  activation, so it must not wait on a probe to find its row. */
+  let builtInRow: LocalCatalogModel | undefined;
+  let builtInPoll: ReturnType<typeof setTimeout> | undefined;
   const rowOf = (ref: string): LocalCatalogModel => {
-    const row = catalog.find((m) => m.ref === ref);
+    const row = catalog.find((m) => m.ref === ref) ?? (builtInRow?.ref === ref ? builtInRow : undefined);
     if (!row) throw new Error(`unknown_model: ${ref}`);
     return row;
   };
@@ -127,6 +145,27 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
     return { ...row, state: ready ? ('ready' as const) : ('absent' as const), backend: fit.backend };
   }
 
+  /** The built-in model's row in the probe's state: `ready` = installed, `downloadable` =
+   *  Download offered, `downloading` = in flight (no progress known after a reload). */
+  async function describeBuiltIn(): Promise<LocalModelRow[]> {
+    const entry = await options.builtIn?.entry().catch((e: unknown) => {
+      reportPageEngineFailure('browser', 'cache_lookup', e);
+      return null;
+    });
+    builtInRow = entry?.row;
+    if (!entry) return [];
+    const pending = inFlight.get(entry.row.ref);
+    if (pending) return [{ ...entry.row, state: 'downloading', progress: pending.progress }];
+    if (entry.state === 'downloading' && !builtInPoll && listeners.size > 0) {
+      // Someone else is downloading it: no events reach us, so look again shortly.
+      builtInPoll = setTimeout(() => {
+        builtInPoll = undefined;
+        changed();
+      }, BUILT_IN_POLL_MS);
+    }
+    return [{ ...entry.row, state: entry.state === 'ready' ? 'ready' : entry.state === 'downloading' ? 'downloading' : 'absent' }];
+  }
+
   return {
     async listLocalModels() {
       const runtimes = [...new Set(catalog.map((m) => m.runtime))];
@@ -137,7 +176,11 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
         }),
       );
       const supports = new Map<LocalRuntimeId, LocalDeviceSupport | null>(answers);
-      return Promise.all(catalog.map((row) => describe(row, supports)));
+      const [rows, builtIn] = await Promise.all([
+        Promise.all(catalog.map((row) => describe(row, supports))),
+        describeBuiltIn(),
+      ]);
+      return [...rows, ...builtIn];
     },
 
     download(ref, onProgress, signal) {

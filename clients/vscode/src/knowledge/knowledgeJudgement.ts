@@ -1,7 +1,7 @@
 /**
  * The editor's judgement port for a review (PRD 38 §4.3, §8.2): routed LOCAL ENGINES FIRST,
  * then the gateway — the same two seams the editor's other small structured calls use
- * (`completeOnDevice`, `routeComplete` in `modelRouting.ts`), with the shared prompts and
+ * (`onDeviceTasks`, `routeComplete` in `modelRouting.ts`), with the shared prompts and
  * memory's validators (`completionJudgement`).
  *
  *   - a model on this machine, when one is running (free tokens);
@@ -15,11 +15,15 @@ import type * as vscode from "vscode";
 import { completionJudgement, fallbackJudgement, type JudgeCompletion } from "@builderforce/agent-tools/knowledge";
 import type { JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
-import { completeOnDevice, onDeviceModelAvailable, resolveModelRoute, routeComplete } from "../modelRouting";
+import { NO_LOCAL_MODEL } from "@seanhogg/builderforce-brain-embedded";
+import { onDeviceModelAvailable, onDeviceTasks, resolveModelRoute, routeComplete } from "../modelRouting";
 import { currentInferenceMode } from "../inferenceModeSetting";
 import type { ChatMessage } from "../gateway";
 
-const messagesOf = (system: string, user: string): ChatMessage[] => [
+/** A judgement turn is only ever system + user — the narrow shape both the on-device port and the router accept. */
+type JudgementMessage = ChatMessage & { role: "system" | "user"; content: string };
+
+const messagesOf = (system: string, user: string): JudgementMessage[] => [
   { role: "system", content: system },
   { role: "user", content: user },
 ];
@@ -35,7 +39,13 @@ export async function editorJudgement(secrets: vscode.SecretStorage, client?: Kn
   const ports: JudgementPort[] = [];
   const used = new Set<string>();
   if (await onDeviceModelAvailable().catch(() => false)) {
-    const local: JudgeCompletion = ({ system, user, signal }) => completeOnDevice(messagesOf(system, user), signal, (ref) => used.add(ref));
+    // The port's raw completion: judgement parses its own reply (memory's validators), and a
+    // failure propagates so the chain moves on to the platform's judge.
+    const local: JudgeCompletion = async ({ system, user, signal }) => {
+      const reply = await onDeviceTasks.complete(messagesOf(system, user), signal, (ref) => used.add(ref));
+      if (reply === null) throw new Error(NO_LOCAL_MODEL);
+      return reply;
+    };
     ports.push(completionJudgement(local));
   }
   if (currentInferenceMode() !== "local-only") {

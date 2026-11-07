@@ -11,7 +11,8 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("vscode", () => ({}));
-vi.mock("@seanhogg/builderforce-brain-embedded", () => ({
+vi.mock("@seanhogg/builderforce-brain-embedded", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   completeLocal: h.completeLocal,
   completeLocalFirst: vi.fn(),
   createHostModelStream: vi.fn(),

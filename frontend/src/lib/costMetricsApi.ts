@@ -4,7 +4,7 @@ import { apiRequest } from './apiClient';
  * "Cost efficiency" (LLM Cost Optimization · A4) — client mirror of
  * api/src/application/costMetrics/costMetricsShape.ts, served by
  *
- *   GET /api/cost/metrics?window=7d|30d&groupBy=none|actionType|role|model|route|lever|day
+ *   GET /api/cost/metrics?window=7d|30d&groupBy=none|actionType|role|model|route|utilityEngine|lever|day
  *   GET /api/cost/runs/:executionId
  *
  * Manager role + premium insights plan feature server-side (`insights.costEfficiency`
@@ -15,10 +15,10 @@ import { apiRequest } from './apiClient';
 
 export type CostMetricWindow = '7d' | '30d';
 /** `day` = one group per UTC day, keyed `YYYY-MM-DD`, ascending — the trend series. */
-export type CostMetricGroupBy = 'none' | 'actionType' | 'role' | 'model' | 'route' | 'lever' | 'day';
+export type CostMetricGroupBy = 'none' | 'actionType' | 'role' | 'model' | 'route' | 'utilityEngine' | 'lever' | 'day';
 /** The dimensions the lens's grouping switch offers (lever has its own table). `route` is
  *  the run's pipeline route — `full` (plan → code → verify) or `quick` (one coding pass). */
-export const COST_GROUPINGS = ['actionType', 'role', 'model', 'route'] as const;
+export const COST_GROUPINGS = ['actionType', 'role', 'model', 'route', 'utilityEngine'] as const;
 export type CostGrouping = (typeof COST_GROUPINGS)[number];
 
 export interface CostGroupMetrics {
@@ -210,6 +210,26 @@ export function dailySeries(
     values.push(v);
   }
   return { days, values };
+}
+
+/** The `utilityEngine` buckets that are not an on-device engine. */
+const NOT_ON_DEVICE: ReadonlySet<string> = new Set(['cloud', 'other']);
+
+/**
+ * PRD 42 · F — the "On-device utility" series from a `groupBy=utilityEngine` report: the
+ * utility calls per serving engine (device engines and `cloud`; non-utility rows dropped) and
+ * the share served on the device. `share` is null when there were no utility calls.
+ */
+export function onDeviceUtilitySeries(report: CostMetricsReport | null | undefined): {
+  groups: CostGroupMetrics[];
+  onDeviceCalls: number;
+  totalCalls: number;
+  share: number | null;
+} {
+  const groups = (report?.groups ?? []).filter((g) => g.group !== 'other');
+  const totalCalls = groups.reduce((n, g) => n + g.calls, 0);
+  const onDeviceCalls = groups.reduce((n, g) => n + (NOT_ON_DEVICE.has(g.group) ? 0 : g.calls), 0);
+  return { groups, onDeviceCalls, totalCalls, share: totalCalls > 0 ? onDeviceCalls / totalCalls : null };
 }
 
 /** Prompt tokens that were neither read from nor written to the cache. */

@@ -75,6 +75,8 @@ export interface BrainSurfaceContextValue {
   /** The last turn's no-model refusal (`brainTurn/modelRefusal.ts`) as THE banner with its
    *  remedies, so every placement — the inline Brain Object included — offers them. */
   refusal?: BrainSurfaceBodyProps['refusal'];
+  /** THE canvas prompt's id - where the transcript's translator hint opens the model menu. */
+  composerId?: string;
   /** Select the Brain Object and reveal the conversation, wherever it lives. */
   onOpen: (nodeId: string) => void;
   onModeChange: (mode: BrainDockMode) => void;

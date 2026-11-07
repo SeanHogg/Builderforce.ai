@@ -44,6 +44,8 @@ import {
   ResumeReviewService, RESUME_REVIEW_STATUSES, isResumeReviewStatus,
 } from '../../application/career/resumeReview';
 import { parseOptionalBody, z, zNumberLike } from './requestBody';
+import { admitClientResult } from './clientResultHttp';
+import { CLIENT_JSON_OBJECT_SPEC } from '../../application/llm/clientResult';
 
 /** Below this a "résumé" is a sentence, and every reading of it would be noise. */
 const MIN_RESUME_CHARS = 40;
@@ -52,9 +54,11 @@ const MIN_RESUME_CHARS = 40;
 // Every body here may be absent (`parseOptionalBody`): each handler answers a
 // missing résumé with its own sentence, which is the message a person reads.
 
-const RewriteBulletsBody = z.object({ resumeText: z.string().nullish(), limit: zNumberLike.nullish() });
+// `clientResult` (PRD 42 Part D) is validated by `admitClientResult`, never here. It is
+// declared ONLY on rewrite and merge: `GradeBody` has none, so grading ignores it (principle 6).
+const RewriteBulletsBody = z.object({ resumeText: z.string().nullish(), limit: zNumberLike.nullish(), clientResult: z.unknown().optional() });
 /** Each entry is `String()`ed and length-filtered by the handler. */
-const MergeBulletsBody = z.object({ resumeTexts: z.unknown().optional() });
+const MergeBulletsBody = z.object({ resumeTexts: z.unknown().optional(), clientResult: z.unknown().optional() });
 const GradeBody = z.object({ resumeText: z.string().nullish(), jobDescription: z.string().nullish() });
 const OpenReviewBody = z.object({
   title: z.string().nullish(),
@@ -70,7 +74,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const ai = (c: { env: unknown }) => new ResumeAiService(c.env as Env);
+  const ai = (c: { env: unknown }) => new ResumeAiService(c.env as Env, db);
   const reviews = (c: { env: unknown }) => new ResumeReviewService(db, c.env as Env);
 
   // ── The three generative capabilities ────────────────────────────────────
@@ -79,9 +83,12 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseOptionalBody(c, RewriteBulletsBody);
     const resumeText = String(body.resumeText ?? '').trim();
     if (resumeText.length < MIN_RESUME_CHARS) return c.json({ error: 'Paste the résumé text first — there is nothing here to rewrite.' }, 400);
+    const { client, rejection } = admitClientResult(c, body.clientResult, CLIENT_JSON_OBJECT_SPEC);
+    if (rejection) return rejection;
     const outcome = await ai(c).rewriteToXyz(c.get('tenantId'), resumeText, {
       ...(body.limit == null ? {} : { limit: Number(body.limit) }),
       userId: c.get('userId') ?? null,
+      ...(client ? { client } : {}),
     });
     return c.json(outcome);
   });
@@ -92,7 +99,9 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
       ? body.resumeTexts.map((value) => String(value ?? '').trim()).filter((value) => value.length >= MIN_RESUME_CHARS)
       : [];
     if (texts.length < 2) return c.json({ error: 'Merging needs at least two résumés. With one, use the rewrite instead.' }, 400);
-    const outcome = await ai(c).mergeBullets(c.get('tenantId'), texts, { userId: c.get('userId') ?? null });
+    const { client, rejection } = admitClientResult(c, body.clientResult, CLIENT_JSON_OBJECT_SPEC);
+    if (rejection) return rejection;
+    const outcome = await ai(c).mergeBullets(c.get('tenantId'), texts, { userId: c.get('userId') ?? null, ...(client ? { client } : {}) });
     return c.json(outcome);
   });
 

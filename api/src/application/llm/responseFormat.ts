@@ -12,7 +12,7 @@
  */
 
 import type { ChatCompletionRequest } from './LlmProxyService';
-import { validateJsonSchema } from './jsonSchemaValidator';
+import { validateJsonSchema } from '@builderforce/json-schema';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Response-format conformance — used by dispatchJson to detect non-conforming

@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   superadmin: vi.fn(async () => false),
   upsertFact: vi.fn(async () => true),
   judgeCost: vi.fn(),
+  judge: vi.fn(),
   version: { n: 0 },
   bump: vi.fn(async () => { mocks.version.n += 1; }),
 }));
@@ -40,6 +41,10 @@ vi.mock('../../application/knowledge/knowledgePerception', async (importOriginal
 vi.mock('../../application/knowledge/listKnowledge', () => ({ listKnowledgeScopes: mocks.scopes, listKnowledgeFacts: mocks.facts }));
 vi.mock('../../application/knowledge/deleteKnowledgeRoot', () => ({ deleteKnowledgeRoot: mocks.deleteRoot }));
 vi.mock('../../application/knowledge/judgeCostEstimate', () => ({ judgeCostFor: mocks.judgeCost }));
+vi.mock('../../application/knowledge/judgeKnowledge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../application/knowledge/judgeKnowledge')>()),
+  judgeKnowledge: mocks.judge,
+}));
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
 vi.mock('../../application/llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsertFact, deleteProjectFact: vi.fn() }));
 vi.mock('../../application/knowledge/getKnowledgeGraph', async (importOriginal) => ({
@@ -435,6 +440,36 @@ describe('project knowledge routes', () => {
       expect(res.status).toBe(200);
       expect((mocks.upsertFact.mock.calls[0] as unknown[])[5]).toBe('l1\nl2\nl3');
     });
+  });
+});
+
+describe('POST /:projectId/knowledge/judge — clientResult (PRD 42 Part D)', () => {
+  const items = [{ ref: 'src:a', text: 'Alpha asserts X.', sourceHash: 'h1' }];
+  const provenance = { engine: 'webllm', model: 'Qwen-0.5B' };
+
+  it('hands a valid clientResult to the use case, with the usage db', async () => {
+    mocks.judge.mockResolvedValue({ extract: [], invalid: 0 });
+    const clientResult = { json: { extract: [{ ref: 'src:a', claims: [], entities: [] }] }, provenance };
+    const res = await appWithErrors().request('/42/knowledge/judge', post({ kind: 'extract', items, clientResult }), {});
+    expect(res.status).toBe(200);
+    expect(mocks.judge).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT, projectId: 42, db }),
+      { kind: 'extract', items },
+      { value: clientResult.json, provenance },
+    );
+  });
+
+  it('answers 400 invalid_client_result when the envelope does not match the request kind', async () => {
+    const res = await appWithErrors().request('/42/knowledge/judge', post({ kind: 'extract', items, clientResult: { json: { compare: [] }, provenance } }), {});
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_client_result', reason: 'json_invalid' });
+    expect(mocks.judge).not.toHaveBeenCalled();
+  });
+
+  it('is unchanged without a clientResult: no client argument', async () => {
+    mocks.judge.mockResolvedValue({ extract: [], invalid: 0 });
+    await appWithErrors().request('/42/knowledge/judge', post({ kind: 'extract', items }), {});
+    expect(mocks.judge).toHaveBeenCalledWith(expect.anything(), { kind: 'extract', items }, undefined);
   });
 });
 

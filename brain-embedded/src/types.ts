@@ -135,6 +135,12 @@ export interface BrainMessage {
   role: string;
   content: string;
   metadata: string | null;
+  /**
+   * Who sent a human (role 'user') message - a fact of the message, stamped server-side from the
+   * authenticated caller. The server answers the chat owner for a legacy row; null for assistant /
+   * agent / system rows and for a message written on this device alone (the reader's own).
+   */
+  authorUserId?: string | null;
   seq: number;
   createdAt: string;
   /**

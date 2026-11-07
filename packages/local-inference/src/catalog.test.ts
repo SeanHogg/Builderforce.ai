@@ -45,7 +45,7 @@ describe('LOCAL_MODEL_CATALOG', () => {
         expect(m.runtime).toBe('bfi');
         expect(m.source.repo).toMatch(/^[\w.-]+\/[\w.-]+$/);
         expect(m.source.file).toMatch(/\.gguf$/);
-      } else {
+      } else if (m.source.kind === 'webllm') {
         expect(m.runtime).toBe('webllm');
         expect(m.source.modelId).toBe(m.model);
         expect(m.source.modelId).toMatch(/-MLC(?:-\w+)?$/);

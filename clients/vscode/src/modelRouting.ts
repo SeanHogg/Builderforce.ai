@@ -31,6 +31,8 @@ import type * as vscode from "vscode";
 import {
   completeLocal,
   completeLocalFirst,
+  completionOnDeviceTasks,
+  type OnDeviceObserver,
   createHostModelStream,
   localFirstApplies,
   NO_LOCAL_MODEL,
@@ -395,7 +397,7 @@ export async function routeComplete(
  * the shared non-streaming completion) with no cloud to fall over to. Gated on local
  * models being enabled, not on local-first (a routing choice for unpinned turns).
  */
-export async function completeOnDevice(
+async function completeOnDevice(
   messages: readonly ChatMessage[],
   signal?: AbortSignal,
   /** Told the local model ref that served the completion (a review records which model judged). */
@@ -419,3 +421,32 @@ export async function completeOnDevice(
 export async function onDeviceModelAvailable(): Promise<boolean> {
   return (await probeOnDeviceRuntimes(getLocalModelsConfig())).some((p) => p.models.some(isServableLocalModel));
 }
+
+/**
+ * The input window a summary chunk must fit: the smallest probed window among the models
+ * that can serve now (the plan may pick any of them), undefined when none reports one.
+ */
+async function onDeviceWindow(): Promise<number | undefined> {
+  const windows = (await probeOnDeviceRuntimes(getLocalModelsConfig()))
+    .flatMap((p) => p.models.filter(isServableLocalModel))
+    .flatMap((m) => (m.contextTokens ? [m.contextTokens] : []));
+  return windows.length > 0 ? Math.min(...windows) : undefined;
+}
+
+/**
+ * The editor's ONE `OnDeviceTasks` port (PRD 42 · B2): Synapse and the other local engines
+ * behind the single on-device completion above. `completeOnDevice` is private to this
+ * module — every caller (knowledge judgement, local research) goes through this port's
+ * `json` / `summarize` / `complete`. `translate` is `null` here; `detectLanguage` is the deterministic heuristic.
+ */
+export function onDeviceTasksObserving(observe?: OnDeviceObserver) {
+  return completionOnDeviceTasks({
+    complete: completeOnDevice,
+    available: onDeviceModelAvailable,
+    contextTokens: onDeviceWindow,
+    ...(observe ? { observe } : {}),
+  });
+}
+
+/** The port with no observer: the callers that have no chat (knowledge judgement, local research) record no row. */
+export const onDeviceTasks = onDeviceTasksObserving();

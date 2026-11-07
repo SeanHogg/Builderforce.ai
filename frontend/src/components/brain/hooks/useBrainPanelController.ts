@@ -46,6 +46,8 @@ import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
 import { useWebTurnGate } from '@/lib/localFirst/useWebInferenceMode';
 import { useWebKnowledgePrefetch } from '@/lib/knowledge/useWebKnowledgePrefetch';
 import { reportWebRunOutcome } from '@/lib/brain/webRunOutcome';
+import { browserOnDeviceTasks } from '@/lib/brain/onDeviceTasks';
+import { registerDockComposer } from '@/lib/brain/dockModelMenu';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -74,6 +76,8 @@ export function useBrainPanelController({
   // THIS panel's composer, as its error banner names it to open its `/` menu (a page
   // can hold the full Brain and the drawer at once — a remedy opens only its own).
   const composerId = useId();
+  // The drawer's composer is the one a comment's translator hint opens (`lib/brain/dockModelMenu`).
+  useEffect(() => (onClose ? registerDockComposer(composerId) : undefined), [composerId, onClose]);
 
   const { filterProjectId, setFilterProjectId } = useBrainProjectFilter();
   const { projects, setProjects, projectName } = useBrainProjects();
@@ -213,6 +217,8 @@ export function useBrainPanelController({
     routingMode: routingModeForSelection(modelSelection),
     pickFallbackModel: modelSelection.mode === 'model' ? undefined : pickFallbackModel,
     windowSources,
+    // Summaries (the fold, the hand-off note) try the browser's own model first (PRD 42 · C2).
+    onDeviceTasks: browserOnDeviceTasks(),
     maxTokens: effortProfile(prefs.effort).maxTokens,
     reasoning: reasoningForRun({ effort: prefs.effort, thinking: prefs.thinking }),
     toolSpecs,

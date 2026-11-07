@@ -18,6 +18,7 @@ import { createInitBudget } from "./initBudget";
 import { ttlCache } from "./ttlCache";
 import { localModelLabels } from "./localModelLabels";
 import { inferenceModeLabels } from "./inferenceModeLabels";
+import { translationLabels } from "./translationLabels";
 import { currentInferenceMode, inferenceModeInit } from "./inferenceModeSetting";
 import { chatTicketsLabels } from "./chatTicketsLabels";
 import { chatSurfaceLabels } from "./chatSurfaceLabels";
@@ -159,7 +160,7 @@ export async function buildWorkspaceInit(
     personalityBlock,
     // BOTH label sets: one surface renders the chat AND the board, so both have to
     // be present whichever surface it opens at.
-    labels: { ...authLabels(), ...brainChatLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels(), ...connectionsLabels(), ...prefetchLabels(), ...knowledgeViewLabels() },
+    labels: { ...authLabels(), ...brainChatLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...translationLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels(), ...connectionsLabels(), ...prefetchLabels(), ...knowledgeViewLabels() },
     // The editor's display language: how the shared components format numbers,
     // money and relative times (the strings themselves are already translated above).
     locale: vscode.env.language,

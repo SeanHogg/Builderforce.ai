@@ -45,7 +45,8 @@ import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteE
 import {
   KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, MAX_EXTRACTED_BYTES, putAnalysisSnapshot, putExtracted,
 } from '../../application/knowledge/knowledgePerception';
-import { MAX_JUDGE_ITEMS, judgeKnowledge } from '../../application/knowledge/judgeKnowledge';
+import { MAX_JUDGE_ITEMS, clientJudgementSpec, judgeKnowledge } from '../../application/knowledge/judgeKnowledge';
+import { admitClientResult } from './clientResultHttp';
 import { judgeCostFor } from '../../application/knowledge/judgeCostEstimate';
 import { parseBody, z } from './requestBody';
 
@@ -148,6 +149,8 @@ const AnalysisBody = z.object({
 const JudgeBody = z.object({
   kind: z.enum(['extract', 'compare']),
   items: z.array(z.object({ ref: zRef, text: z.string().max(20_000), sourceHash: z.string().max(160) })).min(1).max(MAX_JUDGE_ITEMS),
+  /** PRD 42 Part D — validated by `admitClientResult`, never here. */
+  clientResult: z.unknown().optional(),
 });
 const BulkExtractedBody = z.object({
   hashes: z.array(z.string().regex(KNOWLEDGE_HASH_PATTERN)).min(1).max(500),
@@ -292,10 +295,13 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
 
   router.post('/:projectId/knowledge/judge', (c) => withPorts(c, async (p) => {
     if (declaredTooLarge(c, MAX_JUDGE_BYTES)) return tooLarge(MAX_JUDGE_BYTES);
-    const req = await parseBody(c, JudgeBody);
+    const { clientResult, ...req } = await parseBody(c, JudgeBody);
+    const { client, rejection } = admitClientResult(c, clientResult, clientJudgementSpec(req.kind));
+    if (rejection) return rejection;
     const result = await judgeKnowledge(
-      { env: p.env, tenantId: p.tenantId, projectId: p.projectId, userId: person(c) },
+      { env: p.env, tenantId: p.tenantId, projectId: p.projectId, userId: person(c), db: p.db },
       req as unknown as Parameters<typeof judgeKnowledge>[1],
+      client,
     );
     return json(result);
   }));

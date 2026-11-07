@@ -2,13 +2,16 @@ import type { CreationNodeData } from '../types';
 import { type CreationSessionActivity, type CreationSessionComment, creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { useFormat } from '@/i18n/useFormat';
 import { useTranslations } from 'next-intl';
+import { TranslatableText } from '@seanhogg/builderforce-brain-ui';
 import { useCallback, useEffect, useState } from 'react';
 import { activeResumeRevision, resumeFamilyFromNode } from '@/lib/canvasResume';
 import { faultText } from '@/lib/apiClient';
+import { useAuth } from '@/lib/AuthContext';
 import styles from '../styles/inspector.module.css';
 
 export function ActivityInspector({ sessionId, objectId, data, persistence, role, members }: { sessionId: string; objectId: string; data: CreationNodeData; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
   const fmt = useFormat();
+  const viewerId = useAuth().user?.id ?? null;
   const t = useTranslations('creationCanvas');
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);
@@ -71,7 +74,7 @@ export function ActivityInspector({ sessionId, objectId, data, persistence, role
     <section className={styles.commentList} aria-label={t('objectComments')}>
       {comments.map((comment) => <article key={comment.id} className={comment.resolvedAt ? styles.commentResolved : ''}>
         <header><b>{comment.authorName || t('collaborator')}</b><time>{fmt.dateTime(comment.createdAt)}</time></header>
-        <p>{comment.body}</p>
+        <TranslatableText text={comment.body} contentId={`comment:${comment.id}`} enabled={!viewerId || comment.createdBy !== viewerId} render={(shown) => <p>{shown}</p>} />
         {comment.anchor?.kind === 'resume-field' && <small className={styles.commentAnchor}>{t('resumeCommentAnchor', { section: t(`resumeCommentSection_${comment.anchor.section}`), field: comment.anchor.field || t('resumeCommentWholeSection') })}</small>}
         {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? t('reopen') : t('resolve')}</button>}
       </article>)}

@@ -449,6 +449,18 @@
     "message": "Échec du téléchargement — réessayez.",
     "description": "A model download failed"
   },
+  "lmDownloadBuiltIn": {
+    "message": "Télécharger",
+    "description": "Download action for the browser's built-in model (size unknown)"
+  },
+  "lmDownloadingUnknown": {
+    "message": "Téléchargement…",
+    "description": "Download progress line when the percentage is unknown"
+  },
+  "lmBuiltInRequirement": {
+    "message": "Nécessite environ 22 Go d'espace disque libre et un GPU avec plus de 4 Go de mémoire vidéo, ou 16 Go de RAM et 4 cœurs de processeur. Le navigateur gère ce modèle.",
+    "description": "The browser's stated hardware requirement for its built-in model"
+  },
   "lmReasonWebgpu": {
     "message": "Nécessite WebGPU, que ce navigateur ou ce GPU ne propose pas.",
     "description": "Why a model cannot run: no WebGPU"
@@ -1762,5 +1774,29 @@
   "prefetchActionKnowledgeAsk": {
     "message": "Recherche de connaissances",
     "description": "Chat: name of the knowledge-lookup action"
+  },
+  "translationTranslatedFrom": {
+    "message": "Traduit (langue d’origine : {language})",
+    "description": "Chat: caption under a translated message; {language} is the source language's name"
+  },
+  "translationShowOriginal": {
+    "message": "Afficher l'original",
+    "description": "Chat: toggle back to the original text of a translated message"
+  },
+  "translationShowTranslation": {
+    "message": "Afficher la traduction",
+    "description": "Chat: toggle to the translation again"
+  },
+  "translationTranslating": {
+    "message": "Traduction en cours…",
+    "description": "Chat: shown while a message is being translated"
+  },
+  "translationNeedsTranslator": {
+    "message": "La traduction nécessite le traducteur intégré de ce navigateur",
+    "description": "Chat: muted hint when nothing on this device can translate a message"
+  },
+  "translationGetTranslator": {
+    "message": "Télécharger",
+    "description": "Chat: action beside the hint that opens the model picker's Download"
   }
 }

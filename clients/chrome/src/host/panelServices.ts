@@ -7,7 +7,7 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, pageEngineCompletion, pageEnginesReady, pageOnDeviceTasks, type BrainConfig, type ModelFallbackChannel, type OnDeviceTasks, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createProviderConnectionsClient, type GatewayRequest } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { createApiClient, createAuthenticatedFetch, type ApiClient, type AuthenticatedFetch } from '../api/apiClient';
@@ -82,6 +82,8 @@ export interface PanelServices {
   dispose(): void;
   /** The side panel's in-page engines and their model store (the picker's downloads). */
   pageEngines: PageEngineSet;
+  /** The ONE on-device task port (PRD 42 · B): built-in browser APIs, then these page engines. */
+  onDeviceTasks: OnDeviceTasks;
   /** The workspace's Kimi account, called from this browser (Settings → Model, the Connect card). */
   kimi: ConnectedAccount;
   /** The workspace's connected provider accounts — the composer's Status tab and the Kimi
@@ -202,6 +204,12 @@ export async function createPanelServices(): Promise<PanelServices> {
       // isolated (no COEP in the manifest, so no SharedArrayBuffer), and MV3's extension
       // CSP admits no `blob:` workers, which the threaded build's pool spawns.
     },
+  });
+  // Beside the engines: the built-in APIs first (Summarizer, Translator, Prompt API…), then
+  // these same engines through their fetch shim — local only, never `fetchImpl`.
+  const onDeviceTasks = pageOnDeviceTasks({
+    pageCompletion: pageEngineCompletion({ probe: () => pageEngines.probe(), fetch: pageEngines.fetch() }),
+    pageAvailable: () => pageEnginesReady(() => pageEngines.probe()),
   });
   const endpoints = async () => loopbackEndpoints(await settings.synapseUrl());
   // The panel's ONE status-preserving gateway call — provider-connect decides on WHICH
@@ -328,6 +336,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     // A settled run's outcome record, to the gateway's run-outcome door with the device key. Through the same guarded fetch as every platform
     // call (a device kept Local only sends nothing); signed out, there is no key and nothing is sent.
     reportRunRecord: postRunOutcome,
+    onDeviceTasks,
     onDeclined(chatId, call) {
       const tab = working.current();
       void ledger.record(chatId, {
@@ -367,6 +376,7 @@ export async function createPanelServices(): Promise<PanelServices> {
       return [...resolveLoopbackProbes(probes), ...page];
     },
     pageEngines,
+    onDeviceTasks,
     kimi,
     connections,
     modelFallback,

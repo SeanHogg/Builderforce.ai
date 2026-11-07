@@ -312,11 +312,14 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
       return skipped;
     },
     judgement: {
-      judge: (req: JudgementRequest): Promise<JudgementResult> =>
-        jsonCall<JudgementResult>('/knowledge/judge', {
-          ...send('POST', { kind: req.kind, items: req.items }),
-          ...(req.signal ? { signal: req.signal } : {}),
-        }),
+      judge: (req: JudgementRequest): Promise<JudgementResult> => {
+        const post = (clientResult?: unknown) =>
+          jsonCall<JudgementResult>('/knowledge/judge', {
+            ...send('POST', { kind: req.kind, items: req.items, ...(clientResult ? { clientResult } : {}) }),
+            ...(req.signal ? { signal: req.signal } : {}),
+          });
+        return opts.judgeClientFirst ? opts.judgeClientFirst(req, post) : post();
+      },
     },
     scopes,
     judgeEstimate,

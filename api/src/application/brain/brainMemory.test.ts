@@ -27,6 +27,8 @@ import * as timelineTail from '../../domain/shared/timelineTail';
 import * as brainLlmCall from './brainLlmCall';
 import * as advisoryReservation from '../commerce/advisoryReservation';
 import * as brainChatGuards from './brainChatGuards';
+import * as clientResultUsage from '../llm/clientResultUsage';
+import * as sessionAuthority from './agentHostSessionAuthority';
 
 // `vi.mock` does not intercept the modules this file already imported (the
 // factory never runs). Spy the live exports the use cases bound so the
@@ -49,9 +51,12 @@ vi.spyOn(timelineTail, 'readTimelineTail').mockResolvedValue([
 vi.spyOn(brainLlmCall, 'buildTenantLlmService').mockResolvedValue({} as never);
 vi.spyOn(brainLlmCall, 'completeTraced').mockResolvedValue({} as never);
 vi.spyOn(advisoryReservation, 'advisoryChatAdmittedToAiContext').mockResolvedValue(true);
+const recordClientResultUsage = vi.spyOn(clientResultUsage, 'recordClientResultUsage').mockResolvedValue(undefined);
 vi.spyOn(brainChatGuards, 'canAccessChat').mockResolvedValue({ id: 5, projectId: 2 } as never);
+const chatOwnedBy = vi.spyOn(brainChatGuards, 'chatOwnedBy').mockResolvedValue(true);
+const sessionOwnedBy = vi.spyOn(sessionAuthority, 'agentHostSessionOwnedBy').mockResolvedValue(true);
 
-import { answerTextOf, archiveChat, retainChatMemory, summarizeChat } from './brainMemory';
+import { answerTextOf, archiveChat, retainChatMemory, summarizeAgentHostSession, summarizeChat } from './brainMemory';
 
 describe('answerTextOf', () => {
   it('leaves an answer with no reasoning untouched', () => {
@@ -314,5 +319,100 @@ describe('summarizeChat', () => {
       // Via the ONE writer: origin stamped server-side, no author.
       expect.objectContaining({ factOrigin: 'agent', createdBy: null }),
     );
+  });
+
+  it('PRD 42 Part D: a client-supplied summary is stored cleaned, with no model call and a usage row', async () => {
+    const sets: Record<string, unknown>[] = [];
+    const db = {
+      update: () => ({ set: (values: Record<string, unknown>) => { sets.push(values); return { where: async () => [] }; } }),
+      insert: () => ({ values: () => ({ onConflictDoUpdate: async () => undefined }) }),
+    } as never;
+    const env = {} as never;
+    const completeTraced = vi.mocked(brainLlmCall.completeTraced);
+    completeTraced.mockClear();
+    recordClientResultUsage.mockClear();
+    const provenance = { engine: 'webllm' as const, model: 'Qwen-0.5B' };
+
+    const result = await summarizeChat(db, 5, 1, 'user-1', env, { client: { value: '<think>hmm</think>We ship Friday.', provenance } });
+
+    expect(result).toEqual({ summary: 'We ship Friday.' });
+    expect(sets[0]?.summary).toBe('We ship Friday.');
+    expect(completeTraced).not.toHaveBeenCalled();
+    expect(recordClientResultUsage).toHaveBeenCalledWith(db, env, expect.objectContaining({ tenantId: 1, userId: 'user-1', projectId: 2, provenance }));
+  });
+
+  it('PRD 42 principle 6: a participant in a chat they do not own gets the server path, not their client text', async () => {
+    const sets: Record<string, unknown>[] = [];
+    const db = {
+      update: () => ({ set: (values: Record<string, unknown>) => { sets.push(values); return { where: async () => [] }; } }),
+      insert: () => ({ values: () => ({ onConflictDoUpdate: async () => undefined }) }),
+    } as never;
+    const completeTraced = vi.mocked(brainLlmCall.completeTraced);
+    completeTraced.mockClear();
+    recordClientResultUsage.mockClear();
+    chatOwnedBy.mockResolvedValueOnce(false);
+
+    const result = await summarizeChat(db, 5, 1, 'guest', {} as never, {
+      client: { value: 'forged summary', provenance: { engine: 'webllm' as const, model: 'Qwen-0.5B' } },
+    });
+
+    expect(result).toEqual({ summary: 'Agreed; the branch stays.' });
+    expect(completeTraced).toHaveBeenCalledTimes(1);
+    expect(recordClientResultUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe('summarizeAgentHostSession', () => {
+  function sessionDb() {
+    const answers: unknown[][] = [
+      [{ id: 4, projectId: 2, agentHostId: 1 }],
+      [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }],
+    ];
+    let i = 0;
+    const stored: unknown[] = [];
+    const db = {
+      select: () => {
+        const rows = answers[i++] ?? [];
+        const chain: Record<string, unknown> = {};
+        for (const m of ['from', 'where', 'orderBy']) chain[m] = () => chain;
+        chain.limit = async () => rows;
+        // the messages query ends at `.limit(500)`; the session query at `.limit(1)`
+        return chain;
+      },
+      insert: () => ({ values: (v: unknown) => ({ onConflictDoUpdate: async () => { stored.push(v); } }) }),
+    } as never;
+    return { db, stored };
+  }
+
+  it('PRD 42 Part D: stores a client-supplied summary with no deferral, no model call and a usage row', async () => {
+    const { db, stored } = sessionDb();
+    const completeTraced = vi.mocked(brainLlmCall.completeTraced);
+    completeTraced.mockClear();
+    recordClientResultUsage.mockClear();
+    const provenance = { engine: 'synapse' as const, model: 'syn-1' };
+
+    const result = await summarizeAgentHostSession(db, 4, 1, {} as never, { userId: 'u1', client: { value: 'Session fixed the bug.', provenance } });
+
+    expect(result).toEqual({ summary: 'Session fixed the bug.', projectId: 2 });
+    expect(stored[0]).toMatchObject({ agentHostSessionId: 4, summary: 'Session fixed the bug.' });
+    expect(completeTraced).not.toHaveBeenCalled();
+    expect(recordClientResultUsage).toHaveBeenCalledWith(db, {}, expect.objectContaining({ tenantId: 1, userId: 'u1', projectId: 2, provenance }));
+  });
+
+  it("PRD 42 principle 6: a caller who does not own the session's host gets the server path", async () => {
+    const { db, stored } = sessionDb();
+    const completeTraced = vi.mocked(brainLlmCall.completeTraced);
+    completeTraced.mockClear();
+    recordClientResultUsage.mockClear();
+    sessionOwnedBy.mockResolvedValueOnce(false);
+
+    await summarizeAgentHostSession(db, 4, 1, {} as never, {
+      wait: true, userId: 'other',
+      client: { value: 'forged summary', provenance: { engine: 'synapse' as const, model: 'syn-1' } },
+    });
+
+    expect(completeTraced).toHaveBeenCalledTimes(1);
+    expect(stored.every((row) => (row as { summary?: string }).summary !== 'forged summary')).toBe(true);
+    expect(recordClientResultUsage).not.toHaveBeenCalled();
   });
 });

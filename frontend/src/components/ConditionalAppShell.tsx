@@ -20,6 +20,7 @@ import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import ActivityTracker from './ActivityTracker';
+import { WebTranslationProvider } from './translation/WebTranslationProvider';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
@@ -457,7 +458,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
           <BrainActionsProvider>
             <BrainContextProvider>
               <ReportErrorProvider>
-              <ShellContent>{children}</ShellContent>
+              <WebTranslationProvider><ShellContent>{children}</ShellContent></WebTranslationProvider>
               {/* BurnRateOS consolidation: one anonymous-only exit-intent capture
                   across every non-embed surface, backed by the canonical
                   Builderforce newsletter store. */}

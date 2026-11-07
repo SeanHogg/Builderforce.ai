@@ -51,7 +51,7 @@ export function brainCompaction(run: BrainRunContext): BrainCompaction {
         const working = await buildWorkingTranscript(
           c,
           systemPrompt,
-          (msgs) => summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal),
+          (msgs) => summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal, req.onDeviceTasks),
           (fold) => { folded = true; recordFold(run, fold); },
         );
         // What compaction kept out of THIS call's prompt, measured against what it would have been without it.
