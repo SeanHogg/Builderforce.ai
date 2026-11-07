@@ -75,9 +75,10 @@ function syncLines(sync: SyncStatus | null): string[] {
     const r = sync.replica;
     if (r) {
         const state = replicaPhaseEnglish(replicaPhase(r), r.waitingUntil);
-        out.push(`replica: ${state} · queued=${r.queued} · skipped=${r.skipped} · failed=${r.failed.length}${r.lastSyncAt ? ` · last sent ${r.lastSyncAt}` : ''}`);
-        for (const s of r.skippedOps ?? []) out.push(`  replica skipped ${s.op}${s.key ? ` ${s.key}` : ''}`);
-        for (const f of r.failed) out.push(`  replica failed ${f.op}: ${f.reason}`);
+        out.push(`replica: ${state} · dirty=${r.dirty} · failed=${r.failed.length}${r.lastSyncAt ? ` · last sent ${r.lastSyncAt}` : ''}`);
+        if (r.parts) out.push(`  replica parts ${r.parts.sent}/${r.parts.total}`);
+        if (r.lastPack) out.push(`  replica last pack ${r.lastPack.mode} · ${r.lastPack.bytes} bytes · ${r.lastPack.percent}% of ${r.lastPack.jsonBytes} bytes JSON · ${r.lastPack.parts} part(s) · ${r.lastPack.files} file(s)`);
+        for (const f of r.failed) out.push(`  replica failed: ${f.reason}`);
     }
     return out;
 }

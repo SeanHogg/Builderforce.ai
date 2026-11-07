@@ -8,9 +8,8 @@ export interface SyncLabels {
     sync: Record<
         'loading' | 'failed' | 'localTitle' | 'serverTitle' | 'files' | 'edges' | 'docs' | 'notUploaded' | 'pipelineTitle' | 'skippedTitle'
         | 'skippedNone' | 'skippedRow' | 'skippedRowNoSize' | 'edgesNotMeasured' | 'skippedUnknown' | 'truncatedNote' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'barAria' | 'refresh' | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate'  | 'setUpV8Request' | 'turnOnRequest' | 'excludedNone' | 'excludedFolder' | 'diagnosticsTitle' | 'resend' | 'resendNote' | 'deltaLoading' | 'parityTitle' | 'countPair' | 'parityAll' | 'parityMissing'
-        | 'replicaTitle' | 'replicaIdle' | 'replicaSending' | 'replicaWaiting' | 'replicaWhy429' | 'replicaWhyNetwork' | 'replicaWhyServer' | 'replicaFailedRow' | 'replicaLastSync'
-        | 'replicaPausedAuth' | 'replicaPausedUnreachable' | 'replicaPausedProject' | 'replicaSkippedRow'
-        | 'replicaOpWrite' | 'replicaOpScope' | 'replicaOpExtracted' | 'replicaOpStale' | 'replicaOpAnalysis'
+        | 'replicaTitle' | 'replicaIdle' | 'replicaSending' | 'replicaWaiting' | 'replicaWhy429' | 'replicaWhyNetwork' | 'replicaWhyServer' | 'replicaFailedRow' | 'replicaLastSync' | 'replicaPack' | 'replicaParts'
+        | 'replicaPausedAuth' | 'replicaPausedUnreachable' | 'replicaPausedProject'
         | 'replicaReasonAuth' | 'replicaReasonBadRequest' | 'replicaReasonTooLarge' | 'replicaReasonRate' | 'replicaReasonServer' | 'replicaReasonNetwork' | 'replicaReasonOther',
         string
     >;
@@ -76,17 +75,15 @@ export const SYNC_DEFAULTS: SyncLabels = {
         replicaWhy429: 'the server is rate limiting requests',
         replicaWhyNetwork: 'the server cannot be reached',
         replicaWhyServer: 'the server answered with an error',
-        replicaFailedRow: '{op}: {reason}',
+        replicaFailedRow: '{reason}',
         replicaLastSync: 'Last sent {time}.',
+        /** {size} compressed, {percent} of the same rows as JSON, {files}. */
+        replicaPack: 'Last pack: {size}, {percent}% of its JSON size ({files} files).',
+        /** {sent} of {total} parts the server has, {left} still to send. */
+        replicaParts: 'Sending part {sent} of {total} ({left} left).',
         replicaPausedAuth: 'Paused: sign in again to continue sending.',
         replicaPausedUnreachable: 'Paused: the server cannot be reached.',
         replicaPausedProject: 'Paused: this workspace is linked to another project.',
-        replicaSkippedRow: '{op}: too large to store',
-        replicaOpWrite: 'Facts and relations',
-        replicaOpScope: 'Review summary',
-        replicaOpExtracted: 'File contents',
-        replicaOpStale: 'Change marker',
-        replicaOpAnalysis: 'Code analysis',
         replicaReasonAuth: 'not allowed or signed out',
         replicaReasonBadRequest: 'the server refused it',
         replicaReasonTooLarge: 'too large to store',

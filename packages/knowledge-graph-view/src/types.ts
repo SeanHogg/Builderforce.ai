@@ -56,8 +56,11 @@ export type PinpointResult = {
  * (restated from agent-tools' `ReplicaState`: the view never imports a host package).
  */
 export type ReplicaState = {
-    queued: number;
+    /** Dirty keys still to send (files, facts and relations changed since the server's last acknowledgement). */
+    dirty: number;
     sending: boolean;
+    /** Parts of the pack being sent: how many the server has, how many in all. */
+    parts?: { sent: number; total: number };
     /** Epoch ms the host retries at, while it waits out a rate limit or an outage. */
     waitingUntil?: number;
     /** Why it waits: `429`, `network`, or a server status. */
@@ -65,12 +68,11 @@ export type ReplicaState = {
     /** Why it stopped with work left: signed out, the server unreachable, or the queue moved to another project. */
     paused?: 'auth' | 'unreachable' | 'project';
     pausedStatus?: number;
-    skipped: number;
-    /** What was skipped, by op kind. */
-    skippedOps?: { op: string; key?: string }[];
-    failed: { op: string; reason: string; status?: number }[];
-    /** ISO time of the last write that reached the project. */
+    failed: { reason: string; status?: number }[];
+    /** ISO time of the last pack the project acknowledged. */
     lastSyncAt?: string;
+    /** The last pack that reached the project: compressed bytes, the bytes of the same rows as JSON, and the ratio. */
+    lastPack?: { bytes: number; jsonBytes: number; percent: number; parts: number; files: number; mode: 'delta' | 'reconcile' | 'full' };
 };
 
 /**

@@ -46,7 +46,7 @@ export function finishedRun(over: Partial<StoredReviewRun> = {}): StoredReviewRu
             { path: 'src/bad.ts', phase: 'extract', reason: 'Unexpected token }' },
             { path: 'src/slow.ts', phase: 'judge', reason: 'request timed out' },
         ],
-        replica: { queued: 3, sending: false, skipped: 0, skippedOps: [], failed: [] },
+        replica: { dirty: 3, sending: false, failed: [] },
         ...over,
     });
 }

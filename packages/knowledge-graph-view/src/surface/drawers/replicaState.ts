@@ -1,5 +1,5 @@
 /**
- * Where the replica queue stands, as ONE reading (PRD 41 A7): the Sync drawer's headline and the copied
+ * Where the replica's dirty set stands, as ONE reading (PRD 41 A7, A11): the Sync drawer's headline and the copied
  * diagnostics both derive their sentence from {@link replicaPhase}, so they can never disagree. Pure.
  */
 
@@ -19,7 +19,7 @@ export function replicaPhase(replica: ReplicaState, now: number = Date.now()): R
         return { kind: 'waiting', why, seconds: Math.max(0, Math.ceil((replica.waitingUntil - now) / 1000)) };
     }
     if (replica.sending) return { kind: 'sending' };
-    return replica.queued > 0 ? { kind: 'queued' } : { kind: 'idle' };
+    return replica.dirty > 0 ? { kind: 'queued' } : { kind: 'idle' };
 }
 
 /** A short reason for a failed op, by HTTP status (the raw text stays in the tooltip). */
