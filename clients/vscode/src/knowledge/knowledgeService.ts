@@ -26,7 +26,7 @@ import {
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { createKnowledgeClient, type AnalysisSnapshotPayload, type KnowledgeClient } from "@builderforce/knowledge-client";
-import type { KnowledgeGraph, KnowledgeStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
+import type { KnowledgeGraph, KnowledgeStore, LocalSnapshotStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { repoMapPort } from "@builderforce/repo-map";
@@ -85,7 +85,7 @@ export interface OpenRoot {
   /** The local store wrapped for replication: every read and write is local; linked, writes are also queued. */
   store: KnowledgeStore;
   /** The root's ONE local store (the pump reads bodies from it). */
-  local: KnowledgeStore;
+  local: LocalSnapshotStore;
   client?: KnowledgeClient;
   /** Present when linked: what the replica pump needs. */
   pump?: PumpSource;
@@ -115,7 +115,7 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
   const local = rootStore(rootId, () => localKnowledgeStore(files, rootId), "local");
   const manifest = rootManifest(rootId, () => fileManifest(files, manifestFileName(rootId)), root.folderPath);
   const projectId = getSelectedProject()?.id;
-  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest } : undefined;
+  const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest, sizeOf: (p: string) => hashCache.get(`${root.rootPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${p}`)?.size } : undefined;
   return {
     root,
     source: createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title, hashCache }),

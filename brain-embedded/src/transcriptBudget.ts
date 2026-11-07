@@ -54,7 +54,7 @@ export interface PayloadBudget {
    * `label` names the block (e.g. `read_file Output`) so a back reference can say
    * what it points at.
    */
-  cap(payload: string, label: string): string;
+  cap(payload: string, label: string, maxChars?: number): string;
   stats(): PayloadBudgetStats;
   /** A one-line note for the report when the budget actually bit; null otherwise. */
   note(): string | null;
@@ -80,8 +80,12 @@ export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
   let ordinal = 0;
 
   return {
-    cap(payload, label) {
+    cap(payload, label, maxChars) {
       if (!payload) return payload;
+      // A per-call ceiling replaces `perPayload` for THIS payload only (secondary content
+      // such as model reasoning takes a lower one) — same pool, same decay, same dedupe.
+      const ceiling = maxChars != null && maxChars > 0 ? maxChars : opts.perPayload;
+      const floor = Math.min(minPayload, ceiling);
       ordinal += 1;
 
       // A byte-identical repeat is charged nothing: it carries no information the
@@ -97,14 +101,14 @@ export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
 
       // The cap decays with the pool so the tail of the report is not starved by
       // its head. While the pool is healthy this is just `perPayload`.
-      const cap = Math.max(minPayload, Math.min(opts.perPayload, remaining));
+      const cap = Math.max(floor, Math.min(ceiling, remaining));
       if (payload.length <= cap) {
         remaining -= payload.length;
         spent += payload.length;
         return payload;
       }
 
-      if (remaining < minPayload) {
+      if (remaining < floor) {
         trimmed += 1;
         return `…(${payload.length.toLocaleString()} chars omitted — the report hit its size budget. The full result is on the live timeline.)`;
       }
@@ -131,6 +135,43 @@ export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
       return `Note: this report is size-budgeted so its END survives pasting — ${parts.join('; ')}. Every turn, tool call and error is still present.`;
     },
   };
+}
+
+/**
+ * The most characters a copied report may reach. The paste targets this report is written
+ * for cut at 50,000 characters FROM THE END; the 2,000 below that is margin for the final
+ * newline and for any target that counts differently (CRLF, surrogate pairs).
+ */
+export const PASTE_SAFE_REPORT_CHARS = 48_000;
+
+/**
+ * Hard guarantee behind the budget: join `head` + `timeline` + `tail` and, if the result
+ * still exceeds `ceiling`, cut the MIDDLE of the timeline — keeping its start and (the
+ * larger share of) its end — with one marker line. The head (diagnostics) and tail (last
+ * error, budget note, JSON) are never cut; if they alone exceed the ceiling the whole
+ * timeline is replaced by the marker. Cuts land on line boundaries where one exists.
+ */
+export function cutMiddleToFit(head: string, timeline: string, tail: string, ceiling: number): string {
+  const join = (t: string): string => [head, t, tail].filter((s) => s.length > 0).join('\n');
+  const whole = join(timeline);
+  if (whole.length <= ceiling) return whole;
+
+  const marker = (omitted: number): string =>
+    `…(${omitted.toLocaleString()} chars of the middle of the timeline omitted to keep this report under the 50,000-character paste limit)`;
+  // Reserve room for the marker (its number can only be shorter than the full timeline's).
+  const room = Math.max(0, ceiling - (whole.length - timeline.length) - marker(timeline.length).length - 2);
+  const front = Math.floor(room / 3);
+  const back = room - front;
+
+  let start = timeline.slice(0, front);
+  const startNl = start.lastIndexOf('\n');
+  if (startNl > 0) start = start.slice(0, startNl);
+  let end = back > 0 ? timeline.slice(timeline.length - back) : '';
+  const endNl = end.indexOf('\n');
+  if (endNl >= 0 && endNl < end.length - 1) end = end.slice(endNl + 1);
+
+  const omitted = Math.max(0, timeline.length - start.length - end.length);
+  return join([start, marker(omitted), end].filter((s) => s.length > 0).join('\n'));
 }
 
 /** 1 → "1st", 2 → "2nd" … for a readable back reference. */

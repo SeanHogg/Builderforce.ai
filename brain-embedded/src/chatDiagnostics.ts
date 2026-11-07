@@ -769,6 +769,9 @@ export function formatChatSpend(spend: SpendSavingsSummary | null | undefined): 
   );
 }
 
+/** Linked tickets itemised in the copied report; the count line and Signals cover the rest. */
+const MAX_LISTED_LINKED_TICKETS = 10;
+
 /**
  * Render the diagnostics block as Markdown lines (no trailing blank line). Every field
  * is best-effort: an absent value is shown as "unknown"/"none" rather than omitted, so
@@ -963,8 +966,11 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   const tickets = d.tickets ?? [];
   if (tickets.length) {
     lines.push(`- Linked tickets (${tickets.length}):`);
-    for (const tk of tickets) {
+    for (const tk of tickets.slice(0, MAX_LISTED_LINKED_TICKETS)) {
       lines.push(`  - ${tk.kind} #${tk.ref}${tk.label ? ` "${tk.label}"` : ''}${tk.linkType || tk.status ? ` [${[tk.linkType, tk.status].filter(Boolean).join(', ')}]` : ''}`);
+    }
+    if (tickets.length > MAX_LISTED_LINKED_TICKETS) {
+      lines.push(`  - …and ${tickets.length - MAX_LISTED_LINKED_TICKETS} more linked ticket(s)`);
     }
   } else {
     lines.push('- Linked tickets (0)');

@@ -11,7 +11,7 @@ import {
   packFromStore, reviewHasWork,
   type PackProvenance, type PortableKnowledgePack,
 } from "@builderforce/agent-tools/knowledge";
-import type { Extracted, LocalSnapshotStore } from "@seanhogg/builderforce-memory/knowledge";
+import type { Extracted } from "@seanhogg/builderforce-memory/knowledge";
 import { getCurrentUserName } from "../../bfApi";
 import type { KnowledgeRoot } from "../knowledgeRoots";
 import { log, openRoot, reviewRoot, type OpenRoot } from "../knowledgeService";
@@ -22,8 +22,7 @@ import { log, openRoot, reviewRoot, type OpenRoot } from "../knowledgeService";
  */
 async function extractedOf(open: OpenRoot, rootId: string): Promise<Record<string, Extracted[]>> {
   try {
-    const local = open.local as unknown as Partial<Pick<LocalSnapshotStore, "extractedEntries">>;
-    return (await local.extractedEntries?.()) ?? {};
+    return await open.local.extractedEntries();
   } catch (error) {
     log(`pack extracted ${rootId}`, error);
     return {};

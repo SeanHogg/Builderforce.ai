@@ -32,6 +32,8 @@ export const manifestFileName = (rootId: string): string => `${rootFileStem(root
 export const replicaFileName = (rootId: string): string => `${rootFileStem(rootId)}.replica.json`;
 /** The replica's dirty set and ack (PRD 41 A11). */
 export const dirtyFileName = (rootId: string): string => `${rootFileStem(rootId)}.dirty.json`;
+/** The analysis snapshot waiting for the next pack: its own file, so the dirty set stays small. */
+export const analysisPendingFileName = (rootId: string): string => `${rootFileStem(rootId)}.analysis-pending.json`;
 /** A review run's record (PRD 41 A8), in the `runs/` folder; the root's ordered list of them is `runsIndexFileName`. */
 export const runFileName = (runId: string): string => `runs/${runId}.json`;
 export const runsIndexFileName = (rootId: string): string => `runs/${rootFileStem(rootId)}.index.json`;

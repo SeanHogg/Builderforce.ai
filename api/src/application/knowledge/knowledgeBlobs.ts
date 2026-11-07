@@ -192,6 +192,11 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
       return (await bodiesOf(env.UPLOADS, [hash])).get(hash);
     },
 
+    async getMany(hashes) {
+      if (!env.UPLOADS) return new Map();
+      return bodiesOf(env.UPLOADS, hashes);
+    },
+
     async put(hash, extracted) {
       await writeJson(bucket(), keys.extracted(hash), extracted);
       // A root-level output has no `markStale` of its own: register it now.

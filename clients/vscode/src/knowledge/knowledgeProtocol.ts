@@ -18,7 +18,7 @@
  */
 
 import type { PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
-import type { Finding, KnowledgeGraph, ReviewPlan, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
+import type { Finding, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
@@ -96,8 +96,10 @@ export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupt
  * count of all failures when `failures` holds only the latest (`runRecord` returns them all).
  * The view restates this as `StoredReviewRun`.
  */
-export type KnowledgeStoredRun = Omit<ReviewRun, "outcome"> & {
+export type KnowledgeStoredRun = Omit<ReviewRun, "outcome" | "failures"> & {
   outcome?: KnowledgeRunOutcome;
+  /** Every failure, oldest first (memory's run keeps them in chunks; the record, the wire and the file carry them flat). */
+  failures: ReviewFailure[];
   replica?: ReplicaState;
   /** Why the extraction pool was unavailable (the run extracted on one thread); absent ⇒ it was not. */
   poolDown?: string;

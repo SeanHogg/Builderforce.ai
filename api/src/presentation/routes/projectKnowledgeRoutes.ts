@@ -264,6 +264,11 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     if (declaredTooLarge(c, MAX_EXTRACTED_BYTES * 4)) return tooLarge(MAX_EXTRACTED_BYTES * 4);
     const body = await parseBody(c, BulkExtractedBody);
     if (byteLength(body) > MAX_EXTRACTED_BYTES * 4) return tooLarge(MAX_EXTRACTED_BYTES * 4);
+    // Through the bundle index in one query when the cache can (a handful of ranged reads for the whole batch).
+    if (p.extracted.getMany) {
+      const found = await p.extracted.getMany(body.hashes);
+      return json({ extracted: body.hashes.map((hash) => ({ hash, entries: found.get(hash) ?? null })) });
+    }
     const get = p.extracted.get?.bind(p.extracted);
     const extracted = await Promise.all(body.hashes.map(async (hash) => ({ hash, entries: (get ? await get(hash) : null) ?? null })));
     return json({ extracted });

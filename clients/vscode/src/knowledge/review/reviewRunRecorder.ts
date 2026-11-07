@@ -8,7 +8,7 @@
  */
 
 import {
-  applyRunEvent, startRun,
+  applyRunEvent, failuresOf, startRun,
   type ReviewProgress, type ReviewReport, type ReviewRun, type ReviewRunKind, type ReviewRunOutcome, type ReviewStep,
 } from "@seanhogg/builderforce-memory/knowledge";
 import type { ReplicaState } from "@builderforce/agent-tools/knowledge";
@@ -54,12 +54,14 @@ export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
   // Memory's own run (plus the replica state): `interrupted` is a word the STORE adds when it reads a record back.
   let run: ReviewRun & { replica?: ReplicaState; awaitingJudgeTotal?: number } = startRun({ id: args.id, root: args.root, kind: args.kind, at: Date.now() });
   // Latest state wins: a burst of events is one post per interval.
-  const throttle = throttledEmit(() => args.post(run));
+  // The record as it is kept and sent: memory keeps failures in chunks (a run of thousands stays linear), the record carries them flat.
+  const stored = (): KnowledgeStoredRun => ({ ...run, failures: failuresOf(run) });
+  const throttle = throttledEmit(() => args.post(stored()));
   const emit = throttle.emit;
 
   emit();
   return {
-    get run() { return run; },
+    get run() { return stored(); },
     progress(progress) {
       run = applyRunEvent(run, { type: "progress", progress }, Date.now());
       // The map is complete: `total` is the files owed model judgement, which the live "waiting" count counts down from (PRD 41 A10).
@@ -71,7 +73,7 @@ export function createRunRecorder(args: RunRecorderArgs): RunRecorder {
       // Nothing posts the closed run before the host has kept it and flushes. The report never carries the failures: `run.failures` holds the list.
       throttle.cancel();
       run = { ...applyRunEvent(run, { type: "end", outcome, ...(report ? { report: onTheWireReport(report) } : {}) }, Date.now()), ...(replica ? { replica } : {}) };
-      return run;
+      return stored();
     },
     flush: throttle.flush,
   };

@@ -36,11 +36,12 @@ export function rootManifest(rootId: string, open: () => IngestManifest, locatio
 }
 
 /** The root's store for `variant`; `open` runs only the first time (per root and variant). */
-export function rootStore(rootId: string, open: () => KnowledgeStore, variant = 'local'): KnowledgeStore {
+export function rootStore<S extends KnowledgeStore = KnowledgeStore>(rootId: string, open: () => S, variant = 'local'): S {
     const key = `${rootId}${SEP}${variant}`;
     let held = stores.get(key);
     if (!held) stores.set(key, (held = open()));
-    return held;
+    // The held store is the one `open` made for this root and variant, so it is an `S` (a caller keeps one type per variant).
+    return held as S;
 }
 
 /** Both at once (see {@link rootManifest}, {@link rootStore}). */

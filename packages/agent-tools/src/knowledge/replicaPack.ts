@@ -63,7 +63,8 @@ export interface BuiltPack {
 
 /** Largest number of files a within-file diff is attempted for (each needs the server's prior hash). */
 export const DIFF_MAX_FILES = 200;
-const HAVE_CHUNK = 2000;
+/** Hashes per have request: the server answers any number with ONE index query, so a 20,000-file root asks once. */
+const HAVE_CHUNK = 20_000;
 const CHUNK_PARALLEL = 4;
 
 export const pathOfRef = (rootId: string, ref: string): string => {

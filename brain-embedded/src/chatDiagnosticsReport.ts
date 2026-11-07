@@ -111,14 +111,65 @@ export function buildChatDiagnosticsReport(input: BuildChatDiagnosticsReportInpu
 }
 
 /**
+ * Ceiling for the pasted JSON line. Past it, whole bulky fields are dropped (never the
+ * text trimmed) in {@link JSON_ELISION_ORDER}, so the block always parses.
+ */
+export const REPORT_JSON_MAX_CHARS = 12_000;
+
+/**
+ * Fields dropped, in this order, until the compact JSON fits. Lowest value first: the
+ * per-turn model log and per-model scorecard are rendered in the human-readable
+ * Diagnostics block, the linked-ticket and run-history arrays in the Chat diagnostics
+ * block. Dotted paths address `report.<a>.<b>`. The persisted report is never elided.
+ */
+export const JSON_ELISION_ORDER = [
+  'run.modelTurns',
+  'run.modelScores',
+  'chat.tickets',
+  'chat.runs',
+  'run.memoryAnswers',
+  'run.streamRetries',
+] as const;
+
+/** A copy of `report` with the dotted path removed, or null when the path is absent. */
+function withoutPath(report: ChatDiagnosticsReport, path: string): ChatDiagnosticsReport | null {
+  const [outer, inner] = path.split('.') as [keyof ChatDiagnosticsReport, string];
+  const parent = report[outer];
+  if (!parent || typeof parent !== 'object' || !(inner in parent)) return null;
+  const { [inner]: _dropped, ...rest } = parent as unknown as Record<string, unknown>;
+  void _dropped;
+  return { ...report, [outer]: rest } as unknown as ChatDiagnosticsReport;
+}
+
+/**
+ * Compact one-line JSON of the report; when it exceeds `maxChars`, drops fields in
+ * {@link JSON_ELISION_ORDER} and names them in a top-level `_elided` array.
+ */
+export function compactReportJson(report: ChatDiagnosticsReport, maxChars = REPORT_JSON_MAX_CHARS): string {
+  let json = JSON.stringify(report);
+  if (json.length <= maxChars) return json;
+  let current = report;
+  const elided: string[] = [];
+  for (const path of JSON_ELISION_ORDER) {
+    const next = withoutPath(current, path);
+    if (!next) continue;
+    current = next;
+    elided.push(path);
+    json = JSON.stringify({ ...current, _elided: elided });
+    if (json.length <= maxChars) break;
+  }
+  return json;
+}
+
+/**
  * The report as a fenced JSON block for the copied Markdown.
  *
- * Appended at the very END of the transcript and deliberately EXEMPT from the payload
- * budget that trims tool input/output: this is not another rendering of the run, it is
- * the machine-readable copy of the same facts, and a half-elided JSON object is not
- * valid JSON — it is useless to the only reader it exists for. The prose above it is
- * what a human reads; trimming that is a cost, trimming this is a total loss.
+ * Appended at the very END of the transcript. Compact (one line) and, if still over
+ * {@link REPORT_JSON_MAX_CHARS}, stripped of its bulkiest duplicated arrays rather than
+ * trimmed: a half-elided JSON object is not valid JSON — useless to the only reader it
+ * exists for. The prose above it is what a human reads, and the full report persisted with
+ * the chat is unaffected.
  */
 export function formatChatDiagnosticsReportJson(report: ChatDiagnosticsReport): string[] {
-  return ['## Diagnostics (JSON)', '```json', JSON.stringify(report, null, 2), '```'];
+  return ['## Diagnostics (JSON)', '```json', compactReportJson(report), '```'];
 }

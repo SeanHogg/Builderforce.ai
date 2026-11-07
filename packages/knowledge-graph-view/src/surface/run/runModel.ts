@@ -4,7 +4,7 @@
  * phase, the step feed and its filter, and a failure's short reason. React-free and clock-free.
  */
 
-import { runEta, runRate, slowestSteps, type ReviewPhase, type ReviewRun, type ReviewStep } from '@seanhogg/builderforce-memory/knowledge';
+import { runEta, runRate, slowestSteps, type ReviewPhase, type ReviewStep } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import type { StoredReviewRun } from '../../types';
 
@@ -46,8 +46,8 @@ export function phaseRows(run: StoredReviewRun): PhaseRow[] {
             total: p.total,
             frac: p.total > 0 ? Math.min(1, p.done / p.total) : finished ? 1 : 0,
             state: finished ? 'done' : p.phase === active ? 'active' : 'pending',
-            rate: runRate(run as ReviewRun, p.phase),
-            etaMs: finished ? 0 : runEta(run as ReviewRun, p.phase),
+            rate: runRate(run, p.phase),
+            etaMs: finished ? 0 : runEta(run, p.phase),
         };
     });
 }
@@ -68,7 +68,7 @@ export function awaitingJudgeCount(run: StoredReviewRun): number {
 
 /** The five slowest steps of the run's ring, longest first (memory's `slowestSteps`). */
 export const SLOWEST_STEP_COUNT = 5;
-export const slowestOf = (run: Pick<StoredReviewRun, 'steps'>): ReviewStep[] => slowestSteps(run as ReviewRun, SLOWEST_STEP_COUNT);
+export const slowestOf = (run: Pick<StoredReviewRun, 'steps'>): ReviewStep[] => slowestSteps(run, SLOWEST_STEP_COUNT);
 
 /** A duration in the reader's words: milliseconds under a second, else seconds, minutes or hours. */
 export const durationText = (labels: KnowledgeGraphLabels, ms: number): string =>

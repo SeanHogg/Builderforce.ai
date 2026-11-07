@@ -17,7 +17,7 @@
  */
 
 import {
-  createReplicaQueue, currentSourcesOf, dirtyFileName, emptyReplicaState, enqueueFirstSync, pumpReplica, replicaFileName, replicatedKnowledgeStore,
+  analysisPendingFileName, createReplicaQueue, currentSourcesOf, dirtyFileName, emptyReplicaState, enqueueFirstSync, pumpReplica, replicaFileName, replicatedKnowledgeStore,
   type KnowledgeFiles, type ReadThrough, type ReplicaPersistence, type ReplicaQueue, type ReplicaState,
 } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -84,6 +84,7 @@ const entryOf = (rootId: string, files: KnowledgeFiles): Entry => {
     const made: Entry = {
       queue: createReplicaQueue(persistenceOf(files, dirtyFileName(rootId)), {
         legacy: persistenceOf(files, replicaFileName(rootId)),
+        analysis: persistenceOf(files, analysisPendingFileName(rootId)),
         onError: (error) => report("replica queue", error),
         onCorrupt: () => { made.corrupt = true; },
       }),
@@ -119,6 +120,8 @@ export interface PumpSource {
   projectId: number;
   /** The root's manifest: the current sources (path and content hash) the pack is built from. */
   manifest: IngestManifest;
+  /** A source's size in bytes (root-relative path), from the directory source's stat cache; absent when unknown. */
+  sizeOf?: (path: string) => number | undefined;
 }
 
 /** The server's copy as the seed reads it: extracted output by hash, and the root's human-authored facts. */
@@ -223,7 +226,10 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
     try {
       const state = await pumpReplica({
         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
-        projectId: source.projectId, rootId: source.rootId, sources: () => currentSourcesOf(source.manifest, source.rootId),
+        projectId: source.projectId, rootId: source.rootId, sources: async () => (await currentSourcesOf(source.manifest, source.rootId)).map((s) => {
+          const bytes = source.sizeOf?.(s.ref.slice(s.ref.indexOf("::") + 2));
+          return bytes === undefined ? s : { ...s, bytes };
+        }),
         idle: (signal) => waitNotReviewing(held, signal),
         onState: (next) => {
           held.state = next;

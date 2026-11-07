@@ -11,21 +11,13 @@
 import { buildTimeline, formatDuration, strandedReplyKey, toolStepView } from '@seanhogg/builderforce-brain-ui';
 import { splitReasoningSegments } from '@builderforce/agent-loop';
 import {
-  computeBrainDiagnostics,
-  detectUnbackedTicketClaim,
-  detectUnbackedWriteClaim,
-  UNBACKED_TICKET_CLAIM_NOTICE,
-  UNBACKED_WRITE_CLAIM_NOTICE,
-  formatBrainDiagnostics,
-  formatBrainProvenance,
-  formatChatDiagnostics,
-  formatChatDiagnosticsReportJson,
   formatAssistantTranscriptHeading,
   traceWithPersistedSteps,
   createPayloadBudget,
-  midRunNotice,
-  formatSubagentDiagnostics,
+  cutMiddleToFit,
+  PASTE_SAFE_REPORT_CHARS,
 } from '@seanhogg/builderforce-brain-embedded';
+import { buildErrorLines, buildHeadLines, buildJsonLines } from './transcriptSections';
 import type {
   BrainMessage,
   BrainRunActivity,
@@ -98,9 +90,31 @@ const MAX_PAYLOAD_CHARS = 4_000;
  */
 const MAX_TOTAL_PAYLOAD_CHARS = 34_000;
 
+/** Smallest timeline budget, however large the fixed sections are — the hard cut backs it. */
+const MIN_TIMELINE_BUDGET_CHARS = 6_000;
+
+/** Room reserved for the budget note, which is only known after the timeline is walked. */
+const BUDGET_NOTE_RESERVE_CHARS = 400;
+
+/** Rough per-node cost of headings and separators the budget does not charge. */
+const NODE_OVERHEAD_CHARS = 120;
+
+/** Per-item ceilings for message text. Replies carry the answer; reasoning is secondary. */
+const MAX_REPLY_CHARS = 6_000;
+const MAX_USER_TEXT_CHARS = 3_000;
+const MAX_REASONING_CHARS = 1_500;
+
+/** Text shorter than this is not worth charging (or back-referencing: "continue" twice). */
+const MIN_CHARGED_TEXT_CHARS = 240;
+
 function fenced(label: string, payload: string, budget: PayloadBudget, lines: string[]): void {
   if (!payload) return;
   lines.push(`${label}:`, '```', budget.cap(payload, label), '```');
+}
+
+/** Charge a message body against the shared budget; short text passes through. */
+function chargeText(text: string, label: string, budget: PayloadBudget, maxChars: number): string {
+  return text.length < MIN_CHARGED_TEXT_CHARS ? text : budget.cap(text, label, maxChars);
 }
 
 
@@ -117,70 +131,30 @@ export function buildTranscript(input: TranscriptInput): string {
   // bare trace and so reported `Tool calls: 0` under a transcript listing twenty of
   // them. Both now read the same merged event list.
   const events = traceWithPersistedSteps(input.messages, input.trace);
-  // ONE budget for the whole report, spent as the turns are walked, so an early
+  // The FIXED sections (header, diagnostics, error, JSON) are assembled first and
+  // measured: the timeline gets what is left of the whole-report ceiling, so the report
+  // as a whole — not just its tool payloads — stays under the paste limit.
+  const headLines = buildHeadLines(input, events);
+  const errorLines = buildErrorLines(input);
+  const jsonLines = buildJsonLines(input);
+  const fixedChars = [...headLines, ...errorLines, ...jsonLines].join('\n').length + BUDGET_NOTE_RESERVE_CHARS;
+  const timelineBudget = Math.min(
+    MAX_TOTAL_PAYLOAD_CHARS,
+    Math.max(
+      MIN_TIMELINE_BUDGET_CHARS,
+      PASTE_SAFE_REPORT_CHARS - fixedChars - nodes.length * NODE_OVERHEAD_CHARS,
+    ),
+  );
+  // ONE budget for the timeline, spent as the turns are walked, so an early
   // verbose tool dump cannot starve the tail. See `transcriptBudget.ts`.
-  const budget = createPayloadBudget({ total: MAX_TOTAL_PAYLOAD_CHARS, perPayload: MAX_PAYLOAD_CHARS });
-  const lines: string[] = ['# BuilderForce chat transcript'];
-
-  // Chat + project provenance — a pasted transcript should say WHICH conversation
-  // and project it came from, not just the turns.
-  if (input.chatTitle || input.chatId != null) {
-    const title = input.chatTitle?.trim() || 'Untitled chat';
-    lines.push(`Chat: ${title}${input.chatId != null ? ` (#${input.chatId})` : ''}`);
-  }
-  lines.push(`Project: ${input.project ? `${input.project.name} (#${input.project.id})` : 'No project'}`);
-
-  // Chat diagnostics — the identity + Evermind wiring state (project the CHAT is bound
-  // to, tenant, head version/mode/learned/queued/last-learned, the last turn's learn-gate
-  // outcome, invited agents, linked tickets) plus a Signals section naming the likely
-  // cause of "connected yet nothing learns". Shared pure renderer (web parity later).
-  if (input.diagnostics) {
-    lines.push('');
-    lines.push(...formatChatDiagnostics(input.diagnostics));
-  }
-
-  // Model + account provenance — surface, configured vs actual model, which account
-  // served the turns, and any connected account the gateway could NOT use (e.g. an
-  // expired Claude subscription that silently fell back to the shared pool — the
-  // "should have used Opus" context). SHARED formatter, so this copy and the web
-  // triage report stay identical.
-  lines.push(...formatBrainProvenance(events, { configuredModel: input.model, surface: 'VS Code (VSIX)' }));
-  lines.push('');
-
-  // Diagnostics block — the verdict (tool calls never emitted / context exhaustion vs
-  // model degradation) plus the token/tool-payload/downgrade numbers behind it. Same
-  // shared builder the web triage report uses, so both copy surfaces agree. The
-  // MESSAGES go in too: the "narrated a tool call, made none" verdict is only
-  // reachable by reading the turns against the trace.
-  if (events.length) {
-    lines.push(
-      ...formatBrainDiagnostics(
-        computeBrainDiagnostics(events, input.model, input.messages, { running: input.running }),
-      ),
-      '',
-    );
-  }
-
-  // CAPTURE STATE. A report copied while the agent is still working describes an
-  // unfinished run, and every downward-looking signal in it ("no file was written",
-  // "no ticket was linked") is premature rather than damning. Saying so once, up
-  // front, is the difference between a useful mid-run capture and a misleading one.
-  if (input.running) lines.push(midRunNotice(input.activity, Date.now()), '');
-
-  const subagentLines = formatSubagentDiagnostics(input.subagents ?? [], Date.now());
-  if (subagentLines.length) lines.push(...subagentLines, '');
-
-  // Structural honesty flags — an assistant turn that CLAIMED a file write or a
-  // filed/linked ticket while no such tool call succeeded. Web parity: these ran only
-  // in the web triage report, so a VSIX capture of the same failure said nothing.
-  if (detectUnbackedWriteClaim(events, input.messages)) lines.push(UNBACKED_WRITE_CLAIM_NOTICE, '');
-  if (detectUnbackedTicketClaim(events, input.messages)) lines.push(UNBACKED_TICKET_CLAIM_NOTICE, '');
+  const budget = createPayloadBudget({ total: timelineBudget, perPayload: MAX_PAYLOAD_CHARS });
+  const lines: string[] = [];
 
   for (const node of nodes) {
     switch (node.kind) {
       case 'user':
         lines.push('## You');
-        if (node.text) lines.push(node.text);
+        if (node.text) lines.push(chargeText(node.text, 'user message', budget, MAX_USER_TEXT_CHARS));
         for (const img of node.images) lines.push(`[image: ${img.name ?? img.url}]`);
         break;
       case 'assistant': {
@@ -200,15 +174,26 @@ export function buildTranscript(input: TranscriptInput): string {
         // "(no response)" over a turn the reader could in fact read.
         const rescued = node.key === stranded ? thoughts : '';
         if (rescued) {
-          lines.push("_(reply recovered from the model's reasoning — the turn ended without a separate reply)_", '', rescued);
+          lines.push(
+            "_(reply recovered from the model's reasoning — the turn ended without a separate reply)_",
+            '',
+            chargeText(rescued, 'assistant reply', budget, MAX_REPLY_CHARS),
+          );
         } else {
           // A turn that only REASONED (then called a tool) rendered as one collapsed
           // "Thought" line, not as an empty reply — say that, rather than "(no
           // response)" over every step of a working run.
-          lines.push(answer || (thoughts ? '_(reasoning only — no reply text this turn)_' : '(no response)'));
+          lines.push(
+            answer
+              ? chargeText(answer, 'assistant reply', budget, MAX_REPLY_CHARS)
+              : (thoughts ? '_(reasoning only — no reply text this turn)_' : '(no response)'),
+          );
           // Reasoning is kept, clearly marked as not-the-reply — it is often where a
-          // failing turn explains itself.
-          if (thoughts) lines.push('', `<details><summary>model reasoning (not shown to the user)</summary>\n\n${thoughts}\n\n</details>`);
+          // failing turn explains itself. Secondary, so it takes a lower per-item cap.
+          if (thoughts) {
+            const shown = chargeText(thoughts, 'model reasoning', budget, MAX_REASONING_CHARS);
+            lines.push('', `<details><summary>model reasoning (not shown to the user)</summary>\n\n${shown}\n\n</details>`);
+          }
         }
         break;
       }
@@ -254,20 +239,23 @@ export function buildTranscript(input: TranscriptInput): string {
     lines.push('');
   }
 
-  if (input.error) lines.push('### Conversation error', input.error, '');
-
-  // What the budget cost, stated where a reader meets it — so a back reference or an
-  // elision is never mistaken for missing data.
+  // Tail: the conversation error, what the budget cost (stated where a reader meets it,
+  // so a back reference or an elision is never mistaken for missing data), then the
+  // machine-readable JSON LAST. The JSON is never trimmed (a half-elided object does not
+  // parse) — it is compacted and, past its own cap, has whole fields elided; see
+  // `formatChatDiagnosticsReportJson`. It is counted in `fixedChars` above instead.
+  const tail = [...errorLines];
   const budgetNote = budget.note();
-  if (budgetNote) lines.push(budgetNote, '');
+  if (budgetNote) tail.push(budgetNote, '');
+  tail.push(...jsonLines);
 
-  // The machine-readable copy of the same facts, LAST and deliberately outside the
-  // payload budget above. That budget exists to keep the human-readable tail of a long
-  // report from being cut off by a paste target; trimming a JSON object does not shrink
-  // it, it BREAKS it — a half-elided block will not parse, which is the only thing this
-  // block is for. It is also small and bounded (counts and verdicts, not tool payloads),
-  // so it cannot be what crowds the report out.
-  if (input.report) lines.push('', ...formatChatDiagnosticsReportJson(input.report));
-
-  return `${lines.join('\n').trim()}\n`;
+  // Hard guarantee: if the report is somehow still over the ceiling, cut the MIDDLE of
+  // the timeline — the head diagnostics and the tail (last turns, note, JSON) survive.
+  const report = cutMiddleToFit(
+    headLines.join('\n'),
+    lines.join('\n'),
+    tail.join('\n'),
+    PASTE_SAFE_REPORT_CHARS,
+  );
+  return `${report.trim()}\n`;
 }

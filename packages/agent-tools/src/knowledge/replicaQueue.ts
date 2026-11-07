@@ -48,6 +48,12 @@ export interface ReplicaQueueOptions {
     saveEveryMs?: number;
     /** Where an older version's op log lives: read once on load, converted to dirty keys, then removed. */
     legacy?: Pick<ReplicaPersistence, 'read' | 'remove'>;
+    /**
+     * Where the pending analysis snapshot lives (`<root>.analysis-pending.json`). A snapshot can be megabytes, so it
+     * never rides in the dirty file; it is written when set and removed once a pack carried it. Without it the
+     * snapshot is kept in the dirty file (a memory-only queue).
+     */
+    analysis?: Pick<ReplicaPersistence, 'read' | 'write' | 'remove'>;
 }
 
 /** What the pump read: the keys, which mark each was read at, and the ack and analysis at that moment. */
@@ -149,6 +155,8 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
     let project: number | undefined;
     let ack: ReplicaAck | undefined;
     let analysis: ReplicaAnalysis | undefined;
+    /** The analysis changed since it was last written to its own file. */
+    let analysisChanged = false;
     let loaded: Promise<void> | undefined;
     let isLoaded = false;
     /** Marks that arrived before the file was read. */
@@ -180,7 +188,17 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             } else if (parsed.legacy) changedSinceSave = true;
             add(from.keys);
             project ??= from.projectId;
-            if (!from.legacy) { ack ??= from.ack; analysis ??= from.analysis; }
+            if (!from.legacy) {
+                ack ??= from.ack;
+                if (from.analysis) { analysis ??= from.analysis; if (opts.analysis) analysisChanged = true; } // moved out of the dirty file on the next save
+            }
+            if (opts.analysis) {
+                try {
+                    const text = await opts.analysis.read();
+                    const own = text ? (JSON.parse(text) as Partial<ReplicaAnalysis>) : undefined;
+                    if (own && typeof own.sha === 'string') analysis ??= { sha: own.sha, snapshot: own.snapshot };
+                } catch (error) { opts.onError?.(error); }
+            }
         } catch (error) {
             opts.onError?.(error);
         } finally {
@@ -197,8 +215,12 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready(); // never write before the file was read: that would replace what it held
             await persistence.write(JSON.stringify({
                 version: 2, ...(project !== undefined ? { projectId: project } : {}), ...(ack ? { ack } : {}),
-                dirty: [...dirty.keys()], ...(analysis ? { analysis } : {}),
+                dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}),
             }));
+            if (opts.analysis && analysisChanged) {
+                analysisChanged = false;
+                if (analysis) await opts.analysis.write(JSON.stringify(analysis)); else await opts.analysis.remove?.();
+            }
         }).catch((error: unknown) => { changedSinceSave = true; opts.onError?.(error); });
         return saving;
     };
@@ -219,7 +241,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             } catch (error) { opts.onError?.(error); }
         },
         async replaceDirty(keys) { await ready(); dirty.clear(); add(keys); touch(); },
-        setAnalysis(next) { analysis = next; void ready(); touch(); },
+        setAnalysis(next) { analysis = next; analysisChanged = true; void ready(); touch(); },
         async snapshot() {
             await ready();
             return { keys: [...dirty.keys()], marks: new Map(dirty), ...(ack ? { ack } : {}), ...(analysis ? { analysis } : {}) };
@@ -227,7 +249,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
         async settle(snap, next, sent = snap.keys, analysisSent = false) {
             await ready();
             for (const k of sent) if (dirty.get(k) === snap.marks.get(k)) dirty.delete(k);
-            if (analysisSent && analysis === snap.analysis) analysis = undefined;
+            if (analysisSent && analysis === snap.analysis) { analysis = undefined; analysisChanged = true; }
             ack = next;
             touch();
         },
@@ -239,12 +261,12 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready();
             if (project === projectId) return false;
             const discarded = project !== undefined && dirty.size > 0;
-            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; }
+            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; }
             project = projectId;
             touch();
             return discarded;
         },
-        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; touch(); },
+        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; touch(); },
         async flush() { await ready(); await save(); },
         onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
     };

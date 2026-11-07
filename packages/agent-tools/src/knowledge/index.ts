@@ -40,7 +40,7 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
-export { extractedLogFileName, fileManifest, manifestFileName, migratingRootFiles, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
+export { extractedLogFileName, fileManifest, manifestFileName, migratingRootFiles, analysisPendingFileName, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
     createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, fileKey,
     type DirtySnapshot, type ReplicaAck, type ReplicaAnalysis, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,

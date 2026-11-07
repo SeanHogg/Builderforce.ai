@@ -8,13 +8,16 @@ import {
   type Pack, type PackFileRow,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Extracted, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
-import { newWorld, fakeStore, fakeExtracted, fakeSync, type World } from './syncFakes.test-util';
+import { atomically, newWorld, fakeStore, fakeExtracted, fakeSync, type World } from './syncFakes.test-util';
 
 const held = vi.hoisted(() => ({ world: null as null | { facts: Map<string, unknown> } }));
 vi.mock('../../llm/projectFactsWrite', () => ({
-  upsertProjectFact: vi.fn(async (_e: unknown, _d: unknown, _t: unknown, _p: unknown, key: string, content: string, source: string, opts: { fileAnchors?: unknown[]; factOrigin?: string }) => {
-    held.world!.facts.set(key, { key, content, source, importance: 0.5, origin: opts.factOrigin ?? 'model', fileAnchors: opts.fileAnchors ?? [] });
-    return true;
+  // The fact writer's batch call: every fact lands in the world in ONE call (PRD 41 A11 rule 4a).
+  upsertProjectFacts: vi.fn(async (_e: unknown, _d: unknown, _t: unknown, _p: unknown, items: Array<{ key: string; content: string; source?: string; opts?: { fileAnchors?: unknown[]; factOrigin?: string } }>) => {
+    for (const it of items) {
+      held.world!.facts.set(it.key, { key: it.key, content: it.content, source: it.source ?? 'agent', importance: 0.5, origin: it.opts?.factOrigin ?? 'model', fileAnchors: it.opts?.fileAnchors ?? [] });
+    }
+    return new Set(items.map((i) => i.key));
   }),
   deleteProjectFact: vi.fn(async (_e: unknown, _d: unknown, _t: unknown, _p: unknown, key: string) => held.world!.facts.delete(key)),
 }));
@@ -32,7 +35,7 @@ const hashOf = (i: number): string => i.toString(16).padStart(64, 'a');
 let w: World;
 const deps = (): ApplyDeps => ({
   env: {} as never, db: {} as never, tenantId: 1, projectId: 2, userId: 'u1', actorRole: 'developer',
-  store: fakeStore(w), extracted: fakeExtracted(w), sync: fakeSync(w),
+  store: fakeStore(w), extracted: fakeExtracted(w), sync: fakeSync(w), atomically: atomically(w),
 });
 
 const extraction = (path: string, hash: string, symbols = 3): Extracted => ({
@@ -68,7 +71,8 @@ describe('applyKnowledgePack', () => {
     const res = await applyKnowledgePack(deps(), { body: await encodePack(first) });
     expect(res).toMatchObject({ applied: true, generation: 1, digest: first.targetDigest, facts: 2, relations: 1 });
     expect(w.sources.size).toBe(5);
-    expect(w.bodies.size).toBe(5);
+    expect(w.index.size).toBe(5);
+    expect(w.bundles.size).toBe(1); // the pack's bodies are ONE object
 
     const files = [...first.files!.slice(0, 4), { path: 'src/new.ts', hash: hashOf(99), bytes: 5 }];
     const next: Pack = {
@@ -78,7 +82,7 @@ describe('applyKnowledgePack', () => {
     };
     expect(await applyKnowledgePack(deps(), { body: await encodePack(next) })).toMatchObject({ applied: true, generation: 2 });
     expect(w.sources.has('src/f4.ts')).toBe(false);
-    expect(w.sources.get('src/new.ts')).toBe(hashOf(99));
+    expect(w.sources.get('src/new.ts')?.hash).toBe(hashOf(99));
   });
 
   it('answers 409 generation_mismatch for a stale baseGeneration and changes nothing', async () => {
@@ -89,10 +93,62 @@ describe('applyKnowledgePack', () => {
     expect(w.sources.size).toBe(before);
   });
 
-  it('answers 409 digest_mismatch and does not advance the generation', async () => {
+  it('answers 409 digest_mismatch, rolls the transaction back (no rows), and does not advance the generation', async () => {
     const pack = { ...build(3), targetDigest: 'f'.repeat(64) };
     await expect(applyKnowledgePack(deps(), { body: await encodePack(pack) })).rejects.toMatchObject({ status: 409, code: 'digest_mismatch' });
     expect(w.state.get(ROOT)).toBeUndefined();
+    // Nothing the transaction held is kept: the source rows, the bundle index, facts, relations, stale marks.
+    expect(w.sources.size).toBe(0);
+    expect(w.index.size).toBe(0);
+    expect(w.facts.size).toBe(0);
+    expect(w.relations.size).toBe(0);
+    // The bundle was written before the transaction: an orphan, harmless (content-addressed) and swept by age.
+    expect(w.bundles.size).toBe(1);
+    // The next pack, built right, applies cleanly over the rollback.
+    expect(await applyKnowledgePack(deps(), { body: await encodePack(build(3)) })).toMatchObject({ applied: true, generation: 1 });
+    expect(w.sources.size).toBe(3);
+  });
+
+  it('a first sync of 20,000 files writes at most parts + 1 objects, and bodies are one bundle', async () => {
+    const pack = build(20_000);
+    const bytes = await encodePack(pack);
+    const parts = splitParts(bytes);
+    expect(parts.length).toBe(1);
+    const res = await applyKnowledgePack(deps(), { body: bytes });
+    expect(res).toMatchObject({ applied: true, extracted: 20_000 });
+    expect(w.sources.size).toBe(20_000);
+    expect(w.index.size).toBe(20_000);
+    expect(w.puts.filter((p) => p !== 'legacy-body')).toEqual(['bundle', 'sync.json']);
+    expect(w.puts.length).toBeLessThanOrEqual(parts.length + 1);
+    expect(w.puts).not.toContain('legacy-body'); // no per-hash and no per-source object
+  }, 120_000);
+
+  it('a multi-part pack costs the earlier parts, one bundle and sync.json: parts + 1 writes', async () => {
+    const bytes = await encodePack(build(300));
+    const parts = splitParts(bytes, Math.ceil(bytes.length / 3));
+    expect(parts.length).toBe(3);
+    for (let i = 0; i < parts.length; i++) await applyKnowledgePack(deps(), { body: parts[i]!, syncId: 'sync-parts-0001', part: i, parts: parts.length });
+    expect(w.puts).toEqual(['stage', 'stage', 'bundle', 'sync.json']);
+    expect(w.puts.length).toBe(parts.length + 1);
+  });
+
+  it('records a review snapshot only when the scope states a new digest (one more write)', async () => {
+    const pack = { ...build(3), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12' } };
+    await applyKnowledgePack(deps(), { body: await encodePack(pack) });
+    expect(w.puts).toEqual([`snapshot:${ROOT}:abcdef12`, 'bundle', 'sync.json']);
+  });
+
+  it('reads a stored body through the index with a ranged read, and falls back to the legacy per-hash object', async () => {
+    const pack = build(4);
+    await applyKnowledgePack(deps(), { body: await encodePack(pack) });
+    const store = fakeExtracted(w);
+    const hash = pack.files![2]!.hash;
+    expect(await store.get(hash)).toEqual(pack.extracted![2] && (pack.extracted![2] as { entries: Extracted[] }).entries);
+    expect(w.bundleReads).toBe(1);
+    const legacy = extraction('src/legacy.ts', hashOf(777));
+    w.legacyBodies.set(hashOf(777), [legacy]);
+    expect(await store.get(hashOf(777))).toEqual([legacy]);
+    expect(await store.get(hashOf(778))).toBeUndefined();
   });
 
   it('answers 413 for a body over 8 MB and for a bomb', async () => {
@@ -150,7 +206,7 @@ describe('applyKnowledgePack', () => {
       targetDigest: rootDigestOf(ROOT, { files, facts: first.facts!, relations: first.relations! }),
     };
     expect(await applyKnowledgePack(deps(), { body: await encodePack(delta) })).toMatchObject({ applied: true, generation: 2 });
-    expect(w.bodies.get(newHash)).toEqual([next]);
+    expect(await fakeExtracted(w).get(newHash)).toEqual([next]);
     expect(w.stale).toContain(`${ref('src/f0.ts')}@${newHash}`);
 
     const orphan: Pack = { ...delta, baseGeneration: 2, extracted: [{ kind: 'diff', hash: hashOf(501), prior: hashOf(777), entries: diffs }] };
@@ -194,5 +250,29 @@ describe('reconcile and have', () => {
     const order = [...ask].sort();
     const has = order.map((_, i) => (bits[i >> 3]! >> (i & 7)) & 1);
     expect(order.map((h, i) => [h, has[i]])).toEqual(order.map((h) => [h, h === hashOf(40) ? 0 : 1]));
+  });
+
+  it('a have-check with 20,000 hashes is ONE index query, never an object read per hash', async () => {
+    await applyKnowledgePack(deps(), { body: await encodePack(build(50)) });
+    const ask = Array.from({ length: 20_000 }, (_, i) => hashOf(i + 1));
+    const body = await encodePack({ rootId: ROOT, baseGeneration: 0, targetDigest: ZERO_DIGEST, hashes: ask });
+    w.indexQueries = 0;
+    w.bundleReads = 0;
+    const bits = await haveBitmap({ sync: fakeSync(w) }, body);
+    expect(w.indexQueries).toBe(1);
+    expect(w.bundleReads).toBe(0);
+    const order = [...ask].sort();
+    const held = order.filter((_, i) => ((bits[i >> 3]! >> (i & 7)) & 1) === 1);
+    expect(held.sort()).toEqual(Array.from({ length: 50 }, (_, i) => hashOf(i + 1)).sort());
+  });
+
+  it('verifies the bodies a pack leaves out with one query: a held hash that does not name the file is extracted_missing', async () => {
+    await applyKnowledgePack(deps(), { body: await encodePack(build(3)) });
+    // A copy of file 1 at a new path: the project holds the HASH, but its body names src/f1.ts only.
+    const files = [...build(3).files!, { path: 'src/copy.ts', hash: hashOf(2), bytes: 1 }];
+    const pack: Pack = { rootId: ROOT, baseGeneration: 1, files: [files[3]!], targetDigest: ZERO_DIGEST };
+    w.indexQueries = 0;
+    await expect(applyKnowledgePack(deps(), { body: await encodePack(pack) })).rejects.toMatchObject({ status: 409, code: 'extracted_missing', detail: { hashes: [hashOf(2)] } });
+    expect(w.indexQueries).toBe(1);
   });
 });

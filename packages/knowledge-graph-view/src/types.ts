@@ -28,7 +28,7 @@
 
 import type { ReactNode } from 'react';
 import type {
-    Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport, ReviewRun as MemoryReviewRun,
+    Finding, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewFailure as MemoryReviewFailure, ReviewReport, ReviewRun as MemoryReviewRun,
 } from '@seanhogg/builderforce-memory/knowledge';
 
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
@@ -79,7 +79,9 @@ export type ReplicaState = {
  * A review run as the host records it (PRD 41 A8): memory's `ReviewRun` (phases, lanes, the last steps, every
  * failure, the outcome and report) plus where the replica queue stood when it ended.
  */
-export type StoredReviewRun = Omit<MemoryReviewRun, 'outcome'> & {
+export type StoredReviewRun = Omit<MemoryReviewRun, 'outcome' | 'failures'> & {
+    /** Every failure, oldest first (memory keeps them in chunks; the host sends them flat). */
+    failures: MemoryReviewFailure[];
     /** `interrupted` is the host's word for a run left `running` by a window that closed. */
     outcome?: MemoryReviewRun['outcome'] | 'interrupted';
     replica?: ReplicaState;
