@@ -155,7 +155,7 @@ capability matrix, G01/G21) and what is installed locally:
 | Capability | Signed out, offline | Signed in, sync off | Signed in, sync on |
 |---|---|---|---|
 | Understand folder (L0–L3, §B6) | ✔ | ✔ | ✔ |
-| Visualizer, graph, findings, compare | ✔ (local board) | ✔ | ✔ (+ server board) |
+| Visualizer, graph, findings, compare | ✔ (local board) | ✔ | ✔ (+ server board). The view always draws from the local projection (A7) |
 | Agent runs | ✔ with a local model (bfi-node, WebLLM, Ollama) or a direct BYO provider key; else "set up a model" | ✔ | ✔ (+ gateway inference if granted) |
 | Run delta (static tier) | ✔ | ✔ | ✔ (+ synced to account) |
 | LLM narrative over a delta, docs judgement | Local model only, else omitted with a visible reason | Same | Gateway allowed if granted |
@@ -209,6 +209,42 @@ Each of these is already budgeted and degrades. Required behaviour:
 - `getCurrentUserId` results are cached in `globalState` with the session's key id, so a
   signed-in person who goes offline keeps their personality block.
 - `fetchLimbic` reads the local limbic state when the platform is denied.
+
+### A7. The visualizer draws from the local projection, linked or not
+
+**Why.** On 2026-11-07 a linked workspace (`agentic`, VS Code 2026.10.133) drew a broken map:
+- one line;
+- about 45 stations named after single files;
+- every channel "Not set up".
+
+The cause was that the production API had not deployed the outline release. The view drew whatever `GET /knowledge-graph` returned: a cut of 119 of 3,038 files, with no per-file badges. The status strip read "0 here · 2,945 on the server", because a linked review keeps no local snapshot (PRD 38, "Linked projects"). What the person sees must never depend on the server's version, its reachability or its rate limits.
+
+**Rule.**
+1. **The local store is the source of truth for drawing, in every capability state.**
+   - A linked review writes the local store first, then syncs to the server as a replica. The sync uses the batched path in PRD 38 › "Do" 2–3.
+   - A 429, a 413 or the server being unreachable delays the sync. It never ends the review and never changes the map.
+2. **The host computes everything the view draws from the local projection:**
+   - the cut;
+   - the outline (`outlineOf`, already pure in builderforce-memory);
+   - the area roll-up;
+   - badges, findings and the data-coverage facts.
+   
+   The VSIX ships the memory version that computes them, so a view upgrade never waits for an API deploy.
+3. **`GET /knowledge-graph` serves surfaces with no local tree:** the web app, a teammate's machine, and portable packs (PRD 40). The VS Code view calls it only to fill the Sync drawer's server column and to seed a workspace once (rule 5).
+4. **Sync compares two real counts.**
+   - The strip never reads "Synced" when the local side has zero files.
+   - A workspace with no local projection says "Not reviewed on this machine" and offers **Review**, or **Use the server's copy** when online.
+5. **Migration.** Existing linked workspaces have no local snapshot. On first open after this ships:
+   - **If online:** pull the server's full graph once, through the pack import path (PRD 40), into the local store, then re-review incrementally (B2).
+   - **If offline:** run the local review (L0–L3, B6).
+   
+   Neither path ever falls back to drawing the server cut.
+6. **Diagnostics.** The diagnostics name the map source, for example `map source: local projection (L2 complete, L3 measuring)`, and the data coverage per channel. A server-sourced map is a defect that the diagnostics flag, not a mode.
+
+**Accept.**
+- On a linked workspace of about 2,000 files, the map with network denied equals the map online: the same stations, lines and badge coverage, compared by a digest of the drawn model.
+- With the API pinned to an older build, the map is unchanged.
+- A review that hits a 429 on every sync request finishes, and the map opens.
 
 ### A6. Packaged acceptance (extends G27)
 
@@ -1734,6 +1770,7 @@ goes to an **Opus** subagent at medium effort where marked; otherwise Sonnet.
 | WS11 | **SARIF package** (C12), registered in `check-source-package-graph`, with an adapter from `NormalizedFinding` to `DeltaFinding`; plus persistence and sync (C14): the `run-delta` record, the mirror importer, the `run_deltas`, `run_delta_dimensions` and `run_delta_findings` expand migration, the 1024-space embedding registered in `MEMORY_VECTOR_SPACES`, and `sweptTables` retention | WS7; G15–G18 | **Opus** (migration, storage) |
 | WS12 | **Optional dynamic tier** (C6.2, C8.4): benchmark runner, Wilcoxon signed-rank statistics, diff coverage, Stryker incremental | WS9 | Sonnet |
 | WS13 | **Packaged offline acceptance** (A6) and cloud-run delta (C14) | WS1–WS10 | Sonnet |
+| WS14 | **Local-first visualizer** (A7): linked reviews write the local store first and sync as a replica; the host computes cut, outline, roll-up and data coverage from the local projection; Sync shows two real counts; one-time seed from the server via the PRD 40 import path; the A7 network-denied map-digest test. Does not wait for WS2: it uses today's local snapshot store and moves to B4 segments when WS2 lands | WS1 (A2) | Sonnet; Opus review (storage, sync) |
 | WS15 | **builderforce-memory `stats` module and deterministic statistics** (D13, D2, D0 guard): only what `ml/classical` lacks; `ml/classical` extended in place; migrate and delete every copy listed in D13, with their tests unchanged; `check-run-delta-layers` wired into `pnpm run check` and CI | — (pure maths, in parallel) | Sonnet |
 | WS16 | **Labels pipeline** (D1): the run-outcomes context as one owner; `RunFeatures` frozen at run end; per-run commit attribution (VSIX git API, `cloudFinalize`), closing the per-task `runCommitMarker` defect; SZZ, revert, CI and review labellers; censoring; point-in-time features and the leakage guard; consent-scoped training store. Local records start with WS7; the server tables follow WS11. | WS7 (server half: WS11) | **Opus** (storage, privacy, cross-package) |
 | WS17 | **Rule precision, calibration, process control and reliability growth** (D3, D4, D7, D8) | WS15, WS16 | Sonnet |

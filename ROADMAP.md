@@ -77,6 +77,10 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 ### Cloud and IDE agent runs `[agents]`
 
 - **Knowledge review of `agentic` fails.** The linked client makes 3 requests per file on the plan-rpm bucket (~50,000 for this tree) and one 429 or 413 ends the review. Next: move to builderforce-memory 2026.10.36, use `batched` + `preloadExtracted`, add bulk routes and 429 retry, ship a VSIX ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)).
+- **The knowledge view depends on the server for linked workspaces.**
+  - A linked review keeps no local snapshot, so the view draws `GET /knowledge-graph`.
+  - On 2026-11-07 the API had not deployed the outline release. The `agentic` map drew 119 of 3,038 files: one line, file-named stations, every channel "Not set up". The strip read "0 here · 2,945 on the server".
+  - Fix: [PRD 41 › A7](./docs/specs/41-prd-offline-understanding-and-run-delta.md), WS14. The view draws from the local projection in every state, and the server is a sync replica. This also stops a 429 from ending linked reviews (the entry above).
 - **PRD 38 residual items (docs sweep 2026-11-01).** Its Review Persistence section says `docs/knowledge/38-review-*.md`; the actual contract is the `--review-root` CLI flag plus `packages/agent-tools/src/knowledge/reviewRunner.ts` (which writes only `.review/`), and no caller passes a `knowledge/` root. Its Knowledge Client §3 table maps step kinds to statuses (triggered/awaiting_results/etc.) with no corresponding runtime code; either implement or strike. Its §4 asserts the knowledge graph has quote-level and learning-level nodes — only file-level nodes exist.
 - **No source of recorded runtime values for the knowledge view (PRD 38).** Several features are wired and tested but have nothing to show yet:
   - The Simulate drawer's recorded and editable values, which use the optional `recordedValues` source port.
