@@ -49,7 +49,7 @@ describe('delta, not replay', () => {
 
     it('does not mark a key dirty when its content did not change, and saves the set at most once a second', async () => {
         const writes: string[] = [];
-        const w = world({ persistence: { read: async () => undefined, write: async (t) => { writes.push(t); } } });
+        const w = world({ persistence: { read: async () => undefined, write: async (t: string) => { writes.push(t); } } });
         await w.review(0, 50);
         await w.review(0, 50);              // the same hashes again
         expect(await w.queue.size()).toBe(50 + 25);

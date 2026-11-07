@@ -2,7 +2,7 @@
  * applyKnowledgePack — `POST …/knowledge/sync` (PRD 41 A11 rules 3-4b): one BFKP pack in, the root's rows brought
  * to the pack's state, `{ generation, digest }` out.
  *
- * Refused before any row or object is written: a body over 8 MB; more than 8 parts, or parts adding up past 64 MB
+ * Refused before any row or object is written: a body over 8 MB; more than 8 parts, or parts adding up past 24 MB
  * (summed as they load); a wrong generation (read from the FRAME, before any inflation); a frame that is
  * malformed, fails its CRC (header and body) or inflates past the codec's caps (413 / 422); rows the writer cannot
  * take (ids, byte lengths, control characters, duplicates, contradictions, non-model rows: `packValidation`); an
@@ -16,7 +16,10 @@
  * Packs of one project are SERIALISED: the transaction's first statement takes the project's sync advisory lock. Under
  * it, "no other root names this key" (tombstones) is true when acted on, and the body merge — built from the bodies read
  * BEFORE the transaction — is checked against the index: a hash whose bundle moved since is `409 body_conflict` (the
- * client rebuilds and resends), and the index write is conditional on the same key as a second safeguard.
+ * client rebuilds and resends), and the index write is conditional on the same key as a second safeguard. The skipped
+ * bodies are verified again under the lock (the sweep takes the same lock before it drops index rows), and a FULL pack
+ * (generation 0) first clears the root's leaves and bucket digests, so nothing left behind can wedge it. The wait for the
+ * lock is bounded (10 s, then a retryable `503 sync_busy`).
  *
  * The root's manifest is its leaves (`knowledge_sync_leaves`) and the stored bucket digests built from them, never the
  * shared fact and relation tables. A pack recomputes only the buckets it touched. Inside the transaction the root digest is
@@ -96,7 +99,12 @@ const defaultAtomically = (deps: ApplyDeps): NonNullable<ApplyDeps['atomically']
 
 const SOURCE = 'application/knowledge/sync/applyKnowledgePack.ts';
 
-const actorOf = (deps: ApplyDeps): string => deps.userId ?? deps.stageActor ?? 'machine';
+/** Whose staged parts these are. With no identity at all there is nobody to key them to: refused, never a literal shared by every caller. */
+const actorOf = (deps: ApplyDeps): string => {
+  const actor = deps.userId ?? deps.stageActor;
+  if (!actor) throw new KnowledgeSyncError(403, 'forbidden', 'a multi-part pack needs an authenticated caller');
+  return actor;
+};
 
 const bodyConflict = (hashes: readonly string[]): KnowledgeSyncError =>
   new KnowledgeSyncError(409, 'body_conflict', 'another pack changed these extracted bodies while this one was applied; rebuild and resend', { hashes: hashes.slice(0, 50) });
@@ -128,12 +136,12 @@ async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array[
  * the body is per hash, its entries per source. ONE indexed query answers it for every such `(hash, sourceRef)`; any that
  * fails is a 409 `extracted_missing` naming the hashes, and the client sends those bodies. Checked BEFORE anything is written.
  */
-async function verifyBodies(deps: ApplyDeps, pack: Pack): Promise<void> {
+async function verifyBodies(deps: ApplyDeps, pack: Pack, over?: KnowledgeLedgerPort): Promise<void> {
   const shipped = new Set((pack.extracted ?? []).map((x) => x.hash));
   const owed = (pack.files ?? []).filter((f) => !shipped.has(f.hash));
   if (owed.length === 0) return;
   const pairs = owed.map((f) => ({ hash: f.hash, sourceRef: srcRef(pack.rootId, f.path) }));
-  const held = await deps.sync.heldEntries(pairs);
+  const held = await deps.sync.heldEntries(pairs, over);
   const missing = new Set<string>();
   pairs.forEach((p, i) => { if (!held.has(i)) missing.add(p.hash); });
   if (missing.size > 0) throw new KnowledgeSyncError(409, 'extracted_missing', 'the server lacks the extracted output of some files; send those bodies', { hashes: [...missing] });
@@ -229,7 +237,16 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
     const done = await atomically(async (unit) => {
       // FIRST statement: serialise packs of this project. Everything below that reads "who else names this" or merges a body is then true.
       await unit.ledger.lock();
+      // A full pack (generation 0) IS the root's whole state: leaves and bucket digests left by an earlier, rolled-back or
+      // deleted root would otherwise sit in buckets this pack never touches and wedge the root on digest_mismatch forever.
+      if (head.baseGeneration === 0) {
+        await unit.ledger.leaves.clear(root);
+        await unit.ledger.buckets.clear(root);
+      }
       await ensureBuckets(unit.ledger, root);
+      // The skipped bodies are re-checked under the lock: the pre-check above ran before it, and the sweep (which takes the
+      // same lock per project) may have removed a hash's index row in between.
+      await verifyBodies(deps, pack, unit.ledger);
       if (bundle) {
         const now = new Map((await unit.ledger.index.locate(bundle.locs.map((l) => l.hash))).map((l) => [l.hash, l.bundleKey] as const));
         const moved = bundle.locs.filter((l) => (now.get(l.hash) ?? null) !== (basis.get(l.hash) ?? null)).map((l) => l.hash);
@@ -245,7 +262,7 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
       const leaves = leavesOf(pack);
       await unit.ledger.leaves.upsert(root, leaves);
       // The digest of THIS ROOT'S leaves, from the stored bucket digests with only the touched buckets recomputed.
-      const digest = await recomputeBuckets(unit.ledger, root, [...leaves.map((l) => l.key), ...tomb.keys]);
+      const digest = await recomputeBuckets(unit.ledger, root, [...leaves.map((l) => l.key), ...tomb.keys, ...legacy.leafKeys]);
       if (pack.targetDigest !== ZERO_DIGEST && digest !== pack.targetDigest) {
         throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest });
       }

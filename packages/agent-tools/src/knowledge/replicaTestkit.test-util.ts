@@ -8,6 +8,7 @@ import { localSnapshotStore, srcRef, type Extracted, type KnowledgeStore, type S
 import {
     applyEntryDiffs, decodePack, factDigest, factLeafKey, fileLeafKey, joinParts, manifestTree, relationDigest, relationLeafKey, ZERO_DIGEST, type Pack,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
+import { createReplicaQueue, factKey, memoryReplicaPersistence, relationKey, type ReplicaPersistence, type ReplicaQueue } from './replicaQueue.js';
 import { replicatedKnowledgeStore } from './replicatedStore.js';
 import type { ReplicaClient } from './replicaPump.js';
 

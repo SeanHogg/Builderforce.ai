@@ -28,6 +28,7 @@ vi.mock('../../application/knowledge/sync/knowledgeSyncManifest', () => ({
 }));
 
 import { createProjectKnowledgeRoutes } from './projectKnowledgeRoutes';
+import { stageActorOf } from './projectKnowledgeSyncRoutes';
 import type { FrontDoor } from '../middleware/frontDoor';
 import { KnowledgeSyncError } from '../../application/knowledge/sync/knowledgeSyncPorts';
 import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
@@ -119,5 +120,26 @@ describe.each([['tenant door', () => createProjectKnowledgeRoutes({} as never)],
     expect(new Uint8Array(await leaves.arrayBuffer())).toEqual(new Uint8Array([8]));
     const have = await r.request('/3/knowledge/sync/have', { method: 'POST', body: new Uint8Array([1]) });
     expect(new Uint8Array(await have.arrayBuffer())).toEqual(new Uint8Array([7]));
+  });
+
+  it('answers a lock timeout as a retryable 503 with a Retry-After hint', async () => {
+    mocks.apply.mockRejectedValue(new KnowledgeSyncError(503, 'sync_busy', 'busy', { retryAfterSeconds: 5 }));
+    const { url, init } = send(new Uint8Array([1]));
+    const res = await make().request(url, init);
+    expect(res.status).toBe(503);
+    expect(res.headers.get('retry-after')).toBe('5');
+    expect(await res.json()).toMatchObject({ code: 'sync_busy' });
+  });
+});
+
+describe('stageActorOf', () => {
+  const ctx = (vars: Record<string, unknown>) => ({ get: (k: string) => vars[k] }) as never;
+
+  it('prefers the key id, then the host id, then the user id, and is never a bare machine: actor', () => {
+    expect(stageActorOf(ctx({ apiKeyId: 9, machineActor: { kind: 'agent_host', agentHostId: 17 }, userId: 'u1' }))).toBe('key:9');
+    expect(stageActorOf(ctx({ machineActor: { kind: 'agent_host', agentHostId: 17 }, userId: 'u1' }))).toBe('agent_host:17');
+    expect(stageActorOf(ctx({ machineActor: { kind: 'agent_host' }, userId: 'agentHost:17' }))).toBe('user:agentHost:17');
+    expect(stageActorOf(ctx({ userId: 'u1' }))).toBe('user:u1');
+    expect(stageActorOf(ctx({}))).toBeUndefined();
   });
 });

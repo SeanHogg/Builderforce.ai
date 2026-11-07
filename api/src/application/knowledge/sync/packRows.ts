@@ -58,9 +58,11 @@ type Triple = { from: string; to: string; kind: string };
  */
 export async function removeRows(
   deps: ApplyDeps, unit: PackUnit, root: string, rows: { factKeys: readonly string[]; relations: readonly Triple[] }, admin: boolean,
-): Promise<{ deleted: number; skipped: SkippedTombstone[] }> {
+): Promise<{ deleted: number; skipped: SkippedTombstone[]; leafKeys: string[] }> {
   const skipped: SkippedTombstone[] = [];
   let deleted = 0;
+  /** Leaves of THIS root whose rows the cascade removes: the caller recomputes their buckets. */
+  const cascadedKeys: string[] = [];
   const namedElsewhere = await unit.ledger.leaves.namedByOthers(root, [...rows.factKeys.map(factLeafKey), ...rows.relations.map(relationLeafKey)]);
   for (const k of rows.factKeys) if (namedElsewhere.has(factLeafKey(k))) skipped.push({ key: factLeafKey(k), reason: 'other_root' });
   for (const r of rows.relations) if (namedElsewhere.has(relationLeafKey(r))) skipped.push({ key: relationLeafKey(r), reason: 'other_root' });
@@ -78,11 +80,16 @@ export async function removeRows(
     const others = await unit.ledger.leaves.namedByOthers(root, cascaded.map(relationLeafKey));
     for (const r of cascaded) {
       const key = relationLeafKey(r);
-      if (others.has(key)) skipped.push({ key, reason: 'other_root' }); else relations.set(key, { from: r.from, to: r.to, kind: r.kind });
+      if (others.has(key)) { skipped.push({ key, reason: 'other_root' }); continue; }
+      relations.set(key, { from: r.from, to: r.to, kind: r.kind });
+      cascadedKeys.push(key);
     }
   }
   if (relations.size > 0) deleted += await unit.store.deleteRelationRows([...relations.values()], { origin: 'model' });
-  return { deleted, skipped };
+  // A relation row removed by the cascade must not stay a leaf of this root: the manifest would name a row that is gone.
+  const leafKeys = cascadedKeys.length > 0 ? [...(await unit.ledger.leaves.existing(root, cascadedKeys))] : [];
+  if (leafKeys.length > 0) await unit.ledger.leaves.remove(root, leafKeys);
+  return { deleted, skipped, leafKeys };
 }
 
 /**
@@ -102,7 +109,7 @@ export async function applyTombstones(
   const relations = keys.relations.flatMap((k) => { const r = parseRelationLeafKey(k); return r ? [r] : []; });
   const removed = await removeRows(deps, unit, root, { factKeys: keys.facts.map((k) => k.slice(2)), relations }, admin);
   await unit.ledger.leaves.remove(root, keys.all);
-  return { deleted: removed.deleted + keys.files.length, skipped: removed.skipped, keys: keys.all };
+  return { deleted: removed.deleted + keys.files.length, skipped: removed.skipped, keys: [...keys.all, ...removed.leafKeys] };
 }
 
 /**
@@ -113,8 +120,8 @@ export async function applyTombstones(
  */
 export async function reconcileLegacyRows(
   deps: ApplyDeps, unit: PackUnit, pack: Pack, removedPaths: readonly string[], admin: boolean,
-): Promise<{ deleted: number; skipped: SkippedTombstone[] }> {
-  if (removedPaths.length === 0) return { deleted: 0, skipped: [] };
+): Promise<{ deleted: number; skipped: SkippedTombstone[]; leafKeys: string[] }> {
+  if (removedPaths.length === 0) return { deleted: 0, skipped: [], leafKeys: [] };
   const root = pack.rootId;
   const gone = new Set(removedPaths);
   const named = new Set((pack.facts ?? []).map((f) => f.key));

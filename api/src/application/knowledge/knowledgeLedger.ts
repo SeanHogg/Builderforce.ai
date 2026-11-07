@@ -23,6 +23,7 @@
 import { sql } from 'drizzle-orm';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { bucketsLedger, leavesLedger, type BucketsPort, type LeavesPort } from './knowledgeLedgerLeaves';
+import { KnowledgeSyncError, SYNC_LOCK_RETRY_SECONDS, SYNC_LOCK_TIMEOUT } from './sync/knowledgeSyncPorts';
 
 export type { BucketsPort, LeafRow, LeavesPort } from './knowledgeLedgerLeaves';
 
@@ -104,6 +105,11 @@ export interface KnowledgeLedgerPort {
 }
 
 const json = (value: unknown): string => JSON.stringify(value);
+/** Postgres `lock_not_available` (55P03), however the driver wraps it. */
+const isLockTimeout = (error: unknown): boolean => {
+  const e = error as { code?: unknown; cause?: { code?: unknown } } | null;
+  return e?.code === '55P03' || e?.cause?.code === '55P03';
+};
 /** The rows of a `db.execute` result, whichever driver shape it has. */
 export const rowsOf = <T>(result: unknown): T[] => ((result as { rows?: T[] }).rows ?? (result as T[])) as T[];
 const countOf = (result: unknown): number => (result as { rowCount?: number }).rowCount ?? 0;
@@ -260,7 +266,16 @@ export function drizzleLedger(db: Db, tenantId: number, projectId: number): Know
     },
 
     async lock() {
-      await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('knowledge-sync:' || ${String(tenantId)}::text || ':' || ${String(projectId)}::text, 0))`);
+      try {
+        // A bounded wait: a stuck holder must not pin every other request of the project on an open connection.
+        await db.execute(sql.raw(`SET LOCAL lock_timeout = '${SYNC_LOCK_TIMEOUT}'`));
+        await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('knowledge-sync:' || ${String(tenantId)}::text || ':' || ${String(projectId)}::text, 0))`);
+        // The bounded wait covers only the lock: the rest of the pack's transaction runs under the session default.
+        await db.execute(sql.raw('SET LOCAL lock_timeout = DEFAULT'));
+      } catch (error) {
+        if (!isLockTimeout(error)) throw error;
+        throw new KnowledgeSyncError(503, 'sync_busy', 'another sync of this project holds the lock; retry shortly', { retryAfterSeconds: SYNC_LOCK_RETRY_SECONDS });
+      }
     },
 
     exclusive: (work) => inTransaction(db, async (tx) => {

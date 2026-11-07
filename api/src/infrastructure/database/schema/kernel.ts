@@ -1434,6 +1434,11 @@ export const deliveries = pgTable('deliveries', {
  * exported table to keep that guarantee honest.
  */
 
+/** Raw bytes (`bytea`): the pack-sync tables hold digests as bytes, and the ledger reads and writes them through SQL. */
+export const bytea = customType<{ data: Uint8Array }>({
+  dataType() { return 'bytea'; },
+});
+
 export const tsvector = customType<{ data: string }>({
   dataType() { return 'tsvector'; },
 });

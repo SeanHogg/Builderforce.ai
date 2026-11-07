@@ -12,13 +12,16 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bucketOf, manifestTree, parseRelationLeafKey, relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Db } from '../../infrastructure/database/connection';
 import { drizzleLedger, rowsOf, type ExtractedLoc, type KnowledgeLedgerPort } from './knowledgeLedger';
 import { ensureBuckets, recomputeBuckets } from './knowledgeBuckets';
 
-const migration = (name: string): string => readFileSync(fileURLToPath(new URL(`../../../migrations/${name}`, import.meta.url)), 'utf8');
+// PGlite boots a WASM Postgres and applies three migrations: slower than the default 10 s hook / 5 s test budgets.
+vi.setConfig({ hookTimeout: 60_000, testTimeout: 60_000 });
+
+const migration = (name: string): string => readFileSync(fileURLToPath(new URL(`../../../migrations/${name}`, import.meta.url).href), 'utf8');
 
 let pg: PGlite;
 let db: Db;
@@ -168,10 +171,20 @@ describe('buckets (incremental digests)', () => {
 describe('the project sync lock', () => {
   const advisory = async (): Promise<number> => rowsOf<{ n: number }>(await db.execute(sql`SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory'`))[0]!.n;
 
-  it('exclusive() holds a transaction-scoped advisory lock while it runs and releases it at commit, and rolls back on a throw', async () => {
+  it('lock() takes a transaction-scoped advisory lock on the transaction handle, and commit releases it', async () => {
     expect(await advisory()).toBe(0);
+    // PGlite is one session whose queries queue behind an open transaction: the lock is observed THROUGH the transaction's own
+    // handle (`tx`), never through `db`, which would wait for the transaction it is called from and never return.
+    await db.transaction(async (tx) => {
+      const txDb = tx as unknown as Db;
+      await drizzleLedger(txDb, 1, 1).lock();
+      expect(rowsOf<{ n: number }>(await txDb.execute(sql`SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory'`))[0]!.n).toBe(1);
+    });
+    expect(await advisory()).toBe(0);
+  });
+
+  it('exclusive() runs its work in one transaction that commits on success, releases the lock, and rolls back on a throw', async () => {
     await ledger.exclusive(async (locked) => {
-      expect(await advisory()).toBe(1);
       await locked.leaves.upsert('ws:a', [{ key: 'a:k', digest: 'd' }]);
     });
     expect(await advisory()).toBe(0);

@@ -61,22 +61,35 @@ async function bodyOf(c: Context): Promise<Uint8Array> {
   return bytes;
 }
 
-/** Who a machine's staged parts belong to: its key id, else its host id — never one literal shared by every machine key. */
-function stageActorOf(c: Context): string | undefined {
+/**
+ * Who a request's staged parts belong to: the key id, else the host's machine identity, else the user id — never a bare
+ * `machine:` that every caller would share, so two callers' `syncId`s can never meet.
+ */
+export function stageActorOf(c: Context): string | undefined {
   const keyId = c.get('apiKeyId') as string | number | undefined;
-  if (keyId !== undefined && keyId !== null) return `key:${keyId}`;
+  if (keyId !== undefined && keyId !== null && keyId !== '') return `key:${keyId}`;
   const machine = c.get('machineActor') as { kind?: string; agentHostId?: number | string } | undefined;
-  return machine ? `${machine.kind ?? 'machine'}:${machine.agentHostId ?? ''}` : undefined;
+  if (machine && machine.agentHostId !== undefined && machine.agentHostId !== null && machine.agentHostId !== '') return `${machine.kind ?? 'machine'}:${machine.agentHostId}`;
+  const userId = c.get('userId') as string | number | undefined;
+  if (userId !== undefined && userId !== null && userId !== '') return `user:${userId}`;
+  return undefined;
 }
 
 const intOf =(v: string | undefined): number | undefined => (v === undefined || v === '' ? undefined : Number(v));
+
+/** A typed sync refusal as a response: its status, `{ error, code, …detail }`, and `Retry-After` on a retryable 503. */
+export function syncRefusal(error: KnowledgeSyncError): Response {
+  const res = json({ error: error.message, code: error.code, ...(error.detail ?? {}) }, error.status);
+  if (error.retryAfterSeconds !== undefined) res.headers.set('Retry-After', String(error.retryAfterSeconds));
+  return res;
+}
 
 /** Runs a sync handler and answers its typed refusals; anything else is a server fault and rethrows. */
 async function answering(run: () => Promise<Response>): Promise<Response> {
   try {
     return await run();
   } catch (error) {
-    if (error instanceof KnowledgeSyncError) return json({ error: error.message, code: error.code, ...(error.detail ?? {}) }, error.status);
+    if (error instanceof KnowledgeSyncError) return syncRefusal(error);
     // The writer's own refusals (a bad origin, too many rows) are the caller's 4xx, not a server fault.
     if (error instanceof KnowledgeWriteError) return json({ error: error.message, code: error.code }, error.status);
     throw error;

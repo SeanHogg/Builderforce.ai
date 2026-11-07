@@ -34,12 +34,15 @@ import { reportCaughtError, reportedFallback } from '../observability/caughtErro
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
 import { buildBundle, mergeBodies, readBundled } from './knowledgeBundles';
 import type { KnowledgeLedgerPort } from './knowledgeLedger';
+import { KnowledgeSyncError } from './sync/knowledgeSyncPorts';
 
 const SOURCE = 'application/knowledge/knowledgeBlobs.ts';
 /** Blobs fetched per graph build when the bundle is cold; the rest arrive on the next build. */
 export const MAX_BLOB_FETCHES_PER_BUILD = 600;
 const FETCH_CONCURRENCY = 8;
 const LIST_PAGE = 1000;
+/** Re-merges of a legacy upload whose body moved under it before it gives up (409). */
+const PUT_ATTEMPTS = 3;
 
 type Bundle = Record<string, Extracted[]>;
 export interface SourceEntry { path: string; hash: string }
@@ -208,13 +211,17 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
      */
     async put(hash, extracted) {
       if (ledger) {
-        await ledger.exclusive(async (locked) => {
-          const prior = (await locked.index.locate([hash]))[0]?.bundleKey ?? null;
-          const current = (await bodiesOf(bucket(), [hash], locked)).get(hash);
+        // As the pack path: read + merge + write the bundle OUTSIDE the lock (no R2 I/O while it is held), then one locked,
+        // CONDITIONAL index write. A body that moved meanwhile (a pack, another upload) is merged again, a few times.
+        let written = 0;
+        for (let attempt = 0; attempt < PUT_ATTEMPTS && written === 0; attempt++) {
+          const prior = (await ledger.index.locate([hash]))[0]?.bundleKey ?? null;
+          const current = (await bodiesOf(bucket(), [hash])).get(hash);
           const bundle = buildBundle(tenantId, [{ hash, entries: mergeBodies(current, extracted) }]);
           await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
-          if (await locked.index.upsert(bundle.locs, new Map([[hash, prior]])) === 0) throw new Error(`extracted index for ${hash} changed under the sync lock`);
-        });
+          written = await ledger.exclusive((locked) => locked.index.upsert(bundle.locs, new Map([[hash, prior]])));
+        }
+        if (written === 0) throw new KnowledgeSyncError(409, 'body_conflict', `the extracted body of ${hash} kept changing; retry`, { hashes: [hash] });
       } else {
         await writeJson(bucket(), keys.extracted(hash), extracted);
       }

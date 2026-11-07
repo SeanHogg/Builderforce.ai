@@ -499,7 +499,7 @@ A review of 18,838 files queued 34,001 ops, and the queue itself is one JSON fil
    - A digest mismatch rolls back and answers `409`. The client then sends a full pack.
    - **Guards before any work:**
      - the compressed request body is at most 8 MB;
-     - decompression stops past 64 MB of output (`413 pack_too_large`);
+     - decompression stops past 24 MB of output (`413 pack_too_large`);
      - string and row counts are bounded;
      - malformed frames are rejected (`422 bad_pack`).
 4a. **Storage writes are bounded per pack, not per file** (decided 2026-11-07, after the first implementation found about 40,000 object writes per first sync, past the Worker subrequest cap).
@@ -523,7 +523,7 @@ A review of 18,838 files queued 34,001 ops, and the queue itself is one JSON fil
      - A tombstone for a key not in the root's leaves is refused with `422 not_owned`.
    - **What the client sends.** The client sends only rows its credential may write. Today that is `origin: 'model'` rows; human and agent rows travel through their own write paths.
    - **Bodies are merged.** A hash's stored body is the union by `sourceRef` of the prior body and the incoming one, so two roots that share content never evict each other.
-   - **Decoder budgets.** The decoder enforces cumulative budgets across the whole pack: total decoded string bytes and total rows, not per list. A pack has at most 8 parts, and part sizes are summed while loading, aborting past 64 MB.
+   - **Decoder budgets.** The decoder enforces cumulative budgets across the whole pack: total decoded string bytes and total rows, not per list. A pack has at most 8 parts, and part sizes are summed while loading, aborting past 24 MB (`413 pack_too_large`), which is the codec's decoded cap. The client cuts a pack before that: at 16 MB decoded or 150,000 rows (whichever comes first), and again by halving its files if the compressed parts still total more than 24 MB. A request that waits more than 10 s for the project's sync lock is answered `503 sync_busy` with `Retry-After`, which the pump waits out.
    - **Error answers.** Every refusal is a typed 4xx:
      - `KnowledgeWriteError` maps to its status;
      - hash and length validation, duplicates and malformed diffs give 422;
@@ -546,7 +546,7 @@ A review of 18,838 files queued 34,001 ops, and the queue itself is one JSON fil
   - encoding the same input twice gives the same bytes.
 - **The server rejects:**
   - a flipped byte (CRC fails, 422);
-  - a zip bomb (413 before 64 MB is held);
+  - a zip bomb (413 before 24 MB is held);
   - a stale `baseGeneration` (409). After a 409, the client reconciles through the manifest tree and sends only the difference.
 - **Reconcile:**
   - Two clients with identical local state send nothing; one manifest GET each.

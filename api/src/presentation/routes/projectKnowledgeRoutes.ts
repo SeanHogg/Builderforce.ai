@@ -50,7 +50,8 @@ import { MAX_JUDGE_ITEMS, clientJudgementSpec, judgeKnowledge } from '../../appl
 import { admitClientResult } from './clientResultHttp';
 import { judgeCostFor } from '../../application/knowledge/judgeCostEstimate';
 import { parseBody, z } from './requestBody';
-import { registerKnowledgeSyncRoutes } from './projectKnowledgeSyncRoutes';
+import { KnowledgeSyncError } from '../../application/knowledge/sync/knowledgeSyncPorts';
+import { registerKnowledgeSyncRoutes, syncRefusal } from './projectKnowledgeSyncRoutes';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -170,6 +171,8 @@ function declaredTooLarge(c: Context, max: number): boolean {
 /** The answer for a write or upload the caller got wrong; anything else is a server fault and rethrows. */
 function writeRefusal(error: unknown): Response {
   if (error instanceof KnowledgeWriteError) return json({ error: error.message, code: error.code }, error.status);
+  // The sync lock timed out (503 + Retry-After) or the body kept moving (409): typed answers the client retries.
+  if (error instanceof KnowledgeSyncError) return syncRefusal(error);
   throw error;
 }
 
@@ -282,8 +285,6 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     if (byteLength(extracted) > MAX_EXTRACTED_BYTES) return tooLarge(MAX_EXTRACTED_BYTES);
     try {
       const { skippedRefs } = await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
-      // The per-hash object just written replaces the whole body: an older bundle row for this hash must not shadow it.
-      await p.ledger.index.drop([hash]);
       return json({ ok: true, hash, skippedRefs });
     } catch (error) {
       return writeRefusal(error);

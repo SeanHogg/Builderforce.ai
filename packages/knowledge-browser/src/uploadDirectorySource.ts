@@ -6,9 +6,8 @@
  * the files (or null when the person cancels).
  */
 
-import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import {
-  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument,
+  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -35,7 +34,7 @@ function splitRoot(file: File): { folder: string; path: string } {
 }
 
 /** `host` prefixes the root id (`web:upload:<folder>`, `rovr:upload:<folder>`). */
-export function createUploadDirectorySource(files: readonly File[], host: string): DirectorySource {
+export function createUploadDirectorySource(files: readonly File[], host: string): ContentHashedSource {
   const picked = new Map<string, File>();
   let folder = '';
   for (const file of files) {
@@ -50,6 +49,7 @@ export function createUploadDirectorySource(files: readonly File[], host: string
     rootId,
     title,
     // list() hashes a text file with contentHash(file.text()); the review re-hashes the text read() returns.
+    hashKind: 'content',
     hashOf: contentHash,
     async *list() {
       for (const [path, file] of byPath(picked)) {

@@ -60,3 +60,36 @@ describe('a control character in a path or key', () => {
         expect(srv.syncs()).toHaveLength(1);   // and it did not 422 or force a reconcile
     });
 });
+
+describe('a pack past the server\'s total byte cap', () => {
+    it('is cut in half by files before it is sent, and every file still lands', async () => {
+        const w = world();
+        await w.review(0, 40, 0, 4);
+        const srv = fakeServer();
+        const state = await pumpReplica({
+            queue: w.queue, local: w.local, client: srv.client, signal: new AbortController().signal, rootId: ROOT, sources: async () => w.sources, projectId: 1,
+            maxPackBytes: 400, // the 40-file pack deflates to well over this, but a pack of ~10 files does not: it must be halved, not sent whole
+        });
+        expect(state.failed).toEqual([]);
+        expect(srv.syncs().length).toBeGreaterThan(1);
+        expect(srv.syncs()[0]!.pack!.files!.length).toBeLessThan(40); // the whole set was never sent: it was halved first
+        expect(srv.s.files.size).toBe(40);
+        expect(state.dirty).toBe(0);
+    });
+});
+
+describe('a lone surrogate or a NUL in a path, key or fact text', () => {
+    it('is left out of the pack like a control character, and the rest lands', async () => {
+        const w = world();
+        await w.review(0, 3);
+        const hash = hashOf(91), path = 'src/lone\uD800.ts', ref = srcRef(ROOT, path);
+        await w.store.putExtracted!(hash, [extraction(path, hash)]);
+        await w.store.markStale({ rootId: ROOT }, ref as never, hash);
+        w.sources.push({ ref, hash });
+        const srv = fakeServer();
+        const state = await pump(w, srv.client);
+        expect(srv.syncs()[0]!.pack!.files?.map((f) => f.path)).toEqual([pathOf(0), pathOf(1), pathOf(2)]);
+        expect(state.failed).toHaveLength(1);
+        expect(state.dirty).toBe(0);
+    });
+});

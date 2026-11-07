@@ -25,14 +25,14 @@ import {
     bucketOf, diffEntries, encodePack, jsonBytesOf, parseRelationLeafKey, rootLeaves, rootDigestOf, ZERO_DIGEST, fileLeafKey,
     type Pack, type PackExtr,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { hasControlChar } from './packKeyGuard.js';
+import { isCleanKey, isCleanText } from './packKeyGuard.js';
 import { factKey, relationKey, type ReplicaAnalysis } from './replicaQueue.js';
 
 /** A row the pack left out because the server would refuse its key (`422 bad_pack`), with the dirty key it settles. */
 export interface SkippedRow { key: string; reason: string }
 
 const shown = (s: string): string => JSON.stringify(s.length > 80 ? `${s.slice(0, 80)}…` : s);
-const skip = (what: string, id: string): string => `${what} ${shown(id)} was not synced: its path or key holds a control character`;
+const skip = (what: string, id: string): string => `${what} ${shown(id)} was not synced: its path, key or text holds a control character, NUL or lone surrogate the server refuses`;
 
 /** A current source: its ref, content hash, and size in bytes when the host's stat cache knows it. */
 export interface ReplicaSource { ref: string; hash: string; bytes?: number | undefined }
@@ -134,7 +134,7 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     const refused: SkippedRow[] = [];
     const sources = args.sources.filter((s) => {
         const path = pathOfRef(rootId, s.ref);
-        if (!hasControlChar(path)) return true;
+        if (isCleanKey(path)) return true;
         refused.push({ key: fileLeafKey(path, s.hash), reason: skip('file', path) });
         return false;
     });
@@ -153,12 +153,12 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     if (final) {
         const [facts, rels] = await Promise.all([local.facts({ rootId }), local.relations({ rootId })]);
         allFacts = facts.filter((f) => {
-            if (!hasControlChar(f.key) && !f.fileAnchors.some((a) => hasControlChar(a.path ?? ''))) return true;
+            if (isCleanKey(f.key) && isCleanText(f.content) && f.fileAnchors.every((a) => isCleanKey(a.path ?? ''))) return true;
             refused.push({ key: factKey(f.key), reason: skip('fact', f.key) });
             return false;
         });
         allRels = rels.filter((r) => {
-            if (![r.from, r.to, r.kind].some(hasControlChar)) return true;
+            if ([r.from, r.to, r.kind].every(isCleanKey)) return true;
             refused.push({ key: relationKey(r), reason: skip('relation', `${r.from} -> ${r.to}`) });
             return false;
         });

@@ -17,7 +17,7 @@ export { watchDirectory, LIVE_DEBOUNCE_MS, type LiveWatchPorts } from './liveWat
 export { estimateReview, type CallPricePort } from './reviewEstimate';
 export {
   hostRootId, rootKindOf, normalizePath, isSkippedPath, hashesByContent, contentHash, subtleContentHash,
-  metadataHash, textDocument, byteLength, byPath, type KnowledgeDegradedReporter,
+  metadataHash, textDocument, byteLength, byPath, isContentHashed, type ContentHashedSource, type KnowledgeDegradedReporter,
 } from './directorySourceKit';
 export { createUploadDirectorySource, pickFolder, uploadDirectoryProvider } from './uploadDirectorySource';
 export {

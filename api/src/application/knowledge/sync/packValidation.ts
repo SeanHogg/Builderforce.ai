@@ -14,7 +14,7 @@
  *   - provenance: a pack carries MODEL rows (human and agent rows travel by their own writers).
  */
 import { factLeafKey, fileLeafKey, relationLeafKey, type Pack } from '@seanhogg/builderforce-memory/knowledge/pack';
-import { hasControlChar } from '@builderforce/agent-tools';
+import { isCleanKey, isCleanText } from '@builderforce/agent-tools';
 import { KNOWLEDGE_HASH_PATTERN } from '../knowledgePerception';
 import { KnowledgeSyncError } from './knowledgeSyncPorts';
 
@@ -40,7 +40,16 @@ export const normalizeRootId = (rootId: string): string => rootId.trim();
 function id(what: string, s: string, max: number): void {
   if (!s) bad(`${what} is empty`);
   if (bytesOf(s) > max) bad(`${what} is over ${max} bytes`);
-  if (hasControlChar(s)) bad(`${what} holds a control character`);
+  if (!isCleanKey(s)) bad(`${what} holds a control character or a lone surrogate`);
+}
+
+/** The `(hash, sourceRef)` pairs of a `have` request: the same id rules as a pack's, so they never reach jsonb unchecked. */
+export function checkHavePairs(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>): void {
+  for (const p of pairs) {
+    if (!KNOWLEDGE_HASH_PATTERN.test(p.hash)) bad('a have pair names a hash that is not a content hash');
+    if (!REF.test(p.sourceRef)) bad('a have pair has a bad sourceRef');
+    id('a have sourceRef', p.sourceRef, MAX_KEY_BYTES);
+  }
 }
 
 function noDuplicates(what: string, keys: Iterable<string>): void {
@@ -80,6 +89,7 @@ export function validatePack(pack: Pack): void {
     if (!f.key || f.key !== f.key.trim() || f.key.length > MAX_FACT_KEY) bad(`a fact key is 1..${MAX_FACT_KEY} characters with no outer whitespace`);
     id('a fact key', f.key, MAX_KEY_BYTES);
     if (!f.content || f.content.length > MAX_FACT_CONTENT) bad(`fact ${f.key}: content is 1..${MAX_FACT_CONTENT} characters`);
+    if (!isCleanText(f.content)) bad(`fact ${f.key}: content holds a NUL or a lone surrogate`);
     if (f.origin !== 'model') bad(`fact ${f.key}: a pack carries model rows (origin '${f.origin}' travels by its own writer)`);
     if (f.fileAnchors.length > MAX_ANCHORS) bad(`fact ${f.key}: bad anchors`);
     for (const a of f.fileAnchors) id('a fact anchor path', a.path ?? '', MAX_PATH_BYTES);

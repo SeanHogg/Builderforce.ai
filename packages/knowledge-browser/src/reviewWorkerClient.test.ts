@@ -75,4 +75,20 @@ describe('review worker client', () => {
     const reply = await runReview({ mode: 'plan', force: false, modelCalls: 0 }, p, { createWorker: () => worker as unknown as Worker });
     expect(reply).toMatchObject({ type: 'reply', id: 7, ok: false, error: 'quota' });
   });
+
+  it('trusts hashes as content hashes only when the source DECLARES it, never because hashOf exists', async () => {
+    const startOf = async (patch: Partial<DirectorySource> & { hashKind?: 'content' }): Promise<boolean> => {
+      const p = ports();
+      Object.assign(p.source, patch);
+      let flag: boolean | undefined;
+      const worker = new ScriptedWorker((msg, emit) => {
+        if (msg.type === 'start') { flag = msg.hashesAreContentHash; emit({ type: 'result', value: {} }); }
+      });
+      await runReview({ mode: 'plan', force: false, modelCalls: 0 }, p, { createWorker: () => worker as unknown as Worker });
+      return flag!;
+    };
+    expect(await startOf({ hashOf: () => 'x' })).toBe(false);
+    expect(await startOf({ hashKind: 'content' })).toBe(false); // declared, but nothing to re-hash with
+    expect(await startOf({ hashKind: 'content', hashOf: () => 'x' })).toBe(true);
+  });
 });

@@ -54,7 +54,7 @@ export const newWorld = (): World => ({
   legacyBodies: new Map(), leaves: new Map(), buckets: new Map(), roots: new Map(), staged: new Map(), stale: [], puts: [], bundleReads: 0, indexQueries: 0, sharedTableReads: 0,
 });
 
-const inner = <V>(m: Map<string, Map<string, V>>, root: string): Map<string, V> => {
+const inner = <K, V>(m: Map<string, Map<K, V>>, root: string): Map<K, V> => {
   let x = m.get(root);
   if (!x) { x = new Map(); m.set(root, x); }
   return x;
@@ -178,8 +178,9 @@ export function fakeExtracted(w: World): ExtractedCachePort {
 
 export function fakeSync(w: World): KnowledgeSyncPort {
   const all = (root: string): Array<{ path: string; hash: string }> => {
+    // As `listRootSources`: a ledger row wins over the legacy object of the same id, and a removal marker (hash '') hides it.
     const byId = new Map([...inner(w.legacySources, root), ...inner(w.sources, root)]);
-    return [...byId.values()].map((r) => ({ path: r.path, hash: r.hash }));
+    return [...byId.values()].filter((r) => r.hash !== '').map((r) => ({ path: r.path, hash: r.hash }));
   };
   const stageKey = (actor: string, id: string, part: number): string => `${actor}/${id}/${part}`;
   return {
@@ -210,11 +211,11 @@ export function fakeSync(w: World): KnowledgeSyncPort {
 
 /** A transaction over the world: what `work` wrote is kept when it resolves and restored when it throws. */
 export function atomically(w: World) {
-  const copy = <V>(m: Map<string, Map<string, V>>): Map<string, Map<string, V>> => new Map([...m].map(([k, v]) => [k, new Map(v)]));
+  const copy = <K, V>(m: Map<string, Map<K, V>>): Map<string, Map<K, V>> => new Map([...m].map(([k, v]) => [k, new Map(v)]));
   return <T>(work: (unit: PackUnit) => Promise<T>): Promise<T> => {
     const run = async (): Promise<T> => {
       const saved = {
-        facts: new Map(w.facts), relations: new Map(w.relations), sources: copy(w.sources), leaves: copy(w.leaves), buckets: copy(w.buckets as never) as unknown as World['buckets'], index: new Map(w.index),
+        facts: new Map(w.facts), relations: new Map(w.relations), sources: copy(w.sources), leaves: copy(w.leaves), buckets: copy(w.buckets), index: new Map(w.index),
         roots: new Map(w.roots), stale: [...w.stale],
       };
       try {

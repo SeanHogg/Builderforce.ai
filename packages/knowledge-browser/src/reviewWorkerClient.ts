@@ -13,6 +13,7 @@
 import type { ReviewPlan, ReviewProgress, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
+import { isContentHashed } from './directorySourceKit';
 import { createReviewWorker } from './workerFactory';
 
 export type WorkerFactory = () => Worker | null;
@@ -71,6 +72,6 @@ export function runReview(job: ReviewJob, ports: ReviewPorts, opts: RunReviewOpt
       }
     };
     worker.onerror = (e) => { finish(); reject(new Error(e.message || 'knowledge review worker failed')); };
-    post({ type: 'start', job, source: { rootId: ports.source.rootId, title: ports.source.title }, hasJudgement: !!ports.judgement, hashesAreContentHash: typeof ports.source.hashOf === 'function' });
+    post({ type: 'start', job, source: { rootId: ports.source.rootId, title: ports.source.title }, hasJudgement: !!ports.judgement, hashesAreContentHash: isContentHashed(ports.source) });
   });
 }

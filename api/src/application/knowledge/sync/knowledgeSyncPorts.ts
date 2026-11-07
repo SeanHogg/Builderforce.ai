@@ -52,18 +52,32 @@ export interface KnowledgeSyncPort {
 
 /** A pack the caller got wrong or cannot be applied: the route answers `status` with `{ error, code }`. */
 export class KnowledgeSyncError extends Error {
-  constructor(readonly status: 400 | 403 | 409 | 413 | 422, readonly code: string, message: string, readonly detail?: Record<string, unknown>) {
+  constructor(readonly status: 400 | 403 | 409 | 413 | 422 | 503, readonly code: string, message: string, readonly detail?: Record<string, unknown>) {
     super(message);
     this.name = 'KnowledgeSyncError';
   }
+
+  /** Seconds a client should wait before retrying (a 503), as the route's `Retry-After`. */
+  get retryAfterSeconds(): number | undefined {
+    const s = this.detail?.['retryAfterSeconds'];
+    return typeof s === 'number' ? s : undefined;
+  }
 }
+
+/** How long a request waits for the project's sync lock before it answers a retryable 503. */
+export const SYNC_LOCK_TIMEOUT = '10s';
+/** The `Retry-After` of that 503. */
+export const SYNC_LOCK_RETRY_SECONDS = 5;
 
 /** Largest compressed request body (one part). */
 export const MAX_SYNC_BODY_BYTES = 8 * 1024 * 1024;
 /** Most parts a pack may be split into. */
 export const MAX_SYNC_PARTS = 8;
-/** The parts of one pack may add up to at most this (checked while they load, before they are decoded). */
-export const MAX_PACK_BYTES = 64 * 1024 * 1024;
+/**
+ * The parts of one pack may add up to at most this (checked while they load, before they are decoded). It matches the
+ * codec's decoded cap (24 MB): a compressed pack larger than what it may inflate to is never legitimate.
+ */
+export const MAX_PACK_BYTES = 24 * 1024 * 1024;
 /** Pairs one `have` request may ask about: it is ONE index query, so the bound is the request body, not the database. */
 export const MAX_HAVE_HASHES = 50_000;
 /** Parts and `syncId`s expire after this. */

@@ -11,8 +11,19 @@
  * not read for it; its hash is taken from its metadata instead.
  */
 
-import { DEFAULT_MAX_FILE_BYTES, isBinaryPath, sha256Hex } from '@seanhogg/builderforce-memory/knowledge';
+import { DEFAULT_MAX_FILE_BYTES, isBinaryPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import { rootIdFor } from '@builderforce/agent-tools/knowledge';
+
+/**
+ * A `DirectorySource` that DECLARES its `list()` hashes are `contentHash` of the text `read()` returns (upload, File System
+ * Access and the in-memory VFS; never a Cloud Drive's metadata hash). `hashOf` alone proves nothing about what `list()` hashed,
+ * so the review worker trusts only this declared kind.
+ */
+export type ContentHashedSource = DirectorySource & { readonly hashKind: 'content' };
+
+/** Whether `source` declares content hashes (and can re-hash the text it read). */
+export const isContentHashed = (source: DirectorySource): boolean =>
+  (source as { hashKind?: unknown }).hashKind === 'content' && typeof source.hashOf === 'function';
 
 export { isSkippedPath, normalizePath, textDocument } from '@builderforce/agent-tools/knowledge';
 

@@ -4,8 +4,7 @@
  * in memory, so every listed file is hashed by content; `watch` feeds the Live lens.
  */
 
-import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
-import { byteLength, contentHash, isSkippedPath, normalizePath, textDocument } from '@builderforce/knowledge-browser';
+import { byteLength, contentHash, isSkippedPath, normalizePath, textDocument, type ContentHashedSource } from '@builderforce/knowledge-browser';
 
 /** The slice of `VirtualFileSystem` this adapter reads (structural, so tests need no runtime). */
 export interface VfsLike {
@@ -22,7 +21,7 @@ export interface VfsDirectorySourceOptions {
   under?: string;
 }
 
-export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsDirectorySourceOptions): DirectorySource {
+export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsDirectorySourceOptions): ContentHashedSource {
   const base = normalizePath(under).replace(/\/?$/, under ? '/' : '');
   /** root-relative → the VFS's own spelling of the path. */
   const real = new Map<string, string>();
@@ -36,6 +35,7 @@ export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsD
     rootId,
     title,
     // list() hashes every file with contentHash(text); the review re-hashes the text read() returns.
+    hashKind: 'content',
     hashOf: contentHash,
     async *list() {
       for (const vfsPath of fs.list()) {

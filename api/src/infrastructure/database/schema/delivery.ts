@@ -31,7 +31,6 @@ import {
   bigint,
   bigserial,
   boolean,
-  customType,
   date,
   index,
   integer,
@@ -75,6 +74,7 @@ import {
   projectStatusEnum,
   reportScheduleEnum,
   reportTypeEnum,
+  bytea,
   snapshots,
   sourceControlProviderEnum,
   specStatusEnum,
@@ -899,9 +899,6 @@ export const knowledgeSources = pgTable('knowledge_sources', {
   primaryKey({ columns: [t.tenantId, t.projectId, t.rootId, t.sourceId], name: 'pk_knowledge_sources' }),
   index('idx_knowledge_sources_hash').on(t.tenantId, t.projectId, t.hash),
 ]);
-
-/** Raw bytes (`bytea`): the pack-sync tables hold digests as bytes, and the ledger reads and writes them through SQL. */
-const bytea = customType<{ data: Uint8Array }>({ dataType: () => 'bytea' });
 
 // The leaf digests of the rows a root synced (migration 1301, PRD 41 A11 rule 4b): the ONLY input of the server's
 // manifest tree, written in the pack transaction. Never read from project_facts, which every root of a project shares.

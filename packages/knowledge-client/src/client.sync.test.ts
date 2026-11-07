@@ -45,6 +45,11 @@ describe('client.sync (PRD 41 A11)', () => {
     await expect(client.sync('r', { bytes: new Uint8Array([1]) })).rejects.toMatchObject({ status: 429, retryAfterMs: 2000 });
   });
 
+  it('keeps a 503 sync_busy Retry-After too, so the pump waits as long as the server asked', async () => {
+    const { client } = clientWith(() => reply('{"code":"sync_busy"}', 503, { 'retry-after': '5', 'content-type': 'application/json' }));
+    await expect(client.sync('r', { bytes: new Uint8Array([1]) })).rejects.toMatchObject({ status: 503, code: 'sync_busy', retryAfterMs: 5000 });
+  });
+
   it('reads the manifest: generation, root digest and bucket digests', async () => {
     const tree = manifestTree([{ key: 'f:a', digest: 'x' }]);
     const body = await encodePack({ rootId: 'r', baseGeneration: 4, targetDigest: tree.root, buckets: tree.buckets });

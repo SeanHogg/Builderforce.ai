@@ -29,7 +29,7 @@ describe('what rides the pack, and what does not', () => {
         expect(state.dirty).toBe(0);
     });
 
-    it('a note that cannot be written stays dirty and is reported, while the pack still lands', async () => {
+    it('a note the server refuses (4xx) is final: it leaves the dirty set and is reported, while the pack still lands', async () => {
         const w = world();
         await w.review(0, 2);
         await w.store.write({ scope, facts: [{ ...factOf('note:1', pathOf(0)), origin: 'human' as const }], relations: [] });
@@ -38,7 +38,22 @@ describe('what rides the pack, and what does not', () => {
         const state = await pump(w, client);
         expect(srv.s.files.size).toBe(2);
         expect(state.failed).toEqual([{ reason: 'knowledge API 400', status: 400 }]);
-        expect((await w.queue.snapshot()).keys).toEqual([factKey('note:1')]);
+        expect((await w.queue.snapshot()).keys).toEqual([]);   // retrying a refusal every cycle can never succeed
+        expect(state.dirty).toBe(0);
+    });
+
+    it('a note that fails transiently (5xx or a non-HTTP error) stays dirty for the next cycle, while the pack still lands', async () => {
+        const failures: Array<() => unknown> = [() => apiError(503), () => new Error('socket hang up')];
+        for (const fail of failures) {
+            const w = world();
+            await w.review(0, 2);
+            await w.store.write({ scope, facts: [{ ...factOf('note:1', pathOf(0)), origin: 'human' as const }], relations: [] });
+            const srv = fakeServer();
+            const client: ReplicaClient = { ...srv.client, writeRows: async () => { throw fail(); } };
+            await pump(w, client, { maxTransientStreak: 1, sleep: async () => undefined });
+            expect(srv.s.files.size).toBe(2);
+            expect((await w.queue.snapshot()).keys).toContain(factKey('note:1'));   // a 5xx pauses the pump before the pack settles, so the rest stays too
+        }
     });
 });
 

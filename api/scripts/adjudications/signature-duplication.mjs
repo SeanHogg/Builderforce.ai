@@ -71,6 +71,17 @@ export default {
       + 'sealing, staleness, refresh-token merging and revocation live once in '
       + '`application/integrations/oauthTokenVault.ts`, which all three connection services use.',
 
+  'knowledge_sync_buckets = knowledge_sync_leaves':
+    'the overlap is the scope columns plus a sha256 `bytea`, and the two tables hold different facts at different grains '
+      + '(PRD 41 §A11 rule M3). A LEAF row is one synced key of one root: (`leaf_key_hash`, `leaf_key`, `digest`, `bucket`), '
+      + 'which the server sends back as its manifest and which a tombstone deletes. A BUCKET row is the rollup digest of '
+      + 'every leaf in one of the 4,096 buckets of a root, so a pack recomputes only the buckets it touched instead of '
+      + 'rehashing a root of up to 200k leaves inside a 128 MB Worker. Holding both in one table needs a nullable '
+      + '`leaf_key` and `leaf_key_hash`, plus a discriminator, and breaks the primary key, because a bucket has no leaf key. '
+      + 'The bucket row IS derived data: a deliberate denormalisation with ONE writer (`recomputeBuckets` inside the '
+      + 'locked pack transaction, `fillBuckets` for the one-time lazy backfill), and it is checked against the full '
+      + 'recompute by `knowledgeLedger.pglite.test.ts`.',
+
   'project_manager_configs = tenant_manager_defaults':
     'the column NAMES match and their MEANINGS are opposite, which is the one case where merging on a shared signature destroys information. At the project tier each column is a VALUE; at the workspace tier the same name is a BOUND on that value, and the fold in `managerPolicy.ts` reads them differently on purpose. `enabled` is NOT NULL DEFAULT true on a project (a master switch) and a nullable KILL-SWITCH on the workspace, whose own docstring records why: project rows default to true, so last-tier-wins would let every existing row silently defeat the workspace switch. `allow_auto_merge`, `allow_unattended_ceremonies`, `allow_agent_reassignment` and `allow_auto_staff_lanes` are CEILINGS at the workspace tier and plain overrides at the project tier. `agent_reassign_idle_hours` and `agent_reassign_max_per_session` are folded MOST-RESTRICTIVE-WINS from the workspace (largest idle, smallest cap) and taken at face value from the project. `require_signoff_to_complete` is a workspace FLOOR and a project DECISION -- NOT NULL there specifically so the project states it outright instead of deferring. One table cannot hold a value and a bound on that value in one column; disambiguating by whether `project_id` is null is exactly the ambiguity that makes a merged settings table go wrong. The two rows are also different nouns beyond the policy: the project row NAMES the manager (`manager_ref`, `manager_type`) and carries the sweep\'s own runtime state (`last_run_at`, `last_sweep_decision`, `last_sweep_reason`, `last_sweep_at`), six columns that can never be non-null on a workspace row.',
 

@@ -22,6 +22,8 @@
  *                             without diffs; `extracted_missing`: resend with those bodies; at most 4 in a row.
  *   413 pack_too_large        the pack is cut in half (by files) and the rest stays dirty.
  *   422 / any other error     recorded in `failed`; the set is kept and the pump stops.
+ *   side rows (notes, agent facts)  a 4xx is final: the rows leave the set and stay in `failed`; a 5xx or network
+ *                             error keeps them dirty and ends this cycle (the next one retries).
  *
  * Before EVERY request the pump checks the set still belongs to its project (`projectId`) and waits out a
  * running review of the root (`idle`). `pumpReplica` never throws.
@@ -100,6 +102,8 @@ export interface PumpArgs {
     maxTransientStreak?: number;
     /** Compressed bytes per part (default 8 MB). */
     maxPartBytes?: number;
+    /** Compressed bytes one pack may total before it is cut by files (default {@link MAX_SYNC_PACK_BYTES}: the server's cap). */
+    maxPackBytes?: number;
     /** Names a multi-part pack. */
     newSyncId?(): string;
     /** Injected for tests. */
@@ -137,6 +141,13 @@ const codeOf = (error: unknown): string | undefined => {
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 /** Worth waiting for: rate limited, the server failing, or unreachable (the client reports that as status 0). */
 const transient = (status: number | undefined): boolean => status === 429 || status === 0 || (status !== undefined && status >= 500);
+
+/**
+ * The server's limit on one pack (`knowledgeSyncPorts.MAX_PACK_BYTES`): 24 MB of compressed parts in all (the codec's decoded
+ * cap), in at most 8 parts. The builder cuts a pack at 16 MB / 150,000 rows decoded (`replicaPack`), which deflates to well
+ * under it; this is the guard for the pack that does not.
+ */
+export const MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 /** Thrown inside a cycle when the pump must stop (aborted, paused): unwinds to the loop. */
 class Stop extends Error {}
@@ -199,6 +210,8 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
     let conflicts = 0, bodyConflicts = 0, noDiff = false, maxFiles: number | undefined, force: Set<string> | undefined, lastFiles = 0;
     let owned: Set<string> | undefined;
     let hadFailure = false;
+    /** A side write failed for a reason worth retrying: its rows stay dirty, and the NEXT cycle (not this loop) tries them again. */
+    let retryNextCycle = false;
     try {
         await emit();
         while (!signal.aborted) {
@@ -238,6 +251,9 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 });
                 lastFiles = built.files;
                 const parts = splitParts(built.bytes, args.maxPartBytes ?? MAX_PART_BYTES);
+                // What the server accepts: parts adding up to MAX_SYNC_PACK_BYTES (so at most 3 of the 8 MB parts, under its cap of 8).
+                // A pack past it is cut in half by files BEFORE it is sent, the same way the server's 413 would have made it.
+                if (built.bytes.length > (args.maxPackBytes ?? MAX_SYNC_PACK_BYTES) && lastFiles > 1) { maxFiles = Math.floor(lastFiles / 2); continue; }
                 const syncId = parts.length > 1 ? (args.newSyncId?.() ?? newId()) : undefined;
                 let ack: Awaited<ReturnType<ReplicaClient['sync']>> | undefined;
                 for (let i = 0; i < parts.length; i++) {
@@ -266,6 +282,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                         if (!(status !== undefined && status >= 400 && status < 500)) {
                             const unsent = new Set(side.keys);
                             sentKeys = sentKeys.filter((k) => !unsent.has(k));
+                            retryNextCycle = true;
                         }
                     }
                 }
@@ -280,6 +297,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 state.lastSyncAt = new Date(now()).toISOString();
                 conflicts = 0; bodyConflicts = 0; noDiff = false; force = undefined; owned = undefined;
                 delete state.parts;
+                if (retryNextCycle) break;
             } catch (error) {
                 if (error instanceof Stop) break;
                 const status = statusOf(error), code = codeOf(error);

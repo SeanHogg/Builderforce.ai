@@ -14,9 +14,9 @@
  */
 
 import { isVcsMetadataName, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
-import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import {
   byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleContentHash, textDocument,
+  type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -72,7 +72,7 @@ export function createFsAccessDirectorySource(
   handle: FsDirectoryHandleLike,
   host: string,
   limits = FS_WALK_LIMITS,
-): DirectorySource & { skippedFolders(): SkippedFolder[] } {
+): ContentHashedSource & { skippedFolders(): SkippedFolder[] } {
   const rootId = hostRootId(host, 'folder', handle.name);
   const files = new Map<string, FsFileHandleLike>();
   const skipped: SkippedFolder[] = [];
@@ -114,6 +114,7 @@ export function createFsAccessDirectorySource(
     title: handle.name,
     skippedFolders: () => [...skipped],
     // list() hashes a text file with subtleContentHash(file.text()), equal to contentHash of the same text.
+    hashKind: 'content',
     hashOf: contentHash,
     async *list() {
       await walk();

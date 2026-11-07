@@ -124,9 +124,12 @@ export function r2KnowledgeSync(
     },
 
     async clearRoot(rootId) {
-      await ledger.leaves.clear(rootId);
-      await ledger.buckets.clear(rootId);
-      await ledger.roots.clear(rootId);
+      // One transaction under the project's sync lock: a pack of this root can neither interleave nor see a half-cleared root.
+      await ledger.exclusive(async (locked) => {
+        await locked.leaves.clear(rootId);
+        await locked.buckets.clear(rootId);
+        await locked.roots.clear(rootId);
+      });
       if (env.UPLOADS) await env.UPLOADS.delete(legacyStateKey(rootId));
     },
   };

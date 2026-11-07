@@ -14,7 +14,7 @@
  * is reached over the days instead of the same first 200 every time.
  */
 import { sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import { bundlePrefix } from './knowledgeBundles';
@@ -46,6 +46,24 @@ async function readCursor(bucket: R2Bucket): Promise<Cursor> {
   return { tenantId: 0, projectId: 0 };
 }
 
+/**
+ * Deletes the project's old, unreferenced index rows under the project's SYNC LOCK, in one transaction. A pack verifies
+ * the bodies it skipped under the same lock and writes its source rows before releasing it, so a row the pack counted on
+ * cannot vanish behind it: the sweep waits, and then sees the pack's sources.
+ */
+export async function dropOldIndexRows(db: Db, tenantId: number, projectId: number): Promise<number> {
+  return inTransaction(db, async (tx) => {
+    const handle = tx as unknown as Db;
+    await drizzleLedger(handle, tenantId, projectId).lock();
+    const gone = await handle.execute(sql`
+      DELETE FROM knowledge_extracted_index i
+      WHERE i.tenant_id = ${tenantId} AND i.project_id = ${projectId}
+        AND i.created_at < now() - make_interval(days => ${INDEX_ROW_MAX_AGE_DAYS})
+        AND NOT EXISTS (SELECT 1 FROM knowledge_sources k WHERE k.tenant_id = i.tenant_id AND k.project_id = i.project_id AND k.hash = i.hash)`);
+    return (gone as unknown as { rowCount?: number }).rowCount ?? 0;
+  });
+}
+
 async function sweepTenantBundles(bucket: R2Bucket, db: Db, tenantId: number, now: number, minAgeMs: number): Promise<number> {
   let removed = 0;
   let cursor: string | undefined;
@@ -57,13 +75,14 @@ async function sweepTenantBundles(bucket: R2Bucket, db: Db, tenantId: number, no
         SELECT DISTINCT bundle_key FROM knowledge_extracted_index
         WHERE tenant_id = ${tenantId} AND bundle_key IN (SELECT jsonb_array_elements_text(${JSON.stringify(old)}::jsonb))`));
       const keep = new Set(referenced.map((r) => r.bundle_key));
-      const doomed: string[] = [];
       for (const key of old.filter((k) => !keep.has(k))) {
-        // Just before the delete: a retried pack re-puts the same key, which makes the object young again.
+        // Each bundle is deleted right after its OWN check, so a retried pack that re-puts the key (making it young again)
+        // between a batch of checks and a batch delete is not lost.
         const head = await bucket.head(key);
-        if (head && now - head.uploaded.getTime() > minAgeMs) doomed.push(key);
+        if (!head || now - head.uploaded.getTime() <= minAgeMs) continue;
+        await bucket.delete(key);
+        removed += 1;
       }
-      if (doomed.length > 0) { await bucket.delete(doomed); removed += doomed.length; }
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
@@ -116,12 +135,7 @@ export async function sweepKnowledgeStorage(env: Pick<Env, 'UPLOADS'>, db: Db, n
     const scope = { tenantId: s.tenant_id, projectId: s.project_id };
     await sync.sweepStaged().catch(reportedFallback(undefined, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'sweepStaged', context: scope }));
     await sweepRemovedSources(db, sync, s.tenant_id, s.project_id).catch(reportedFallback(undefined, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'sweepRemovedSources', context: scope }));
-    const gone = await db.execute(sql`
-      DELETE FROM knowledge_extracted_index i
-      WHERE i.tenant_id = ${s.tenant_id} AND i.project_id = ${s.project_id}
-        AND i.created_at < now() - make_interval(days => ${INDEX_ROW_MAX_AGE_DAYS})
-        AND NOT EXISTS (SELECT 1 FROM knowledge_sources k WHERE k.tenant_id = i.tenant_id AND k.project_id = i.project_id AND k.hash = i.hash)`);
-    result.indexRowsRemoved += (gone as unknown as { rowCount?: number }).rowCount ?? 0;
+    result.indexRowsRemoved += await dropOldIndexRows(db, s.tenant_id, s.project_id).catch(reportedFallback(0, { source: 'application/knowledge/knowledgeSweep.ts', operation: 'dropOldIndexRows', context: scope }));
     result.projects += 1;
   }
   for (const tenantId of tenants) {
