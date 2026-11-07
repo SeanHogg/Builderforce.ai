@@ -89,6 +89,9 @@ const MAX_PAYLOAD_CHARS = 4_000;
  * the report survives. See `transcriptBudget.ts`.
  */
 const MAX_TOTAL_PAYLOAD_CHARS = 34_000;
+// NOTE: 34,000 is only the UPPER bound of the timeline pool. The pool actually used is
+// min(34,000, max(MIN_TIMELINE_BUDGET_CHARS, 48,000 − fixed sections − nodes × 120)), so
+// a big header/JSON shrinks the timeline instead of the report overflowing the paste limit.
 
 /** Smallest timeline budget, however large the fixed sections are — the hard cut backs it. */
 const MIN_TIMELINE_BUDGET_CHARS = 6_000;

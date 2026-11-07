@@ -461,7 +461,7 @@ export { createComposingActivity, toolCallArgBytes, utf8ByteLength } from './com
 export type { ComposingActivity, ComposingSink, ComposingOptions } from './composingActivity';
 
 // Size budget for a copied triage report, so its END survives pasting.
-export { createPayloadBudget, cutMiddleToFit, PASTE_SAFE_REPORT_CHARS } from './transcriptBudget';
+export { createPayloadBudget, cutMiddleToFit, truncateMiddle, PASTE_SAFE_REPORT_CHARS } from './transcriptBudget';
 
 // Did the run's change actually SHIP? The evidence a run holds first-hand when it
 // pushed straight to the base branch — the case no merge webhook can ever see.

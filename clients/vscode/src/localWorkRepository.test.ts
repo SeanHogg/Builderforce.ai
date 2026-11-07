@@ -198,4 +198,44 @@ describe("localWorkRepository", () => {
     expect((await store.export()).records).toEqual([]);
     expect((await store.export()).events).toEqual([]);
   });
+
+  it("accepts a decimal project id as a server reference without a local project", async () => {
+    const { store, repo } = harness();
+    const ticket = await repo.createTicket({ projectId: "11", title: "On the server project" });
+    expect(ticket.payload).toMatchObject({ projectId: "11", title: "On the server project" });
+    expect(ticket.destination).toEqual(UNBOUND_DESTINATION);
+    // Nothing local to wait for: the server resolves the reference itself.
+    const create = (await store.export()).events.find((event) => event.clientEntityId === ticket.id);
+    expect(create?.dependsOn).toEqual([]);
+    // A UUID is not a server reference: it must be a live local project.
+    await expect(
+      repo.createTicket({ projectId: "00000000-0000-4000-8000-0000000000ff", title: "Orphan" }),
+    ).rejects.toMatchObject({ code: "project_not_found" });
+  });
+
+  it("takes a decimal parent as a server task id and still requires a local parent to exist", async () => {
+    const { repo } = harness();
+    const project = await repo.createProject({ name: "Board" });
+    const child = await repo.createTicket({ projectId: project.id, title: "Child", parentTicketId: "42" });
+    expect(child.payload.parentTicketId).toBe("42");
+    await expect(
+      repo.createTicket({ projectId: project.id, title: "Lost", parentTicketId: "00000000-0000-4000-8000-0000000000ee" }),
+    ).rejects.toMatchObject({ code: "ticket_not_found" });
+  });
+
+  it("persists taskType and the creating chat, and an old record without them still reads", async () => {
+    const { repo } = harness();
+    const project = await repo.createProject({ name: "Board" });
+    const epic = await repo.createTicket({
+      projectId: project.id,
+      title: "Program",
+      taskType: "epic",
+      chatClientId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(epic.payload).toMatchObject({ taskType: "epic", chatClientId: "11111111-1111-4111-8111-111111111111" });
+    const plain = await repo.createTicket({ projectId: project.id, title: "Plain" });
+    expect(plain.payload).not.toHaveProperty("taskType");
+    expect(plain.payload).not.toHaveProperty("chatClientId");
+    expect((await repo.getTicket(plain.id)).payload.title).toBe("Plain");
+  });
 });

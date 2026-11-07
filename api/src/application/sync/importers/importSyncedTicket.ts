@@ -14,6 +14,9 @@
 
 import { and, eq } from 'drizzle-orm';
 import { CLIENT_REPORTED_EVIDENCE } from '../../../domain/sync/occurredAtGate';
+import { isJournalEventId } from '../../../domain/sync/syncProtocol';
+import { bumpChatTicketLinkCaches, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
+import { ticketKindForTaskType } from '../../brain/chatTicketTypes';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import type { Tx } from '../../../infrastructure/database/connection';
 import { tasks } from '../../../infrastructure/database/schema';
@@ -24,7 +27,9 @@ import {
   appliedNew,
   conflict,
   insertedId,
+  mappedChat,
   mutateGate,
+  pending,
   preludeRejection,
   rejected,
   sameCanonical,
@@ -34,6 +39,9 @@ import {
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 type TicketPriority = (typeof PRIORITIES)[number];
+/** The `task_type` values a device may create (the planning tiers a chat can be tied to). */
+const TASK_TYPES = ['task', 'epic', 'gap'] as const;
+type TicketTaskType = (typeof TASK_TYPES)[number];
 
 export const TICKET_ENTITY_TYPES = ['ticket'] as const;
 
@@ -46,6 +54,14 @@ interface TicketPayload {
   parentTicketId?: string;
   archived: boolean;
   assignedUserId?: string;
+  /** Absent ⇒ 'task'. */
+  taskType: TicketTaskType;
+  /** The device's chat (client UUID) the ticket was created in; the server links it 'created'. */
+  chatClientId?: string;
+}
+
+function isTaskType(value: string): value is TicketTaskType {
+  return (TASK_TYPES as readonly string[]).includes(value);
 }
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; detail: string };
@@ -77,9 +93,17 @@ function readTicket(payload: unknown, fallbackStatus: string | null): Parsed<Tic
   if (raw.assignedUserId !== undefined && (typeof raw.assignedUserId !== 'string' || raw.assignedUserId.length === 0 || raw.assignedUserId.length > 36)) {
     return { ok: false, detail: 'ticket_assignee_invalid' };
   }
+  let taskType: TicketTaskType = 'task';
+  if (raw.taskType !== undefined) {
+    if (typeof raw.taskType !== 'string' || !isTaskType(raw.taskType)) return { ok: false, detail: 'ticket_task_type_invalid' };
+    taskType = raw.taskType;
+  }
+  if (raw.chatClientId !== undefined && !isJournalEventId(raw.chatClientId)) return { ok: false, detail: 'ticket_chat_invalid' };
   return {
     ok: true,
     value: {
+      taskType,
+      ...(typeof raw.chatClientId === 'string' ? { chatClientId: raw.chatClientId } : {}),
       projectId: raw.projectId,
       title,
       description: typeof raw.description === 'string' ? raw.description : undefined,
@@ -111,6 +135,10 @@ function canonical(
     ...(parentServerId !== null ? { parentTicketId: String(parentServerId) } : {}),
     archived: payload.archived,
     ...(payload.assignedUserId !== undefined ? { assignedUserId: payload.assignedUserId } : {}),
+    // Only when they say something: a plain task from before these fields existed keeps
+    // the canonical form (and hash) it was mapped under, so its replay is not a conflict.
+    ...(payload.taskType !== 'task' ? { taskType: payload.taskType } : {}),
+    ...(payload.chatClientId !== undefined ? { chatClientId: payload.chatClientId } : {}),
   };
 }
 
@@ -138,6 +166,7 @@ async function resolveRefs(
 async function createTicket(
   event: SyncEventInput,
   ctx: SyncImportContext,
+  stores: SyncStoreSet,
   tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
@@ -152,24 +181,48 @@ async function createTicket(
     if (sameCanonical(mapping, stored)) return appliedExisting(mapping, stored);
     return conflict(mapping, 'entity_already_imported');
   }
+  // The chat the ticket was created in, resolved BEFORE the write: an unmapped chat holds the
+  // event (`dependency_pending`, nothing written) rather than dropping the link.
+  let chatId: number | null = null;
+  if (payload.chatClientId !== undefined) {
+    const chat = await mappedChat(stores, ctx, payload.chatClientId);
+    if (chat.kind === 'unmapped') return pending('ticket_chat_pending');
+    if (chat.kind === 'foreign') return rejected('ticket_chat_not_owned');
+    chatId = chat.chatId;
+  }
   try {
-    const rows = await tx.transaction((savepoint) => savepoint.insert(tasks).values({
-      projectId: refs.projectServerId,
-      tenantId: ctx.auth.tenantId,
-      key: taskKey(event.clientEntityId),
-      title: payload.title,
-      description: payload.description ?? null,
-      status: payload.status,
-      priority: payload.priority,
-      parentTaskId: refs.parentServerId,
-      assignedUserId: payload.assignedUserId ?? null,
-      archived: payload.archived,
-      source: CLIENT_REPORTED_EVIDENCE,
-      taskType: 'task',
-      updatedAt: ctx.now,
-    }).returning({ id: tasks.id }));
-    const id = insertedId(rows);
+    // The row and its 'created' link commit or roll back together (one savepoint).
+    const id = await tx.transaction(async (savepoint) => {
+      const rows = await savepoint.insert(tasks).values({
+        projectId: refs.projectServerId,
+        tenantId: ctx.auth.tenantId,
+        key: taskKey(event.clientEntityId),
+        title: payload.title,
+        description: payload.description ?? null,
+        status: payload.status,
+        priority: payload.priority,
+        parentTaskId: refs.parentServerId,
+        assignedUserId: payload.assignedUserId ?? null,
+        archived: payload.archived,
+        source: CLIENT_REPORTED_EVIDENCE,
+        taskType: payload.taskType,
+        updatedAt: ctx.now,
+      }).returning({ id: tasks.id });
+      const inserted = insertedId(rows);
+      if (inserted !== null && chatId !== null) {
+        await upsertChatTicketLink(savepoint, {
+          tenantId: ctx.auth.tenantId,
+          chatId,
+          kind: ticketKindForTaskType(payload.taskType),
+          ref: String(inserted),
+          linkType: 'created',
+          createdBy: ctx.auth.userId,
+        });
+      }
+      return inserted;
+    });
     if (id === null) return rejected('ticket_insert_failed');
+    if (chatId !== null) await bumpChatTicketLinkCaches(ctx.auth.tenantId, chatId);
     return appliedNew(String(id), 1, ctx.destinationKey, stored);
   } catch (error) {
     return writeFailure(error, 'createTicket');
@@ -239,8 +292,9 @@ async function deleteTicket(
 
 /**
  * Apply one already-validated ticket mutation through the unit-of-work `tx`.
- * The row is a historical fact: `source` is client-reported, `taskType` stays
- * `task`, and no agent column is set.
+ * The row is a historical fact: `source` is client-reported, `taskType` is the
+ * device's (`task` | `epic` | `gap`, default `task`), and no agent column is set.
+ * A ticket that names its chat (`chatClientId`) is linked to it as 'created'.
  */
 export async function importSyncedTicket(
   event: SyncEventInput,
@@ -254,6 +308,6 @@ export async function importSyncedTicket(
   const mapping = await stores.findMapping(ctx.auth.tenantId, event.entityType, event.clientEntityId);
   if (event.operation === 'delete') return deleteTicket(event, ctx, tx, mapping);
   if (event.operation === 'update') return updateTicket(event, ctx, tx, mapping);
-  if (event.operation === 'create' || event.operation === 'import') return createTicket(event, ctx, tx, mapping);
+  if (event.operation === 'create' || event.operation === 'import') return createTicket(event, ctx, stores, tx, mapping);
   return rejected('operation_unsupported');
 }

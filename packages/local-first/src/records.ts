@@ -134,15 +134,30 @@ export interface ProjectValue {
   status?: string;
 }
 
+/** The planning tiers a device can create (the server's `task_type`); absent ⇒ `task`. */
+export type TicketTaskType = 'task' | 'epic' | 'gap';
+
 export interface TicketValue {
+  /**
+   * The local project's client id — or, when the project has no local mirror, a DECIMAL
+   * server project id (a server reference the sync importer resolves as the tenant's own).
+   */
   projectId: ClientEntityId;
   title: string;
   description?: string;
   status: string;
   priority?: string;
+  /** A local ticket's client id, or a DECIMAL server task id (same rule as `projectId`). */
   parentTicketId?: ClientEntityId;
   archived?: boolean;
   assignedUserId?: string;
+  /** `task` | `epic` | `gap`. Old records omit it and read as `task`. */
+  taskType?: TicketTaskType;
+  /**
+   * The client id of the chat the ticket was created in. Sync imports the ticket AND links
+   * that chat to it as 'created', so the creator never needs a separate link call.
+   */
+  chatClientId?: ClientEntityId;
 }
 
 /**

@@ -18,6 +18,7 @@ const LOCAL: readonly LocalDomainToolName[] = [
   'ticket-update',
   'ticket-move',
   'ticket-archive',
+  'ticket-delete',
   'memory-recall',
   'local-memory-recall',
   'audit-finding',

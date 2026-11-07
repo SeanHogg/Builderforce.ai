@@ -357,6 +357,108 @@ describe('importSyncedTicket', () => {
   });
 });
 
+describe('importSyncedTicket — task type and the chat it was created in', () => {
+  const CHAT = '22222222-2222-4222-8222-222222222222';
+  const base = { projectId: '9', title: 'Phase 1', status: 'backlog' };
+  /** No ticket mapping yet; the chat maps to server chat 55 when `chatMapped`. */
+  const book = (chatMapped: boolean) => ({
+    ...stores(),
+    findMapping: async (_tenant: number, type: string) => (type === 'chat' && chatMapped ? mapping({ serverId: '55' }) : null),
+  });
+
+  it('writes the epic task type and links the chat as created, in the same savepoint', async () => {
+    const db = dbOf([[{ id: 15 }], [], [{ id: 1 }]]);
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, taskType: 'epic', chatClientId: CHAT } }),
+      ctx(),
+      book(true),
+      db,
+    );
+    expect(outcome.status).toBe('applied');
+    expect(db.calls.map((call) => call.kind)).toEqual(['insert', 'select', 'insert']);
+    expect(db.calls[0]?.payload).toMatchObject({ taskType: 'epic' });
+    expect(db.calls[2]?.payload).toMatchObject({
+      tenantId: 7,
+      chatId: 55,
+      ticketKind: 'epic',
+      ticketRef: '15',
+      linkType: 'created',
+      createdBy: 'user-1',
+    });
+    if (outcome.status === 'applied') expect(outcome.payload).toMatchObject({ taskType: 'epic', chatClientId: CHAT });
+  });
+
+  it('defaults to a plain task with no link and keeps its canonical form unchanged', async () => {
+    const db = dbOf([[{ id: 16 }]]);
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: base }),
+      ctx(),
+      stores(),
+      db,
+    );
+    expect(db.calls.map((call) => call.kind)).toEqual(['insert']);
+    expect(db.calls[0]?.payload).toMatchObject({ taskType: 'task' });
+    expect(outcome.status === 'applied' && outcome.payload).not.toHaveProperty('taskType');
+  });
+
+  it('does not link a second time when the same ticket is pushed again', async () => {
+    const payload = { ...base, taskType: 'epic', chatClientId: CHAT };
+    const first = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload }),
+      ctx(),
+      book(true),
+      dbOf([[{ id: 15 }], [], [{ id: 1 }]]),
+    );
+    expect(first.status).toBe('applied');
+    if (first.status !== 'applied') return;
+    const replay = dbOf();
+    const again = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload }),
+      ctx(),
+      stores(mapping({ serverId: '15', serverVersion: 1, payloadHash: first.payloadHash })),
+      replay,
+    );
+    expect(again.status).toBe('applied');
+    expect(replay.calls).toHaveLength(0);
+  });
+
+  it('holds the event as dependency_pending while the chat is unmapped, writing nothing', async () => {
+    const db = dbOf();
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
+      ctx(),
+      book(false),
+      db,
+    );
+    expect(outcome).toEqual({ status: 'pending', detail: 'ticket_chat_pending' });
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('rejects a chat that is not the caller\'s own, an unknown task type and a malformed chat id', async () => {
+    const foreign = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: CHAT } }),
+      ctx({ resolveOwnChatId: async () => null }),
+      book(true),
+      dbOf(),
+    );
+    expect(foreign).toEqual({ status: 'rejected', detail: 'ticket_chat_not_owned' });
+    const type = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, taskType: 'portfolio' } }),
+      ctx(),
+      stores(),
+      dbOf(),
+    );
+    expect(type).toEqual({ status: 'rejected', detail: 'ticket_task_type_invalid' });
+    const badChat = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload: { ...base, chatClientId: 'not-a-uuid' } }),
+      ctx(),
+      stores(),
+      dbOf(),
+    );
+    expect(badChat).toEqual({ status: 'rejected', detail: 'ticket_chat_invalid' });
+  });
+});
+
 describe('importMirrorRecord', () => {
   it('refuses ticket and project before any mapping read', async () => {
     const book = stores();

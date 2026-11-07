@@ -1166,6 +1166,33 @@ function newLocalRecord(input) {
   };
 }
 
+// ../packages/local-first/src/domainToolClass.ts
+var LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([
+  "project-create",
+  "project-update",
+  "project-move",
+  "project-archive",
+  "ticket-create",
+  "ticket-update",
+  "ticket-move",
+  "ticket-archive",
+  "ticket-delete",
+  "memory-recall",
+  "local-memory-recall",
+  "audit-finding",
+  "local-audit-finding"
+]);
+var CONNECTED_ONLY_DOMAIN_TOOL_NAMES = Object.freeze([
+  "cloud-execution",
+  "meeting-join",
+  "remote-session-read"
+]);
+var LOCAL = new Set(LOCAL_DOMAIN_TOOL_NAMES);
+var CONNECTED = new Set(CONNECTED_ONLY_DOMAIN_TOOL_NAMES);
+var LOCAL_CLASS = Object.freeze({ mode: "local" });
+var CONNECTED_CLASS = Object.freeze({ mode: "connected-only" });
+var UNKNOWN_CLASS = Object.freeze({ mode: "unknown" });
+
 // ../packages/local-first/src/journalCodec.ts
 var MAGIC_BYTES = 5;
 var JOURNAL_HEADER_BYTES = MAGIC_BYTES + 8;
@@ -5483,10 +5510,10 @@ function labelProbabilities(logprobs, labels) {
 var DEFAULT_GATE_BUDGET_MS = 300;
 var LLM_ROUTE_SHOWN = 3;
 var clock = () => typeof performance !== "undefined" ? performance.now() : Date.now();
-function slashHit(request, slash) {
-  if (!slash) return false;
+function slashHit(request, slash2) {
+  if (!slash2) return false;
   const head = request.trimStart().split(/\s/, 1)[0] ?? "";
-  return head.toLowerCase() === slash.toLowerCase();
+  return head.toLowerCase() === slash2.toLowerCase();
 }
 function exactHit(request, action) {
   return slashHit(request, action.slash) || (action.patterns ?? []).some((re) => {
@@ -8942,8 +8969,8 @@ import { hashText } from "@seanhogg/builderforce-memory/ingest";
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 import { mediaTypeOfPath, sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
 var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
-function isBuilderforceState(rel) {
-  const path2 = rel.replace(/\\/g, "/");
+function isBuilderforceState(rel2) {
+  const path2 = rel2.replace(/\\/g, "/");
   return path2.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path2);
 }
 
@@ -10260,7 +10287,7 @@ import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef2 } from 
 import {
   DEFAULT_REVIEW_MODEL_CALLS,
   planDetail,
-  reviewDirectory,
+  reviewDirectory as reviewDirectory2,
   srcRef as srcRef4
 } from "@seanhogg/builderforce-memory/knowledge";
 
@@ -10291,6 +10318,27 @@ import {
   knownKeysOfEntities,
   sha256Hex as sha256Hex3,
   srcRef as srcRef3
+} from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
+import { hashText as hashText5 } from "@seanhogg/builderforce-memory/ingest";
+
+// ../packages/agent-tools/src/knowledge/graphIgnore.ts
+import { ignoreMatcher, ignoreSourcesOf } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
+var MAX_GRAPH_FILE_BYTES = 256 * 1024;
+var FAILED_RETAIN_MS = 2 * 6e4;
+var cache = createShaCache({
+  keep: (held) => held.retainMs === 0 ? false : held.retainMs ?? true
+});
+
+// ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
+import {
+  orderForJudging,
+  pathOfRef,
+  refreshPlan,
+  reviewDirectory
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
@@ -10334,23 +10382,44 @@ async function judgeWith(ask2, req) {
   return result;
 }
 
-// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-import { hashText as hashText5 } from "@seanhogg/builderforce-memory/ingest";
-var MAX_GRAPH_FILE_BYTES = 256 * 1024;
-var FAILED_RETAIN_MS = 2 * 6e4;
-var cache = createShaCache({
-  keep: (held) => held.retainMs === 0 ? false : held.retainMs ?? true
-});
-
 // ../packages/agent-tools/src/knowledge/humanFact.ts
 import {
   factRef,
-  pathOfRef,
+  pathOfRef as pathOfRef2,
   sha256Hex as sha256Hex4
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
 import { loadKnowledgeIndex, sha256Hex as sha256Hex5 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/replicaQueue.ts
+import { factLeafKey, fileLeafKey, relationLeafKey } from "@seanhogg/builderforce-memory/knowledge/pack";
+
+// ../packages/agent-tools/src/knowledge/replicatedStore.ts
+import { factDigest, relationDigest } from "@seanhogg/builderforce-memory/knowledge/pack";
+
+// ../packages/agent-tools/src/knowledge/replicaPump.ts
+import { MAX_PART_BYTES, splitParts } from "@seanhogg/builderforce-memory/knowledge/pack";
+
+// ../packages/agent-tools/src/knowledge/replicaPack.ts
+import {
+  bucketOf,
+  diffEntries,
+  encodePack,
+  jsonBytesOf,
+  rootDigestOf,
+  ZERO_DIGEST,
+  fileLeafKey as fileLeafKey2
+} from "@seanhogg/builderforce-memory/knowledge/pack";
+
+// ../packages/agent-tools/src/knowledge/replicaReconcile.ts
+import {
+  differingBuckets,
+  leafDelta,
+  manifestTree,
+  rootLeaves
+} from "@seanhogg/builderforce-memory/knowledge/pack";
+var EMPTY_ROOT = manifestTree([]).root;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
 import { filesManifestKey as filesManifestKey2, srcRef as srcRef5 } from "@seanhogg/builderforce-memory/knowledge";
@@ -10363,7 +10432,7 @@ import {
   canonicalJson as canonicalJson3,
   compareStr as compareStr7,
   factRef as factRef2,
-  pathOfRef as pathOfRef2
+  pathOfRef as pathOfRef4
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/packGraph.ts
@@ -12504,21 +12573,21 @@ function walk(value, schema, path2, errs, max) {
     if (Array.isArray(schema.required)) {
       for (const field of schema.required) {
         if (typeof field === "string" && !(field in obj)) {
-          errs.push({ path: joinPath(path2, field), message: "required field missing" });
+          errs.push({ path: joinPath2(path2, field), message: "required field missing" });
           if (errs.length >= max) return;
         }
       }
     }
     if (schema.properties) {
       for (const [k, sub] of Object.entries(schema.properties)) {
-        if (k in obj && errs.length < max) walk(obj[k], sub, joinPath(path2, k), errs, max);
+        if (k in obj && errs.length < max) walk(obj[k], sub, joinPath2(path2, k), errs, max);
       }
     }
     if (schema.additionalProperties === false && schema.properties) {
       const known = new Set(Object.keys(schema.properties));
       for (const k of Object.keys(obj)) {
         if (!known.has(k)) {
-          errs.push({ path: joinPath(path2, k), message: "additional property not allowed" });
+          errs.push({ path: joinPath2(path2, k), message: "additional property not allowed" });
           if (errs.length >= max) return;
         }
       }
@@ -12526,7 +12595,7 @@ function walk(value, schema, path2, errs, max) {
       const known = new Set(schema.properties ? Object.keys(schema.properties) : []);
       for (const k of Object.keys(obj)) {
         if (!known.has(k) && errs.length < max) {
-          walk(obj[k], schema.additionalProperties, joinPath(path2, k), errs, max);
+          walk(obj[k], schema.additionalProperties, joinPath2(path2, k), errs, max);
         }
       }
     }
@@ -12572,7 +12641,7 @@ function describeType(value) {
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function joinPath(base, key) {
+function joinPath2(base, key) {
   if (base.length === 0) return key;
   return `${base}.${key}`;
 }
@@ -17964,7 +18033,7 @@ ${excerpt2}` : "Evidence: (none recorded \u2014 return [] rather than guess)"
 function kebab(raw) {
   return raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
 }
-function factKey(raw) {
+function factKey2(raw) {
   const body = kebab(raw.replace(/^learned:/i, "").replace(/^workspace:/i, ""));
   return body ? `${KEY_PREFIX}${body}` : "";
 }
@@ -17988,7 +18057,7 @@ function parseLearnedFacts(raw) {
     if (typeof row.kind !== "string" || !KINDS.has(row.kind)) continue;
     if (typeof row.key !== "string" || typeof row.content !== "string") continue;
     if (/^workspace:/i.test(row.key.trim())) continue;
-    const key = factKey(row.key);
+    const key = factKey2(row.key);
     const content = row.content.replace(/\s+/g, " ").trim();
     if (!key || content.length < MIN_FACT_CHARS || seen.has(key)) continue;
     seen.add(key);
@@ -24938,8 +25007,8 @@ var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/
 function commentOf(line2) {
   const t = line2.trim();
   if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
-  const slash = line2.indexOf("//");
-  if (slash > 0 && line2[slash - 1] !== ":") return line2.slice(slash);
+  const slash2 = line2.indexOf("//");
+  if (slash2 > 0 && line2[slash2 - 1] !== ":") return line2.slice(slash2);
   return null;
 }
 function markedLines(text2) {
@@ -29378,31 +29447,33 @@ function createPayloadBudget(opts) {
   const seen = /* @__PURE__ */ new Map();
   let ordinal = 0;
   return {
-    cap(payload, label) {
+    cap(payload, label, maxChars) {
       if (!payload) return payload;
+      const ceiling = maxChars != null && maxChars > 0 ? maxChars : opts.perPayload;
+      const floor = Math.min(minPayload, ceiling);
       ordinal += 1;
       const prior = seen.get(payload);
       if (prior) {
         deduped += 1;
         dedupedChars += payload.length;
-        return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${payload.length.toLocaleString()} chars. Repeated verbatim; not reprinted.)`;
+        return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
       }
       seen.set(payload, { ordinal, label });
-      const cap2 = Math.max(minPayload, Math.min(opts.perPayload, remaining));
+      const cap2 = Math.max(floor, Math.min(ceiling, remaining));
       if (payload.length <= cap2) {
         remaining -= payload.length;
         spent += payload.length;
         return payload;
       }
-      if (remaining < minPayload) {
+      if (remaining < floor) {
         trimmed += 1;
-        return `\u2026(${payload.length.toLocaleString()} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
+        return `\u2026(${formatCount(payload.length)} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
       }
       trimmed += 1;
       remaining -= cap2;
       spent += cap2;
       return `${payload.slice(0, cap2)}
-\u2026(+${(payload.length - cap2).toLocaleString()} chars truncated \u2014 full result is on the live timeline)`;
+\u2026(+${formatCount(payload.length - cap2)} chars truncated \u2014 full result is on the live timeline)`;
     },
     stats() {
       return { spent, trimmed, deduped, dedupedChars };
@@ -29419,6 +29490,67 @@ function createPayloadBudget(opts) {
       return `Note: this report is size-budgeted so its END survives pasting \u2014 ${parts.join("; ")}. Every turn, tool call and error is still present.`;
     }
   };
+}
+var PASTE_SAFE_REPORT_CHARS = 48e3;
+var PASTE_LIMIT_CHARS = 5e4;
+var formatCount = (n2) => n2.toLocaleString("en-US");
+function safePrefix(s, n2) {
+  let end = Math.max(0, Math.min(n2, s.length));
+  if (end > 0 && end < s.length) {
+    const c = s.charCodeAt(end - 1);
+    if (c >= 55296 && c <= 56319) end -= 1;
+  }
+  return s.slice(0, end);
+}
+function safeSuffix(s, n2) {
+  let start = Math.max(0, s.length - Math.max(0, n2));
+  if (start > 0 && start < s.length) {
+    const c = s.charCodeAt(start);
+    if (c >= 56320 && c <= 57343) start += 1;
+  }
+  return s.slice(start);
+}
+function truncateMiddle(text2, max) {
+  if (text2.length <= max) return text2;
+  const marker = `
+\u2026(${formatCount(text2.length)} chars omitted from the middle)\u2026
+`;
+  const room = Math.max(0, max - marker.length);
+  if (room === 0) return safePrefix(text2, max);
+  const head = safePrefix(text2, Math.ceil(room / 2));
+  const tail = safeSuffix(text2, Math.floor(room / 2));
+  const omitted = text2.length - head.length - tail.length;
+  return `${head}
+\u2026(${formatCount(omitted)} chars omitted from the middle)\u2026
+${tail}`;
+}
+function cutMiddleToFit(head, timeline, tail, ceiling) {
+  const join = (...parts) => parts.filter((s) => s.length > 0).join("\n");
+  const whole = join(head, timeline, tail);
+  if (whole.length <= ceiling) return whole;
+  const marker = (omitted2) => `\u2026(${formatCount(omitted2)} chars of the middle of the timeline omitted to keep this report under the ${formatCount(PASTE_LIMIT_CHARS)}-character paste limit)`;
+  const markerMax = marker(timeline.length).length;
+  const overhead = 2 + 2;
+  const room = ceiling - head.length - tail.length - markerMax - overhead;
+  if (room < 0) {
+    const headNote = "\u2026(diagnostics header truncated to keep this report within the paste limit)";
+    const headRoom = Math.max(0, ceiling - tail.length - marker(timeline.length).length - headNote.length - 3 - 2);
+    let h = safePrefix(head, headRoom);
+    const nl = h.lastIndexOf("\n");
+    if (nl > 0 && h.length < head.length) h = h.slice(0, nl);
+    const out = join(h, headNote, marker(timeline.length), tail);
+    return out.length <= ceiling ? out : safeSuffix(out, ceiling);
+  }
+  const front = Math.floor(room / 3);
+  const back = room - front;
+  let start = safePrefix(timeline, front);
+  const startNl = start.lastIndexOf("\n");
+  if (startNl > 0) start = start.slice(0, startNl);
+  let end = back > 0 ? safeSuffix(timeline, back) : "";
+  const endNl = end.indexOf("\n");
+  if (endNl >= 0 && endNl < end.length - 1) end = end.slice(endNl + 1);
+  const omitted = Math.max(0, timeline.length - start.length - end.length);
+  return join(head, join(start, marker(omitted), end), tail);
 }
 function ordinalWord(n2) {
   const rem100 = n2 % 100;
@@ -30153,6 +30285,7 @@ function formatChatSpend(spend) {
   const unpriced = s.unpricedTokens > 0 ? ` \xB7 ${s.unpricedTokens.toLocaleString("en-US")} tok unpriced` : "";
   return `- This chat's cost: platform ${usd2(s.platformUsd)} \xB7 your key ${usd2(s.yourKeyUsd)} \xB7 total ${usd2(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
 }
+var MAX_LISTED_LINKED_TICKETS = 10;
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface} (where this CONVERSATION runs; where each dispatched RUN ran is under Execution history)`);
@@ -30257,8 +30390,11 @@ function formatChatDiagnostics(d) {
   const tickets = d.tickets ?? [];
   if (tickets.length) {
     lines.push(`- Linked tickets (${tickets.length}):`);
-    for (const tk of tickets) {
+    for (const tk of tickets.slice(0, MAX_LISTED_LINKED_TICKETS)) {
       lines.push(`  - ${tk.kind} #${tk.ref}${tk.label ? ` "${tk.label}"` : ""}${tk.linkType || tk.status ? ` [${[tk.linkType, tk.status].filter(Boolean).join(", ")}]` : ""}`);
+    }
+    if (tickets.length > MAX_LISTED_LINKED_TICKETS) {
+      lines.push(`  - \u2026and ${tickets.length - MAX_LISTED_LINKED_TICKETS} more linked ticket(s)`);
     }
   } else {
     lines.push("- Linked tickets (0)");
@@ -30451,8 +30587,41 @@ function buildChatDiagnosticsReport(input) {
     staffing: events.length ? staffingSummaryInTrace(events) : null
   };
 }
+var REPORT_JSON_MAX_CHARS = 12e3;
+var JSON_ELISION_ORDER = [
+  "run.modelTurns",
+  "run.modelScores",
+  "chat.tickets",
+  "chat.runs",
+  "run.memoryAnswers",
+  "run.streamRetries"
+];
+function withoutPath(report, path2) {
+  const [outer, inner] = path2.split(".");
+  const parent = report[outer];
+  if (!parent || typeof parent !== "object" || !(inner in parent)) return null;
+  const copy = { ...parent };
+  delete copy[inner];
+  return { ...report, [outer]: copy };
+}
+function compactReportJson(report, maxChars = REPORT_JSON_MAX_CHARS) {
+  let json = JSON.stringify(report);
+  if (json.length <= maxChars) return json;
+  let current = report;
+  const elided = [];
+  for (const path2 of JSON_ELISION_ORDER) {
+    const next = withoutPath(current, path2);
+    if (!next) continue;
+    current = next;
+    elided.push(path2);
+    json = JSON.stringify({ ...current, _elided: elided });
+    if (json.length <= maxChars) return json;
+  }
+  const { schemaVersion, capturedAt, surface: surface2, likelyCause, running } = report;
+  return JSON.stringify({ schemaVersion, capturedAt, surface: surface2, likelyCause, running, _elided: ["*"] });
+}
 function formatChatDiagnosticsReportJson(report) {
-  return ["## Diagnostics (JSON)", "```json", JSON.stringify(report, null, 2), "```"];
+  return ["## Diagnostics (JSON)", "```json", compactReportJson(report), "```"];
 }
 
 // src/gatewayModels.ts
@@ -31365,6 +31534,7 @@ export {
   ON_DEVICE_TASK_ROUTES,
   PAGE_ENGINE_REPLY_TYPES,
   PAGE_ENGINE_REQUEST_TYPES,
+  PASTE_SAFE_REPORT_CHARS,
   PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM,
   PREVIEW_REVIEW_TOOL,
@@ -31491,6 +31661,7 @@ export {
   createPageEngineSet,
   createPayloadBudget,
   createRunUsageLedger,
+  cutMiddleToFit,
   declinesReview,
   declinesShipping,
   defaultInferenceMode,
@@ -31768,6 +31939,7 @@ export {
   transcriptSeedOf,
   transportRetryTrace,
   trimToolResult,
+  truncateMiddle,
   turnAffectBlock,
   turnInterruption,
   turnOptimizationDirective,

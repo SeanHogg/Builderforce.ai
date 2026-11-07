@@ -26,6 +26,7 @@ export const LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([
   'ticket-update',
   'ticket-move',
   'ticket-archive',
+  'ticket-delete',
   'memory-recall',
   'local-memory-recall',
   'audit-finding',
@@ -50,7 +51,8 @@ const LOCAL_CLASS: DomainToolClass = Object.freeze({ mode: 'local' });
 const CONNECTED_CLASS: DomainToolClass = Object.freeze({ mode: 'connected-only' });
 const UNKNOWN_CLASS: DomainToolClass = Object.freeze({ mode: 'unknown' });
 
-function normalize(name: string): string {
+/** The table's spelling of a tool name: trimmed, lower-cased, spaces/underscores as one hyphen. */
+export function normalizeDomainToolName(name: string): string {
   return name.trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/-+/g, '-');
 }
 
@@ -63,7 +65,7 @@ export function looksLikeServerMcpTool(name: string): boolean {
   if (typeof name !== 'string') return false;
   const raw = name.trim().toLowerCase();
   if (raw.includes('mcp')) return true;
-  return normalize(name).startsWith('builtin-');
+  return normalizeDomainToolName(name).startsWith('builtin-');
 }
 
 /**
@@ -74,7 +76,7 @@ export function looksLikeServerMcpTool(name: string): boolean {
 export function classifyDomainTool(name: string): DomainToolClass {
   if (typeof name !== 'string') return UNKNOWN_CLASS;
   if (looksLikeServerMcpTool(name)) return CONNECTED_CLASS;
-  const normalized = normalize(name);
+  const normalized = normalizeDomainToolName(name);
   if (normalized === '' || normalized === '-') return UNKNOWN_CLASS;
   if (LOCAL.has(normalized)) return LOCAL_CLASS;
   if (CONNECTED.has(normalized)) return CONNECTED_CLASS;

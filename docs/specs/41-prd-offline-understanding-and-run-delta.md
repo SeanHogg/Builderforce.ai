@@ -510,6 +510,26 @@ A review of 18,838 files queued 34,001 ops, and the queue itself is one JSON fil
    - **Have-check and body checks.** The `have` check and the body verification answer from the index with one query, never one object read per hash.
    - **The bound.** Object writes per sync are at most one per part, plus `sync.json`.
    - **Order and atomicity.** The bundle is written before the transaction commits. An orphan bundle left by a failed transaction is harmless (content-addressed) and is swept by age. The digest is checked inside the transaction, and a mismatch rolls it back.
+4b. **The server's manifest is what this root synced, not a re-read of the shared tables** (decided 2026-11-07, after review found that a project-wide re-read is not scoped to the root, is truncated at 5,000 facts, and is normalised by the fact writer, so digests never converge and a reconcile could delete another root's rows).
+   - **Leaves table.** An additive table `knowledge_sync_leaves (tenant_id, project_id, root_id, leaf_key, digest, PK(tenant_id, project_id, root_id, leaf_key))` holds the client-computed leaf digests. The pack transaction upserts and deletes it.
+   - **Where the tree comes from.** `GET/POST …/sync/manifest` and the in-transaction digest check build `manifestTree` from this table only, paged and unbounded. They never read `project_facts` or relations, and never use a display cap.
+   - **Generations.** An additive table `knowledge_sync_roots (tenant_id, project_id, root_id, generation, digest)` replaces `sync.json`.
+     - The transaction advances it with `UPDATE … SET generation = generation + 1 WHERE generation = $base RETURNING`. No row updated means `409 generation_mismatch`.
+     - A full pack (`baseGeneration = 0`) is accepted only when the root has no row.
+   - **Tombstones are limited to the root.**
+     - A tombstone is applied only to a key in this root's leaves.
+     - It always removes the leaf.
+     - It deletes the underlying fact or relation row only when no other root's leaves name that key, and the credential's author rule allows it.
+     - A tombstone for a key not in the root's leaves is refused with `422 not_owned`.
+   - **What the client sends.** The client sends only rows its credential may write. Today that is `origin: 'model'` rows; human and agent rows travel through their own write paths.
+   - **Bodies are merged.** A hash's stored body is the union by `sourceRef` of the prior body and the incoming one, so two roots that share content never evict each other.
+   - **Decoder budgets.** The decoder enforces cumulative budgets across the whole pack: total decoded string bytes and total rows, not per list. A pack has at most 8 parts, and part sizes are summed while loading, aborting past 64 MB.
+   - **Error answers.** Every refusal is a typed 4xx:
+     - `KnowledgeWriteError` maps to its status;
+     - hash and length validation, duplicates and malformed diffs give 422;
+     - an oversized analysis is checked before the transaction.
+
+     The pump treats 4xx as non-transient and gives up after a bounded streak of 5xx.
 5. **Retire the per-file uploads.** The pump's `putExtracted`, `writeRows` and `markStale` calls are removed. The `PUT …/extracted/:hash` route is deleted if nothing else calls it. Reads (`GET`, `bulk`) stay.
 6. **Visible.** The sync pill and the Run panel's replica row show:
    - the dirty-key count instead of the op count;

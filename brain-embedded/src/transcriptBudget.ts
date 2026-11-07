@@ -95,7 +95,7 @@ export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
       if (prior) {
         deduped += 1;
         dedupedChars += payload.length;
-        return `…(identical to the ${ordinalWord(prior.ordinal)} payload in this report — ${prior.label}, ${payload.length.toLocaleString()} chars. Repeated verbatim; not reprinted.)`;
+        return `…(identical to the ${ordinalWord(prior.ordinal)} payload in this report — ${prior.label}, ${formatCount(payload.length)} chars. Repeated verbatim; not reprinted.)`;
       }
       seen.set(payload, { ordinal, label });
 
@@ -110,13 +110,13 @@ export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
 
       if (remaining < floor) {
         trimmed += 1;
-        return `…(${payload.length.toLocaleString()} chars omitted — the report hit its size budget. The full result is on the live timeline.)`;
+        return `…(${formatCount(payload.length)} chars omitted — the report hit its size budget. The full result is on the live timeline.)`;
       }
 
       trimmed += 1;
       remaining -= cap;
       spent += cap;
-      return `${payload.slice(0, cap)}\n…(+${(payload.length - cap).toLocaleString()} chars truncated — full result is on the live timeline)`;
+      return `${payload.slice(0, cap)}\n…(+${formatCount(payload.length - cap)} chars truncated — full result is on the live timeline)`;
     },
 
     stats() {
@@ -144,34 +144,90 @@ export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
  */
 export const PASTE_SAFE_REPORT_CHARS = 48_000;
 
+/** The paste limit the report is defended against (named in the middle-cut marker). */
+export const PASTE_LIMIT_CHARS = 50_000;
+
+const formatCount = (n: number): string => n.toLocaleString('en-US');
+
+/** `s.slice(0, n)` that never leaves a lone high surrogate at the cut. */
+function safePrefix(s: string, n: number): string {
+  let end = Math.max(0, Math.min(n, s.length));
+  if (end > 0 && end < s.length) {
+    const c = s.charCodeAt(end - 1);
+    if (c >= 0xd800 && c <= 0xdbff) end -= 1;
+  }
+  return s.slice(0, end);
+}
+
+/** The last `n` characters of `s` that never start on a lone low surrogate. */
+function safeSuffix(s: string, n: number): string {
+  let start = Math.max(0, s.length - Math.max(0, n));
+  if (start > 0 && start < s.length) {
+    const c = s.charCodeAt(start);
+    if (c >= 0xdc00 && c <= 0xdfff) start += 1;
+  }
+  return s.slice(start);
+}
+
 /**
- * Hard guarantee behind the budget: join `head` + `timeline` + `tail` and, if the result
- * still exceeds `ceiling`, cut the MIDDLE of the timeline — keeping its start and (the
- * larger share of) its end — with one marker line. The head (diagnostics) and tail (last
- * error, budget note, JSON) are never cut; if they alone exceed the ceiling the whole
- * timeline is replaced by the marker. Cuts land on line boundaries where one exists.
+ * Bound one block of text to `max` characters by cutting its MIDDLE (head and tail kept,
+ * one marker between). Used for unbounded free text — a conversation error, a chat title.
+ */
+export function truncateMiddle(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const marker = `\n…(${formatCount(text.length)} chars omitted from the middle)…\n`;
+  const room = Math.max(0, max - marker.length);
+  if (room === 0) return safePrefix(text, max);
+  const head = safePrefix(text, Math.ceil(room / 2));
+  const tail = safeSuffix(text, Math.floor(room / 2));
+  const omitted = text.length - head.length - tail.length;
+  return `${head}\n…(${formatCount(omitted)} chars omitted from the middle)…\n${tail}`;
+}
+
+/**
+ * Last-resort guarantee behind the budget: join `head` + `timeline` + `tail` so that the
+ * result is ALWAYS at most `ceiling` characters. If it does not already fit, the MIDDLE of
+ * the timeline is cut — its start and (the larger share of) its end are kept — with one
+ * marker line. If head + tail + marker alone exceed the ceiling, the timeline is dropped
+ * entirely and the head is truncated from its END (its first lines — the verdict and
+ * diagnostics — survive); the tail (last turns' note, JSON) is kept whole. Cuts land on
+ * line boundaries where one exists and never split a surrogate pair.
  */
 export function cutMiddleToFit(head: string, timeline: string, tail: string, ceiling: number): string {
-  const join = (t: string): string => [head, t, tail].filter((s) => s.length > 0).join('\n');
-  const whole = join(timeline);
+  const join = (...parts: string[]): string => parts.filter((s) => s.length > 0).join('\n');
+  const whole = join(head, timeline, tail);
   if (whole.length <= ceiling) return whole;
 
   const marker = (omitted: number): string =>
-    `…(${omitted.toLocaleString()} chars of the middle of the timeline omitted to keep this report under the 50,000-character paste limit)`;
-  // Reserve room for the marker (its number can only be shorter than the full timeline's).
-  const room = Math.max(0, ceiling - (whole.length - timeline.length) - marker(timeline.length).length - 2);
+    `…(${formatCount(omitted)} chars of the middle of the timeline omitted to keep this report under the ${formatCount(PASTE_LIMIT_CHARS)}-character paste limit)`;
+  const markerMax = marker(timeline.length).length;
+
+  // Newlines between head / middle / tail, and inside the middle (start, marker, end).
+  const overhead = 2 + 2;
+  const room = ceiling - head.length - tail.length - markerMax - overhead;
+  if (room < 0) {
+    // Head + tail do not leave room even for a marker: truncate the head, keep the tail.
+    const headNote = '…(diagnostics header truncated to keep this report within the paste limit)';
+    const headRoom = Math.max(0, ceiling - tail.length - marker(timeline.length).length - headNote.length - 3 - 2);
+    let h = safePrefix(head, headRoom);
+    const nl = h.lastIndexOf('\n');
+    if (nl > 0 && h.length < head.length) h = h.slice(0, nl);
+    const out = join(h, headNote, marker(timeline.length), tail);
+    // Pathological: the tail alone is over the ceiling. Keep its END (the JSON block).
+    return out.length <= ceiling ? out : safeSuffix(out, ceiling);
+  }
+
   const front = Math.floor(room / 3);
   const back = room - front;
-
-  let start = timeline.slice(0, front);
+  let start = safePrefix(timeline, front);
   const startNl = start.lastIndexOf('\n');
   if (startNl > 0) start = start.slice(0, startNl);
-  let end = back > 0 ? timeline.slice(timeline.length - back) : '';
+  let end = back > 0 ? safeSuffix(timeline, back) : '';
   const endNl = end.indexOf('\n');
   if (endNl >= 0 && endNl < end.length - 1) end = end.slice(endNl + 1);
 
   const omitted = Math.max(0, timeline.length - start.length - end.length);
-  return join([start, marker(omitted), end].filter((s) => s.length > 0).join('\n'));
+  return join(head, join(start, marker(omitted), end), tail);
 }
 
 /** 1 → "1st", 2 → "2nd" … for a readable back reference. */

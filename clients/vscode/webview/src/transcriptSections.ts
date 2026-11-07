@@ -18,9 +18,15 @@ import {
   formatChatDiagnosticsReportJson,
   midRunNotice,
   formatSubagentDiagnostics,
+  truncateMiddle,
 } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { TranscriptInput } from './transcript';
+
+/** The conversation error is free text of unknown size; bound it so it cannot crowd the JSON out. */
+const MAX_ERROR_CHARS = 4_000;
+/** A chat title is user-authored; bound it in the header. */
+const MAX_TITLE_CHARS = 200;
 
 /** Title, chat/project provenance, chat diagnostics, run diagnostics, notices, flags. */
 export function buildHeadLines(input: TranscriptInput, events: BrainTraceEvent[]): string[] {
@@ -29,7 +35,7 @@ export function buildHeadLines(input: TranscriptInput, events: BrainTraceEvent[]
   // Chat + project provenance — a pasted transcript should say WHICH conversation
   // and project it came from, not just the turns.
   if (input.chatTitle || input.chatId != null) {
-    const title = input.chatTitle?.trim() || 'Untitled chat';
+    const title = truncateMiddle(input.chatTitle?.trim() ?? '', MAX_TITLE_CHARS) || 'Untitled chat';
     lines.push(`Chat: ${title}${input.chatId != null ? ` (#${input.chatId})` : ''}`);
   }
   lines.push(`Project: ${input.project ? `${input.project.name} (#${input.project.id})` : 'No project'}`);
@@ -85,7 +91,7 @@ export function buildHeadLines(input: TranscriptInput, events: BrainTraceEvent[]
 
 /** The conversation-error block, after the timeline. Empty when there is no error. */
 export function buildErrorLines(input: TranscriptInput): string[] {
-  return input.error ? ['### Conversation error', input.error, ''] : [];
+  return input.error ? ['### Conversation error', truncateMiddle(input.error, MAX_ERROR_CHARS), ''] : [];
 }
 
 /** The machine-readable JSON block, LAST. Empty when no report was supplied. */

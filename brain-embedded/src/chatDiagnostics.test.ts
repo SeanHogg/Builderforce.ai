@@ -53,6 +53,23 @@ const signals = (d: ChatDiagnosticsData) => {
   return i === -1 ? '' : text.slice(i);
 };
 
+describe('formatChatDiagnostics — linked ticket list cap', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ kind: 'task', ref: String(i), status: 'todo' }));
+
+  it('itemises at most 10 linked tickets, keeps the full count, and names the rest', () => {
+    const full = render(baseline({ tickets: many(25) }));
+    const out = full.split('### Signals')[0]!;
+    expect(out).toContain('Linked tickets (25):');
+    expect(out).toContain('task #9 ');
+    expect(out).not.toContain('task #10 ');
+    expect(out).toContain('  - …and 15 more linked ticket(s)');
+  });
+
+  it('prints no overflow line at or under the cap', () => {
+    expect(render(baseline({ tickets: many(10) }))).not.toContain('more linked ticket(s)');
+  });
+});
+
 describe('formatChatDiagnostics — learn version signal', () => {
   it('stays silent when the head moved AHEAD of the learn step — that is the queued learn landing', () => {
     // Observed: "reported v22 · head v23" flagged as a mismatch on a healthy chat. The

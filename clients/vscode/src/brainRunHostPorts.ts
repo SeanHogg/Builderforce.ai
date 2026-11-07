@@ -62,18 +62,6 @@ function workspaceRoot(): string {
 }
 
 /**
- * Explicit synchronize grant only. A missing or throwing policy is a denial,
- * so a domain tool writes the local store instead of calling the platform.
- */
-function domainToolPolicyAllows(): boolean {
-  try {
-    return platformPolicy().allows("synchronize") === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Bind the adapter to this host's store. Idempotent, and LAZY on purpose:
  * `localBrainApplication` mints the device id and only then persists it, so at
  * host-construction time a fresh install has none yet and an eager bind would

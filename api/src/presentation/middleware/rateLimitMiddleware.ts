@@ -17,6 +17,10 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * (5× plan rpm in requests, plus the chat-dispatch window) live in
  * `application/ratelimit/tenantBuckets.ts`.
  *
+ * A board write that arrives through the MCP relay (`POST /llm/v1/mcp/call` naming
+ * tasks.create / tasks.update / chats.link_ticket …) is classified by the tool in the
+ * body, not the path — see MCP_CALL_ROUTE.
+ *
  * Returns HTTP 429 with Retry-After header when the limit is exceeded.
  *
  * Usage:
@@ -31,6 +35,7 @@ import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import {
   BOARD_RPM_MULTIPLIER, RPM_LIMITS, boardBucketKey, resolvePlanRpm, tenantBucketKey,
 } from '../../application/ratelimit/tenantBuckets';
+import { BUILTIN_EXTENSION_ID } from '../../application/llm/toolNaming';
 import { resolveBearerTenantId } from '../routes/llmRoutes';
 
 /** Requests the limiter never counts or blocks AT THE DOOR. Persisting a chat turn is
@@ -107,6 +112,46 @@ export function isBoardMutation(method: string, path: string): boolean {
   return BOARD_MUTATION_PREFIXES.some((re) => re.test(path));
 }
 
+/**
+ * The MCP relay door (`POST /llm/v1/mcp/call`, and `/v1/mcp/call`) every `builtin_*` tool
+ * call goes through — the web Brain's and the editor's alike. The path says nothing
+ * about the work, so the TOOL named in the body decides: a board-write tool is the same
+ * fan-out as the REST routes above (a chat filing tickets = N creates + N links) and
+ * spends the board bucket, not the human's 1× window.
+ */
+const MCP_CALL_ROUTE = /^\/(?:llm\/)?v1\/mcp\/call\/?$/;
+
+/** Relay tool names (`<domain>.<method>` on the `builtin` extension) that write the board. Data, not branches. */
+const BOARD_MUTATION_MCP_TOOLS: ReadonlySet<string> = new Set([
+  'tasks.create',
+  'tasks.update',
+  'tasks.move',
+  'tasks.delete',
+  'chats.link_ticket',
+  'chats.unlink_ticket',
+  'tickets.from_delta',
+]);
+
+/** Whether a relay call body names a board-write builtin tool. */
+export function isBoardMutationMcpCall(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false;
+  const { extensionId, tool } = body as { extensionId?: unknown; tool?: unknown };
+  return extensionId === BUILTIN_EXTENSION_ID && typeof tool === 'string' && BOARD_MUTATION_MCP_TOOLS.has(tool);
+}
+
+/**
+ * The relay call route and its body, when this request is one. `c.req.json()` is cached
+ * by Hono, so reading it here leaves the body intact for the route's own parse.
+ */
+async function isBoardMutationRelayCall(c: Parameters<MiddlewareHandler>[0]): Promise<boolean> {
+  if (c.req.method.toUpperCase() !== 'POST' || !MCP_CALL_ROUTE.test(c.req.path)) return false;
+  try {
+    return isBoardMutationMcpCall(await c.req.json());
+  } catch {
+    return false; // not JSON — the route answers its own 400
+  }
+}
+
 type RateLimitHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
     TENANT_RATE_LIMITER?: DurableObjectNamespace;
@@ -156,7 +201,7 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
   // request against a bucket" rather than two that can drift. Board fan-out
   // writes use a different key and a higher allowance (see BOARD_RPM_MULTIPLIER);
   // everything else keeps the tenant key and the plan rpm.
-  const boardWrite = isBoardMutation(c.req.method, c.req.path);
+  const boardWrite = isBoardMutation(c.req.method, c.req.path) || await isBoardMutationRelayCall(c);
   const bucketKey = boardWrite ? boardBucketKey(tenantId) : tenantBucketKey(tenantId);
   const limit = boardWrite ? rpm * BOARD_RPM_MULTIPLIER : rpm;
   try {

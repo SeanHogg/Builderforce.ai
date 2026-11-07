@@ -12,8 +12,8 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.45",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.45"
+    "@seanhogg/builderforce-memory": "^2026.10.46",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.46"
   },
   "devDependencies": {
     "vitest": "^4.0.18"

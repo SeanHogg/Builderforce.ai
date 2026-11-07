@@ -1,13 +1,13 @@
 /**
  * VSIX local domain tools (review G06).
  *
- * Most project/ticket/audit tools the agent sees are dynamically fetched server
- * MCP tools (`builtin_tasks_create`, …) relayed through the gateway, so with the
- * platform denied there is nothing left to call and the work silently cannot be
- * done. This module is the LOCAL ADAPTER set: when platform policy denies a
- * capability the local repository is the tool, chosen BEFORE any platform call,
- * and the journal event that write appended is queued for sync instead of being
- * sent as an API request.
+ * This module is the LOCAL ADAPTER set: in the editor the local repository IS the
+ * project/ticket tool — signed in or not, sync granted or not — and the server twins
+ * (`builtin_tasks_create`, …) are not offered (`localDomainToolRouting.ts`). A write
+ * lands on this device and the journal event it appended is what the batched
+ * local-first sync later carries to the account; no ticket is ever one API request.
+ * (The injected `platformPolicy`/`platformTool` path below is for other hosts and
+ * tests; the editor host never wires it.)
  *
  * Rules this module owns:
  *
@@ -43,13 +43,19 @@
  */
 
 import {
+  LOCAL_DOMAIN_TOOL_NAMES,
+  classifyDomainTool,
   destinationKey,
+  normalizeDomainToolName,
+  type DomainToolMode,
   type EntityDestination,
   type JournalEvent,
+  type LocalDomainToolName,
   type LocalEntityType,
   type LocalFirstStore,
   type LocalRecord,
   type ProjectValue,
+  type TicketTaskType,
   type TicketValue,
 } from "@builderforce/local-first";
 import {
@@ -59,39 +65,24 @@ import {
   type LocalWorkRepositoryOptions,
 } from "./localWorkRepository";
 
-/**
- * Domain tools this host can perform locally. Every name here has a real local
- * write behind it — a name is never listed because it "sounds local".
- * Mirrors the shared classification in
- * `packages/local-first/src/domainToolClass.ts`, which is not re-exported from the
- * package index and which this slice may not edit.
- */
-export const LOCAL_DOMAIN_TOOL_NAMES = [
-  "project-create",
-  "project-update",
-  "project-archive",
-  "ticket-create",
-  "ticket-update",
-  "ticket-move",
-  "ticket-archive",
-  "ticket-delete",
-] as const;
+// The classification table is the package's (`packages/local-first/src/domainToolClass.ts`),
+// the ONE copy. This host performs only the names it has a repository write for
+// (`LOCAL_DOMAIN_TOOL_SPECS` in `localDomainToolRouting.ts`); the rest of the table's
+// "local" names answer `unknown_domain_tool` if one is ever called.
+export {
+  CONNECTED_ONLY_DOMAIN_TOOL_NAMES,
+  LOCAL_DOMAIN_TOOL_NAMES,
+  looksLikeServerMcpTool,
+  type ConnectedOnlyDomainToolName,
+  type LocalDomainToolName,
+} from "@builderforce/local-first";
 
-export type LocalDomainToolName = (typeof LOCAL_DOMAIN_TOOL_NAMES)[number];
+export type LocalDomainToolMode = DomainToolMode;
 
-/** Named actions that need the platform. Refused offline, never queued. */
-export const CONNECTED_ONLY_DOMAIN_TOOL_NAMES = [
-  "cloud-execution",
-  "meeting-join",
-  "remote-session-read",
-] as const;
-
-export type ConnectedOnlyDomainToolName = (typeof CONNECTED_ONLY_DOMAIN_TOOL_NAMES)[number];
-
-export type LocalDomainToolMode = "local" | "connected-only" | "unknown";
-
-const LOCAL: ReadonlySet<string> = new Set(LOCAL_DOMAIN_TOOL_NAMES);
-const CONNECTED: ReadonlySet<string> = new Set(CONNECTED_ONLY_DOMAIN_TOOL_NAMES);
+/** The classification as a plain mode string: "local" | "connected-only" | "unknown". */
+export function classifyLocalDomainTool(name: string): LocalDomainToolMode {
+  return classifyDomainTool(name).mode;
+}
 
 export type LocalDomainToolErrorCode =
   | "unknown_domain_tool"
@@ -99,8 +90,7 @@ export type LocalDomainToolErrorCode =
   | "platform_tool_required"
   | "tool_arguments_required"
   | "invalid_arguments"
-  | "invalid_status"
-  | "unknown_project";
+  | "invalid_status";
 
 export class LocalDomainToolError extends Error {
   constructor(
@@ -112,37 +102,6 @@ export class LocalDomainToolError extends Error {
   }
 }
 
-function normalize(name: string): string {
-  return name.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/-+/g, "-");
-}
-
-/**
- * A dynamically fetched server MCP tool. The gateway relay advertises flat names
- * such as `builtin_tasks_create`, and any name containing "mcp" is a server
- * tool. Neither is a local adapter and neither may be queued.
- */
-export function looksLikeServerMcpTool(name: string): boolean {
-  if (typeof name !== "string") return false;
-  const raw = name.trim().toLowerCase();
-  if (raw.includes("mcp")) return true;
-  return normalize(name).startsWith("builtin-");
-}
-
-/**
- * Classify a domain tool name. Local adapters may run offline. A server MCP tool,
- * cloud execution, meeting join and remote session read are connected-only.
- * Every other name is unknown and is never queued either.
- */
-export function classifyLocalDomainTool(name: string): LocalDomainToolMode {
-  if (typeof name !== "string") return "unknown";
-  if (looksLikeServerMcpTool(name)) return "connected-only";
-  const normalized = normalize(name);
-  if (normalized === "" || normalized === "-") return "unknown";
-  if (LOCAL.has(normalized)) return "local";
-  if (CONNECTED.has(normalized)) return "connected-only";
-  return "unknown";
-}
-
 // ── The repository port ──────────────────────────────────────────────────────
 
 export interface LocalCreateTicketArgs {
@@ -152,6 +111,9 @@ export interface LocalCreateTicketArgs {
   status?: string;
   priority?: string;
   parentTicketId?: string;
+  taskType?: TicketTaskType;
+  /** The creating chat's client id; stamped by the HOST from the run, never by the model. */
+  chatClientId?: string;
   id?: string;
 }
 
@@ -305,40 +267,44 @@ function statusOf(args: Readonly<Record<string, unknown>>, fallback?: string): s
   return status;
 }
 
+/** `taskType` when given: task | epic | gap. Absent ⇒ nothing (the ticket reads as a task). */
+function taskTypeOf(args: Readonly<Record<string, unknown>>): { taskType?: TicketTaskType } {
+  const raw = optionalString(args, "taskType");
+  if (raw === undefined) return {};
+  if (raw !== "task" && raw !== "epic" && raw !== "gap") {
+    fail("invalid_arguments", `taskType must be task, epic or gap (got ${raw}).`);
+  }
+  return { taskType: raw };
+}
+
 // ── The local writes ─────────────────────────────────────────────────────────
 
 type LocalWrite = { entityType: "project" | "ticket"; id: string; record?: LocalRecord };
 
-const PROJECT_ID_NUMERIC = /^\d+$/;
+const SERVER_ID_NUMERIC = /^\d+$/;
 
 /**
- * The panel's selected project is surfaced to the model as a NUMERIC server id
- * (see `activeProjectDirective`), but the local store keys projects by client
- * UUID. Nothing else translates the two id spaces, so a local tool handed the
- * numeric id would die with `No such local project: 11` — and the same 11 sent
- * to a platform tool collides with another tenant. Resolve the numeric id to
- * the live client UUID here, at the tool boundary, before the repository
- * lookup. An exact local-id match always wins; a numeric id falls back to the
- * server-id mapping row, resolved only when that mapping points at a live
- * project. Anything else is a named error the model can recover from — never a
- * silent guess.
+ * The panel's selected project (and any ticket the model read from the platform) is
+ * surfaced as a NUMERIC server id (see `activeProjectDirective`), but the local store
+ * keys records by client UUID. A numeric id resolves to the live client UUID of its
+ * mirror when this device has one (the server-id mapping row). With no mirror it passes
+ * through VERBATIM: the repository treats a decimal id as a server reference (not looked
+ * up locally) and the sync importer resolves it as the tenant's own. An exact local id
+ * always wins. Nothing here guesses — a UUID is validated by the repository.
  */
-async function resolveLocalProjectId(
+async function resolveLocalReference(
   store: LocalFirstStore,
-  projectId: string,
+  entityType: "project" | "ticket",
+  reference: string,
 ): Promise<string> {
-  const raw = typeof projectId === "string" ? projectId.trim() : "";
-  if (!PROJECT_ID_NUMERIC.test(raw)) return projectId;
-
-  const mapped = await store.read((tx) => tx.mappingByServerId("project", raw));
+  const raw = typeof reference === "string" ? reference.trim() : "";
+  if (!SERVER_ID_NUMERIC.test(raw)) return reference;
+  const mapped = await store.read((tx) => tx.mappingByServerId(entityType, raw));
   if (mapped) {
-    const target = await store.read((tx) => tx.get("project", mapped.clientEntityId));
+    const target = await store.read((tx) => tx.get(entityType, mapped.clientEntityId));
     if (target && !target.deletedAt) return mapped.clientEntityId;
   }
-  throw new LocalDomainToolError(
-    "unknown_project",
-    `No such local project: ${raw}. Pass the local project UUID, or a numeric id that is synced to this workspace.`,
-  );
+  return raw;
 }
 
 async function writeLocally(
@@ -383,14 +349,17 @@ async function writeLocally(
       const description = optionalString(args, "description");
       const priority = optionalString(args, "priority");
       const parentTicketId = optionalString(args, "parentTicketId");
+      const chatClientId = optionalString(args, "chatClientId");
       const id = optionalString(args, "id");
       const record = await repository.createTicket({
-        projectId: await resolveLocalProjectId(store, requireString(args, "projectId")),
+        projectId: await resolveLocalReference(store, "project", requireString(args, "projectId")),
         title: requireString(args, "title"),
         status: statusOf(args, DEFAULT_TICKET_STATUS),
         ...(description ? { description } : {}),
         ...(priority ? { priority } : {}),
-        ...(parentTicketId ? { parentTicketId } : {}),
+        ...(parentTicketId ? { parentTicketId: await resolveLocalReference(store, "ticket", parentTicketId) } : {}),
+        ...(chatClientId ? { chatClientId } : {}),
+        ...taskTypeOf(args),
         ...(id ? { id } : {}),
       });
       return { entityType: "ticket", id: record.id, record };
@@ -505,7 +474,7 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
         `${tool} needs the platform. It is refused offline and is never queued as local history.`,
       );
     }
-    const name = normalize(tool) as LocalDomainToolName;
+    const name = normalizeDomainToolName(tool) as LocalDomainToolName;
 
     // Resolved BEFORE the write: an explicit grant delegates to the platform and
     // does not write locally, a denial takes the local path and never reaches a

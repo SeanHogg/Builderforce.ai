@@ -7,9 +7,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { chatTicketLinks, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
-import { bumpExecutionState } from '../runtime/executionStateVersion';
-import { bumpChatStructure } from './chatCacheVersions';
 import { accessibleChat, type ChatTicketDeps } from './chatTicketAccess';
+import { bumpChatTicketLinkCaches, upsertChatTicketLink } from './chatTicketLinkWrite';
 import { chatTicketPage, type ChatTicketPage, type ListChatTicketsOptions } from './chatTicketListing';
 import { isTicketKind, missingTicket, ticketKey, type ChatTicketLink, type LinkType, type TicketKind } from './chatTicketTypes';
 import { onTicketAgentAssigned } from './ticketAgentHandoff';
@@ -67,24 +66,11 @@ export async function linkTicket(
 
   const seg = await resolveSegment(db, tenantId);
   const linkType: LinkType = input.linkType === 'created' ? 'created' : 'linked';
-  const [existing] = await db.select({ id: chatTicketLinks.id, linkType: chatTicketLinks.linkType }).from(chatTicketLinks)
-    .where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, input.kind), eq(chatTicketLinks.ticketRef, input.ref))).limit(1);
-
-  let row;
-  if (existing) {
-    // A later delta may re-link a ticket originally CREATED by this chat. Keep
-    // that stronger lineage instead of downgrading it to a generic link.
-    const effectiveLinkType = existing.linkType === 'created' ? 'created' : linkType;
-    [row] = await db.update(chatTicketLinks).set({ linkType: effectiveLinkType })
-      .where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.id, existing.id))).returning();
-  } else {
-    [row] = await db.insert(chatTicketLinks).values({
-      tenantId, segmentId: seg, chatId, ticketKind: input.kind, ticketRef: input.ref,
-      linkType, createdBy: input.createdBy ?? userId ?? null,
-    }).returning();
-  }
-  // The attention snapshot (TTL 300 s) counts linked tickets, so it must be orphaned too.
-  await Promise.all([bumpChatStructure(chatId, env), bumpExecutionState(env, tenantId)]);
+  const row = await upsertChatTicketLink(db, {
+    tenantId, segmentId: seg, chatId, kind: input.kind, ref: input.ref,
+    linkType, createdBy: input.createdBy ?? userId ?? null,
+  });
+  await bumpChatTicketLinkCaches(tenantId, chatId, env);
   // Handoff: if this task-tier ticket already has a cloud-agent owner, bring that agent
   // into the chat it was just linked to (the "assign the ticket, then link it" ordering
   // — the assignment-time trigger fires only for chats linked at assignment time).
@@ -112,6 +98,6 @@ export async function unlinkTicket(
   const rows = await db.delete(chatTicketLinks)
     .where(and(eq(chatTicketLinks.tenantId, tenantId), eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref)))
     .returning({ id: chatTicketLinks.id });
-  if (rows.length > 0) await Promise.all([bumpChatStructure(chatId, env), bumpExecutionState(env, tenantId)]);
+  if (rows.length > 0) await bumpChatTicketLinkCaches(tenantId, chatId, env);
   return { removed: rows.length > 0 };
 }

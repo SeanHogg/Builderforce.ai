@@ -11,7 +11,7 @@ vi.mock('../../application/tenant/tenantPlanSnapshot', () => ({
   resolveTenantEffectivePlan: (...a: unknown[]) => resolveTenantEffectivePlan(...a),
 }));
 
-import { isBoardMutation, rateLimitMiddleware } from './rateLimitMiddleware';
+import { isBoardMutation, isBoardMutationMcpCall, rateLimitMiddleware } from './rateLimitMiddleware';
 
 /** A stand-in DO namespace that records the bucket key and limit each check carried.
  *  `allowed` may deny one key while allowing another, so the two windows can be
@@ -233,6 +233,52 @@ describe('isBoardMutation — blast radius', () => {
     expect(isBoardMutation('POST', '/api/brain/chats/112/summarize')).toBe(false);
     expect(isBoardMutation('POST', '/api/llm/chat/completions')).toBe(false);
     expect(isBoardMutation('GET', '/x')).toBe(false);
+  });
+});
+
+describe('MCP relay board-write tools spend the board bucket', () => {
+  const post = (path: string, body: unknown) => ({
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }) satisfies RequestInit;
+
+  it('classifies by the tool in the body, on the builtin extension only', () => {
+    expect(isBoardMutationMcpCall({ extensionId: 'builtin', tool: 'tasks.create' })).toBe(true);
+    expect(isBoardMutationMcpCall({ extensionId: 'builtin', tool: 'tasks.update' })).toBe(true);
+    expect(isBoardMutationMcpCall({ extensionId: 'builtin', tool: 'chats.link_ticket' })).toBe(true);
+    expect(isBoardMutationMcpCall({ extensionId: 'builtin', tool: 'tasks.list' })).toBe(false);
+    expect(isBoardMutationMcpCall({ extensionId: 'builtin', tool: 'chats.list_tickets' })).toBe(false);
+    expect(isBoardMutationMcpCall({ extensionId: 'some-server', tool: 'tasks.create' })).toBe(false);
+    expect(isBoardMutationMcpCall(null)).toBe(false);
+    expect(isBoardMutationMcpCall('tasks.create')).toBe(false);
+  });
+
+  it('charges a tasks.create relay call to the 4x board bucket and leaves the body readable', async () => {
+    const { ns, calls } = fakeLimiter();
+    resolveBearerTenantId.mockResolvedValue(41);
+    resolveTenantEffectivePlan.mockResolvedValue('free');
+    const a = new Hono();
+    a.use('*', rateLimitMiddleware as never);
+    a.post('/llm/v1/mcp/call', async (c) => c.json(await c.req.json()));
+    const body = { extensionId: 'builtin', tool: 'tasks.create', arguments: { title: 'x' } };
+    const res = await a.request('/llm/v1/mcp/call', post('/llm/v1/mcp/call', body), { TENANT_RATE_LIMITER: ns });
+    expect(await res.json()).toEqual(body);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ limit: 1200 });
+    expect(calls[0]?.key).toContain('board');
+  });
+
+  it('keeps a relay read on the human window', async () => {
+    const { ns, calls } = fakeLimiter();
+    resolveBearerTenantId.mockResolvedValue(41);
+    resolveTenantEffectivePlan.mockResolvedValue('free');
+    const a = new Hono();
+    a.use('*', rateLimitMiddleware as never);
+    a.post('/llm/v1/mcp/call', (c) => c.text('ok'));
+    await a.request('/llm/v1/mcp/call', post('/llm/v1/mcp/call', { extensionId: 'builtin', tool: 'tasks.list' }), { TENANT_RATE_LIMITER: ns });
+    expect(calls[0]).toMatchObject({ limit: 300 });
+    expect(calls[0]?.key).not.toContain('board');
   });
 });
 

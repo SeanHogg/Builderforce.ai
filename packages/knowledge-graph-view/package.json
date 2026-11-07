@@ -16,8 +16,8 @@
   "peerDependencies": {
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
-    "@seanhogg/builderforce-memory": "^2026.10.45",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.45",
+    "@seanhogg/builderforce-memory": "^2026.10.46",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.46",
     "react": "~19.3.1",
     "react-dom": "~19.3.1",
     "three": "^0.185.1"

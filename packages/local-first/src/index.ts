@@ -20,8 +20,21 @@ export type {
   SyncConflict,
   SyncReceipt,
   TerminalExecutionStatus,
+  TicketTaskType,
   TicketValue,
 } from './records.js';
+export {
+  CONNECTED_ONLY_DOMAIN_TOOL_NAMES,
+  LOCAL_DOMAIN_TOOL_NAMES,
+  classifyDomainTool,
+  looksLikeServerMcpTool,
+  mayEnqueueOffline,
+  normalizeDomainToolName,
+  type ConnectedOnlyDomainToolName,
+  type DomainToolClass,
+  type DomainToolMode,
+  type LocalDomainToolName,
+} from './domainToolClass.js';
 export { commitWriteAndEnqueue, type EnqueueEvent } from './atomicWrite.js';
 export {
   DEFAULT_COMPACTION_FRAME,

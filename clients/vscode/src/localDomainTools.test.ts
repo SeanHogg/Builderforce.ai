@@ -407,17 +407,37 @@ describe("localDomainTools", () => {
     expect(syncQueue.queued).toHaveLength(1);
   });
 
-  it("treats an unmapped numeric project id as unknown_project, not a guess", async () => {
-    const { repository, store, syncQueue, tools } = harness();
+  it("passes an unmapped numeric project id through as a server reference, and still refuses an unknown UUID", async () => {
+    const { repository, syncQueue, tools } = harness();
     await repository.createProject({ name: "Board" });
 
-    await expect(tools.execute("ticket-create", { projectId: "9999", title: "Orphan" })).rejects.toMatchObject({
-      code: "unknown_project",
+    // No local mirror of server project 9999: the decimal id is a server reference the
+    // sync importer resolves as the tenant's own — not looked up, not guessed at.
+    const created = await tools.execute("ticket-create", { projectId: "9999", title: "On the server project" });
+    if (created.kind !== "local") throw new Error("expected a local result");
+    expect(created.record?.payload).toMatchObject({ projectId: "9999", title: "On the server project" });
+    expect(syncQueue.queued).toHaveLength(1);
+
+    await expect(
+      tools.execute("ticket-create", { projectId: "00000000-0000-4000-8000-00000000dead", title: "Orphan" }),
+    ).rejects.toMatchObject({ code: "project_not_found" });
+    expect(syncQueue.queued).toHaveLength(1);
+  });
+
+  it("stamps taskType and the creating chat on the ticket, and refuses an unknown task type", async () => {
+    const { repository, tools } = harness();
+    const project = await repository.createProject({ name: "Board" });
+    const created = await tools.execute("ticket-create", {
+      projectId: project.id,
+      title: "Program",
+      taskType: "epic",
+      chatClientId: "chat-client-1",
     });
-    await expect(tools.execute("ticket-create", { projectId: "9999", title: "Orphan" })).rejects.toThrow(
-      /no such local project: 9999/i,
-    );
-    expect(syncQueue.queued).toEqual([]);
+    if (created.kind !== "local") throw new Error("expected a local result");
+    expect(created.record?.payload).toMatchObject({ taskType: "epic", chatClientId: "chat-client-1" });
+    await expect(
+      tools.execute("ticket-create", { projectId: project.id, title: "Bad", taskType: "portfolio" }),
+    ).rejects.toMatchObject({ code: "invalid_arguments" });
   });
 
   it("still resolves an exact local UUID project id unchanged", async () => {

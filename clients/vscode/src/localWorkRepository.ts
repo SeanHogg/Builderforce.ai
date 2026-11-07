@@ -22,6 +22,11 @@
  *     cannot adopt work written by somebody else.
  *   • A ticket's destination is SNAPPED from its project at creation (G11), so a later
  *     sign-in or selection change cannot redirect work already written.
+ *   • A decimal `projectId` / `parentTicketId` is a SERVER reference (the model is handed
+ *     numeric server ids): stored verbatim, not looked up locally, resolved by the sync
+ *     importer as something the tenant owns. A UUID must be a live local record. A
+ *     ticket also carries `taskType` (task | epic | gap) and the `chatClientId` of the
+ *     chat it was created in, which sync turns into the chat↔ticket 'created' link.
  *   • One transaction commits the record and its journal event, so a crash between
  *     them is not a state this layer can produce, and every mutation is a
  *     compare-and-set on the record version — the store refuses a stale writer with
@@ -59,8 +64,18 @@ import {
   type LocalFirstTransaction,
   type LocalRecord,
   type ProjectValue,
+  type TicketTaskType,
   type TicketValue,
 } from "@builderforce/local-first";
+
+/**
+ * A DECIMAL id is a SERVER reference (the model is handed numeric server project and
+ * ticket ids), never a local one: client ids are UUIDs. A server reference is stored
+ * verbatim and not looked up here — the sync importer resolves it as a project/task the
+ * tenant owns — while a UUID must be a live local record.
+ */
+const SERVER_REFERENCE = /^\d+$/;
+const isServerReference = (id: string): boolean => SERVER_REFERENCE.test(id.trim());
 
 export type LocalProject = LocalRecord<ProjectValue>;
 export type LocalTicket = LocalRecord<TicketValue>;
@@ -129,12 +144,17 @@ export interface CreateLocalProjectInput {
 }
 
 export interface CreateLocalTicketInput {
+  /** A live local project's id, or a DECIMAL server project id (a server reference). */
   projectId: string;
   title: string;
   description?: string;
   status?: string;
   priority?: string;
+  /** A local ticket's id (must exist), or a DECIMAL server task id (a server reference). */
   parentTicketId?: string;
+  taskType?: TicketTaskType;
+  /** The client id of the chat the ticket is created in; sync links that chat to it. */
+  chatClientId?: string;
   /**
    * Must match the project's snapshotted destination when given. A ticket is never
    * bound independently of its project.
@@ -446,10 +466,13 @@ export function createLocalWorkRepository(options: LocalWorkRepositoryOptions) {
       assertStatus(status);
       const priority = input.priority?.trim();
       return options.store.transact(async (tx) => {
-        const project = await projectFor(tx, input.projectId);
+        // A decimal project id is a server reference: no local project to look up or
+        // snap a destination from, so the ticket takes the repository's (or the call's).
+        const projectRef = input.projectId.trim();
+        const project = isServerReference(projectRef) ? undefined : await projectFor(tx, input.projectId);
         // The destination is the PROJECT's, snapped now. Never re-read at sync time,
         // and never taken from a caller's own account argument.
-        if (input.destination !== undefined) {
+        if (input.destination !== undefined && project) {
           const proposed = creationDestination(input.destination);
           if (destinationKey(proposed) !== destinationKey(project.destination)) {
             throw new LocalWorkRepositoryError(
@@ -459,28 +482,32 @@ export function createLocalWorkRepository(options: LocalWorkRepositoryOptions) {
           }
         }
         const stamp = now().toISOString();
+        const parentRef = input.parentTicketId?.trim();
         const payload: TicketValue = {
-          projectId: project.id,
+          projectId: project?.id ?? projectRef,
           title,
           status,
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(priority ? { priority } : {}),
-          ...(input.parentTicketId !== undefined ? { parentTicketId: input.parentTicketId } : {}),
+          ...(parentRef ? { parentTicketId: parentRef } : {}),
+          ...(input.taskType ? { taskType: input.taskType } : {}),
+          ...(input.chatClientId ? { chatClientId: input.chatClientId } : {}),
         };
-        const record: LocalTicket = newLocalRecord<TicketValue>({
+        const record: LocalRecord<TicketValue> = newLocalRecord<TicketValue>({
           id: input.id?.trim() || newId(),
           entityType: "ticket",
           payload,
           deviceId: options.deviceId,
-          destination: project.destination,
+          destination: project ? project.destination : stampFor(input.destination),
           occurredAt: stamp,
         });
         // Depend on the create events (always v1), so a later batch push applies the
-        // parent before the child even after the parent has been updated.
-        const dependsOn = [eventId("project", project.id, 1)];
-        if (input.parentTicketId) {
-          const parent = await ticketFor(tx, input.parentTicketId);
-          if (parent.payload.projectId !== project.id) {
+        // parent before the child even after the parent has been updated. A server
+        // reference has no local event to wait for.
+        const dependsOn: string[] = project ? [eventId("project", project.id, 1)] : [];
+        if (parentRef && !isServerReference(parentRef)) {
+          const parent = await ticketFor(tx, parentRef);
+          if (parent.payload.projectId !== payload.projectId) {
             throw new LocalWorkRepositoryError(
               "cross_destination",
               "A subticket belongs to its parent's project.",

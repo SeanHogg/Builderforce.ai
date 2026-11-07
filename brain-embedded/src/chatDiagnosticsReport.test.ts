@@ -3,6 +3,8 @@ import {
   CHAT_DIAGNOSTICS_SCHEMA_VERSION,
   buildChatDiagnosticsReport,
   formatChatDiagnosticsReportJson,
+  compactReportJson,
+  REPORT_JSON_MAX_CHARS,
   type ChatDiagnosticsReport,
 } from './chatDiagnosticsReport';
 import type { BrainTraceEvent } from './brainTriage';
@@ -114,5 +116,56 @@ describe('formatChatDiagnosticsReportJson', () => {
     // The block exists ONLY to be machine-read, so round-tripping it is the contract.
     const parsed = JSON.parse(lines.slice(2, -1).join('\n')) as ChatDiagnosticsReport;
     expect(parsed).toEqual(report);
+  });
+
+  it('is compact one-line JSON', () => {
+    const report = buildChatDiagnosticsReport({
+      diagnostics: CHAT, events: events(), messages: [], surface: 'Web', now: NOW,
+    });
+    const lines = formatChatDiagnosticsReportJson(report);
+    expect(lines).toHaveLength(4);
+    expect(lines[2]).not.toContain('\n');
+  });
+
+  it('elides bulky fields in order, still parses, and names what it dropped', () => {
+    const report = buildChatDiagnosticsReport({
+      diagnostics: {
+        ...CHAT,
+        tickets: Array.from({ length: 40 }, (_, i) => ({ kind: 'task', ref: String(i), label: 'L'.repeat(300) })),
+      },
+      events: events(), messages: [], surface: 'Web', now: NOW,
+    });
+    // Force the per-turn log to be the bulky field.
+    (report.run as unknown as { modelTurns: unknown[] }).modelTurns = Array.from({ length: 200 }, (_, i) => ({ i, pad: 'p'.repeat(100) }));
+    const lines = formatChatDiagnosticsReportJson(report);
+    const body = lines[2]!;
+    expect(body.length).toBeLessThanOrEqual(REPORT_JSON_MAX_CHARS);
+    const parsed = JSON.parse(body) as Record<string, unknown> & { run: Record<string, unknown>; chat: Record<string, unknown> };
+    expect(parsed._elided).toEqual(['run.modelTurns', 'run.modelScores', 'chat.tickets']);
+    expect('modelTurns' in parsed.run).toBe(false);
+    expect('tickets' in parsed.chat).toBe(false);
+    // The caller's report is untouched.
+    expect(report.chat.tickets).toHaveLength(40);
+  });
+
+  it('falls back to a minimal parseable skeleton when elision is not enough', () => {
+    const report = buildChatDiagnosticsReport({
+      diagnostics: { ...CHAT, agents: Array.from({ length: 2_000 }, (_, i) => ({ agentRef: `agent-${i}`, role: 'member' })) },
+      events: events(), messages: [], surface: 'Web', now: NOW,
+    });
+    const json = compactReportJson(report);
+    expect(json.length).toBeLessThanOrEqual(REPORT_JSON_MAX_CHARS);
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    expect(parsed._elided).toEqual(['*']);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.capturedAt).toBe('2026-09-15T12:00:00.000Z');
+    expect('chat' in parsed).toBe(false);
+  });
+
+  it('leaves a report under the cap unmarked', () => {
+    const report = buildChatDiagnosticsReport({
+      diagnostics: CHAT, events: events(), messages: [], surface: 'Web', now: NOW,
+    });
+    expect(JSON.parse(compactReportJson(report))._elided).toBeUndefined();
   });
 });

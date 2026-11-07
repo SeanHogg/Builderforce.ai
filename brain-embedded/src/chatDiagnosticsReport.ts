@@ -136,14 +136,20 @@ function withoutPath(report: ChatDiagnosticsReport, path: string): ChatDiagnosti
   const [outer, inner] = path.split('.') as [keyof ChatDiagnosticsReport, string];
   const parent = report[outer];
   if (!parent || typeof parent !== 'object' || !(inner in parent)) return null;
-  const { [inner]: _dropped, ...rest } = parent as unknown as Record<string, unknown>;
-  void _dropped;
-  return { ...report, [outer]: rest } as unknown as ChatDiagnosticsReport;
+  const copy = { ...(parent as unknown as Record<string, unknown>) };
+  delete copy[inner];
+  return { ...report, [outer]: copy } as unknown as ChatDiagnosticsReport;
 }
 
 /**
  * Compact one-line JSON of the report; when it exceeds `maxChars`, drops fields in
- * {@link JSON_ELISION_ORDER} and names them in a top-level `_elided` array.
+ * {@link JSON_ELISION_ORDER} and names them in a top-level `_elided` array. If the
+ * report is STILL over after every listed field is gone, only a minimal skeleton
+ * (identity, capture time, verdict) is emitted with `_elided: ["*"]`.
+ *
+ * The output may therefore carry an extra top-level `_elided` key that is not on
+ * {@link ChatDiagnosticsReport}; consumers of the pasted block must tolerate it, and
+ * must not assume `run`, `chat.tickets` etc. are present when it is.
  */
 export function compactReportJson(report: ChatDiagnosticsReport, maxChars = REPORT_JSON_MAX_CHARS): string {
   let json = JSON.stringify(report);
@@ -156,9 +162,10 @@ export function compactReportJson(report: ChatDiagnosticsReport, maxChars = REPO
     current = next;
     elided.push(path);
     json = JSON.stringify({ ...current, _elided: elided });
-    if (json.length <= maxChars) break;
+    if (json.length <= maxChars) return json;
   }
-  return json;
+  const { schemaVersion, capturedAt, surface, likelyCause, running } = report;
+  return JSON.stringify({ schemaVersion, capturedAt, surface, likelyCause, running, _elided: ['*'] });
 }
 
 /**
