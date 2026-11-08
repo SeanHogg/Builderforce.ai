@@ -56,6 +56,7 @@ import { createProjectKnowledgeRoutes } from './projectKnowledgeRoutes';
 import type { FrontDoor } from '../middleware/frontDoor';
 import { errorHandler } from '../middleware/errorHandler';
 import { r2ExtractedCache } from '../../application/knowledge/knowledgeBlobs';
+import { invalidateHealedBody } from '../../application/knowledge/knowledgeHeal';
 import { fakeLedger, newWorld } from '../../application/knowledge/sync/syncFakes.test-util';
 
 const db = {} as never;
@@ -302,7 +303,7 @@ describe('project knowledge routes', () => {
     } as unknown as R2Bucket;
     const world = newWorld();
     const ledger = fakeLedger(world);
-    const extracted = r2ExtractedCache({ UPLOADS: bucket }, 8, 42, ledger);
+    const extracted = r2ExtractedCache({ UPLOADS: bucket }, 8, 42, { ledger, onHealed: invalidateHealedBody });
     mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
       env: {}, db, tenantId, projectId, store: { markRelationsStale: vi.fn(async () => 0) }, extracted, ledger,
     }));

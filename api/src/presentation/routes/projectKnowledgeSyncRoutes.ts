@@ -4,6 +4,7 @@
  *
  *   POST /:projectId/knowledge/sync?syncId=&part=&parts=   one BFKP pack (or one part of one) → { generation, digest }
  *   GET  /:projectId/knowledge/sync/manifest?root=         the root digest and the 4,096 bucket digests (BFKP)
+ *   GET  /:projectId/knowledge/sync/manifest?root=&view=generation   `{ generation, digest }` only (JSON): the quiet-root probe
  *   POST /:projectId/knowledge/sync/manifest               the leaves of the buckets asked for (BFKP in, BFKP out)
  *   POST /:projectId/knowledge/sync/have                   a BFKP HASH section in, a bitmap of the held hashes out
  *
@@ -16,7 +17,7 @@ import type { HonoEnv } from '../../env';
 import { KPACK_CONTENT_TYPE } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { KnowledgePorts } from '../../application/knowledge/knowledgeComposition';
 import { applyKnowledgePack } from '../../application/knowledge/sync/applyKnowledgePack';
-import { bucketIdsOf, haveBitmap, manifestLeaves, manifestSummary } from '../../application/knowledge/sync/knowledgeSyncManifest';
+import { bucketIdsOf, haveBitmap, manifestGeneration, manifestLeaves, manifestSummary } from '../../application/knowledge/sync/knowledgeSyncManifest';
 import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES } from '../../application/knowledge/sync/knowledgeSyncPorts';
 import { reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
@@ -114,6 +115,9 @@ export function registerKnowledgeSyncRoutes(router: Hono<HonoEnv>, h: SyncRouteH
     // Trimmed by `normalizeRootId` inside the use case: the pack route, this one and the leaf request read one root the same way.
     const rootId = c.req.query('root');
     if (!rootId?.trim()) return json({ error: 'root is required' }, 400);
+    if (c.req.query('view') === 'generation') {
+      return new Response(JSON.stringify(await manifestGeneration(p, rootId)), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    }
     return binary(await manifestSummary(p, rootId), KPACK_CONTENT_TYPE);
   })));
 

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   owned: vi.fn(),
   apply: vi.fn(),
   summary: vi.fn(),
+  generation: vi.fn(),
   leaves: vi.fn(),
   have: vi.fn(),
 }));
@@ -23,7 +24,7 @@ vi.mock('../../application/knowledge/knowledgeComposition', () => ({
 }));
 vi.mock('../../application/knowledge/sync/applyKnowledgePack', () => ({ applyKnowledgePack: mocks.apply }));
 vi.mock('../../application/knowledge/sync/knowledgeSyncManifest', () => ({
-  manifestSummary: mocks.summary, manifestLeaves: mocks.leaves, haveBitmap: mocks.have,
+  manifestSummary: mocks.summary, manifestGeneration: mocks.generation, manifestLeaves: mocks.leaves, haveBitmap: mocks.have,
   bucketIdsOf: async () => ({ rootId: 'r', buckets: [1, 2] }),
 }));
 
@@ -120,6 +121,16 @@ describe.each([['tenant door', () => createProjectKnowledgeRoutes({} as never)],
     expect(new Uint8Array(await leaves.arrayBuffer())).toEqual(new Uint8Array([8]));
     const have = await r.request('/3/knowledge/sync/have', { method: 'POST', body: new Uint8Array([1]) });
     expect(new Uint8Array(await have.arrayBuffer())).toEqual(new Uint8Array([7]));
+  });
+
+  it('serves the generation-only view as JSON, without the summary', async () => {
+    mocks.generation.mockResolvedValue({ generation: 6, digest: 'dg' });
+    const res = await make().request('/3/knowledge/sync/manifest?root=r&view=generation');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ generation: 6, digest: 'dg' });
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(mocks.summary).not.toHaveBeenCalled();
+    expect((await make().request('/3/knowledge/sync/manifest?view=generation')).status).toBe(400);
   });
 
   it('answers a lock timeout as a retryable 503 with a Retry-After hint', async () => {

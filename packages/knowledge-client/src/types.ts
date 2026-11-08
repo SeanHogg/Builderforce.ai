@@ -131,6 +131,8 @@ export interface KnowledgeClient {
   sync(rootId: string, part: SyncPart): Promise<SyncAck>;
   /** GET …/knowledge/sync/manifest?root= — the server's generation, root digest and 4,096 bucket digests. */
   syncManifest(rootId: string): Promise<SyncManifest>;
+  /** GET …/knowledge/sync/manifest?root=&view=generation — the server's generation and root digest alone (a quiet root's cheap probe). */
+  syncGeneration(rootId: string): Promise<{ generation: number; digest: string }>;
   /** POST …/knowledge/sync/manifest — the server's leaves in the given buckets. */
   syncLeaves(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }>;
   /**
@@ -167,7 +169,8 @@ export interface SyncPart { bytes: Uint8Array; syncId?: string; part?: number; p
 
 /** The server's answer to a pack (or to a part that is not the last). */
 export type SyncAck =
-  | { applied: true; generation: number; digest: string }
+  /** `reconcile`: the server invalidated leaves of THIS root while applying the pack (a heal); reconcile before the next delta. */
+  | { applied: true; generation: number; digest: string; reconcile?: true }
   | { applied: false; received: number; parts: number };
 
 export interface SyncManifest {

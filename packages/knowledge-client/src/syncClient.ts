@@ -19,6 +19,7 @@ import {
 export interface SyncClient {
   sync(rootId: string, part: SyncPart): Promise<SyncAck>;
   syncManifest(rootId: string): Promise<SyncManifest>;
+  syncGeneration(rootId: string): Promise<{ generation: number; digest: string }>;
   syncLeaves(rootId: string, bucketIds: readonly number[]): Promise<{ generation: number; leaves: Array<{ key: string; digest: string }> }>;
   syncHave(rootId: string, pairs: readonly SyncHavePair[]): Promise<boolean[]>;
 }
@@ -61,9 +62,9 @@ export function createSyncClient(base: string, doFetch: (url: string, init?: Req
       if (part.parts !== undefined) q.set('parts', String(part.parts));
       const query = q.size > 0 ? `?${q.toString()}` : '';
       const res = await call(`/knowledge/sync${query}`, { method: 'POST', headers: { 'Content-Type': KPACK_CONTENT_TYPE }, body: part.bytes as unknown as BodyInit });
-      const body = (await res.json()) as { applied?: boolean; generation?: number; digest?: string; received?: number; parts?: number };
+      const body = (await res.json()) as { applied?: boolean; reconcile?: boolean; generation?: number; digest?: string; received?: number; parts?: number };
       return body.applied
-        ? { applied: true, generation: body.generation ?? 0, digest: body.digest ?? '' }
+        ? { applied: true, generation: body.generation ?? 0, digest: body.digest ?? '', ...(body.reconcile ? { reconcile: true as const } : {}) }
         : { applied: false, received: body.received ?? 0, parts: body.parts ?? 0 };
     },
 
@@ -71,6 +72,12 @@ export function createSyncClient(base: string, doFetch: (url: string, init?: Req
       const res = await call(`/knowledge/sync/manifest?root=${encodeURIComponent(rootId)}`, { method: 'GET', headers: { Accept: KPACK_CONTENT_TYPE } });
       const pack = await decodePack(new Uint8Array(await res.arrayBuffer()));
       return { generation: pack.baseGeneration, digest: pack.targetDigest, buckets: pack.buckets ?? [] };
+    },
+
+    async syncGeneration(rootId) {
+      const res = await call(`/knowledge/sync/manifest?root=${encodeURIComponent(rootId)}&view=generation`, { method: 'GET', headers: { Accept: 'application/json' } });
+      const body = (await res.json()) as { generation?: number; digest?: string };
+      return { generation: body.generation ?? 0, digest: body.digest ?? '' };
     },
 
     async syncLeaves(rootId, bucketIds) {

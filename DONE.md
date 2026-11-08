@@ -8,6 +8,8 @@
 
 - **The review no longer sticks at "Counting files…" on a large root.** On a 15,960-file root the plan awaited five unbounded setup steps (partitions, symbol index, judge start-up, git history, knowledge index) before walking, then hashed every file serially through the extension host. Now `reviewPortsFor.ts` builds the plan from source, manifest, packs and a judge-configured flag only (no server call); run-only ports start in the background with a 120 s bound each (a timeout is logged and dropped, a failure fails the review as before); the walk hashes 16 at a time with node:crypto, skips reading files over the size limit, and keeps a persisted hash cache, so a restart is not a cold walk; every plan logs per-step timings to the BuilderForce output channel.
 
+- **A lost stored body heals for every project that used it.** When an unreadable body (lost R2 object) is re-supplied by one root's pack, every affected leaf of every root that named it, the applying root's other paths included, is invalidated in the same transaction and its generation advanced; the pack ack carries `reconcile`, a cheap generation-only read (`?view=generation`, no-store) lets a quiet linked root notice the change every 10 minutes (VS Code arms one timer per healthy root), refs split exactly by the known root (`#` paths and `cloud:<id>:` roots handled), and the legacy upload reaches the same heal through an injected hook. Regression tests cover each case.
+
 ## ✅ RESOLVED 2026-11-08 — Uploads no longer stall, a review stops when asked, the Graph loads, and anti-patterns explain themselves (builderforce-memory 2026.10.51–54 · VS Code 2026.10.141)
 
 - **The knowledge replica no longer stalls on `409 extracted_missing`.**

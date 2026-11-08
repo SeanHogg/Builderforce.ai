@@ -27,15 +27,14 @@
  * analyzers) is its own source object, named by `~<tag>|<path>`, so it never displaces the
  * file's own entry. The bundle is a cache keyed by content hash: a lost race re-fetches.
  */
+import { splitSourceRef } from '@builderforce/agent-tools';
 import { sha256Hex, type Extracted, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
 import { buildBundle, mergeBody, readBundled } from './knowledgeBundles';
-import type { KnowledgeLedgerPort } from './knowledgeLedger';
-import { invalidateLostBodies, lostRefsOf } from './knowledgeHeal';
-import { pathOfSourceRef, rootOfRef } from './knowledgeRefs';
+import type { ExtractedLoc, KnowledgeLedgerPort } from './knowledgeLedger';
 import { KnowledgeSyncError } from './sync/knowledgeSyncPorts';
 
 const SOURCE = 'application/knowledge/knowledgeBlobs.ts';
@@ -48,6 +47,23 @@ const PUT_ATTEMPTS = 3;
 
 type Bundle = Record<string, Extracted[]>;
 export interface SourceEntry { path: string; hash: string }
+
+/** A body that was unreadable and has been rewritten from an upload: the old index row and what the rewritten body keeps. */
+export interface HealedBody {
+  hash: string;
+  prior: Pick<ExtractedLoc, 'sourceRefs'>;
+  kept: { entries: readonly Pick<Extracted, 'sourceRef'>[]; entryless: readonly string[] };
+}
+
+/**
+ * The ledger the adapter stores through, WITH the heal it owes: a ledger is never given without its hook. `onHealed` runs inside
+ * the transaction (under the sync lock) that wrote the healed body's index row; the manifest work a heal owes the other roots
+ * belongs to the application (`knowledgeHeal.ts`), never to this adapter.
+ */
+export interface LedgerBinding {
+  ledger: KnowledgeLedgerPort;
+  onHealed(locked: KnowledgeLedgerPort, healed: HealedBody): Promise<unknown>;
+}
 
 const seg = (s: string): string => encodeURIComponent(s);
 
@@ -146,7 +162,8 @@ export async function listRootSources(
   return [...byId.values()];
 }
 
-export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, ledger?: KnowledgeLedgerPort): ExtractedCachePort {
+export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, binding?: LedgerBinding): ExtractedCachePort {
+  const ledger = binding?.ledger;
   const keys = knowledgeBlobKeys(tenantId, projectId);
   const bucket = (): R2Bucket => {
     if (!env.UPLOADS) throw new Error('knowledge storage (R2) is not configured');
@@ -219,8 +236,8 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
           await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
           written = await ledger.exclusive(async (locked) => {
             const n = await locked.index.upsert(bundle.locs, new Map([[hash, prior]]));
-            // The other roots that shared the lost body send it again on their next sync (`knowledgeHeal.ts`).
-            if (n > 0 && unreadable) await invalidateLostBodies(locked, [{ hash, refs: lostRefsOf(loc!, merged) }]);
+            // The roots that shared the lost body send it again on their next sync: the application's hook, in this transaction.
+            if (n > 0 && unreadable) await binding!.onHealed(locked, { hash, prior: loc!, kept: merged });
             return n;
           });
         }
@@ -231,16 +248,16 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
       // A root-level output has no `markStale` of its own: register it now.
       if (!hash.startsWith('~')) return;
       for (const e of extracted) {
-        const root = rootOfRef(e.sourceRef);
-        if (root) await putSource(root, pathOfSourceRef(e.sourceRef), hash);
+        const parts = splitSourceRef(e.sourceRef);
+        if (parts) await putSource(parts.rootId, parts.path, hash);
       }
     },
 
     async setSource(sourceRef: NodeRef, hash: string) {
-      const root = rootOfRef(sourceRef);
-      if (!root) return;
-      // A file's own object is named by its plain path; '' (removed) deletes it.
-      await putSource(root, pathOfSourceRef(sourceRef), hash, '');
+      const parts = splitSourceRef(sourceRef);
+      if (!parts) return;
+      // A file's own object is named by its plain, full path ('#' included); '' (removed) deletes it.
+      await putSource(parts.rootId, parts.path, hash, '');
     },
 
     async rootExtracted(rootId) {

@@ -58,6 +58,13 @@ describe('client.sync (PRD 41 A11)', () => {
     expect(calls[0]!.path).toBe('/api/projects/5/knowledge/sync/manifest?root=r');
   });
 
+  it('reads the generation alone: one small JSON request, no manifest', async () => {
+    const { client, calls } = clientWith(() => json({ ok: true, generation: 7, digest: 'dg' }));
+    expect(await client.syncGeneration('r')).toEqual({ generation: 7, digest: 'dg' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.path).toBe('/api/projects/5/knowledge/sync/manifest?root=r&view=generation');
+  });
+
   it('answers have per (hash, sourceRef) in the order asked, from the server bitmap over the rows sorted by sourceRef', async () => {
     const h = 'a'.repeat(64);
     const asked = [{ hash: h, sourceRef: 'src:r::c.ts' }, { hash: h, sourceRef: 'src:r::a.ts' }, { hash: h, sourceRef: 'src:r::b.ts' }];

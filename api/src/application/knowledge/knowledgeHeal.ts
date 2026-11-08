@@ -15,19 +15,25 @@
  * differing; the pack builder then asks `have`, the index answers "not held", and the body is sent again. Nothing else is.
  *
  * Runs inside the pack's (or the legacy upload's) transaction, under the project's sync lock, after the index row is written.
- * The root being applied is left alone: its own pack asserts its digest, and it is re-sending what it names.
+ * A pack calls it AFTER its own root's generation advanced, so the applying root is covered too: its OTHER paths that shared
+ * the lost hash (and that this pack did not re-supply) are invalidated the same way. A root with no acknowledged state (no
+ * roots row) is skipped: its next sync is a full pack, which clears its leaves, so nothing is lost by leaving them.
  */
 import { bucketOf, fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
-import { ensureBuckets, recomputeBuckets } from './knowledgeBuckets';
+import { splitSourceRef } from '@builderforce/agent-tools';
+import type { HealedBody } from './knowledgeBlobs';
+import { commitLeaves, ensureBuckets } from './knowledgeBuckets';
 import { ENTRYLESS_PREFIX, type ExtractedLoc, type KnowledgeLedgerPort } from './knowledgeLedger';
-import { pathOfSourceRef, rootOfRef } from './knowledgeRefs';
 
 /** The digest a healed file leaf carries until its root sends the body again (a file digest is its content hash, never this). */
 export const HEALED_LEAF_DIGEST = 'healed:body-lost';
 
 /** One hash whose stored body was lost, and the source refs its old index row named that the rewritten row no longer does. */
 export interface LostBody { hash: string; refs: string[] }
+
+/** A root a heal invalidated, at the generation and digest it now has. */
+export interface InvalidatedRoot { root: string; generation: number; digest: string }
 
 /** The sources `loc` (the old index row) named that `kept` (the rewritten body) does not, as `src:` refs. */
 export function lostRefsOf(
@@ -38,32 +44,39 @@ export function lostRefsOf(
   return [...new Set(named)].filter((r) => !keep.has(r));
 }
 
+/** The legacy upload's hook (`r2ExtractedCache`): the heal of one rewritten body, run inside its locked transaction. */
+export const invalidateHealedBody = (locked: KnowledgeLedgerPort, healed: HealedBody): Promise<InvalidatedRoot[]> =>
+  invalidateLostBodies(locked, [{ hash: healed.hash, refs: lostRefsOf(healed.prior, healed.kept) }]);
+
 /**
- * Makes every root (but `exceptRoot`) that named a lost body send it again on its next sync. The caller holds the project's
- * sync lock. Returns the roots invalidated.
+ * Makes every root that named a lost body send it again on its next sync. The caller holds the project's sync lock and runs
+ * this in the transaction that rewrote the body. `knownRoots` (the applying root) are split exactly. Returns the roots invalidated, with their new generation.
  */
-export async function invalidateLostBodies(ledger: KnowledgeLedgerPort, lost: readonly LostBody[], exceptRoot?: string): Promise<string[]> {
+export async function invalidateLostBodies(ledger: KnowledgeLedgerPort, lost: readonly LostBody[], knownRoots: readonly string[] = []): Promise<InvalidatedRoot[]> {
   const byRoot = new Map<string, Map<string, string>>(); // root → file leaf key → the lost hash it names
   for (const { hash, refs } of lost) {
     for (const ref of refs) {
-      const root = rootOfRef(ref);
-      if (!root || root === exceptRoot) continue;
-      const wanted = byRoot.get(root) ?? new Map<string, string>();
-      wanted.set(fileLeafKey(pathOfSourceRef(ref), hash), hash);
-      byRoot.set(root, wanted);
+      // The client's own rule (`splitSourceRef`): the FULL path after the root, since that is what a file leaf key is built from
+      // (a '#' in `src/C#/a.cs` is not a section), and a root id ending in ':' (`cloud:<id>:`) is split right.
+      const parts = splitSourceRef(ref, knownRoots);
+      if (!parts) continue;
+      const wanted = byRoot.get(parts.rootId) ?? new Map<string, string>();
+      wanted.set(fileLeafKey(parts.path, hash), hash);
+      byRoot.set(parts.rootId, wanted);
     }
   }
-  const invalidated: string[] = [];
+  const invalidated: InvalidatedRoot[] = [];
   for (const [root, wanted] of byRoot) {
+    const row = await ledger.roots.get(root);
+    if (!row || row.generation < 1) continue;
     await ensureBuckets(ledger, root);
     const present = await ledger.leaves.inBuckets(root, [...new Set([...wanted.keys()].map(bucketOf))]);
     const stale = present.filter((l) => wanted.get(l.key) === l.digest);
     if (stale.length === 0) continue;
-    await ledger.leaves.upsert(root, stale.map((l) => ({ key: l.key, digest: HEALED_LEAF_DIGEST })));
-    const digest = await recomputeBuckets(ledger, root, stale.map((l) => l.key));
-    const row = await ledger.roots.get(root);
-    if (row) await ledger.roots.advance(root, row.generation, digest);
-    invalidated.push(root);
+    const { generation, digest } = await commitLeaves(ledger, root, { leaves: stale.map((l) => ({ key: l.key, digest: HEALED_LEAF_DIGEST })), base: row.generation });
+    // Buckets changed, so the generation MUST move with them: refuse (the caller's transaction rolls back) rather than leave them apart.
+    if (generation === null) throw new Error(`knowledge heal: root ${root} moved past generation ${row.generation} while its leaves were invalidated; rolled back`);
+    invalidated.push({ root, generation, digest });
   }
   return invalidated;
 }

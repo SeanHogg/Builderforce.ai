@@ -250,7 +250,9 @@ describe('bodies', () => {
     w.bundles.clear(); // the object behind the index row is gone
     const copy = { path: 'src/copy.ts', hash: shared.hash, bytes: 1 };
     const pack: Pack = { rootId: ROOT, baseGeneration: 1, files: [copy], extracted: [{ kind: 'full', hash: shared.hash, entries: [extraction(ROOT, copy.path, shared.hash)] }], targetDigest: ZERO_DIGEST };
-    expect(await apply(pack)).toMatchObject({ applied: true, generation: 2 });
+    // The pack advances the root to 2; the root's OWN src/f0.ts still names the lost hash and the pack did not re-supply it, so the heal
+    // invalidates that leaf too (generation 3) and tells the client to reconcile.
+    expect(await apply(pack)).toMatchObject({ applied: true, generation: 3, reconcile: true });
     expect(w.index.get(shared.hash)!.sourceRefs).toEqual([refOf(ROOT, copy.path)]); // the lost body's old sources are no longer claimed
     expect(await fakeSync(w).heldEntries([{ hash: shared.hash, sourceRef: refOf(ROOT, rows.files[0]!.path) }])).toEqual(new Set()); // so that pair is asked for again
   });

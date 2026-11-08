@@ -3,6 +3,7 @@
  * client asks before it builds a pack:
  *
  *   manifest   GET  …/sync/manifest?root=     the root digest and the 4,096 bucket digests (BFKP `BKT`)
+ *   generation GET  …/sync/manifest?root=&view=generation   `{ generation, digest }` from the roots row alone (a quiet root's cheap probe)
  *   leaves     POST …/sync/manifest           the leaves of the buckets asked for (BFKP `LEAF`)
  *   have       POST …/sync/have               which `(hash, sourceRef)` pairs the project already holds (a bitmap)
  *
@@ -54,6 +55,18 @@ export async function manifestSummary(deps: ManifestDeps, rawRoot: string): Prom
   await ensureBucketsLocked(deps.ledger, rootId);
   const { generation, value: buckets } = await readAtGeneration(deps, rootId, () => deps.ledger.buckets.digests(rootId));
   return encodePack({ rootId, baseGeneration: generation, targetDigest: rootDigestOfBuckets(buckets), buckets });
+}
+
+/**
+ * GET manifest, `view=generation`: the root's acknowledged `{ generation, digest }` from its roots row ONLY — no bucket rows, no
+ * lock, no body to speak of. A client that has nothing to send asks this to learn whether the server moved (a heal advances the
+ * generation); only when it did does it read the full manifest.
+ */
+export async function manifestGeneration(deps: Pick<ManifestDeps, 'sync'>, rawRoot: string): Promise<{ generation: number; digest: string }> {
+  const rootId = normalizeRootId(rawRoot);
+  checkRootId(rootId);
+  const { generation, digest } = await deps.sync.state(rootId);
+  return { generation, digest };
 }
 
 /** POST manifest: the leaves of the requested buckets. */

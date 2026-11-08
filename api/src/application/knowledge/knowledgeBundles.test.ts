@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import { buildBundle, bundlePrefix, mergeBody, readBundled } from './knowledgeBundles';
 import { r2ExtractedCache } from './knowledgeBlobs';
+import { invalidateHealedBody } from './knowledgeHeal';
 import type { ExtractedLoc, KnowledgeLedgerPort } from './knowledgeLedger';
 
 const body = (n: number, nodes = 3): Extracted[] => [{
@@ -72,7 +73,7 @@ describe('extracted bundles', () => {
     objects.set(bundle.key, { bytes: bundle.bytes });
     const rows = new Map<string, ExtractedLoc>(bundle.locs.map((l) => [l.hash, l]));
     const ledger = { index: { locate: async (hs: readonly string[]) => hs.flatMap((h) => (rows.has(h) ? [rows.get(h)!] : [])), upsert: async () => undefined }, sources: {} } as unknown as KnowledgeLedgerPort;
-    const cache = r2ExtractedCache({ UPLOADS: bucket }, 4, 9, ledger);
+    const cache = r2ExtractedCache({ UPLOADS: bucket }, 4, 9, { ledger, onHealed: invalidateHealedBody });
 
     expect(await cache.get('h2')).toEqual(body(2));
     expect(log.ranged).toHaveLength(1);

@@ -42,7 +42,7 @@ import { factViewer } from '../deleteKnowledgeFact';
 import { authorizePackUpload } from '../packAccess';
 import { sourceId } from '../knowledgeBlobs';
 import { buildBundle } from '../knowledgeBundles';
-import { ensureBuckets, recomputeBuckets } from '../knowledgeBuckets';
+import { commitLeaves, ensureBuckets } from '../knowledgeBuckets';
 import { invalidateLostBodies } from '../knowledgeHeal';
 import { drizzleLedger, type KnowledgeLedgerPort, type SourceRow } from '../knowledgeLedger';
 import { drizzleKnowledgeStore } from '../knowledgeStore';
@@ -90,7 +90,8 @@ export interface SkippedTombstone { key: string; reason: 'other_root' | 'not_per
 
 export type ApplyResult =
   | { applied: false; syncId: string; received: number; parts: number }
-  | { applied: true; generation: number; digest: string; files: number; extracted: number; facts: number; relations: number; deleted: number; skipped: SkippedTombstone[] };
+  /** `reconcile`: this pack's own root lost a stored body to a heal and its leaves were invalidated; the client reconciles at once. */
+  | { applied: true; reconcile?: true; generation: number; digest: string; files: number; extracted: number; facts: number; relations: number; deleted: number; skipped: SkippedTombstone[] };
 
 const defaultAtomically = (deps: ApplyDeps): NonNullable<ApplyDeps['atomically']> => (work) =>
   inTransaction(deps.db, (tx) => {
@@ -253,8 +254,6 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
         const moved = bundle.locs.filter((l) => (now.get(l.hash) ?? null) !== (basis.get(l.hash) ?? null)).map((l) => l.hash);
         if (moved.length > 0) throw bodyConflict(moved);
         if (await unit.ledger.index.upsert(bundle.locs, basis) !== bundle.locs.length) throw bodyConflict(bundle.locs.map((l) => l.hash));
-        // A body healed from this pack: the other roots that shared it send it again on their next sync.
-        await invalidateLostBodies(unit.ledger, lost, root);
       }
       const legacy = await reconcileLegacyRows(deps, unit, pack, plan.legacyPaths, admin);
       const tomb = await applyTombstones(deps, unit, pack, admin);
@@ -262,16 +261,24 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
       await unit.ledger.sources.mark(root, plan.remove);
       if (plan.stale.length > 0) await unit.store.markRelationsStaleMany(plan.stale);
       const written = await writeRows(deps, unit, pack);
-      const leaves = leavesOf(pack);
-      await unit.ledger.leaves.upsert(root, leaves);
       // The digest of THIS ROOT'S leaves, from the stored bucket digests with only the touched buckets recomputed.
-      const digest = await recomputeBuckets(unit.ledger, root, [...leaves.map((l) => l.key), ...tomb.keys, ...legacy.leafKeys]);
-      if (pack.targetDigest !== ZERO_DIGEST && digest !== pack.targetDigest) {
-        throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest });
+      const committed = await commitLeaves(unit.ledger, root, {
+        leaves: leavesOf(pack), touched: [...tomb.keys, ...legacy.leafKeys], base: head.baseGeneration,
+        verify: (digest) => {
+          if (pack.targetDigest !== ZERO_DIGEST && digest !== pack.targetDigest) {
+            throw new KnowledgeSyncError(409, 'digest_mismatch', 'the server did not reach the pack’s digest; reconcile', { generation: state.generation, digest });
+          }
+        },
+      });
+      if (committed.generation === null) throw new KnowledgeSyncError(409, 'generation_mismatch', 'another pack reached this root first', { generation: state.generation });
+      let { generation, digest } = { generation: committed.generation, digest: committed.digest };
+      // A body healed from this pack: every root that shared it — this one included, for its paths the pack did not re-supply — sends it
+      // again on its next sync. After this root's own advance, so its pack asserted its digest before any leaf was invalidated.
+      let reconcile = false;
+      for (const inv of lost.length > 0 ? await invalidateLostBodies(unit.ledger, lost, [root]) : []) {
+        if (inv.root === root) { generation = inv.generation; digest = inv.digest; reconcile = true; }
       }
-      const generation = await unit.ledger.roots.advance(root, head.baseGeneration, digest);
-      if (generation === null) throw new KnowledgeSyncError(409, 'generation_mismatch', 'another pack reached this root first', { generation: state.generation });
-      return { written, tomb, legacy, generation, digest };
+      return { written, tomb, legacy, generation, digest, reconcile };
     });
 
     // After the commit: objects and calls the transaction must not hold open. A legacy delete that fails here is harmless
@@ -281,7 +288,7 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
     await bumpKnowledgeVersion(deps.env, deps.tenantId, deps.projectId);
     if (analysis) await putAnalysisSnapshot(deps, analysis.sha, root, analysis.snapshot);
     return {
-      applied: true, generation: done.generation, digest: done.digest, files: plan.upsert.length + plan.remove.length, extracted: bodies.length,
+      applied: true, ...(done.reconcile ? { reconcile: true as const } : {}), generation: done.generation, digest: done.digest, files: plan.upsert.length + plan.remove.length, extracted: bodies.length,
       facts: done.written.facts, relations: done.written.relations, deleted: done.tomb.deleted + done.legacy.deleted, skipped: [...done.tomb.skipped, ...done.legacy.skipped],
     };
   } finally {

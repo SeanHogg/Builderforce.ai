@@ -39,6 +39,24 @@ export async function recomputeBuckets(ledger: KnowledgeLedgerPort, rootId: stri
   return rootDigestOfBuckets(await ledger.buckets.digests(rootId));
 }
 
+type LeafRows = Parameters<KnowledgeLedgerPort['leaves']['upsert']>[1];
+
+/**
+ * The ONE way a root's leaves change: upsert `leaves`, recompute the buckets they (and `touched`, e.g. removed keys) fall in,
+ * hand the new root digest to `verify` (it throws to refuse, rolling the transaction back), then advance the generation from
+ * `base`. `generation` is null when another writer moved the root first: the caller throws, so buckets never change
+ * without a generation bump. Call inside the project's sync transaction.
+ */
+export async function commitLeaves(
+  ledger: KnowledgeLedgerPort, rootId: string,
+  args: { leaves: LeafRows; touched?: Iterable<string>; base: number; verify?: (digest: string) => void },
+): Promise<{ generation: number | null; digest: string }> {
+  await ledger.leaves.upsert(rootId, args.leaves);
+  const digest = await recomputeBuckets(ledger, rootId, [...args.leaves.map((l) => l.key), ...(args.touched ?? [])]);
+  args.verify?.(digest);
+  return { generation: await ledger.roots.advance(rootId, args.base, digest), digest };
+}
+
 /** The root digest from the stored bucket digests (a root with no leaves is the empty tree's digest). */
 export async function storedRootDigest(ledger: KnowledgeLedgerPort, rootId: string): Promise<string> {
   return rootDigestOfBuckets(await ledger.buckets.digests(rootId));

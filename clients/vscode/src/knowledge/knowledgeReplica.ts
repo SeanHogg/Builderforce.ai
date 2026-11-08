@@ -11,13 +11,19 @@
  *            window holding the root's lock pumps (`replicaLock.ts`), and it is bound to the project
  *            of its client: a project switch aborts it, discards the other project's queue and starts
  *            a fresh pump with the new client. It is stopped on dispose; the queue resumes next time;
+ *   quiet    a HEALTHY linked root with nothing to send (no keys, no failures, not paused on auth/project) still starts a pump every
+ *            `GENERATION_CHECK_INTERVAL_MS` (one timer per root, unref'd, skipped while a pump or a review runs, and cleared once the
+ *            root no longer resolves to the project its queue is bound to). Failures and auth pauses are restarted by Retry upload and
+ *            sign-in (`retryReplica`, `resumeAuthPaused`), never by this timer. It also runs on workspace open: the pump then reads the server's generation, so a root
+ *            the server invalidated (a healed body) reconciles. This timer is also the ONLY signal for the uploader's own other paths
+ *            after a legacy per-hash upload heal (that response carries no `reconcile` flag).
  *   state    kept per root in memory ({@link ReplicaState}) and read by the sync status.
  *
  * Nothing here can fail a review: the pump reports into the state, never into the caller.
  */
 
 import {
-  analysisPendingFileName, createReplicaQueue, currentSourcesOf, dirtyFileName, emptyReplicaState, enqueueFirstSync, pumpReplica, replicaFileName, replicatedKnowledgeStore,
+  GENERATION_CHECK_INTERVAL_MS, analysisPendingFileName, createReplicaQueue, currentSourcesOf, dirtyFileName, emptyReplicaState, enqueueFirstSync, pumpReplica, replicaFileName, replicatedKnowledgeStore,
   type KnowledgeFiles, type ReadThrough, type ReplicaPersistence, type ReplicaQueue, type ReplicaState,
 } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -48,6 +54,10 @@ interface Entry {
   reviewing: number;
   waiters: Array<() => void>;
   timer?: ReturnType<typeof setTimeout>;
+  /** The quiet-root timer: starts a pump every `GENERATION_CHECK_INTERVAL_MS` (see {@link armQuietCheck}). */
+  quiet?: ReturnType<typeof setInterval>;
+  /** The CURRENT pump source of the linked root (set by `replicatedStoreOf`): the timer never starts a stale one. */
+  resolve?: () => PumpSource | undefined;
   /** The saved queue did not parse: the first sync is queued again whatever the marks say. */
   corrupt: boolean;
   /** Epoch ms the last pump started: live edits wait until `MIN_SEND_INTERVAL_MS` after it. */
@@ -149,6 +159,7 @@ export function replicatedStoreOf(
   rootId: string, files: KnowledgeFiles, local: KnowledgeStore, pump: PumpSource | undefined, readThrough: boolean,
   resolve: () => PumpSource | undefined = () => pump,
 ): KnowledgeStore {
+  if (pump) entryOf(rootId, files).resolve = resolve;
   return replicatedKnowledgeStore({
     local,
     rootId,
@@ -202,15 +213,42 @@ export async function stopReplicaPump(rootId: string): Promise<void> {
   const held = entries.get(rootId);
   if (!held) return;
   if (held.timer) { clearTimeout(held.timer); held.timer = undefined; }
+  if (held.quiet) { clearInterval(held.quiet); held.quiet = undefined; }
   held.abort?.abort();
   await held.running;
+}
+
+/**
+ * One timer per linked root: every `GENERATION_CHECK_INTERVAL_MS` it starts a pump unless one or a review is running, and asks the
+ * pump to read the server's generation (the previous check time is forgotten, so it is never skipped as "recent"). Unref'd, and
+ * cleared by `stopReplicaPump` and `disposeReplicas`.
+ */
+function armQuietCheck(held: Entry): void {
+  if (held.quiet) return;
+  held.quiet = setInterval(() => { void quietTick(held).catch((error) => report("replica quiet check", error)); }, GENERATION_CHECK_INTERVAL_MS);
+  (held.quiet as { unref?: () => void }).unref?.();
+}
+
+async function quietTick(held: Entry): Promise<void> {
+  if (held.running || held.reviewing > 0) return;
+  const source = (held.resolve ?? (() => held.lastSource))();
+  if (!source || (await held.queue.projectId()) !== source.projectId) {
+    // Unlinked, the folder left the workspace, or the queue moved to another project: nothing here to check any more.
+    if (held.quiet) { clearInterval(held.quiet); held.quiet = undefined; }
+    return;
+  }
+  // Only a quiet, healthy root: a failed one waits for Retry upload, an auth-paused one for sign-in (unreachable may recover by itself).
+  if ((await held.queue.size()) > 0 || held.state.failed.length > 0 || (held.state.paused !== undefined && held.state.paused !== "unreachable")) return;
+  const { generationCheckedAt: _checked, ...rest } = held.state;
+  held.state = rest; // forget the last check, so this pump really asks the server
+  void startReplicaPump(source, { probe: true });
 }
 
 /**
  * Starts draining the root's queue unless a pump for the SAME project is already running (one for
  * another project is stopped first). Never throws; resolves when the pump has stopped.
  */
-export async function startReplicaPump(source: PumpSource): Promise<void> {
+export async function startReplicaPump(source: PumpSource, opts: { probe?: boolean } = {}): Promise<void> {
   const held = entryOf(source.rootId, source.files);
   if (held.running) {
     if (held.projectId === source.projectId) return held.running;
@@ -220,7 +258,8 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
   held.abort = abort;
   held.projectId = source.projectId;
   held.lastSource = source;
-  held.lastStartAt = Date.now();
+  if (!opts.probe) held.lastStartAt = Date.now(); // only real sends delay a live edit's pump
+  armQuietCheck(held);
   const running: Promise<void> = (async () => {
     // Only the window holding the lock pumps: another window's pump on this folder is not ours to double.
     const lock = await acquireReplicaLock(source.files, source.rootId).catch(() => undefined);
@@ -291,10 +330,13 @@ export function kickReplicaPump(rootId: string, files: KnowledgeFiles, resolve: 
   }, wait);
 }
 
-/** Starts the pump when the dirty set holds keys (the workspace opened with work waiting). */
+/** Starts the pump when the workspace opens with a queue bound to this project (keys to send, an ack to check, or a reconcile owed). */
 export async function resumeReplica(source: PumpSource): Promise<void> {
   const queue = entryOf(source.rootId, source.files).queue;
-  if ((await queue.size()) > 0 && (await queue.projectId()) === source.projectId) void startReplicaPump(source);
+  if ((await queue.projectId()) !== source.projectId) return;
+  // Keys waiting, an ack to check against the server's generation, or NO ack (a reconcile is owed: it compares manifests, cheaply
+  // equal when nothing differs): a queue bound to this project always gets a pump on open.
+  void startReplicaPump(source);
 }
 
 /**
@@ -326,6 +368,7 @@ export async function disposeReplicas(): Promise<void> {
   await Promise.all(all.map((e) => e.queue.flush().catch(() => undefined)));
   for (const held of all) {
     if (held.timer) clearTimeout(held.timer);
+    if (held.quiet) clearInterval(held.quiet);
     held.abort?.abort();
   }
   await Promise.all(all.map((e) => e.running));

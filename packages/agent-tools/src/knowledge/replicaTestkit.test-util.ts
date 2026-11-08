@@ -66,7 +66,7 @@ export function world(opts: { projectId?: number; persistence?: ReplicaPersisten
     return w;
 }
 
-export type Logged = { kind: 'sync' | 'manifest' | 'leaves' | 'have'; bytes?: number; pack?: Pack; part?: number };
+export type Logged = { kind: 'sync' | 'manifest' | 'generation' | 'leaves' | 'have'; bytes?: number; pack?: Pack; part?: number };
 
 export function fakeServer() {
     const s = {
@@ -143,6 +143,7 @@ export function fakeServer() {
             return { applied: true as const, generation: s.generation, digest: tree().root };
         },
         syncManifest: async () => { log.push({ kind: 'manifest' }); const t = tree(); return { generation: s.generation, digest: t.root, buckets: t.buckets }; },
+        syncGeneration: async () => { log.push({ kind: 'generation' }); return { generation: s.generation, digest: tree().root }; },
         syncLeaves: async (_r, ids) => { log.push({ kind: 'leaves' }); const t = tree(); return { generation: s.generation, leaves: ids.flatMap((b) => t.leaves.get(b) ?? []) }; },
         syncHave: async (_r, pairs) => { log.push({ kind: 'have' }); return pairs.map((p) => entryFor(p.hash, p.sourceRef)); },
         writeRows: async (_r, rows) => {

@@ -77,11 +77,27 @@ export function sourcePathOf(ref: string, rootId: string): string | undefined {
     return ref.startsWith(prefix) ? ref.slice(prefix.length) : undefined;
 }
 
-/** The root id of a source ref (`src:<rootId>::<path>`) whose root came from {@link rootIdFor}. */
-export function rootIdOfSourceRef(ref: string): string | undefined {
+/**
+ * Splits `src:<rootId>::<path>` into its root and its FULL path (never section-stripped: the path is exactly what the client
+ * builds a file leaf key from, so `src/C#/a.cs` stays whole). A root id may end in ':' (the linked repo's `cloud:<id>:`), so the
+ * colons after the first `::` that directly follow it belong to the root: `src:cloud:5:::docs/a.md` is root `cloud:5:`, path
+ * `docs/a.md`. (A path that itself starts with ':' is read as part of the root — the same trade-off `cleanPart` documents.)
+ * Undefined when `ref` is not a source ref. Pass `knownRootIds` where the root is known, so even a path that starts with ':' is exact.
+ */
+export function splitSourceRef(ref: string, knownRootIds: readonly string[] = []): { rootId: string; path: string } | undefined {
     if (!ref.startsWith('src:')) return undefined;
-    const end = ref.indexOf('::', 4);
-    return end > 4 ? ref.slice(4, end) : undefined;
+    // A root the caller KNOWS (the one being applied) is split by its exact prefix first: that alone reads a path starting with ':'.
+    for (const rootId of knownRootIds) if (ref.startsWith(`src:${rootId}::`)) return { rootId, path: ref.slice(`src:${rootId}::`.length) };
+    const at = ref.indexOf('::', 4);
+    if (at <= 4) return undefined;
+    let end = at;
+    while (ref[end + 2] === ':') end += 1;
+    return { rootId: ref.slice(4, end), path: ref.slice(end + 2) };
+}
+
+/** The root id of a source ref (`src:<rootId>::<path>`), including a root id that ends in ':' (see {@link splitSourceRef}). */
+export function rootIdOfSourceRef(ref: string): string | undefined {
+    return splitSourceRef(ref)?.rootId;
 }
 
 /**

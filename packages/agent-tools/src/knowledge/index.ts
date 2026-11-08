@@ -46,12 +46,12 @@ export {
     type DirtySnapshot, type ReplicaAck, type ReplicaAnalysis, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,
 } from './replicaQueue.js';
 export { replicatedKnowledgeStore, type ReadThrough, type ReplicaTarget, type ReplicatedStoreArgs } from './replicatedStore.js';
-export { emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaPackStats, type ReplicaState } from './replicaPump.js';
+export { GENERATION_CHECK_INTERVAL_MS, emptyReplicaState, pumpReplica, type PumpArgs, type ReplicaClient, type ReplicaFailure, type ReplicaPackStats, type ReplicaState } from './replicaPump.js';
 export { buildPack, pathOfRef, DIFF_MAX_FILES, type BuiltPack, type ReplicaSource, type SkippedRow } from './replicaPack.js';
 export { hasControlChar, isCleanKey, isCleanText, isWellFormedString } from './packKeyGuard.js';
 export { planReconcile, type ReconcilePlan } from './replicaReconcile.js';
 export { currentSourcesOf, enqueueFirstSync, enqueueSources, type FirstSyncCounts } from './replicaFirstSync.js';
-export { PACK_ROOT_HOST, folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, type RootIdParts } from './rootId.js';
+export { PACK_ROOT_HOST, folderIdOf, isPackRootId, isWellFormedPackRootId, packRootIdFor, repoIdOfRemote, rootIdFor, rootIdOfSourceRef, rootRelOf, sourcePathOf, splitSourceRef, type RootIdParts } from './rootId.js';
 export {
     canDeleteFact, factRightsCache,
     type FactAuthor, type FactRightsCache, type FactViewer, type FactsListing,

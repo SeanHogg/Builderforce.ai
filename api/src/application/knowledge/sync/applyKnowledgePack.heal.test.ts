@@ -19,8 +19,9 @@ vi.mock('../knowledgeVersion', () => ({ bumpKnowledgeVersion: vi.fn(async () => 
 vi.mock('../../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: vi.fn(async () => false) }));
 
 import { applyKnowledgePack, type ApplyDeps } from './applyKnowledgePack';
-import { HEALED_LEAF_DIGEST } from '../knowledgeHeal';
-import { bucketIdsOf, haveBitmap, manifestLeaves, manifestSummary } from './knowledgeSyncManifest';
+import { HEALED_LEAF_DIGEST, lostRefsOf } from '../knowledgeHeal';
+import { entrylessRef } from '../knowledgeLedger';
+import { bucketIdsOf, haveBitmap, manifestGeneration, manifestLeaves, manifestSummary } from './knowledgeSyncManifest';
 
 const ROOT_B = 'ws:other';
 const SHARED = hashOf(500);
@@ -64,7 +65,7 @@ async function sharedThenLost(): Promise<{ a: Rows; b: Rows }> {
 }
 
 /** Root A re-supplies the lost hash under a new path (its own delta pack at generation 1). */
-const healFromA = (): Promise<unknown> => apply({
+const healFromA = () => apply({
   rootId: ROOT, baseGeneration: 1, files: [{ path: 'src/a2.ts', hash: SHARED, bytes: 1 }],
   extracted: [{ kind: 'full', hash: SHARED, entries: [extraction(ROOT, 'src/a2.ts', SHARED)] }], targetDigest: ZERO_DIGEST,
 });
@@ -85,7 +86,7 @@ describe('healing a lost body shared by two roots', () => {
     expect(await haveOf(ROOT_B, 'src/b.ts', SHARED)).toBe(false); // so the pack builder sends its body
   });
 
-  it('regression: B sending the file again restores its leaf and the body, and leaves reconcile equal', async () => {
+  it('guard: B sending the file again restores its leaf and the body, and leaves reconcile equal', async () => {
     const { b } = await sharedThenLost();
     await healFromA();
     const gen = w.roots.get(ROOT_B)!.generation;
@@ -94,7 +95,7 @@ describe('healing a lost body shared by two roots', () => {
     expect(await haveOf(ROOT_B, 'src/b.ts', SHARED)).toBe(true);
   });
 
-  it('regression: a root whose file has moved on to another hash is not invalidated by the heal', async () => {
+  it('guard: a root whose file has moved on to another hash is not invalidated by the heal', async () => {
     await sharedThenLost();
     const moved = rowsOf('src/b.ts', hashOf(77));
     await apply(packOf(moved, { root: ROOT_B, generation: 1 }));
@@ -105,5 +106,70 @@ describe('healing a lost body shared by two roots', () => {
     expect(w.leaves.get(ROOT_B)!.get('f:src/b.ts')).toBe(hashOf(77));
     expect(w.roots.get(ROOT_B)!.generation).toBe(generation);
     expect(await reconcileFinds(ROOT_B, moved)).toEqual([]);
+  });
+
+  it('regression: the applying root OWN other path that shared the lost hash is invalidated too, and the pack answers `reconcile`', async () => {
+    await sharedThenLost();
+    const aRows: Rows = { files: [{ path: 'src/a.ts', hash: SHARED, bytes: 1 }, { path: 'src/a2.ts', hash: SHARED, bytes: 1 }], facts: [], relations: [] };
+
+    const res = await healFromA();
+
+    expect(res).toMatchObject({ applied: true, reconcile: true, generation: 3 }); // the pack advanced 1 → 2, the invalidation 2 → 3
+    expect(w.roots.get(ROOT)!.generation).toBe(3);
+    expect(w.leaves.get(ROOT)!.get('f:src/a.ts')).toBe(HEALED_LEAF_DIGEST);
+    expect(w.leaves.get(ROOT)!.get('f:src/a2.ts')).toBe(SHARED); // the path the pack re-supplied is untouched
+    expect(await reconcileFinds(ROOT, aRows)).toEqual(['f:src/a.ts']);
+    expect(await haveOf(ROOT, 'src/a.ts', SHARED)).toBe(false);
+  });
+
+  it('a pack that heals nothing does not ask for a reconcile', async () => {
+    const res = await apply(packOf(rowsOf('src/a.ts', SHARED)));
+    expect(res).not.toHaveProperty('reconcile');
+  });
+
+  it('guard: two lost hashes shared across two roots, healed by ONE pack, invalidate each root once', async () => {
+    const H1 = hashOf(501), H2 = hashOf(502);
+    const rows = (): Rows => ({ files: [{ path: 'src/x1.ts', hash: H1, bytes: 1 }, { path: 'src/x2.ts', hash: H2, bytes: 1 }], facts: [], relations: [] });
+    await apply(packOf(rows()));
+    await apply(packOf(rows(), { root: ROOT_B }));
+    w.bundles.clear();
+
+    await apply(packOf(rows(), { root: 'ws:third' }));
+
+    for (const root of [ROOT, ROOT_B]) {
+      expect(w.leaves.get(root)!.get('f:src/x1.ts')).toBe(HEALED_LEAF_DIGEST);
+      expect(w.leaves.get(root)!.get('f:src/x2.ts')).toBe(HEALED_LEAF_DIGEST);
+      expect(w.roots.get(root)!.generation).toBe(2); // both files in ONE advance
+      expect((await reconcileFinds(root, rows())).sort()).toEqual(['f:src/x1.ts', 'f:src/x2.ts']);
+    }
+  });
+
+  it('guard: entry-less refs of the old index row are named lost unless the rewritten body keeps them', () => {
+    const ref = refOf(ROOT, 'src/bin.dat');
+    const loc = { sourceRefs: [refOf(ROOT, 'src/a.ts'), entrylessRef(ref), entrylessRef(refOf(ROOT_B, 'src/b.bin'))] };
+    expect(lostRefsOf(loc, { entries: [{ sourceRef: refOf(ROOT, 'src/a.ts') }], entryless: [ref] })).toEqual([refOf(ROOT_B, 'src/b.bin')]);
+    expect(lostRefsOf(loc, { entries: [], entryless: [] }).sort()).toEqual([refOf(ROOT, 'src/a.ts'), ref, refOf(ROOT_B, 'src/b.bin')].sort());
+  });
+
+  it('guard: a root with leaves but no roots row is left as it is (its next sync is a full pack), and the heal still completes', async () => {
+    await sharedThenLost();
+    w.leaves.set('ws:ghost', new Map([['f:src/g.ts', SHARED]]));
+    w.index.get(SHARED)!.sourceRefs.push(refOf('ws:ghost', 'src/g.ts'));
+
+    await healFromA();
+
+    expect(w.leaves.get('ws:ghost')!.get('f:src/g.ts')).toBe(SHARED);
+    expect(w.roots.has('ws:ghost')).toBe(false);
+    expect(w.buckets.has('ws:ghost')).toBe(false);
+    expect(w.leaves.get(ROOT_B)!.get('f:src/b.ts')).toBe(HEALED_LEAF_DIGEST);
+  });
+
+  it('the generation-only read answers the roots row and touches no bucket', async () => {
+    await sharedThenLost();
+    await healFromA();
+    const reads = w.indexQueries;
+    expect(await manifestGeneration({ sync: fakeSync(w) }, ROOT_B)).toEqual({ generation: 2, digest: w.roots.get(ROOT_B)!.digest });
+    expect(await manifestGeneration({ sync: fakeSync(w) }, 'ws:never')).toEqual({ generation: 0, digest: '' });
+    expect(w.indexQueries).toBe(reads);
   });
 });

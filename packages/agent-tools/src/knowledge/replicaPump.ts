@@ -33,12 +33,14 @@ import type { KnowledgeStore, StoredFact, StoredRelation } from '@seanhogg/build
 import { MAX_PART_BYTES, splitParts } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { buildPack, type PackQueries, type ReplicaSource } from './replicaPack.js';
 import type { ReplicaQueue } from './replicaQueue.js';
+import { generationCheckDue, readServerGeneration, type GenerationReader } from './replicaGenerationCheck.js';
+export { GENERATION_CHECK_INTERVAL_MS } from './replicaGenerationCheck.js';
 import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 
 /** The knowledge client's sync calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
-export interface ReplicaClient extends PackQueries, ReconcileQueries {
+export interface ReplicaClient extends PackQueries, ReconcileQueries, Partial<Pick<GenerationReader, 'syncGeneration'>> {
     sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }): Promise<
-        { applied: true; generation: number; digest: string } | { applied: false; received: number; parts: number }>;
+        { applied: true; generation: number; digest: string; reconcile?: true } | { applied: false; received: number; parts: number }>;
     /** The existing single writer (≤ 500 rows): the path for rows a pack does not carry. */
     writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
 }
@@ -80,6 +82,8 @@ export interface ReplicaState {
     failed: ReplicaFailure[];
     /** ISO time of the last pack the server acknowledged. */
     lastSyncAt?: string;
+    /** Epoch ms of the last time a quiet root asked the server for its generation (see {@link GENERATION_CHECK_INTERVAL_MS}). */
+    generationCheckedAt?: number;
     lastPack?: ReplicaPackStats;
 }
 
@@ -117,6 +121,8 @@ const BACKOFF_START_MS = 1000;
 const BACKOFF_CAP_MS = 60_000;
 const MIN_WAIT_MS = 250;
 const MAX_CONFLICTS = 4;
+/** Recorded failures kept (the newest): they carry over between pumps, so a root failing every cycle must not grow them for ever. */
+const MAX_FAILED_KEPT = 50;
 /** Rebuilds after `body_conflict` (two packs of one project merged the same bodies at once). */
 const MAX_BODY_CONFLICTS = 3;
 /** Rows per side write: the single writer's bound. */
@@ -181,6 +187,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
     delete state.waitingUntil; delete state.waitingFor; delete state.paused; delete state.pausedStatus; delete state.parts; delete state.awaitingReview;
     const emit = async (): Promise<void> => {
         try {
+            if (state.failed.length > MAX_FAILED_KEPT) state.failed.splice(0, state.failed.length - MAX_FAILED_KEPT);
             state.dirty = await queue.size();
             args.onState?.({ ...state, failed: [...state.failed] });
         } catch { /* reporting never stops the pump */ }
@@ -195,6 +202,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
             if (args.projectId !== undefined && (await queue.projectId()) !== args.projectId) { state.paused = 'project'; throw new Stop(); }
             try {
                 const value = await fn();
+                state.generationCheckedAt = now(); // the server just answered: a quiet root need not ask again for a while
                 delete state.waitingUntil; delete state.waitingFor;
                 attempt = 0; streak = 0;
                 return value;
@@ -226,6 +234,16 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
         writeRows: (r: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }) => request(() => args.client.writeRows(r, rows)),
     };
 
+    /** True when the server's generation for this root differs from `generation` (one generation read, rate limited, never retried). Never throws. */
+    const serverMovedPast = async (generation: number): Promise<boolean> => {
+        if (!generationCheckDue(state.generationCheckedAt, now())) return false;
+        if (args.projectId !== undefined && (await queue.projectId()) !== args.projectId) return false;
+        const server = await readServerGeneration(args.client, rootId);
+        if (server === undefined) return false;
+        state.generationCheckedAt = now();
+        return server !== generation;
+    };
+
     let conflicts = 0, bodyConflicts = 0, noDiff = false, maxFiles: number | undefined, force: Set<string> | undefined, lastFiles = 0;
     let owned: Set<string> | undefined;
     let hadFailure = false;
@@ -235,7 +253,11 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
         await emit();
         while (!signal.aborted) {
             let snap = await queue.snapshot();
-            if (snap.ack && snap.keys.length === 0 && !snap.analysis) break;
+            if (snap.ack && snap.keys.length === 0 && !snap.analysis) {
+                if (!(await serverMovedPast(snap.ack.generation))) break;
+                await queue.requestReconcile();
+                continue;
+            }
             state.sending = true;
             await emit();
             try {
@@ -312,7 +334,9 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                         }
                     }
                 }
-                await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, sentKeys, built.analysisSent);
+                // `ack.reconcile`: the server invalidated leaves of this root while applying the pack (a healed body), so the ack is not
+                // a base to build on: ONE queue operation drops the sent keys and stores no ack (the next cycle reconciles).
+                await queue.settle(snap, { generation: ack.generation, digest: ack.digest }, sentKeys, built.analysisSent, ack.reconcile === true);
                 // Rows the server would refuse (a control character in a path or key) were left out of the pack and settled: one
                 // such file must not 422 the pack and stall the pump. They are recorded, never silent.
                 for (const row of built.skipped) { state.failed.push({ reason: row.reason }); hadFailure = true; }

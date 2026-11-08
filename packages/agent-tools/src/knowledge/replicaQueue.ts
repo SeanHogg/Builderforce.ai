@@ -79,7 +79,9 @@ export interface ReplicaQueue {
      * A pack carrying `sent` keys of `snapshot` was acknowledged as `ack`: those keys leave the set unless
      * they were marked again since, and the ack is stored. Pass `analysisSent` when the pack carried the analysis.
      */
-    settle(snapshot: DirtySnapshot, ack: ReplicaAck, sent?: readonly string[], analysisSent?: boolean): Promise<void>;
+    settle(snapshot: DirtySnapshot, ack: ReplicaAck, sent?: readonly string[], analysisSent?: boolean, reconcile?: boolean): Promise<void>;
+    // `reconcile`: the server invalidated this root's leaves while applying the pack. The sent keys leave the set but the ack is
+    // NOT stored (no ack = a reconcile is owed), in ONE operation: a crash can never keep an ack a reconcile was owed for.
     /** Number of dirty keys. */
     size(): Promise<number>;
     ack(): Promise<ReplicaAck | undefined>;
@@ -255,11 +257,11 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready();
             return { keys: [...dirty.keys()], marks: new Map(dirty), ...(ack ? { ack } : {}), ...(analysis ? { analysis } : {}) };
         },
-        async settle(snap, next, sent = snap.keys, analysisSent = false) {
+        async settle(snap, next, sent = snap.keys, analysisSent = false, reconcile = false) {
             await ready();
             for (const k of sent) if (dirty.get(k) === snap.marks.get(k)) dirty.delete(k);
             if (analysisSent && analysis === snap.analysis) { analysis = undefined; analysisChanged = true; }
-            ack = next;
+            ack = reconcile ? undefined : next;
             touch();
         },
         async size() { await ready(); return dirty.size; },
