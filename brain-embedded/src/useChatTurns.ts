@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useDoorStopMarks, stopDoorTurns, stopEpochOf } from './doorStop';
+import { useDoorStopMarks, stopDoorTurns, stopEpochOf, sendEpochKey } from './doorStop';
 import type { RunKey } from './brainRunStore';
 import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
@@ -197,11 +197,12 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
       let turn: T | undefined = first;
       while (turn !== undefined) {
         const key = ports.current.runKey;
-        const epoch = stopEpochOf(marks, key); // the Stops on THIS turn's view: one on another chat is not its to heed
+        const epochKey = sendEpochKey(ports.current); // THIS turn's view (a draft by its token): a Stop on another is not its to heed
+        const epoch = stopEpochOf(marks, epochKey);
         const sent: T = turn;
         // A host's send may throw synchronously: that is a send not kept, never a lost turn.
         const kept = await new Promise<unknown>((resolve) => { resolve(sendOnce(sent)); }).then((ok) => ok !== false, () => false);
-        if (stopEpochOf(marks, key) !== epoch) return;
+        if (stopEpochOf(marks, epochKey) !== epoch) return;
         const { textOf: text, attachmentsOf: attached, isDirected: directed } = ports.current;
         if (kept) {
           // A turn that starts no run (a typed stop, sent idle) raises no falling edge, so the turns

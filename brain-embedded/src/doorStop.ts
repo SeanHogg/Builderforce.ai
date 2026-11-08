@@ -17,10 +17,10 @@ export interface DoorStopMarks {
   stoppingRef: MutableRefObject<boolean>;
   markStopping: (on: boolean) => void;
   /**
-   * Counts Stops PER VIEW, by the run key the Stop was pressed on: a send in flight when a Stop lands on ITS view must not put
+   * Counts Stops PER VIEW, by the view's epoch key (a chat's run key, or `draft:<token>` for a draft): a send in flight when a Stop lands on ITS view must not put
    * its turn back afterwards. A Stop on another view is not that send's (it would drop the turn: in no box, queue or chat).
    */
-  stopEpochs: MutableRefObject<Map<RunKey | null, number>>;
+  stopEpochs: MutableRefObject<Map<StopEpochKey, number>>;
 }
 
 export function useDoorStopMarks(running: boolean): DoorStopMarks {
@@ -29,13 +29,30 @@ export function useDoorStopMarks(running: boolean): DoorStopMarks {
   const [, repaint] = useState(false);
   const markStopping = useCallback((on: boolean) => { stoppingRef.current = on; repaint(on); }, []);
   useEffect(() => { if (!running && stoppingRef.current) markStopping(false); }, [running, markStopping]);
-  const stopEpochs = useRef(new Map<RunKey | null, number>());
+  const stopEpochs = useRef(new Map<StopEpochKey, number>());
   // Stable identity: `stop` keeps its identity across renders.
   return useMemo(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
 }
 
-/** The Stops pressed so far on the view with this run key (a draft's is `null`). */
-export const stopEpochOf = (marks: DoorStopMarks, key: RunKey | null): number => marks.stopEpochs.current.get(key) ?? 0;
+/** A view's key in `stopEpochs`: a chat's run key, a draft's `draft:<token>`, or `null` (a host with no binding). */
+export type StopEpochKey = RunKey | `draft:${number}` | null;
+
+/**
+ * Every draft view has run key `null`, so the draft's TOKEN names its epoch: a Stop on draft A must not read as a Stop to a
+ * send in flight on draft B. No token (an empty new draft, or a host with no binding) falls back to the run key.
+ */
+export const stopEpochKey = (runKey: RunKey | null, draftToken?: DraftToken | null): StopEpochKey =>
+  runKey === null && typeof draftToken === 'number' ? `draft:${draftToken}` : runKey;
+
+/**
+ * The epoch key a send from the view showing right now belongs to. A send from a draft `begin`s the draft's token, and
+ * `adopt` is the very token it will get (minted if the draft has none yet), so a Stop on THAT draft is seen by the send.
+ */
+export const sendEpochKey = (ports: Pick<DoorStopPorts, 'runKey' | 'drafts'>): StopEpochKey =>
+  stopEpochKey(ports.runKey, ports.runKey === null ? ports.drafts?.adopt() : undefined);
+
+/** The Stops pressed so far on the view with this epoch key. */
+export const stopEpochOf = (marks: DoorStopMarks, key: StopEpochKey): number => marks.stopEpochs.current.get(key) ?? 0;
 
 /** The ports a Stop reads, newest at call time. */
 export interface DoorStopPorts {
@@ -59,7 +76,8 @@ export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear:
   // An empty new draft has no run, no send in flight and no draft to stop: it must not bump the epoch (a send in flight
   // elsewhere would be told it was stopped) or word the Send button for a run that is not unwinding.
   if (token === null) return;
-  marks.stopEpochs.current.set(key, stopEpochOf(marks, key) + 1);
+  const epochKey = stopEpochKey(key, token);
+  marks.stopEpochs.current.set(epochKey, stopEpochOf(marks, epochKey) + 1);
   if (ports.running) marks.markStopping(true);
   // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
   // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -

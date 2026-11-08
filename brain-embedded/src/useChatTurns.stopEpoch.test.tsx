@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
+import { createDraftBinding } from './draftBinding';
 import { drainRunSteering } from './runSteering';
 import { resetRunSteering } from '@builderforce/agent-run';
 
@@ -61,5 +62,61 @@ describe('useChatTurns - a flushed turn heeds only the Stops pressed on ITS view
     expect(restore).not.toHaveBeenCalled();
     expect(drainRunSteering(70)).toEqual([]);
     expect(result.current.queued.items).toEqual([]);
+  });
+});
+
+/**
+ * Every draft view has run key `null`, so a draft's epoch is keyed by its TOKEN: a Stop on draft A is not draft B's.
+ */
+describe('useChatTurns - a flushed draft turn heeds only the Stops pressed on ITS draft', () => {
+  let restore: ReturnType<typeof vi.fn>;
+  let settle: (kept: boolean) => void;
+
+  const mount = async () => {
+    restore = vi.fn();
+    installRunDriver({ start: vi.fn(), stop: vi.fn(), confirm: vi.fn(), clearError: vi.fn(), steer: vi.fn() } as unknown as BrainRunDriver);
+    const drafts = createDraftBinding();
+    // The host's send is what makes the draft's chat: it starts the creation for the token the door handed it.
+    const send = vi.fn((_turn: string, ctx?: { draft?: number }) => {
+      if (ctx?.draft !== undefined) drafts.startCreation(ctx.draft);
+      return new Promise<boolean>((resolve) => { settle = resolve; });
+    });
+    const props = (running: boolean): ChatTurnsOptions<string> => ({ running, runKey: null, drafts, send, isDirected: () => false, restore });
+    const hook = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(true) });
+    // Typed on a draft with no token yet while a run is live: held untagged, and flushed on the run's falling edge.
+    await act(async () => { await hook.result.current.queueAfter('T'); });
+    expect(hook.result.current.queued.items.map((i) => i.value)).toEqual(['T']);
+    await act(async () => { hook.rerender(props(false)); }); // the run ended: T is flushed from draft B (the send is awaiting)
+    expect(send).toHaveBeenCalledTimes(1);
+    const draftB = drafts.current();
+    expect(draftB).not.toBeNull();
+    return { ...hook, drafts, draftB };
+  };
+
+  beforeEach(() => { stopRun.mockReset(); resetRunSteering(); });
+  afterEach(() => installRunDriver(null));
+
+  it("a Stop on draft A, switched to while draft B's send was in flight, does not drop B's turn", async () => {
+    const { result, drafts, draftB } = await mount();
+    act(() => drafts.leave());
+    const draftA = drafts.adopt(); // a different draft is on screen now
+    expect(draftA).not.toBe(draftB);
+
+    act(() => result.current.stop()); // Stop on draft A
+    await act(async () => { settle(false); }); // B's send was not kept (its creation had started, so the door does not restore it)
+
+    // Put back at the front of the queue - not dropped, and not given to the composer.
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['T']);
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("a Stop on the draft the send belongs to drops its turn: not put back", async () => {
+    const { result } = await mount();
+
+    act(() => result.current.stop()); // Stop on B's own draft
+    await act(async () => { settle(false); });
+
+    expect(result.current.queued.items).toEqual([]);
+    expect(restore).not.toHaveBeenCalled();
   });
 });
