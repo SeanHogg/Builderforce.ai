@@ -19,29 +19,28 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, claimSimilarity, createReviewRecorder, indexedSymbolLookup, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, repoGraphEdgeCount, reviewIndexPort, reviewPacks,
-  rootManifest, rootStore, runKnowledgeReview, workspaceCodeAnalyzers,
-  type FsDirectorySource, type KnowledgeReviewOptions, type KnowledgeReviewPorts, type RepoGraphPort, type ReviewRecorder, type SymbolLookup,
+  buildStoredGraph, createReviewRecorder, migratingRootFiles, reviewPacks,
+  rootManifest, rootStore, runKnowledgeReview,
+  type FsDirectorySource, type KnowledgeReviewOptions,
 } from "@builderforce/agent-tools/knowledge";
-import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
-import { createKnowledgeClient, type AnalysisSnapshotPayload, type KnowledgeClient } from "@builderforce/knowledge-client";
+import { createKnowledgeClient, type KnowledgeClient } from "@builderforce/knowledge-client";
 import type { KnowledgeGraph, KnowledgeStore, LocalSnapshotStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
-import { repoMapPort } from "@builderforce/repo-map";
 import { fetchAuthed, type AuthedInit } from "../bfApi";
 import { getSelectedProject } from "../projectState";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
-import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
 import { createDirectorySource, type HashCache } from "./vscodeDirectorySource";
 import { fileManifest, localKnowledgeStore, manifestFileName, type KnowledgeFiles } from "./knowledgeStores";
-import { configureReplicaLog, duringReview, replicaQueueFor, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
+import { configureReplicaLog, duringReview, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
-import { editorJudgement, type TrackedJudgement } from "./knowledgeJudgement";
+import type { TrackedJudgement } from "./knowledgeJudgement";
+import { persistentHashCache } from "./hashCacheFile";
+import { reviewPortsFor } from "./reviewPortsFor";
 import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 
@@ -129,71 +128,6 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
   };
 }
 
-/** The repo map, reporting the import-edge count of each graph it builds to the review's record (the sync panel's local edges). */
-function measuringRepoMap(recorder: ReviewRecorder): RepoGraphPort {
-  return {
-    accepts: (path, size) => repoMapPort.accepts(path, size),
-    create() {
-      const graph = repoMapPort.create();
-      return {
-        addFile: (path, content) => graph.addFile(path, content),
-        build() {
-          const built = graph.build();
-          recorder.edges(repoGraphEdgeCount(built));
-          return built;
-        },
-      };
-    },
-  };
-}
-
-/** The review's ports for an opened root: symbols, analyzers, layers, judgement and the index. */
-async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot, recorder: ReviewRecorder): Promise<KnowledgeReviewPorts & { symbolLookup: SymbolLookup }> {
-  const { root, client } = open;
-  const caps = buildLocalCapabilityProvider(root.folderPath);
-  const partitions = await readPartitions({ caps });
-  const symbols = await workspaceSymbolIndex(root.folderPath).filesUnder(root.rel || undefined).catch(() => []);
-  const judgement = await editorJudgement(secrets, client);
-  const history = await gitHistoryPort(root.rootPath, { onWarn: (message) => log("history", message) });
-  const index = await getHostKnowledgeIndex(root.rootId).catch((error: unknown) => { log("index", error); return undefined; });
-  return {
-    source: open.source,
-    store: open.store,
-    manifest: open.manifest,
-    partitions,
-    symbolsOf: indexedSymbolSource(symbols, root.rel),
-    // The same index hits, as plain data for the extraction pool's jobs (one symbol rule on both paths).
-    symbolLookup: indexedSymbolLookup(symbols, root.rel),
-    analyzers: workspaceCodeAnalyzers({
-      caps,
-      partitions,
-      repoGraph: measuringRepoMap(recorder),
-      ...(root.rel ? { path: root.rel } : {}),
-      // The analysis is always kept locally (the review stores its output); linked, its snapshot is queued for the project.
-      ...(open.pump ? {
-        upload: async (sha: string, snapshot: unknown) => {
-          const queue = replicaQueueFor(root.rootId, open.files);
-          await queue.adopt(open.pump!.projectId);
-          queue.setAnalysis({ sha, snapshot: snapshot as AnalysisSnapshotPayload });
-        },
-      } : {}),
-      onUploadError: (error) => log("analysis upload", error),
-      onWarn: (message) => log("analysis", message),
-    }),
-    ...(history ? { history } : {}),
-    rootFiles: { fs: vscodeKnowledgeFs(), rootPath: root.rootPath },
-    onSignalsSkipped: (skipped) => recorder.signals(skipped),
-    ...(judgement ? { judgement } : {}),
-    ...(index ? { similar: claimSimilarity(index, open.store, root.rootId) } : {}),
-    // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
-    index: reviewIndexPort(() => getHostKnowledgeIndex(root.rootId)),
-    // No `platformGraph`: the knowledge index is fed from the LOCAL graph too, so nothing the editor
-    // shows or searches depends on the server's version (PRD 41 A7).
-    onIndexError: (error) => log("index upsert", error),
-    onSystemsError: (error) => log("systems", error),
-  };
-}
-
 /** A review of one root: plan first (no writes), then the review on that plan once confirmed (no re-walk). */
 export interface RootReview {
   open: OpenRoot;
@@ -226,18 +160,17 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
   const open = openRoot(secrets, root, { readThrough: !!opts.seed });
   // What this review skips (plan, folders, coverage, uploads during the run) is recorded per root for the sync status.
   const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, ...(open.client ? { client: open.client } : {}), folders: () => open.source.skippedFolders() });
-  let ports: ReturnType<typeof reviewPorts> | undefined;
-  const portsOnce = () => (ports ??= reviewPorts(secrets, open, recorder));
+  const ports = reviewPortsFor({ secrets, open, recorder, log, hashCache: persistentHashCache(open.files, root.rootPath, hashCache) });
   return {
     open,
     async plan(force) {
-      const planned = await planKnowledgeReviewDetail(await portsOnce(), { force: !!force });
+      const planned = await ports.plan({ force: !!force });
       recorder.planned(planned.plan);
       // The confirm chip states the file budget of the judge pass too (PRD 41 A10).
       return { ...planned, plan: { ...planned.plan, judgeFiles: judgeBudgetFiles() } };
     },
     async run(opts) {
-      const p = await portsOnce();
+      const p = await ports.full();
       if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
       // The shared runner feeds the knowledge index (reported as the `index` phase).
       recorder.begin();
@@ -250,7 +183,7 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
       });
     },
     async judgeModel() {
-      const judgement = (await portsOnce()).judgement as Partial<TrackedJudgement> | undefined;
+      const judgement = (await ports.full()).judgement as Partial<TrackedJudgement> | undefined;
       return judgement?.modelsUsed?.().join(", ") || undefined;
     },
   };

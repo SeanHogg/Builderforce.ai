@@ -4,9 +4,14 @@
  * (`@builderforce/agent-tools/knowledge` `createFsDirectorySource`: SHA-256 per file,
  * cached by mtime + size; `.builderforce/` state never listed) over `vscode.workspace.fs`
  * (`knowledgeFs.ts`), skipping the ONE list every host's review skips (`KNOWLEDGE_SKIP_DIRS`).
+ *
+ * This host hashes natively (`node:crypto`, the same lowercase-hex SHA-256) and never reads a
+ * file the plan skips as too large (it needs the size only).
  */
 
 import { createFsDirectorySource, type FsDirectorySource, type HashCache, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
+import { DEFAULT_MAX_FILE_BYTES } from "@seanhogg/builderforce-memory/knowledge";
+import { nodeSha256Hex } from "./hashCacheFile";
 
 export type { HashCache, KnowledgeFs };
 
@@ -20,5 +25,5 @@ export interface DirectorySourceOptions {
 }
 
 export function createDirectorySource(opts: DirectorySourceOptions): FsDirectorySource {
-  return createFsDirectorySource(opts);
+  return createFsDirectorySource({ ...opts, hash: nodeSha256Hex, skipHashAbove: DEFAULT_MAX_FILE_BYTES });
 }

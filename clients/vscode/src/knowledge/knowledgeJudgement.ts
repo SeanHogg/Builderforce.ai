@@ -34,6 +34,15 @@ export interface TrackedJudgement extends JudgementPort {
   modelsUsed(): string[];
 }
 
+/**
+ * Whether {@link editorJudgement} will yield a judge: a gateway judge unless the mode is Local only (a settings read),
+ * else a model running on this machine. No server is started or asked — the confirm chip uses it to count compare calls.
+ */
+export async function judgeConfigured(): Promise<boolean> {
+  if (currentInferenceMode() !== "local-only") return true;
+  return onDeviceModelAvailable().catch(() => false);
+}
+
 /** The review's judgement port, resolved once per review; undefined when nothing may judge. */
 export async function editorJudgement(secrets: vscode.SecretStorage, client?: KnowledgeClient): Promise<TrackedJudgement | undefined> {
   const ports: JudgementPort[] = [];

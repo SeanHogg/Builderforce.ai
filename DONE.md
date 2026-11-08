@@ -6,6 +6,8 @@
 - **Dead code removed.** The step-replay plan nothing called is gone: `resumePlan`, `applyResumePlan`, `pendingStepsOf`, `mayReplayStep`, `isShellOrExternalStep` and their types and passthroughs.
 - Strings go through `vscode.l10n.t` with real de/es/fr/zh-cn translations, and the rows use only `--vscode-*` / `--bf-*` tokens and wrap at narrow widths.
 
+- **The review no longer sticks at "Counting files…" on a large root.** On a 15,960-file root the plan awaited five unbounded setup steps (partitions, symbol index, judge start-up, git history, knowledge index) before walking, then hashed every file serially through the extension host. Now `reviewPortsFor.ts` builds the plan from source, manifest, packs and a judge-configured flag only (no server call); run-only ports start in the background with a 120 s bound each (a timeout is logged and dropped, a failure fails the review as before); the walk hashes 16 at a time with node:crypto, skips reading files over the size limit, and keeps a persisted hash cache, so a restart is not a cold walk; every plan logs per-step timings to the BuilderForce output channel.
+
 ## ✅ RESOLVED 2026-11-08 — Uploads no longer stall, a review stops when asked, the Graph loads, and anti-patterns explain themselves (builderforce-memory 2026.10.51–54 · VS Code 2026.10.141)
 
 - **The knowledge replica no longer stalls on `409 extracted_missing`.**

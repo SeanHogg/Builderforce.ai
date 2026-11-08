@@ -63,6 +63,8 @@ export type HashCache = Map<string, { mtime: number; size: number; hash: string 
 const BUILDERFORCE_INPUTS: ReadonlySet<string> = new Set(['.builderforce/ignore', '.builderforce/partitions.json']);
 /** A walk that has listed this many files stops. */
 export const MAX_LISTED_FILES = 20_000;
+/** Files of one folder stat'ed and hashed at once. */
+const HASH_CONCURRENCY = 16;
 
 export interface FsDirectorySourceOptions {
     fs: KnowledgeFs;
@@ -73,6 +75,15 @@ export interface FsDirectorySourceOptions {
     /** Directory NAMES never walked; default {@link KNOWLEDGE_SKIP_DIRS}. */
     skipDirs?: ReadonlySet<string>;
     hashCache?: HashCache;
+    /** The content hash of a file's bytes; default memory's {@link sha256Hex}. A host may pass a native one that yields the SAME lowercase hex digest. */
+    hash?: (bytes: Uint8Array) => string;
+    /**
+     * Files larger than this many bytes are listed with their size and a placeholder hash, never read: for a host whose
+     * plan skips them as too large (the plan classifies those by size alone). Default: every file is hashed.
+     */
+    skipHashAbove?: number;
+    /** A walk that has listed this many files stops; default {@link MAX_LISTED_FILES}. */
+    maxListed?: number;
 }
 
 const join = (a: string, b: string): string => (a ? `${a}/${b}` : b);
@@ -114,11 +125,15 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
     const nested = new Set<string>();
     const underWalked = (rel: string): boolean => !isSkippedPath(rel, skipDirs, nested);
 
+    const digest = opts.hash ?? sha256Hex;
+    const maxListed = opts.maxListed ?? MAX_LISTED_FILES;
     const hashOf = async (abs: string): Promise<{ hash: string; size: number }> => {
         const st = await fs.stat(abs);
+        // A file the plan skips by size needs its size only: never read, and a hash no other file can equal.
+        if (opts.skipHashAbove !== undefined && st.size > opts.skipHashAbove) return { hash: `unhashed:${st.size}:${abs}`, size: st.size };
         const hit = cache.get(abs);
         if (hit && hit.mtime === st.mtime && hit.size === st.size) return { hash: hit.hash, size: st.size };
-        const hash = sha256Hex(await fs.readFile(abs));
+        const hash = digest(await fs.readFile(abs));
         cache.set(abs, { mtime: st.mtime, size: st.size, hash });
         return { hash, size: st.size };
     };
@@ -148,6 +163,7 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
                 skipped.push({ path: dir, reason: 'nested-checkout' });
                 continue;
             }
+            const fileRels: string[] = [];
             for (const [name, kind] of [...entries].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
                 const rel = join(dir, name);
                 if (kind === 'dir') {
@@ -159,13 +175,26 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
                     continue;
                 }
                 if (isVcsMetadataName(name) || !listsFile(rel)) continue; // a `.git` FILE is a link to a repository store, not a source
-                try {
-                    const { hash, size } = await hashOf(`${root}/${rel}`);
-                    yield { path: rel, hash, size };
-                } catch {
-                    continue; // Deleted mid-walk.
+                fileRels.push(rel);
+            }
+            // A folder's files are stat'ed and hashed a few at a time (a cold walk of ~16k files one await at a time
+            // spent minutes in round trips); the listing order is unchanged.
+            // Never starts hashing past the cap: a batch is at most what the cap still allows.
+            for (let i = 0; i < fileRels.length;) {
+                const batch = fileRels.slice(i, i + Math.min(HASH_CONCURRENCY, maxListed - listed));
+                i += batch.length;
+                const hashed = await Promise.all(batch.map(async (rel) => {
+                    try {
+                        return { path: rel, ...(await hashOf(`${root}/${rel}`)) };
+                    } catch {
+                        return undefined; // Deleted mid-walk.
+                    }
+                }));
+                for (const file of hashed) {
+                    if (!file) continue;
+                    yield file;
+                    if (++listed >= maxListed) return;
                 }
-                if (++listed >= MAX_LISTED_FILES) return;
             }
         }
     }

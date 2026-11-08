@@ -183,8 +183,12 @@ function willCompare(ports: Pick<KnowledgeReviewPorts, 'judgement' | 'similar'>)
 }
 
 /** The confirm chip's numbers AND the walk behind them: hand it back as `plan` to run the review without re-walking. */
-export function planKnowledgeReviewDetail(ports: KnowledgeReviewPorts, opts: Pick<KnowledgeReviewOptions, 'force'> = {}): Promise<PlanDetail> {
-    return planDetail(ports.source, ports.manifest, reviewPacks(ports), { ...(opts.force ? { force: true } : {}), compare: willCompare(ports) });
+export function planKnowledgeReviewDetail(
+    ports: KnowledgeReviewPorts,
+    /** `compare` overrides the ports-derived answer: a host that knows a judge will be there, but has not started it, counts the compare calls. */
+    opts: Pick<KnowledgeReviewOptions, 'force'> & { compare?: boolean } = {},
+): Promise<PlanDetail> {
+    return planDetail(ports.source, ports.manifest, reviewPacks(ports), { ...(opts.force ? { force: true } : {}), compare: opts.compare ?? willCompare(ports) });
 }
 
 /** The confirm chip's numbers: a walk plus a manifest diff, no reads of unchanged files. */

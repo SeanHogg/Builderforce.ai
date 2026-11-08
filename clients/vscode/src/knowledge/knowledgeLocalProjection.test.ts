@@ -35,7 +35,7 @@ vi.mock("./knowledgeFs", () => ({
   }),
 }));
 vi.mock("./vscodeDirectorySource", () => ({ createDirectorySource: () => ({ skippedFolders: () => [] }) }));
-vi.mock("./knowledgeJudgement", () => ({ editorJudgement: async () => undefined }));
+vi.mock("./knowledgeJudgement", () => ({ editorJudgement: async () => undefined, judgeConfigured: async () => false }));
 vi.mock("@builderforce/agent-tools/prefetch", () => ({ readPartitions: async () => undefined }));
 vi.mock("@builderforce/agent-tools/node-git-history", () => ({ gitHistoryPort: async () => undefined }));
 vi.mock("@builderforce/repo-map", () => ({ repoMapPort: {} }));
