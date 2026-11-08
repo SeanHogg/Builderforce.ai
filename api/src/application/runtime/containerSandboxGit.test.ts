@@ -144,9 +144,12 @@ describe.skipIf(!hasGit || !posix)('publishing a new commit: workspace bundle ->
 
     const w = createWorkspace(workdir);
     // Basis = a commit the mirror never received: `verify` fails, nothing is imported.
-    const incomplete = await w.handle({ op: 'bundleOut', branch: 'bf/5', basis: two }) as { bundle: string };
+    const incomplete = await w.handle({ op: 'bundleOut', branch: 'bf/5', basis: two });
+    expect(incomplete.ok).toBe(true);
+    const incompleteBundle = incomplete.bundle;
+    if (typeof incompleteBundle !== 'string') throw new Error('bundleOut returned no bundle');
     const f1 = join(m.privateDir, 'out-1.bundle');
-    await writeFile(f1, Buffer.from(incomplete.bundle, 'base64'), { mode: 0o600 });
+    await writeFile(f1, Buffer.from(incompleteBundle, 'base64'), { mode: 0o600 });
     expect((await importBundle(m, f1, 'bf/5')).ok).toBe(false);
 
     // A complete bundle of a different branch: it does not carry the run branch.

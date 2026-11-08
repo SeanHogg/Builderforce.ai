@@ -933,3 +933,111 @@ export const recommendationDismissals = pgTable('recommendation_dismissals', {
 }, (t) => [
   unique('recommendation_dismissals_tenant_id_rec_key_key').on(t.tenantId, t.recKey),
 ]);
+
+
+// ---------------------------------------------------------------------------
+// Agentic governance — the policy-pack domain (PRD 08, migration 1336).
+//
+// Four (tenantId, segmentId)-scoped tables that back the governance-auditor
+// agent: rule-bearing policy packs, the enforceable rules they carry, the audit
+// runs that resolve a ruleset against a repo/ref, and the findings a run raises.
+// DISTINCT from the migration-0348 `policyPacks`/`policyGates` pair above — those
+// are tool-call gates the runtime enforces at the wire; these are RULES an
+// auditor checks a repo against. The `check` matcher kinds are an enum-in-JSON
+// (not a DB enum) so packs can grow matchers without a migration.
+// ---------------------------------------------------------------------------
+
+/** A named bundle of rules. Org baseline ("Default Security Baseline") or a custom pack. */
+export const governancePolicyPacks = pgTable('governance_policy_packs', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** NULL = tenant/segment-wide (the org baseline); set = scoped to one project. */
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  framework:   varchar('framework', { length: 40 }),     // soc2|owasp|gdpr|pci|internal|custom
+  status:      varchar('status', { length: 20 }).notNull().default('active'), // active|draft|archived
+  isBaseline:  boolean('is_baseline').notNull().default(false),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_governance_packs_scope').on(t.tenantId, t.segmentId),
+]);
+
+/**
+ * One enforceable rule. `check` carries the deterministic pre-filter (optional —
+ * absent means an LLM-only rule); `guidance` drives the LLM triage/remediation.
+ */
+export const governanceRules = pgTable('governance_rules', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  packId:      uuid('pack_id').notNull().references(() => governancePolicyPacks.id, { onDelete: 'cascade' }),
+  ruleRef:     varchar('rule_ref', { length: 80 }).notNull(),   // e.g. "SEC.SECRET.NO_HARDCODED"
+  category:    varchar('category', { length: 40 }).notNull(),   // secrets|authz|injection|deps|license|change_mgmt|pii|custom
+  title:       varchar('title', { length: 255 }).notNull(),
+  description: text('description').notNull(),                    // the rule, in plain language (the LLM reads this)
+  severity:    varchar('severity', { length: 20 }).notNull().default('medium'), // blocker|critical|high|medium|low|info
+  /** Deterministic pre-filter: { kind:"regex"|"path_required"|"path_forbidden"|"dependency"|"glob", pattern, paths?, options? } */
+  check:       jsonb('check'),
+  guidance:    text('guidance'),                                // remediation hint surfaced on findings
+  enabled:     boolean('enabled').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_governance_rules_scope').on(t.tenantId, t.segmentId),
+  index('idx_governance_rules_pack').on(t.packId),
+]);
+
+/** One audit execution of a repo/ref against a resolved ruleset. */
+export const governanceAuditRuns = pgTable('governance_audit_runs', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  repoRef:      varchar('repo_ref', { length: 500 }),           // repo url/id
+  ref:          varchar('ref', { length: 200 }),                // branch/commit/PR audited
+  trigger:      varchar('trigger', { length: 20 }).notNull(),   // manual|agent_pr|schedule
+  agentRunId:   varchar('agent_run_id', { length: 64 }),        // execution id when triggered on an agent PR
+  status:       varchar('status', { length: 20 }).notNull().default('queued'), // queued|running|completed|failed
+  rulesetHash:  varchar('ruleset_hash', { length: 64 }),        // hash of (DB packs + in-repo overrides) used
+  /** [{ packId, name, source: "db"|"repo" }] — exactly what governed the run. */
+  packsApplied: jsonb('packs_applied'),
+  /** { blocker, critical, high, medium, low, info, passed } */
+  summary:      jsonb('summary'),
+  gateResult:   varchar('gate_result', { length: 16 }),         // pass|blocked|null (not gating)
+  startedAt:    timestamp('started_at'),
+  finishedAt:   timestamp('finished_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_governance_audit_runs_scope_status').on(t.tenantId, t.segmentId, t.projectId, t.status),
+]);
+
+/** One finding raised by an audit run against one rule. */
+export const governanceFindings = pgTable('governance_findings', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  runId:        uuid('run_id').notNull().references(() => governanceAuditRuns.id, { onDelete: 'cascade' }),
+  ruleId:       uuid('rule_id').references(() => governanceRules.id, { onDelete: 'set null' }),
+  ruleRef:      varchar('rule_ref', { length: 80 }).notNull(),  // denormalized so findings survive rule deletion
+  severity:     varchar('severity', { length: 20 }).notNull(),
+  title:        varchar('title', { length: 255 }).notNull(),
+  detail:       text('detail').notNull(),                       // what was found + why it violates the rule
+  filePath:     varchar('file_path', { length: 1000 }),
+  line:         integer('line'),
+  evidence:     text('evidence'),                               // matched snippet / explanation
+  remediation:  text('remediation'),
+  source:       varchar('source', { length: 16 }).notNull().default('agent'), // prefilter|agent|vuln_scan
+  confidence:   varchar('confidence', { length: 10 }),          // high|medium|low (LLM self-rated)
+  status:       varchar('status', { length: 20 }).notNull().default('open'),  // open|triaged|fixed|accepted_risk|false_positive
+  /** Set when a CRITICAL auto-opens a SecurityIncident (PRD 08 §4.4). */
+  incidentId:   uuid('incident_id').references(() => securityIncidents.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_governance_findings_run_severity').on(t.runId, t.severity),
+  index('idx_governance_findings_scope_status').on(t.tenantId, t.segmentId, t.status),
+]);

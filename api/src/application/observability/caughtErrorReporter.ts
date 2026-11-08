@@ -39,6 +39,11 @@ function sanitizeContext(context: Record<string, unknown> | undefined): Record<s
   return redactDeep(context, CONTEXT_LIMITS);
 }
 
+/** An error carrying a list of inner errors (`AggregateError` and look-alikes). */
+function hasErrorList(error: Error): error is Error & { errors: unknown[] } {
+  return 'errors' in error && Array.isArray(error.errors);
+}
+
 /**
  * The error as it may leave this module: a clone with the same name and own properties (`code`, `status`) whose
  * message, stack and cause are redacted. The raw error never reaches a log line or an exception sink.
@@ -49,8 +54,8 @@ function redactedError(error: unknown): unknown {
   const clone = Object.create(Object.getPrototypeOf(error) as object | null) as Error;
   Object.defineProperty(clone, 'message', { value: redactSecrets(error.message), writable: true, configurable: true, enumerable: false });
   if (error.cause !== undefined) Object.defineProperty(clone, 'cause', { value: redactDeep(error.cause, CONTEXT_LIMITS), writable: true, configurable: true, enumerable: false });
-  if (Array.isArray((error as { errors?: unknown }).errors)) {
-    Object.defineProperty(clone, 'errors', { value: redactDeep((error as { errors: unknown[] }).errors, CONTEXT_LIMITS), writable: true, configurable: true, enumerable: false });
+  if (hasErrorList(error)) {
+    Object.defineProperty(clone, 'errors', { value: redactDeep(error.errors, CONTEXT_LIMITS), writable: true, configurable: true, enumerable: false });
   }
   Object.assign(clone, redactDeep({ ...error }, CONTEXT_LIMITS));
   clone.name = error.name;

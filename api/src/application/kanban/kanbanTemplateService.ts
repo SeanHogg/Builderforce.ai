@@ -118,7 +118,7 @@ export class KanbanTemplateService {
     const t = await this.get(env, tenantId, id);
     if (!t) return null;
     const locked = await lockedTemplateListing(this.db, env, { tenantId, buyerRef, templateId: id });
-    return { template: locked ? previewOf(t, locked) : t };
+    return locked ? { template: previewOf(t, locked) } : { template: t };
   }
 
   /** Create a new tenant template (optionally forked from a built-in / existing one). */

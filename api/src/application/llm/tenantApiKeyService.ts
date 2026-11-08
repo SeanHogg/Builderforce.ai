@@ -41,6 +41,7 @@ import { isDeviceClient, type DeviceClient } from '@builderforce/creation-canvas
 export const TENANT_API_SCOPES = [
   'ingest:feedback',   // BurnRateOS → POST /v1/ingest/feedback
   'webhooks:manage',   // host manages its outbound webhook subscriptions
+  'segments:manage',   // host provisions/updates/erases end-client Segments (PRD 05 §3)
   'read:catalog',      // GET /api/v1/agents, /skills, /personas
   'read:installs',     // how many workspaces run this publisher's packages
   'write:packages',    // submit and publish extension versions from CI

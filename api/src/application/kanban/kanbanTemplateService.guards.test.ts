@@ -27,6 +27,14 @@ vi.mock('../swimlane/boardReads', () => ({ invalidateBoardLanesCache: vi.fn() })
 import { KanbanTemplateService } from './kanbanTemplateService';
 import { TemplateLicenceRequiredError } from './templateEntitlement';
 
+/** The `values` the first `updateTemplate` call wrote; fails the test when it was never called. */
+function firstUpdateValues(): Record<string, unknown> {
+  const call = m.updateTemplate.mock.calls[0];
+  expect(call).toBeDefined();
+  if (!call) throw new Error('updateTemplate was not called');
+  return (call[2] as { values: Record<string, unknown> }).values;
+}
+
 const FOREIGN = {
   id: '11111111-1111-4111-8111-111111111111',
   tenantId: 99,
@@ -82,16 +90,16 @@ describe('KanbanTemplateService paywall + seller guards', () => {
   it('publish does not let another manager overwrite an existing publisherRef', async () => {
     m.getTenantTemplate.mockResolvedValue({ ...FOREIGN, tenantId: 1 });
     await svc.setPublication({} as never, 1, FOREIGN.id, { published: true, publisherRef: 'mallory' });
-    expect(m.updateTemplate.mock.calls[0][2].values).not.toHaveProperty('publisherRef');
+    expect(firstUpdateValues()).not.toHaveProperty('publisherRef');
   });
 
   it('publish lets the author re-publish and claims an unclaimed row', async () => {
     m.getTenantTemplate.mockResolvedValue({ ...FOREIGN, tenantId: 1 });
     await svc.setPublication({} as never, 1, FOREIGN.id, { published: true, publisherRef: 'author' });
-    expect(m.updateTemplate.mock.calls[0][2].values.publisherRef).toBe('author');
+    expect(firstUpdateValues().publisherRef).toBe('author');
     m.updateTemplate.mockReset();
     m.getTenantTemplate.mockResolvedValue({ ...FOREIGN, tenantId: 1, publisherRef: null });
     await svc.setPublication({} as never, 1, FOREIGN.id, { published: true, publisherRef: 'mgr' });
-    expect(m.updateTemplate.mock.calls[0][2].values.publisherRef).toBe('mgr');
+    expect(firstUpdateValues().publisherRef).toBe('mgr');
   });
 });

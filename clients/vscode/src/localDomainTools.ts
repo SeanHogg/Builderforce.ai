@@ -39,6 +39,7 @@ import {
   LOCAL_DOMAIN_TOOL_NAMES,
   classifyDomainTool,
   destinationKey,
+  linkChatTicket,
   normalizeDomainToolName,
   type DomainToolMode,
   type EntityDestination,
@@ -192,6 +193,8 @@ export interface LocalDomainToolsOptions {
   /** Reads back the journal event the repository's transaction appended. */
   store: LocalFirstStore;
   syncQueue: LocalDomainSyncQueue;
+  /** This device's id — stamped on the local `chat-ticket-link` a ticket-create writes. */
+  deviceId: string;
 }
 
 // ── Argument validation (before the store is touched) ─────────────────────────
@@ -465,6 +468,25 @@ export function createLocalDomainTools(options: LocalDomainToolsOptions) {
     const name = normalizeDomainToolName(tool) as LocalDomainToolName;
 
     const write = await writeLocally(name, options.repository, options.store, args);
+    // A ticket-create stamped with the run's chat links the chat LOCALLY, first
+    // (`chat-ticket-link`, linkType 'created'): the rail and the work tree read that
+    // record, not the ticket's chatClientId, so without it the ticket is created but
+    // never shows as linked to its chat. Sync then carries the link up like any other
+    // record. The chat must live in this store (a bound local chat); when it does not
+    // (a server-reference chat the device never saw), the stamped chatClientId still
+    // rides the ticket for the importer's best-effort server-side link.
+    if (name === "ticket-create" && typeof args.chatClientId === "string" && args.chatClientId.trim() !== "") {
+      const chatClientId = args.chatClientId.trim();
+      const chatPresent = await options.store.read((tx) => tx.get("chat", chatClientId));
+      if (chatPresent) {
+        await linkChatTicket(options.store, {
+          chatClientId,
+          ticketClientId: write.id,
+          deviceId: options.deviceId,
+          linkType: "created",
+        });
+      }
+    }
     const syncEvent = await queuedEventFor(options.store, write.entityType, write.id, write.record === undefined);
     if (syncEvent) options.syncQueue.enqueue([syncEvent]);
     const serverId = await serverIdOf(options.store, write.record);

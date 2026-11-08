@@ -37,7 +37,7 @@ describe('onReviewerVerdict', () => {
     const rows = [slot({ stageKey: 'in_progress', roleKey: 'developer', responsibility: 'owner' }), slot()];
     expect(await onReviewerVerdict({} as never, dbWith(rows), args)).toEqual(['developer']);
     expect(reopen).toHaveBeenCalledTimes(1);
-    expect(reopen.mock.calls[0][2]).toMatchObject({ stageKey: 'in_progress', taskId: 7 });
+    expect(reopen.mock.calls[0]?.[2]).toMatchObject({ stageKey: 'in_progress', taskId: 7 });
   });
 
   it('does not reopen on a producer-slot verdict', async () => {

@@ -11,6 +11,8 @@
  * - A record with a pending local event is SKIPPED: an unsynced local edit is never overwritten.
  * - An equal payload writes nothing (no version bump), so ingesting the same rows twice is a no-op
  *   and a subscriber is not woken for it.
+ * - A row's `merge` over a record the device authored keeps that record's provenance (the rail
+ *   owns a few fields, not the record), and an identical merge writes nothing.
  * - With `completeListFor`, the rows are the COMPLETE set of a chat's tickets: each local
  *   `chat-ticket-link` of that chat whose ticket the server no longer lists is tombstoned, but ONLY
  *   when the batch lists at least `total` distinct tickets (a paged or truncated read tombstones
@@ -140,21 +142,30 @@ export async function ingestServerRecords(
       result.clientIds.push(clientId);
       const existing = await tx.get(row.entityType, clientId);
       const incoming = await withServerIds(tx, row);
+      const merged = Boolean(row.merge && existing && !existing.deletedAt);
+      // A merge over a record the device authored keeps the device's provenance: the server owns
+      // only the merged fields, not the record, so it stays the device's work (Unfiled, own).
+      const keepsProvenance = merged && existing?.provenance !== undefined && existing.provenance.evidence !== 'server-observed';
       const next = materialize(
         {
           clientEntityId: clientId,
           entityType: row.entityType,
-          payload: row.merge && existing && !existing.deletedAt ? row.merge(existing.payload, incoming) : incoming,
+          payload: merged ? row.merge!(existing!.payload, incoming) : incoming,
           updatedAt: row.updatedAt,
           destination: row.destination,
-          provenance: { deviceId: SERVER_DEVICE, source: 'imported', evidence: 'server-observed' },
+          provenance: keepsProvenance
+            ? { ...existing!.provenance! }
+            : { deviceId: SERVER_DEVICE, source: 'imported', evidence: 'server-observed' },
         },
         existing,
       );
       if (!next) continue;
+      // A merge compares payloads whatever the provenance (it never changes it), so an identical
+      // merge writes nothing; a replace also adopts the server's provenance, so it compares only
+      // over a record that already has it.
       const unchanged = existing !== undefined
         && !existing.deletedAt
-        && existing.provenance?.evidence === 'server-observed'
+        && (merged || existing.provenance?.evidence === 'server-observed')
         && canonicalPayloadHash(existing.payload) === canonicalPayloadHash(next.payload);
       if (unchanged) {
         result.unchanged += 1;

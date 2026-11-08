@@ -41,7 +41,10 @@ describe('readPersonProfile open count', () => {
   it('counts only workable statuses, so archived and cancelled tickets are not "open"', async () => {
     const db = fakeDb([[member], [{ open: 1, recent: 1, done: 0 }]]);
     await readPersonProfile(db as unknown as Db, 7, 'u1');
-    const fields = db.calls[1].args[0] as { open: import('drizzle-orm').SQL };
+    const workCall = db.calls[1];
+    expect(workCall).toBeDefined();
+    if (!workCall) return;
+    const fields = workCall.args[0] as { open: import('drizzle-orm').SQL };
     const { sql: text, params } = new PgDialect().sqlToQuery(fields.open);
     expect(text).toContain('"status" in');
     expect(params).toEqual(expect.arrayContaining(['backlog', 'todo', 'ready', 'in_progress', 'in_review', 'blocked']));

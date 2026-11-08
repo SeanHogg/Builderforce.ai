@@ -64,6 +64,14 @@ export interface UnmetRequirement {
   /** 'missing' = never satisfied; 'changes_requested' = a reviewer asked for changes. */
   reason: 'missing' | 'changes_requested';
   description?: string;
+  /** Evidence detail for the gap (§5.6/§10): which roles signed off vs which could, so the
+   *  audit reads WHY a requirement is unmet, not just THAT it is. */
+  evidence?: {
+    signedOffBy: string[];
+    capableOfRole: string[];
+    performedBy: string[];
+    sectionAuthoredBy: string[];
+  };
 }
 
 /**

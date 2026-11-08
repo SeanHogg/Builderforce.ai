@@ -31,15 +31,16 @@ import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./re
  *  separate stuck stretches, and only back-to-back ones should end in a pause. */
 export const LADDER_RESET_TURNS = 8;
 
-export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "unkept_ready" | "no_progress";
+export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "reverifying" | "unkept_ready" | "no_progress";
 
 /** Strongest first — a turn reports only its strongest signal. */
 const SIGNAL_RANK: Readonly<Record<ProgressSignalKind, number>> = {
   edit_revert: 0,
   repeated_failure: 1,
   circling_read: 2,
-  unkept_ready: 3,
-  no_progress: 4,
+  reverifying: 3,
+  unkept_ready: 4,
+  no_progress: 5,
 };
 
 export interface ProgressSignal {
@@ -118,6 +119,12 @@ export class ProgressDetector {
   private quietTurns: number;
   private steer: string | undefined;
   private turnSignal: ProgressSignal | null = null;
+  /** Repo-relative paths this run wrote successfully this turn — the re-verification base. */
+  private wroteThisTurn: string[];
+  /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
+  private writtenPaths: Set<string>;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  private readThisTurn: string[];
 
   constructor(state: ProgressDetectorState = {}, private readonly ports: ProgressDetectorPorts = {}) {
     this.visits = new VisitTally(state.visits);
@@ -130,6 +137,9 @@ export class ProgressDetector {
     this.unkeptTurns = state.unkeptTurns ?? 0;
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
+    this.wroteThisTurn = [];
+    this.writtenPaths = new Set();
+    this.readThisTurn = [];
   }
 
   private raise(signal: ProgressSignal): void {
@@ -158,10 +168,18 @@ export class ProgressDetector {
     } else if (changesContent(args)) {
       const revert = this.edits.record(tool, args, { ok });
       if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
-      if (ok) this.forgetVisitsOf(pathArgOf(args));
+      if (ok) {
+        const path = pathArgOf(args);
+        this.forgetVisitsOf(path);
+        if (path) {
+          this.wroteThisTurn.push(path);
+          this.writtenPaths.add(path);
+        }
+      }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
+        this.readThisTurn.push(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -190,6 +208,20 @@ export class ProgressDetector {
     // The previous trip's steer has now been shown for one turn.
     this.steer = undefined;
     const idle = this.progress.endTurn();
+    // A turn whose only read activity is files the run itself already wrote — no new
+    // path, no change, no test movement — is re-verifying already-shipped ground. It is
+    // the exact loop that evades no_progress (constant new-target ground) and
+    // circling_read (reset by every successful write): re-running a filtered type-check,
+    // or re-reading a file the run committed, to convince itself the work landed. A turn
+    // that also breaks new ground or writes is real work, not re-verification.
+    if (!this.turnSignal && this.readThisTurn.length > 0) {
+      const allWritten = this.readThisTurn.every((t) => this.writtenPaths.has(t));
+      if (allWritten && !this.progress.lastTurnGround && idle > 0) {
+        this.raise({ kind: "reverifying", count: this.readThisTurn.length });
+      }
+    }
+    this.wroteThisTurn = [];
+    this.readThisTurn = [];
     // New files do not excuse it: the run said it had what it needed.
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
@@ -275,6 +307,8 @@ export function progressAdvice(signal: ProgressSignal): string {
       return `\`${signal.tool}\` has failed ${signal.count} times with identical arguments${signal.reason ? ` ("${signal.reason}")` : ""}. Change the argument the error names, use a different tool, or finish and state what is blocking you.`;
     case "circling_read":
       return `you have read ${signal.target} ${signal.count} times and nothing changed it in between. Everything you read is still above you. Act on it — make the edit — or page forward to lines you have not seen.`;
+    case "reverifying":
+      return `this turn only re-checked ${signal.count === 1 ? "a file" : `${signal.count} files`} you already wrote and verified. Re-running the same type-check, build or read on ground you shipped does not make it more correct — it burns budget. The work is done: report the result and stop, or move on to the next task. Only re-verify when something actually changed the code.`;
     case "unkept_ready":
       return `you have said ${signal.count} times that you have what you need — or that you are about to write — and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
     case "no_progress":
@@ -288,6 +322,7 @@ export function progressPauseQuestion(signal: ProgressSignal, trip: number): str
     edit_revert: `keeps undoing its own change to ${signal.target ?? "a file"}`,
     repeated_failure: `keeps repeating a failing \`${signal.tool ?? "tool"}\` call`,
     circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
+    reverifying: "keeps re-checking files it already wrote and verified instead of reporting the result",
     unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
     no_progress: "has stopped making progress (no new files, no test changes)",
   };

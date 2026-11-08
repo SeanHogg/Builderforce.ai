@@ -239,6 +239,30 @@ describe('ingestServerRecords: complete lists and mappings', () => {
     expect(ticket.payload).toMatchObject({ projectId: '3', title: 'From the server', status: 'backlog' });
   });
 
+  it('a merge over a device-authored ticket keeps its provenance, and an identical merge writes nothing', async () => {
+    const store = await seeded();
+    await syncedAway(store);
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: ACCOUNT, entityType: 'ticket', clientEntityId: TICKET_A, serverId: '77', serverVersion: 1 });
+    });
+    const before = (await ticketsOf(store)).find((t) => t.id === TICKET_A)!;
+    const mergeTitle = (existing: unknown, incoming: unknown) => ({ ...(existing as object), title: (incoming as TicketValue).title });
+    // The rail's first refresh lists the ticket exactly as the device holds it.
+    const same: ServerRecordRow = { ...ticketRow('77', TICKET_A), merge: mergeTitle };
+    const identical = await ingestServerRecords(store, [same], { now: NOW });
+    expect(identical).toMatchObject({ written: 0, unchanged: 1 });
+    const untouched = (await ticketsOf(store)).find((t) => t.id === TICKET_A)!;
+    expect(untouched.version).toBe(before.version);
+    expect(untouched.provenance).toEqual(before.provenance);
+
+    const renamed = await ingestServerRecords(store, [{ ...ticketRow('77', 'Renamed'), merge: mergeTitle }], { now: NOW });
+    expect(renamed.written).toBe(1);
+    const after = (await ticketsOf(store)).find((t) => t.id === TICKET_A)!;
+    expect(after.payload.title).toBe('Renamed');
+    expect(after.provenance).toEqual(before.provenance);
+    expect(after.provenance?.source).not.toBe('imported');
+  });
+
   it('does not reset an existing derived-id mapping to version 1', async () => {
     const store = await seeded();
     const created = await linkChatTicket(store, link(CHAT, TICKET_A));

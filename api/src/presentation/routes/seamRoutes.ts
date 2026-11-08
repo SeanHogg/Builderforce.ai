@@ -25,6 +25,10 @@ import {
   listSegmentWebhookSubscriptions,
 } from '../../application/publicApi/publicWebhookSubscriptionService';
 import { parseOptionalBody, z } from './requestBody';
+import { and, eq } from 'drizzle-orm';
+import { segments } from '../../infrastructure/database/schema';
+import { invalidateSegment } from '../../infrastructure/auth/segmentResolver';
+import { cascadeSegmentDelete, collectSegmentTelemetryKeys } from '../../application/shared/siblingCascade';
 
 /**
  * Host (third-party) payloads: loose, only the fields read, each as optional as the
@@ -142,6 +146,128 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
     const deleted = await deleteSegmentWebhookSubscription(db, svc.tenantId, svc.segmentId, id);
     if (!deleted) return c.json({ error: 'subscription not found' }, 404);
     return c.json({ ok: true, id });
+  });
+
+  // ── Segment provisioning handshake (spec 05 §3) — host pre-warms / updates /
+  //    erases an end-client Segment server-to-server. Same lifecycle rules as
+  //    /api/segments, but behind the `segments:manage` scope so a host key that
+  //    may provision segments cannot also ingest feedback (and vice versa).
+  const SEGMENT_STATUSES = ['active', 'suspended', 'archived'] as const;
+
+  // Eager provisioning: pre-warm a Segment (default board/deck seeding is a
+  // deployment concern; the row + plan is what BuilderForce owns here).
+  router.post('/admin/segments', async (c) => {
+    const body = await parseOptionalBody(c, z.looseObject({
+      accountId: z.string().nullish(),
+      companyId: z.string().nullish(),
+      displayName: z.string().nullish(),
+      plan: z.string().nullish(),
+    }));
+
+    let svc;
+    try {
+      svc = await authenticateServiceToken(c, 'segments:manage', {
+        accountId: body.accountId ?? undefined, companyId: body.companyId ?? undefined,
+      });
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    const accountId = (body.accountId ?? '').trim();
+    const companyId = (body.companyId ?? '').trim();
+    if (!accountId) return c.json({ error: 'accountId is required' }, 400);
+    if (!companyId) return c.json({ error: 'companyId is required' }, 400);
+
+    // Eager provisioning is idempotent on the (tenant, account, company) unique
+    // key — a host that re-POSTs on every company-enable converges to one row.
+    const [existing] = await db
+      .select()
+      .from(segments)
+      .where(and(
+        eq(segments.tenantId, svc.tenantId),
+        eq(segments.externalAccountId, accountId),
+        eq(segments.externalCompanyId, companyId),
+      ))
+      .limit(1);
+    if (existing) return c.json(existing, 200);
+
+    const displayName = body.displayName?.trim() || companyId;
+    const [seg] = await db
+      .insert(segments)
+      .values({
+        tenantId: svc.tenantId,
+        externalAccountId: accountId,
+        externalCompanyId: companyId,
+        displayName,
+        slug: `${accountId}-${companyId}`.slice(0, 255),
+        plan: body.plan ?? 'free',
+        isDefault: false,
+      })
+      .returning();
+    return c.json(seg, 201);
+  });
+
+  // Plan / status propagation from the host (spec 05 §3.3).
+  router.put('/admin/segments/:id', async (c) => {
+    let svc;
+    try {
+      svc = await authenticateServiceToken(c, 'segments:manage', {
+        accountId: c.req.query('accountId'), companyId: c.req.query('companyId'),
+      });
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    const body = await parseOptionalBody(c, z.looseObject({
+      plan: z.string().nullish(),
+      status: z.string().nullish(),
+      displayName: z.string().nullish(),
+    }));
+
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.plan !== null && body.plan !== undefined) patch.plan = body.plan;
+    if (body.status !== null && body.status !== undefined) {
+      if (!(SEGMENT_STATUSES as readonly string[]).includes(body.status)) {
+        return c.json({ error: `status must be one of ${SEGMENT_STATUSES.join(', ')}` }, 400);
+      }
+      patch.status = body.status;
+    }
+    if (body.displayName?.trim()) patch.displayName = body.displayName.trim();
+    if (Object.keys(patch).length === 1) return c.json({ error: 'nothing to update' }, 400);
+
+    const [updated] = await db
+      .update(segments)
+      .set(patch)
+      .where(and(eq(segments.id, c.req.param('id')), eq(segments.tenantId, svc.tenantId), eq(segments.isDefault, false)))
+      .returning();
+    if (!updated) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    await invalidateSegment(updated.id, c.env);
+    return c.json(updated);
+  });
+
+  // Company deletion / GDPR erasure (spec 05 §3.4): cascades every Segment-scoped
+  // row (migrations 0056–0061+ carry segment_id ON DELETE CASCADE) and the run
+  // telemetry that lives beyond the core cascade.
+  router.delete('/admin/segments/:id', async (c) => {
+    let svc;
+    try {
+      svc = await authenticateServiceToken(c, 'segments:manage', {
+        accountId: c.req.query('accountId'), companyId: c.req.query('companyId'),
+      });
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    const id = c.req.param('id');
+    const telemetryKeys = await collectSegmentTelemetryKeys(db, svc.tenantId, id);
+    const [deleted] = await db
+      .delete(segments)
+      .where(and(eq(segments.id, id), eq(segments.tenantId, svc.tenantId), eq(segments.isDefault, false)))
+      .returning({ id: segments.id });
+    if (!deleted) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    await cascadeSegmentDelete(db, telemetryKeys);
+    await invalidateSegment(deleted.id, c.env);
+    return c.json({ ok: true, id: deleted.id });
   });
 
   return router;

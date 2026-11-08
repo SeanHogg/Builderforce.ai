@@ -44,7 +44,7 @@ export const userAccount = (userId: string): LedgerAccount => ({ kind: 'user', r
  * varchar shared by both kinds, and an unprefixed numeric id could collide with a
  * user id in any deployment whose user ids are numeric.
  */
-export const workspaceAccount = (tenantId: number): LedgerAccount => ({ kind: 'tenant', ref: `tenant:${tenantId}` });
+export const workspaceAccount = (tenantId: number): LedgerAccount & { kind: 'tenant' } => ({ kind: 'tenant', ref: `tenant:${tenantId}` });
 
 /**
  * A BOARD's earned budget. A board is a uuid, unique across tenants, so the ref

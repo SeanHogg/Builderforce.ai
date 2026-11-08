@@ -77,6 +77,28 @@ describe("ProgressDetector", () => {
     expect(resumed.endTurn()?.signal.kind).toBe("edit_revert");
   });
 
+  it("trips reverifying when a turn only re-reads files the run itself wrote", () => {
+    const d = new ProgressDetector({}, ports);
+    // Turn 1: the run writes and verifies a file.
+    d.observe("edit_file", { path: "src/a.ts", old_string: "x", new_string: "y" }, okData);
+    expect(d.endTurn()).toBeNull();
+    // Turn 2: it re-reads that same file it wrote — no new path, no change, no test movement.
+    d.observe("read_file", { path: "src/a.ts" }, okData);
+    const a = d.endTurn();
+    expect(a).toMatchObject({ kind: "steer", signal: { kind: "reverifying" } });
+    expect(d.steerNote()).toContain("re-verify");
+  });
+
+  it("does not trip reverifying when the turn also breaks new ground", () => {
+    const d = new ProgressDetector({}, ports);
+    d.observe("edit_file", { path: "src/a.ts", old_string: "x", new_string: "y" }, okData);
+    expect(d.endTurn()).toBeNull();
+    // The run wrote a file AND reached a new one — that is real work, not a verification loop.
+    d.observe("read_file", { path: "src/a.ts" }, okData);
+    d.observe("read_file", { path: "src/never-seen.ts" }, okData);
+    expect(d.endTurn()).toBeNull();
+  });
+
   it("counts a changed check result as progress, an unchanged re-run as idle", () => {
     const d = new ProgressDetector({}, ports);
     d.observe("read_file", { path: "a.ts" }, okData);

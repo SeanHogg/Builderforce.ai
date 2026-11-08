@@ -10,7 +10,7 @@
  * 2. deadLetter on the newest pending event
  * 3. a pending event with no receipt
  * 4. an accepted or duplicate receipt and no newer pending event
- * 5. no receipt and no pending event
+ * 5. no receipt and no pending event: synced when the record is mapped or server-observed, else local
  *
  * A rejected or dependency_pending receipt does not settle the record, so a
  * denied sync stays syncing (or dead-letter once the event is gone) and is
@@ -41,6 +41,13 @@ export interface SyncStatusInput {
    */
   readonly receipts?: readonly SyncReceipt[];
   readonly conflicts?: readonly SyncConflict[];
+  /**
+   * True when the store holds a server mapping for the record. A mapped record with no pending
+   * event and no receipt of its own is `synced`: the server holds it. That covers a record synced
+   * before receipts named their record, whose event is acknowledged and gone and whose receipt
+   * therefore no longer ties to it.
+   */
+  readonly mapped?: boolean;
 }
 
 function sameRecord(entityType: LocalRecord['entityType'], id: string, record: LocalRecord): boolean {
@@ -127,9 +134,11 @@ export function deriveRecordSyncStatus(input: SyncStatusInput): SyncStatus {
   if (pending.some((event) => !receipts.some((receipt) => receipt.eventId === event.eventId))) return 'syncing';
   if (receipts.some((receipt) => isSettling(receipt) && noNewerPending(receipt, pending))) return 'synced';
   // A record the server itself reported (ingested, never authored here) is already synced:
-  // it has no events and no receipts because nothing local ever needed sending.
+  // it has no events and no receipts because nothing local ever needed sending. So is a mapped
+  // record: the server holds it, and its acknowledged events (and any receipt that predates the
+  // entity fields) are gone.
   if (receipts.length === 0 && pending.length === 0) {
-    return input.record.provenance?.evidence === 'server-observed' ? 'synced' : 'local';
+    return input.mapped === true || input.record.provenance?.evidence === 'server-observed' ? 'synced' : 'local';
   }
   if (pending.length > 0) return 'syncing';
   if (receipts.some((receipt) => receipt.status === 'rejected')) return 'dead-letter';
