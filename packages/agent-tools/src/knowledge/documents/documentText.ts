@@ -7,14 +7,16 @@
  *   legacy .doc / .xls / .ppt → undefined (OLE; stays an asset)
  *
  * Paragraph breaks survive (the parser sections by line structure). Two kinds of failure, kept apart:
- *   - FINAL (returns `undefined`): the file is malformed, over the size caps, has no text layer, or is not an
- *     extractable type. The review stores it as an asset.
- *   - TRANSIENT (THROWS): the pdf.js chunk failed to load, the run was aborted, or memory ran out. The
- *     engine records a failed read and retries; the file must NOT become an asset because of it.
- * Pure of fs/network, Worker-safe; pdf.js is imported lazily so only a PDF pays for it.
+ *   - FINAL (`readDocument` → `{ failure }`, `extractDocumentText` → `undefined`): the file opens but has no text
+ *     (`no-text`), or it is malformed, over the size caps, or not an extractable type (`unreadable`). The review
+ *     stores it as an asset.
+ *   - TRANSIENT (THROWS): the pdf.js chunk failed to load, or the run was aborted. The engine records a failed read
+ *     and retries; the file must NOT become an asset because of it.
+ * Pure of fs/network, Worker-safe; pdf.js is imported lazily so only a PDF pays for it. pdf.js TRANSFERS the buffer it
+ * is given to its worker (detaching it), so it always gets a private copy: a caller's bytes are never detached.
  */
 
-import { strFromU8, Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
+import { strFromU8, Unzip, UnzipInflate, UnzipPassThrough, unzipSync } from 'fflate';
 import { DEFAULT_MAX_FILE_BYTES } from '@seanhogg/builderforce-memory/knowledge';
 
 export const PDF_MEDIA_TYPE = 'application/pdf';
@@ -42,6 +44,8 @@ export const MAX_ZIP_ENTRIES = 10_000;
 
 /** The zip broke a size/entry cap: FINAL (the document is unreadable), not transient. */
 class DocumentLimitError extends Error {}
+/** The zip is not the document its media type claims (its text-bearing entry is missing): FINAL. */
+class DocumentFormatError extends Error {}
 /** The pdf.js chunk could not be loaded: TRANSIENT. */
 class DocumentEngineUnavailable extends Error {
     constructor(cause: unknown) { super('document: pdf engine failed to load'); this.name = 'DocumentEngineUnavailable'; this.cause = cause; }
@@ -128,8 +132,29 @@ const slideNumber = (name: string): number => Number(/slide(\d+)\.xml$/.exec(nam
 const PUSH_BYTES = 4096;
 
 /**
- * Unzip only the wanted entries, STREAMING: the declared size is a cheap pre-check, but the caps are enforced on the
- * ACTUAL inflated byte count (a header may lie), and inflating stops the moment a cap is passed.
+ * The entry names of a zip, read from its central directory WITHOUT inflating anything (the cheap "is this a Word
+ * document?" check). Undefined when the bytes are not a readable zip or hold more than `MAX_ZIP_ENTRIES` entries.
+ */
+export function zipEntryNames(bytes: Uint8Array): string[] | undefined {
+    const names: string[] = [];
+    try {
+        unzipSync(bytes, {
+            filter: (file) => {
+                if (names.length >= MAX_ZIP_ENTRIES) throw new DocumentLimitError('document: too many zip entries');
+                names.push(file.name);
+                return false;
+            },
+        });
+    } catch {
+        return undefined;
+    }
+    return names;
+}
+
+/**
+ * Unzip only the wanted entries, STREAMING: the DECLARED sizes are a cheap pre-check (per entry, and summed over the
+ * wanted entries), and the caps are ALSO enforced on the actual inflated byte count (a header may lie), so inflating
+ * stops the moment either is passed.
  * `onChunk` (a test seam) is called with every inflated chunk of a wanted entry.
  */
 export function unzipEntries(
@@ -138,13 +163,16 @@ export function unzipEntries(
     const out: Record<string, Uint8Array> = {};
     let seen = 0;
     let total = 0;
+    /** Sum of the sizes DECLARED by the wanted entries so far: the cheap pre-check on the zip as a whole. */
+    let declaredTotal = 0;
     const unzip = new Unzip((file) => {
         signal?.throwIfAborted();
         if (++seen > MAX_ZIP_ENTRIES) throw new DocumentLimitError('document: too many zip entries');
         if (!wanted(file.name)) return;
         const declared = file.originalSize ?? 0;
         if (declared > MAX_ENTRY_BYTES) throw new DocumentLimitError('document: zip entry too large');
-        if (total + declared > MAX_TOTAL_BYTES) throw new DocumentLimitError('document: zip inflates too large');
+        declaredTotal += declared;
+        if (declaredTotal > MAX_TOTAL_BYTES) throw new DocumentLimitError('document: zip inflates too large');
         const parts: Uint8Array[] = [];
         let entryBytes = 0;
         file.ondata = (err, chunk, final) => {
@@ -175,18 +203,22 @@ export function unzipEntries(
     return out;
 }
 
-function ooxmlText(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): string | undefined {
-    if (mediaType === DOCX_MEDIA_TYPE) {
-        const doc = unzipEntries(bytes, (n) => n === 'word/document.xml', signal)['word/document.xml'];
-        return doc && scanText(strFromU8(doc), WORD_SPEC);
-    }
+/** The text-bearing entry a DOCX / ODF document cannot be without: missing, the zip is not that document (unreadable). */
+function requiredEntry(bytes: Uint8Array, name: string, signal?: AbortSignal): Uint8Array {
+    const entry = unzipEntries(bytes, (n) => n === name, signal)[name];
+    if (!entry) throw new DocumentFormatError(`document: no ${name}`);
+    return entry;
+}
+
+/** A workbook with no shared strings, or a deck with no slides, is a real document with no text (''). */
+function ooxmlText(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): string {
+    if (mediaType === DOCX_MEDIA_TYPE) return scanText(strFromU8(requiredEntry(bytes, 'word/document.xml', signal)), WORD_SPEC);
     if (mediaType === XLSX_MEDIA_TYPE) {
         const strings = unzipEntries(bytes, (n) => n === 'xl/sharedStrings.xml', signal)['xl/sharedStrings.xml'];
-        return strings && scanText(strFromU8(strings), SHEET_SPEC);
+        return strings ? scanText(strFromU8(strings), SHEET_SPEC) : '';
     }
     const entries = unzipEntries(bytes, (n) => /^ppt\/slides\/slide\d+\.xml$/.test(n), signal);
     const names = Object.keys(entries).sort((a, b) => slideNumber(a) - slideNumber(b));
-    if (names.length === 0) return undefined;
     return names.map((n) => { signal?.throwIfAborted(); return scanText(strFromU8(entries[n]!), SLIDE_SPEC); }).join('\n\n');
 }
 
@@ -200,7 +232,8 @@ async function pdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<string>
         throw new DocumentEngineUnavailable(error);
     }
     signal?.throwIfAborted();
-    const pdf = await mod.getDocumentProxy(bytes);
+    // A PRIVATE copy: pdf.js transfers (detaches) the buffer it is handed, which must never be the caller's.
+    const pdf = await mod.getDocumentProxy(bytes.slice());
     try {
         const pages: string[] = [];
         let size = 0;
@@ -218,8 +251,8 @@ async function pdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<string>
         }
         return pages.join('\n');
     } finally {
-        // The runtime proxy has destroy(); the installed pdfjs types omit it, so call it through a structural guard.
-        await (pdf as { destroy?: () => Promise<void> }).destroy?.();
+        // PDFDocumentProxy has no destroy(); the loading task owns the worker and transport.
+        await pdf.loadingTask.destroy();
     }
 }
 
@@ -227,12 +260,47 @@ async function pdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<string>
 // eslint-disable-next-line no-control-regex
 const stripControl = (text: string): string => text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
 
-/** Failures that say nothing about the FILE: an abort, memory exhaustion, an engine that did not load. These rethrow. */
+/**
+ * Failures that say nothing about the FILE: an abort or an engine that did not load. These rethrow. Anything else
+ * (a RangeError included) was raised while parsing the bytes, so the file is unreadable, not retried forever.
+ */
 function isTransient(error: unknown, signal?: AbortSignal): boolean {
     return signal?.aborted === true
         || error instanceof DocumentEngineUnavailable
-        || error instanceof RangeError
         || (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'AbortError');
+}
+
+/**
+ * What reading a document gave: its text, or why there is none.
+ *   - `no-text`: the file opened but holds no text (a scanned PDF, an empty DOCX).
+ *   - `unreadable`: malformed, over the caps, or not an extractable type; `reason` says which.
+ */
+export type DocumentRead =
+    | { text: string }
+    | { failure: 'no-text' }
+    | { failure: 'unreadable'; reason: string };
+
+const unreadable = (reason: string): DocumentRead => ({ failure: 'unreadable', reason });
+
+/**
+ * Read `bytes` as the document `mediaType` says it is. THROWS on a transient failure (see the module header) and on
+ * `signal` aborting; every other failure is a `{ failure }` answer. The caller's `bytes` are never detached.
+ */
+export async function readDocument(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<DocumentRead> {
+    const type = mediaType.trim().toLowerCase();
+    if (!isExtractableDocumentType(type)) return unreadable('not an extractable document type');
+    signal?.throwIfAborted();
+    let raw: string;
+    try {
+        if (type === PDF_MEDIA_TYPE) raw = await pdfText(bytes, signal);
+        else if (type === DOCX_MEDIA_TYPE || type === XLSX_MEDIA_TYPE || type === PPTX_MEDIA_TYPE) raw = ooxmlText(bytes, type, signal);
+        else raw = scanText(strFromU8(requiredEntry(bytes, 'content.xml', signal)), ODF_SPEC);
+    } catch (error) {
+        if (isTransient(error, signal)) throw error;
+        return unreadable(error instanceof Error && error.message ? error.message : 'unknown error');
+    }
+    const text = stripControl(raw).trim();
+    return text ? { text: text.slice(0, DEFAULT_MAX_FILE_BYTES) } : { failure: 'no-text' };
 }
 
 /**
@@ -240,21 +308,6 @@ function isTransient(error: unknown, signal?: AbortSignal): boolean {
  * caps, no text layer). THROWS on a transient failure (see the module header) and on `signal` aborting.
  */
 export async function extractDocumentText(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<string | undefined> {
-    const type = mediaType.trim().toLowerCase();
-    if (!isExtractableDocumentType(type)) return undefined;
-    signal?.throwIfAborted();
-    try {
-        let raw: string | undefined;
-        if (type === PDF_MEDIA_TYPE) raw = await pdfText(bytes, signal);
-        else if (type === DOCX_MEDIA_TYPE || type === XLSX_MEDIA_TYPE || type === PPTX_MEDIA_TYPE) raw = ooxmlText(bytes, type, signal);
-        else {
-            const content = unzipEntries(bytes, (n) => n === 'content.xml', signal)['content.xml'];
-            raw = content && scanText(strFromU8(content), ODF_SPEC);
-        }
-        const text = raw === undefined ? '' : stripControl(raw).trim();
-        return text ? text.slice(0, DEFAULT_MAX_FILE_BYTES) : undefined;
-    } catch (error) {
-        if (isTransient(error, signal)) throw error;
-        return undefined;
-    }
+    const read = await readDocument(bytes, mediaType, signal);
+    return 'text' in read ? read.text : undefined;
 }

@@ -1,4 +1,4 @@
-/** Test fixture: a stored (uncompressed) zip, enough for a docx — the extractor unzips it like any other. */
+/** Test-only fixture (`*.test-util.ts`, as agent-tools' `testkit.test-util.ts`: never matched by the test glob, never imported by source): a stored (uncompressed) zip, enough for a docx — the extractor unzips it like any other. */
 export function storedZip(entries: Record<string, string>): Uint8Array {
   const enc = new TextEncoder();
   const crcTable = Array.from({ length: 256 }, (_, n) => {

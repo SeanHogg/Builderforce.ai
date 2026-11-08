@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-11-08: knowledge review stores binary files, reads PDF and Office text, and no longer stalls the judge (Knowledge · builderforce-memory 2026.10.62 · VSIX 2026.10.145)
+## ✅ RESOLVED 2026-11-08: knowledge review stores binary files, reads PDF and Office text, and no longer stalls the judge (Knowledge · builderforce-memory 2026.10.62 · VSIX 2026.10.146)
 
 - **Symptom.** A hired.video review listed 30 files as "not stored" (png, ico, pdf, docx). `plan.ts` skipped every binary extension with no node, `mediaTypeOfPath` returned `text/plain` for `.png`, no host extracted PDF or DOCX text, and the judge's flat 60 s timeout tripped the 5-in-a-row breaker on large README and package.json requests (0 sections judged).
 - **Assets.** Binaries are planned, not skipped: each is a file node with badges `asset`, `mediaType` and `size` (`oversized` for a claimed document over the size cap). `EXTRACTOR_VERSION` 4 re-plans old manifests. Assets cost no model calls, sort last in importance, and are excluded from system metadata. `ReviewPlan.assets` lets hosts subtract them from ETAs.

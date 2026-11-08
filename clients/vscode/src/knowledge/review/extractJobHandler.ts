@@ -19,9 +19,8 @@ import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocu
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
 export const READ_TIMEOUT_MS = 5_000;
-/** A pdf/office file reads and parses slower: its read (and the review's per-job `extractMs`, see `DOCUMENT_EXTRACT_MS`) gets 60 s, as the source's `readTimeoutMs` does. */
+/** A pdf/office file reads and parses slower: its read gets 60 s, as the source's `readTimeoutMs` does (memory adds that to the pool deadline). */
 export const DOCUMENT_READ_TIMEOUT_MS = 60_000;
-export const DOCUMENT_EXTRACT_MS = 60_000;
 
 /**
  * A job that makes the WORKER read the file (PRD 41 A10 rule 8): `rootPath` + `path` name it and `hash` is the

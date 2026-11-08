@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DOCUMENT_EXTRACT_MS } from "./extractJobHandler";
 import { configureExtractPool, disposeExtractPool, EXTRACT_WORKER_FILE, extractPoolDown, JUDGE_CONCURRENCY, reviewParallelism } from "./extractPoolHost";
 
 const made: string[] = [];
@@ -30,9 +29,16 @@ describe("reviewParallelism", () => {
     expect(p).not.toHaveProperty("maxModelCalls");
   });
 
-  it("gives a pooled review the document-length extract deadline, not memory's 10 s", () => {
+  it("leaves memory's extract deadline alone: a document's longer deadline comes from the source's readTimeoutMs, per path", () => {
     configureExtractPool(extensionWith(true), () => 4);
-    expect(reviewParallelism().timeouts).toEqual({ extractMs: DOCUMENT_EXTRACT_MS });
+    expect(reviewParallelism()).not.toHaveProperty("timeouts");
+    expect(reviewParallelism(undefined, "/repo")).not.toHaveProperty("timeouts");
+  });
+
+  it("defers the read to the pool only when the review has a root path", () => {
+    configureExtractPool(extensionWith(true), () => 4);
+    expect(reviewParallelism()).not.toHaveProperty("deferRead");
+    expect(reviewParallelism(undefined, "/repo").deferRead).toBe(true);
   });
 
   it("uses no pool and leaves the review's default width on a machine with one core to spare or fewer", () => {

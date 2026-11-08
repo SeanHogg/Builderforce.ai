@@ -56,7 +56,7 @@ describe('VFS directory source', () => {
     const source = createVfsDirectorySource({ fs, rootId: 'r', title: 't' });
     for (const entry of await listed(source)) {
       const text = ((await source.read(entry.path)).content as { text: string }).text;
-      expect(source.hashOf!(text)).toBe(entry.hash);
+      expect(source.hashOf!(text, entry.path)).toBe(entry.hash);
     }
   });
 

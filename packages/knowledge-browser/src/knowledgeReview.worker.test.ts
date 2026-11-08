@@ -3,8 +3,8 @@ import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import type { ReviewPorts } from './reviewJob';
 import { LIST_ALL, READ_BYTES, type FromReviewWorker, type ToReviewWorker } from './reviewProtocol';
 import { runReview } from './reviewWorkerClient';
-import type { ByteReadableSource } from './directorySourceKit';
-import { docxBytes } from './testDocx';
+import { bytesHash, type ByteReadableSource } from './directorySourceKit';
+import { docxBytes } from './docx.test-util';
 
 const DOCX = docxBytes('Hello from the docx');
 
@@ -14,7 +14,7 @@ function pageSource(): ByteReadableSource {
   return {
     rootId: 'web:upload:r',
     title: 'r',
-    async *list() { yield { path: 'plan.docx', hash: 'bytes-hash', size: DOCX.length }; },
+    async *list() { yield { path: 'plan.docx', hash: bytesHash(DOCX), size: DOCX.length }; },
     read: async (path) => ({ id: path, tenantId: 'r', title: path, content: { kind: 'text', text: 'RAW-UTF8-GARBAGE', mediaType: 'text/plain' } }),
     readBytes: async () => DOCX,
   };
@@ -90,5 +90,9 @@ describe('document extraction runs in the review worker', () => {
     const text = (doc.content as { text: string }).text;
     expect(text).toContain('Hello from the docx');
     expect(text).not.toContain('RAW-UTF8-GARBAGE');
+    // "Changed since plan": the worker re-hashes the extracted text to the hash of the BYTES it read, which is the listing hash.
+    const [listed] = await (async () => { const out = []; for await (const e of page.list()) out.push(e); return out; })();
+    expect(seen.source!.hashOf!(text, 'plan.docx')).toBe(bytesHash(DOCX));
+    expect(seen.source!.hashOf!(text, 'plan.docx')).toBe(listed!.hash);
   });
 });

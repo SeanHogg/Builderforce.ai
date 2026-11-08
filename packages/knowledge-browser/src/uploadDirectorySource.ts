@@ -7,7 +7,7 @@
  */
 
 import {
-  byPath, bytesHash, contentHash, hashesByBytes, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument, type ByteReadableSource, type ContentHashedSource,
+  byPath, contentHash, hashesByBytes, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleBytesHash, textDocument, type ByteReadableSource, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -54,7 +54,7 @@ export function createUploadDirectorySource(files: readonly File[], host: string
     async *list() {
       for (const [path, file] of byPath(picked)) {
         const hash = hashesByBytes(path, file.size)
-          ? bytesHash(new Uint8Array(await file.arrayBuffer()))
+          ? await subtleBytesHash(new Uint8Array(await file.arrayBuffer()))
           : hashesByContent(path, file.size)
             ? contentHash(await file.text())
             : metadataHash(path, file.size, file.lastModified);

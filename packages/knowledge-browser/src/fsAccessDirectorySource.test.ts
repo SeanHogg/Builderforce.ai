@@ -101,7 +101,7 @@ describe('File System Access directory source', () => {
     );
     for (const entry of await listAll(source)) {
       const text = ((await source.read(entry.path)).content as { text: string }).text;
-      expect(source.hashOf!(text)).toBe(entry.hash);
+      expect(source.hashOf!(text, entry.path)).toBe(entry.hash);
     }
   });
 

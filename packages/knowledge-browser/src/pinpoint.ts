@@ -89,14 +89,15 @@ export async function pinpointImage(deps: PinpointDeps, image: Blob, rootId: str
   checkPinpointImage(image);
   const seen = parseVisionReply(await deps.host.describe(await blobDataUrl(image)));
   const dir = await deps.directory(rootId);
-  let corpus: Map<string, string> | undefined;
+  // The PROMISE is kept, not its result: matchAnchors searches several literals concurrently, and each would otherwise start its own full read.
+  let corpus: Promise<Map<string, string>> | undefined;
   return matchAnchors({
     rootId,
     ...(deps.host.catalogKeys ? { catalogKeys: deps.host.catalogKeys } : {}),
     search: async (literal) => {
       if (dir) {
-        corpus ??= await readCorpus(dir);
-        return scanCorpus(corpus, literal);
+        corpus ??= readCorpus(dir);
+        return scanCorpus(await corpus, literal);
       }
       const hits = await deps.client.search(rootId, literal, SERVER_HITS);
       return hits.flatMap((h) => {

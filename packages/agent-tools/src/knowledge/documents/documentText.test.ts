@@ -2,8 +2,9 @@ import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import {
     decodeEntities, DOCX_MEDIA_TYPE, extractDocumentText, MAX_ZIP_ENTRIES, ODT_MEDIA_TYPE, PDF_MEDIA_TYPE,
-    PPTX_MEDIA_TYPE, unzipEntries, XLSX_MEDIA_TYPE,
+    PPTX_MEDIA_TYPE, readDocument, unzipEntries, XLSX_MEDIA_TYPE, zipEntryNames,
 } from './documentText.js';
+import { tinyPdf } from './documentText.fixtures.test-util.js';
 
 const docx = (xml: string): Uint8Array => zipSync({ 'word/document.xml': strToU8(xml) });
 const slide = (text: string): Uint8Array => strToU8(`<p:sld><a:p><a:r><a:t>${text}</a:t></a:r></a:p></p:sld>`);
@@ -20,24 +21,6 @@ function declareSize(zip: Uint8Array, size: number): Uint8Array {
     return out;
 }
 
-/** A one-page PDF whose content stream shows `text`, with a correct xref table. */
-function tinyPdf(text: string): Uint8Array {
-    const stream = `BT /F1 24 Tf 72 700 Td (${text}) Tj ET`;
-    const objs = [
-        '<< /Type /Catalog /Pages 2 0 R >>',
-        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    ];
-    let pdf = '%PDF-1.4\n';
-    const offsets: number[] = [];
-    objs.forEach((body, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${body}\nendobj\n`; });
-    const xref = pdf.length;
-    pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
-    pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-    return strToU8(pdf);
-}
 
 describe('extractDocumentText', () => {
     it('reads a DOCX, one line per paragraph, tabs kept', async () => {
@@ -67,10 +50,44 @@ describe('extractDocumentText', () => {
         expect(await extractDocumentText(tinyPdf('Hello PDF'), PDF_MEDIA_TYPE)).toContain('Hello PDF');
     });
 
+    it('never detaches the caller\'s buffer (pdf.js gets a private copy)', async () => {
+        const bytes = tinyPdf('Hello PDF');
+        const length = bytes.byteLength;
+        await extractDocumentText(bytes, PDF_MEDIA_TYPE);
+        expect(bytes.byteLength).toBe(length);
+        // Read again from the same bytes: still readable.
+        expect(await extractDocumentText(bytes, PDF_MEDIA_TYPE)).toContain('Hello PDF');
+    });
+
     it('returns undefined for legacy types, malformed bytes and empty documents', async () => {
         expect(await extractDocumentText(docx('<w:p/>'), 'application/msword')).toBeUndefined();
         expect(await extractDocumentText(strToU8('not a zip'), DOCX_MEDIA_TYPE)).toBeUndefined();
         expect(await extractDocumentText(docx('<w:body></w:body>'), DOCX_MEDIA_TYPE)).toBeUndefined();
+    });
+});
+
+describe('readDocument', () => {
+    it('tells "opens, but has no text" from "unreadable"', async () => {
+        expect(await readDocument(tinyPdf(''), PDF_MEDIA_TYPE)).toEqual({ failure: 'no-text' });
+        expect(await readDocument(strToU8('%PDF-1.4 this is not a pdf'), PDF_MEDIA_TYPE)).toMatchObject({ failure: 'unreadable' });
+        expect(await readDocument(docx('<w:body></w:body>'), DOCX_MEDIA_TYPE)).toEqual({ failure: 'no-text' });
+        expect(await readDocument(zipSync({ 'xl/workbook.xml': strToU8('<x/>') }), DOCX_MEDIA_TYPE)).toMatchObject({ failure: 'unreadable' });
+        expect(await readDocument(docx('<w:p/>'), 'application/msword')).toMatchObject({ failure: 'unreadable' });
+    });
+
+    it('a zip whose deflate data is corrupt is unreadable, not no-text', async () => {
+        const zip = docx(`<w:p><w:r><w:t>${'corrupt me '.repeat(200)}</w:t></w:r></w:p>`);
+        const nameLength = new DataView(zip.buffer).getUint16(26, true);
+        const data = 30 + nameLength + new DataView(zip.buffer).getUint16(28, true);
+        for (let i = data; i < data + 16; i++) zip[i] = 0xff;
+        expect(await readDocument(zip, DOCX_MEDIA_TYPE)).toMatchObject({ failure: 'unreadable' });
+    });
+});
+
+describe('zipEntryNames', () => {
+    it('lists the entries without inflating, undefined for bytes that are not a zip', () => {
+        expect(zipEntryNames(zipSync({ 'a.xml': strToU8('<a/>'), 'b/c.xml': strToU8('<c/>') }))).toEqual(['a.xml', 'b/c.xml']);
+        expect(zipEntryNames(new Uint8Array([0x50, 0x4b, 1, 2, 3, 4, 5, 6]))).toBeUndefined();
     });
 });
 
@@ -98,7 +115,7 @@ describe('size caps', () => {
         expect(await extractDocumentText(declareSize(docx('<w:t>x</w:t>'), nine), DOCX_MEDIA_TYPE)).toBeUndefined();
         const slides: Record<string, Uint8Array> = {};
         for (let i = 1; i <= 3; i++) slides[`ppt/slides/slide${i}.xml`] = slide(`s${i}`);
-        // Three slides each declaring 7 MB: each under the entry cap, 21 MB together.
+        // Three slides each declaring 7 MB: each under the entry cap, 21 MB together (the DECLARED total is capped too).
         expect(await extractDocumentText(declareSize(zipSync(slides), 7 * 1024 * 1024), PPTX_MEDIA_TYPE)).toBeUndefined();
     });
 
@@ -126,12 +143,26 @@ describe('size caps', () => {
 });
 
 describe('linear scanner', () => {
-    it('finishes unclosed tags on 1 MB in well under 100 ms', async () => {
-        for (const piece of ['<w:t>', '<w:t ', '<w:t><w:p>']) {
-            const bytes = docx(piece.repeat(Math.ceil((1024 * 1024) / piece.length)));
+    /** Fastest of a few runs: the least load-sensitive estimate of the work itself. */
+    async function fastest(bytes: Uint8Array): Promise<number> {
+        let best = Number.POSITIVE_INFINITY;
+        for (let run = 0; run < 5; run++) {
             const started = performance.now();
             await extractDocumentText(bytes, DOCX_MEDIA_TYPE);
-            expect(performance.now() - started).toBeLessThan(100);
+            best = Math.min(best, performance.now() - started);
+        }
+        return best;
+    }
+
+    it('scales linearly on unclosed tags: doubling the input far less than quadruples the time', async () => {
+        const size = 512 * 1024;
+        for (const piece of ['<w:t>', '<w:t ', '<w:t><w:p>']) {
+            const once = docx(piece.repeat(Math.ceil(size / piece.length)));
+            const twice = docx(piece.repeat(Math.ceil((2 * size) / piece.length)));
+            await fastest(twice); // warm-up: JIT and the lazily loaded pieces, outside the measurement
+            const ratio = (await fastest(twice)) / Math.max(await fastest(once), 0.5);
+            // Linear ≈ 2; quadratic ≈ 4. The 0.5 ms floor keeps a sub-millisecond run from inflating the ratio.
+            expect(ratio).toBeLessThan(3);
         }
     });
 });

@@ -9,7 +9,7 @@
  * a real text layer does not need a model to be read; it needs a parser.
  *
  * So this runs first and the model is the fallback, not the path:
- *   - PDF / DOCX → `extractDocumentText` (`@builderforce/agent-tools/documents`, the ONE document extractor).
+ *   - PDF / DOCX → `readDocument` (`@builderforce/agent-tools/documents`, the ONE document extractor; no pdf.js of its own).
  *   - text / Markdown / JSON → decoded as-is.
  *   - scanned PDFs, legacy .doc (OLE), images → declined HERE, so the caller can
  *     escalate to the multimodal path knowing why rather than guessing.
@@ -19,7 +19,9 @@
  * for-hire upload path and the tenant-scoped canvas import path share one reader.
  */
 
-import { extractDocumentText } from '@builderforce/agent-tools/documents';
+import {
+  type DocumentRead, DOCX_MEDIA_TYPE, PDF_MEDIA_TYPE, readDocument, zipEntryNames,
+} from '@builderforce/agent-tools/documents';
 
 export type ResumeExtractResult =
   | { ok: true; text: string }
@@ -66,73 +68,36 @@ function looksLikePdf(bytes: Uint8Array, contentType?: string): boolean {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5)).startsWith(PDF_MAGIC);
 }
 
-/** The media types the shared document extractor (`@builderforce/agent-tools/documents`) is asked for. */
-const PDF_MEDIA_TYPE = 'application/pdf';
-const DOCX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-/**
- * File names in a zip, read from its central directory WITHOUT inflating anything — the cheap "is this a Word document?" check.
- * Undefined when the bytes are not a readable zip.
- */
-function zipEntryNames(bytes: Uint8Array): string[] | undefined {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let eocd = -1;
-  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i -= 1) {
-    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) return undefined;
-  const count = view.getUint16(eocd + 10, true);
-  let at = view.getUint32(eocd + 16, true);
-  const names: string[] = [];
-  for (let n = 0; n < count; n += 1) {
-    if (at + 46 > bytes.length || view.getUint32(at, true) !== 0x02014b50) return undefined;
-    const nameLen = view.getUint16(at + 28, true);
-    if (at + 46 + nameLen > bytes.length) return undefined;
-    names.push(new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLen)));
-    at += 46 + nameLen + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
-  }
-  return names;
-}
-
-/** Whether pdf.js can open the file at all: told apart from "opens, but has no text" only when extraction came back empty. */
-async function pdfOpenError(bytes: Uint8Array): Promise<string | undefined> {
-  try {
-    const { getDocumentProxy } = await import('unpdf');
-    await (await getDocumentProxy(bytes)).destroy();
-    return undefined;
-  } catch (error) {
-    return error instanceof Error ? error.message : 'unknown error';
-  }
-}
-
 const unreadablePdf = (reason: string): ResumeExtractResult => ({ ok: false, code: 'NO_TEXT_LAYER', message: `Could not read this PDF: ${reason}.` });
+const unreadableDocx: ResumeExtractResult = { ok: false, code: 'UNSUPPORTED_MEDIA_TYPE', message: 'This file is not a readable .docx.' };
 
 async function extractPdf(bytes: Uint8Array): Promise<ResumeExtractResult> {
-  let text: string | undefined;
+  let read: DocumentRead;
   try {
-    text = await extractDocumentText(bytes, PDF_MEDIA_TYPE);
+    read = await readDocument(bytes, PDF_MEDIA_TYPE);
   } catch (error) {
     return unreadablePdf(error instanceof Error ? error.message : 'unknown error');
   }
-  if (text !== undefined) return { ok: true, text: stripResumeControlChars(text).trim() };
-  // The shared extractor answers undefined for both "no text" and "malformed"; the probe says which.
-  const openError = await pdfOpenError(bytes);
-  if (openError !== undefined) return unreadablePdf(openError);
+  if ('text' in read) return { ok: true, text: stripResumeControlChars(read.text).trim() };
+  if (read.failure === 'unreadable') return unreadablePdf(read.reason);
   return { ok: false, code: 'NO_TEXT_LAYER', message: 'This PDF has no text layer — it looks like a scan or a photo.' };
 }
 
 async function extractDocx(bytes: Uint8Array): Promise<ResumeExtractResult> {
   const names = zipEntryNames(bytes);
-  if (!names) return { ok: false, code: 'UNSUPPORTED_MEDIA_TYPE', message: 'This file is not a readable .docx.' };
+  if (!names) return unreadableDocx;
   // A PK zip that isn't a Word document (.xlsx / .pptx / .pages).
   if (!names.includes('word/document.xml')) return { ok: false, code: 'UNSUPPORTED_MEDIA_TYPE', message: 'This zip is not a Word .docx.' };
+  let read: DocumentRead;
   try {
-    const text = await extractDocumentText(bytes, DOCX_MEDIA_TYPE);
-    if (text === undefined) return { ok: false, code: 'NO_TEXT_LAYER', message: 'This .docx contained no text.' };
-    return { ok: true, text: stripResumeControlChars(text).trim() };
+    read = await readDocument(bytes, DOCX_MEDIA_TYPE);
   } catch {
-    return { ok: false, code: 'UNSUPPORTED_MEDIA_TYPE', message: 'This file is not a readable .docx.' };
+    return unreadableDocx;
   }
+  if ('text' in read) return { ok: true, text: stripResumeControlChars(read.text).trim() };
+  // The zip opens but its deflate data is corrupt (or over the caps): not a readable .docx, never "no text".
+  if (read.failure === 'unreadable') return unreadableDocx;
+  return { ok: false, code: 'NO_TEXT_LAYER', message: 'This .docx contained no text.' };
 }
 
 /**

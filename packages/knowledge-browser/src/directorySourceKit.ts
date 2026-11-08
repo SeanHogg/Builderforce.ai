@@ -27,7 +27,13 @@ export type ContentHashedSource = DirectorySource & { readonly hashKind: 'conten
  * worker reads the bytes through the proxy (`READ_BYTES`) and runs `withDocumentText` itself, off the UI thread. A review that
  * runs in-thread (no Worker) wraps the source once, in `runReview`. So no page source applies `withDocumentText`.
  */
-export type ByteReadableSource = DirectorySource & { readBytes(path: string, signal?: AbortSignal): Promise<Uint8Array> };
+export type ByteReadableSource = DirectorySource & {
+  /**
+   * The file's raw bytes, in a buffer the CALLER owns: a fresh `Uint8Array` over its own `ArrayBuffer` (never a view into a
+   * cache or a shared buffer). `reviewWorkerClient` transfers that buffer to the worker, which detaches it on the page.
+   */
+  readBytes(path: string, signal?: AbortSignal): Promise<Uint8Array>;
+};
 
 export const isByteReadable = (source: DirectorySource): source is ByteReadableSource =>
   typeof (source as { readBytes?: unknown }).readBytes === 'function';
@@ -36,7 +42,7 @@ export const isByteReadable = (source: DirectorySource): source is ByteReadableS
 export const isContentHashed = (source: DirectorySource): boolean =>
   (source as { hashKind?: unknown }).hashKind === 'content' && typeof source.hashOf === 'function';
 
-export { isSkippedPath, normalizePath, textDocument, withDocumentHashes, withDocumentText } from '@builderforce/agent-tools/knowledge';
+export { isSkippedPath, normalizePath, textDocument, withDocumentText } from '@builderforce/agent-tools/knowledge';
 
 /**
  * `<host>:<kind>:<…parts>` — a reviewed root's id (`knowledge_scopes.root_id`), by THE
@@ -74,16 +80,30 @@ export function bytesHash(bytes: Uint8Array): string {
   return sha256Hex(bytes);
 }
 
+/** SHA-256 through the platform's SubtleCrypto as lowercase hex, or undefined where there is none. */
+async function subtleSha256Hex(bytes: Uint8Array): Promise<string | undefined> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return undefined;
+  const digest = await subtle.digest('SHA-256', bytes as BufferSource);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * The same content hash through the platform's SubtleCrypto (off the JS thread for large
  * files). Equal to {@link contentHash} for the same text — both hash its UTF-8 bytes — so
  * a host may use either and still share the extracted cache.
  */
 export async function subtleContentHash(text: string): Promise<string> {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) return contentHash(text);
-  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return (await subtleSha256Hex(new TextEncoder().encode(text))) ?? contentHash(text);
+}
+
+/**
+ * {@link bytesHash} through SubtleCrypto, for a page-side `list()`: a pure-JS SHA-256 of a large pdf/office file blocks the
+ * page thread (~100 ms per 2 MB). Equal to `bytesHash` for the same bytes, so the review worker's sync re-check
+ * (`hashOf` must be sync) still matches the listing hash.
+ */
+export async function subtleBytesHash(bytes: Uint8Array): Promise<string> {
+  return (await subtleSha256Hex(bytes)) ?? bytesHash(bytes);
 }
 
 export function metadataHash(...parts: Array<string | number | undefined>): string {

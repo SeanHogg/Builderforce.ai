@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createUploadDirectorySource } from './uploadDirectorySource';
 import { bytesHash, contentHash, metadataHash, withDocumentText } from './directorySourceKit';
-import { docxBytes } from './testDocx';
+import { docxBytes } from './docx.test-util';
 
 /** The slice of an `<input webkitdirectory>` File the adapter reads. */
 const file = (webkitRelativePath: string, text: string, lastModified = 1): File =>
@@ -48,7 +48,7 @@ describe('folder upload directory source', () => {
     for await (const entry of source.list()) {
       const doc = await source.read(entry.path);
       const text = (doc.content as { text: string }).text;
-      expect(source.hashOf!(text)).toBe(entry.hash);
+      expect(source.hashOf!(text, entry.path)).toBe(entry.hash);
     }
   });
 
