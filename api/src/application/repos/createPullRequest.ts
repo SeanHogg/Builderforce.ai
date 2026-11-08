@@ -189,8 +189,8 @@ async function findOpenPr(
   const parsed = first ? parseCreatePrSuccess(input.provider, first) : null;
   if (!parsed) return null;
   const { draft, body: text, description } = first as { draft?: unknown; body?: unknown; description?: unknown };
-  const body = typeof text === 'string' ? text : typeof description === 'string' ? description : undefined;
-  return { ...parsed, ...(typeof draft === 'boolean' ? { draft } : {}), ...(body !== undefined ? { body } : {}) };
+  const prBody = typeof text === 'string' ? text : typeof description === 'string' ? description : undefined;
+  return { ...parsed, ...(typeof draft === 'boolean' ? { draft } : {}), ...(prBody !== undefined ? { body: prBody } : {}) };
 }
 
 /** The open PR for a head branch, with whether it is a draft and its body (the sweep's proof that a PR is the platform's own). Null when none. */

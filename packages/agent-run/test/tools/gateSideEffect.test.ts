@@ -54,7 +54,10 @@ describe("a tool plus class gate", () => {
   it("needs both", () => {
     const gate: PolicyGate = { id: "g", tool: "write_file", sideEffect: "mutate", effect: "block" };
     expect(isToolWithheld([gate], "write_file")).toBe(true);
-    expect(isToolWithheld([gate], "edit_file")).toBe(false);
+    // A write gate also covers edit_file on purpose: see TOOL_NAME_SYNONYMS in src/policy/tools/gateToolNames.ts.
+    expect(isToolWithheld([gate], "edit_file")).toBe(true);
+    // A mutating tool outside the write family: same side-effect class, different tool name, so not withheld.
+    expect(isToolWithheld([gate], "run_command")).toBe(false);
     const wrongClass: PolicyGate = { id: "g2", tool: "write_file", sideEffect: "read", effect: "block" };
     expect(isToolWithheld([wrongClass], "write_file")).toBe(false);
   });
