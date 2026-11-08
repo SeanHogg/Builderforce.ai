@@ -84,6 +84,26 @@ describe('runAgentReply', () => {
     expect(first[1]?.content).toContain('list my tasks');
   });
 
+  it('a create the reply makes carries the chat it replies in, stamped over the model\'s, and the trusted hostChatId', async () => {
+    const CREATE = 'builtin_tasks_create';
+    const base = input();
+    const withCreate = {
+      ...base,
+      toolset: {
+        tools: [{ type: 'function', function: { name: CREATE, description: 'create', parameters: { type: 'object', properties: {} } } }, ASK_USER_TOOL_SPEC],
+        nameToTool: new Map([[CREATE, 'tasks.create']]), nameFor: () => CREATE,
+      } as never,
+    };
+    h.script = [{ content: '', toolCalls: [{ id: 'c1', name: CREATE, args: { title: 'T', chatId: 555 } }] }, { content: 'Filed.' }];
+    await runAgentReply(withCreate);
+    expect(h.callTool.mock.calls[0]?.[1]).toMatchObject({ tool: 'tasks.create', arguments: { title: 'T', chatId: 9 }, hostChatId: 9, userId: 'u1', agentRef: 'ref-7' });
+    // A non-create tool's arguments are left alone, but the host chat still rides beside them.
+    h.turn = 0; h.callTool.mockClear();
+    h.script = [{ content: '', toolCalls: [{ id: 't1', name: TOOL, args: { limit: 3 } }] }, { content: 'ok' }];
+    await runAgentReply(input());
+    expect(h.callTool.mock.calls[0]?.[1]).toMatchObject({ arguments: { limit: 3 }, hostChatId: 9 });
+  });
+
   it('ask_user ends the reply with the lead-in prose and the card, and its sibling calls never run', async () => {
     h.script = [{
       content: 'One quick thing.',

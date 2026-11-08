@@ -120,7 +120,6 @@ export async function linkChatTicket(
   store: LocalFirstStore,
   input: LinkChatTicketInput,
 ): Promise<LocalRecord<ChatTicketLinkValue>> {
-  requireLinkIds(input);
   return store.transact((tx) => linkChatTicketInTx(tx, input));
 }
 

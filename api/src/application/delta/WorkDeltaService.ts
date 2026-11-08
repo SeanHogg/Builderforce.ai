@@ -51,6 +51,7 @@ import { ProjectService } from '../project/ProjectService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { ChatTicketService } from '../brain/ChatTicketService';
+import type { ChatLinkOutcome } from '../brain/chatTicketTypes';
 import { recordActivity, resolveActorByRef } from '../activity/activityLog';
 import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
@@ -74,6 +75,9 @@ export interface RecordDeltaInput {
   modality?: string;
   /** Brain chat that produced the change (ties the ticket to the conversation). */
   chatId?: number | null;
+  /** The identity the chat-access guard checks for `chatId` (see `chatAccessUserFor`);
+   *  omitted ⇒ the recording `userId`. */
+  chatAccessUserId?: string | null;
   /** Existing project ticket that already tracks this change. Reused, never duplicated. */
   taskId?: number | null;
   /** User id or agent ref that authored the turn. */
@@ -90,6 +94,9 @@ export interface RecordDeltaResult {
   taskKey: string | null;
   /** True when the delta was attached to an already-existing project ticket. */
   deduped: boolean;
+  /** What became of the chat link, when a chat was named and a ticket exists — a refused
+   *  or failed link is said here instead of vanishing. */
+  chatLink?: ChatLinkOutcome;
 }
 
 /** Match the same project + normalized-title idempotency contract as tasks.create. */
@@ -176,6 +183,7 @@ export class WorkDeltaService {
     let taskId: number | null = null;
     let taskKey: string | null = null;
     let deduped = false;
+    let chatLink: ChatLinkOutcome | undefined;
 
     if (input.createTicket !== false) {
       // A chat may create/assign the ticket first and then record the code delta.
@@ -211,14 +219,19 @@ export class WorkDeltaService {
 
       // Tie the ticket back to the conversation. An existing ticket is linked,
       // while a ticket minted by this delta is marked as created by the chat.
+      // Best-effort lineage: never fail the delta on a link error, but SAY it — a refused
+      // link (`{ error }`) used to vanish because the `.catch` only saw throws.
       if (input.chatId != null) {
-        await this.chatTickets
-          .linkTicket(tenantId, input.chatId, userId, {
-            kind: 'task', ref: String(taskId), linkType: deduped ? 'linked' : 'created', createdBy,
-          })
-          .catch((error) => { /* best-effort lineage; never fail the delta on a link error */ 
-            reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
-          });
+        const chatId = input.chatId;
+        const linkType = deduped ? 'linked' as const : 'created' as const;
+        const accessAs = input.chatAccessUserId !== undefined ? input.chatAccessUserId : userId;
+        try {
+          const linked = await this.chatTickets.linkTicket(tenantId, chatId, accessAs, { kind: 'task', ref: String(taskId), linkType, createdBy });
+          chatLink = 'error' in linked ? { linked: false, chatId, reason: linked.error } : { linked: true, chatId, linkType };
+        } catch (error) {
+          reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
+          chatLink = { linked: false, chatId, reason: error instanceof Error ? error.message : String(error) };
+        }
       }
     }
 
@@ -257,6 +270,6 @@ export class WorkDeltaService {
       reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
     }
 
-    return { deltaId: row!.id, kind, taskId, taskKey, deduped };
+    return { deltaId: row!.id, kind, taskId, taskKey, deduped, ...(chatLink ? { chatLink } : {}) };
   }
 }

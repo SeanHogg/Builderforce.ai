@@ -80,12 +80,20 @@ describe('platformTools', () => {
     expect(h.call.mock.calls[0]?.[1]).toMatchObject({ tenantId: 1, tool: 'tasks.create', arguments: { projectId: 9, title: 'T', chatId: 77 }, executionId: 5 });
   });
 
-  it('stamps the originating chat over a model-sent one, and strips a guessed chat from a create when the run has none', async () => {
+  it('stamps the originating chat over a model-sent one and passes it as the trusted hostChatId', async () => {
     await tools.dispatch('builtin_tasks_create', { title: 'T', chatId: 5 });
-    expect(h.call.mock.calls[0]?.[1]).toMatchObject({ arguments: { chatId: 77 } });
-    const unbound = platformTools({ env: {} as never, db: {} as never, tenantId: 1, projectId: 9, meterExecutionId: 5, executionId: 2 });
+    expect(h.call.mock.calls[0]?.[1]).toMatchObject({ arguments: { chatId: 77 }, hostChatId: 77, userId: 'ref', agentRef: 'ref' });
+  });
+
+  it('a run with no chat drops a guessed chatId from EVERY call and has no host chat', async () => {
+    const unbound = platformTools({ env: {} as never, db: {} as never, tenantId: 1, projectId: 9, meterExecutionId: 5, executionId: 2, cloudAgentRef: 'ref' });
     await unbound.dispatch('builtin_tasks_create', { title: 'T', chatId: 5 });
-    expect((h.call.mock.calls[1]?.[1] as { arguments: Record<string, unknown> }).arguments).not.toHaveProperty('chatId');
+    await unbound.dispatch('builtin_chats_send_message', { content: 'hi', chatId: 5 });
+    for (const [, args] of h.call.mock.calls as unknown as Array<[unknown, { arguments: Record<string, unknown>; hostChatId: unknown }]>) {
+      expect(args.arguments).not.toHaveProperty('chatId');
+      expect(args.hostChatId).toBeNull();
+    }
+    expect(h.call).toHaveBeenCalledTimes(2);
   });
 
   it('blocks an outbound message carrying credential material, and reports a tool failure as the tool\'s own', async () => {

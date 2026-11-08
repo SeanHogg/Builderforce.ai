@@ -86,7 +86,7 @@ export function agentReplySystemPrompt(input: AgentReplyPromptInput): string {
     // defect the client-side loop had.
     chatMode === 'work'
       ? (linkTicket && listTickets
-          ? `This conversation is in WORK mode: turn what you conclude into real work rather than describing it. Tie every work item you create or discuss to the chat with ${linkTicket}(chatId=${chatId}), and use ${listTickets}(chatId=${chatId}) to see what is already linked so you never duplicate one. `
+          ? `This conversation is in WORK mode: turn what you conclude into real work rather than describing it. A work item you create is linked to this chat automatically — do not link it again. Tie an EXISTING work item you discuss to the chat with ${linkTicket}(chatId=${chatId}), and use ${listTickets}(chatId=${chatId}) to see what is already linked so you never duplicate one. `
           : '')
       : `This conversation is in CHAT mode: answer the question. Read and investigate freely, but do not create, re-status or dispatch board work as a side effect of answering — unless the user explicitly asks you to in this message. If something clearly ought to be tracked, say so in one line at the end and leave it to the user. `,
     `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ${ASK_USER_TOOL} tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ${ASK_USER_TOOL} would let the user just click a choice.`,

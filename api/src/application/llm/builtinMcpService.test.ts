@@ -391,6 +391,27 @@ describe('callBuiltinTool', () => {
     expect(chatLink.linkTicket).not.toHaveBeenCalled();
   });
 
+  it('a cloud agent links into its HOST chat tenant-scoped; a chat named only in the arguments gets no exception', async () => {
+    taskSvc.listTasks.mockResolvedValue([]);
+    taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 52, projectId: 3 }) });
+    const agent = { userId: 'agent-7', agentRef: 'agent-7' };
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', ...agent, hostChatId: 42, arguments: { projectId: 3, title: 'T', assignedUserId: 'c-1', chatId: 42 } });
+    expect(chatLink.linkTicket).toHaveBeenLastCalledWith(expect.anything(), TENANT, 42, null, expect.objectContaining({ createdBy: 'agent-7' }));
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', ...agent, arguments: { projectId: 3, title: 'T', assignedUserId: 'c-1', chatId: 42 } });
+    expect(chatLink.linkTicket).toHaveBeenLastCalledWith(expect.anything(), TENANT, 42, 'agent-7', expect.anything());
+  });
+
+  it('chats.link_ticket accepts every TICKET_KIND (retro, poker included) and reaches a cloud agent\'s host chat', async () => {
+    const entry = listBuiltinTools().find((t) => t.tool === 'chats.link_ticket')!;
+    const kinds = ((entry.parameters as { properties: { kind: { enum: string[] } } }).properties.kind.enum);
+    expect(kinds).toEqual(['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task', 'retro', 'poker']);
+    expect(entry.description).toContain('retro|poker');
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'chats.link_ticket', userId: 'agent-7', agentRef: 'agent-7', hostChatId: 42, arguments: { chatId: 42, kind: 'retro', ref: 'r-1' } });
+    expect(chatLink.linkTicket).toHaveBeenLastCalledWith(expect.anything(), TENANT, 42, null, { kind: 'retro', ref: 'r-1', linkType: 'linked', createdBy: 'agent-7' });
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'chats.link_ticket', userId: 'u1', arguments: { chatId: 42, kind: 'poker', ref: 'p-1' } });
+    expect(chatLink.linkTicket).toHaveBeenLastCalledWith(expect.anything(), TENANT, 42, 'u1', expect.objectContaining({ kind: 'poker' }));
+  });
+
   it('refuses a workspace write to a canvas contributor or viewer before touching the service', async () => {
     // `tasks.create` writes through the service, never through the ticket route's
     // `task:write` gate — so a person seated by one shared canvas must be refused here.

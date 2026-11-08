@@ -130,6 +130,7 @@ export {
   type JournalWriteOptions,
 } from './journalRules.js';
 export { bindWorkForSync, ticketWaitsOn } from './workBinding.js';
+export { SYNC_PASS_BIND_TYPES } from './dependencyGraph.js';
 export {
   TASK_TABLE_KINDS,
   chatTicketLinkId,

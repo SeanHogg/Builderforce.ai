@@ -10,6 +10,7 @@ import {
 } from '../../application/runtime/dispatchAdmission';
 import { admissionRefusalResponse, admitHumanDispatch, type DispatchRefusal } from '../../application/runtime/humanDispatchAdmission';
 import { steerRateLimited, steerTextTooLong, STEER_MAX_TEXT_CHARS } from '../../application/runtime/steerGuard';
+import { unbindableRunChat, UNBINDABLE_RUN_CHAT_ERROR } from '../../application/runtime/runChatBinding';
 
 /**
  * THE HTTP adapters for run admission, beside {@link ./executionTokenGate}. They hold no
@@ -81,6 +82,7 @@ export function replayOnIdempotencyKey<E extends HonoEnv>(): MiddlewareHandler<E
 
 /**
  * EVERY pre-row gate of the two submit routes (`/executions`, `/tasks/submit`), in order, so the routes cannot drift:
+ *   0. the chat binding - a `payload.chatId` the submitter cannot open -> 404 (same rule and words as run-now);
  *   1. admission - live-run dedupe, concurrent cap, budget floor (PRD 09 D6/D8/B3) -> 409 / 429;
  *   2. the token gate - no budget, no run (shared with Run-now and the board Run; the superadmin bypass lives there) -> 429;
  *   3. the approval gate - a ticket that needs sign-off answers 202 `awaiting_approval` instead of running.
@@ -93,6 +95,11 @@ export async function submitRunGates<E extends HonoEnv>(
   db: Db,
   a: { task: ApprovalGateTask; agentHostId: number | null; payload?: string },
 ): Promise<Response | null> {
+  // 0. A `payload.chatId` binds the run to a chat — only one the submitter can open (the run-now rule, one helper).
+  if (await unbindableRunChat(db, c.get('tenantId'), c.get('userId'), a.payload) != null) {
+    return c.json({ error: UNBINDABLE_RUN_CHAT_ERROR }, 404);
+  }
+
   const admissionBlock = await executionAdmissionGate(c, db, {
     taskId: a.task.id,
     pinnedHost: (a.agentHostId ?? a.task.assignedAgentHostId) != null,

@@ -18,7 +18,6 @@ import { isHumanOrExternalOutputTool } from '../../domain/trust/contentTrust';
 import type { Db } from '../../infrastructure/database/connection';
 import { builtinToolMutates, callBuiltinTool, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool } from '../llm/builtinMcpService';
 import { inspectOutboundContent } from '../trust/trustService';
-import { withHostChat } from '../brain/createdWorkItemChatLink';
 import { ANALYZE_CODEBASE_TOOL, withSavedAnalysis } from './cloudAgent/auditAnalysis';
 import { CLOUD_RUN_TENANT_ROLE } from './cloudAgentTools';
 import { recordCloudToolEvent } from './cloudToolEvents';
@@ -60,12 +59,16 @@ export function platformTools(a: PlatformToolsArgs): ToolExtension {
       // Run in-process, tenant-scoped, defaulting the project to THIS run's so a follow-up task lands on the
       // right project unless the model names another. MANAGER role so the OKR/task writes the user asked for are
       // permitted; the curated subset is admin/destructive-free so this can't reach keys/security/etc.
+      // The originating chat is the HOST's fact. A run's chat is stamped over anything the model sent; a run with
+      // NO chat drops a model-sent `chatId` from EVERY call — a cloud run has no business naming a conversation it was
+      // never put in (from_delta and the chat tools would otherwise link or post into a guessed one).
+      const { chatId: _modelChat, ...modelArgs } = args;
       try {
         const data = await callBuiltinTool(a.db, {
           tenantId: a.tenantId, tool,
-          // The originating chat is the HOST's fact: stamped over anything the model sent, and on a
-          // work-item create stripped when the run has no chat, so the item links only where the run is.
-          arguments: withHostChat(tool, { projectId: a.projectId, ...args, ...(chat != null ? { chatId: chat } : {}) }, chat),
+          arguments: { projectId: a.projectId, ...modelArgs, ...(chat != null ? { chatId: chat } : {}) },
+          // Trusted server state, separate from the arguments: the one chat this agent may reach tenant-scoped.
+          hostChatId: chat ?? null,
           env: a.env, userId: a.cloudAgentRef ?? null, agentRef: a.cloudAgentRef ?? null,
           role: CLOUD_RUN_TENANT_ROLE,
           // Provenance (ticket 5301): this run formed the belief, so a project_facts.remember from here carries the execution id.

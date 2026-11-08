@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { UNBOUND_DESTINATION, type JournalEvent } from './records.js';
-import { createMemoryLocalFirstStore } from './store.js';
+import { UNBOUND_DESTINATION, type EntityDestination, type JournalEvent } from './records.js';
+import { createMemoryLocalFirstStore, newLocalRecord } from './store.js';
+import { dependencyIndex, loadMappedEntities, resolveDependency, unsendableEventIds } from './dependencyGraph.js';
+import { importKey } from './journalRules.js';
 import { createSyncCoordinator, wireDependencies, type SyncPushBatch } from './sync.js';
 import { createPlatformPolicy } from './policy.js';
 
@@ -36,6 +38,58 @@ describe('wireDependencies', () => {
     // OTHER is an id no pending event carries (acknowledged, or replaced away): nothing to wait for.
     expect(wired?.dependsOn).toEqual([P]);
     expect(ticket.dependsOn).toHaveLength(4);
+  });
+});
+
+describe('resolveDependency across the unbound partition', () => {
+  const TICKET = '44444444-4444-4444-8444-444444444444';
+  const LINK = '55555555-5555-4555-8555-555555555555';
+
+  /** A ticket record in `ticketAt` and a BOUND link import waiting on the ticket's import key. */
+  async function setup(ticketAt: EntityDestination, mapped: boolean) {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      await tx.put(newLocalRecord<unknown>({ id: TICKET, entityType: 'ticket', payload: {}, deviceId: 'd', destination: ticketAt, occurredAt: AT }));
+      if (mapped) await tx.putMapping({ destination: BOUND, entityType: 'ticket', clientEntityId: TICKET, serverId: '9', serverVersion: 1 });
+      await tx.append({
+        idempotencyKey: importKey('chat-ticket-link', LINK), clientEntityId: LINK, entityType: 'chat-ticket-link', operation: 'import',
+        schemaVersion: 1, occurredAt: AT, dependsOn: [importKey('ticket', TICKET)], destination: BOUND, payload: {},
+      });
+    });
+    return store.read(async (tx) => {
+      const all = await tx.pending();
+      const facts = await loadMappedEntities(tx, all);
+      const link = all.find((event) => event.clientEntityId === LINK)!;
+      return {
+        resolved: resolveDependency(importKey('ticket', TICKET), dependencyIndex(all, facts), link),
+        unsendable: unsendableEventIds(all, facts).has(link.eventId),
+      };
+    });
+  }
+
+  it('regression: a bound dependent on an entity whose record is still unbound awaits the bind (not satisfied)', async () => {
+    expect(await setup(UNBOUND_DESTINATION, false)).toEqual({ resolved: { kind: 'awaiting-bind' }, unsendable: true });
+  });
+
+  it('regression: a bound dependent on an entity with an imported mapping stays satisfied', async () => {
+    expect(await setup(BOUND, true)).toEqual({ resolved: { kind: 'satisfied' }, unsendable: false });
+    // The mapping wins even over an unbound local record.
+    expect(await setup(UNBOUND_DESTINATION, true)).toEqual({ resolved: { kind: 'satisfied' }, unsendable: false });
+  });
+
+  it('regression: a dependency on an entity that does not exist locally stays satisfied', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      await tx.append({
+        clientEntityId: LINK, entityType: 'chat-ticket-link', operation: 'import',
+        schemaVersion: 1, occurredAt: AT, dependsOn: [importKey('ticket', TICKET)], destination: BOUND, payload: {},
+      });
+    });
+    const resolved = await store.read(async (tx) => {
+      const all = await tx.pending();
+      return resolveDependency(importKey('ticket', TICKET), dependencyIndex(all, await loadMappedEntities(tx, all)), all[0]!);
+    });
+    expect(resolved).toEqual({ kind: 'satisfied' });
   });
 });
 

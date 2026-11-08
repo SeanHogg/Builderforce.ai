@@ -11,7 +11,7 @@ import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDest
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
 import { SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import type { CoordinatorLeaseFence } from './syncLease.js';
-import { blockedEventIds, dependencyIndex, loadMappedEntities, resolveDependency } from './dependencyGraph.js';
+import { dependencyIndex, loadMappedEntities, resolveDependency, unsendableEventIds } from './dependencyGraph.js';
 import { rebaseImportsOntoMapping, rebaseNewerWrites } from './journalRules.js';
 import { holdGiveUpReason } from './holdLimits.js';
 import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
@@ -162,7 +162,8 @@ async function mergePulled(
  * currently carries that key, in ANY destination's partition, so a replaced write (a bound row's
  * import dropped and re-queued under a new id) is followed, not stranded. Nothing pending under it
  * means it was acknowledged: the dependency is dropped. Dead-lettered events are not live, and a
- * dependent of one is filtered out before this by `blockedEventIds`. The journal is not rewritten.
+ * dependent of one — or of an entity still awaiting its sync-pass bind — is filtered out before
+ * this by `unsendableEventIds`. The journal is not rewritten.
  */
 export function wireDependencies(
   events: readonly JournalEvent[],
@@ -287,8 +288,9 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       every.sort((a, b) => a.localSequence - b.localSequence);
       // A dependent of a dead-lettered write is BLOCKED (not sent, not counted) until a new live
       // event appears under that key; it needs no state change of its own to become sendable.
+      // Likewise a dependent of an entity whose record still awaits the sync pass's bind.
       const mapped = await loadMappedEntities(tx, every);
-      const blocked = blockedEventIds(every, mapped);
+      const blocked = unsendableEventIds(every, mapped);
       const sendable = (await selectPending(tx, undefined, destination)).filter((event) => !blocked.has(event.eventId));
       return wireDependencies(sendable, every, mapped);
     });

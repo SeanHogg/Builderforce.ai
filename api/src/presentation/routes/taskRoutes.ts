@@ -48,7 +48,7 @@ import { roleDisplayName } from '../../application/kanban/roleCatalog';
 import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
-import { BrainService } from '../../application/brain/BrainService';
+import { mayBindRunToChat, UNBINDABLE_RUN_CHAT_ERROR } from '../../application/runtime/runChatBinding';
 import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
@@ -500,8 +500,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       : undefined;
     if (chatId != null) {
       const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
-      if (!userId || !(await new BrainService(db).canAccess(chatId, c.get('tenantId'), userId))) {
-        return c.json({ error: 'Originating Brain chat not found' }, 404);
+      if (!(await mayBindRunToChat(db, c.get('tenantId'), userId, chatId))) {
+        return c.json({ error: UNBINDABLE_RUN_CHAT_ERROR }, 404);
       }
     }
     const row = await loadTenantTask(id, c.get('tenantId'));

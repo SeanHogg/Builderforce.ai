@@ -24,6 +24,7 @@ brain-embedded/src/runStore/agentRunReport.test.ts
 brain-embedded/src/runStore/continueChat.test.ts
 brain-embedded/src/runStore/continueClaim.test.ts
 brain-embedded/src/runStore/continueStop.test.ts
+brain-embedded/src/runStore/createChatStamp.test.ts
 brain-embedded/src/runStore/earlyDelegation.child.test.ts
 brain-embedded/src/runStore/earlyDelegation.test.ts
 brain-embedded/src/runStore/engineRun.test.ts

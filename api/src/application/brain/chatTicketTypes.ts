@@ -24,6 +24,13 @@ export type TicketKind = (typeof TICKET_KINDS)[number];
 
 export type LinkType = 'linked' | 'created';
 
+/** What became of the chat link a write asked for — carried on that write's result so a
+ *  link failure is SAID instead of failing the write or vanishing (a create tool's
+ *  `chatLink`, a work delta's `chatLink`). */
+export type ChatLinkOutcome =
+  | { linked: true; chatId: number; linkType: LinkType }
+  | { linked: false; chatId: number; reason: string };
+
 /** Lifecycle phases a run can narrate into its linked chats. `started`/`completed`/`failed`
  *  come from `RuntimeService.update`; `paused` (ask_human), `resumed` (the answer arriving),
  *  and `cancelled` are posted from the sites that write the execution row directly and bypass

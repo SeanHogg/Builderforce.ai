@@ -1,6 +1,6 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { isApprovalVisibleTo, isSelfOwnedApproval } from '../../domain/approval/selfOwned';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 /**
  * First-party (built-in) MCP server — exposes the platform's OWN capabilities
  * (projects, tasks, …) as MCP tools through the same gateway endpoints that
@@ -107,6 +107,8 @@ import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItem
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { linkCreatedWorkItemToChat } from '../brain/createdWorkItemChatLink';
+import { chatAccessUserFor } from '../brain/chatTicketAccess';
+import { TICKET_KINDS } from '../brain/chatTicketTypes';
 import { readChatRunHistoryForCaller } from '../brain/chatRunHistory';
 import { BrainService } from '../brain/BrainService';
 import { normalizeChatTitle } from '../brain/chatTitle';
@@ -1250,14 +1252,17 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('work-delta recording requires the worker env');
       const files = Array.isArray(a.files) ? (a.files as unknown[]).map(str) : undefined;
+      const deltaChatId = a.chatId != null ? num(a.chatId) : null;
       return new WorkDeltaService(ctx.db, ctx.env).record(ctx.tenantId, ctx.userId ?? null, {
+        // The chat-access identity, decided from the trusted caller (a cloud agent reaches its own host chat).
+        ...(deltaChatId != null ? { chatAccessUserId: chatAccessUserFor(ctx, deltaChatId) } : {}),
         projectId: num(a.projectId),
         summary: str(a.summary),
         detail: a.detail != null ? str(a.detail) : null,
         kind: a.kind != null ? (str(a.kind) as DeltaKind) : undefined,
         files,
         modality: a.modality != null ? str(a.modality) : 'mcp',
-        chatId: a.chatId != null ? num(a.chatId) : null,
+        chatId: deltaChatId,
         taskId: a.taskId != null ? num(a.taskId) : null,
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
@@ -1299,7 +1304,7 @@ const CATALOG: BuiltinTool[] = [
       // a task with no open PR simply has none) and the execution that produced it.
       const reviewedHeadSha = ctx.env
         ? await resolveTaskPrTarget(ctx.env, ctx.db, ctx.tenantId, taskId)
-          .then((r) => (r.ok ? r.target.headSha : null)).catch(() => null)
+          .then((r) => (r.ok ? r.target.headSha : null)).catch(reportedFallback(null, { source: 'application/llm/builtinMcpService.ts', operation: 'resolveReviewedHeadSha', context: { taskId } }))
         : null;
       const result = await new ValidationService(ctx.db).recordReview(ctx.tenantId, {
         taskId,
@@ -2109,8 +2114,9 @@ const CATALOG: BuiltinTool[] = [
   // All logic lives in ChatTicketService (shared with the HTTP routes).
   { tool: 'chats.get_messages', mutates: false, description: "Read a Brain chat's message transcript (role + content, in order). Use to REVIEW a conversation's history — e.g. before deciding which chats to merge/consolidate, or to see what a chat produced.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listMessages(ctx.tenantId, num(a.chatId), ctx.userId ?? null, a.limit != null ? num(a.limit) : 200); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
   { tool: 'chats.list_tickets', mutates: false, description: "List the work items (portfolio/objective/initiative/roadmap/spec/epic/gap/task) a Brain chat is tied to, each with a health summary (% done). Use to show a chat's ticket status. A chat can carry 100+ links, so pass `openOnly` to get just the work still owed — that is the right call for \"what is left?\", rather than reading the full list and classifying it yourself. `openOnly` keeps anything not in the closed class (done/cancelled/archived), and KEEPS links whose ticket no longer exists, since deleted work is unresolved rather than finished. The result is always { tickets, total, matched, hasMore } (every link when no `limit` is given) — check `hasMore` before treating the page as the whole set.", parameters: obj({ chatId: N, status: S, kind: S, openOnly: { type: 'boolean' }, limit: N, offset: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listTicketPageForChat(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { status: a.status != null ? str(a.status) : undefined, kind: a.kind != null ? str(a.kind) : undefined, openOnly: a.openOnly === true, limit: a.limit != null ? num(a.limit) : undefined, offset: a.offset != null ? num(a.offset) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
-  { tool: 'chats.link_ticket', mutates: true, description: "Tie a Brain chat to a work item. kind = portfolio|objective|initiative|roadmap|spec|epic|gap|task; ref = the task/epic/gap id (number) or the portfolio/objective/initiative/roadmap/spec UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.", parameters: obj({ chatId: N, kind: { type: 'string', enum: ['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task'] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.linkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked' }); if ('error' in r) throw new Error(r.error); return r; } },
-  { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.unlinkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
+  // The kind list is TICKET_KINDS itself, so a kind the link use case accepts (retro, poker) is never refused by the schema.
+  { tool: 'chats.link_ticket', mutates: true, description: `Tie a Brain chat to an EXISTING work item (an item you create is linked to your chat automatically). kind = ${TICKET_KINDS.join('|')}; ref = the task/epic/gap id (number) or the other tiers' UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.`, parameters: obj({ chatId: N, kind: { type: 'string', enum: [...TICKET_KINDS] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const chatId = num(a.chatId); const r = await svc.linkTicket(ctx.tenantId, chatId, chatAccessUserFor(ctx, chatId), { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked', createdBy: ctx.agentRef ?? ctx.userId ?? null }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const chatId = num(a.chatId); const r = await svc.unlinkTicket(ctx.tenantId, chatId, chatAccessUserFor(ctx, chatId), str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
   { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat, each with the name a human would recognise. These are the people this chat\'s work belongs to — dispatch to them by their agentRef rather than doing their work yourself.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
@@ -4440,7 +4446,7 @@ export { advertisedName };
 function buildCtx(
   db: Db,
   tenantId: number,
-  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
+  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; hostChatId?: number | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
 ): BuiltinCtx {
   const projectRepo = new ProjectRepository(db);
   const taskRepo = new TaskRepository(db);
@@ -4461,6 +4467,7 @@ function buildCtx(
     env: opts?.env,
     userId: opts?.userId ?? null,
     agentRef: opts?.agentRef ?? null,
+    hostChatId: opts?.hostChatId ?? null,
     role: opts?.role,
     authToken: opts?.authToken ?? null,
     executionCtx: opts?.executionCtx,
@@ -4606,13 +4613,14 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
 export async function callBuiltinTool(
   db: Db,
-  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
+  /** `hostChatId`: the chat the HOST put this call in (server state — never read from `arguments`). */
+  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; hostChatId?: number | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
   // Direct-write rows never pass a route gate — refuse a sub-developer caller here.
   assertMayRunBuiltinTool(entry.tool, entry.mutates, args.role);
-  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin });
+  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, hostChatId: args.hostChatId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin });
   // A mapped create links its item to the host-stamped chat in the same call (see createdWorkItemChatLink).
   const result = await linkCreatedWorkItemToChat(db, args, await entry.run(ctx, (args.arguments ?? {}) as Json));
   // Unified audit stream: record any mutating tool run (best-effort, off the result).

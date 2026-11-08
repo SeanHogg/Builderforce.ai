@@ -50,18 +50,25 @@ const entityKey = (type: string, id: string): string => `${type}\u0000${id}`;
 /** Key of "this destination holds this entity" in the `mapped` set. */
 const mappedKey = (destination: JournalEvent['destination'], type: string, id: string): string =>
   `${destinationKey(destination)}\u0001${type}\u0000${id}`;
+/** Key of "this entity's record is live in the unbound partition, the next sync pass binds it" in the same set. */
+const AWAITING_BIND = '\u0002';
+const awaitingBindKey = (type: string, id: string): string => `${AWAITING_BIND}${type}\u0000${id}`;
 
 export interface DependencyIndex {
   readonly byId: ReadonlyMap<string, JournalEvent>;
   readonly byKey: ReadonlyMap<string, readonly JournalEvent[]>;
   readonly byEntity: ReadonlyMap<string, readonly JournalEvent[]>;
-  /** Entities the server already holds, per destination (`mappedKey`). */
+  /**
+   * The store facts `loadMappedEntities` read: entities the server already holds, per destination
+   * (`mappedKey`), and entities whose record awaits a sync-pass bind (`awaitingBindKey`).
+   */
   readonly mapped: ReadonlySet<string>;
 }
 
 export type ResolvedDependency =
   | { kind: 'event'; event: JournalEvent }
   | { kind: 'blocked' }
+  | { kind: 'awaiting-bind' }
   | { kind: 'satisfied' };
 
 /** Index EVERY journal event (live and dead-lettered), each list in sequence order. */
@@ -119,18 +126,26 @@ export function resolveDependency(dependency: string, index: DependencyIndex, de
     }
   }
   const newest = [...pool].filter((event) => destinationKey(event.destination) === home).sort(bySequence).pop();
-  if (!newest) return { kind: 'satisfied' };
+  if (!newest) {
+    return entity && dependent.destination.kind === 'bound' && index.mapped.has(awaitingBindKey(entity.type, entity.id))
+      ? { kind: 'awaiting-bind' }
+      : { kind: 'satisfied' };
+  }
   return newest.deadLetter ? { kind: 'blocked' } : { kind: 'event', event: newest };
 }
 
 /**
- * Which dependency entities the server already holds, per destination: one mapping read per
- * distinct (destination, entity) a pending event depends on. Feed the result to `dependencyIndex`.
+ * The store facts the graph resolves against, for the entities pending events depend on: which the
+ * server already holds, per destination (one mapping read per distinct (destination, entity)), and
+ * — for a BOUND dependent's entity the server does not hold — whether its record is live in the
+ * unbound partition, of a type the sync pass binds, and written on a device (not pulled). Feed the
+ * result to `dependencyIndex`.
  */
 export async function loadMappedEntities(tx: LocalFirstTransaction, all: readonly JournalEvent[]): Promise<Set<string>> {
   const index = dependencyIndex(all);
   const mapped = new Set<string>();
   const seen = new Set<string>();
+  const checkedBind = new Set<string>();
   for (const event of all) {
     for (const dependency of event.dependsOn) {
       const entity = dependencyEntity(dependency, index);
@@ -139,10 +154,50 @@ export async function loadMappedEntities(tx: LocalFirstTransaction, all: readonl
       if (seen.has(key)) continue;
       seen.add(key);
       const mapping = await tx.mapping(entity.type as LocalEntityType, entity.id, event.destination);
-      if (mapping && mapping.serverVersion > 0) mapped.add(key);
+      if (mapping && mapping.serverVersion > 0) {
+        mapped.add(key);
+        continue;
+      }
+      const bindKey = awaitingBindKey(entity.type, entity.id);
+      if (event.destination.kind !== 'bound' || checkedBind.has(bindKey)) continue;
+      checkedBind.add(bindKey);
+      if (!SYNC_PASS_BIND_TYPES.has(entity.type as LocalEntityType)) continue;
+      const record = await tx.get(entity.type as LocalEntityType, entity.id);
+      if (record && record.destination.kind === 'unbound' && !record.deletedAt && record.provenance?.source !== 'imported') {
+        mapped.add(bindKey);
+      }
     }
   }
   return mapped;
+}
+
+/**
+ * Live events that (transitively) depend on something `stuck` — and so cannot be sent. A dependent
+ * of a stuck event (followed by key or wire id) is stuck too.
+ */
+function stuckEventIds(
+  all: readonly JournalEvent[],
+  mapped: ReadonlySet<string>,
+  stuck: (resolved: ResolvedDependency) => boolean,
+): Set<string> {
+  const held = new Set<string>();
+  const index = dependencyIndex(all, mapped);
+  const live = all.filter((event) => !event.deadLetter).sort(bySequence);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const event of live) {
+      if (held.has(event.eventId)) continue;
+      const isStuck = event.dependsOn.some((dependency) => {
+        const resolved = resolveDependency(dependency, index, event);
+        return stuck(resolved) || (resolved.kind === 'event' && resolved.event.eventId !== event.eventId && held.has(resolved.event.eventId));
+      });
+      if (isStuck) {
+        held.add(event.eventId);
+        changed = true;
+      }
+    }
+  }
+  return held;
 }
 
 /**
@@ -150,23 +205,18 @@ export async function loadMappedEntities(tx: LocalFirstTransaction, all: readonl
  * DEAD-LETTERED and no live creating write has replaced it. They are blocked, not dead-lettered.
  */
 export function blockedEventIds(all: readonly JournalEvent[], mapped: ReadonlySet<string> = new Set()): Set<string> {
-  const blocked = new Set<string>();
-  if (!all.some((event) => event.deadLetter)) return blocked;
-  const index = dependencyIndex(all, mapped);
-  const live = all.filter((event) => !event.deadLetter).sort(bySequence);
-  for (let changed = true; changed;) {
-    changed = false;
-    for (const event of live) {
-      if (blocked.has(event.eventId)) continue;
-      const stuck = event.dependsOn.some((dependency) => {
-        const resolved = resolveDependency(dependency, index, event);
-        return resolved.kind === 'blocked' || (resolved.kind === 'event' && resolved.event.eventId !== event.eventId && blocked.has(resolved.event.eventId));
-      });
-      if (stuck) {
-        blocked.add(event.eventId);
-        changed = true;
-      }
-    }
-  }
-  return blocked;
+  if (!all.some((event) => event.deadLetter)) return new Set();
+  return stuckEventIds(all, mapped, (resolved) => resolved.kind === 'blocked');
+}
+
+/**
+ * Live events that cannot be sent NOW: the blocked ones, plus those that (transitively) wait on an
+ * entity AWAITING BIND (module comment). Neither is work a drain can do; a later bind (or a live
+ * replacement of the dead letter) releases them with no state change of their own.
+ */
+export function unsendableEventIds(all: readonly JournalEvent[], mapped: ReadonlySet<string> = new Set()): Set<string> {
+  const anyDead = all.some((event) => event.deadLetter);
+  const anyAwaiting = [...mapped].some((key) => key.startsWith(AWAITING_BIND));
+  if (!anyDead && !anyAwaiting) return new Set();
+  return stuckEventIds(all, mapped, (resolved) => resolved.kind === 'blocked' || resolved.kind === 'awaiting-bind');
 }

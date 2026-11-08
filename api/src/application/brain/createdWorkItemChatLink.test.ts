@@ -12,13 +12,18 @@ const h = vi.hoisted(() => ({
 vi.mock('./ChatTicketService', () => ({ ChatTicketService: function () { return { linkTicket: h.linkTicket }; } }));
 vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: h.report }));
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  CHAT_LINKED_CREATE_TOOL_IDS, chatLinkAccessUser, createdWorkItemLink, isChatLinkedCreateTool,
+  CHAT_LINKED_CREATE_TOOL_IDS, createdWorkItemLink, isChatLinkedCreateTool,
   linkCreatedWorkItemToChat, stampedChatId, withHostChat,
 } from './createdWorkItemChatLink';
+import { chatAccessUserFor } from './chatTicketAccess';
+import { advertisedName } from '../llm/toolNaming';
 
 const db = {} as never;
-const call = (tool: string, args: Record<string, unknown>, who: { userId?: string | null; agentRef?: string | null } = { userId: 'u1' }) =>
+const call = (tool: string, args: Record<string, unknown>, who: { userId?: string | null; agentRef?: string | null; hostChatId?: number | null } = { userId: 'u1' }) =>
   ({ tenantId: 7, tool, arguments: args, env: {} as never, ...who });
 
 beforeEach(() => vi.clearAllMocks());
@@ -85,16 +90,39 @@ describe('host chat stamp', () => {
   });
 });
 
-describe('chatLinkAccessUser', () => {
-  it('checks a human caller as themselves, and a cloud agent acting as itself tenant-scoped', () => {
-    expect(chatLinkAccessUser({ userId: 'u1' })).toBe('u1');
-    // An addressed-agent reply runs FOR a person: that person's access is checked.
-    expect(chatLinkAccessUser({ userId: 'u1', agentRef: 'agent-7' })).toBe('u1');
-    // A cloud run's userId is its own ref — no user identity to check membership for.
-    expect(chatLinkAccessUser({ userId: 'agent-7', agentRef: 'agent-7' })).toBeNull();
-    expect(chatLinkAccessUser({ userId: null, agentRef: 'agent-7' })).toBeNull();
-    // A gateway caller with no identity is tenant-wide already.
-    expect(chatLinkAccessUser({})).toBeNull();
+describe('chatAccessUserFor', () => {
+  const agent = { userId: 'agent-7', agentRef: 'agent-7', hostChatId: 42 };
+  it('checks a self-acting agent in its HOST chat tenant-scoped (null)', () => {
+    expect(chatAccessUserFor(agent, 42)).toBeNull();
+    expect(chatAccessUserFor({ userId: null, agentRef: 'agent-7', hostChatId: 42 }, 42)).toBeNull();
+  });
+
+  it('checks a self-acting agent in any OTHER chat as its own ref, so a locked chat stays closed', () => {
+    expect(chatAccessUserFor(agent, 43)).toBe('agent-7');
+    // No host chat at all: never tenant-wide.
+    expect(chatAccessUserFor({ userId: 'agent-7', agentRef: 'agent-7' }, 42)).toBe('agent-7');
+    expect(chatAccessUserFor({ userId: null, agentRef: 'agent-7' }, 42)).toBe('agent-7');
+  });
+
+  it('checks a person as themselves — including the person an addressed-agent reply runs for', () => {
+    expect(chatAccessUserFor({ userId: 'u1' }, 42)).toBe('u1');
+    expect(chatAccessUserFor({ userId: 'u1', agentRef: 'agent-7', hostChatId: 42 }, 42)).toBe('u1');
+    // A gateway caller with no identity is tenant-wide, as it always was.
+    expect(chatAccessUserFor({}, 42)).toBeNull();
+  });
+});
+
+// ONE list of create tools: the client stamps exactly the tools the server links. The
+// client cannot read a catalog flag (its tool specs are the model-facing `tools[]`, and
+// two hosts assemble them outside brain-embedded), so the lists are held equal here.
+describe('client/server create-tool parity', () => {
+  it('brain-embedded CHAT_STAMPED_CREATE_TOOLS === the server ids mapped through advertisedName', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(here, '../../../../brain-embedded/src/chatWorkLinking.ts'), 'utf8');
+    const block = /CHAT_STAMPED_CREATE_TOOLS[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src)?.[1];
+    expect(block, 'CHAT_STAMPED_CREATE_TOOLS not found in brain-embedded/src/chatWorkLinking.ts').toBeDefined();
+    const client = [...block!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+    expect(client).toEqual(CHAT_LINKED_CREATE_TOOL_IDS.map(advertisedName).sort());
   });
 });
 
@@ -140,8 +168,13 @@ describe('linkCreatedWorkItemToChat', () => {
     expect(h.report).toHaveBeenCalledTimes(1);
   });
 
-  it('links a cloud agent acting as itself tenant-scoped, credited to the agent', async () => {
-    await linkCreatedWorkItemToChat(db, call('tasks.create', { chatId: 42 }, { userId: 'agent-7', agentRef: 'agent-7' }), { id: 3 });
+  it('links a cloud agent into its host chat tenant-scoped, credited to the agent', async () => {
+    await linkCreatedWorkItemToChat(db, call('tasks.create', { chatId: 42 }, { userId: 'agent-7', agentRef: 'agent-7', hostChatId: 42 }), { id: 3 });
     expect(h.linkTicket).toHaveBeenCalledWith(7, 42, null, expect.objectContaining({ createdBy: 'agent-7' }));
+  });
+
+  it('never grants the tenant-scoped exception off the arguments: a chat that is not the host chat is checked as the agent', async () => {
+    await linkCreatedWorkItemToChat(db, call('tasks.create', { chatId: 99 }, { userId: 'agent-7', agentRef: 'agent-7', hostChatId: 42 }), { id: 3 });
+    expect(h.linkTicket).toHaveBeenCalledWith(7, 99, 'agent-7', expect.anything());
   });
 });

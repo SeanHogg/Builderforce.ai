@@ -1,4 +1,4 @@
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.js';
+import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -1073,9 +1073,9 @@ declare function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: B
  * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
  * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
  * this run — the "it said it linked the gap to the chat, but the chat shows no link"
- * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
- * a claim with no successful create/link tool means nothing was actually filed or
- * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
+ * failure. A REAL create links its own chat in the same call (the host stamps the chat
+ * and the server — or the editor's local store — links it), so a claim with no
+ * successful create/link tool means nothing was actually filed or linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
  * it identically.
  */
 declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
@@ -2343,12 +2343,15 @@ declare function parseSubagentOrigin(msg: {
  * Two vocabularies exist for the same act:
  *
  *   • SERVER (web, cloud): `builtin_tasks_create` makes a task the account owns and returns
- *     a NUMERIC id; `builtin_chats_link_ticket` ties it to the chat; the board's resource
- *     scoping (`builtin_kanban_*`) addresses that numeric id.
+ *     a NUMERIC id, linked to the run's chat in the same call (the host stamps the chat; see
+ *     `CHAT_STAMPED_CREATE_TOOLS`); the board's resource scoping (`builtin_kanban_*`)
+ *     addresses that numeric id.
  *   • LOCAL (the editor): `ticket-create` writes the DEVICE store and returns a LOCAL id (a
- *     UUID). It links the creating chat itself and syncs in the background, so there is no
- *     link step, and the `builtin_kanban_*` tools (which take server ids) do not apply to it
+ *     UUID). It links the creating chat locally in the same transaction and syncs in the
+ *     background, and the `builtin_kanban_*` tools (which take server ids) do not apply to it
  *     until it has synced. The editor's catalog does not even advertise the server twins.
+ *
+ * Neither vocabulary has a link step after a create any more.
  *
  * Every prompt, hand-off and triage check that names a create tool reads this, so none of
  * them keeps its own list of names. A surface that cannot say what it advertises gets the
@@ -2361,8 +2364,6 @@ interface TicketToolVocabulary {
     readonly createTool: string | undefined;
     /** The create tool is the device-local `ticket-create` (ids are local UUIDs). */
     readonly local: boolean;
-    /** A separate chat-link call follows a create (false for `ticket-create`, which links itself). */
-    readonly needsLinkStep: boolean;
     /** The `builtin_kanban_*` resource-scoping tools apply to a ticket this tool creates. */
     readonly kanbanScoping: boolean;
     /** The name a prompt should give for the create tool (the server's when none is advertised). */

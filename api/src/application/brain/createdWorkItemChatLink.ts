@@ -17,12 +17,16 @@
  *
  * `tickets.from_delta` is deliberately NOT mapped — it links its own ticket (with the
  * honest created-vs-attached lineage) inside `WorkDeltaService`.
+ *
+ * The client's list of tools it stamps (`brain-embedded` `CHAT_STAMPED_CREATE_TOOLS`) is
+ * held equal to {@link CHAT_LINKED_CREATE_TOOL_IDS} by a parity test in this module's tests.
  */
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ChatTicketService } from './ChatTicketService';
-import { ticketKindForTaskType, type LinkType, type TicketKind } from './chatTicketTypes';
+import { chatAccessUserFor, type ChatCaller } from './chatTicketAccess';
+import { ticketKindForTaskType, type ChatLinkOutcome, type LinkType, type TicketKind } from './chatTicketTypes';
 
 type KindOfRow = (row: Record<string, unknown>) => TicketKind;
 
@@ -82,6 +86,7 @@ export function stampedChatId(args: unknown): number | null {
  * The host's chat, stamped onto a mapped create call: the host's value overrides whatever
  * the model sent, and with no host chat any model-sent `chatId` is stripped (a guessed id
  * would name somebody else's conversation). Every other tool's arguments are untouched.
+ * Defence in depth only — the access decision never reads arguments ({@link chatAccessUserFor}).
  */
 export function withHostChat(tool: string, args: Record<string, unknown>, hostChatId: number | null | undefined): Record<string, unknown> {
   if (!isChatLinkedCreateTool(tool)) return args;
@@ -90,31 +95,15 @@ export function withHostChat(tool: string, args: Record<string, unknown>, hostCh
 }
 
 /**
- * Who the chat-access guard checks. A cloud agent acting as ITSELF (`agentRef` set and no
- * separate human — its `userId` is its own ref) has no user identity to check membership
- * for: the chat it carries was stamped by its host from the run's originating chat, so it
- * is checked tenant-scoped (null), exactly like a gateway caller. A chat in another tenant
- * is still refused — `resolveChatAccess` always filters by tenant. Any human caller —
- * including the person an addressed-agent reply runs for — is checked as themselves.
- */
-export function chatLinkAccessUser(caller: { userId?: string | null; agentRef?: string | null }): string | null {
-  const userId = caller.userId ?? null;
-  if (caller.agentRef && (userId == null || userId === caller.agentRef)) return null;
-  return userId;
-}
-
-export type ChatLinkOutcome =
-  | { linked: true; chatId: number; linkType: LinkType }
-  | { linked: false; chatId: number; reason: string };
-
-/**
  * Link the item a mapped create tool just produced to the chat stamped on its arguments.
  * Returns the result unchanged when the tool is not a mapped create, no chat was stamped,
  * or the result names no item; otherwise the result plus a `chatLink` outcome. Never throws.
+ * Access is decided by {@link chatAccessUserFor} from the TRUSTED caller (`hostChatId` is
+ * server state), so a chat named in the arguments gets no exception it was not owed.
  */
 export async function linkCreatedWorkItemToChat(
   db: Db,
-  call: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null },
+  call: ChatCaller & { tenantId: number; tool: string; arguments: unknown; env?: Env },
   result: unknown,
 ): Promise<unknown> {
   if (!isChatLinkedCreateTool(call.tool)) return result;
@@ -124,7 +113,7 @@ export async function linkCreatedWorkItemToChat(
   if (!link) return result;
   let chatLink: ChatLinkOutcome;
   try {
-    const linked = await new ChatTicketService(db, call.env as Env).linkTicket(call.tenantId, chatId, chatLinkAccessUser(call), {
+    const linked = await new ChatTicketService(db, call.env as Env).linkTicket(call.tenantId, chatId, chatAccessUserFor(call, chatId), {
       kind: link.kind, ref: link.ref, linkType: link.linkType, createdBy: call.agentRef ?? call.userId ?? null,
     });
     chatLink = 'error' in linked

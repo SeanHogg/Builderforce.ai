@@ -23,6 +23,7 @@
 import * as vscode from "vscode";
 import {
   SCAN_STOP,
+  SYNC_PASS_BIND_TYPES,
   bindWorkForSync,
   countPending,
   createDeviceStoreCoordinatorLease,
@@ -43,12 +44,6 @@ import { platformFetch, platformPolicy } from "./platformPolicy";
 const HEARTBEAT_MS = 5 * 60_000;
 /** Writes arrive in bursts (a turn's messages, its usage rows); one pass covers them. */
 const DEBOUNCE_MS = 2_000;
-/**
- * The entity types this sync pass moves out of the unbound partition: the chat history
- * (`bindChatHistoryForSync`) and the work filed beside it — projects and tickets, which
- * the agent writes locally and this pass carries up in one batch (`bindWorkForSync`).
- */
-const SYNC_SLICE: ReadonlySet<string> = new Set(["chat", "message", "usage", "project", "ticket"]);
 
 export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable {
   const local = localBrainApplication(ctx);
@@ -127,20 +122,31 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
   // their own binding. The commit's
   // change hint says whether the pending queue moved at all (an unknown change counts as
   // yes); only then is the queue scanned — without cloning an event.
+  //
+  // During a pass, bound events are the running drain's to send, so only UNBOUND sync-slice
+  // work counts: a ticket filed mid-pass is past this pass's bind, so it asks for one more
+  // pass (`again`) instead of waiting for the heartbeat.
   const onStoreChange = (change?: LocalFirstChange): void => {
-    if (running || policy.allows("synchronize") !== true) return;
+    if (policy.allows("synchronize") !== true) return;
     if (change && !change.events) return;
     const destination = chatAccountDestination();
     if (!destination) return;
+    const duringPass = running;
     void local.store.read(async (tx) => {
       let pending = false;
-      await tx.scanPending((event) => { if (!event.deadLetter) { pending = true; return SCAN_STOP; } }, destination);
+      if (!duringPass) {
+        await tx.scanPending((event) => { if (!event.deadLetter) { pending = true; return SCAN_STOP; } }, destination);
+      }
       if (!pending) {
-        await tx.scanPending((event) => { if (!event.deadLetter && SYNC_SLICE.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
+        await tx.scanPending((event) => { if (!event.deadLetter && SYNC_PASS_BIND_TYPES.has(event.entityType)) { pending = true; return SCAN_STOP; } }, { kind: "unbound" });
       }
       return pending;
     })
-      .then((pending) => { if (pending) schedule(); })
+      .then((pending) => {
+        if (!pending) return;
+        if (running) again = true;
+        else schedule();
+      })
       .catch(() => undefined);
   };
 

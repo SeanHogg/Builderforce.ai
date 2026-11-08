@@ -53,6 +53,7 @@ __export(src_exports, {
   CHAT_DIAGNOSTICS_SCHEMA_VERSION: () => CHAT_DIAGNOSTICS_SCHEMA_VERSION,
   CHAT_MODES: () => CHAT_MODES,
   CHAT_MODE_ICON: () => CHAT_MODE_ICON,
+  CHAT_STAMPED_CREATE_TOOLS: () => CHAT_STAMPED_CREATE_TOOLS,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
   CONSOLIDATION_MARKER_PREFIX: () => import_working20.CONSOLIDATION_MARKER_PREFIX,
@@ -221,6 +222,7 @@ __export(src_exports, {
   createEngineWorker: () => createEngineWorker,
   createHandoffFit: () => createHandoffFit,
   createHostModelStream: () => createHostModelStream,
+  createLinkedToChat: () => createLinkedToChat,
   createLocalBrainPersistence: () => createLocalBrainPersistence,
   createLocalChatIdentity: () => createLocalChatIdentity,
   createLocalFirstStream: () => createLocalFirstStream,
@@ -474,6 +476,7 @@ __export(src_exports, {
   staffingSummaryInTrace: () => staffingSummaryInTrace,
   stallRecoveriesInTrace: () => stallRecoveriesInTrace,
   stallUnrecoveredInTrace: () => stallUnrecoveredInTrace,
+  stampRunChat: () => stampRunChat,
   startEngineRun: () => startEngineRun,
   startRun: () => startRun,
   startsRun: () => startsRun,
@@ -550,8 +553,7 @@ __export(src_exports, {
   withReadyPageModels: () => withReadyPageModels,
   withRunUsage: () => withRunUsage,
   withUsageSurface: () => withUsageSurface,
-  workFiledNotStaffedVerdict: () => workFiledNotStaffedVerdict,
-  workItemLinkFromCreate: () => workItemLinkFromCreate
+  workFiledNotStaffedVerdict: () => workFiledNotStaffedVerdict
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -17739,8 +17741,9 @@ var SIGNAL_RANK = {
   edit_revert: 0,
   repeated_failure: 1,
   circling_read: 2,
-  unkept_ready: 3,
-  no_progress: 4
+  reverifying: 3,
+  unkept_ready: 4,
+  no_progress: 5
 };
 function succeeded2(result) {
   if (result.isError) return false;
@@ -17768,6 +17771,8 @@ var ProgressDetector = class {
     this.unkeptTurns = state.unkeptTurns ?? 0;
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
+    this.writtenPaths = /* @__PURE__ */ new Set();
+    this.readThisTurn = [];
   }
   ports;
   visits;
@@ -17781,6 +17786,10 @@ var ProgressDetector = class {
   quietTurns;
   steer;
   turnSignal = null;
+  /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
+  writtenPaths;
+  /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
+  readThisTurn;
   raise(signal) {
     if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
@@ -17803,10 +17812,17 @@ var ProgressDetector = class {
     } else if (changesContent(args)) {
       const revert = this.edits.record(tool, args, { ok });
       if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
-      if (ok) this.forgetVisitsOf(pathArgOf(args));
+      if (ok) {
+        const path2 = pathArgOf(args);
+        this.forgetVisitsOf(path2);
+        if (path2) {
+          this.writtenPaths.add(path2);
+        }
+      }
     } else if (ok && this.ports.isReadOnly?.(tool, args)) {
       const target = visitTargetOf(args);
       if (target) {
+        this.readThisTurn.push(target);
         const visit = this.visits.record(`${tool}:${target}`, args);
         if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
       }
@@ -17830,6 +17846,13 @@ var ProgressDetector = class {
   endTurn() {
     this.steer = void 0;
     const idle = this.progress.endTurn();
+    if (!this.turnSignal && this.readThisTurn.length > 0) {
+      const allWritten = this.readThisTurn.every((t) => this.writtenPaths.has(t));
+      if (allWritten && !this.progress.lastTurnGround && idle > 0) {
+        this.raise({ kind: "reverifying", count: this.readThisTurn.length });
+      }
+    }
+    this.readThisTurn = [];
     const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
     if (unkept > unkeptBefore) this.unkeptTurns += 1;
@@ -17902,6 +17925,8 @@ function progressAdvice(signal) {
       return `\`${signal.tool}\` has failed ${signal.count} times with identical arguments${signal.reason ? ` ("${signal.reason}")` : ""}. Change the argument the error names, use a different tool, or finish and state what is blocking you.`;
     case "circling_read":
       return `you have read ${signal.target} ${signal.count} times and nothing changed it in between. Everything you read is still above you. Act on it \u2014 make the edit \u2014 or page forward to lines you have not seen.`;
+    case "reverifying":
+      return `this turn only re-checked ${signal.count === 1 ? "a file" : `${signal.count} files`} you already wrote and verified. Re-running the same type-check, build or read on ground you shipped does not make it more correct \u2014 it burns budget. The work is done: report the result and stop, or move on to the next task. Only re-verify when something actually changed the code.`;
     case "unkept_ready":
       return `you have said ${signal.count} times that you have what you need \u2014 or that you are about to write \u2014 and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
     case "no_progress":
@@ -17913,6 +17938,7 @@ function progressPauseQuestion(signal, trip) {
     edit_revert: `keeps undoing its own change to ${signal.target ?? "a file"}`,
     repeated_failure: `keeps repeating a failing \`${signal.tool ?? "tool"}\` call`,
     circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
+    reverifying: "keeps re-checking files it already wrote and verified instead of reporting the result",
     unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
     no_progress: "has stopped making progress (no new files, no test changes)"
   };
@@ -18580,7 +18606,6 @@ var LOCAL_TICKET_CREATE_LABEL = /ticket[-_.]create/i;
 var SERVER = Object.freeze({
   createTool: SERVER_TICKET_CREATE_TOOL,
   local: false,
-  needsLinkStep: true,
   kanbanScoping: true,
   createName: SERVER_TICKET_CREATE_TOOL
 });
@@ -18592,7 +18617,6 @@ function ticketToolVocabulary(toolNames) {
     return Object.freeze({
       createTool: LOCAL_TICKET_CREATE_TOOL,
       local: true,
-      needsLinkStep: false,
       kanbanScoping: false,
       createName: LOCAL_TICKET_CREATE_TOOL
     });
@@ -18609,34 +18633,41 @@ var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
   "builtin_tickets_from_delta",
   "builtin_chats_link_ticket",
   "builtin_reviews_record",
-  // The editor's device-local create: it IS the recording (it links its own chat once synced).
+  // The editor's device-local create: it IS the recording — it links its chat LOCALLY in
+  // the create's own transaction, and the link syncs to the account with the ticket.
   LOCAL_TICKET_CREATE_TOOL
 ]);
-var CREATE_TOOL_KIND = {
-  builtin_objectives_create: "objective",
-  builtin_specs_create: "spec",
-  builtin_portfolios_create: "portfolio",
-  builtin_initiatives_create: "initiative",
-  // Team ceremonies. A retro or an estimation session the Brain sets up FROM a
-  // conversation is that conversation's outcome, so it links like any other item it
-  // creates — without this the chat that arranged the ceremony kept no trace of it.
-  builtin_retro_create: "retro",
-  builtin_poker_create_session: "poker"
-};
-function workItemLinkFromCreate(toolName, result) {
-  if (!result || typeof result !== "object") return null;
-  const row = result;
-  const id = row.id;
-  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
-  if (!ref) return null;
-  const linkType = row.deduped === true ? "linked" : "created";
-  if (toolName === "builtin_tasks_create") {
-    const t = typeof row.taskType === "string" ? row.taskType : "task";
-    const kind2 = t === "epic" || t === "gap" ? t : "task";
-    return { kind: kind2, ref, linkType };
+var CHAT_STAMPED_CREATE_TOOLS = /* @__PURE__ */ new Set([
+  "builtin_tasks_create",
+  "builtin_objectives_create",
+  "builtin_specs_create",
+  "builtin_portfolios_create",
+  "builtin_initiatives_create",
+  // Team ceremonies: a retro or estimation session set up FROM a conversation is that
+  // conversation's outcome, so it links like any other item the agent creates.
+  "builtin_retro_create",
+  "builtin_poker_create_session"
+]);
+function stampRunChat(toolName, args, serverChatId) {
+  if (!CHAT_STAMPED_CREATE_TOOLS.has(toolName)) return;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return;
+  const bag = args;
+  if (serverChatId != null) bag.chatId = serverChatId;
+  else delete bag.chatId;
+}
+function createLinkedToChat(toolName, result) {
+  if (!CHAT_STAMPED_CREATE_TOOLS.has(toolName)) return false;
+  let row = result;
+  if (typeof row === "string") {
+    try {
+      row = JSON.parse(row);
+    } catch {
+      return false;
+    }
   }
-  const kind = CREATE_TOOL_KIND[toolName];
-  return kind ? { kind, ref, linkType } : null;
+  if (!row || typeof row !== "object") return false;
+  const link = row.chatLink;
+  return !!link && typeof link === "object" && link.linked === true;
 }
 function isTicketRecordingTool(name) {
   return TICKET_RECORDING_TOOLS.has(name);
@@ -18756,7 +18787,7 @@ function codeChangeFile(args) {
 function chatWorkLinkingDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const linked = chatId != null;
   const createBullet = tickets.local ? `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically \u2014 do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.
-` : `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked && tickets.needsLinkStep ? ` AND link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}, linkType="created")` : ""}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+` : `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked ? `. It is linked to this chat automatically \u2014 do not call ${SERVER_TICKET_LINK_TOOL} for an item you just created` : ""}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
 `;
   const scopingBullet = tickets.kanbanScoping ? `\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
 ` : `\u2022 A ticket filed with ${tickets.createName} is on this device first. The builtin_kanban_* resource-scoping tools address the account's tickets, so use them on a ticket only once it has synced (they answer plainly when it has not); file the work first and scope, staff and coordinate it afterwards.
@@ -27146,7 +27177,7 @@ function shippedToBaseBranch(events, opts) {
 var REVIEW_RECORD_TOOL = "builtin_reviews_record";
 function previewReviewDirective(chatId, tickets = SERVER_TICKET_TOOLS) {
   const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : "the ticket you recorded the change against";
-  const linkFirst = chatId != null && tickets.needsLinkStep ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : "";
+  const linkFirst = chatId != null && !tickets.local ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : "";
   return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
 1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
 2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 ${listed}; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
@@ -27311,33 +27342,6 @@ async function updateLinkedTickets(serverChatId, c, req, select, status2, reason
       isError: isFailedToolResult(out)
     });
   }
-}
-async function autoLinkCreatedItem(serverChatId, c, runTool, toolName, out) {
-  const link = workItemLinkFromCreate(toolName, out);
-  if (!link || serverChatId == null) return;
-  const chatId = serverChatId;
-  const toolStart = nowMs2();
-  let result;
-  try {
-    result = await runTool("builtin_chats_link_ticket", {
-      chatId,
-      kind: link.kind,
-      ref: link.ref,
-      linkType: link.linkType
-    });
-  } catch (e) {
-    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  if (!isFailedToolResult(result)) c.ticketRecorded = true;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "tool",
-    label: "builtin_chats_link_ticket",
-    durationMs: nowMs2() - toolStart,
-    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
-    result: result ?? null,
-    isError: isFailedToolResult(result)
-  });
 }
 
 // src/runStore/serverChat.ts
@@ -27717,7 +27721,7 @@ function restatedReplyNudge(tickets = SERVER_TICKET_TOOLS) {
   return [
     "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
     "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
-    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName}${tickets.needsLinkStep ? ", linked to this chat" : " \u2014 it links this chat itself"}) so the status lives on the board instead of in a repeated summary.`,
+    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName} \u2014 it links this chat itself) so the status lives on the board instead of in a repeated summary.`,
     "End with only what CHANGED this turn."
   ].join("\n");
 }
@@ -29415,7 +29419,11 @@ function callPreflight(run) {
       reportToPolicy(run, { type: "hand_off" });
       pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
       const outcome = await executeHandOff(plan, {
-        runTool: (name, args2) => runTool(name, args2),
+        // A hand-off ticket links to this chat in its create call, stamped like a model's.
+        runTool: (name, args2) => {
+          stampRunChat(name, args2, run.serverChatId);
+          return runTool(name, args2);
+        },
         toolNames: new Set(catalogToolNames),
         // The research the coders inherit: what this planning run read and searched.
         knowledge: run.knowledge.brief(),
@@ -29423,8 +29431,7 @@ function callPreflight(run) {
         request: run.goal,
         ...req.projectId != null ? { projectId: req.projectId } : {},
         afterCreate: async (toolName, out) => {
-          if (isTicketRecordingTool(toolName)) c.ticketRecorded = true;
-          await autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out);
+          if (isTicketRecordingTool(toolName) || createLinkedToChat(toolName, out)) c.ticketRecorded = true;
         },
         step: (label, args2, out, durationMs) => pushTrace(c, {
           ts: nowIso(),
@@ -29454,6 +29461,7 @@ function callPreflight(run) {
     }
     const args = call2.args;
     attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
+    stampRunChat(call2.name, args, run.serverChatId);
     if (needsConfirm && needsConfirm({ name: call2.name, args })) {
       const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
       if (!ok) {
@@ -29606,8 +29614,7 @@ function callRunner(run) {
         });
       }
     }
-    if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
-    await autoLinkCreatedItem(run.serverChatId, c, runTool, call2.name, out);
+    if (isTicketRecordingTool(call2.name) || createLinkedToChat(call2.name, out)) c.ticketRecorded = true;
     let advisory = null;
     if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
     if (isFailedToolResult(out)) {
@@ -32286,7 +32293,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         updateMessages(id, (prev) => [...prev, userMsg]);
         closePending(id);
         onActivity?.(id);
-        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
+        if (messages.length === 0) onFirstUserTurn?.(id, trimmed, displayContent);
         if (addressedTo) {
           const agents = directedAgentRecipients(addressedTo);
           if (agents.length > 0) {
@@ -34656,8 +34663,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     creations.current.set(token, mine);
     return mine;
   }, [drafts]);
-  const onFirstUserTurn = (0, import_react25.useCallback)(async (id, firstUserText) => {
-    void captureRef.current?.(id, firstUserText);
+  const onFirstUserTurn = (0, import_react25.useCallback)(async (id, firstUserText, composedText) => {
+    void captureRef.current?.(id, composedText ?? firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
   return { ensureChatId, onFirstUserTurn, drafts };
@@ -34687,6 +34694,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   CHAT_DIAGNOSTICS_SCHEMA_VERSION,
   CHAT_MODES,
   CHAT_MODE_ICON,
+  CHAT_STAMPED_CREATE_TOOLS,
   CODE_CHANGE_TOOLS,
   CONNECT_RETRY_DELAYS_MS,
   CONSOLIDATION_MARKER_PREFIX,
@@ -34855,6 +34863,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   createEngineWorker,
   createHandoffFit,
   createHostModelStream,
+  createLinkedToChat,
   createLocalBrainPersistence,
   createLocalChatIdentity,
   createLocalFirstStream,
@@ -35108,6 +35117,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   staffingSummaryInTrace,
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
+  stampRunChat,
   startEngineRun,
   startRun,
   startsRun,
@@ -35184,7 +35194,6 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   withReadyPageModels,
   withRunUsage,
   withUsageSurface,
-  workFiledNotStaffedVerdict,
-  workItemLinkFromCreate
+  workFiledNotStaffedVerdict
 });
 //# sourceMappingURL=index.cjs.map

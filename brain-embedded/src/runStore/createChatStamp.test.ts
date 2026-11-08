@@ -7,6 +7,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getRunTrace, resetBrainRunStore, startRun, type BrainStreamFn } from '../brainRunStore';
+import type { RunLineage } from '../runLineage';
 
 beforeEach(resetBrainRunStore);
 
@@ -34,8 +35,14 @@ function createThenStop(): BrainStreamFn {
 }
 
 async function run(chatId: number, serverChatId: number | null | undefined) {
+  return runWith(chatId, serverChatId);
+}
+
+/** {@link run}, optionally as a sub-agent of `lineage`'s owner. */
+async function runWith(chatId: number, serverChatId: number | null | undefined, lineage?: RunLineage) {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   await startRun(chatId, {
+    ...(lineage ? { lineage } : {}),
     resolvedSystemPrompt: 'sys',
     tools: [spec('builtin_tasks_create'), spec('builtin_chats_link_ticket')],
     projectId: 3,
@@ -67,11 +74,74 @@ describe("a model's create call carries the run's chat", () => {
     expect(step?.result).toMatchObject({ chatLink: { linked: true, chatId: 4242 } });
   });
 
+  it("a sub-agent (lineage) run stamps its OWNER's server chat — the chat the whole tree lives in", async () => {
+    const lineage: RunLineage = { rootChatId: 4800, ownerKey: 4800, ownerName: 'BuilderForce', handle: 'a1', label: 'file it', agent: { ref: 'agent_ada', name: 'Ada' }, depth: 1 };
+    const calls = await runWith(-9001, undefined, lineage);
+    expect(calls.find((c) => c.name === 'builtin_tasks_create')?.args.chatId).toBe(4800);
+  });
+
   it('strips a model-sent chatId for an unbound local chat', async () => {
     const calls = await run(6, null);
     const create = calls.find((c) => c.name === 'builtin_tasks_create');
     expect(create).toBeDefined();
     expect(create?.args).not.toHaveProperty('chatId');
     expect(calls.some((c) => c.name === 'builtin_chats_link_ticket')).toBe(false);
+  });
+});
+
+/**
+ * The planner's hand-off files its tickets through the run's runTool directly (not the
+ * model dispatch), so it stamps too — and a create the server linked is recorded work,
+ * which keeps the settle-time from_delta backstop from minting a second ticket.
+ */
+describe('hand-off tickets carry the chat and count as recorded work', () => {
+  const PLAN = {
+    summary: 'Two slices.',
+    tasks: [
+      { title: 'Slice A', brief: 'Do A.', paths: ['a.ts'] },
+      { title: 'Slice B', brief: 'Do B.', paths: ['b.ts'] },
+    ],
+  };
+
+  async function handOff(linked: boolean) {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    let nextId = 900;
+    let turn = 0;
+    await startRun(5, {
+      resolvedSystemPrompt: 'sys',
+      tools: [spec('read_file'), spec('edit_file'), spec('builtin_tasks_create'), spec('spawn_agents')],
+      projectId: 11,
+      serverChatId: 4242,
+      runTool: async (name, args) => {
+        calls.push({ name, args: { ...(args as Record<string, unknown>) } });
+        if (name === 'builtin_tasks_create') {
+          const chatId = (args as { chatId?: number }).chatId;
+          return { id: (nextId += 1), ...(linked ? { chatLink: { linked: true, chatId, linkType: 'created' } } : { chatLink: { linked: false, chatId, reason: 'Chat not found' } }) };
+        }
+        if (name === 'spawn_agents') return { ok: true, workstreams: [{ ok: true, label: 'a' }, { ok: true, label: 'b' }], changedFiles: ['a.ts', 'b.ts'] };
+        return { ok: true, taskId: 990 };
+      },
+      stream: async () => {
+        turn += 1;
+        if (turn === 1) return { text: 'Planned.', toolCalls: [{ id: 'h1', name: 'hand_off', args: JSON.stringify(PLAN) }], finishReason: 'tool_calls' };
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'do the two slices',
+      chatMode: 'work',
+    });
+    return calls;
+  }
+
+  it("stamps the run's chat onto every hand-off create, and a linked create keeps the from_delta backstop quiet", async () => {
+    const calls = await handOff(true);
+    expect(calls.filter((c) => c.name === 'builtin_tasks_create').map((c) => c.args.chatId)).toEqual([4242, 4242]);
+    expect(calls.some((c) => c.name === 'builtin_chats_link_ticket')).toBe(false);
+    expect(calls.some((c) => c.name === 'builtin_tickets_from_delta')).toBe(false);
+  });
+
+  it('a hand-off create the server could NOT link is not recorded work, so the backstop still records the change', async () => {
+    const calls = await handOff(false);
+    expect(calls.some((c) => c.name === 'builtin_tickets_from_delta')).toBe(true);
   });
 });

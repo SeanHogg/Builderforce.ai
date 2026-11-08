@@ -1499,11 +1499,10 @@ describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', (
       userTurn: 'finish S0',
     });
 
-    // One ticket per task, each linked to the chat in its own create call (the run stamps
-    // its chat; the server links) — no separate link step.
-    const creates = calls.filter((c) => c.name === 'builtin_tasks_create');
-    expect(creates.map((c) => c.args.title)).toEqual(['One StatTile', 'Drawer on SlideOutPanel']);
-    expect(creates.map((c) => c.args.chatId)).toEqual([5301, 5301]);
+    // One ticket per task, each linked to the chat — by its own create call now (the run
+    // stamps its chat, the server links; see runStore/createChatStamp.test.ts), so no
+    // separate link step follows.
+    expect(calls.filter((c) => c.name === 'builtin_tasks_create').map((c) => c.args.title)).toEqual(['One StatTile', 'Drawer on SlideOutPanel']);
     expect(calls.filter((c) => c.name === 'builtin_chats_link_ticket')).toHaveLength(0);
     // The tasks ran side by side, on the coding role, each on its ticket — as clones, no read-only flag.
     const fan = calls.find((c) => c.name === 'spawn_agents');

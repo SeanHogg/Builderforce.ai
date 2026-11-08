@@ -557,5 +557,29 @@ describe("localWorkRepository", () => {
       expect(order.indexOf(linkId)).toBeGreaterThan(order.indexOf(CHAT));
       expect(pushed.find((event) => event.clientEntityId === linkId)?.operation).toBe("import");
     });
+
+    it("regression: chat BOUND, project + ticket UNBOUND — a drain before the bind does not push the link; after the bind it follows the ticket's import", async () => {
+      const { store, repo } = harness();
+      await putChat(store, boundTo);
+      const project = await repo.createProject({ name: "Board" });
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Mid-pass", chatClientId: CHAT });
+      const linkId = chatTicketLinkId(CHAT, ticket.id);
+      // The link takes the chat's (bound) destination; its ticket is still in the unbound partition.
+      expect((await store.read((tx) => tx.get("chat-ticket-link", linkId)))?.destination).toEqual(boundTo);
+      expect((await store.read((tx) => tx.get("ticket", ticket.id)))?.destination).toEqual(UNBOUND_DESTINATION);
+
+      // A drain that ran before this pass's bind (the ticket was filed mid-pass): only the chat goes.
+      const early = await pushAll(store, boundTo);
+      expect(early.map((event) => event.clientEntityId)).toEqual([CHAT]);
+      expect((await store.read((tx) => tx.pending())).some((event) => event.clientEntityId === linkId)).toBe(true);
+
+      await bindWorkForSync(store, "device-1", boundTo);
+      const pushed = await pushAll(store, boundTo);
+      const order = pushed.map((event) => event.clientEntityId);
+      expect(order).toContain(linkId);
+      expect(order.indexOf(linkId)).toBeGreaterThan(order.indexOf(ticket.id));
+      expect(order.indexOf(ticket.id)).toBeGreaterThan(order.indexOf(project.id));
+      expect(pushed.find((event) => event.clientEntityId === ticket.id)?.operation).toBe("import");
+    });
   });
 });
