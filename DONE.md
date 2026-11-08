@@ -1,3 +1,30 @@
+## ✅ RESOLVED 2026-11-08: the knowledge view no longer freezes the screen on a real graph (Knowledge · VSIX 2026.10.144)
+
+- **Symptom.** On `agentic` (3138 nodes, 158,663 edges, 20,738 findings, 389 stations), every camera blocked the main thread for 1.5–4.5 s.
+- **Measured.** The `src/perf` harness (`KG_PERF=1`) found these culprits: `insightsOf` 1.5 s, the `rankTask` sort as one 1.07 s step, `pathOfStations` 1.3 s, `canonicalEdges` computed three times, and the surface model built synchronously.
+- **Algorithms.**
+  - One memoised `canonicalEdges` with a stepped typed-array sort (`scene/chunkedSort.ts`).
+  - Packed-key ranking (`scene/rankStages.ts`).
+  - A station-pair index for paths.
+  - Single-pass insights (`insights/hotspots.ts`).
+  - Stepped springs and plane order.
+  - Shared `pairKey` and incident-edge helpers.
+- **One compute worker (`src/compute/`).**
+  - Results come back as indices into the main thread's own arrays.
+  - Graphs are uploaded in 500-element slices.
+  - Ranked-edge incident lists are decoded lazily (`LazyIncident`).
+  - Every heavy call site uses `useComputed`: layouts, edge paths and buffers, ranking, mind map, surface, path, insights, partition matrix, anti-patterns, focus.
+  - Failure handling:
+    - every failure path re-runs the request instead of dropping it;
+    - one unclonable request no longer disables the worker;
+    - a graph whose upload fails runs in-process alone.
+  - The VS Code webview gets a blob worker via `setWorkerFactory`.
+- **Edit contract.** Graphs are immutable: an edit produces new node, edge and finding arrays. In development, `isDevBuild()` (`src/devBuild.ts`) freezes resident arrays, so an in-place edit throws.
+- **Wheel and pinch zoom.** These now write the viewBox per animation frame and commit to React once on settle, instead of re-rendering on every tick.
+- **Result.** In the cold harness the longest main-thread step is 46 ms, with every step under the 50 ms budget. Layout steps swing on a cold first run. Tests cover the client (cancel, eviction, clone errors, failover), residency, codecs and zoom.
+- **Reviews.** Two Opus reviews; all their findings were fixed.
+- **Next.** PRD 43: one shared 3D stage for every camera.
+
 ## ✅ RESOLVED 2026-11-08: a posting links to every board it lands on, applicants come home with their source, and Workable is a connector (Hiring)
 
 - **Public board URLs.** `resolveBoardUrls.ts` builds the public link from each board's posting id: Greenhouse, LinkedIn (Rest.li `ids=List(...)`), Ashby (job-id filter), Lever and Workable. A failed lookup retries on `resolve_retry_at` alone, and a success clears the error. Indeed has no public URL by design, so it shows as link-less instead of broken.

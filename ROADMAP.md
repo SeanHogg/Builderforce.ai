@@ -76,18 +76,6 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **Knowledge view freezes the screen on a real graph (in progress 2026-11-08).** On `agentic` (2000/3138 nodes, 104,972 drawn edges, 20,738 findings, 389 stations) every camera blocks the main thread for 1.5–4.5 s. The `src/perf` harness (`KG_PERF=1`) measured `insightsOf` 1.5 s, the `rankTask` sort as a single 1.07 s step, `pathOfStations` 1.3 s, `canonicalEdges` computed three times, and the surface model (`buildStations`/`buildLines`) run synchronously in `useSurface`. Landed on main without verification (swept into 3a2c752db/ee2222212):
-  - (A1) algorithm fixes: one shared `canonicalEdges` with a typed-array sort split into 30k-edge slices, packed-key ranking, a station-pair index for `pathOfStations`, single-pass memoised insights;
-  - (A2) ONE compute worker under `src/compute/`, with results passed back as indices.
-
-  Still open:
-  - finish migrating the call sites (`useSurface`, reviews panel);
-  - coalesce wheel zoom;
-  - run typecheck, tests and both builds;
-  - re-run the harness cold, since memo hits currently skew the medians;
-  - review the diff.
-
-  Done when no main-thread task in the harness exceeds 50 ms. Then: one shared 3D stage for every camera, design first.
 - **No source of recorded runtime values for the knowledge view (PRD 38).** Several features are wired and tested but have nothing to show yet:
   - The Simulate drawer's recorded and editable values, which use the optional `recordedValues` source port.
   - Path-hop payload sizes ("PUT 1.4 MB"), which need a `payloadBytes` file badge.
