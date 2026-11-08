@@ -955,7 +955,7 @@ export const governancePolicyPacks = pgTable('governance_policy_packs', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   /**
    * NULL = tenant/segment-wide (the org baseline); set = scoped to one project.
-   * FK re-added in migration 1337 once projects.id went bigint (PRD 20 bigint migration).
+   * Migration 1337 re-added the projects.id FKs (PRD 20 bigint migration).
    */
   projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
@@ -1000,7 +1000,7 @@ export const governanceAuditRuns = pgTable('governance_audit_runs', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  /** FK re-added in migration 1337 once projects.id went bigint (PRD 20 bigint migration). */
+  /** Migration 1337 re-added the projects.id FK (PRD 20 bigint migration). */
   projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   repoRef:      varchar('repo_ref', { length: 500 }),           // repo url/id
   ref:          varchar('ref', { length: 200 }),                // branch/commit/PR audited
