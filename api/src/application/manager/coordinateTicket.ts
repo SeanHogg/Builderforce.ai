@@ -22,6 +22,7 @@ import { blocksCompletion } from '../kanban/participantStates';
 import { isParkedLane } from '../swimlane/nextLane';
 import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { gateAutomaticClose, recordManagerReviewClose, type ReviewGateVerdict } from './reviewGateAuthority';
 
 export interface CoordinateResult {
@@ -152,7 +153,10 @@ export async function coordinateCompletedStage(
     targetLabel: `#${args.taskId}`,
     summary: `Ticket #${args.taskId} handed off from '${args.fromStatus}' to '${next.key}'`.slice(0, 300),
     metadata: { fromLane: args.fromStatus, toLane: next.key, toRole: nextRoleName(manifest, next.key), terminal: next.isTerminal },
-  }).catch(() => { /* best-effort: the audit trail must never fail the advance */ });
+  }).catch((error) => {
+    // Best-effort: the audit trail must never fail the advance, but a lost hand-off row is reported.
+    reportCaughtError(error, { source: 'application/manager/coordinateTicket.ts', operation: 'recordHandoffActivity' });
+  });
   if (closeVerdict === 'manager_authorized') {
     await recordManagerReviewClose(env, db, {
       tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,

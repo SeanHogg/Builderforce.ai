@@ -7,6 +7,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { studioVoiceClones, voiceClipProvenance } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { hmacBase64Url } from '../../infrastructure/crypto/hmac';
 import { hkdfSha256 } from '../../infrastructure/crypto/hkdf';
 import { canUseClone } from './voiceCloneAccess';
@@ -98,7 +99,8 @@ export function createVoiceProvenancePorts(
       const rows = await db
         .select()
         .from(voiceClipProvenance)
-        .where(column)
+        // The public verifier: provenance exists to be found by a stranger holding the audio (watermark or hash).
+        .where(acrossTenants(voiceClipProvenance, 'public_catalogue', column))
         .orderBy(sql`(${voiceClipProvenance.engine} = ${CLIENT_REPORTED_ENGINE})`, asc(voiceClipProvenance.createdAt))
         .limit(20);
       return pickAuthoritative(rows.map(toRecord));
@@ -108,7 +110,8 @@ export function createVoiceProvenancePorts(
       const [row] = await db
         .select({ name: studioVoiceClones.name, visibility: studioVoiceClones.visibility })
         .from(studioVoiceClones)
-        .where(eq(studioVoiceClones.id, cloneId))
+        // For the public verifier's answer; the caller shows the name only for a marketplace voice.
+        .where(acrossTenants(studioVoiceClones, 'public_catalogue', eq(studioVoiceClones.id, cloneId)))
         .limit(1);
       return row ?? null;
     },

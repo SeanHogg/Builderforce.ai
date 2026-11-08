@@ -4,12 +4,15 @@
  * Two vocabularies exist for the same act:
  *
  *   • SERVER (web, cloud): `builtin_tasks_create` makes a task the account owns and returns
- *     a NUMERIC id; `builtin_chats_link_ticket` ties it to the chat; the board's resource
- *     scoping (`builtin_kanban_*`) addresses that numeric id.
+ *     a NUMERIC id, linked to the run's chat in the same call (the host stamps the chat; see
+ *     `CHAT_STAMPED_CREATE_TOOLS`); the board's resource scoping (`builtin_kanban_*`)
+ *     addresses that numeric id.
  *   • LOCAL (the editor): `ticket-create` writes the DEVICE store and returns a LOCAL id (a
- *     UUID). It links the creating chat itself and syncs in the background, so there is no
- *     link step, and the `builtin_kanban_*` tools (which take server ids) do not apply to it
+ *     UUID). It links the creating chat locally in the same transaction and syncs in the
+ *     background, and the `builtin_kanban_*` tools (which take server ids) do not apply to it
  *     until it has synced. The editor's catalog does not even advertise the server twins.
+ *
+ * Neither vocabulary has a link step after a create any more.
  *
  * Every prompt, hand-off and triage check that names a create tool reads this, so none of
  * them keeps its own list of names. A surface that cannot say what it advertises gets the
@@ -28,8 +31,6 @@ export interface TicketToolVocabulary {
   readonly createTool: string | undefined;
   /** The create tool is the device-local `ticket-create` (ids are local UUIDs). */
   readonly local: boolean;
-  /** A separate chat-link call follows a create (false for `ticket-create`, which links itself). */
-  readonly needsLinkStep: boolean;
   /** The `builtin_kanban_*` resource-scoping tools apply to a ticket this tool creates. */
   readonly kanbanScoping: boolean;
   /** The name a prompt should give for the create tool (the server's when none is advertised). */
@@ -39,7 +40,6 @@ export interface TicketToolVocabulary {
 const SERVER: TicketToolVocabulary = Object.freeze({
   createTool: SERVER_TICKET_CREATE_TOOL,
   local: false,
-  needsLinkStep: true,
   kanbanScoping: true,
   createName: SERVER_TICKET_CREATE_TOOL,
 });
@@ -55,7 +55,6 @@ export function ticketToolVocabulary(toolNames?: Iterable<string>): TicketToolVo
     return Object.freeze({
       createTool: LOCAL_TICKET_CREATE_TOOL,
       local: true,
-      needsLinkStep: false,
       kanbanScoping: false,
       createName: LOCAL_TICKET_CREATE_TOOL,
     });

@@ -109,7 +109,7 @@ export const projectInsightEvents = pgTable('project_insight_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   userId:      varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   executionId: integer('execution_id').references(() => executions.id, { onDelete: 'set null' }),
   codeChanges: integer('code_changes').notNull().default(0),
@@ -118,7 +118,13 @@ export const projectInsightEvents = pgTable('project_insight_events', {
 
 
 export const projects = pgTable('projects', {
-  id:              serial('id').primaryKey(),
+  // BIGINT per the PRD 20 consolidation: a projects row is reference-counted by
+  // more foreign keys than any other table in the model, and the pool of
+  // assignable int4 values is the ceiling none of them can outgrow. bigserial
+  // keeps it a drop-in for integer-valued callers (TypeScript still sees number).
+  // Migration 1337 carries the type change; every referencing column migrates in
+  // the same file.
+  id:              bigserial('id', { mode: 'number' }).primaryKey(),
   publicId:        uuid('public_id').notNull().defaultRandom(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
@@ -211,7 +217,7 @@ export const projects = pgTable('projects', {
 
 export const tasks = pgTable('tasks', {
   id:                serial('id').primaryKey(),
-  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:         bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /**
    * Denormalised from `projects.tenant_id` (migration 0944). DB NOT NULL, derived
    * by `trg_tasks_tenant` on INSERT and on any UPDATE OF project_id, so it can
@@ -481,7 +487,7 @@ export const workDeltas = pgTable('work_deltas', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** The ticket this delta created/updated (null if it could not be created). */
   taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   /** The Brain chat/session that produced the delta (null for headless runs). */
@@ -514,7 +520,7 @@ export const workDeltas = pgTable('work_deltas', {
 export const projectManagerConfigs = pgTable('project_manager_configs', {
   id:                uuid('id').primaryKey().defaultRandom(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:         bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** Designated manager, assignee-encoded ('u:<userId>' | 'c:<cloudRef>' | 'h:<hostId>').
    *  Null = the tenant system service manages this project (no named manager). */
   managerRef:        text('manager_ref'),
@@ -619,7 +625,7 @@ export const taskStatusTransitions = pgTable('task_status_transitions', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   fromStatus:  varchar('from_status', { length: 64 }),
   toStatus:    varchar('to_status', { length: 64 }).notNull(),
@@ -643,7 +649,7 @@ export const agentHostProjects = pgTable('agent_host_projects', {
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:    integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 64 }).notNull().default('default'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -679,7 +685,7 @@ export const specs = pgTable('specs', {
   id:          uuid('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   goal:        text('goal').notNull(),
   status:      specStatusEnum('status').notNull().default('draft'),
@@ -752,9 +758,9 @@ export const ideProjects = pgTable('ide_projects', {
   tenantId:            integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:           uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   /** The user-facing "Project" container this build is grouped under; NULL = ungrouped. */
-  containerProjectId:  integer('container_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  containerProjectId:  bigint('container_project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** The backing projects row holding this build's files/datasets/training/site/repo. */
-  storageProjectId:    integer('storage_project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  storageProjectId:    bigint('storage_project_id', { mode: 'number' }).notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                varchar('name', { length: 255 }).notNull(),
   /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice' (legacy: 'llm' → evermind). */
   modality:            text('modality').notNull().default('designer'),
@@ -776,7 +782,7 @@ export const projectMemories = pgTable('project_memories', {
   id:                   serial('id').primaryKey(),
   tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  projectId:            integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }).unique(),
+  projectId:            bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }).unique(),
   consolidatedSummary:  text('consolidated_summary').notNull().default(''),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
@@ -786,7 +792,7 @@ export const projectMemories = pgTable('project_memories', {
 export const teamProjects = pgTable('team_projects', {
   id:        serial('id').primaryKey(),
   teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   addedAt:   timestamp('added_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_team_project').on(t.teamId, t.projectId),
@@ -800,7 +806,7 @@ export const teamProjects = pgTable('team_projects', {
 export const projectFacts = pgTable('project_facts', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   key:        varchar('key', { length: 255 }).notNull(),
   content:    text('content').notNull(),
   source:     varchar('source', { length: 64 }).notNull().default('agent'),
@@ -867,7 +873,7 @@ export const projectFacts = pgTable('project_facts', {
 export const projectFactRelations = pgTable('project_fact_relations', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   fromRef:    varchar('from_ref', { length: 512 }).notNull(),
   toRef:      varchar('to_ref', { length: 512 }).notNull(),
   kind:       varchar('kind', { length: 32 }).notNull(),
@@ -890,7 +896,7 @@ export const projectFactRelations = pgTable('project_fact_relations', {
 export const knowledgeScopes = pgTable('knowledge_scopes', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** `${host}:${repoId or folder id}:${path}`. */
   rootId:         varchar('root_id', { length: 512 }).notNull(),
   title:          varchar('title', { length: 255 }),
@@ -910,7 +916,7 @@ export const knowledgeScopes = pgTable('knowledge_scopes', {
 // so a read is a ranged GET and a have-check is one query. Written in the same transaction as the pack's rows.
 export const knowledgeExtractedIndex = pgTable('knowledge_extracted_index', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   hash:       varchar('hash', { length: 160 }).notNull(),
   bundleKey:  text('bundle_key').notNull(),
   byteOffset: integer('byte_offset').notNull(),
@@ -928,7 +934,7 @@ export const knowledgeExtractedIndex = pgTable('knowledge_extracted_index', {
 // output. The legacy per-source R2 objects are still read as a fallback.
 export const knowledgeSources = pgTable('knowledge_sources', {
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   rootId:    varchar('root_id', { length: 512 }).notNull(),
   sourceId:  text('source_id').notNull(),
   path:      text('path').notNull(),
@@ -943,7 +949,7 @@ export const knowledgeSources = pgTable('knowledge_sources', {
 // manifest tree, written in the pack transaction. Never read from project_facts, which every root of a project shares.
 export const knowledgeSyncLeaves = pgTable('knowledge_sync_leaves', {
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   rootId:    varchar('root_id', { length: 512 }).notNull(),
   /** The key as the codec builds it; stored for reading back, NEVER indexed (a relation key can be 8 KB). */
   leafKey:   text('leaf_key').notNull(),
@@ -962,7 +968,7 @@ export const knowledgeSyncLeaves = pgTable('knowledge_sync_leaves', {
 // recomputes only the buckets it touched. An absent row is an empty bucket.
 export const knowledgeSyncBuckets = pgTable('knowledge_sync_buckets', {
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   rootId:    varchar('root_id', { length: 512 }).notNull(),
   bucket:    smallint('bucket').notNull(),
   digest:    bytea('digest').notNull(),
@@ -974,7 +980,7 @@ export const knowledgeSyncBuckets = pgTable('knowledge_sync_buckets', {
 // so concurrent packs have one winner. Replaces the `sync.json` object.
 export const knowledgeSyncRoots = pgTable('knowledge_sync_roots', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   rootId:     varchar('root_id', { length: 512 }).notNull(),
   generation: integer('generation').notNull().default(0),
   digest:     varchar('digest', { length: 64 }).notNull().default(''),
@@ -989,7 +995,7 @@ export const roadmapItems = pgTable('roadmap_items', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Nullable project scope (0121): NULL = portfolio/segment-level, non-null = one project.
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   title:      varchar('title', { length: 255 }).notNull(),
   horizon:    varchar('horizon', { length: 10 }).notNull().default('now'),
   status:     varchar('status', { length: 20 }).notNull().default('planned'),
@@ -1012,7 +1018,7 @@ export const sprints = pgTable('sprints', {
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Nullable project scope (0244): NULL = portfolio/segment-level cadence, non-null
   // = one project. The Planning ceremony is project-scoped, so its sprints follow.
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:         varchar('name', { length: 255 }).notNull(),
   goal:         text('goal'),
   startDate:    timestamp('start_date'),
@@ -1041,7 +1047,7 @@ export const taskDependencies = pgTable('task_dependencies', {
   // Nullable in Drizzle (omitted on insert); the set_default_segment_id() trigger
   // fills it and migration 0121 enforces NOT NULL at the DB — same as task_status_transitions.
   segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:         bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   predecessorTaskId: integer('predecessor_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   successorTaskId:    integer('successor_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   depType:           varchar('dep_type', { length: 16 }).notNull().default('finish_to_start'),
@@ -1068,7 +1074,7 @@ export const boards = pgTable('boards', {
   // One board per project (UNIQUE(project_id), migration 0111). Enforced in code
   // via findOrCreateBoard so both create entry points converge on the existing
   // board rather than tripping this constraint.
-  projectId:            integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:            bigint('project_id', { mode: 'number' }).notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                 varchar('name', { length: 255 }).notNull(),
   // The board-level Autonomous toggle was dropped in migration 0207 (inert
   // since 0084 — autonomy is driven by lane agents + per-lane gate 'auto'/'human').
@@ -1234,7 +1240,7 @@ export const swimlaneRequirements = pgTable('swimlane_requirements', {
 export const projectRoleAssignments = pgTable('project_role_assignments', {
   id:           varchar('id', { length: 36 }).primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   roleKey:      varchar('role_key', { length: 120 }).notNull(),
   assigneeKind: varchar('assignee_kind', { length: 16 }).notNull(), // agent | human | hire
   assigneeRef:  varchar('assignee_ref', { length: 128 }).notNull(),
@@ -1313,7 +1319,7 @@ export const boardConnections = pgTable('board_connections', {
   id:              uuid('id').primaryKey().defaultRandom(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:       integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:       bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   credentialId:    uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
   provider:        varchar('provider', { length: 24 }).notNull(),  // github|jira|freshworks|rally|bitbucket
   externalBoardId: varchar('external_board_id', { length: 255 }),
@@ -1399,7 +1405,7 @@ export const importStagedProjects = pgTable('import_staged_projects', {
   itemCount:         integer('item_count'),
   /** 'create' (new BF project) | 'map' (fold into targetProjectId — combine) | 'skip'. */
   action:            varchar('action', { length: 8 }).notNull().default('create'),
-  targetProjectId:   integer('target_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  targetProjectId:   bigint('target_project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   targetProjectName: varchar('target_project_name', { length: 255 }),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
 });
@@ -1450,7 +1456,7 @@ export const projectRepositories = pgTable('project_repositories', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   provider:      varchar('provider', { length: 16 }).notNull(),  // github|bitbucket|gitlab
   host:          varchar('host', { length: 255 }).notNull().default('github.com'),
   owner:         varchar('owner', { length: 255 }).notNull(),
@@ -1540,7 +1546,7 @@ export const repoDeliveryStatus = pgTable('repo_delivery_status', {
 export const projectEvermind = pgTable('project_evermind', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   name:          text('name').notNull().default('Project Evermind'),
   /** Current canonical version (monotonic). 0 = not yet seeded (no model in R2). */
   version:       integer('version').notNull().default(0),
@@ -1601,7 +1607,7 @@ export const projectEvermind = pgTable('project_evermind', {
 export const evermindLearningBaselines = pgTable('evermind_learning_baselines', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:    bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   headVersion:  integer('head_version').notNull().default(0),
   facts:        jsonb('facts').$type<Array<{ key: string; content: string }>>().notNull().default([]),
   factCount:    integer('fact_count').notNull().default(0),
@@ -1613,7 +1619,7 @@ export const evermindLearningBaselines = pgTable('evermind_learning_baselines', 
 export const evermindLearningRuns = pgTable('evermind_learning_runs', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   headVersion: integer('head_version').notNull().default(0),
   produced:    boolean('produced').notNull().default(false),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
@@ -1624,7 +1630,7 @@ export const evermindLearningRuns = pgTable('evermind_learning_runs', {
 export const evermindLearningCandidates = pgTable('evermind_learning_candidates', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:        bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   runId:            integer('run_id').notNull().references(() => evermindLearningRuns.id, { onDelete: 'cascade' }),
   statement:        text('statement').notNull(),
   factKey:          varchar('fact_key', { length: 120 }).notNull(),
@@ -1671,7 +1677,7 @@ export const monitoringBoards = pgTable('monitoring_boards', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   imageKey:    varchar('image_key', { length: 512 }),   // R2 key
   imageWidth:  integer('image_width'),
@@ -1788,7 +1794,7 @@ export const taskFileChanges = pgTable('task_file_changes', {
  */
 export const projectSecrets = pgTable('project_secrets', {
   id:             uuid('id').primaryKey().defaultRandom(),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   /** Env-var style name (`[A-Z][A-Z0-9_]*`), validated in the application. */
   name:           varchar('name', { length: 128 }).notNull(),
@@ -1812,7 +1818,7 @@ export const projectSecrets = pgTable('project_secrets', {
  */
 export const projectAppBlueprints = pgTable('project_app_blueprints', {
   id:             uuid('id').primaryKey().defaultRandom(),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   commitSha:      varchar('commit_sha', { length: 40 }).notNull(),
   blueprint:      jsonb('blueprint').notNull(),
   detectedAt:     timestamp('detected_at').notNull().defaultNow(),
@@ -1836,7 +1842,7 @@ export const projectAppBlueprints = pgTable('project_app_blueprints', {
  */
 export const projectBackends = pgTable('project_backends', {
   id:             uuid('id').primaryKey().defaultRandom(),
-  projectId:      integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   strategy:       varchar('strategy', { length: 32 }).notNull().default('declarative'),
   status:         varchar('status', { length: 16 }).notNull().default('active'),
@@ -1867,7 +1873,7 @@ export const projectBackends = pgTable('project_backends', {
  */
 export const projectGameTargets = pgTable('project_game_targets', {
   id:              uuid('id').primaryKey().defaultRandom(),
-  projectId:       integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:       bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   /** The game's file-safe stem; a project may hold several games. */
   slug:            varchar('slug', { length: 64 }).notNull(),
@@ -1898,7 +1904,7 @@ export const projectGameTargets = pgTable('project_game_targets', {
  */
 export const projectBackendRequests = pgTable('project_backend_requests', {
   id:          bigserial('id', { mode: 'number' }).primaryKey(),
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   route:       varchar('route', { length: 255 }).notNull(),
   method:      varchar('method', { length: 8 }).notNull(),
@@ -1924,7 +1930,7 @@ export const challenges = pgTable('challenges', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   /** Set once BUILT; null while the challenge is only parsed + planned. */
-  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   title:         varchar('title', { length: 255 }).notNull(),
   sponsor:       varchar('sponsor', { length: 255 }),
   brief:         text('brief').notNull(),
@@ -1967,7 +1973,7 @@ export const realizations = pgTable('realizations', {
   /** The brief this proof is of, when it came from one. */
   challengeId:   uuid('challenge_id').references(() => challenges.id, { onDelete: 'set null' }),
   /** Set once BUILT; null while the realization is only planned. */
-  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** A RealizationKey — `demo-video`, `smoke-test`, `live-system`, … */
   targetKey:     varchar('target_key', { length: 48 }).notNull(),
   title:         varchar('title', { length: 255 }).notNull(),
@@ -2091,7 +2097,7 @@ export const objectives = pgTable('objectives', {
    *  projectId, the OKR tab's project scope) lives here; the Project 360 counts these
    *  as the project's linked goals (its Direction dimension) without needing a task or
    *  initiative link. Null = an org/portfolio/initiative-level objective. */
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   title:        varchar('title', { length: 255 }).notNull(),
   description:  text('description'),
   period:       varchar('period', { length: 20 }), // e.g. '2026-Q2' — DERIVED from startDate (0225); kept for reporting/grouping
@@ -2188,7 +2194,7 @@ export const allocationGoals = pgTable('allocation_goals', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   scopeKind:   varchar('scope_kind', { length: 16 }).notNull().default('tenant'), // tenant | team | project
   teamId:      integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   periodMonth: varchar('period_month', { length: 7 }).notNull(),                   // 'YYYY-MM'
   category:    varchar('category', { length: 16 }).notNull(),                      // innovation | ktlo | support | tech_debt | other
   targetPct:   real('target_pct').notNull().default(0),                            // desired share of effort (0..100)
@@ -2430,7 +2436,7 @@ export const deploymentEvents = pgTable('deployment_events', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   taskId:       integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   environment:  varchar('environment', { length: 64 }).notNull().default('production'),
   status:       deploymentStatusEnum('status').notNull().default('success'),
@@ -2541,7 +2547,7 @@ export const productReleases = pgTable('product_releases', {
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Project scope for the release-picker (EMP-10a, migration 0316).
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   version:     varchar('version', { length: 50 }),
   // Plan vs actual (1266): `targetDate` is the planned ship date; `releasedAt` is when
@@ -2681,7 +2687,7 @@ export const qaJourneyEvents = pgTable('qa_journey_events', {
   // Builderforce app shell itself, which belongs to no customer project — that is
   // what every pre-0955 row means, so no backfill was needed. Heat ranks per
   // project when this is set (0955).
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   // Client-generated journey id — groups events from one continuous session.
   sessionId:  varchar('session_id', { length: 64 }).notNull(),
   seq:        integer('seq').notNull().default(0),
@@ -2706,7 +2712,7 @@ export const qaFlows = pgTable('qa_flows', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Project (site-under-test) this flow belongs to. Null = workspace-level
   // (legacy capture / builderforce self-test).
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
   slug:        varchar('slug', { length: 255 }).notNull(),
   // 'usage' (derived from journeys) | 'crawl' (AI route-map exploration) | 'manual'
@@ -2733,7 +2739,7 @@ export const qaTests = pgTable('qa_tests', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   flowId:      uuid('flow_id').references(() => qaFlows.id, { onDelete: 'set null' }),
   // The persona this scenario runs as (resolved from the flow's personaRole).
   credentialId: uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
@@ -2762,7 +2768,7 @@ export const qaTargets = pgTable('qa_targets', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   name:       varchar('name', { length: 255 }).notNull(),       // e.g. "Production", "Staging"
   baseUrl:    varchar('base_url', { length: 512 }).notNull(),
   isDefault:  boolean('is_default').notNull().default(false),
@@ -2784,7 +2790,7 @@ export const qaCredentials = pgTable('qa_credentials', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   label:         varchar('label', { length: 255 }).notNull(),   // "Admin user", "Read-only viewer"
   // Free-form role slug used to match AI-inferred personaRole on a flow.
   role:          varchar('role', { length: 64 }),
@@ -2846,7 +2852,7 @@ export const qaExplorations = pgTable('qa_explorations', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   targetId:      uuid('target_id').references(() => qaTargets.id, { onDelete: 'set null' }),
   credentialId:  uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
   // 'queued' | 'running' | 'passed' | 'failed' | 'error'
@@ -2881,7 +2887,7 @@ export const qaFindings = pgTable('qa_findings', {
   explorationId: uuid('exploration_id').notNull().references(() => qaExplorations.id, { onDelete: 'cascade' }),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   // 'console' | 'pageerror' | 'network' | 'assertion' | 'crash' | 'navigation'
   type:          varchar('type', { length: 24 }).notNull(),
   // 'low' | 'medium' | 'high' | 'critical'
@@ -2916,7 +2922,7 @@ export const qaRoutingSettings = pgTable('qa_routing_settings', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   enabled:       boolean('enabled').notNull().default(false),
   // Minimum finding severity that triggers a route ('low'|'medium'|'high'|'critical').
   minSeverity:   varchar('min_severity', { length: 16 }).notNull().default('high'),
@@ -2943,7 +2949,7 @@ export const qaSchedules = pgTable('qa_schedules', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:    bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   // Which target + persona the scheduled run uses (null target = project default).
   targetId:     uuid('target_id').references(() => qaTargets.id, { onDelete: 'set null' }),
   credentialId: uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
@@ -3016,7 +3022,7 @@ export const pullRequests = pgTable('pull_requests', {
   id:                uuid('id').primaryKey().defaultRandom(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:         bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   repoId:            uuid('repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
   taskId:            integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   specId:            uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
@@ -3049,7 +3055,7 @@ export const pullRequests = pgTable('pull_requests', {
 export const prReconciliationRuns = pgTable('pr_reconciliation_runs', {
   id:                uuid('id').primaryKey().defaultRandom(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:         bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   repoId:            uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
   agentRef:          varchar('agent_ref', { length: 64 }),
   mode:              varchar('mode', { length: 16 }).notNull().default('dry_run'),
@@ -3142,7 +3148,7 @@ export const prodIncidents = pgTable('prod_incidents', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:      bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   title:          varchar('title', { length: 255 }).notNull(),
   severity:       varchar('severity', { length: 16 }).notNull().default('sev3'), // sev1 | sev2 | sev3 | sev4
   status:         varchar('status', { length: 16 }).notNull().default('open'),   // open | acknowledged | mitigated | resolved
@@ -3185,7 +3191,7 @@ export const onCallRotations = pgTable('on_call_rotations', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   name:         varchar('name', { length: 255 }).notNull(),
   description:  text('description'),
   rotationKind: varchar('rotation_kind', { length: 16 }).notNull().default('manual'), // manual|daily|weekly
@@ -3204,7 +3210,7 @@ export const escalationPolicies = pgTable('escalation_policies', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   name:          varchar('name', { length: 255 }).notNull(),
   description:   text('description'),
   matchSeverity: varchar('match_severity', { length: 16 }), // null = any
@@ -3242,7 +3248,7 @@ export const monitors = pgTable('monitors', {
   tenantId:            integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:           uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   boardId:             uuid('board_id').notNull().references(() => monitoringBoards.id, { onDelete: 'cascade' }),
-  projectId:           integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:           bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   label:               varchar('label', { length: 255 }).notNull(),
   description:         text('description'),
   posX:                real('pos_x').notNull().default(0.5),
@@ -3356,7 +3362,7 @@ export const errorCollectors = pgTable('error_collectors', {
   id:               uuid('id').primaryKey().defaultRandom(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   /** NULL = tenant-level collector (routes via mapping rules); set = project collector. */
-  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:             varchar('name', { length: 255 }).notNull(),
   /** SHA-256 of the bfq_* ingest key (raw key shown once at creation/rotation). */
   keyHash:          varchar('key_hash', { length: 64 }).unique(),
@@ -3374,7 +3380,7 @@ export const errorCollectors = pgTable('error_collectors', {
   previousKeyExpiresAt: timestamp('previous_key_expires_at'),
   keyRotatedAt:     timestamp('key_rotated_at'),
   /** Fallback project for a tenant-level collector when no mapping rule matches. */
-  defaultProjectId: integer('default_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  defaultProjectId: bigint('default_project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   enabled:          boolean('enabled').notNull().default(true),
   status:           varchar('status', { length: 16 }).notNull().default('active'),
   lastEventAt:      timestamp('last_event_at'),
@@ -3430,7 +3436,7 @@ export const errorMappingRules = pgTable('error_mapping_rules', {
   matchField:   varchar('match_field', { length: 64 }).notNull(),
   matchOp:      varchar('match_op', { length: 16 }).notNull().default('equals'),
   matchValue:   varchar('match_value', { length: 255 }).notNull(),
-  projectId:    integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:    bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   priority:     integer('priority').notNull().default(100),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
@@ -3446,7 +3452,7 @@ export const errorMappingRules = pgTable('error_mapping_rules', {
 export const errorGroups = pgTable('error_groups', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   collectorId:    uuid('collector_id').references(() => errorCollectors.id, { onDelete: 'set null' }),
   fingerprint:    varchar('fingerprint', { length: 128 }).notNull(),
   title:          varchar('title', { length: 500 }).notNull(),
@@ -3501,7 +3507,7 @@ export const alerts = pgTable('alerts', {
   threshold:       real('threshold').notNull().default(0),
   windowDays:      integer('window_days').notNull().default(7),
   scopeKind:       varchar('scope_kind', { length: 16 }).notNull().default('tenant'), // tenant | project | team
-  projectId:       integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:       bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   teamId:          integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
   notifySlack:     boolean('notify_slack').notNull().default(true),
   notifyEmail:     boolean('notify_email').notNull().default(true),
@@ -3740,7 +3746,7 @@ export const bottleneckAnalysis = pgTable('bottleneck_analysis', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
   /** The project measured (migration 1160 — was a `project_ref` string); null = workspace-wide. */
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   stage:       varchar('stage', { length: 64 }).notNull(),
   periodStart: timestamp('period_start').notNull(),
   periodEnd:   timestamp('period_end').notNull(),
@@ -3904,7 +3910,7 @@ export const tenantWorkingCalendars = pgTable('tenant_working_calendars', {
 export const taskPlanVerdicts = pgTable('task_plan_verdicts', {
   id:        uuid('id').primaryKey().defaultRandom(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** The PARENT whose plan this is (an Epic). */
   taskId:    integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   /** Estimates were scaled down to fit the parent's window. */

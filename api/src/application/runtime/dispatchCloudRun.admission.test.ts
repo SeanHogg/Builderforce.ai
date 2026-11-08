@@ -24,7 +24,7 @@ vi.mock('./cloudAgentEngine', () => ({
 }));
 vi.mock('./cloudAgent/prd', () => ({ ensureTaskPrd: (...a: unknown[]) => ensureTaskPrd(...a) }));
 vi.mock('../tenant/featureEntitlements', () => ({ tenantHasFeature: async () => false }));
-vi.mock('../repos/resolveDefaultRepo', () => ({ resolveDefaultRepoForTask: async () => null }));
+vi.mock('../repos/resolveDefaultRepo', () => ({ resolveDefaultRepoForTask: async () => null, resolveDefaultRepoForProject: async () => null }));
 vi.mock('../artifact/resolveArtifacts', () => ({ resolveArtifacts: async () => undefined }));
 vi.mock('./executionEvents', () => ({ notifyExecutionSubscribers: () => undefined }));
 vi.mock('./defaultCloudAgent', () => ({ resolveDefaultCloudAgentRef: async () => ({ ref: null, reason: 'none' }), UNATTRIBUTED_RUN_MESSAGE: { none: 'x' } }));

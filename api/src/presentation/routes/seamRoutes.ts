@@ -25,10 +25,15 @@ import {
   listSegmentWebhookSubscriptions,
 } from '../../application/publicApi/publicWebhookSubscriptionService';
 import { parseOptionalBody, z } from './requestBody';
-import { and, eq } from 'drizzle-orm';
-import { segments } from '../../infrastructure/database/schema';
-import { invalidateSegment } from '../../infrastructure/auth/segmentResolver';
-import { cascadeSegmentDelete, collectSegmentTelemetryKeys } from '../../application/shared/siblingCascade';
+import {
+  eraseSegment,
+  findSegmentByExternalIds,
+  isSegmentStatus,
+  provisionSegment,
+  SEGMENT_STATUSES,
+  updateSegment,
+  type SegmentPatch,
+} from '../../application/tenant/segmentLifecycle';
 
 /**
  * Host (third-party) payloads: loose, only the fields read, each as optional as the
@@ -152,7 +157,6 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
   //    erases an end-client Segment server-to-server. Same lifecycle rules as
   //    /api/segments, but behind the `segments:manage` scope so a host key that
   //    may provision segments cannot also ingest feedback (and vice versa).
-  const SEGMENT_STATUSES = ['active', 'suspended', 'archived'] as const;
 
   // Eager provisioning: pre-warm a Segment (default board/deck seeding is a
   // deployment concern; the row + plan is what BuilderForce owns here).
@@ -180,30 +184,16 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
 
     // Eager provisioning is idempotent on the (tenant, account, company) unique
     // key — a host that re-POSTs on every company-enable converges to one row.
-    const [existing] = await db
-      .select()
-      .from(segments)
-      .where(and(
-        eq(segments.tenantId, svc.tenantId),
-        eq(segments.externalAccountId, accountId),
-        eq(segments.externalCompanyId, companyId),
-      ))
-      .limit(1);
+    const existing = await findSegmentByExternalIds(db, svc.tenantId, accountId, companyId);
     if (existing) return c.json(existing, 200);
 
-    const displayName = body.displayName?.trim() || companyId;
-    const [seg] = await db
-      .insert(segments)
-      .values({
-        tenantId: svc.tenantId,
-        externalAccountId: accountId,
-        externalCompanyId: companyId,
-        displayName,
-        slug: `${accountId}-${companyId}`.slice(0, 255),
-        plan: body.plan ?? 'free',
-        isDefault: false,
-      })
-      .returning();
+    const seg = await provisionSegment(db, svc.tenantId, {
+      externalAccountId: accountId,
+      externalCompanyId: companyId,
+      displayName: body.displayName?.trim() || companyId,
+      slug: `${accountId}-${companyId}`.slice(0, 255),
+      plan: body.plan ?? 'free',
+    });
     return c.json(seg, 201);
   });
 
@@ -224,24 +214,19 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
       displayName: z.string().nullish(),
     }));
 
-    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    const patch: SegmentPatch = {};
     if (body.plan !== null && body.plan !== undefined) patch.plan = body.plan;
     if (body.status !== null && body.status !== undefined) {
-      if (!(SEGMENT_STATUSES as readonly string[]).includes(body.status)) {
+      if (!isSegmentStatus(body.status)) {
         return c.json({ error: `status must be one of ${SEGMENT_STATUSES.join(', ')}` }, 400);
       }
       patch.status = body.status;
     }
     if (body.displayName?.trim()) patch.displayName = body.displayName.trim();
-    if (Object.keys(patch).length === 1) return c.json({ error: 'nothing to update' }, 400);
+    if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
 
-    const [updated] = await db
-      .update(segments)
-      .set(patch)
-      .where(and(eq(segments.id, c.req.param('id')), eq(segments.tenantId, svc.tenantId), eq(segments.isDefault, false)))
-      .returning();
+    const updated = await updateSegment(db, c.env, svc.tenantId, c.req.param('id'), patch);
     if (!updated) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
-    await invalidateSegment(updated.id, c.env);
     return c.json(updated);
   });
 
@@ -258,16 +243,9 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const id = c.req.param('id');
-    const telemetryKeys = await collectSegmentTelemetryKeys(db, svc.tenantId, id);
-    const [deleted] = await db
-      .delete(segments)
-      .where(and(eq(segments.id, id), eq(segments.tenantId, svc.tenantId), eq(segments.isDefault, false)))
-      .returning({ id: segments.id });
-    if (!deleted) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
-    await cascadeSegmentDelete(db, telemetryKeys);
-    await invalidateSegment(deleted.id, c.env);
-    return c.json({ ok: true, id: deleted.id });
+    const erased = await eraseSegment(db, c.env, svc.tenantId, c.req.param('id'));
+    if (!erased) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    return c.json({ ok: true, id: erased });
   });
 
   return router;

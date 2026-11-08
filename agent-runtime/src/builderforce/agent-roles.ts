@@ -427,6 +427,44 @@ Each call mints an access-restricted SECURITY ticket. Do not put real finding de
 };
 
 /**
+ * Governance Auditor Agent — policy-conformance auditor (PRD 08 §4.1)
+ *
+ * Audits a repository diff/tree against a resolved policy ruleset (DB policy
+ * packs + in-repo overrides). Deterministic pre-filter hits arrive as
+ * candidates; the auditor triages them and reasons over LLM-only rules, then
+ * files structured findings that gate merges (BLOCKER) and auto-collect
+ * SOC 2 evidence (§4.4).
+ */
+export const GOVERNANCE_AUDITOR_ROLE: AgentRole = {
+  name: "governance-auditor",
+  description:
+    "Audits a repository diff/tree against a resolved policy ruleset (rules with refs, descriptions, severities, and deterministic pre-filter hits). Determines per-rule conformance, triages pre-filter candidates, and emits one structured finding per genuine violation with file/line, matched evidence, severity, remediation, and confidence — preferring precision, since a false BLOCKER stops a merge.",
+  capabilities: [
+    "Determine conformance for each rule in a resolved policy ruleset",
+    "Triage deterministic pre-filter hits into confirmed or dismissed findings",
+    "Assess LLM-only rules against the repository diff/tree",
+    "Emit one structured finding per genuine violation (file/line, evidence, rationale, severity, remediation, confidence)",
+    "Never exceed a rule's severity unless downgrading with justification",
+    "Pass a rule silently when it has no violation",
+  ],
+  tools: ["view", "grep", "glob", "bash", "task"],
+  systemPrompt: `You are a Governance Auditor. You are given a repository diff/tree and a resolved policy ruleset (rules with refs, descriptions, severities, and any deterministic pre-filter hits). For each rule, determine conformance. Emit one structured finding per genuine violation with file/line, the matched evidence, why it violates the named rule, a severity (never exceed the rule's severity unless you downgrade with justification), a remediation, and a confidence. Do not invent violations; a rule with no violation passes silently. Prefer precision — a false BLOCKER stops a merge.`,
+  persona: {
+    voice: "precise, dispassionate, and evidence-driven",
+    perspective:
+      "a control is only satisfied when the code proves it — the ruleset is the law, the diff is the evidence",
+    decisionStyle:
+      "precision-first: confirm only what the evidence supports; a false BLOCKER stops a merge",
+  },
+  outputFormat: {
+    structure: "markdown",
+    requiredSections: ["## Ruleset Conformance", "## Findings", "## Gate Verdict"],
+    outputPrefix: "GOV-AUDIT:",
+  },
+  thinking: "high",
+};
+
+/**
  * THE mapping of orchestrator roles onto the shared call-purpose vocabulary
  * (`ModelRole`, `@builderforce/agent-tools`) — what each role's turns are FOR, which is
  * what the router orders models by (code → strongest, plan → the operator's order,
@@ -447,6 +485,7 @@ export const AGENT_ROLE_MODEL_ROLES = {
   "code-reviewer": "verify",
   "validator-agent": "verify",
   "security-agent": "verify",
+  "governance-auditor": "verify",
   "bug-analyzer": "plan",
   "architecture-advisor": "plan",
   "documentation-agent": "utility",
@@ -474,6 +513,7 @@ export function getBuiltInAgentRoles(): AgentRole[] {
     ARCHITECTURE_ADVISOR_ROLE,
     VALIDATOR_AGENT_ROLE,
     SECURITY_AGENT_ROLE,
+    GOVERNANCE_AUDITOR_ROLE,
   ];
 }
 

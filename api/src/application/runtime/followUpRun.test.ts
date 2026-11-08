@@ -27,7 +27,7 @@ vi.mock('./executionApprovalGate', () => ({ evaluateExecutionApprovalGate: (...a
 vi.mock('./dispatchCloudRun', () => ({ startDispatchedExecution: (...a: unknown[]) => startDispatchedExecution(...(a as [])) }));
 vi.mock('./executionSteering', () => ({ enqueueExecutionMessage: (...a: unknown[]) => enqueueExecutionMessage(...(a as [])) }));
 vi.mock('./cloudAgent/prd', () => ({ recordPrdDirective: (...a: unknown[]) => recordPrdDirective(...(a as [])) }));
-vi.mock('../swimlane/evaluateAutoRun', () => ({ AUTO_RUN_REASON_TEXT: { cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance.' } }));
+vi.mock('../swimlane/evaluateAutoRun', async (importOriginal) => ({ ...(await importOriginal<typeof import('../swimlane/evaluateAutoRun')>()), AUTO_RUN_REASON_TEXT: { cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance.' } }));
 vi.mock('./cloudDispatch', () => ({
   buildFollowUpPayload: (prior: string | null, f: { directive: string; priorExecutionId: number }) =>
     JSON.stringify({ ...(prior ? JSON.parse(prior) as object : {}), followUp: f }),

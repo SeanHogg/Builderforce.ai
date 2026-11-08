@@ -45,6 +45,14 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (2026-11-08, server-safe markdown) — `lib/markdownRender.ts` (~110 lines). Not new
+ *     first-paint work: `components/DocumentMarkdown.tsx` (already here, via LegalDocPreview)
+ *     used to import `react-markdown`, a package leaf this guard does not count. That package
+ *     imports `useState`/`useEffect` at module top level, so it cannot sit in a React Server
+ *     Component graph and broke `next build` for the server-rendered tenant site
+ *     (`/w/[owner]`). `markdownRender.ts` is the hook-free sync path of that same package
+ *     (same unified chain, same deps, same URL hardening) — the edge swapped a leaf for a
+ *     src module of the same weight, it did not add one.
  *   +3 files (2026-11-07, PRD 42 on-device translation / client-first) — each is a thin
  *     shell whose heavy deps are all behind `import()`:
  *     `components/translation/WebTranslationProvider.tsx` (~50 lines) wraps the shell in

@@ -1,5 +1,5 @@
-import type { Components } from 'react-markdown';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
+import type { MarkdownComponents as Components } from '@/lib/markdownRender';
 import type { PublicWebsitePage } from '@/lib/publicApi';
 
 /** Links in tenant-authored Markdown are untrusted: no SEO endorsement, no opener access. */

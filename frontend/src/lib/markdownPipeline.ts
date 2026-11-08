@@ -12,7 +12,7 @@ import { remarkRichFormat } from './markdownRichFormat';
  * from the consumer also guarantees the lists stay exactly what
  * `<ReactMarkdown>` accepts, whatever version of `unified` it resolves.
  */
-type PluggableList = NonNullable<Options['remarkPlugins']>;
+export type PluggableList = NonNullable<Options['remarkPlugins']>;
 
 /**
  * The ONE markdown pipeline. Every `<ReactMarkdown>` on the platform spreads

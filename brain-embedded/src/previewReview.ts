@@ -41,8 +41,10 @@ const REVIEW_RECORD_TOOL = 'builtin_reviews_record';
 export function previewReviewDirective(chatId: number | null, tickets: TicketToolVocabulary = SERVER_TICKET_TOOLS): string {
   // The Studio's chats are server chats; an unbound one (PRD 36) names its ticket directly.
   const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : 'the ticket you recorded the change against';
-  // A ticket filed with the editor's `ticket-create` is linked to its chat by the create itself.
-  const linkFirst = chatId != null && tickets.needsLinkStep ? ` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : '';
+  // The reviewed ticket may be an EXISTING one this chat never linked (a ticket it creates
+  // links itself). The editor's local tickets link through their own tools, so only the
+  // account vocabulary is told to link it.
+  const linkFirst = chatId != null && !tickets.local ?` If the ticket you reviewed is not linked yet, link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}) first.` : '';
   return (
     'REVIEW YOUR OWN CHANGE — in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute — even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:\n' +
     '1. VERIFY — `canvas_read_build_diagnostics` must show no current failures. Then call `canvas_inspect_preview` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card\'s height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (`occludedBy`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.\n' +

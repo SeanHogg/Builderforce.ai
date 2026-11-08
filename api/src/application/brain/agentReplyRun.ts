@@ -31,6 +31,7 @@ import { applyVerifyPhase, describeVerifyOutcome, runVerifyPhase } from '@builde
 import { commitRunMemory, recordRunVerifyEvents } from '../runtime/cloudAgent/runEndMemory';
 import { toGatewayMessage } from '../runtime/cloudAdapterModel';
 import { completeTraced, type BrainCallContext } from './brainLlmCall';
+import { withHostChat } from './createdWorkItemChatLink';
 import type { AgentReplyToolset } from './agentReplyPrompt';
 import { readByoFunded, readModel, readVendor, type ReplyTurnState } from './agentReplyState';
 
@@ -143,7 +144,8 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
       }
       try {
         const out = await callBuiltinTool(db, {
-          tenantId, tool: toolIdOf(name), arguments: args, env,
+          // A work item this reply creates links to the chat it is replying in — stamped by the host, never guessed by the model.
+          tenantId, tool: toolIdOf(name), arguments: withHostChat(toolIdOf(name), args, input.chatId), env,
           userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
           // The reply IS this agent acting: the ref is what lets a tool act "as me" and credits a replayed write to the agent.
           agentRef,

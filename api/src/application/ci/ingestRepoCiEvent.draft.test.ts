@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock('../validation/validationDispatch', () => ({ triggerFastValidatorReview: async () => null }));
 vi.mock('../security/prSecurityGate', async (orig) => ({ ...(await orig<Record<string, unknown>>()), resolvePullRequestHead: h.head }));
-vi.mock('../repos/resolveDefaultRepo', () => ({ resolveDefaultRepoForTask: h.repo }));
+vi.mock('../repos/resolveDefaultRepo', () => ({ resolveDefaultRepoForTask: h.repo, resolveDefaultRepoForProject: async () => null }));
 vi.mock('../runtime/liveExecutionStatus', async (orig) => ({ ...(await orig<Record<string, unknown>>()), taskHasLiveRun: h.live }));
 vi.mock('../runtime/cloudToolEvents', () => ({ recordCloudToolEvent: h.toolEvent }));
 
@@ -63,7 +63,8 @@ describe('ingestRepoCiEvent - a draft PR is not a merge candidate', () => {
 
   it('regression: MAJOR 3 - a live run\'s draft AT the green sha plus a newer non-draft row on the task does not merge: only the non-draft is judged, and it is not at that commit', async () => {
     h.head.mockImplementation(async (...a: unknown[]) => ({ ok: true as const, sha: a[3] === 'draft-id' ? 'sha1' : 'newer-sha' }));
-    const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow('draft', 'draft-id'), prRow('open', 'newer-id'))), mergingEnv, 'secret', green);
+    // Newest first: the fake ignores ORDER BY, and `findOpenPullRequestByTask` takes the newest row (the open one).
+    const res = await ingestRepoCiEvent(makeFakeDb(rows(prRow('open', 'newer-id'), prRow('draft', 'draft-id'))), mergingEnv, 'secret', green);
     expect(res.merged).toBe(false);
     expect(h.head.mock.calls.map((c) => c[3])).toEqual(['newer-id']); // the draft was never even resolved
     expect(h.repo).not.toHaveBeenCalled();

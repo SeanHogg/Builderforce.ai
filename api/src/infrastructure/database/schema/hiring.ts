@@ -27,6 +27,7 @@
 
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -68,7 +69,7 @@ import { objects } from './kernel';
 export const jobPostings = pgTable('job_postings', {
   id:               varchar('id', { length: 36 }).primaryKey(),
   tenantId:         integer('tenant_id').notNull(),
-  projectId:        integer('project_id'),
+  projectId:        bigint('project_id', { mode: 'number' }),
   title:            varchar('title', { length: 200 }).notNull(),
   description:      text('description'),
   discipline:       varchar('discipline', { length: 60 }),

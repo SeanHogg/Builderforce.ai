@@ -2,12 +2,19 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   bindWorkForSync,
+  chatTicketLinkId,
   createMemoryLocalFirstStore,
+  createPlatformPolicy,
+  createSyncCoordinator,
   importKey,
   newLocalRecord,
   queueImport,
   UNBOUND_DESTINATION,
+  type EntityDestination,
+  type LocalFirstStore,
+  type SyncPushBatch,
 } from "@builderforce/local-first";
+import { readRailFromFacts } from "./chatRail/buildRail";
 import { createLocalWorkRepository } from "./localWorkRepository";
 import { creationDestination, isSignedInTenantLure, LocalWorkRepositoryError } from "./localWorkShared";
 
@@ -344,6 +351,211 @@ describe("localWorkRepository", () => {
       const [event] = await pendingFor(store, child.id);
       expect(event?.dependsOn).toEqual([]);
       expect(ticket.id).not.toBe(child.id);
+    });
+  });
+
+  describe("a ticket created in a local chat is linked locally, in the same commit", () => {
+    const boundTo = { kind: "bound", accountId: "acct-1", tenantId: "tenant-a" } as const;
+    const CHAT = "33333333-3333-4333-8333-333333333333";
+
+    /** A chat row the way the chat store writes it; bound chats get their import queued. */
+    async function putChat(store: LocalFirstStore, destination: EntityDestination): Promise<void> {
+      await store.transact(async (tx) => {
+        const chat = newLocalRecord<unknown>({
+          id: CHAT, entityType: "chat", payload: { clientId: CHAT, chat: { id: 4, title: "Planning" } },
+          deviceId: "device-1", destination, occurredAt: "2026-11-07T00:00:00.000Z",
+        });
+        await tx.put(chat);
+        if (destination.kind === "bound") await queueImport(tx, chat);
+      });
+    }
+
+    /** Push everything pending, ONE event per push, so the order of the pushes is the dependency order. */
+    async function pushAll(store: LocalFirstStore, destination: EntityDestination): Promise<SyncPushBatch["events"]> {
+      const pushed: SyncPushBatch["events"] = [];
+      const policy = createPlatformPolicy();
+      policy.set({ synchronize: true });
+      const coordinator = createSyncCoordinator({
+        store,
+        policy,
+        deviceId: "device-1",
+        maxEvents: 1,
+        lease: { run: (_owner, work) => work() },
+        transport: {
+          async push(batch) {
+            pushed.push(...batch.events);
+            return batch.events.map((event) => ({ eventId: event.eventId, status: "accepted" as const, receivedAt: "2026-11-08T00:00:00.000Z" }));
+          },
+          async pull() {
+            return { records: [] };
+          },
+        },
+      });
+      for (let pass = 0; pass < 10; pass += 1) {
+        const before = pushed.length;
+        await coordinator.synchronize(destination);
+        if (pushed.length === before) break;
+      }
+      return pushed;
+    }
+
+    it("regression: a ticket-create in a live local chat writes its 'created' chat-ticket-link in the ticket's transaction", async () => {
+      const { store, repo } = harness();
+      await putChat(store, UNBOUND_DESTINATION);
+      const project = await repo.createProject({ name: "Board" });
+      const ticket = await repo.createTicket({ projectId: project.id, title: "From the chat", chatClientId: CHAT });
+
+      const records = (await store.export()).records;
+      const link = records.find((row) => row.entityType === "chat-ticket-link");
+      expect(link?.id).toBe(chatTicketLinkId(CHAT, ticket.id));
+      expect(link?.payload).toMatchObject({ chatClientId: CHAT, ticketClientId: ticket.id, linkType: "created" });
+      expect(link?.provenance).toMatchObject({ deviceId: "device-1", source: "local" });
+      expect(ticket.payload.chatClientId).toBe(CHAT);
+
+      // ONE commit: when the link write fails, the ticket is not kept either.
+      const refuseLinkPut = <T extends object>(tx: T): T => new Proxy(tx, {
+        get(target, key) {
+          const value = Reflect.get(target, key) as unknown;
+          if (key !== "put" || typeof value !== "function") return typeof value === "function" ? value.bind(target) : value;
+          return async (record: { entityType: string }, ...rest: unknown[]) => {
+            if (record.entityType === "chat-ticket-link") throw new Error("link write failed");
+            return value.call(target, record, ...rest);
+          };
+        },
+      });
+      const failing = new Proxy(store, {
+        get(target, key) {
+          if (key === "transact") return ((work) => store.transact((tx) => work(refuseLinkPut(tx)))) as LocalFirstStore["transact"];
+          const value = Reflect.get(target, key) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const failingRepo = createLocalWorkRepository({ store: failing, deviceId: "device-1", newId: () => "44444444-4444-4444-8444-444444444444" });
+      await expect(failingRepo.createTicket({ projectId: project.id, title: "Torn", chatClientId: CHAT })).rejects.toThrow(/link write failed/);
+      const after = (await store.export()).records;
+      expect(after.some((row) => row.id === "44444444-4444-4444-8444-444444444444")).toBe(false);
+      expect(after.filter((row) => row.entityType === "chat-ticket-link")).toHaveLength(1);
+    });
+
+    it("regression: a chatClientId naming no local chat creates the ticket, no link, and keeps chatClientId for the server", async () => {
+      const { store, repo } = harness();
+      const project = await repo.createProject({ name: "Board" });
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Server chat", chatClientId: CHAT });
+      expect(ticket.payload.chatClientId).toBe(CHAT);
+      const records = (await store.export()).records;
+      expect(records.some((row) => row.entityType === "ticket" && row.id === ticket.id)).toBe(true);
+      expect(records.some((row) => row.entityType === "chat-ticket-link")).toBe(false);
+    });
+
+    it("regression: a tombstoned local chat gets no link", async () => {
+      const { store, repo } = harness();
+      await putChat(store, UNBOUND_DESTINATION);
+      await store.transact(async (tx) => {
+        const chat = await tx.get("chat", CHAT);
+        await tx.put({ ...chat!, version: chat!.version + 1, deletedAt: "2026-11-07T01:00:00.000Z" }, chat!.version);
+      });
+      const project = await repo.createProject({ name: "Board" });
+      await repo.createTicket({ projectId: project.id, title: "Deleted chat", chatClientId: CHAT });
+      expect((await store.export()).records.some((row) => row.entityType === "chat-ticket-link")).toBe(false);
+    });
+
+    it("regression: the chat rail lists the new ticket as linked before any sync", async () => {
+      const { store, repo } = harness();
+      await putChat(store, UNBOUND_DESTINATION);
+      const project = await repo.createProject({ name: "Board" });
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Shows at once", chatClientId: CHAT });
+      const rail = readRailFromFacts(await store.export(), CHAT);
+      expect(rail.found).toBe(true);
+      expect(rail.tickets.map((row) => ({ clientId: row.clientId, linkType: row.linkType, label: row.label }))).toEqual([
+        { clientId: ticket.id, linkType: "created", label: "Shows at once" },
+      ]);
+      expect(rail.links).toEqual([expect.objectContaining({ clientId: chatTicketLinkId(CHAT, ticket.id), ticketClientId: ticket.id })]);
+    });
+
+    it("regression: BOUND — the link is pushed after the ticket's plain create and the chat's import", async () => {
+      const { store, repo } = harness();
+      const project = await repo.createProject({ name: "Board" });
+      await bindWorkForSync(store, "device-1", boundTo);
+      await putChat(store, boundTo);
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Bound", chatClientId: CHAT });
+      const linkId = chatTicketLinkId(CHAT, ticket.id);
+
+      const pending = await store.read((tx) => tx.pending());
+      // The ticket journals a plain CREATE, not an import; the link waits on `ticket:<id>:import`.
+      expect(pending.find((event) => event.clientEntityId === ticket.id)).toMatchObject({
+        operation: "create",
+        idempotencyKey: `ticket:${ticket.id}:v1`,
+      });
+      expect(pending.find((event) => event.clientEntityId === linkId)).toMatchObject({
+        operation: "import",
+        dependsOn: [importKey("chat", CHAT), importKey("ticket", ticket.id)],
+      });
+
+      const pushed = await pushAll(store, boundTo);
+      const order = pushed.map((event) => event.clientEntityId);
+      expect(order).toHaveLength(4);
+      expect(order.indexOf(linkId)).toBeGreaterThan(order.indexOf(ticket.id));
+      expect(order.indexOf(linkId)).toBeGreaterThan(order.indexOf(CHAT));
+    });
+
+    it("regression: BOUND — on the wire the link depends on the ticket's create and the chat's import event ids", async () => {
+      const { store, repo } = harness();
+      const project = await repo.createProject({ name: "Board" });
+      await bindWorkForSync(store, "device-1", boundTo);
+      await putChat(store, boundTo);
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Bound", chatClientId: CHAT });
+      const linkId = chatTicketLinkId(CHAT, ticket.id);
+      const pending = await store.read((tx) => tx.pending());
+      const ticketCreate = pending.find((event) => event.clientEntityId === ticket.id)!;
+      const chatImport = pending.find((event) => event.clientEntityId === CHAT)!;
+
+      // One batch holding all four: the wire form of the link names both parents' real event ids
+      // (the `ticket:<id>:import` key resolves to the ticket's plain create), so the server
+      // applies the link after them even within a batch.
+      const wire: SyncPushBatch["events"] = [];
+      const policy = createPlatformPolicy();
+      policy.set({ synchronize: true });
+      await createSyncCoordinator({
+        store, policy, deviceId: "device-1",
+        lease: { run: (_owner, work) => work() },
+        transport: {
+          async push(batch) {
+            wire.push(...batch.events);
+            return batch.events.map((event) => ({ eventId: event.eventId, status: "accepted" as const, receivedAt: "2026-11-08T00:00:00.000Z" }));
+          },
+          async pull() {
+            return { records: [] };
+          },
+        },
+      }).synchronize(boundTo);
+      const link = wire.find((event) => event.clientEntityId === linkId);
+      expect(link?.dependsOn).toEqual(expect.arrayContaining([ticketCreate.eventId, chatImport.eventId]));
+      expect(wire.findIndex((event) => event.clientEntityId === linkId)).toBeGreaterThan(wire.findIndex((event) => event.clientEntityId === ticket.id));
+    });
+
+    it("regression: UNBOUND — after the bind pass the link's import is pushed after the ticket's and the chat's imports", async () => {
+      const { store, repo } = harness();
+      await putChat(store, UNBOUND_DESTINATION);
+      const project = await repo.createProject({ name: "Board" });
+      const ticket = await repo.createTicket({ projectId: project.id, title: "Offline", chatClientId: CHAT });
+      const linkId = chatTicketLinkId(CHAT, ticket.id);
+      expect((await store.read((tx) => tx.get("chat-ticket-link", linkId)))?.destination).toEqual(UNBOUND_DESTINATION);
+
+      // The bind: the chat history pass (`bindChatHistoryForSync`) re-imports the chat, then the work pass.
+      await store.transact(async (tx) => {
+        const chat = await tx.get("chat", CHAT);
+        const moved = { ...chat!, destination: boundTo };
+        await tx.put(moved);
+        await queueImport(tx, moved);
+      });
+      await bindWorkForSync(store, "device-1", boundTo);
+
+      const pushed = await pushAll(store, boundTo);
+      const order = pushed.map((event) => event.clientEntityId);
+      expect(order).toContain(linkId);
+      expect(order.indexOf(linkId)).toBeGreaterThan(order.indexOf(ticket.id));
+      expect(order.indexOf(linkId)).toBeGreaterThan(order.indexOf(CHAT));
+      expect(pushed.find((event) => event.clientEntityId === linkId)?.operation).toBe("import");
     });
   });
 });

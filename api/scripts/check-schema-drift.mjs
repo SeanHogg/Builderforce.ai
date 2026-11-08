@@ -101,6 +101,18 @@ function splitTopLevel(sqlBlock) {
   return parts;
 }
 
+/**
+ * True when a CREATE TABLE clause is a table constraint rather than a column. `check` and `unique`
+ * are also legal column names (`governance_rules.check JSONB`, mig 1336): as constraints they are
+ * followed by `(` (or `NULLS [NOT] DISTINCT (` for UNIQUE); as a column, by its type.
+ */
+function isTableConstraint(keyword, rest) {
+  if (['primary', 'constraint', 'foreign', 'exclude'].includes(keyword)) return true;
+  if (keyword === 'check') return /^\s*\(/.test(rest);
+  if (keyword === 'unique') return /^\s*(\(|nulls\b)/i.test(rest);
+  return false;
+}
+
 function recordColumns(table, sqlBlock) {
   if (!migratedColumns.has(table)) migratedColumns.set(table, new Set());
   const cols = migratedColumns.get(table);
@@ -110,7 +122,7 @@ function recordColumns(table, sqlBlock) {
   for (let part of splitTopLevel(sqlBlock)) {
     part = part.trim().replace(/^ADD COLUMN(?:\s+IF NOT EXISTS)?\s+/i, '');
     const m = part.match(/^([a-z_][a-z_0-9]*)/i);
-    if (m && !['primary', 'unique', 'constraint', 'foreign', 'check', 'exclude'].includes(m[1].toLowerCase())) {
+    if (m && !isTableConstraint(m[1].toLowerCase(), part.slice(m[1].length))) {
       cols.add(m[1].toLowerCase());
     }
   }

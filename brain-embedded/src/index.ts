@@ -576,13 +576,15 @@ export {
   chatWorkLinkingDirective,
   isTicketRecordingTool,
   codeChangeFile,
-  workItemLinkFromCreate,
+  stampRunChat,
+  createLinkedToChat,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,
   TICKET_RECORDING_TOOLS,
+  CHAT_STAMPED_CREATE_TOOLS,
   NOT_STARTED_TASK_STATUSES,
 } from './chatWorkLinking';
-export type { CreatedWorkItemLink, LinkedTicketToAdvance } from './chatWorkLinking';
+export type { LinkedTicketToAdvance } from './chatWorkLinking';
 
 // The LOCAL WORKSPACE TOOLSET — what a surface can do because it sits beside the
 // user's files. Owns both "can this run change code" and the always-advertise list

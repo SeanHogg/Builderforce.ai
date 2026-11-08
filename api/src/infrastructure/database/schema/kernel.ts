@@ -182,7 +182,7 @@ export const activityLog = pgTable('activity_log', {
    *  filter on tenantId, so a global row is simply invisible to any one tenant. */
   tenantId:     integer('tenant_id'),
   segmentId:    uuid('segment_id'),
-  projectId:    integer('project_id'),
+  projectId:    bigint('project_id', { mode: 'number' }),
   /** human | hire | cloud_agent | host_agent | system */
   actorType:    varchar('actor_type', { length: 16 }).notNull(),
   /** Id into the per-type table (users.id / ide_agents.id / agent_hosts.id); null for system. */

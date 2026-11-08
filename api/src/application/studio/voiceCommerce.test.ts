@@ -42,7 +42,8 @@ function fakeDb(clone: Record<string, unknown> | undefined, license: Record<stri
   };
 }
 
-const env = { STRIPE_SECRET_KEY: 'sk', CORS_ORIGINS: 'https://app.test' } as never;
+// APP_URL is the web origin a checkout returns to when no returnUrl is named (trustedReturnUrl).
+const env = { STRIPE_SECRET_KEY: 'sk', CORS_ORIGINS: 'https://app.test', APP_URL: 'https://app.test' } as never;
 
 beforeEach(() => { createSession.mockReset(); verifyPaid.mockReset(); split.mockReset(); });
 

@@ -1299,6 +1299,29 @@ export function createSecurityAuditWorkflow(target: string): WorkflowStep[] {
 }
 
 /**
+ * Governance Audit Workflow
+ *
+ * The policy-aware sibling of {@link createSecurityAuditWorkflow} (PRD 08 §4.3).
+ * Three phases:
+ *   1. resolve-ruleset (deterministic) — resolve the effective DB + in-repo policy
+ *      ruleset (hashed) via the governance_audit tool's rules/resolve step
+ *   2. governance-auditor assess — triage deterministic pre-filter hits + assess
+ *      LLM-only rules against the repo/diff (useCase: gov.policy_audit)
+ *   3. code-reviewer verify gate — verify the findings (evidence, no false
+ *      BLOCKERs) and sign off; a BLOCKER finding gates auto-merge
+ */
+export function createGovernanceAuditWorkflow(repoRef: string): WorkflowStep[] {
+  const resolve = `Resolve the effective governance policy ruleset for: ${repoRef}. Call the governance_audit tool with dryRun to run the deterministic pre-filters (regex/secret/path/dependency/glob matchers) and enumerate the resolved rules with their refs, descriptions, severities, and pre-filter candidate hits. Do not file findings yet.`;
+  const assess = `Assess policy conformance for: ${repoRef} using the resolved ruleset and pre-filter hits from the previous step. Run the governance-auditor assessment (useCase: gov.policy_audit): confirm or dismiss each pre-filter candidate with file/line evidence, and determine conformance for each LLM-only rule. Emit one structured finding per genuine violation — never exceed the rule's severity, never invent violations; a rule with no violation passes silently.`;
+  const gate = `Verify-gate the governance audit findings for: ${repoRef}. Check each BLOCKER/critical finding against the actual code (real file/line, real evidence, not a false positive — a false BLOCKER stops a merge), confirm severity caps were respected, and produce the gate verdict (pass/blocked) with a residual-risk summary.`;
+  return [
+    { role: "architecture-advisor", task: resolve },
+    { role: "governance-auditor", task: assess, dependsOn: [resolve] },
+    { role: "code-reviewer", task: gate, dependsOn: [assess] },
+  ];
+}
+
+/**
  * Quality Audit Workflow
  *
  * Bug Analyzer assesses test coverage / CI / build integrity, Test Generator

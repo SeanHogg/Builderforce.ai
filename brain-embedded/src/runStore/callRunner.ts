@@ -2,7 +2,7 @@
  * The tool runner - run by the agent's platform tools (`run/brainPlatformTools.ts`):
  * runs one call on the host: refuses a call whose arguments
  * never parsed, records what it changed (opening the run's ticket on its first edit),
- * links what it created, and attaches the guards' advisories to the copy of the result
+ * notes a create the server linked to the chat, and attaches the guards' advisories to the copy of the result
  * the model reads (repeated failure, placeholders, an unshipped completion, circling).
  */
 
@@ -10,7 +10,7 @@ import { malformedCallOutcome, malformedCallLabel, type LoopPorts, type ParsedTo
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { isFailedToolResult } from '../brainTriage';
 import { withObservedModel } from '../lastResolvedModel';
-import { isTicketRecordingTool } from '../chatWorkLinking';
+import { createLinkedToChat, isTicketRecordingTool } from '../chatWorkLinking';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { codeChangesOf, isDelegationTool } from '../codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from '../placeholderGuard';
@@ -22,7 +22,7 @@ import { revisitAdvisory, withAdvisory } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
 import { nowIso, nowMs, pushTrace, setActivity } from './runCells';
-import { autoLinkCreatedItem, recordCodeChangeTicket } from './runBackstops';
+import { recordCodeChangeTicket } from './runBackstops';
 import { earlyDelegationAdvisory } from './earlyDelegation';
 import { failureAdvisoryFor, isDedupableRead, type BrainRunContext } from './brainRunContext';
 
@@ -103,14 +103,11 @@ export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessag
         await recordCodeChangeTicket(run.serverChatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
       }
     }
-    if (isTicketRecordingTool(call.name)) c.ticketRecorded = true;
-    // Deterministic traceability: whenever this turn CREATED a work item via an
-    // MCP create tool (task/epic/gap, objective, spec, portfolio, initiative),
-    // tie it to THIS conversation right now — instead of relying on the model to
-    // remember the advisory builtin_chats_link_ticket call (which it often skips,
-    // leaving the item created but orphaned from the chat). Fires the same shared
-    // link tool the model would, tied to the run's resolved chatId.
-    await autoLinkCreatedItem(run.serverChatId, c, runTool, call.name, out);
+    // A server create the run stamped with its chat (`stampRunChat`, in the preflight)
+    // was linked to THIS conversation by the create call itself; its result's
+    // `chatLink` says so, and the create's own trace step carries it. A linked create
+    // is recorded work, so the from_delta backstop stays quiet.
+    if (isTicketRecordingTool(call.name) || createLinkedToChat(call.name, out)) c.ticketRecorded = true;
     // The MODEL transcript gets a size-capped copy so a big list result can't
     // flood the context window; the TRACE keeps the full result (bounded by
     // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte

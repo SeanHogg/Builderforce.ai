@@ -48,7 +48,11 @@ describe('handleCiEventOutcome', () => {
     expect(res.autoFixDispatched).toBe(true);
     await settle();
 
-    expect(dispatchRun).toHaveBeenCalledWith({ taskId: 7, tenantId: 3, payload: '{"remediation":{}}', submittedBy: 'system:autofix' });
+    expect(dispatchRun).toHaveBeenCalledWith({
+      taskId: 7, tenantId: 3, payload: '{"remediation":{}}', submittedBy: 'system:autofix',
+      // A refusal by admission is parked as a deferred dispatch carrying the same build facts.
+      parkIfDeferred: { kind: 'ci_autofix', meta: expect.objectContaining({ taskId: 7, attempt: 2, sha: 'abc', statusKey: 'PIPELINE', source: 'gitlab' }) },
+    });
     const ev = inserts.find((i) => i.toolName === AUTOFIX_DISPATCH_EVENT);
     expect(ev).toBeTruthy();
     expect(ev?.executionId).toBe(55);

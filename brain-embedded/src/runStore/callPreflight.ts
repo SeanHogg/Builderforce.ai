@@ -2,7 +2,8 @@
  * What decides, per tool call, whether the host's runner is reached - run by the agent's platform tools
  * (`run/brainPlatformTools.ts`). Everything that decides, per tool call, whether the
  * host's runner is reached at all and with what: the tool router, the conversational
- * `ask_user` / `hand_off` tools, the one-ticket-per-run attach, the human confirm gate,
+ * `ask_user` / `hand_off` tools, the one-ticket-per-run attach, the run's chat stamped
+ * onto a server create, the human confirm gate,
  * and the read de-duplication / covered-read / derived-search / repeated-write guards.
  */
 
@@ -23,8 +24,8 @@ import { requestedReadWindow, trimToolResult } from '../toolResultBudget';
 import { stillInWorkingContext } from '@seanhogg/builderforce-memory/working';
 import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
-import { isTicketRecordingTool } from '../chatWorkLinking';
-import { attachDeltaToRunTicket, autoLinkCreatedItem } from './runBackstops';
+import { createLinkedToChat, isTicketRecordingTool, stampRunChat } from '../chatWorkLinking';
+import { attachDeltaToRunTicket } from './runBackstops';
 import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
 export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
@@ -38,7 +39,7 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
     // are answered locally (no network, no host dispatch); `invoke` unwraps to the
     // real tool and then falls through to the normal path below — so a routed call
     // still passes the confirm gate, the read-dedupe, the audit step and the
-    // auto-link, exactly like a directly-advertised one.
+    // chat stamp, exactly like a directly-advertised one.
     let call = rawCall;
     // Common hallucinations (list_dir → list_files, …) remapped once here so every
     // host's runTool sees the catalog name — confirm, dedupe, activity and dispatch
@@ -108,7 +109,11 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
       reportToPolicy(run, { type: 'hand_off' });
       pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
       const outcome = await executeHandOff(plan, {
-        runTool: (name, args) => runTool!(name, args),
+        // A hand-off ticket links to this chat in its create call, stamped like a model's.
+        runTool: (name, args) => {
+          stampRunChat(name, args, run.serverChatId);
+          return runTool!(name, args);
+        },
         toolNames: new Set(catalogToolNames),
         // The research the coders inherit: what this planning run read and searched.
         knowledge: run.knowledge.brief(),
@@ -116,9 +121,9 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         request: run.goal,
         ...(req.projectId != null ? { projectId: req.projectId } : {}),
         afterCreate: async (toolName, out) => {
-          // A hand-off ticket filed with the editor's own create tool is recorded work too.
-          if (isTicketRecordingTool(toolName)) c.ticketRecorded = true;
-          await autoLinkCreatedItem(run.serverChatId, c, runTool!, toolName, out);
+          // A hand-off ticket filed with the editor's own create tool, or a server create
+          // linked to this chat in its own call, is recorded work too.
+          if (isTicketRecordingTool(toolName) || createLinkedToChat(toolName, out)) c.ticketRecorded = true;
         },
         step: (label, args, out, durationMs) => pushTrace(c, {
           ts: nowIso(), category: 'tool', label, durationMs, args, result: out ?? null, isError: isFailedToolResult(out),
@@ -151,6 +156,10 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
     // so the model's call is pointed at the ticket the run has: the deterministic
     // form of the advice the directive gives it in prose.
     attachDeltaToRunTicket(call.name, args, c.deltaTicketId);
+    // The chat a server create links its item to is the RUN's fact, never the model's:
+    // stamped here — before the confirm gate, the trace and the dispatch — so the server
+    // links the item to this conversation in the create call itself.
+    stampRunChat(call.name, args, run.serverChatId);
     // Human-in-the-loop gate: pause for an explicit confirm when the host's
     // predicate says so. The resolver lives on the cell, so whichever Brain
     // instance is mounted (even after a navigation swapped it) can answer.

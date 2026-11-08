@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
+import { TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 
 const getForViewer = vi.fn();
@@ -20,7 +21,7 @@ function app() {
     c.set('isEmulation', true);
     c.set('tenantId', 5);
     c.set('userId', 'user-1');
-    c.set('role', 'developer');
+    c.set('role', TenantRole.DEVELOPER);
     await next();
   });
   a.route('/', createKanbanRoutes({} as unknown as Db));
@@ -35,7 +36,7 @@ describe('GET /templates/:id', () => {
     const res = await app().request('/templates/t1');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ template: { id: 't1', lanes: [] } });
-    expect(getForViewer.mock.calls[0].slice(1)).toEqual([5, 't1', 'user-1']);
+    expect(getForViewer.mock.calls[0]?.slice(1)).toEqual([5, 't1', 'user-1']);
   });
 
   it('wraps a preview in { template } carrying the preview discriminator', async () => {

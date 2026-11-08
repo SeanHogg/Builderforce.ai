@@ -9,7 +9,9 @@
  * - Unlink is a TOMBSTONE (`deletedAt`), never a missing row, so a later pull cannot revive it.
  * - A link's sync event waits on BOTH the chat's and the ticket's imports (`importKey`s, the
  *   pattern `ticketWaitsOn` uses): the server resolves the link through both mappings, so it
- *   must not run before either parent has landed.
+ *   must not run before either parent has landed. An `importKey` names the ENTITY: at send time
+ *   it resolves to that parent's newest pending creating write, an `import` or a plain `create`
+ *   (`dependencyGraph.ts`), so a link written in the same transaction as its ticket follows it.
  * - Linking an existing live pair is a no-op; a 'created' link is never downgraded to 'linked'
  *   (the server's `upsertChatTicketLink` rule).
  * - The server ids of a chat / ticket the device only INGESTED ride the payload (`linkServerIds`),
@@ -109,58 +111,73 @@ function missing(code: string): never {
   throw Object.assign(new Error(code), { code });
 }
 
+function requireLinkIds(input: ChatTicketLinkInput): void {
+  if (!input.chatClientId.trim() || !input.ticketClientId.trim()) missing('chat_ticket_link_ids_required');
+}
+
 /** Link a chat to a ticket on this device. Returns the live link record. */
 export async function linkChatTicket(
   store: LocalFirstStore,
   input: LinkChatTicketInput,
 ): Promise<LocalRecord<ChatTicketLinkValue>> {
+  requireLinkIds(input);
+  return store.transact((tx) => linkChatTicketInTx(tx, input));
+}
+
+/**
+ * The ONE link writer, in the CALLER's transaction: a write that creates a ticket in a chat
+ * (the VSIX `createTicket`) links them in the same commit, so a crash never leaves the ticket
+ * without its link. Both the chat and the ticket must already be in `tx`.
+ */
+export async function linkChatTicketInTx(
+  tx: LocalFirstTransaction,
+  input: LinkChatTicketInput,
+): Promise<LocalRecord<ChatTicketLinkValue>> {
+  requireLinkIds(input);
   const { chatClientId, ticketClientId, linkType, deviceId } = input;
-  if (!chatClientId.trim() || !ticketClientId.trim()) missing('chat_ticket_link_ids_required');
   const id = chatTicketLinkId(chatClientId, ticketClientId);
-  return store.transact(async (tx) => {
-    const chat = await tx.get('chat', chatClientId);
-    if (!chat) missing('chat_not_found');
-    if (!(await tx.get('ticket', ticketClientId))) missing('ticket_not_found');
-    const existing = await tx.get<ChatTicketLinkValue>('chat-ticket-link', id);
-    const live = existing && !existing.deletedAt ? existing : undefined;
-    // 'created' is the stronger lineage: re-linking never downgrades it.
-    const effective: ChatTicketLinkType = live?.payload.linkType === 'created' ? 'created' : linkType;
-    if (live && live.payload.linkType === effective) return live;
-    const payload: ChatTicketLinkValue = {
-      chatClientId,
-      ticketClientId,
-      ...(await linkServerIds(tx, chatClientId, ticketClientId)),
-      ...(input.ticketKind && input.ticketRef ? { ticketKind: input.ticketKind, ticketRef: input.ticketRef } : {}),
-      linkType: effective,
+  const chat = await tx.get('chat', chatClientId);
+  if (!chat) missing('chat_not_found');
+  if (!(await tx.get('ticket', ticketClientId))) missing('ticket_not_found');
+  const existing = await tx.get<ChatTicketLinkValue>('chat-ticket-link', id);
+  const live = existing && !existing.deletedAt ? existing : undefined;
+  // 'created' is the stronger lineage: re-linking never downgrades it.
+  const effective: ChatTicketLinkType = live?.payload.linkType === 'created' ? 'created' : linkType;
+  if (live && live.payload.linkType === effective) return live;
+  const payload: ChatTicketLinkValue = {
+    chatClientId,
+    ticketClientId,
+    ...(await linkServerIds(tx, chatClientId, ticketClientId)),
+    ...(input.ticketKind && input.ticketRef ? { ticketKind: input.ticketKind, ticketRef: input.ticketRef } : {}),
+    linkType: effective,
+  };
+  const at = input.occurredAt ?? new Date().toISOString();
+  let record: LocalRecord<ChatTicketLinkValue>;
+  if (existing) {
+    const { deletedAt: _dropped, ...rest } = existing;
+    void _dropped;
+    record = {
+      ...rest,
+      payload,
+      version: existing.version + 1,
+      baseVersion: existing.version,
+      occurredAt: at,
+      updatedAt: at,
+      provenance: { deviceId, source: 'local' },
     };
-    const at = input.occurredAt ?? new Date().toISOString();
-    let record: LocalRecord<ChatTicketLinkValue>;
-    if (existing) {
-      const { deletedAt: _dropped, ...rest } = existing;
-      void _dropped;
-      record = {
-        ...rest,
-        payload,
-        version: existing.version + 1,
-        baseVersion: existing.version,
-        occurredAt: at,
-        updatedAt: at,
-        provenance: { deviceId, source: 'local' },
-      };
-    } else {
-      record = newLocalRecord<ChatTicketLinkValue>({
-        id,
-        entityType: 'chat-ticket-link',
-        payload,
-        deviceId,
-        destination: chat.destination,
-        occurredAt: at,
-      });
-    }
-    await tx.put(record);
-    await journalLink(tx, record, live ? 'update' : 'create');
-    return record;
-  });
+  } else {
+    record = newLocalRecord<ChatTicketLinkValue>({
+      id,
+      entityType: 'chat-ticket-link',
+      payload,
+      deviceId,
+      destination: chat.destination,
+      occurredAt: at,
+    });
+  }
+  await tx.put(record);
+  await journalLink(tx, record, live ? 'update' : 'create');
+  return record;
 }
 
 /** Unlink: tombstone the link and journal the delete. Returns whether a live link was removed. */

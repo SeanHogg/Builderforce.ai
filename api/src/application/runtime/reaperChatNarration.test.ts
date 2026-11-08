@@ -52,12 +52,12 @@ vi.mock('../maintenance/parkAgeTimeout', async (importOriginal) => ({
   runParkAgeTimeoutSweep: async () => ({ stale: 0, unparked: 0 }),
 }));
 
-import { reapStaleExecutions } from './staleExecutionReaper';
+import { reapStaleExecutions, type SettleReapedFailures } from './staleExecutionReaper';
 import { PAUSED_ORPHAN_REASON } from './orphanReasons';
 
 const env = { NEON_DATABASE_URL: 'postgres://fake' } as unknown as Parameters<typeof reapStaleExecutions>[0];
 const NOW = Date.parse('2026-07-24T12:00:00.000Z');
-const settle = vi.fn(async () => undefined);
+const settle = vi.fn<SettleReapedFailures>(async () => undefined);
 const reap = () => reapStaleExecutions(env, NOW, createReaperFakeDb(script) as never, settle);
 
 beforeEach(() => {

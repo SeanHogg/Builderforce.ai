@@ -3,7 +3,9 @@ import {
   chatWorkLinkingDirective,
   isTicketRecordingTool,
   codeChangeFile,
-  workItemLinkFromCreate,
+  stampRunChat,
+  createLinkedToChat,
+  CHAT_STAMPED_CREATE_TOOLS,
   linkedTicketsToAdvance,
   isReadOnlyPlatformTool,
 } from './chatWorkLinking';
@@ -13,7 +15,9 @@ describe('chatWorkLinkingDirective', () => {
     const d = chatWorkLinkingDirective(42);
     expect(d).toContain('Brain chat #42');
     // Both operator requirements are present, wired to THIS chat's id.
-    expect(d).toContain('builtin_chats_link_ticket (chatId=42, linkType="created")');
+    // A created item links itself — the prompt says so instead of asking for a link step.
+    expect(d).toContain('It is linked to this chat automatically');
+    expect(d).not.toContain('linkType="created"');
     expect(d).toContain('builtin_tickets_from_delta (chatId=42');
     expect(d).toContain('pass its numeric ref as taskId');
     expect(d).toContain('builtin_tasks_create');
@@ -87,52 +91,40 @@ describe('ticket-recording predicates', () => {
   });
 });
 
-describe('workItemLinkFromCreate', () => {
-  it('maps a created task/epic/gap to its taskType kind + numeric ref, linkType created', () => {
-    expect(workItemLinkFromCreate('builtin_tasks_create', { id: 158, taskType: 'epic' }))
-      .toEqual({ kind: 'epic', ref: '158', linkType: 'created' });
-    expect(workItemLinkFromCreate('builtin_tasks_create', { id: 12, taskType: 'gap' }))
-      .toEqual({ kind: 'gap', ref: '12', linkType: 'created' });
-    // A task with no/unknown taskType defaults to the 'task' tier.
-    expect(workItemLinkFromCreate('builtin_tasks_create', { id: 7 }))
-      .toEqual({ kind: 'task', ref: '7', linkType: 'created' });
+// The kind mapping moved to the server (api `createdWorkItemChatLink.test.ts` carries the
+// ported expectations); the client only stamps the run's chat onto the create call.
+describe('stampRunChat', () => {
+  it('stamps every server create tool, the ceremonies included', () => {
+    expect([...CHAT_STAMPED_CREATE_TOOLS]).toEqual([
+      'builtin_tasks_create', 'builtin_objectives_create', 'builtin_specs_create', 'builtin_portfolios_create',
+      'builtin_initiatives_create', 'builtin_retro_create', 'builtin_poker_create_session',
+    ]);
   });
 
-  /**
-   * A retro and an estimation session are TEAM WORK, not ambient rooms. When the Brain
-   * sets one up from a conversation, that session is the conversation's outcome — so it
-   * links like every other item the agent creates. Without this the chat that arranged
-   * the ceremony kept no trace of it.
-   */
-  it('links a ceremony the Brain creates back to the conversation', () => {
-    expect(workItemLinkFromCreate('builtin_retro_create', { id: 'retro-uuid' }))
-      .toEqual({ kind: 'retro', ref: 'retro-uuid', linkType: 'created' });
-    expect(workItemLinkFromCreate('builtin_poker_create_session', { id: 'poker-uuid' }))
-      .toEqual({ kind: 'poker', ref: 'poker-uuid', linkType: 'created' });
+  it("stamps the run's chat over the model's, and strips a guessed chat for an unbound chat", () => {
+    const bound: Record<string, unknown> = { title: 'T', chatId: 999 };
+    stampRunChat('builtin_tasks_create', bound, 42);
+    expect(bound).toEqual({ title: 'T', chatId: 42 });
+    const unbound: Record<string, unknown> = { title: 'T', chatId: 999 };
+    stampRunChat('builtin_tasks_create', unbound, null);
+    expect(unbound).toEqual({ title: 'T' });
   });
 
-  it('maps the strategy + spec create tools to their tier with the uuid ref', () => {
-    expect(workItemLinkFromCreate('builtin_objectives_create', { id: 'obj-uuid' }))
-      .toEqual({ kind: 'objective', ref: 'obj-uuid', linkType: 'created' });
-    expect(workItemLinkFromCreate('builtin_specs_create', { id: 'spec-uuid' }))
-      .toEqual({ kind: 'spec', ref: 'spec-uuid', linkType: 'created' });
-    expect(workItemLinkFromCreate('builtin_portfolios_create', { id: 'pf-uuid' }))
-      .toEqual({ kind: 'portfolio', ref: 'pf-uuid', linkType: 'created' });
-    expect(workItemLinkFromCreate('builtin_initiatives_create', { id: 'init-uuid' }))
-      .toEqual({ kind: 'initiative', ref: 'init-uuid', linkType: 'created' });
+  it('leaves every other tool untouched', () => {
+    const delta: Record<string, unknown> = { summary: 's', chatId: 7 };
+    stampRunChat('builtin_tickets_from_delta', delta, 42);
+    expect(delta).toEqual({ summary: 's', chatId: 7 });
   });
+});
 
-  it('records an idempotent-hit (deduped) result as a linked, not created, edge', () => {
-    expect(workItemLinkFromCreate('builtin_tasks_create', { id: 5, taskType: 'epic', deduped: true }))
-      .toEqual({ kind: 'epic', ref: '5', linkType: 'linked' });
-  });
-
-  it('returns null for non-create tools and results without a usable id', () => {
-    expect(workItemLinkFromCreate('builtin_tasks_update', { id: 1 })).toBeNull();
-    expect(workItemLinkFromCreate('builtin_specs_list', { specs: [] })).toBeNull();
-    expect(workItemLinkFromCreate('builtin_objectives_create', {})).toBeNull();
-    expect(workItemLinkFromCreate('builtin_objectives_create', { id: '  ' })).toBeNull();
-    expect(workItemLinkFromCreate('builtin_tasks_create', null)).toBeNull();
+describe('createLinkedToChat', () => {
+  it("reads the server's chatLink verdict off a stamped create's result", () => {
+    expect(createLinkedToChat('builtin_tasks_create', { id: 5, chatLink: { linked: true, chatId: 42, linkType: 'created' } })).toBe(true);
+    expect(createLinkedToChat('builtin_specs_create', JSON.stringify({ id: 's', chatLink: { linked: true } }))).toBe(true);
+    expect(createLinkedToChat('builtin_tasks_create', { id: 5, chatLink: { linked: false, reason: 'Chat not found' } })).toBe(false);
+    expect(createLinkedToChat('builtin_tasks_create', { id: 5 })).toBe(false);
+    expect(createLinkedToChat('builtin_tasks_update', { chatLink: { linked: true } })).toBe(false);
+    expect(createLinkedToChat('builtin_tasks_create', 'not json')).toBe(false);
   });
 });
 

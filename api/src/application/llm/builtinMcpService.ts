@@ -106,6 +106,7 @@ import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVe
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
+import { linkCreatedWorkItemToChat } from '../brain/createdWorkItemChatLink';
 import { readChatRunHistoryForCaller } from '../brain/chatRunHistory';
 import { BrainService } from '../brain/BrainService';
 import { normalizeChatTitle } from '../brain/chatTitle';
@@ -4612,7 +4613,8 @@ export async function callBuiltinTool(
   // Direct-write rows never pass a route gate — refuse a sub-developer caller here.
   assertMayRunBuiltinTool(entry.tool, entry.mutates, args.role);
   const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin });
-  const result = await entry.run(ctx, (args.arguments ?? {}) as Json);
+  // A mapped create links its item to the host-stamped chat in the same call (see createdWorkItemChatLink).
+  const result = await linkCreatedWorkItemToChat(db, args, await entry.run(ctx, (args.arguments ?? {}) as Json));
   // Unified audit stream: record any mutating tool run (best-effort, off the result).
   if (entry.mutates && args.env) {
     const emit = emitBuiltinToolActivity(args.env, db, args.tenantId, args.userId, args.tool, result);

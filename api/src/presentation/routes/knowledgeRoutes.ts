@@ -63,7 +63,7 @@ import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
-import { parseBody, parseOptionalBody } from './requestBody';
+import { parseBody, parseOptionalBody, z } from './requestBody';
 import { admitClientResult, clientTextAsSseResponse } from './clientResultHttp';
 import { CLIENT_DOCUMENT_SPEC } from '../../application/llm/clientResult';
 import { recordClientResultUsage } from '../../application/llm/clientResultUsage';
@@ -996,8 +996,8 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     // placeholder numbers the model echoes back are the ones the client restores against. Editor-only
     // route and the same trust as /ai-draft's client `existingContent`; capped, and still passed
     // through knowledgeText so a raw drawing fence can never reach the model as coordinates.
-    const sent = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
-    const clientText = typeof sent?.text === 'string' && sent.text.trim() ? sent.text.slice(0, ANALYSIS_CLIENT_TEXT_MAX) : null;
+    const sent = await parseOptionalBody(c, z.looseObject({ text: z.unknown().optional() }));
+    const clientText = typeof sent.text === 'string' && sent.text.trim() ? sent.text.slice(0, ANALYSIS_CLIENT_TEXT_MAX) : null;
     const userMsg = `Title: ${doc.title}\n\n--- Document ---\n${knowledgeText(clientText ?? doc.content)}`;
 
     const traceId = newTraceId();

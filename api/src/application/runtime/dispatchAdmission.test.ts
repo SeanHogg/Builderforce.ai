@@ -96,7 +96,7 @@ describe('admitCloudRun', () => {
     expect(await admit(11, 3)).toBeNull();
     const late = await admit(10, 2);
     expect(admissionRefusalOf(late)).toMatchObject({ code: 'concurrent_run_limit', limit: 2 });
-    expect(state.rows.filter((r) => RUNNING.has(r.status) && r.seq !== null).map((r) => r.id).sort()).toEqual([5, 11]);
+    expect(state.rows.filter((r) => RUNNING.has(r.status) && r.seq !== null).map((r) => r.id).sort((a, b) => a - b)).toEqual([5, 11]);
   });
 
   it('regression: N parallel submits against a cap of 2 -> exactly 2 start (D8)', async () => {

@@ -1,6 +1,5 @@
 import { Children, isValidElement, lazy, Suspense, type ComponentProps, type ReactNode } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
+import { renderMarkdown, type MarkdownComponents as Components } from '@/lib/markdownRender';
 
 const DRAWING_LANGUAGE = 'language-bf-drawing';
 
@@ -40,11 +39,15 @@ export interface DocumentMarkdownProps {
  * *document* scale. Typography comes entirely from the `.markdown-body` class
  * (theme-token driven, defined once in globals.css) so every long-form surface
  * stays in lockstep. No per-element inline styles, no chat affordances.
+ *
+ * Hook-free (renders through {@link renderMarkdown}, not `<ReactMarkdown>`), so it
+ * is safe in a React Server Component — the published tenant site renders it
+ * server-side — as well as in any client tree.
  */
 export function DocumentMarkdown({ content, className, components }: DocumentMarkdownProps) {
   return (
     <div className={className ? `markdown-body ${className}` : 'markdown-body'}>
-      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={components ? { ...DRAWING_AWARE_COMPONENTS, ...components } : DRAWING_AWARE_COMPONENTS}>{content}</ReactMarkdown>
+      {renderMarkdown(content, { components: components ? { ...DRAWING_AWARE_COMPONENTS, ...components } : DRAWING_AWARE_COMPONENTS })}
     </div>
   );
 }

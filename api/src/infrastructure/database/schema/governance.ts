@@ -41,7 +41,7 @@ import type { AnswerMap, DevexSegments, SurveyQuestion } from '../../../domain/d
 export const systemAuditRuns = pgTable('system_audit_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   auditId: varchar('audit_id', { length: 64 }).notNull(),
   executor: varchar('executor', { length: 16 }).notNull(),
   status: varchar('status', { length: 32 }).notNull().default('queued'),
@@ -65,7 +65,7 @@ export const systemAuditRuns = pgTable('system_audit_runs', {
 export const systemAuditRemediations = pgTable('system_audit_remediations', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
   taskId: integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   leaseUntil: timestamp('lease_until'),
@@ -129,7 +129,7 @@ export const securityAudits = pgTable('security_audits', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   /** The project (repo) the audit ran against; its findings are filed into it. */
-  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** The transient anchor task the cloud run hangs on (dispatch is task-centric). */
   anchorTaskId:     integer('anchor_task_id'),
   /** ide_agents.id of the Security agent that ran the audit (or 'system'). */
@@ -242,7 +242,7 @@ export const stakeholderMapEntries = pgTable('stakeholder_map_entries', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   initiativeId:   uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
   stakeholderRef: varchar('stakeholder_ref', { length: 64 }).notNull(),
   displayName:    varchar('display_name', { length: 255 }).notNull(),
@@ -261,7 +261,7 @@ export const stakeholderHealthProfiles = pgTable('stakeholder_health_profiles', 
   id:        uuid('id').primaryKey().defaultRandom(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   answers:   jsonb('answers').notNull(),
   score:     integer('score').notNull(),
   updatedBy: varchar('updated_by', { length: 64 }),
@@ -275,7 +275,7 @@ export const stakeholderPrioritySubmissions = pgTable('stakeholder_priority_subm
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   stakeholderRef: varchar('stakeholder_ref', { length: 64 }).notNull(),
   teamScope:      varchar('team_scope', { length: 120 }).notNull(),
   priorityKey:    varchar('priority_key', { length: 160 }).notNull(),
@@ -289,7 +289,7 @@ export const stakeholderConflicts = pgTable('stakeholder_conflicts', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   signature:   varchar('signature', { length: 255 }).notNull(),
   teamScope:   varchar('team_scope', { length: 120 }).notNull(),
   priorityKeys: jsonb('priority_keys').notNull(),
@@ -307,7 +307,7 @@ export const stakeholderAlignmentReviews = pgTable('stakeholder_alignment_review
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   subjectRef:  varchar('subject_ref', { length: 160 }).notNull(),
   summary:     text('summary').notNull(),
   requiredApproverRefs: jsonb('required_approver_refs').notNull(),
@@ -336,7 +336,7 @@ export const stakeholderEscalations = pgTable('stakeholder_escalations', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   reviewId:       uuid('review_id').notNull().references(() => stakeholderAlignmentReviews.id, { onDelete: 'cascade' }),
   level:          integer('level').notNull().default(1),
   ownerRef:       varchar('owner_ref', { length: 64 }),
@@ -561,7 +561,7 @@ export const featureScores = pgTable('feature_scores', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Nullable project scope (0121): NULL = portfolio/segment-level, non-null = one project.
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:       varchar('name', { length: 255 }).notNull(),
   reach:      real('reach'),
   impact:     real('impact'),
@@ -703,7 +703,7 @@ export const policyPacks = pgTable('policy_packs', {
   description: text('description'),
   enabled:     boolean('enabled').notNull().default(true),
   /** NULL = every project. */
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   /** NULL = every agent. */
   agentRef:    varchar('agent_ref', { length: 128 }),
   createdBy:   varchar('created_by', { length: 64 }),
@@ -846,7 +846,7 @@ export const devexCampaigns = pgTable('devex_campaigns', {
   /** NULL = a workspace-wide campaign (the original and still the default). Set =
    *  the campaign asks ONE project's team, which is what lets the project-grained
    *  SPACE lens report a real Satisfaction score instead of an engagement proxy. */
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   templateId:  integer('template_id').references(() => devexSurveyTemplates.id, { onDelete: 'set null' }),
   title:       varchar('title', { length: 200 }).notNull(),
   periodMonth: varchar('period_month', { length: 7 }),
@@ -955,9 +955,9 @@ export const governancePolicyPacks = pgTable('governance_policy_packs', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   /**
    * NULL = tenant/segment-wide (the org baseline); set = scoped to one project.
-   * FK to projects.id intentionally omitted until projects.id migrates to bigint (tracked: PRD 20 bigint migration).
+   * FK re-added in migration 1337 once projects.id went bigint (PRD 20 bigint migration).
    */
-  projectId:   bigint('project_id', { mode: 'number' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   framework:   varchar('framework', { length: 40 }),     // soc2|owasp|gdpr|pci|internal|custom
@@ -1000,8 +1000,8 @@ export const governanceAuditRuns = pgTable('governance_audit_runs', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  /** FK to projects.id intentionally omitted until projects.id migrates to bigint (tracked: PRD 20 bigint migration). */
-  projectId:    bigint('project_id', { mode: 'number' }),
+  /** FK re-added in migration 1337 once projects.id went bigint (PRD 20 bigint migration). */
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   repoRef:      varchar('repo_ref', { length: 500 }),           // repo url/id
   ref:          varchar('ref', { length: 200 }),                // branch/commit/PR audited
   trigger:      varchar('trigger', { length: 20 }).notNull(),   // manual|agent_pr|schedule

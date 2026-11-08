@@ -136,6 +136,7 @@ export {
   chatTicketLinkWaitsOn,
   linkServerIds,
   linkChatTicket,
+  linkChatTicketInTx,
   unlinkChatTicket,
   type ChatTicketLinkInput,
   type LinkChatTicketInput,

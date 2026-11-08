@@ -98,7 +98,8 @@ export async function loadConductProjects(db: Db, limit: number, cursor = 0): Pr
       .orderBy(asc(tasks.projectId))
       .limit(n),
   });
-  return rows.flatMap((r) => (r.projectId == null ? [] : [{ projectId: r.projectId, tenantId: r.tenantId }]));
+  // `tasks.tenant_id` is nullable in the schema; the join on the manager config's tenant already excludes null rows.
+  return rows.flatMap((r) => (r.projectId == null || r.tenantId == null ? [] : [{ projectId: r.projectId, tenantId: r.tenantId }]));
 }
 
 /** The project's review tickets in id rotation after `cursor`, bounded to one tick's share. */

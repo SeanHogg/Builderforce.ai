@@ -7,13 +7,16 @@
  *     resolved by the sync importer as something the tenant owns. A UUID must be a live
  *     local record.
  *   • A ticket carries `taskType` (task | epic | gap) and the `chatClientId` of the chat it
- *     was created in, which sync turns into the chat↔ticket 'created' link.
+ *     was created in. When that chat is in this store, the chat↔ticket 'created' link
+ *     (`chat-ticket-link`) is written LOCALLY in the create's own transaction and synced
+ *     like any record; otherwise the server importer links from the ticket's `chatClientId`.
  *   • A new ticket depends on the CURRENT pending event of its project, parent and chat —
  *     whatever that is (a create, an update, or the import a bind replaced them with).
  */
 
 import {
   destinationKey,
+  linkChatTicketInTx,
   newLocalRecord,
   type DestinationBinding,
   type EntityDestination,
@@ -48,7 +51,7 @@ export interface CreateLocalTicketInput {
   /** A local ticket's id (must exist), or a DECIMAL server task id (a server reference). */
   parentTicketId?: string;
   taskType?: TicketTaskType;
-  /** The client id of the chat the ticket is created in; sync links that chat to it. */
+  /** The client id of the chat the ticket is created in; a local chat is linked in the same commit. */
   chatClientId?: string;
   /**
    * Must match the project's snapshotted destination when given. A ticket is never
@@ -154,6 +157,22 @@ export function createTicketRepository(ctx: WorkRepoContext) {
           destination: record.destination,
           payload: record.payload,
         });
+        // The chat↔ticket 'created' link is written HERE, in the ticket's own commit, so the
+        // rail and the work tree show the ticket linked at once and a crash never leaves it
+        // unlinked. A chat this store does not hold writes no link: the ticket's
+        // `chatClientId` still lets the server importer link it.
+        if (input.chatClientId) {
+          const chat = await tx.get("chat", input.chatClientId);
+          if (chat && !chat.deletedAt) {
+            await linkChatTicketInTx(tx, {
+              chatClientId: input.chatClientId,
+              ticketClientId: record.id,
+              deviceId: ctx.deviceId,
+              linkType: "created",
+              occurredAt: stamp,
+            });
+          }
+        }
         return record;
       });
     },

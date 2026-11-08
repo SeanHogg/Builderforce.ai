@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryLocalFirstStore, UNBOUND_DESTINATION, type LocalFirstStore } from "@builderforce/local-first";
+import {
+  chatTicketLinkId,
+  createMemoryLocalFirstStore,
+  newLocalRecord,
+  queueImport,
+  UNBOUND_DESTINATION,
+  type LocalFirstStore,
+} from "@builderforce/local-first";
+import { readRailFromFacts } from "./chatRail/buildRail";
 import { createLocalWorkRepository, type LocalWorkRepository } from "./localWorkRepository";
 import {
   LocalDomainToolError,
@@ -26,7 +34,7 @@ function harness() {
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
   });
   const syncQueue = createInMemoryLocalSyncQueue();
-  const tools: LocalDomainTools = createLocalDomainTools({ repository, store, syncQueue, deviceId: "device-vsix" });
+  const tools: LocalDomainTools = createLocalDomainTools({ repository, store, syncQueue });
   return { store, repository, syncQueue, tools };
 }
 
@@ -235,7 +243,7 @@ describe("localDomainTools", () => {
 
     it("a refused write is not queued", async () => {
       const { repository, store, syncQueue } = harness();
-      const tools = createLocalDomainTools({ repository, store, syncQueue, deviceId: "device-vsix" });
+      const tools = createLocalDomainTools({ repository, store, syncQueue });
 
       await expect(tools.execute("ticket-create", { projectId: "no-such-project", title: "Orphan" })).rejects.toThrow(
         /no such local project/i,
@@ -253,7 +261,7 @@ describe("localDomainTools", () => {
       newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
     });
     const syncQueue = createInMemoryLocalSyncQueue();
-    const tools = createLocalDomainTools({ repository, store, syncQueue, deviceId: "device-vsix" });
+    const tools = createLocalDomainTools({ repository, store, syncQueue });
 
     const created = await tools.execute("project-create", { name: "Never connected" });
     if (created.kind !== "local") throw new Error("expected a local result");
@@ -280,7 +288,7 @@ describe("localDomainTools", () => {
       export: () => store.export(),
       subscribe: (listener) => store.subscribe(listener),
     };
-    const tools = createLocalDomainTools({ repository, store: journalBlind, syncQueue, deviceId: "device-vsix" });
+    const tools = createLocalDomainTools({ repository, store: journalBlind, syncQueue });
 
     await expect(tools.execute("project-create", { name: "Unjournalled" })).rejects.toThrow(
       /produced no journal event/,
@@ -341,6 +349,32 @@ describe("localDomainTools", () => {
     await expect(
       tools.execute("ticket-create", { projectId: project.id, title: "Bad", taskType: "portfolio" }),
     ).rejects.toMatchObject({ code: "invalid_arguments" });
+  });
+
+  it("regression: ticket-create in a live local chat links that chat locally ('created'), in the create's commit", async () => {
+    const { store, repository, tools } = harness();
+    const chatId = "00000000-0000-4000-8000-0000000000c1";
+    await store.transact(async (tx) => {
+      const chat = newLocalRecord<unknown>({
+        id: chatId, entityType: "chat", payload: { clientId: chatId, chat: { id: 3, title: "Planning" } },
+        deviceId: "device-vsix", destination: ACCOUNT,
+      });
+      await tx.put(chat);
+      await queueImport(tx, chat);
+    });
+    const project = await repository.createProject({ name: "Board" });
+    let commits = 0;
+    const unsubscribe = store.subscribe(() => { commits += 1; });
+    const created = await tools.execute("ticket-create", { projectId: project.id, title: "From chat", chatClientId: chatId });
+    unsubscribe();
+    if (created.kind !== "local") throw new Error("expected a local result");
+
+    const link = (await store.export()).records.find((row) => row.entityType === "chat-ticket-link");
+    expect(link?.id).toBe(chatTicketLinkId(chatId, created.id));
+    expect(link?.payload).toMatchObject({ chatClientId: chatId, ticketClientId: created.id, linkType: "created" });
+    // Ticket and link are ONE commit; the tool layer writes nothing of its own.
+    expect(commits).toBe(1);
+    expect(readRailFromFacts(await store.export(), chatId).tickets.map((row) => row.clientId)).toEqual([created.id]);
   });
 
   it("still resolves an exact local UUID project id unchanged", async () => {

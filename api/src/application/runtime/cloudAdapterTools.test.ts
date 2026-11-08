@@ -80,6 +80,14 @@ describe('platformTools', () => {
     expect(h.call.mock.calls[0]?.[1]).toMatchObject({ tenantId: 1, tool: 'tasks.create', arguments: { projectId: 9, title: 'T', chatId: 77 }, executionId: 5 });
   });
 
+  it('stamps the originating chat over a model-sent one, and strips a guessed chat from a create when the run has none', async () => {
+    await tools.dispatch('builtin_tasks_create', { title: 'T', chatId: 5 });
+    expect(h.call.mock.calls[0]?.[1]).toMatchObject({ arguments: { chatId: 77 } });
+    const unbound = platformTools({ env: {} as never, db: {} as never, tenantId: 1, projectId: 9, meterExecutionId: 5, executionId: 2 });
+    await unbound.dispatch('builtin_tasks_create', { title: 'T', chatId: 5 });
+    expect((h.call.mock.calls[1]?.[1] as { arguments: Record<string, unknown> }).arguments).not.toHaveProperty('chatId');
+  });
+
   it('blocks an outbound message carrying credential material, and reports a tool failure as the tool\'s own', async () => {
     h.inspect.mockResolvedValueOnce({ ok: false, reasons: ['private_key'] });
     expect(await tools.dispatch('builtin_chats_send_message', { text: 'key' })).toMatchObject({ isError: true });

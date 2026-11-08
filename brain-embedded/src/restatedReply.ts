@@ -71,7 +71,7 @@ export function restatedReplyNudge(tickets: TicketToolVocabulary = SERVER_TICKET
   return [
     'Your reply repeats the status you already gave the user last turn — they have it. Do not restate it.',
     'Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.',
-    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName}${tickets.needsLinkStep ? ', linked to this chat' : ' — it links this chat itself'}) so the status lives on the board instead of in a repeated summary.`,
+    `If the remaining items are not yet tickets, file one ticket per item (${tickets.createName} — it links this chat itself) so the status lives on the board instead of in a repeated summary.`,
     'End with only what CHANGED this turn.',
   ].join('\n');
 }

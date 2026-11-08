@@ -17,6 +17,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { studioVoiceClones, tenantMembers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hkdfSha256 } from '../../infrastructure/crypto/hkdf';
 import { credentialSecret, decryptCredentials, encryptCredentials } from '../integrations/credentialCrypto';
 import { VoiceCloneForbidden, VoiceCloneNotFound } from './voiceCloneService';
@@ -110,8 +111,9 @@ async function assertOwner(db: Db, clone: CloneRow | undefined, tenantId: number
   return clone;
 }
 
-async function loadClone(db: Db, cloneId: number): Promise<CloneRow | undefined> {
-  const [row] = await db.select().from(studioVoiceClones).where(eq(studioVoiceClones.id, cloneId)).limit(1);
+/** The caller's tenant's clone: another tenant's id reads as missing (404), never as present-but-forbidden. */
+async function loadClone(db: Db, cloneId: number, tenantId: number): Promise<CloneRow | undefined> {
+  const [row] = await db.select().from(studioVoiceClones).where(scopedToTenant(studioVoiceClones, tenantId, eq(studioVoiceClones.id, cloneId))).limit(1);
   return row;
 }
 
@@ -129,7 +131,7 @@ export async function getOwnerEmbedding(
   env: Env,
   p: { cloneId: number; tenantId: number; userId: string | null },
 ): Promise<OwnerEmbedding | null> {
-  const clone = await assertOwner(db, await loadClone(db, p.cloneId), p.tenantId, p.userId);
+  const clone = await assertOwner(db, await loadClone(db, p.cloneId, p.tenantId), p.tenantId, p.userId);
   if (clone.embeddingEnc && clone.embeddingIv) {
     const sealed = { enc: clone.embeddingEnc, iv: clone.embeddingIv };
     // No unbound-AAD fallback: `embedding_enc` shipped (mig 1326) with the clone binding from day one.
@@ -154,7 +156,7 @@ export async function storeOwnerEmbeddingIfMissing(
   env: Env,
   p: { cloneId: number; tenantId: number; userId: string | null; embedding: number[]; sampleRate?: number | null },
 ): Promise<boolean> {
-  const clone = await assertOwner(db, await loadClone(db, p.cloneId), p.tenantId, p.userId);
+  const clone = await assertOwner(db, await loadClone(db, p.cloneId, p.tenantId), p.tenantId, p.userId);
   const sealed = await sealEmbedding(env, clone.tenantId, clone.id, p.embedding, p.sampleRate ?? null);
   const written = await db
     .update(studioVoiceClones)

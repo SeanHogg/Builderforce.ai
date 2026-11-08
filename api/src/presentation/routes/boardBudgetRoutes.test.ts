@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
+import { TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 
 const readBoardBudget = vi.fn();
@@ -14,7 +15,7 @@ function app() {
     c.set('isEmulation', true);
     c.set('tenantId', 5);
     c.set('userId', 'user-1');
-    c.set('role', 'developer');
+    c.set('role', TenantRole.DEVELOPER);
     await next();
   });
   a.route('/', createBoardBudgetRoutes({} as unknown as Db));

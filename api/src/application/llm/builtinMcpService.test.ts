@@ -24,6 +24,13 @@ const codingTarget = vi.hoisted(() => ({
   ensureProjectCodingTarget: vi.fn(async () => ({ kind: 'workspace' })),
 }));
 
+// The chat-ticket link use case — faked so a create's same-call chat link is observable without a DB.
+const chatLink = vi.hoisted(() => ({ linkTicket: vi.fn(async (..._a: unknown[]) => ({ linkId: 1 }) as unknown) }));
+vi.mock('../brain/chatTicketLinking', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../brain/chatTicketLinking')>()),
+  linkTicket: chatLink.linkTicket,
+}));
+
 vi.mock('../project/ProjectService', () => ({ ProjectService: function () { return projectSvc; } }));
 vi.mock('../task/TaskService', () => ({ TaskService: function () { return taskSvc; } }));
 vi.mock('../../infrastructure/repositories/ProjectRepository', () => ({ ProjectRepository: function () { /* stub */ } }));
@@ -370,6 +377,18 @@ describe('callBuiltinTool', () => {
     taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 5 }) });
     await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Do it', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 3, title: 'Do it' }), TENANT);
+  });
+
+  it('tasks.create links the created ticket to the host-stamped chat in the same call', async () => {
+    taskSvc.listTasks.mockResolvedValue([]);
+    taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 51, taskType: 'epic', projectId: 3 }) });
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', userId: 'u1', arguments: { projectId: 3, title: 'Epic it', assignedUserId: 'coordinator-1', chatId: 42 } });
+    expect(chatLink.linkTicket).toHaveBeenCalledWith(expect.anything(), TENANT, 42, 'u1', { kind: 'epic', ref: '51', linkType: 'created', createdBy: 'u1' });
+    expect(res).toMatchObject({ id: 51, chatLink: { linked: true, chatId: 42, linkType: 'created' } });
+    // Without a stamped chat nothing is linked and the result keeps its shape.
+    chatLink.linkTicket.mockClear();
+    expect(await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Epic it', assignedUserId: 'coordinator-1' } })).not.toHaveProperty('chatLink');
+    expect(chatLink.linkTicket).not.toHaveBeenCalled();
   });
 
   it('refuses a workspace write to a canvas contributor or viewer before touching the service', async () => {

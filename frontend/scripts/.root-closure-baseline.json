@@ -274,6 +274,7 @@
     "lib/localFirst/webInferenceMode.ts",
     "lib/localFirst/webRequestGate.ts",
     "lib/markdownPipeline.ts",
+    "lib/markdownRender.ts",
     "lib/markdownRichFormat.ts",
     "lib/marketingApi.ts",
     "lib/mediaCapture.ts",

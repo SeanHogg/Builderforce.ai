@@ -19,6 +19,7 @@
  */
 
 import { and, eq, inArray } from 'drizzle-orm';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ledgerEntries, studioVoiceCloneLicenses, studioVoiceClones } from '../../infrastructure/database/schema';
@@ -44,7 +45,10 @@ export function voicePriceCents(clone: Pick<CloneRow, 'priceMillicents'>): numbe
 }
 
 async function loadPurchasableVoice(db: Db, cloneId: number): Promise<CloneRow | null> {
-  const [clone] = await db.select().from(studioVoiceClones).where(eq(studioVoiceClones.id, cloneId)).limit(1);
+  // A marketplace voice is published FOR other tenants: the buyer is never the owning tenant.
+  const [clone] = await db.select().from(studioVoiceClones)
+    .where(acrossTenants(studioVoiceClones, 'public_catalogue', eq(studioVoiceClones.id, cloneId), eq(studioVoiceClones.visibility, 'marketplace')))
+    .limit(1);
   // A voice that is not published to the marketplace does not exist to a buyer.
   if (!clone || clone.visibility !== 'marketplace' || clone.status !== 'published') return null;
   return clone;
@@ -241,10 +245,12 @@ export async function reverseVoicePurchase(
 
   const saleRef = `voice-sale:${license.id}`;
   const feeRef = `voice-fee:${license.id}`;
+  // Both legs were written to the SELLER's ledger (`recordSaleSplit`: the clone's owning tenant).
+  const sellerTenant = db.select({ tenantId: studioVoiceClones.tenantId }).from(studioVoiceClones).where(eq(studioVoiceClones.id, input.cloneId));
   const originals = await db
     .select()
     .from(ledgerEntries)
-    .where(inArray(ledgerEntries.reference, [saleRef, feeRef]));
+    .where(and(inArray(ledgerEntries.tenantId, sellerTenant), inArray(ledgerEntries.reference, [saleRef, feeRef])));
   const reversals = originals.map((e) => ({
     tenantId: e.tenantId,
     accountKind: e.accountKind,

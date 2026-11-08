@@ -9,6 +9,7 @@
  */
 
 import { and, eq } from 'drizzle-orm';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import { studioVoiceCloneLicenses, studioVoiceClones } from '../../infrastructure/database/schema';
 import { VoiceCloneNotFound } from './voiceCloneService';
@@ -22,7 +23,10 @@ export async function acquireFreeVoiceLicense(
   db: Db,
   p: { cloneId: number; tenantId: number; userId: string | null },
 ): Promise<{ cloneId: number; licensedTenantId: number } | { applied: false; reason: 'license_revoked' }> {
-  const [clone] = await db.select().from(studioVoiceClones).where(eq(studioVoiceClones.id, p.cloneId)).limit(1);
+  // A marketplace voice is published FOR other tenants: the licensee is never the owning tenant.
+  const [clone] = await db.select().from(studioVoiceClones)
+    .where(acrossTenants(studioVoiceClones, 'public_catalogue', eq(studioVoiceClones.id, p.cloneId), eq(studioVoiceClones.visibility, 'marketplace')))
+    .limit(1);
   // A voice that is not published to the marketplace does not exist to a buyer.
   if (!clone || clone.visibility !== 'marketplace' || clone.status !== 'published') throw new VoiceCloneNotFound();
   if (clone.priceMillicents > 0) throw new VoiceCloneLicensePaymentRequired();

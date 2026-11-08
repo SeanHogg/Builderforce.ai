@@ -10,8 +10,11 @@ const LOCAL = ticketToolVocabulary(['read_file', 'ticket-create', 'ticket-update
 const task = (title: string): HandOffTask => ({ title, brief: `do ${title}`, paths: [] });
 
 describe('ticketToolVocabulary', () => {
-  it('reads the editor catalog as local: no link step, no kanban scoping', () => {
-    expect(LOCAL).toMatchObject({ createTool: 'ticket-create', local: true, needsLinkStep: false, kanbanScoping: false });
+  it('reads the editor catalog as local: no kanban scoping', () => {
+    expect(LOCAL).toMatchObject({ createTool: 'ticket-create', local: true, kanbanScoping: false });
+    // Neither vocabulary has a link step after a create any more.
+    expect(LOCAL).not.toHaveProperty('needsLinkStep');
+    expect(SERVER_TICKET_TOOLS).not.toHaveProperty('needsLinkStep');
   });
 
   it('keeps the account vocabulary for web / cloud and for a surface that does not say', () => {
@@ -29,7 +32,9 @@ describe('ticketToolVocabulary', () => {
     expect(text).toContain('ticket-move');
     const server = chatWorkLinkingDirective(7);
     expect(server).toContain('builtin_tasks_create');
-    expect(server).toContain('AND link it with builtin_chats_link_ticket (chatId=7, linkType="created")');
+    // The server create links its chat in the same call: no link step is asked for.
+    expect(server).not.toContain('AND link it with');
+    expect(server).toContain('It is linked to this chat automatically');
     expect(server).toContain('Every created ticket must be resource-scoped');
   });
 
@@ -37,7 +42,7 @@ describe('ticketToolVocabulary', () => {
     expect(previewReviewDirective(7, LOCAL)).not.toContain('builtin_chats_link_ticket (chatId=7) first');
     expect(previewReviewDirective(7)).toContain('builtin_chats_link_ticket (chatId=7) first');
     expect(restatedReplyNudge(LOCAL)).toContain('ticket-create');
-    expect(restatedReplyNudge()).toContain('builtin_tasks_create, linked to this chat');
+    expect(restatedReplyNudge()).toContain('builtin_tasks_create — it links this chat itself');
   });
 
   it('triage counts a successful ticket-create as filing work', () => {

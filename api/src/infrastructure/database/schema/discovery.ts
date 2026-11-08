@@ -19,7 +19,7 @@
  * way. The FK is declared in the raw migration SQL instead (1122/1123).
  */
 
-import { integer, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { bigint, integer, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { tenants, segments, users } from './identity';
 
 export const customerInterviews = pgTable('customer_interviews', {
@@ -29,7 +29,7 @@ export const customerInterviews = pgTable('customer_interviews', {
   // NO `.references(() => projects.id)` — see the header comment: the FK is
   // declared in the raw migration SQL instead, to keep this module from
   // opening a `discovery.ts -> delivery.ts` schema edge.
-  projectId:       integer('project_id'),
+  projectId:       bigint('project_id', { mode: 'number' }),
   title:           varchar('title', { length: 255 }).notNull(),
   participantName: varchar('participant_name', { length: 255 }),
   notes:           text('notes'),
@@ -42,7 +42,7 @@ export const researchNotes = pgTable('research_notes', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id'),
+  projectId:  bigint('project_id', { mode: 'number' }),
   title:      varchar('title', { length: 255 }).notNull(),
   sourceUrl:  varchar('source_url', { length: 500 }),
   body:       text('body'),

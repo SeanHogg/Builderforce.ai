@@ -35,60 +35,64 @@ export const TICKET_RECORDING_TOOLS: ReadonlySet<string> = new Set([
   'builtin_tickets_from_delta',
   'builtin_chats_link_ticket',
   'builtin_reviews_record',
-  // The editor's device-local create: it IS the recording (it links its own chat once synced).
+  // The editor's device-local create: it IS the recording — it links its chat LOCALLY in
+  // the create's own transaction, and the link syncs to the account with the ticket.
   LOCAL_TICKET_CREATE_TOOL,
 ]);
 
 /**
- * Advertised (gateway `builtin_*`) names of the platform tools that CREATE a
- * chat-linkable work item, mapped to the `chat_ticket_links` kind their result
- * represents. `builtin_tasks_create` is special-cased (its kind is the row's own
- * `taskType`: task | epic | gap), so it is not in this table. Adding an entry here
- * makes a create tool auto-link to the conversation — see {@link workItemLinkFromCreate}.
+ * Advertised (gateway `builtin_*`) names of the server create tools that LINK the item
+ * they create to the caller's chat, in the same call. The server owns which kind each
+ * one links as (`api/src/application/brain/createdWorkItemChatLink.ts`); the client's
+ * only job is the one fact the server cannot know — which chat this run is in — so the
+ * run stamps its `serverChatId` onto these calls ({@link stampRunChat}).
  */
-const CREATE_TOOL_KIND: Readonly<Record<string, string>> = {
-  builtin_objectives_create: 'objective',
-  builtin_specs_create: 'spec',
-  builtin_portfolios_create: 'portfolio',
-  builtin_initiatives_create: 'initiative',
-  // Team ceremonies. A retro or an estimation session the Brain sets up FROM a
-  // conversation is that conversation's outcome, so it links like any other item it
-  // creates — without this the chat that arranged the ceremony kept no trace of it.
-  builtin_retro_create: 'retro',
-  builtin_poker_create_session: 'poker',
-};
+export const CHAT_STAMPED_CREATE_TOOLS: ReadonlySet<string> = new Set([
+  'builtin_tasks_create',
+  'builtin_objectives_create',
+  'builtin_specs_create',
+  'builtin_portfolios_create',
+  'builtin_initiatives_create',
+  // Team ceremonies: a retro or estimation session set up FROM a conversation is that
+  // conversation's outcome, so it links like any other item the agent creates.
+  'builtin_retro_create',
+  'builtin_poker_create_session',
+]);
 
-/** A work item a create tool just produced, in the shape `builtin_chats_link_ticket`
- *  wants: which tier it is, its ref, and whether it was newly created vs. an
- *  idempotent hit on a pre-existing item (so the link records the honest lineage). */
-export interface CreatedWorkItemLink {
-  kind: string;
-  ref: string;
-  linkType: 'created' | 'linked';
+/**
+ * Stamp the run's platform chat onto a server create call so the server links the item
+ * it creates to this conversation. The run's value always wins over whatever the model
+ * sent; an unbound local chat (`serverChatId` null) has no platform chat, so a
+ * model-sent `chatId` is removed rather than letting a guess name someone else's chat.
+ *
+ * Mutates in place because that is where the dispatcher reads its arguments from (the
+ * same contract as `attachDeltaToRunTicket`). A no-op for every other tool.
+ */
+export function stampRunChat(toolName: string, args: unknown, serverChatId: number | null): void {
+  if (!CHAT_STAMPED_CREATE_TOOLS.has(toolName)) return;
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return;
+  const bag = args as Record<string, unknown>;
+  if (serverChatId != null) bag.chatId = serverChatId;
+  else delete bag.chatId;
 }
 
 /**
- * Derive the chat-link descriptor for the result of a work-item CREATE tool, or null
- * when the tool is not a create (or the result carries no usable id). This is what
- * makes "an item the Brain creates is always tied to the conversation" DETERMINISTIC:
- * the run loop fires `builtin_chats_link_ticket` off this instead of hoping the model
- * remembers to. An idempotent-hit result (`{ deduped: true, … }`) links as 'linked'
- * (the item already existed) rather than 'created'.
+ * Whether a stamped create's result says the server linked its item to the chat
+ * (`chatLink.linked === true`). Tolerates the result arriving as a JSON string.
  */
-export function workItemLinkFromCreate(toolName: string, result: unknown): CreatedWorkItemLink | null {
-  if (!result || typeof result !== 'object') return null;
-  const row = result as Record<string, unknown>;
-  const id = row.id;
-  const ref = typeof id === 'number' ? String(id) : typeof id === 'string' && id.trim() ? id : null;
-  if (!ref) return null;
-  const linkType: 'created' | 'linked' = row.deduped === true ? 'linked' : 'created';
-  if (toolName === 'builtin_tasks_create') {
-    const t = typeof row.taskType === 'string' ? row.taskType : 'task';
-    const kind = t === 'epic' || t === 'gap' ? t : 'task';
-    return { kind, ref, linkType };
+export function createLinkedToChat(toolName: string, result: unknown): boolean {
+  if (!CHAT_STAMPED_CREATE_TOOLS.has(toolName)) return false;
+  let row: unknown = result;
+  if (typeof row === 'string') {
+    try {
+      row = JSON.parse(row);
+    } catch {
+      return false;
+    }
   }
-  const kind = CREATE_TOOL_KIND[toolName];
-  return kind ? { kind, ref, linkType } : null;
+  if (!row || typeof row !== 'object') return false;
+  const link = (row as { chatLink?: unknown }).chatLink;
+  return !!link && typeof link === 'object' && (link as { linked?: unknown }).linked === true;
 }
 
 export function isTicketRecordingTool(name: string): boolean {
@@ -279,7 +283,7 @@ export function chatWorkLinkingDirective(chatId: number | null, tickets: TicketT
   // create + link + kanban-scoping tools, or the editor's one device-local `ticket-create`.
   const createBullet = tickets.local
     ? `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. Create the work item with ${tickets.createName} (projectId, title, description, taskType "task", "epic", or "gap"; file an epic first, then its tasks with parentTicketId=<the epic's returned id>; or the matching builtin_*_create for an objective, spec, or roadmap item). It is saved on this device, syncs to the account in the background and is linked to this chat automatically — do NOT call builtin_chats_link_ticket, and do not create tickets with builtin_tasks_create. The id it returns is a LOCAL id: use it with the ticket-* tools.\n`
-    : `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked && tickets.needsLinkStep ? ` AND link it with ${SERVER_TICKET_LINK_TOOL} (chatId=${chatId}, linkType="created")` : ''}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n`;
+    : `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (${tickets.createName} with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked ? `. It is linked to this chat automatically — do not call ${SERVER_TICKET_LINK_TOOL} for an item you just created` : ''}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n`;
   const scopingBullet = tickets.kanbanScoping
     ? `• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n`
     : `• A ticket filed with ${tickets.createName} is on this device first. The builtin_kanban_* resource-scoping tools address the account's tickets, so use them on a ticket only once it has synced (they answer plainly when it has not); file the work first and scope, staff and coordinate it afterwards.\n`;

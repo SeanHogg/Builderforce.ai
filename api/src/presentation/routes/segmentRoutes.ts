@@ -18,17 +18,23 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { segments } from '../../infrastructure/database/schema';
-import { invalidateSegment } from '../../infrastructure/auth/segmentResolver';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z } from './requestBody';
-import { cascadeSegmentDelete, collectSegmentTelemetryKeys } from '../../application/shared/siblingCascade';
+import {
+  eraseSegment,
+  isSegmentStatus,
+  provisionSegment,
+  SEGMENT_STATUSES,
+  updateSegment,
+  type SegmentPatch,
+} from '../../application/tenant/segmentLifecycle';
 
 /** `displayName` stays optional so "displayName is required" still answers. */
 const CreateSegmentBody = z.object({
@@ -45,9 +51,6 @@ const UpdateSegmentBody = z.object({
   plan: z.string().optional(),
   displayName: z.string().optional(),
 });
-
-const SEGMENT_STATUSES = ['active', 'suspended', 'archived'] as const;
-type SegmentStatus = (typeof SEGMENT_STATUSES)[number];
 
 function slugify(input: string): string {
   return slugifyBase(input, { maxLength: 255 });
@@ -80,18 +83,13 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
     if (!slug) return c.json({ error: 'slug could not be derived; provide a slug' }, 400);
 
     try {
-      const [seg] = await db
-        .insert(segments)
-        .values({
-          tenantId,
-          externalAccountId: body.externalAccountId ?? null,
-          externalCompanyId: body.externalCompanyId ?? null,
-          displayName: body.displayName.trim(),
-          slug,
-          plan: body.plan ?? 'free',
-          isDefault: false,
-        })
-        .returning();
+      const seg = await provisionSegment(db, tenantId, {
+        externalAccountId: body.externalAccountId ?? null,
+        externalCompanyId: body.externalCompanyId ?? null,
+        displayName: body.displayName.trim(),
+        slug,
+        plan: body.plan ?? 'free',
+      });
       return c.json(seg, 201);
     } catch (err) {
       // Unique violations: slug already used, or (account, company) already mapped.
@@ -108,28 +106,20 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
     const id = c.req.param('id');
     const body = await parseBody(c, UpdateSegmentBody);
 
-    const patch: Partial<{ status: SegmentStatus; plan: string; displayName: string; updatedAt: Date }> = {};
+    const patch: SegmentPatch = {};
     if (body.status !== undefined) {
-      if (!SEGMENT_STATUSES.includes(body.status as SegmentStatus)) {
+      if (!isSegmentStatus(body.status)) {
         return c.json({ error: `status must be one of ${SEGMENT_STATUSES.join(', ')}` }, 400);
       }
-      patch.status = body.status as SegmentStatus;
+      patch.status = body.status;
     }
     if (body.plan !== undefined) patch.plan = body.plan;
     if (body.displayName !== undefined) patch.displayName = body.displayName.trim();
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
-    patch.updatedAt = new Date();
 
-    // Scope to this tenant and never let the API mutate the default segment.
-    const [updated] = await db
-      .update(segments)
-      .set(patch)
-      .where(and(eq(segments.id, id), eq(segments.tenantId, tenantId), eq(segments.isDefault, false)))
-      .returning();
-
+    // Scoped to this tenant; the default segment is never mutated (segmentLifecycle).
+    const updated = await updateSegment(db, c.env, tenantId, id, patch);
     if (!updated) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
-    // Drop the warm-isolate mapping so a status/plan change takes effect now.
-    await invalidateSegment(updated.id, c.env);
     return c.json(updated);
   });
 
@@ -143,19 +133,10 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId');
     const id = c.req.param('id');
 
-    // Run telemetry lives on its own database, beyond the cascade: capture which runs and
-    // hosts were this segment's while core can still say so, erase them after.
-    const telemetryKeys = await collectSegmentTelemetryKeys(db, tenantId, id);
-    const [deleted] = await db
-      .delete(segments)
-      .where(and(eq(segments.id, id), eq(segments.tenantId, tenantId), eq(segments.isDefault, false)))
-      .returning({ id: segments.id });
-
-    if (!deleted) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
-    await cascadeSegmentDelete(db, telemetryKeys);
-    // Stop the warm isolate from resolving the now-deleted segment.
-    await invalidateSegment(deleted.id, c.env);
-    return c.json({ ok: true, id: deleted.id });
+    // Also erases the run telemetry beyond the core cascade (segmentLifecycle).
+    const erased = await eraseSegment(db, c.env, tenantId, id);
+    if (!erased) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    return c.json({ ok: true, id: erased });
   });
 
   return router;

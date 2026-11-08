@@ -14,27 +14,20 @@
 import { Hono } from 'hono';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { SHA256_HEX, WATERMARK_ID_HEX } from '@builderforce/voice-provenance';
 import {
   verifyVoiceProvenanceManifestPublic,
-  verifyVoiceProvenancePublic,
   VoiceProvenanceUnavailable,
   type ProvenanceLookup,
-  type PublicVoiceProvenance,
 } from '../../application/studio/voiceProvenanceService';
 import { createVoiceProvenancePorts } from '../../application/studio/voiceProvenancePorts';
+import { lookupVoiceProvenancePublic } from '../../application/studio/voiceProvenanceLookup';
 import { parseBody, z } from './requestBody';
 import { clientIp, voiceRateLimited, VOICE_VERIFY_RPM } from './voiceRateLimit';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const VerifyClaimBody = z.object({ manifest: z.unknown(), signature: z.unknown(), audioSha256: z.string().optional() });
-
-/** Carries a verdict out of the cache loader without caching it. */
-class Uncacheable extends Error {
-  constructor(readonly verdict: PublicVoiceProvenance) { super('uncacheable'); }
-}
 
 function lookupFromQuery(query: Record<string, string | undefined>): ProvenanceLookup | null {
   const { watermarkId, audioSha256, clipId } = query;
@@ -48,14 +41,6 @@ function lookupFromQuery(query: Record<string, string | undefined>): ProvenanceL
 function claimedHashFromQuery(query: Record<string, string | undefined>): string | undefined {
   const { audioSha256 } = query;
   return audioSha256 && SHA256_HEX.test(audioSha256) ? audioSha256 : undefined;
-}
-
-function cacheKeyFor(by: ProvenanceLookup, claimedHash?: string): string {
-  const base = 'watermarkId' in by ? `voiceprov:wm:${by.watermarkId}`
-    : 'audioSha256' in by ? `voiceprov:sha:${by.audioSha256}`
-    : `voiceprov:clip:${by.clipId}`;
-  // The view carries the hash comparison, so it is part of what is cached.
-  return claimedHash ? `${base}:claim:${claimedHash}` : base;
 }
 
 export function createVoiceProvenanceRoutes(db: Db): Hono<HonoEnv> {
@@ -76,24 +61,8 @@ export function createVoiceProvenanceRoutes(db: Db): Hono<HonoEnv> {
     const by = lookupFromQuery(query);
     if (!by) return c.json({ error: 'Provide a valid watermarkId, audioSha256 or clipId.' }, 400);
     const claimedHash = claimedHashFromQuery(query);
-    const env = c.env as Env;
-    const ports = createVoiceProvenancePorts(db, env);
     try {
-      const verdict = await getOrSetCached(
-        env,
-        cacheKeyFor(by, claimedHash),
-        async () => {
-          const v = await verifyVoiceProvenancePublic(ports, by, claimedHash);
-          if (!v.valid) throw new Uncacheable(v);
-          return v;
-        },
-        // The manifest is immutable, but the public view names the voice, which can
-        // be renamed or unpublished — keep the TTL short.
-        { kvTtlSeconds: 300 },
-      ).catch((err: unknown) => {
-        if (err instanceof Uncacheable) return err.verdict;
-        throw err;
-      });
+      const verdict = await lookupVoiceProvenancePublic(db, c.env as Env, by, claimedHash);
       return c.json(verdict, verdict.valid ? 200 : verdict.reason === 'not_found' ? 404 : 422);
     } catch (err) {
       if (err instanceof VoiceProvenanceUnavailable) return c.json({ error: err.message, code: err.code }, 503);

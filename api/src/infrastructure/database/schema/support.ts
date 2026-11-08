@@ -18,6 +18,7 @@
  */
 
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -172,7 +173,7 @@ export const feedbackSentiments = pgTable('feedback_sentiments', {
 export const feedbackCollectors = pgTable('feedback_collectors', {
   id:               uuid('id').primaryKey().defaultRandom(),
   tenantId:         integer('tenant_id').notNull(),
-  projectId:        integer('project_id').notNull(),
+  projectId:        bigint('project_id', { mode: 'number' }).notNull(),
   name:             varchar('name', { length: 255 }).notNull(),
   /** SHA-256 of the bff_* ingest key (raw key shown once at creation). */
   keyHash:          varchar('key_hash', { length: 64 }).unique(),
@@ -202,7 +203,7 @@ export const feedbackCollectors = pgTable('feedback_collectors', {
 export const feedbackSubmissions = pgTable('feedback_submissions', {
   id:              uuid('id').primaryKey().defaultRandom(),
   tenantId:        integer('tenant_id').notNull(),
-  projectId:       integer('project_id').notNull(),
+  projectId:       bigint('project_id', { mode: 'number' }).notNull(),
   collectorId:     uuid('collector_id').references(() => feedbackCollectors.id, { onDelete: 'set null' }),
   /** 'feature' | 'bug' | 'idea' | 'other'. */
   kind:            varchar('kind', { length: 16 }).notNull().default('feature'),

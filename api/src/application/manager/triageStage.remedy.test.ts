@@ -20,7 +20,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  * counters `runStallTriage` returns can catch that, which is why the assertion is here.
  */
 
-vi.mock('../swimlane/evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
+vi.mock('../swimlane/evaluateAutoRun', async (importOriginal) => ({ ...(await importOriginal<typeof import('../swimlane/evaluateAutoRun')>()), evaluateTaskAutoRun: vi.fn() }));
 vi.mock('../swimlane/laneEntryTrigger', () => ({ routeLaneEntry: vi.fn() }));
 vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../kanban/driveSignoffs', () => ({ driveOutstandingSignoffs: vi.fn() }));

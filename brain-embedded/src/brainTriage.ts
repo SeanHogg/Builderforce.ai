@@ -191,9 +191,9 @@ export function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: Br
  * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
  * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
  * this run — the "it said it linked the gap to the chat, but the chat shows no link"
- * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
- * a claim with no successful create/link tool means nothing was actually filed or
- * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
+ * failure. A REAL create links its own chat in the same call (the host stamps the chat
+ * and the server — or the editor's local store — links it), so a claim with no
+ * successful create/link tool means nothing was actually filed or linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
  * it identically.
  */
 export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {

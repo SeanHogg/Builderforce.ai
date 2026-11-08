@@ -65,7 +65,7 @@ import { projects } from './delivery';
  */
 export const projectSites = pgTable('project_sites', {
   id:            serial('id').primaryKey(),
-  projectId:     integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   subdomain:     varchar('subdomain', { length: 63 }).notNull().unique(),
   /** 'static' (R2-served built assets) | 'container' (V2 container web-serving, later phase). */
@@ -123,7 +123,7 @@ export const siteTrafficDaily = pgTable('site_traffic_daily', {
   id:          serial('id').primaryKey(),
   siteId:      integer('site_id').notNull().references(() => projectSites.id, { onDelete: 'cascade' }),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   day:         date('day').notNull(),
   pageViews:   integer('page_views').notNull().default(0),
   assetHits:   integer('asset_hits').notNull().default(0),
@@ -153,7 +153,7 @@ export const siteCollections = pgTable('site_collections', {
   id:                   serial('id').primaryKey(),
   siteId:               integer('site_id').notNull().references(() => projectSites.id, { onDelete: 'cascade' }),
   tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:            integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:            bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   name:                 varchar('name', { length: 64 }).notNull(),
   acceptsPublicWrites:  boolean('accepts_public_writes').notNull().default(true),
   /** When set, a submission carrying an `email` also lands in this audience. */
@@ -394,7 +394,7 @@ export const marketingSenderIdentities = pgTable('marketing_sender_identities', 
 export const marketingAudiences = pgTable('marketing_audiences', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description').notNull().default(''),
   memberCount: integer('member_count').notNull().default(0),
@@ -518,7 +518,7 @@ export const marketingAssets = pgTable('marketing_assets', {
 export const marketingCampaigns = pgTable('marketing_campaigns', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
   audienceId:       integer('audience_id').notNull().references(() => marketingAudiences.id, { onDelete: 'cascade' }),
   senderIdentityId: integer('sender_identity_id').references(() => marketingSenderIdentities.id, { onDelete: 'set null' }),
   /**
@@ -648,7 +648,7 @@ export const marketingCampaignSends = pgTable('marketing_campaign_sends', {
 export const socialCampaigns = pgTable('social_campaigns', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   body:        text('body').notNull().default(''),
   linkUrl:     varchar('link_url', { length: 1000 }).notNull().default(''),
@@ -2071,7 +2071,7 @@ export const replaySites = pgTable('replay_sites', {
   /** `hosted` | `external`. */
   kind:      varchar('kind', { length: 16 }).notNull(),
   /** Bare project id (the hosted site's project); resolved through the apps database. */
-  projectId: integer('project_id'),
+  projectId: bigint('project_id', { mode: 'number' }),
   label:     varchar('label', { length: 200 }).notNull().default(''),
   apiKeyId:  uuid('api_key_id').references(() => tenantApiKeys.id, { onDelete: 'set null' }),
   settings:  jsonb('settings').notNull().default(sql`'{}'::jsonb`),

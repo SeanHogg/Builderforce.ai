@@ -2,12 +2,13 @@
  * The run's TICKET BACKSTOPS — the deterministic half of "a code change is always tied
  * to a ticket, and the board says what happened to it": the delta ticket a run opens on
  * its first edit (and attaches later files to), the linked tickets it advances or
- * completes when it settles, and the chat link for every work item a create tool made.
- * Each is best-effort, records a durable step, and never fails the run.
+ * completes when it settles. (A work item a create tool makes links its own chat in the
+ * create call — see `stampRunChat` — so there is no link backstop.) Each is best-effort,
+ * records a durable step, and never fails the run.
  */
 
 import { isFailedToolResult } from '../brainTriage';
-import { workItemLinkFromCreate, type LinkedTicketToAdvance } from '../chatWorkLinking';
+import type { LinkedTicketToAdvance } from '../chatWorkLinking';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from './runCell';
 import { nowIso, nowMs, pushTrace } from './runCells';
@@ -218,49 +219,4 @@ export async function updateLinkedTickets(
       isError: isFailedToolResult(out),
     });
   }
-}
-
-/**
- * Deterministic chat↔work link for an item a create tool just produced. If `out` is
- * the result of a recognised create tool (see {@link workItemLinkFromCreate}), fire
- * the shared `builtin_chats_link_ticket` tool — via the run's own dispatcher so it
- * rides the same gateway MCP relay the model uses — so the new Epic / task / OKR /
- * spec is tied to this conversation for traceability. Idempotent (re-linking is a
- * no-op update), best-effort (never fails the run), and recorded as a durable step so
- * the auto-link is visible on the timeline. Marks the run as having recorded a ticket
- * so the from_delta backstop stays quiet.
- */
-export async function autoLinkCreatedItem(
-  serverChatId: number | null,
-  c: RunCell,
-  runTool: (name: string, args: unknown) => Promise<unknown>,
-  toolName: string,
-  out: unknown,
-): Promise<void> {
-  const link = workItemLinkFromCreate(toolName, out);
-  // An unbound local chat (PRD 36) has no platform chat to link the item to.
-  if (!link || serverChatId == null) return;
-  const chatId = serverChatId;
-  const toolStart = nowMs();
-  let result: unknown;
-  try {
-    result = await runTool('builtin_chats_link_ticket', {
-      chatId,
-      kind: link.kind,
-      ref: link.ref,
-      linkType: link.linkType,
-    });
-  } catch (e) {
-    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  if (!isFailedToolResult(result)) c.ticketRecorded = true;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: 'tool',
-    label: 'builtin_chats_link_ticket',
-    durationMs: nowMs() - toolStart,
-    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
-    result: result ?? null,
-    isError: isFailedToolResult(result),
-  });
 }

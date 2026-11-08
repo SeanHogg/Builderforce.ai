@@ -18,6 +18,7 @@ import { isHumanOrExternalOutputTool } from '../../domain/trust/contentTrust';
 import type { Db } from '../../infrastructure/database/connection';
 import { builtinToolMutates, callBuiltinTool, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool } from '../llm/builtinMcpService';
 import { inspectOutboundContent } from '../trust/trustService';
+import { withHostChat } from '../brain/createdWorkItemChatLink';
 import { ANALYZE_CODEBASE_TOOL, withSavedAnalysis } from './cloudAgent/auditAnalysis';
 import { CLOUD_RUN_TENANT_ROLE } from './cloudAgentTools';
 import { recordCloudToolEvent } from './cloudToolEvents';
@@ -62,7 +63,9 @@ export function platformTools(a: PlatformToolsArgs): ToolExtension {
       try {
         const data = await callBuiltinTool(a.db, {
           tenantId: a.tenantId, tool,
-          arguments: { projectId: a.projectId, ...args, ...(chat != null ? { chatId: chat } : {}) },
+          // The originating chat is the HOST's fact: stamped over anything the model sent, and on a
+          // work-item create stripped when the run has no chat, so the item links only where the run is.
+          arguments: withHostChat(tool, { projectId: a.projectId, ...args, ...(chat != null ? { chatId: chat } : {}) }, chat),
           env: a.env, userId: a.cloudAgentRef ?? null, agentRef: a.cloudAgentRef ?? null,
           role: CLOUD_RUN_TENANT_ROLE,
           // Provenance (ticket 5301): this run formed the belief, so a project_facts.remember from here carries the execution id.

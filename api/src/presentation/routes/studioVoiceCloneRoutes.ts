@@ -338,13 +338,14 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
   router.put('/:id/embedding', async (c) => {
     const cloneId = Number(c.req.param('id'));
     if (!Number.isInteger(cloneId)) return c.json({ error: 'invalid clone id' }, 400);
-    const body = (await c.req.json().catch(() => null)) as { embedding?: unknown; sampleRate?: unknown } | null;
-    const embedding = parseEmbedding(body?.embedding);
+    // Loose on purpose: `parseEmbedding` / `parseSampleRate` own the field rules and the 422 wording.
+    const body = await parseOptionalBody(c, z.looseObject({ embedding: z.unknown().optional(), sampleRate: z.unknown().optional() }));
+    const embedding = parseEmbedding(body.embedding);
     if (!embedding) return c.json({ error: 'embedding must be a non-empty array of at most 4096 finite numbers' }, 422);
     try {
       const stored = await storeOwnerEmbeddingIfMissing(db, c.env as Env, {
         cloneId, tenantId: c.get('tenantId'), userId: c.get('userId') ?? null, embedding,
-        sampleRate: parseSampleRate(body?.sampleRate),
+        sampleRate: parseSampleRate(body.sampleRate),
       });
       return c.json({ stored });
     } catch (err) {

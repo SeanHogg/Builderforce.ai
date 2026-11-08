@@ -40,7 +40,11 @@ describe('usableRefusalReason', () => {
 });
 
 describe('loadRecordedRefusalReasons', () => {
-  beforeEach(() => vi.mocked(loadLatestRefusals).mockReset());
+  // A block body on purpose: Vitest runs a function RETURNED from `beforeEach` as teardown, and
+  // `mockReset()` returns the mock — which then ran with no arguments and rejected after the last test.
+  beforeEach(() => {
+    vi.mocked(loadLatestRefusals).mockReset();
+  });
 
   it('reads the ledger ONCE for N tickets (no N+1)', async () => {
     vi.mocked(loadLatestRefusals).mockResolvedValue(new Map([
