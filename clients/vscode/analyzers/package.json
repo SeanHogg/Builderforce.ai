@@ -6,7 +6,7 @@
   "dependencies": {
     "dependency-cruiser": "16.10.4",
     "jscpd": "4.0.5",
-    "knip": "5.30.0",
+    "knip": "5.88.1",
     "typescript": "5.6.3"
   }
 }
