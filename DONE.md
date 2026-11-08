@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-11-08: main's Release goes green again: the 3a2c752db sweep's broken tests, guards and VS Code checks repaired, and the canvas webview is type-checked in CI (Release health)
+
+- **Autonomous-delivery tests and guards.** The `laneEntryTrigger.*` mocks keep the real `evaluateAutoRun` exports. `boardBudget` asserts the two cache keys one credit clears. `boardMilestones` reads date params from the query chunks instead of stringifying a self-referencing SQL object. The backlog-disposition report uses a raw `not exists` fragment: three round trips, and the query is scoped to the tenant. Its apply test now covers the tenant-scoped "Superseded by" quote. `kernel/accountLedger.test.ts` is new. The empty catches in `conductMarker.ts` and `incidentVoice.ts` now report.
+- **Cloud admission.** The three `executions` updates in `dispatchAdmission.ts` are scoped by tenant. `followUpRun.admission.test.ts` stubs the side modules that admission pulls in. The four silent `.catch(() => null)` sites in `fetchBuildError.ts` report through `reportedFallback`.
+- **Frontend ratchets.** The redundant `'use client'` in `KanbanTemplatePreviewPanel` is gone. `BoardBudgetControl` derives its display per board with no reset effects. Board rosters, investor milestones and Discovery each have their own client module (`boardRostersApi.ts`, `investorMilestonesApi.ts`, `discoveryApi.ts`), so `builderforceApi.ts`, `founderOpsApi.ts` and `TaskMgmtContent.tsx` are back under their ceilings. Session storage goes through `lib/storage.ts`.
+- **VS Code extension.**
+  - `VoiceMarketplaceScreen.tsx` moved from the strict webview project to `webview/tsconfig.canvas.json`.
+  - The `type-check` script now runs `tsc -p webview/tsconfig.canvas.json`, so the canvas webview has CI coverage for the first time.
+  - The `externalUrl` test feeds a real backslash (`"/\\evil.com"`). The resolver was already correct.
+  - `knowledgeLinkedDenied.acceptance` closes and clears the folder's SQLite cache between runs.
+  - The `--integration` esbuild branch gets `importMetaUrlShim`, so the real-VS Code activation test finds `node:sqlite`.
+
+## ✅ RESOLVED 2026-11-08: a folder's knowledge lives in one SQLite file the editor and on-prem agent both open (Local-first · G03 · PRD 41 WS2)
+
+- **The floor and the store.** `engines.vscode` is `^1.101.0`, so `node:sqlite` is always present. The agent-tools subpaths `./node-local-sqlite` (opener) and `./node-knowledge-store` keep one file per folder at `.builderforce/cache/knowledge/index.sqlite`, with tables `meta`, `scope`, `fact`, `relation`, `recheck`, `extracted` and `manifest`. Extract bodies live in the `extracted` table, not in object files; that deviation from PRD 41 §B4 is recorded in the PRD. The VS Code folder store (`folderKnowledge.ts`), the replica stack and on-prem (`onPremKnowledge.ts`) all open it. `agent-runtime`'s own `memory/sqlite.ts` and the editor's `localRecordTransaction` are gone.
+- **Writes are atomic with their manifest.** Manifest writes are buffered and commit in the same transaction as the facts they describe. Same-key writes upsert, and a fact-free manifest change does not move the generation.
+- **Legacy JSON migrates once, safely.** Migration is insert-only and runs once per root behind a `migrated:<rootId>` marker. Rows are built with yields, then written in one transaction without yielding. A root with no legacy files leaves the generation alone, and a chunk that only deletes is still written.
+- **A damaged or newer file is never made worse.**
+  - A corrupt file (SQLITE_CORRUPT/NOTADB) is moved aside all-or-nothing. Any other open failure (READONLY, IOERR) leaves the file in place.
+  - A file written by a newer format opens read-only. Nothing is written at open (no schema statements, no WAL pragma), and every write path refuses: apply, manifest set/delete, transaction, setMeta. A refused manifest write never lingers in the read buffer.
+  - The integrity check and WAL are opt-in. UNC and `\\wsl$` paths use `journal_mode = DELETE`. The cache folder gets its own `.gitignore`.
+- **Shutdown closes in order.** One memoized `shutdownKnowledge()` stops the replica pumps, flushes their queues, then closes every folder store. `deactivate` and the subscription dispose both await the same close. Opens are refused while it runs, and a late pump timer logs instead of throwing.
+
 ## ✅ RESOLVED 2026-11-08: one tool classifier fails closed, security gates every merge, and shipped milestones reach the investor update (Governance · Finance)
 
 - **One tool classifier, failing closed.** `packages/agent-tools/src/tool-side-effect.ts` is the only classifier.
