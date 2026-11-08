@@ -13,6 +13,7 @@
  * Pure apart from that per-shell verdict; the command TEXT stays in `git-tools.ts`.
  */
 
+import type { ShellCapability } from "./capabilities.js";
 import type { ToolResult } from "./tool.js";
 
 /** A safe git ref/path token — blocks shell metacharacters so a model-supplied

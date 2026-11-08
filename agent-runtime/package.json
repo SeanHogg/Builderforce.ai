@@ -213,8 +213,8 @@
     "node-llama-cpp": "3.15.1"
   },
   "optionalDependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.59",
-    "@seanhogg/builderforce-memory-mcp": "^2026.10.59"
+    "@seanhogg/builderforce-memory": "^2026.10.60",
+    "@seanhogg/builderforce-memory-mcp": "^2026.10.60"
   },
   "engines": {
     "node": ">=22.13.0"

@@ -355,16 +355,23 @@ function walk(value: unknown, depth: number, ctx: WalkContext, schemaMap = false
   if (value == null || typeof value !== 'object') return value;
   if (value instanceof Date) return value;
   if (depth >= (o.maxDepth ?? DEFAULT_MAX_DEPTH)) return '[MAX_DEPTH]';
-  if (ctx.path.has(value)) return '[CIRCULAR]';
+  if (ctx.path.has(value)) {
+    ctx.circularHits++;
+    return '[CIRCULAR]';
+  }
   const memoKey = `${depth}|${schemaMap ? 1 : 0}`;
   const memo = ctx.done.get(value)?.get(memoKey);
   if (memo !== undefined) return memo;
   ctx.path.add(value);
+  const circularBefore = ctx.circularHits;
   try {
     const result = walkNode(value, depth, ctx, schemaMap, entries);
-    let byDepth = ctx.done.get(value);
-    if (!byDepth) ctx.done.set(value, (byDepth = new Map()));
-    byDepth.set(memoKey, result);
+    // A result that contains a `[CIRCULAR]` marker depends on the path it was reached by: never reuse it from another path.
+    if (ctx.circularHits === circularBefore) {
+      let byDepth = ctx.done.get(value);
+      if (!byDepth) ctx.done.set(value, (byDepth = new Map()));
+      byDepth.set(memoKey, result);
+    }
     return result;
   } finally {
     ctx.path.delete(value);
@@ -408,5 +415,5 @@ function walkNode(value: object, depth: number, ctx: WalkContext, schemaMap: boo
  * of the same shape, so a later `JSON.stringify` is always valid JSON with the secret gone.
  */
 export function redactDeep<T>(value: T, options: RedactDeepOptions = {}): T {
-  return walk(value, 0, { options, path: new Set(), done: new WeakMap() }) as T;
+  return walk(value, 0, newWalkContext(options, 0)) as T;
 }

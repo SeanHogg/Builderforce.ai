@@ -3,8 +3,13 @@
  * workspace, so authenticated git runs only in a private mirror, built by `mirrorGitCommand`. These pin what that
  * command is — and is not.
  */
-import { describe, expect, it } from 'vitest';
-import { bundleCreateArgs, gitAuthOf, mirrorGitCommand } from '../../../container/sandboxCore.mjs';
+import { afterEach, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { bundleCreateArgs, gitAuthOf, importBundle, mirrorGitCommand } from '../../../container/sandboxCore.mjs';
+import { createWorkspace } from '../../../container/workspaceAgent.mjs';
 
 const URL_ = 'https://api.example.test/api/runtime/internal/container-git/42.git';
 const parent = {
@@ -72,4 +77,84 @@ describe('gitAuthOf', () => {
     expect(gitAuthOf({})).toBeNull();
     expect(gitAuthOf({ repo: {} })).toBeNull();
   });
+});
+
+describe('the mirror\'s PATH', () => {
+  it('is the fixed trusted list, not the inherited one (a writable directory on the server\'s PATH cannot plant `git`)', () => {
+    const cmd = mirrorGitCommand('/m', ['init'], null, { PATH: '/tmp/evil:/usr/bin' });
+    if (process.platform === 'win32') return;
+    expect(cmd.env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
+  });
+});
+
+const hasGit = spawnSync('git', ['--version'], { stdio: 'ignore', timeout: 10_000 }).status === 0;
+const posix = process.platform !== 'win32';
+
+/** Plain git in `cwd` (a fixture: throws so a broken setup fails loudly). Bounded: it can never hang the run. */
+function git(cwd: string, ...args: string[]): string {
+  const r = spawnSync('git', ['-c', 'user.email=t@example.test', '-c', 'user.name=T', ...args], { cwd, encoding: 'utf8', timeout: 30_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+  if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+describe.skipIf(!hasGit || !posix)('publishing a new commit: workspace bundle -> mirror import (real git)', () => {
+  let root = '';
+  afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }); root = ''; });
+
+  async function fixture() {
+    root = await mkdtemp(join(tmpdir(), 'bf-import-'));
+    const workdir = join(root, 'ws');
+    git(root, 'init', '-q', '-b', 'bf/5', workdir);
+    await writeFile(join(workdir, 'f.txt'), '1');
+    git(workdir, 'add', '.');
+    git(workdir, 'commit', '-q', '-m', 'one');
+    const base = git(workdir, 'rev-parse', 'HEAD');
+    // The mirror, as the server has it after fetching the run branch: a bare repo holding only `base`.
+    const privateDir = join(root, 'private');
+    git(root, 'init', '-q', '--bare', join(privateDir, 'repo.git'));
+    git(workdir, 'push', '-q', join(privateDir, 'repo.git'), 'bf/5:refs/heads/bf/5');
+    return { workdir, base, m: { repo: join(privateDir, 'repo.git'), privateDir, auth: null } };
+  }
+
+  it('imports a bundle of a NEW commit (the file transport is refused for fetch, so this is bundle verify + unbundle) and moves the ref to its sha', async () => {
+    const { workdir, base, m } = await fixture();
+    await writeFile(join(workdir, 'f.txt'), '2');
+    git(workdir, 'commit', '-q', '-am', 'two');
+    const next = git(workdir, 'rev-parse', 'HEAD');
+
+    const w = createWorkspace(workdir);
+    const out = await w.handle({ op: 'bundleOut', branch: 'bf/5', basis: base }) as { ok: boolean; bundle: string };
+    expect(out.ok).toBe(true);
+    const file = join(m.privateDir, 'out-1.bundle');
+    await writeFile(file, Buffer.from(out.bundle, 'base64'), { mode: 0o600 });
+
+    const imported = await importBundle(m, file, 'bf/5');
+    expect(imported).toEqual({ ok: true, sha: next });
+    expect(git(m.repo, 'rev-parse', 'refs/heads/bf/5')).toBe(next);
+    expect(next).not.toBe(base);
+  }, 60_000);
+
+  it('refuses a bundle whose prerequisite the mirror does not hold, and one that lacks the branch', async () => {
+    const { workdir, m } = await fixture();
+    await writeFile(join(workdir, 'f.txt'), '2');
+    git(workdir, 'commit', '-q', '-am', 'two');
+    const two = git(workdir, 'rev-parse', 'HEAD');
+    await writeFile(join(workdir, 'f.txt'), '3');
+    git(workdir, 'commit', '-q', '-am', 'three');
+
+    const w = createWorkspace(workdir);
+    // Basis = a commit the mirror never received: `verify` fails, nothing is imported.
+    const incomplete = await w.handle({ op: 'bundleOut', branch: 'bf/5', basis: two }) as { bundle: string };
+    const f1 = join(m.privateDir, 'out-1.bundle');
+    await writeFile(f1, Buffer.from(incomplete.bundle, 'base64'), { mode: 0o600 });
+    expect((await importBundle(m, f1, 'bf/5')).ok).toBe(false);
+
+    // A complete bundle of a different branch: it does not carry the run branch.
+    git(workdir, 'branch', 'other');
+    const full = join(m.privateDir, 'out-2.bundle');
+    git(workdir, 'bundle', 'create', full, 'refs/heads/other');
+    const wrong = await importBundle(m, full, 'bf/5');
+    expect(wrong).toMatchObject({ ok: false, error: expect.stringContaining('refs/heads/bf/5') });
+    expect(git(m.repo, 'rev-parse', 'refs/heads/bf/5')).not.toBe(git(workdir, 'rev-parse', 'HEAD'));
+  }, 60_000);
 });

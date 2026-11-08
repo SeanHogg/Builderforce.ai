@@ -5,7 +5,7 @@
  * registered (`zoom.tsx`); with none registered (the 3D tower) they are disabled.
  */
 
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
 import { CONTROL } from '../styles';
@@ -25,9 +25,15 @@ export interface CameraBarProps {
     onOut?: (() => void) | undefined;
     /** The active camera's zoom; null/absent ⇒ +, − and Fit are disabled. */
     zoom?: ZoomApi | null | undefined;
+    /** The canvas tools (Panels, Risk overlays), right after the View group and outside its scroller so a popover is not clipped. */
+    tools?: ReactNode;
+    /** On a phone the tools take their own sideways-scrolling line instead of sharing the View row. */
+    stacked?: boolean | undefined;
+    /** The panel show/hide toggles, before the zoom buttons. */
+    panelToggles?: ReactNode;
 }
 
-const zoomButton: CSSProperties = {
+export const zoomButton: CSSProperties = {
     height: CONTROL, minWidth: CONTROL, padding: '0 10px', borderRadius: 8, cursor: 'pointer', font: 'inherit', ...TYPE.pill,
     border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'), pointerEvents: 'auto',
 };

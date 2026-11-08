@@ -130,6 +130,12 @@ export class ComputeClient {
         return () => { live = false; stop(); };
     }
 
+    /** `run` as a promise, for a handler that needs the answer once. */
+    once<K extends TaskKind>(kind: K, input: KindInput<K>): Promise<KindResult<K>> {
+        this.retain();
+        return new Promise<KindResult<K>>((resolve, reject) => { this.run(kind, input, { done: resolve, fail: reject }); }).finally(() => this.release());
+    }
+
     /** Lets go of the worker and settles everything it owed in-process. For a client that is being replaced. */
     dispose(): void {
         if (this.lingering) { clearTimeout(this.lingering); this.lingering = null; }

@@ -8,6 +8,7 @@ export {
     DEFAULT_KNOWLEDGE_GRAPH_LABELS, resolveLabels, fillTemplate, camelKind,
     type KnowledgeGraphLabels, type FindingKindLabels, type SurfaceLabels, type StringLabelKey,
 } from './labels';
+export { setWorkerFactory } from './compute/sharedClient';
 export { buildStations, changedRefs, type Station, type StationModel } from './surface/stations';
 export { buildLines, type Line, type LinesModel } from './surface/lines';
 export { makeOverlay, PRESETS, METRICS, CHANNELS, type Bindings, type OverlayModel } from './surface/overlays';

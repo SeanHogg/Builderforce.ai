@@ -40,10 +40,12 @@ export const AGENT_WORKFLOW_PATH = '.github/workflows/builderforce-agent.yml';
  * and lets a future bump be a one-line migration rather than another backfill.
  *
  * `r1` is the first revision that carries `run-name`; `r2` cuts the job permissions to `contents: read` +
- * `id-token: write` (a repo still on r1 grants the job token write access it no longer needs). NULL in the database means
+ * `id-token: write` (a repo still on r1 grants the job token write access it no longer needs); `r3` adds the `if: always()`
+ * shell-user cleanup step and downloads the runner to `$RUNNER_TEMP` (an older copy leaves a cancelled run's processes and
+ * the agent-owned `.git` behind). NULL in the database means
  * "committed before revisions existed", i.e. possibly older than r1.
  */
-export const AGENT_WORKFLOW_REVISION = 'r2';
+export const AGENT_WORKFLOW_REVISION = 'r3';
 
 /**
  * The audience an agent workflow must request — DELIBERATELY DISTINCT from the

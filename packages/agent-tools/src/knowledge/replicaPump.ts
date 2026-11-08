@@ -265,7 +265,8 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 let baseGeneration = snap.ack?.generation ?? 0;
                 let mode: ReplicaPackStats['mode'] = 'delta';
                 if (!snap.ack) {
-                    const plan = await planReconcile({ rootId, local, sources, client: guarded, dirty: snap.keys });
+                    const whole = await planReconcile({ rootId, local, sources, client: guarded, dirty: snap.keys });
+                    const plan = (await queue.additive()) ? additivePlan(whole, snap.keys) : whole;
                     if (plan.kind === 'equal') {
                         await queue.settle(snap, plan.ack);
                         state.lastSyncAt = new Date(now()).toISOString();

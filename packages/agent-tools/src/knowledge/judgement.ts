@@ -96,6 +96,20 @@ export function completionJudgement(complete: JudgeCompletion): JudgementPort {
 /** Default ceiling for one judgement request before it is treated as unjudged (a stalled engine). */
 export const DEFAULT_JUDGEMENT_TIMEOUT_MS = 60_000;
 
+/** Extra time granted per {@link JUDGEMENT_CHARS_PER_STEP} characters of request text. */
+export const JUDGEMENT_MS_PER_STEP = 15_000;
+export const JUDGEMENT_CHARS_PER_STEP = 4_000;
+/** Ceiling of the scaled timeout. */
+export const MAX_JUDGEMENT_TIMEOUT_MS = 300_000;
+
+/** The timeout of one request: the 60 s base plus 15 s per 4,000 characters of its text, capped at 300 s. */
+export function defaultJudgementTimeoutMs(req: JudgementRequest): number {
+    let chars = 0;
+    for (const item of req.items) chars += item.text.length;
+    const scaled = DEFAULT_JUDGEMENT_TIMEOUT_MS + Math.floor(chars / JUDGEMENT_CHARS_PER_STEP) * JUDGEMENT_MS_PER_STEP;
+    return Math.min(MAX_JUDGEMENT_TIMEOUT_MS, scaled);
+}
+
 /**
  * The first port that answers: a port that THROWS (no engine running, signed out, a
  * refused call) hands the request to the next; a stopped review stops here. A port that

@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { getComputeClient } from './client';
+import { getComputeClient } from './sharedClient';
 
 export function useGraphResident(graph: KnowledgeGraph | null): void {
     const client = getComputeClient();

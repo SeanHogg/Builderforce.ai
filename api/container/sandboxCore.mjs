@@ -27,9 +27,9 @@ import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './too
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
 import { bootJobIdPrefix, createJobTable, killTree, provisionShellUser, releaseShellWorkspace, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation } from './sandboxJobs.mjs';
 import { createWorkspaceClient } from './workspaceClient.mjs';
-import { absorbHead, bundleCreateArgs, cloneWorkspace, createMirror, disposeMirror, gitAuthOf, mirrorGitCommand, publishHead, safeRef, scrubCheckoutCredentials, syncWorkspace } from './sandboxGit.mjs';
+import { absorbHead, bundleCreateArgs, cloneWorkspace, createMirror, disposeMirror, gitAuthOf, importBundle, mirrorGitCommand, publishHead, safeRef, scrubCheckoutCredentials, syncWorkspace } from './sandboxGit.mjs';
 
-export { absorbHead, bundleCreateArgs, cloneWorkspace, gitAuthOf, mirrorGitCommand, provisionShellUser, releaseShellWorkspace, scrubCheckoutCredentials, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation };
+export { absorbHead, bundleCreateArgs, cloneWorkspace, gitAuthOf, importBundle, mirrorGitCommand, provisionShellUser, releaseShellWorkspace, scrubCheckoutCredentials, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation };
 
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
 

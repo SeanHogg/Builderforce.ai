@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-08T15:56:40.889Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-08T16:08:27.627Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -323,7 +323,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [2.3e-8, 8.4e-8],
+  "openai/gpt-oss-120b": [2.6e-8, 9.4e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
@@ -416,10 +416,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "tencent/hy-mt2-1.8b": [4.4e-8, 1.77e-7],
   "tencent/hy-mt2-30b-a3b": [7.4e-8, 2.95e-7],
   "tencent/hy-mt2-7b": [7.4e-8, 2.95e-7],
-  "tencent/hy3": [1.32e-7, 5.28e-7],
+  "tencent/hy3": [8.25e-8, 3.3e-7],
   "tencent/hy3-preview": [1.8e-7, 6e-7],
   "tencent/hy4": [4.17e-7, 0.0000012505],
-  "tencent/hy4-preview": [8.34e-7, 0.000002501],
+  "tencent/hy4-preview": [7.506e-7, 0.0000022509],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [5.5e-7, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],

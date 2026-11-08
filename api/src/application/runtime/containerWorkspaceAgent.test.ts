@@ -35,13 +35,14 @@ describe('the workspace helper protocol', () => {
     serveWorkspace(ws(), input, output);
     const replies: Array<Record<string, unknown>> = [];
     output.on('data', (chunk: Buffer) => { for (const line of chunk.toString().split('\n').filter(Boolean)) replies.push(JSON.parse(line)); });
+    try {
     input.write(`${JSON.stringify({ id: 7, op: 'init' })}\n${JSON.stringify({ id: 8, op: 'write', path: 'a.txt', content: 'hi' })}\n${JSON.stringify({ id: 9, op: 'nope' })}\n`);
     await new Promise((r) => setTimeout(r, 300));
     expect(replies.find((r) => r.id === 7)).toMatchObject({ ok: true });
     expect(replies.find((r) => r.id === 8)).toMatchObject({ ok: true, path: 'a.txt' });
     expect(replies.find((r) => r.id === 9)).toMatchObject({ ok: false, error: expect.stringContaining("unknown workspace op 'nope'") });
     expect(await readFile(join(workdir, 'a.txt'), 'utf8')).toBe('hi');
-    input.end();
+    } finally { input.end(); } // never leave the readline interface open: a leaked one keeps the worker alive
   });
 
   it('refuses every path that leaves the repository or reaches .git — for each file op', async () => {

@@ -77,8 +77,36 @@ export interface KnowledgeSourceOptions {
   pinpoint?: PinpointHost;
 }
 
-export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGraphSource {
+export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnowledgeSource {
   const { client, onDegraded } = opts;
+  /** ONE replica host per source: the review's local store is replicated to the project by ONE pack per root (the pump). */
+  const replica = createBrowserReplica(onDegraded);
+  const { host } = replica;
+  /** The local store, manifest and queue files: opened on first need (IndexedDB, else memory). */
+  let localKnowledge: Promise<BrowserKnowledge> | undefined;
+  const knowledge = (): Promise<BrowserKnowledge> => (localKnowledge ??= openBrowserKnowledge(onDegraded));
+  const pumpOf = (kn: BrowserKnowledge, rootId: string): PumpSource => ({
+    rootId, files: kn.files, local: kn.store, client, projectId: opts.projectId, manifest: kn.manifest,
+  });
+  let resumed = false;
+  /** The queues this browser left bound to the project: the pump picks them up again. A root never reviewed here has no queue file. */
+  const resumeQueues = async (rootIds: readonly string[]): Promise<void> => {
+    const kn = await knowledge();
+    for (const rootId of rootIds) {
+      if (await kn.files.read(dirtyFileName(rootId))) await host.resumeReplica(pumpOf(kn, rootId));
+    }
+  };
+  /**
+   * A root this host holds no rows for, or whose rows cannot outlive the page, must never make the pump delete server data:
+   *  - the in-memory fallback is empty after every reload;
+   *  - a root reviewed against the server before the local store existed has manifest entries but NO scope here, so an
+   *    incremental review would leave only the changed files locally (the server's copy seeds the unchanged ones through readThrough).
+   */
+  const needsAdditive = async (kn: BrowserKnowledge, rootId: string): Promise<boolean> => {
+    if (kn.degraded) return true;
+    if ((await kn.store.scopes()).some((s) => s.rootId === rootId)) return false;
+    return (await currentSourcesOf(kn.manifest, rootId)).length > 0;
+  };
   /** Every directory a review opened this session: a re-review (Continue) reuses its handle, and Live watches those that can. */
   const opened = new Map<string, DirectorySource>();
   /** Per root, the paths changed since its last review (Live's badges), kept across re-subscribes. */
@@ -159,7 +187,11 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     const dir = await opening;
     if (!dir) { yield { type: 'cancelled' }; return; }
     opened.set(dir.rootId, dir);
-    const ports: ReviewPorts = { source: dir, store: client.store, judgement: client.judgement, manifest: await openManifest(dir.rootId, onDegraded) };
+    const kn = await knowledge();
+    const pump = pumpOf(kn, dir.rootId);
+    if (await needsAdditive(kn, dir.rootId)) await host.markAdditive(dir.rootId, kn.files);
+    // The review writes the LOCAL store; the replicated store queues what changed, and the pump sends it as ONE pack.
+    const ports: ReviewPorts = { source: dir, store: host.replicatedStoreOf(dir.rootId, kn.files, kn.store, pump, true), judgement: client.judgement, manifest: kn.manifest };
     const base = { force: !!req.force, modelCalls: KNOWLEDGE_REVIEW_MODEL_CALLS };
     const workerOpts = opts.createWorker ? { createWorker: opts.createWorker } : {};
     const plan = await runReview({ ...base, mode: 'plan' }, ports, workerOpts);
@@ -177,14 +209,19 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     const queue: Array<KnowledgeReviewEvent | { type: 'failed'; error: unknown }> = [];
     let wake: (() => void) | null = null;
     const push = (e: (typeof queue)[number]) => { queue.push(e); wake?.(); };
-    void runReview({ ...base, mode: 'review' }, ports, { ...workerOpts, signal: ctl.signal, onProgress: (progress) => push({ type: 'progress', progress }) })
-      .then((report: ReviewReport) => {
-        // The new review IS the files' current state: nothing is pending against it.
-        pendingChanges.get(dir.rootId)?.clear();
-        recorder.finish();
-        const skipped = reviewRecords.get(dir.rootId)?.skipped;
-        push({ type: 'done', rootId: dir.rootId, report, ...(skipped ? { skipped } : {}) });
-      }, (error: unknown) => push({ type: 'failed', error }));
+    const review = (): Promise<ReviewReport> => runReview({ ...base, mode: 'review' }, ports, { ...workerOpts, signal: ctl.signal, onProgress: (progress) => push({ type: 'progress', progress }) });
+    // One batch per review, as the editor's: the local store persists in checkpoints, not once per file.
+    const batched = (): Promise<ReviewReport> => (ports.store.batched ? ports.store.batched(review) : review());
+    void (async () => {
+      const report = await replica.duringReview(dir.rootId, kn.files, pump, batched, { full: !!req.force });
+      // The result is on the server when `done` is shown (the graph is server-built); a pump still sending after the wait goes on in the background.
+      await host.drainedWithin(dir.rootId, REPLICA_DRAIN_MS).catch((error: unknown) => { onDegraded('replica drain', error, { rootId: dir.rootId }); });
+      // The new review IS the files' current state: nothing is pending against it.
+      pendingChanges.get(dir.rootId)?.clear();
+      recorder.finish();
+      const skipped = reviewRecords.get(dir.rootId)?.skipped;
+      push({ type: 'done', rootId: dir.rootId, report, ...(skipped ? { skipped } : {}) });
+    })().catch((error: unknown) => push({ type: 'failed', error }));
     for (;;) {
       while (queue.length > 0) {
         const ev = queue.shift()!;

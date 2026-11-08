@@ -5,7 +5,12 @@
  * (`hostKnowledgeGraphSource.ts`). A new focus (Open in graph) remounts the view on it.
  */
 
-import { KnowledgeGraphView, type KnowledgeGraphLabels, type KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
+import { KnowledgeGraphView, setWorkerFactory, type KnowledgeGraphLabels, type KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
+// The compute worker as a BLOB worker (`?worker&inline`): a webview may refuse a worker loaded from its resource origin, and the
+// view would then compute on the main thread, the freeze the worker exists to prevent. Registered before the first view renders.
+import KnowledgeComputeWorker from '../../../../../packages/knowledge-graph-view/src/compute/graphCompute.worker.ts?worker&inline';
+
+setWorkerFactory(() => new KnowledgeComputeWorker() as never);
 
 export interface KnowledgeViewProps {
   source: KnowledgeGraphSource;

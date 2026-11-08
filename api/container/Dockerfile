@@ -45,6 +45,9 @@ EXPOSE 8080
 # `sudo -n -u bfagent env -i … bash -lc …` spawn; `!use_pty` keeps the shell in a process group the kill can reach.
 RUN useradd --create-home --shell /bin/bash --user-group bfagent \
   && install -d -o bfagent -g bfagent -m 0755 /workspaces \
+  # `node` joins bfagent's GROUP (bfagent itself stays in only its own group) so the server can chgrp the bundle handoff
+  # directory and files to it: sandboxGit.mjs then makes them 0750/0640 instead of falling back to world-readable.
+  && usermod -aG bfagent node \
   && printf 'node ALL=(bfagent) NOPASSWD: ALL\nDefaults:node !use_pty\n' > /etc/sudoers.d/zz-bf-agent \
   && chmod 0440 /etc/sudoers.d/zz-bf-agent \
   && visudo -cf /etc/sudoers.d/zz-bf-agent

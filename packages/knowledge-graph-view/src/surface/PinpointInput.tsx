@@ -16,7 +16,7 @@ import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { card, muted, primaryButton, quietButton } from '../styles';
 import { TYPE } from './ui/type';
 import type { KnowledgeGraphSource, PinpointResult } from '../types';
-import { getComputeClient } from '../compute/client';
+import { getComputeClient } from '../compute/sharedClient';
 import { scopeFindings } from './scope';
 import { stationOfRef, type StationModel } from './stations';
 import { MAX_IMAGE_BYTES, usePinpoint } from './usePinpoint';

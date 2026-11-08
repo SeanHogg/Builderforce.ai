@@ -32,6 +32,20 @@ export type ReconcilePlan =
     /** Exactly these keys differ; `owned` are the ones only the server holds (this root's leaves to tombstone). */
     | { kind: 'delta'; touched: string[]; baseGeneration: number; owned: Set<string> };
 
+/**
+ * ADDITIVE mode (see `ReplicaQueue.additive`): a leaf only the server holds is not this store's to delete, so it leaves the plan.
+ * A key the dirty set names (a file the review saw removed) is explicit work and stays, tombstone included.
+ */
+export function additivePlan(plan: ReconcilePlan, dirty: readonly string[]): ReconcilePlan {
+    if (plan.kind !== 'delta') return plan;
+    const explicit = new Set(dirty);
+    return {
+        ...plan,
+        touched: plan.touched.filter((k) => !plan.owned.has(k) || explicit.has(k)),
+        owned: new Set([...plan.owned].filter((k) => explicit.has(k))),
+    };
+}
+
 /** Bucket ids asked for per leaf request. */
 const BUCKETS_PER_REQUEST = 512;
 const EMPTY_ROOT = manifestTree([]).root;

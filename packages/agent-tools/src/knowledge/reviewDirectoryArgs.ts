@@ -20,7 +20,7 @@ export function directoryArgs(
         // A per-request timeout so a stalled engine cannot hang the whole review at `judge`:
         // the affected sections stay unjudged and a later run judges them again. The wrapper
         // lives here (not in memory's `reviewDirectory`), so the ONE review pipeline is unchanged.
-        ...(ports.judgement ? { judgement: judgementWithTimeout(ports.judgement, opts.judgementTimeoutMs ?? DEFAULT_JUDGEMENT_TIMEOUT_MS) } : {}),
+        ...(ports.judgement ? { judgement: judgementWithTimeout(ports.judgement, opts.judgementTimeoutMs ?? defaultJudgementTimeoutMs) } : {}),
         ...(ports.similar ? { similar: ports.similar } : {}),
         ...(opts.plan ? { plan: opts.plan } : {}),
         ...(opts.force ? { force: true } : {}),

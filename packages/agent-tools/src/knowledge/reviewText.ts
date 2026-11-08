@@ -13,12 +13,12 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 export function planDetailLine(plan: ReviewPlan, title?: string): string {
     const packs = Object.entries(plan.byPack).map(([pack, n]) => `${pack} ${n}`).join(' · ');
     const parts = [
-        `${plural(plan.files, 'file')}${packs ? ` (${packs})` : ''}`,
+        `${plural(plan.files - (plan.assets ?? 0), 'file')}${packs ? ` (${packs})` : ''}`,
         `${plan.unchanged} unchanged`,
         `≈ ${plural(plan.estimatedModelCalls, 'model call')}`,
     ];
     if (plan.skipped.length > 0) parts.push(`${plan.skipped.length} skipped`);
-    if (plan.assets > 0) parts.push(`${plural(plan.assets, 'asset')} stored`);
+    if (plan.assets) parts.push(`${plural(plan.assets, 'asset')} stored`);
     return `${title ? `${title}: ` : ''}${parts.join(' · ')}`;
 }
 

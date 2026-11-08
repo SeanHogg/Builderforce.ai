@@ -135,6 +135,8 @@ describe.skipIf(!process.env.KG_PERF)('view pipelines (KG_PERF=1)', () => {
     afterAll(() => {
         const rows = [...rec.rows].sort((a, b) => b.median - a.median);
         console.log(`\nKnowledge-graph view pipelines (median of 3, ms; "(!)" = a single step over 50 ms)\n${rec.table()}`);
+        const longest = rec.longestSteps();
+        console.log(`\nLongest single main-thread step per sliced pipeline / worker half (limit ${LOCK_MS} ms; (!) = over)\n${longest.map((l) => `${String(l.ms).padStart(9)}${l.over ? ' (!)' : '    '}  ${l.step}`).join('\n')}`);
         console.log(`\nRenders (jsdom)\n${renders.map((r) => JSON.stringify(r)).join('\n')}`);
         writeReport({ generatedAt: new Date().toISOString(), node: process.version, graph: stats, steps: rows, longestMainThreadSteps: longest, overBudget: longest.filter((l) => l.over).map((l) => l.step), renders });
         console.log(`\nwrote ${LAST_RUN_JSON}`);

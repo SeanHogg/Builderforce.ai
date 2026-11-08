@@ -286,7 +286,9 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             touch();
             return discarded;
         },
-        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; touch(); },
+        async additive() { await ready(); return isAdditive; },
+        async setAdditive(on) { await ready(); if (isAdditive !== on) { isAdditive = on; touch(); } },
+        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; touch(); },
         async flush() { await ready(); await save(); },
         onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
     };

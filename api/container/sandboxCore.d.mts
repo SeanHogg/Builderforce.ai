@@ -56,7 +56,7 @@ export function spawnShell(
 /** GitHub Actions: create the isolated shell user, hand it the checkout and prove the isolation; throws (fail closed). */
 export function provisionShellUser(args: { user: string; workdir: string }): string;
 /** Prove, as the shell user, that it cannot sudo, write the Docker socket or read the server's environ, and can write the workspace. Throws. */
-export function verifyShellIsolation(args: { user: string; workdir: string }): void;
+export function verifyShellIsolation(args: { user: string; workdir: string; serverPid?: number; parentPid?: number; pathDirs?: string[] }): void;
 /** Give the checkout back to the runner without its `.git`. */
 export function releaseShellWorkspace(args: { workdir: string }): void;
 /** Kill every process the shell user owns — only where `BUILDERFORCE_SHELL_SWEEP=1` (the Actions runner). */
@@ -83,3 +83,13 @@ export function absorbHead(box: SandboxBox): Promise<boolean>;
 
 /** The `git bundle create` argv for `branches`, excluding what the other side holds (`basis`: branch → sha). */
 export function bundleCreateArgs(file: string, branches: string[], basis?: Record<string, string>): string[];
+
+/** The fixed, root-owned directories privileged binaries are resolved from (never the inherited PATH). */
+export const TRUSTED_PATH: string;
+/** `name` as an absolute path in the trusted directories (git: also /usr/local/bin); resolved once. Bare name on Windows. */
+export function trustedBinary(name: string, platform?: string): string;
+/** Synchronous teardown for a signal handler: kill the shell user's processes, release the checkout. Returns a failure message or null; never throws. */
+export function teardownShellSync(args: { user: string; workdir: string }): string | null;
+
+/** Import `refs/heads/<head>` from a server-chosen bundle file into a mirror (`bundle verify` + `unbundle` + `update-ref`; no file transport). */
+export function importBundle(m: { repo: string; privateDir: string }, file: string, head: string): Promise<{ ok: true; sha: string } | { ok: false; error: string }>;

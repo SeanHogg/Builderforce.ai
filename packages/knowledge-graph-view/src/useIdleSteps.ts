@@ -1,5 +1,5 @@
 /**
- * Like `useIdleValue`, for work that comes in steps: `start()` returns a task whose `step()` does one small unit
+ * For work that comes in steps: `start()` returns a task whose `step()` does one small unit
  * and returns true when finished. Steps run on idle callbacks (else `setTimeout(0)`), at most `SLICE_MS` of them per
  * callback, so a long computation (the 3D layout's relaxation passes) never blocks the UI thread for longer than
  * about one slice. Null until the task is done.

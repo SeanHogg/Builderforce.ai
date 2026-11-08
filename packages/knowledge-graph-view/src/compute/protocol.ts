@@ -63,6 +63,9 @@ export interface StationLookup {
 
 export interface AntiPatternGroupRaw extends Omit<AntiPatternGroup, 'findings'> { findings: Uint32Array }
 
+/** `whole`: the focus is the graph itself (the very same arrays), so nothing else is sent. */
+export interface FocusRaw { whole: boolean; nodes: Uint32Array; edges: Uint32Array }
+
 export interface SurfaceRaw { stations: StationModel; lines: LinesModel }
 export interface MatrixRaw { partitions: string[]; cells: Map<string, PartitionCell> }
 
@@ -80,6 +83,7 @@ export interface TaskTable {
     path: { req: { graph: GraphId; refs: string[]; stations: StationLookup }; raw: PathModel };
     insights: { req: { graph: GraphId }; raw: Insights };
     partitionMatrix: { req: { graph: GraphId }; raw: MatrixRaw };
+    focus: { req: { graph: GraphId; max: number; keep: string[] }; raw: FocusRaw };
     antiPatterns: { req: { graph: GraphId; layer: string | null; stations?: StationLookup }; raw: AntiPatternGroupRaw[] };
 }
 

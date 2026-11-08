@@ -11,7 +11,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { closeSandboxBox, createSandboxBox, serveSandbox, shellInvocation, shellUser, type SandboxBox } from '../../../container/sandboxCore.mjs';
+import { TRUSTED_PATH, closeSandboxBox, createSandboxBox, serveSandbox, shellEnv, shellInvocation, shellUser, trustedBinary, type SandboxBox } from '../../../container/sandboxCore.mjs';
 import { WORKSPACE_HELPER } from './containerTestHelper';
 
 const posix = process.platform !== 'win32';
@@ -41,7 +41,7 @@ describe('shellInvocation', () => {
 
   it('with a shell user it is `sudo -n -u <user> env -i <allowlisted KEY=VAL> bash -lc <command>`', () => {
     const inv = shellInvocation('npm test', { env: parent });
-    expect(inv.file).toBe('sudo');
+    expect(inv.file).toBe(trustedBinary('sudo')); // an absolute path from the fixed trusted dirs, never a PATH lookup
     expect(inv.args.slice(0, 5)).toEqual(['-n', '-u', 'bfagent', 'env', '-i']);
     expect(inv.args.slice(-3)).toEqual(['bash', '-lc', 'npm test']);
     const pairs = inv.args.slice(5, -3);
@@ -57,8 +57,8 @@ describe('shellInvocation', () => {
     for (const secret of ['run-secret', 'oidc-request-secret', 'runtime-secret', 'ghs_secret', 'unlisted-secret', 'token.actions.test', 'BUILDERFORCE_']) {
       expect(argv).not.toContain(secret);
     }
-    // The wrapper process holds PATH only.
-    expect(inv.env).toEqual({ PATH: '/usr/bin:/bin' });
+    // The wrapper process holds PATH only, and it is the fixed trusted list, not the inherited one.
+    expect(inv.env).toEqual({ PATH: TRUSTED_PATH });
   });
 
   it('passes the caller\'s own plan env (a preview\'s project env) through, after the filter', () => {
@@ -71,6 +71,33 @@ describe('shellInvocation', () => {
     const inv = shellInvocation('npm ci', { env: { ...parent, NPM_TOKEN: 'npm-secret', BUILDERFORCE_SHELL_ENV: 'NPM_TOKEN' } });
     expect(inv.args).toContain('NPM_TOKEN=npm-secret');
     expect(inv.args.join('\u0000')).not.toContain('unlisted-secret');
+  });
+
+  it('never hands the shell a credential-bearing COREPACK_* name, even when the tenant lists it', () => {
+    const env = shellEnv({
+      PATH: '/usr/bin', COREPACK_HOME: '/cp', COREPACK_NPM_TOKEN: 't', COREPACK_NPM_PASSWORD: 'p', COREPACK_NPM_REGISTRY_AUTH: 'a', COREPACK_X_SECRET: 's',
+      BUILDERFORCE_SHELL_ENV: 'COREPACK_NPM_TOKEN',
+    });
+    expect(env.COREPACK_HOME).toBe('/cp');
+    for (const name of ['COREPACK_NPM_TOKEN', 'COREPACK_NPM_PASSWORD', 'COREPACK_NPM_REGISTRY_AUTH', 'COREPACK_X_SECRET']) expect(env[name], name).toBeUndefined();
+  });
+
+  it('never hands the shell the container control secret', () => {
+    expect(shellEnv({ PATH: '/usr/bin', BUILDERFORCE_CONTROL_SECRET: 'c', BUILDERFORCE_SHELL_ENV: 'BUILDERFORCE_CONTROL_SECRET' }).BUILDERFORCE_CONTROL_SECRET).toBeUndefined();
+  });
+
+  it('resolves privileged binaries to absolute paths in a fixed trusted list (never the inherited PATH)', () => {
+    expect(TRUSTED_PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
+    if (process.platform === 'win32') {
+      expect(trustedBinary('git')).toBe('git'); // no such layout there; there is no shell user either
+      return;
+    }
+    for (const name of ['git', 'sudo', 'id', 'kill', 'pkill', 'chown', 'rm']) {
+      const path = trustedBinary(name);
+      expect(path, name).toMatch(/^\/(usr\/(local\/)?)?s?bin\//);
+      expect(path.endsWith(`/${name}`)).toBe(true);
+    }
+    expect(() => trustedBinary('../evil')).toThrow(/not a binary name/);
   });
 
   it('refuses a shell-user name that could carry an option or a command', () => {

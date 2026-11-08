@@ -20,8 +20,11 @@ import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels
 import { useKnowledgeGraph } from './useKnowledgeGraph';
 import { graphDiagnostics } from './graphDiagnostics';
 import { lensFindings } from './lenses';
-import { PHONE_FOCUS_NODES, focusGraph, lensGraph, nodeIndex } from './graphModel';
+import { PHONE_FOCUS_NODES, lensGraph, nodeIndex } from './graphModel';
 import { useGraphResident } from './compute/useGraphResident';
+import { useComputed } from './compute/useComputed';
+import { isSmall } from './compute/size';
+import type { VisibleGraph } from './graphModel';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
 import { layoutOf } from './layout';
@@ -91,6 +94,8 @@ export interface KnowledgeGraphViewProps {
     onOpenSource?(location: SourceLocation): void;
 }
 
+const EMPTY_VISIBLE: VisibleGraph = { nodes: [], edges: [] };
+
 export function KnowledgeGraphView({
     source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource,
 }: KnowledgeGraphViewProps) {
@@ -116,6 +121,7 @@ export function KnowledgeGraphView({
     const real = shown ? foldCopyFindings(shown) : shown;
     const graph = real ?? EMPTY_GRAPH;
     useGraphResident(real); // registered in this render so the cameras' subsets find it; posted to the worker early
+    useGraphResident(kg.baseline?.graph ?? null); // the Before/After twin the surface also reads
     const side = showingBefore ? 'baseline' as const : 'current' as const;
     const evidenceFor = useMemo(() => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined), [source]);
     const evidenceOf = useMemo(() => (evidenceFor ? (f: Finding) => evidenceFor(f, side) : undefined), [evidenceFor, side]);
@@ -139,7 +145,10 @@ export function KnowledgeGraphView({
     const cameras = CAMERAS.filter((c) => c.available(graph, surfaceEnv));
     const mode: ViewMode = cameras.find((c) => c.id === chosen)?.id ?? cameras.find((c) => c.id === 'transit')?.id ?? 'graph';
     // Selecting a node already inside the drawn set must not change the arrays the cameras key their layouts on.
-    const visible = useStableGraph(useMemo(() => focusGraph(graph, compact && !showAll ? PHONE_FOCUS_NODES : MAX_DRAWN_NODES, [...kg.focus, ...(selected ? [selected] : [])]), [graph, compact, showAll, kg.focus, selected]));
+    const focusKeep = useMemo(() => [...kg.focus, ...(selected ? [selected] : [])], [kg.focus, selected]);
+    // Up to ~360 ms on a large graph: computed in the worker (in the same render for a small one), the previous drawn set staying until the new one lands.
+    const focused = useComputed('focus', { graph, max: compact && !showAll ? PHONE_FOCUS_NODES : MAX_DRAWN_NODES, keep: focusKeep }, [graph, compact, showAll, focusKeep], EMPTY_VISIBLE, { inline: isSmall(graph), scope: [graph] }).value ?? EMPTY_VISIBLE;
+    const visible = useStableGraph(focused);
     const drawn = useMemo(() => lensGraph(visible, lens), [visible, lens]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
     const canApplyFor = useMemo(() => (source.applyFix ? (kind: string) => canApplyKind(source, kind) : false), [source]);

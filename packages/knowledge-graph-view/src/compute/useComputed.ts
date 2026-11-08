@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { getComputeClient } from './client';
+import { getComputeClient } from './sharedClient';
 import type { KindInput, KindResult } from './kinds';
 import type { TaskKind } from './protocol';
 

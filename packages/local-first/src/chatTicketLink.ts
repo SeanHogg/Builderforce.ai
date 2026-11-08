@@ -32,6 +32,9 @@ export interface ChatTicketLinkInput {
 
 export interface LinkChatTicketInput extends ChatTicketLinkInput {
   linkType: ChatTicketLinkType;
+  /** The ticket's tier and ref when it is not a task/epic/gap: carried on the link for the importer. */
+  ticketKind?: string;
+  ticketRef?: string;
 }
 
 /** The stable UUID-shaped (custom, version-8 style: not a UUIDv5) id of the pair. */
@@ -82,7 +85,9 @@ export async function linkServerIds(
     const row = await tx.get(type, id);
     if (!row) return undefined;
     const mapping = await tx.mapping(type, id, row.destination);
-    return isImported(mapping) ? mapping!.serverId : undefined;
+    if (!isImported(mapping)) return undefined;
+    // Only a numeric server id names a task/chat: another tier's id (`spec:5`) rides as kind + ref.
+    return /^\d+$/.test(mapping!.serverId) ? mapping!.serverId : undefined;
   };
   const chatServerId = await idOf('chat', chatClientId);
   const ticketServerId = await idOf('ticket', ticketClientId);
@@ -117,6 +122,7 @@ export async function linkChatTicket(
       chatClientId,
       ticketClientId,
       ...(await linkServerIds(tx, chatClientId, ticketClientId)),
+      ...(input.ticketKind && input.ticketRef ? { ticketKind: input.ticketKind, ticketRef: input.ticketRef } : {}),
       linkType: effective,
     };
     const at = input.occurredAt ?? new Date().toISOString();

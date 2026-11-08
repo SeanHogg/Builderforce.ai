@@ -6,7 +6,7 @@
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { Layout2D } from '../graph2d/layout2d';
 import type { EdgePath } from '../graph2d/edgePaths';
-import type { PartitionCell } from '../graphModel';
+import type { VisibleGraph, PartitionCell } from '../graphModel';
 import type { Insights } from '../insights/insightsModel';
 import type { MindMap, MindOptions } from '../map/mindMapModel';
 import type { EdgeBuffer } from '../scene/buffers';
@@ -30,6 +30,7 @@ export interface Kinds {
     path: { input: { graph: KnowledgeGraph; refs: readonly string[]; stations: StationModel }; result: PathModel };
     insights: { input: { graph: KnowledgeGraph }; result: Insights };
     partitionMatrix: { input: { graph: KnowledgeGraph }; result: { partitions: string[]; cells: Map<string, PartitionCell> } };
+    focus: { input: { graph: KnowledgeGraph; max: number; keep: readonly string[] }; result: VisibleGraph };
     antiPatterns: { input: { graph: KnowledgeGraph; layer: string | null; stations: StationModel }; result: AntiPatternGroup[] };
 }
 

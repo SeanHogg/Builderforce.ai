@@ -45,3 +45,11 @@ export const antiPatterns: Codec<'antiPatterns'> = {
     },
     decode: (raw, { graph }) => raw.map(({ findings, ...group }) => ({ ...group, findings: mapBack(findings, graph.findings) })),
 };
+
+export const focus: Codec<'focus'> = {
+    encode: ({ graph, max, keep }, residency) => {
+        const id = residency.graphId(graph);
+        return { graph: id, req: { graph: id, max, keep: [...keep] } };
+    },
+    decode: (raw, { graph }) => (raw.whole ? { nodes: graph.nodes, edges: graph.edges } : { nodes: mapBack(raw.nodes, graph.nodes), edges: mapBack(raw.edges, graph.edges) }),
+};

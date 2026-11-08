@@ -96,8 +96,10 @@ export function ReviewStart({ labels, review, state, history, queued }: ReviewSt
     const { plan, estimate } = state;
     const forced = state.force === true;
     const pace = lastRunPace(history);
+    /** Assets are stored, never read: they are counted apart and out of the read estimate. */
+    const assets = plan.assets ?? 0;
     const everything = forced ? plan.files : plan.files + plan.unchanged;
-    const readMs = etaMs(plan.files, pace?.rate);
+    const readMs = etaMs(plan.files - assets, pace?.rate);
     const readTime = pace && readMs !== undefined ? fillTemplate(r.estimate, { duration: spanText(labels, readMs), rate: rateText(pace.rate) }) : r.estimateNone;
     const judge = plan.judgeFiles !== undefined && plan.judgeFiles > 0 ? plan.judgeFiles : undefined;
     const calls = counted(labels, 'modelCalls', estimate?.modelCalls ?? plan.estimatedModelCalls);
