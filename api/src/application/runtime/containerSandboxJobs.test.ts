@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { WORKSPACE_HELPER } from './containerTestHelper';
 import { closeSandboxBox, createSandboxBox, serveSandbox, type SandboxBox, type SandboxOnAbort } from '../../../container/sandboxCore.mjs';
 
 const posix = process.platform !== 'win32';
@@ -20,7 +21,7 @@ let box: SandboxBox;
 beforeEach(async () => {
   if (!posix) return;
   workdir = await mkdtemp(join(tmpdir(), 'bf-sandbox-jobs-'));
-  box = createSandboxBox({ spec: {}, workdir });
+  box = createSandboxBox({ spec: {}, workdir, helperPath: WORKSPACE_HELPER });
 });
 
 afterEach(async () => {

@@ -37488,6 +37488,9 @@
     "nodePack": "Pack",
     "nodePartition": "Partition",
     "nodeOrigin": "Origin",
+    "nodeMediaType": "Media type",
+    "nodeSize": "Size",
+    "assetNoFacts": "Stored as a file. It is not read, so there is nothing to remember about its contents.",
     "origins": {
       "extracted": "Read from the source",
       "model": "Judged by a model",
@@ -38432,6 +38435,7 @@
           "tileFiles": "Files",
           "tileUnchanged": "Unchanged since last review",
           "tileLeftOut": "Left out",
+          "tileAssets": "Stored as files",
           "readTitle": "What to read",
           "choiceChanged": "What changed",
           "choiceAll": "Everything again",

@@ -36,7 +36,7 @@ interface MenuBase {
     defaultOpen?: boolean;
     /**
      * What the panel is positioned against: its `trigger` (default) or the nearest positioned ancestor
-     * (`container`, e.g. the status strip, for a panel that should span it). Always absolute, never fixed,
+     * (`container`, e.g. the scene overlay, for a panel that should span it). Always absolute, never fixed,
      * so it works inside a docked host.
      */
     anchor?: 'trigger' | 'container';

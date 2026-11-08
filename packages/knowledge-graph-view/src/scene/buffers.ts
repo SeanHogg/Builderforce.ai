@@ -61,10 +61,19 @@ export const isViolation = (e: KEdge): boolean => e.verdict === 'upward' || e.ve
 /** A link drawn in a warning colour: a layer violation or a cycle (what the picture is for). */
 export const isLoudEdge = (e: KEdge): boolean => isViolation(e) || !!e.cycle;
 
-export function edgeBucket(e: KEdge): { bucket: string; tone: ThemeTone } {
-    if (isViolation(e)) return { bucket: 'violation', tone: 'violation' };
-    if (e.cycle) return { bucket: 'cycle', tone: 'cycle' };
-    return { bucket: e.kind, tone: KIND_TONE[e.kind] ?? 'edge' };
+export interface EdgeBucket { bucket: string; tone: ThemeTone }
+
+// Shared frozen buckets: edgeBucket allocates nothing per edge (it runs for every drawn edge).
+const VIOLATION: EdgeBucket = Object.freeze({ bucket: 'violation', tone: 'violation' });
+const CYCLE: EdgeBucket = Object.freeze({ bucket: 'cycle', tone: 'cycle' });
+const KIND_BUCKETS = new Map<string, EdgeBucket>();
+
+export function edgeBucket(e: KEdge): EdgeBucket {
+    if (isViolation(e)) return VIOLATION;
+    if (e.cycle) return CYCLE;
+    let b = KIND_BUCKETS.get(e.kind);
+    if (!b) { b = Object.freeze({ bucket: e.kind, tone: KIND_TONE[e.kind] ?? 'edge' }); KIND_BUCKETS.set(e.kind, b); }
+    return b;
 }
 
 export interface EdgeGroup<P> {
@@ -80,10 +89,9 @@ export function groupEdges<P>(edges: readonly KEdge[], at: (ref: string) => P | 
     for (const e of edges) {
         const a = at(e.from), b = at(e.to);
         if (!a || !b) continue;
-        // The bucket name alone decides the group; the tone is read once, from the group's first edge.
-        const name = isViolation(e) ? 'violation' : e.cycle ? 'cycle' : e.kind;
-        let g = groups.get(name);
-        if (!g) { const { bucket, tone } = edgeBucket(e); g = { bucket, tone, pairs: [] }; groups.set(bucket, g); }
+        const { bucket, tone } = edgeBucket(e);
+        let g = groups.get(bucket);
+        if (!g) { g = { bucket, tone, pairs: [] }; groups.set(bucket, g); }
         g.pairs.push([a, b]);
     }
     return [...groups.values()].sort((a, b) => cmp(a.bucket, b.bucket));

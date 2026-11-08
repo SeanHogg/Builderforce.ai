@@ -130,4 +130,22 @@ describe('caughtErrorReporter', () => {
     // The original is untouched for the caller that rethrows it.
     expect(error.message).toContain(ghp);
   });
+
+  it('regression: the redacted clone keeps the original prototype (instanceof) and an AggregateError keeps its redacted errors', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const sink = vi.fn(async (_record: unknown) => undefined);
+    configureCaughtErrorReporter(sink);
+    const ghp = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8';
+    class ProviderError extends Error {}
+    const error = new AggregateError([new ProviderError(`one ${ghp}`), new Error('two')], 'several failed');
+
+    await reportUnhandledError(error, { source: 'test', operation: 'prototype' }, { env: {} });
+
+    const record = sink.mock.calls[0]![0] as { error: AggregateError };
+    expect(record.error).toBeInstanceOf(AggregateError);
+    expect(record.error).toBeInstanceOf(Error);
+    expect(Array.isArray(record.error.errors)).toBe(true);
+    expect(record.error.errors).toHaveLength(2);
+    expect(JSON.stringify(record.error.errors)).not.toContain(ghp);
+  });
 });

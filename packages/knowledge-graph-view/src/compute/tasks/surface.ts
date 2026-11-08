@@ -1,7 +1,6 @@
 /** The surface model (stations, then the lines drawn over them) and a pinned path through the stations. */
 
 import { buildLines } from '../../surface/lines';
-import { mapEdges } from '../../surface/outlineGraph';
 import { pathOfStations } from '../../surface/path';
 import { buildStations } from '../../surface/stations';
 import { modelOf } from '../stationLookup';
@@ -13,4 +12,5 @@ export const surface: Handler<'surface'> = (store, { graph, changed, repoConfigN
     return { stations, lines: buildLines(g, stations) };
 });
 
-export const path: Handler<'path'> = (store, { graph, refs, stations }) => once(() => pathOfStations(refs, modelOf(stations), mapEdges(store.graph(graph))));
+/** The edges and the station lookup are the store's per-graph ones, so `pathOfStations`' hop-count memo (keyed on both) hits across requests. */
+export const path: Handler<'path'> = (store, { graph, refs, stations }) => once(() => pathOfStations(refs, modelOf(store.stationLookup(graph, stations)), store.surfaceEdges(graph)));

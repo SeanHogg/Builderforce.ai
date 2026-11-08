@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildFollowUpPayload, stripAdmissionStamps } from './cloudDispatch';
 
 describe('stripAdmissionStamps', () => {
-  it('regression: drops a client-supplied executor and admission stamp, keeps everything else', () => {
-    const out = JSON.parse(stripAdmissionStamps(JSON.stringify({ executor: 'durable', cloud_admitted_seq: 3, cloudAdmittedSeq: 4, model: 'm' }))!);
+  it('regression: drops a client-supplied executor, keeps everything else', () => {
+    const out = JSON.parse(stripAdmissionStamps(JSON.stringify({ executor: 'durable', model: 'm' }))!);
     expect(out).toEqual({ model: 'm' });
   });
 
@@ -17,9 +17,8 @@ describe('stripAdmissionStamps', () => {
 
 describe('buildFollowUpPayload', () => {
   it('regression: a follow-up does not inherit where the prior run landed', () => {
-    const out = JSON.parse(buildFollowUpPayload(JSON.stringify({ executor: 'github_actions', cloud_admitted_seq: 9, model: 'm' }), { directive: 'd', priorExecutionId: 1 }));
+    const out = JSON.parse(buildFollowUpPayload(JSON.stringify({ executor: 'github_actions', model: 'm' }), { directive: 'd', priorExecutionId: 1 }));
     expect(out.executor).toBeUndefined();
-    expect(out.cloud_admitted_seq).toBeUndefined();
     expect(out.model).toBe('m');
   });
 });

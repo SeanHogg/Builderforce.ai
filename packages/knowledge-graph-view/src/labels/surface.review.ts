@@ -46,6 +46,7 @@ export const REVIEW_WORDS = {
     tileFiles: 'Files',
     tileUnchanged: 'Unchanged since last review',
     tileLeftOut: 'Left out',
+    tileAssets: 'Stored as files',
     readTitle: 'What to read',
     choiceChanged: 'What changed',
     choiceAll: 'Everything again',

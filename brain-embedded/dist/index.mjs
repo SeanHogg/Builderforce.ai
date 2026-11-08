@@ -1532,7 +1532,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 101583e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1609,7 +1609,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [332688e-12, 665376e-12],
+  "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
@@ -1677,7 +1677,7 @@ var PRICE_SNAPSHOT = {
   "mancer/weaver": [4e-7, 75e-8],
   "meituan/longcat-2.0": [3e-7, 12e-7],
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
-  "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
+  "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
   "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
   "meta-llama/llama-3.3-70b-instruct": [59e-8, 79e-8],
@@ -1699,7 +1699,7 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
+  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -1730,7 +1730,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
-  "moonshotai/kimi-k3:batch": [997e-9, 6e-6],
+  "moonshotai/kimi-k3:batch": [917e-9, 6e-6],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -1838,7 +1838,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [26e-9, 97e-9],
+  "openai/gpt-oss-120b": [22e-9, 81e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -1975,14 +1975,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [37e-8, 15e-7],
+  "z-ai/glm-5.2:batch": [341e-9, 1381e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [335e-10, 83e-9],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [37e-8, 15e-7],
+  "z-ai/glm-5.3:batch": [341e-9, 1381e-9],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -8197,8 +8197,10 @@ function buildGitCommand(action, opts) {
   const path2 = safeGitArg(opts?.path);
   const pathArg = path2 ? ` -- "${path2}"` : "";
   const tracked = safeGitArg(opts?.trackedBranch);
-  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `git fetch origin "${tracked}" 2>/dev/null && git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
-  const publish = (force) => tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
+  const viaSandbox = opts?.remoteViaSandbox === true;
+  const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
+  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `${fetchTracked}git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
+  const publish = (force) => tracked && !viaSandbox ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
   switch (action) {
     case "status":
       return "git status --short --branch";
@@ -8215,7 +8217,7 @@ function buildGitCommand(action, opts) {
         ...tracked ? absorb : ["set -e"],
         resolveBase,
         ...tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME],
-        'git fetch origin "$BASE"',
+        ...viaSandbox ? [] : ['git fetch origin "$BASE"'],
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
         ...publish(false),
         'echo "Synced with origin/$BASE"'
@@ -8253,8 +8255,19 @@ async function runGitTool(action, opts, ctx) {
   const refused = invalidRepoResult(action, opts.repo);
   if (refused) return refused;
   const trackedBranch = ctx.caps.shell?.trackedBranch;
-  const ran = await runInRepoScope(ctx, opts, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, { baseBranch: opts.baseBranch, limit: opts.limit, path: path2, ...trackedBranch ? { trackedBranch } : {} }), safeRepoArg(repo) ?? void 0));
+  const remote = trackedBranch && (action === "sync_latest" || action === "undo" || action === "redo") ? ctx.caps.shell?.git : void 0;
+  let baseBranch = opts.baseBranch;
+  if (remote) {
+    const synced = await remote.sync({ baseBranch: opts.baseBranch });
+    if (!synced.ok) return { data: { ok: false, action, error: `could not fetch from the remote: ${synced.error ?? "unknown error"}` } };
+    baseBranch = synced.baseBranch ?? baseBranch;
+  }
+  const ran = await runInRepoScope(ctx, opts, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, { baseBranch, limit: opts.limit, path: path2, ...trackedBranch ? { trackedBranch } : {}, ...remote ? { remoteViaSandbox: true } : {} }), safeRepoArg(repo) ?? void 0));
   if (!ran) return notARepoWithCandidates(action, ctx);
+  if (remote && ran.r.ok) {
+    const published = await remote.publish({ force: action !== "sync_latest" });
+    if (!published.ok) return { data: { ok: false, action, error: `the change was made locally but could not be published: ${published.error ?? "unknown error"}` } };
+  }
   const result = gitToolResult(action, ran.r);
   if (ran.repo && result.data.ok) {
     result.data.repo = ran.repo;

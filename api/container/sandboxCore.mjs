@@ -12,21 +12,25 @@
  * owns the loop, the tools, the commits, verify and finalize. This file owns only what a
  * Worker physically cannot do — a shell, a working tree, the project's own checks.
  *
+ * THE RULE this file keeps: this process holds the run's secrets, so it never reads, writes,
+ * lists or runs git inside the working tree (which the model's shell controls). The tree
+ * belongs to the shell user, every file/git operation on it goes through the workspace helper
+ * (`workspaceAgent.mjs`, run as that user, reached by `workspaceClient.mjs`), and authenticated
+ * git runs only in a private mirror (`sandboxGit.mjs`).
+ *
  * Plain ESM. Its only imports are node builtins and its siblings (the generated tool-output
- * policy, the post-edit checks, the background-job table), so the Actions runner can inline
- * it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
+ * policy, the post-edit checks, the background-job table, the workspace client, the mirror),
+ * so the Actions runner can inline it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
  */
-import { execFile } from 'node:child_process';
-import { access, lstat, mkdir, open as openFile, readFile, readdir, readlink, realpath, rm, stat } from 'node:fs/promises';
-import { constants as fsConstants } from 'node:fs';
-import { join, dirname, relative, resolve as resolvePath, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
-import { bootJobIdPrefix, createJobTable, killTree, provisionShellUser, shellEnv, shellInvocation, shellUser, spawnShell } from './sandboxJobs.mjs';
+import { bootJobIdPrefix, createJobTable, killTree, provisionShellUser, releaseShellWorkspace, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation } from './sandboxJobs.mjs';
+import { createWorkspaceClient } from './workspaceClient.mjs';
+import { absorbHead, bundleCreateArgs, cloneWorkspace, createMirror, disposeMirror, gitAuthOf, mirrorGitCommand, publishHead, safeRef, scrubCheckoutCredentials, syncWorkspace } from './sandboxGit.mjs';
 
-export { provisionShellUser, shellEnv, shellInvocation, shellUser, spawnShell };
+export { absorbHead, bundleCreateArgs, cloneWorkspace, gitAuthOf, mirrorGitCommand, provisionShellUser, releaseShellWorkspace, scrubCheckoutCredentials, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation };
 
-const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
 
 /** Whether the C7 lever is on for this run — decided by the Worker (it owns the tenant
@@ -88,146 +92,32 @@ function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
   });
 }
 
-/** Case-insensitive glob → RegExp (mirror of packages/agent-tools `globToRegExp`;
- *  inlined because this container is plain ESM with no build step / package imports).
- *  `**` crosses `/`, `*` stays within a segment, `?` is one non-slash char. */
-function globToRegExp(pattern) {
-  let re = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i];
-    if (c === '*') {
-      // `**/` is one token: zero or more directories, matching glob.ts.
-      if (pattern[i + 1] === '*') {
-        if (pattern[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
-        else { re += '.*'; i++; }
-      } else { re += '[^/]*'; }
-    } else if (c === '?') {
-      re += '[^/]';
-    } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return new RegExp(`^${re}$`, 'i');
-}
-/** A slash-free glob matches the basename at any depth; otherwise the full path. */
-function matchGlob(p, pattern) {
-  const re = globToRegExp(pattern);
-  return pattern.includes('/') ? re.test(p) : re.test(p.slice(p.lastIndexOf('/') + 1));
-}
-/**
- * Scope-aware glob: `sub` is where the walk started, so a glob written against THAT
- * folder must resolve against the scope-relative path too. Filtering only the
- * repo-root-relative path silently dropped every match (and the tool's zero-match
- * note then reported real files as missing). Mirrors `matchGlobInScope` in
- * `@builderforce/agent-tools` — this server is standalone, so it keeps a local copy.
- */
-function matchGlobScoped(p, pattern, sub) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  if (!scope) return matchGlob(p, pattern);
-  if (p !== scope && !p.startsWith(scope + '/')) return false;
-  return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
-}
-
-/** Mirror of `dirMayContainGlobMatch` in packages/agent-tools/src/glob.ts. */
-function dirMayContainGlob(dir, pattern, sub) {
-  const norm = (s) => (s ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  const d = norm(dir);
-  const scope = norm(sub);
-  const pat = String(pattern).split('\\').join('/');
-  if (scope && d && d !== scope && !d.startsWith(scope + '/') && !scope.startsWith(d + '/')) return false;
-  const literalPrefix = (p) => {
-    if (!p.includes('/')) return null;
-    const meta = p.search(/[*?\[]/);
-    if (meta === 0) return null;
-    const head = meta < 0 ? p : p.slice(0, meta);
-    const slash = head.lastIndexOf('/');
-    return slash < 0 ? null : head.slice(0, slash + 1);
-  };
-  const canReach = (directory, prefix) => {
-    if (directory === '') return true;
-    const dirSlash = directory + '/';
-    return prefix.startsWith(dirSlash) || dirSlash.startsWith(prefix);
-  };
-  const readings = [literalPrefix(pat)];
-  if (scope) {
-    const rel = literalPrefix(pat);
-    readings.push(rel == null ? scope + '/' : scope + '/' + rel);
-  }
-  for (const prefix of readings) {
-    if (prefix == null) {
-      if (!scope || d === '' || d === scope || d.startsWith(scope + '/') || scope.startsWith(d + '/')) return true;
-      continue;
-    }
-    if (canReach(d, prefix)) return true;
-  }
-  return false;
-}
-
-function emptyGlobNote(glob, sub, truncated) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  const base = 'No file matches glob "' + glob + '"' + (scope ? ' under "' + scope + '"' : '') + '.';
-  if (truncated) {
-    return base + ' This is NOT proof the file does not exist: the search was cut off before the tree was fully scanned, so this only means "not among the paths scanned so far". Narrow path to a smaller folder and re-run before concluding anything is missing.';
-  }
-  return base + ' Try a broader pattern, or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.';
-}
-
-/**
- * List repo files under `dir` (skipping .git/node_modules), capped. BREADTH-FIRST so
- * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
- * in a large subtree; sorted for stable output. `glob` filters by name (case-
- * insensitive; a bare name matches the basename at any depth) so a file can be found
- * without dumping the tree.
- *
- * The glob is applied DURING the walk, so the cap counts MATCHES: a globbed listing is
- * never starved by unrelated files ahead of the match in the queue.
- */
-async function listFiles(dir, sub, glob) {
-  const root = sub ? join(dir, sub) : dir;
-  const acc = [];
-  const queue = [root];
-  let truncated = false;
-  while (queue.length > 0) {
-    if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
-    const d = queue.shift();
-    let entries;
-    try { entries = await readdir(d, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      if (e.name === '.git' || e.name === 'node_modules') continue;
-      const full = join(d, e.name);
-      if (e.isDirectory()) {
-        if (glob) {
-          const relDir = relative(dir, full).split(sep).join('/');
-          if (!dirMayContainGlob(relDir, glob, sub)) continue;
-        }
-        queue.push(full);
-      }
-      else {
-        const rel = relative(dir, full).split(sep).join('/');
-        if (glob && !matchGlobScoped(rel, glob, sub)) continue;
-        if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
-        acc.push(rel);
-      }
-    }
-  }
-  acc.sort((a, b) => a.localeCompare(b));
-  const result = { ok: true, paths: acc, truncated };
-  if (glob && acc.length === 0) result.note = emptyGlobNote(glob, sub, truncated);
-  return result;
-}
-
-/** The D7 post-edit checks over the clone (their events reach the run's timeline). */
+/** The D7 post-edit checks over the clone (their events reach the run's timeline). The checks' reads of the tree
+ *  (marker files, package.json scripts) go through the workspace helper like every other read. */
 function startPostEditChecks(box) {
-  const { workdir } = box;
+  const { workdir, workspace } = box;
   const bins = new Map();
   const hasBin = (name) => {
     if (!bins.has(name)) bins.set(name, runShell(`command -v ${name} >/dev/null 2>&1`, workdir, null, 10_000).then((r) => r.exitCode === 0));
     return bins.get(name);
   };
+  const rel = (abs) => relative(workdir, abs).split(sep).join('/');
+  const treeIo = {
+    access: async (abs) => {
+      const r = await workspace.call({ op: 'stat', path: rel(abs) });
+      if (!r.ok || !r.exists) throw new Error('absent');
+    },
+    readFile: async (abs) => {
+      const r = await workspace.call({ op: 'read', path: rel(abs) });
+      if (!r.ok) throw new Error(r.error);
+      return r.content;
+    },
+    hasBin,
+  };
   return createPostEditChecks({
     workdir,
     run: (command, cwd, timeoutMs) => runShell(command, cwd, null, timeoutMs),
-    io: cloneCheckIo(workdir, { access, readFile, hasBin }),
+    io: cloneCheckIo(workdir, treeIo),
     // Accepted split: output is elided HERE (container, head+tail cut) and again by the Worker's tool-output policy.
     // Redaction happens at the Worker's writers (`insertToolAudit`, the stream publish), not here: the container
     // holds no policy about secrets, only the bytes, and the cut never exposes more than the uncut text would.
@@ -236,235 +126,47 @@ function startPostEditChecks(box) {
   });
 }
 
-/** A repo-relative path inside the clone, or null when it would escape it. */
-function lexicallyInside(root, abs) {
-  return abs === root || abs.startsWith(root + sep);
-}
-
-const MAX_LINK_HOPS = 16;
-
 /**
- * The real path `p` (absolute) resolves to once every symlink on its path is followed, or null when
- * that is outside `realRoot`. `realpath` throws ENOENT for a path that does not exist yet (a file
- * about to be created) AND for a dangling symlink, so on ENOENT the probe is `lstat`ed: a dangling
- * link is resolved by hand (`readlink`, against the real parent) and re-checked, up to a hop limit;
- * a genuinely missing component walks up to the nearest ancestor that exists, and the components
- * that do not exist yet are appended to its real path.
+ * Absorb a change the engine already COMMITTED to the ticket branch (through the Worker's git provider, which owns
+ * the lease, the outbound inspection and the file-change ledger): fast-forward the clone to that branch, so the
+ * commit is real history here and `git_undo` / `git_redo` / `git_sync_latest` act on it instead of on a dirty tree.
+ * The fetch runs through the private mirror and reaches the clone as a bundle. True when the file now holds
+ * `content` (null ⇒ is gone); false ⇒ the caller writes it directly (a conflicting local edit, an unreachable remote).
  */
-async function resolveInside(realRoot, p, hops = 0) {
-  let probe = p;
-  const rest = [];
-  const inside = (real) => (lexicallyInside(realRoot, real) ? real : null);
-  for (;;) {
-    try {
-      return inside(join(await realpath(probe), ...rest));
-    } catch (e) {
-      if (!e || e.code !== 'ENOENT') return null;
-    }
-    let link = null;
-    try {
-      const st = await lstat(probe);
-      if (st.isSymbolicLink()) link = await readlink(probe);
-    } catch (e) {
-      if (!e || e.code !== 'ENOENT') return null;
-    }
-    if (link !== null) {
-      if (hops >= MAX_LINK_HOPS) return null;
-      let parentReal;
-      try { parentReal = await realpath(dirname(probe)); } catch { return null; }
-      const target = await resolveInside(realRoot, resolvePath(parentReal, link), hops + 1);
-      return target === null ? null : inside(join(target, ...rest));
-    }
-    const parent = dirname(probe);
-    if (parent === probe) return null;
-    rest.unshift(probe.slice(parent.length).replace(/^[\\/]+/, ''));
-    probe = parent;
+async function absorbCommit(box, path, content) {
+  if (!(await absorbHead(box))) return false;
+  if (content === null) {
+    const gone = await box.workspace.call({ op: 'stat', path });
+    return gone.ok === true && gone.exists === false;
   }
+  const now = await box.workspace.call({ op: 'read', path });
+  return now.ok === true && now.content === content;
 }
 
-/** Whether a path (relative to the clone root) passes through the clone's own `.git` control directory. */
-function touchesGitDir(relPath) {
-  return relPath.split(sep).includes('.git');
-}
-
-/**
- * A repo-relative path inside the clone, or null when it would escape it — lexically
- * (`../`, a leading `/` is treated as clone-relative) AND through symlinks, including a
- * dangling link whose target is outside (see {@link resolveInside}). This is defence in
- * depth: the model's shell is a different, unprivileged uid (`shellUser`), but it shares the
- * tree with this process, so the guard is what keeps an fs op from being steered by a symlink
- * the shell planted into the server's own files (or into `.git`, reached through an alias such
- * as `ln -s .git g`: the `.git` check is applied to the RESOLVED path too). Accepted residuals:
- * a TOCTOU between this check and the open (node has no `openat`/O_DIRECTORY-relative open; the
- * writer narrows it by re-verifying the parent's realpath after `mkdir` and refusing a symlink
- * at the final component with O_NOFOLLOW), and hard links to files outside the clone.
- */
-async function insideClone(workdir, path) {
-  if (typeof path !== 'string' || !path.trim()) return null;
-  const abs = resolvePath(workdir, path.replace(/^\/+/, ''));
-  if (!lexicallyInside(workdir, abs)) return null;
-  // `.git` is the clone's own control directory (hooks run as code, config can point at anything): never reachable through an fs op or a cwd.
-  if (touchesGitDir(relative(workdir, abs))) return null;
-  let realRoot;
-  try { realRoot = await realpath(workdir); } catch { return null; }
-  const real = await resolveInside(realRoot, abs);
-  if (real === null || touchesGitDir(relative(realRoot, real))) return null;
-  return abs;
-}
-
-/** The directory is a real one inside the clone and not `.git`: the check that is re-run right after `mkdir`, when the tree may have changed under the guard. */
-async function parentStillInside(workdir, abs) {
-  const realRoot = await realpath(workdir);
-  const parent = await realpath(dirname(abs));
-  return lexicallyInside(realRoot, parent) && !touchesGitDir(relative(realRoot, parent));
-}
-
-/** Write `content` to `abs` without following a symlink at the final component (where the platform has O_NOFOLLOW).
- *  Mode 0664: the shell user (same group, other uid) reads and rewrites what this process writes. */
-async function writeNoFollow(workdir, abs, content) {
-  const real = await realpath(abs).catch(() => abs); // an in-clone alias is resolved by the guard; write its real file
-  // Recheck the RESOLVED path (the guard ran before this realpath, and the tree may have changed since).
-  if (real !== abs) {
-    const realRoot = await realpath(workdir);
-    if (!lexicallyInside(realRoot, real) || touchesGitDir(relative(realRoot, real))) throw new Error('path resolves outside the repository');
-  }
-  const fh = await openFile(real, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | (fsConstants.O_NOFOLLOW ?? 0), 0o664);
-  try { await fh.writeFile(content); } finally { await fh.close(); }
-}
-
-/** A git-safe ref name, or null. */
-function safeRef(v) {
-  return typeof v === 'string' && /^[\w./@-]+$/.test(v) ? v : null;
-}
-
-/**
- * Where, and as whom, THIS process talks git to the Worker's container-git proxy: the credential-free
- * `spec.repo.cloneUrl` and the run's token (`spec.token`). No clone URL on the spec ⇒ the local `origin`
- * (tests, hand-run). The token is never put in a URL, in `.git/config`, or in the model shell's environ.
- */
-export function gitAuthOf(spec) {
-  const url = spec && spec.repo && typeof spec.repo.cloneUrl === 'string' ? spec.repo.cloneUrl : null;
-  if (!url) return { url: 'origin', token: null };
-  return { url, token: typeof spec.token === 'string' && spec.token ? spec.token : null };
-}
-
-/**
- * Run `git <args>` as THIS process (never as the shell user, never through the model's shell), with the run
- * credential supplied for this one command only: an `http.<url>.extraHeader` through git's command-line config
- * environment (GIT_CONFIG_*), which lives in this child's environ and nowhere on disk or in argv (`/proc/<pid>/cmdline`
- * is world-readable). Used for the clone, and the fetch that absorbs an engine commit.
- */
-export function runGit(args, cwd, auth = null) {
-  const config = [['safe.directory', '*']];
-  if (auth && auth.token && /^https?:\/\//.test(auth.url)) {
-    const basic = Buffer.from(`x-access-token:${auth.token}`).toString('base64');
-    config.push([`http.${auth.url}.extraHeader`, `Authorization: Basic ${basic}`]);
-  }
-  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_COUNT: String(config.length) };
-  config.forEach(([key, value], i) => { env[`GIT_CONFIG_KEY_${i}`] = key; env[`GIT_CONFIG_VALUE_${i}`] = value; });
-  return new Promise((resolve) => {
-    execFile('git', args, { cwd, env, timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
-      const code = error ? (typeof error.code === 'number' ? error.code : -1) : 0;
-      // The output is shown to the model/timeline: never echo the credential back out of git's own diagnostics.
-      const output = `${stdout}${stderr}`.split(auth && auth.token ? auth.token : '\0').join('***');
-      resolve({ exitCode: code, output });
-    });
-  });
-}
-
-/** `git config --unset-all` answers 5 for "that key is not set": the expected state, not a failure. */
-const GIT_CONFIG_KEY_NOT_SET = 5;
-
-/**
- * Remove the credential `actions/checkout` persists into `.git/config` (`http.https://github.com/.extraheader`) from
- * a checkout made by an OLDER tenant workflow that lacks `persist-credentials: false`, before any request is
- * served — the model's shell must never find the repo's GITHUB_TOKEN there. `{ ok: false, output }` when git
- * could not even run the command (not a repository, git missing); an absent key is the normal case.
- */
-export async function scrubCheckoutCredentials(workdir) {
-  const r = await runGit(['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], workdir);
-  return r.exitCode === 0 || r.exitCode === GIT_CONFIG_KEY_NOT_SET ? { ok: true } : { ok: false, output: r.output };
-}
-
-/**
- * Absorb a change the engine already COMMITTED to the ticket branch (through the Worker's
- * git provider, which owns the lease, the outbound inspection and the file-change ledger):
- * fast-forward the clone to that branch, so the commit is real history here and
- * `git_undo` / `git_redo` / `git_sync_latest` act on it instead of on a dirty tree.
- * Before the first commit the clone may sit on base; the branch is then checked out at
- * the fetched head, carrying any uncommitted shell work. True when the file now holds
- * `content` (null ⇒ is gone); false ⇒ the caller writes it directly (a conflicting
- * local edit, an unreachable remote).
- */
-async function absorbCommit(box, abs, content) {
-  const head = safeRef(box.spec.repo && box.spec.repo.headBranch);
-  if (!head) return false;
-  const auth = gitAuthOf(box.spec);
-  if (!auth) return false;
-  const fetched = await runGit(['fetch', '-q', auth.url, head], box.workdir, auth);
-  if (fetched.exitCode !== 0) return false;
-  const current = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], box.workdir);
-  const moved = current.exitCode === 0 && current.output.trim() === head
-    ? await runGit(['merge', '-q', '--ff-only', 'FETCH_HEAD'], box.workdir)
-    : await runGit(['checkout', '-q', '-B', head, 'FETCH_HEAD'], box.workdir);
-  if (moved.exitCode !== 0) return false;
-  try {
-    return content === null ? !(await access(abs).then(() => true, () => false)) : (await readFile(abs, 'utf8')) === content;
-  } catch {
-    return false;
-  }
-}
+/** An fs request the helper may serve: only these ops, only these fields (the body is the engine's, but the helper is not a generic RPC). */
+const FS_OPS = new Set(['list', 'read', 'write', 'delete']);
 
 async function sandboxFs(box, body) {
-  const { workdir } = box;
-  if (body.op === 'list') {
-    if (typeof body.path === 'string' && body.path && !(await insideClone(workdir, body.path))) {
-      return { ok: false, error: 'path must stay inside the repository' };
-    }
-    return listFiles(workdir, typeof body.path === 'string' && body.path ? body.path : undefined,
-      typeof body.glob === 'string' && body.glob.trim() ? body.glob.trim() : undefined);
-  }
-  const abs = await insideClone(workdir, body.path);
-  if (!abs) return { ok: false, error: 'path is required and must stay inside the repository' };
-  if (body.op === 'read') {
-    try {
-      const real = await realpath(abs);
-      if (!lexicallyInside(await realpath(workdir), real)) return { ok: false, error: 'path must stay inside the repository' };
-      return { ok: true, path: body.path, content: await readFile(real, 'utf8') };
-    }
-    catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
-  }
-  if (body.op === 'write') {
-    if (typeof body.content !== 'string') return { ok: false, error: 'content is required' };
-    if (!(body.committed === true && await absorbCommit(box, abs, body.content))) {
-      try {
-        await mkdir(dirname(abs), { recursive: true, mode: 0o775 });
-        // The shell shares this tree: re-verify the parent now that it exists, not only as the guard saw it.
-        if (!(await parentStillInside(workdir, abs))) throw new Error('path resolves outside the repository');
-        await writeNoFollow(workdir, abs, body.content);
-      } catch (e) { return { ok: false, error: `write failed: ${e.message}` }; }
-    }
+  const op = body.op;
+  if (!FS_OPS.has(op)) return { ok: false, error: `unknown fs op '${op}'` };
+  if (op === 'list' || op === 'read') return box.workspace.call({ op, path: body.path, glob: body.glob });
+  const committable = typeof body.path === 'string' && (op === 'delete' || typeof body.content === 'string');
+  if (body.committed === true && committable && await absorbCommit(box, body.path, op === 'delete' ? null : body.content)) {
     box.checks?.touch(body.path);
     return { ok: true, path: body.path };
   }
-  if (body.op === 'delete') {
-    try {
-      if (!(body.committed === true && await absorbCommit(box, abs, null))) await rm(abs, { force: true });
-    } catch (e) { return { ok: false, error: `delete failed: ${e.message}` }; }
-    box.checks?.touch(body.path);
-    return { ok: true, path: body.path };
-  }
-  return { ok: false, error: `unknown fs op '${body.op}'` };
+  const r = await box.workspace.call({ op, path: body.path, content: body.content });
+  if (r.ok) box.checks?.touch(body.path);
+  return r;
 }
 
 /** The directory a command runs in: the clone's root when `cwd` is absent, else that
  *  repo-relative directory. `{ error }` when it escapes the clone or is not a directory. */
 async function commandDir(box, cwd) {
   if (cwd == null || cwd === '' || cwd === '.') return { dir: box.workdir };
-  const abs = await insideClone(box.workdir, cwd);
-  if (!abs) return { error: 'cwd must be a directory inside the repository' };
-  const isDir = await stat(abs).then((s) => s.isDirectory(), () => false);
-  return isDir ? { dir: abs } : { error: `cwd '${cwd}' is not a directory in the repository` };
+  const st = await box.workspace.call({ op: 'stat', path: cwd });
+  if (!st.ok) return { error: 'cwd must be a directory inside the repository' };
+  return st.isDir ? { dir: join(box.workdir, String(cwd).replace(/^\/+/, '')) } : { error: `cwd '${cwd}' is not a directory in the repository` };
 }
 
 /** A foreground command runs in the clone's root: the engine writes any directory into the
@@ -505,21 +207,50 @@ async function sandboxChecks(box) {
 }
 
 /**
- * One run's sandbox over `workdir`. `emit(toolName, detail, result)` reports a local
- * service's event to the run's timeline (each transport posts it its own way).
+ * The git verbs a clone with no credential and no network of its own cannot do for itself (`git_sync_latest`,
+ * `git_undo`, `git_redo`): `sync` brings the run branch and the base branch into the clone's `origin/*`; `publish`
+ * pushes the clone's run branch. Both go through the private mirror (`sandboxGit.mjs`).
  */
-export function createSandboxBox({ spec, workdir, branch = null, emit = () => {}, jobIdPrefix = '' }) {
-  // The model's shell is another uid in this process's group: what this process creates (files, git objects) must be group-writable for it.
-  if (shellUser()) process.umask(0o002);
-  const box = { spec, workdir, branch, emit, checks: null, jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS, idPrefix: jobIdPrefix }) };
+async function sandboxGitOp(box, body) {
+  const repo = box.spec.repo || {};
+  if (body.op === 'sync') {
+    const head = safeRef(repo.headBranch);
+    const base = safeRef(body.base) ?? safeRef(repo.baseBranch);
+    const synced = await syncWorkspace(box, [head, base].filter(Boolean));
+    if (!synced.ok) return { ok: false, error: synced.error };
+    if (base && !synced.fetched.includes(base)) return { ok: false, error: `the base branch '${base}' was not found on the remote` };
+    return { ok: true, ...(base ? { base } : {}) };
+  }
+  if (body.op === 'publish') return publishHead(box, { force: body.force === true });
+  return { ok: false, error: `unknown git op '${body.op}'` };
+}
+
+/**
+ * One run's sandbox over `workdir`. `emit(toolName, detail, result)` reports a local
+ * service's event to the run's timeline (each transport posts it its own way). `helperPath` is
+ * the workspace helper script (a file this process owns and the shell user can read but not change; REQUIRED —
+ * the container passes its sibling `workspaceAgent.mjs`, the Actions runner a file it wrote).
+ */
+export function createSandboxBox({ spec, workdir, branch = null, emit = () => {}, jobIdPrefix = '', helperPath }) {
+  if (typeof helperPath !== 'string' || !helperPath) throw new Error('createSandboxBox needs the workspace helper path (workspaceAgent.mjs)');
+  const box = {
+    spec, workdir, branch, emit, checks: null,
+    jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS, idPrefix: jobIdPrefix }),
+    workspace: createWorkspaceClient({ workdir, helperPath }),
+    mirror: createMirror(spec),
+  };
   if (spec.postEditChecks === true) box.checks = startPostEditChecks(box);
   return box;
 }
 
-/** The run is over: kill every background job it left running. Each transport calls this
+/** The run is over: kill every background job THIS box tracks (never the shell user's other processes — a live preview
+ *  outlives its run), optionally delete the workspace, and release the helper and the mirror. Each transport calls this
  *  from its close path, so no job outlives its run. */
-export async function closeSandboxBox(box) {
+export async function closeSandboxBox(box, { destroy = false } = {}) {
   await box.jobs.closeAll();
+  if (destroy) await box.workspace.call({ op: 'destroy' });
+  box.workspace.close();
+  await disposeMirror(box.mirror);
 }
 
 /** A job reply's `output` fitted like a foreground command's, so the verdict (printed last)
@@ -529,7 +260,7 @@ function fitJobOutput(box, reply) {
 }
 
 /**
- * Serve one sandbox request on `box`: `fs` / `run` / `checks` / `job/*`. `onAbort(kill)`
+ * Serve one sandbox request on `box`: `fs` / `run` / `checks` / `job/*` / `git`. `onAbort(kill)`
  * lets the transport kill a running command (or end a job poll's wait) when the engine
  * gives up on the request (a cancel).
  */
@@ -537,6 +268,7 @@ export async function serveSandbox(box, path, body, onAbort = () => {}) {
   if (path === '/sandbox/fs') return sandboxFs(box, body);
   if (path === '/sandbox/run') return sandboxRun(box, body, onAbort);
   if (path === '/sandbox/checks') return sandboxChecks(box);
+  if (path === '/sandbox/git') return sandboxGitOp(box, body);
   if (path === '/sandbox/job/start') return sandboxJobStart(box, body);
   if (path === '/sandbox/job/poll') return fitJobOutput(box, await box.jobs.poll(String(body.id ?? ''), body.waitMs, onAbort));
   if (path === '/sandbox/job/active') return { ok: true, active: box.jobs.hasRunning() };

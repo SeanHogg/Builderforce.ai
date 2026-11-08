@@ -83,7 +83,7 @@ export function createWorkspace(workdir) {
   async function exclude(paths) {
     const info = join(root, '.git', 'info');
     const gitDir = await lstat(join(root, '.git')).catch(() => null);
-    if (!gitDir || !gitDir.isDirectory()) return { ok: true, skipped: 'not a git clone' };
+    if (!gitDir || !gitDir.isDirectory()) return { ok: true, skipped: 'no repository' };
     await mkdir(info, { recursive: true });
     const file = join(info, 'exclude');
     const current = await readFile(file, 'utf8').catch(() => '');

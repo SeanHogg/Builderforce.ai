@@ -97,7 +97,7 @@ import { sweepOrphanedDraftPullRequests } from './application/repos/sweepOrphane
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
 import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
-import { runDeferredDispatchSweep } from './application/runtime/deferredDispatch';
+import { runDeferredDispatchSweep } from './application/runtime/deferredDispatchSweep';
 import { dispatchCloudRunForTask } from './application/runtime/dispatchCloudRun';
 import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
@@ -1002,7 +1002,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'orphaned-draft-prs',
     cadence: 'frequent',
-    description: 'Settle the early draft PR of a run that never finished: mark it ready when its branch has commits, close it when it has none.',
+    description: 'Settle the early draft PR of a run that never reached its finalize, judged by the run that opened it: mark it ready when that run succeeded and left commits, close it when the run failed or was cancelled or left nothing. A draft with a live run on the ticket is never touched.',
     run: async ({ env, db }) => {
       const r = await sweepOrphanedDraftPullRequests(env, db);
       return r.readied + r.closed > 0 ? `checked=${r.checked} readied=${r.readied} closed=${r.closed} skipped=${r.skipped}` : null;
@@ -1061,11 +1061,11 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'deferred-dispatch',
     cadence: 'frequent',
-    description: 'Retry one-shot dispatches (CI auto-fix, incident, security, validation) that admission deferred: a live run on the ticket, or the plan\'s concurrent cloud-run limit.',
+    description: 'Claim the parked one-shot dispatches (CI auto-fix, incident, security, validation) that admission deferred, re-dispatch each with exponential backoff while it stays deferred, and abandon one that is refused for good or older than six hours (running its dispatcher\'s own cleanup).',
     dispatches: true,
     run: async ({ env, budget }) => {
       const r = await runDeferredDispatchSweep(env, budget, dispatchCloudRunForTask);
-      return r.parked > 0 ? `parked=${r.parked} started=${r.started} stillDeferred=${r.stillDeferred}` : null;
+      return r.claimed > 0 ? `claimed=${r.claimed} started=${r.started} stillDeferred=${r.stillDeferred} abandoned=${r.abandoned}` : null;
     },
   },
   {

@@ -21,6 +21,7 @@ import { useKnowledgeGraph } from './useKnowledgeGraph';
 import { graphDiagnostics } from './graphDiagnostics';
 import { lensFindings } from './lenses';
 import { PHONE_FOCUS_NODES, focusGraph, lensGraph, nodeIndex } from './graphModel';
+import { useGraphResident } from './compute/useGraphResident';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
 import { layoutOf } from './layout';
@@ -70,7 +71,6 @@ import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePan
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
 const MAX_DRAWN_NODES = 2000;
-
 export interface KnowledgeGraphViewProps {
     source: KnowledgeGraphSource;
     /** Host words over the English defaults: `resolveLabels` merges every map key by key, so a host may pass a subset. */
@@ -115,6 +115,7 @@ export function KnowledgeGraphView({
     // null until a graph arrives; the frame is drawn regardless. The findings of stray copies are folded away (PRD 41 A9).
     const real = shown ? foldCopyFindings(shown) : shown;
     const graph = real ?? EMPTY_GRAPH;
+    useGraphResident(real); // registered in this render so the cameras' subsets find it; posted to the worker early
     const side = showingBefore ? 'baseline' as const : 'current' as const;
     const evidenceFor = useMemo(() => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined), [source]);
     const evidenceOf = useMemo(() => (evidenceFor ? (f: Finding) => evidenceFor(f, side) : undefined), [evidenceFor, side]);

@@ -127,30 +127,35 @@ export async function dispatchSecurityAudit(
       payload,
       submittedBy: params.submittedBy ?? `security:${securityRef}`,
       // One-shot: nothing re-sweeps an audit, so a deferred admission is parked and retried.
-      parkIfDeferred: true,
+      parkIfDeferred: { kind: 'security', meta: { auditId } },
     });
     await Promise.allSettled(deferred);
-    // Deferred = parked, not refused: the audit stays `running` until the retry starts it.
+    // Deferred = parked, not refused: the audit stays `running` until the retry starts it
+    // (or the sweep abandons it, which fails the audit via `failSecurityAudit`).
     if (admissionDeferred) return auditId;
     // A refused dispatch left the audit sitting `running` with nothing running it —
     // indistinguishable from an audit in progress, forever. Finish it with the reason.
     if (executionId == null) {
-      await audits.finishAudit(params.tenantId, auditId, {
-        status: 'failed',
-        summary: `Audit dispatch refused: ${refusal?.message ?? 'the dispatcher declined without a reason'}`.slice(0, 500),
-      }).catch((error) => {
-        reportCaughtError(error, { source: "application/security/securityDispatch.ts", operation: "dispatchSecurityAudit" });
-      });
+      await failSecurityAudit(db, params.tenantId, auditId, `Audit dispatch refused: ${refusal?.message ?? 'the dispatcher declined without a reason'}`);
       return null;
     }
     return auditId;
   } catch {
     // Best-effort — a dispatch failure marks the run failed but never throws.
-    await audits.finishAudit(params.tenantId, auditId, { status: 'failed', summary: 'Audit dispatch failed.' }).catch((error) => {
-      reportCaughtError(error, { source: "application/security/securityDispatch.ts", operation: "dispatchSecurityAudit" });
-    });
+    await failSecurityAudit(db, params.tenantId, auditId, 'Audit dispatch failed.');
     return null;
   }
+}
+
+/**
+ * Finish an audit that will never run as `failed`, so it is not stuck `running` forever. Best-effort.
+ * Shared by the direct dispatch path and the deferred-dispatch sweep's `security` handler (a parked
+ * audit that is finally refused or abandoned).
+ */
+export async function failSecurityAudit(db: Db, tenantId: number, auditId: number, summary: string): Promise<void> {
+  await new SecurityAuditService(db).finishAudit(tenantId, auditId, { status: 'failed', summary: summary.slice(0, 500) }).catch((error) => {
+    reportCaughtError(error, { source: "application/security/securityDispatch.ts", operation: "failSecurityAudit" });
+  });
 }
 
 export interface SecuritySweepResult {

@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { WORKSPACE_HELPER } from './containerTestHelper';
 import { closeSandboxBox, createSandboxBox, serveSandbox, shellEnv, type SandboxBox } from '../../../container/sandboxCore.mjs';
 
 const posix = process.platform !== 'win32';
@@ -26,7 +27,7 @@ beforeEach(async () => {
   await mkdir(workdir, { recursive: true });
   await mkdir(outside, { recursive: true });
   await writeFile(join(outside, 'secret.txt'), 'TOP-SECRET');
-  box = createSandboxBox({ spec: {}, workdir });
+  box = createSandboxBox({ spec: {}, workdir, helperPath: WORKSPACE_HELPER });
 });
 
 afterEach(async () => {
@@ -196,9 +197,30 @@ describe.skipIf(!posix)('the model shell environment', () => {
   beforeEach(() => { for (const [k, v] of Object.entries(secrets)) { saved[k] = process.env[k]; process.env[k] = v; } });
   afterEach(() => { for (const k of Object.keys(secrets)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } });
 
-  it('shellEnv drops the credential variables and keeps the rest', () => {
-    const env = shellEnv({ ...secrets, PATH: '/usr/bin', HOME: '/home/a', NODE_ENV: 'test' });
-    expect(Object.keys(env).sort()).toEqual(['HOME', 'NODE_ENV', 'PATH']);
+  it('shellEnv is an ALLOWLIST: the credential variables and anything unlisted are dropped', () => {
+    const env = shellEnv({
+      ...secrets, PATH: '/usr/bin', HOME: '/home/a', NODE_ENV: 'test', SOME_UNKNOWN_TOKEN: 'x',
+      LANG: 'C.UTF-8', LC_ALL: 'C', TERM: 'xterm', TZ: 'UTC', CI: 'true', NODE_EXTRA_CA_CERTS: '/ca.crt',
+      npm_config_registry: 'https://r.test', COREPACK_HOME: '/c', GIT_SSL_CAINFO: '/bundle.crt',
+    });
+    expect(Object.keys(env).sort()).toEqual(['CI', 'COREPACK_HOME', 'GIT_SSL_CAINFO', 'HOME', 'LANG', 'LC_ALL', 'NODE_EXTRA_CA_CERTS', 'PATH', 'TERM', 'TZ', 'npm_config_registry']);
+  });
+
+  it('shellEnv passes through the names a tenant lists in BUILDERFORCE_SHELL_ENV, but never a run credential', () => {
+    const env = shellEnv({
+      ...secrets, PATH: '/usr/bin', NPM_TOKEN: 'npm-secret', OTHER: 'o',
+      BUILDERFORCE_SHELL_ENV: 'NPM_TOKEN, GITHUB_TOKEN,ACTIONS_ID_TOKEN_REQUEST_TOKEN,BUILDERFORCE_TOKEN,not a name',
+    });
+    expect(env.NPM_TOKEN).toBe('npm-secret');
+    expect(env.OTHER).toBeUndefined();
+    for (const denied of ['GITHUB_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN', 'BUILDERFORCE_TOKEN', 'BUILDERFORCE_SHELL_ENV']) expect(env[denied]).toBeUndefined();
+  });
+
+  it('shellEnv keeps NODE_OPTIONS only when it preloads no code', () => {
+    expect(shellEnv({ NODE_OPTIONS: '--max-old-space-size=4096' }).NODE_OPTIONS).toBe('--max-old-space-size=4096');
+    for (const preload of ['--require /app/x.js', '-r /app/x.js', '--import=/app/x.mjs', '--max-old-space-size=1 --loader /x']) {
+      expect(shellEnv({ NODE_OPTIONS: preload }).NODE_OPTIONS, preload).toBeUndefined();
+    }
   });
 
   it('a command the model runs cannot read them (foreground and background)', async () => {

@@ -7,7 +7,7 @@
  *
  * Plain ESM, node builtins and `sandboxJobs.mjs` only (the Actions runner inlines it).
  */
-import { dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { killTree, spawnShell } from './sandboxJobs.mjs';
 
@@ -32,9 +32,13 @@ export function createWorkspaceClient({ workdir, helperPath }) {
   }
 
   function start() {
-    // The workdir may not exist yet (the helper's `init` makes it): start from its parent.
-    const proc = spawnShell(`exec ${quote(process.execPath)} ${quote(helperPath)} ${quote(workdir)}`, { cwd: dirname(workdir), stdio: ['pipe', 'pipe', 'inherit'] });
+    // The workdir may not exist yet (the helper's `init` makes it): start somewhere that always does.
+    const proc = spawnShell(`exec ${quote(process.execPath)} ${quote(helperPath)} ${quote(workdir)}`, { cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] });
     child = proc;
+    // The helper's stderr is the MODEL's to influence (it runs as the shell user): never inherited, since a line starting
+    // `::` on the runner's own stderr is an Actions workflow command (`::add-mask::`, `::set-env`…). Every line gets a fixed prefix.
+    createInterface({ input: proc.stderr }).on('line', (line) => console.error(`[workspace] ${line.replace(/[\r\0]/g, '')}`.slice(0, 2000)));
+    proc.stderr.on('error', () => { /* the helper ended */ });
     createInterface({ input: proc.stdout }).on('line', (line) => {
       let reply;
       try { reply = JSON.parse(line); } catch (e) { console.error(`[workspace] unparseable reply: ${e.message}`); return; }

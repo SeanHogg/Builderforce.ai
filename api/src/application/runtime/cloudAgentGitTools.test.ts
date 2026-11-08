@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildGitCommand, buildCoreToolRegistry, type CapabilityProvider, type ShellResult } from '@builderforce/agent-tools';
 import { CLOUD_AGENT_TOOLS, cloudAgentToolsFor } from './cloudAgentTools';
 import { prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
@@ -101,5 +101,69 @@ describe('git tool execute() via the shell capability', () => {
     const d = r.data as { ok: boolean; error?: string };
     expect(d.ok).toBe(false);
     expect(d.error).toMatch(/uncommitted changes/i);
+  });
+});
+
+describe('git tools with the remote half routed through the sandbox (a clone with no credential)', () => {
+  it('buildGitCommand drops git fetch / git push when the sandbox does them', () => {
+    const sync = buildGitCommand('sync_latest', { baseBranch: 'main', trackedBranch: 'bf/5', remoteViaSandbox: true });
+    expect(sync).not.toContain('git fetch');
+    expect(sync).not.toContain('git push');
+    expect(sync).toContain('git merge --no-edit "origin/$BASE"');
+    expect(sync).toContain('git merge --ff-only "origin/bf/5"');
+    for (const a of ['undo', 'redo'] as const) {
+      const cmd = buildGitCommand(a, { trackedBranch: 'bf/5', remoteViaSandbox: true });
+      expect(cmd).not.toContain('git fetch');
+      expect(cmd).not.toContain('git push');
+    }
+  });
+
+  it('the local (non-sandbox) command is unchanged: it still fetches and pushes itself', () => {
+    const sync = buildGitCommand('sync_latest', { baseBranch: 'main', trackedBranch: 'bf/5' });
+    expect(sync).toContain('git fetch origin "$BASE"');
+    expect(sync).toContain('git push origin HEAD');
+  });
+
+  function sandboxCtx(script: ShellResult, git: { sync: unknown; publish: unknown }) {
+    const calls: string[] = [];
+    const caps = {
+      capabilities: new Set(['shell'] as const),
+      shell: { run: async (c: string) => { calls.push(c); return script; }, trackedBranch: 'bf/5', git },
+    } as unknown as CapabilityProvider;
+    return { ctx: { caps }, calls };
+  }
+
+  it('git_sync_latest syncs through the sandbox, runs the local script against its base, then publishes', async () => {
+    const order: string[] = [];
+    const git = {
+      sync: async (o: { baseBranch?: string }) => { order.push(`sync:${o.baseBranch ?? ''}`); return { ok: true, baseBranch: 'develop' }; },
+      publish: async (o: { force: boolean }) => { order.push(`publish:${o.force}`); return { ok: true }; },
+    };
+    const { ctx, calls } = sandboxCtx({ ok: true, stdout: 'Synced', exitCode: 0 }, git);
+    const r = await buildCoreToolRegistry().dispatch('git_sync_latest', {}, ctx as never);
+    expect((r.data as { ok: boolean }).ok).toBe(true);
+    expect(order).toEqual(['sync:', 'publish:false']);
+    expect(calls[0]).toContain('BASE="develop"');
+    expect(calls[0]).not.toContain('git fetch');
+  });
+
+  it('git_undo force-publishes; a failed sync stops before any local change; a failed publish is reported', async () => {
+    const ok = { sync: async () => ({ ok: true }), publish: vi.fn(async () => ({ ok: true })) };
+    const a = sandboxCtx({ ok: true, stdout: 'Undid', exitCode: 0 }, ok);
+    await buildCoreToolRegistry().dispatch('git_undo', {}, a.ctx as never);
+    expect(ok.publish).toHaveBeenCalledWith({ force: true });
+
+    const noSync = { sync: async () => ({ ok: false, error: 'remote unreachable' }), publish: vi.fn() };
+    const b = sandboxCtx({ ok: true, stdout: '', exitCode: 0 }, noSync);
+    const rb = await buildCoreToolRegistry().dispatch('git_undo', {}, b.ctx as never);
+    expect((rb.data as { error: string }).error).toMatch(/remote unreachable/);
+    expect(b.calls).toHaveLength(0);
+    expect(noSync.publish).not.toHaveBeenCalled();
+
+    const noPublish = { sync: async () => ({ ok: true }), publish: async () => ({ ok: false, error: 'push refused' }) };
+    const c = sandboxCtx({ ok: true, stdout: 'Undid', exitCode: 0 }, noPublish);
+    const rc = await buildCoreToolRegistry().dispatch('git_redo', {}, c.ctx as never);
+    expect((rc.data as { ok: boolean; error: string }).ok).toBe(false);
+    expect((rc.data as { error: string }).error).toMatch(/push refused/);
   });
 });

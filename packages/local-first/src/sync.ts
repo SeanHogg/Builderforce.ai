@@ -330,9 +330,11 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         if (!answered) continue;
         // A delete the server refused only because its target is already gone is SETTLED: it is
         // recorded as a duplicate (the outcome already held), so it neither holds nor dead-letters.
-        const receipt: SyncReceipt = answered.status === 'rejected' && isAlreadySatisfiedDelete(event.entityType, event.operation, answered.detail)
+        const settled: SyncReceipt = answered.status === 'rejected' && isAlreadySatisfiedDelete(event.entityType, event.operation, answered.detail)
           ? { ...answered, status: 'duplicate' }
           : answered;
+        // The receipt names its record, so a status read never credits it to another one.
+        const receipt: SyncReceipt = { ...settled, entityType: event.entityType, clientEntityId: event.clientEntityId };
         await tx.putReceipt(receipt);
         if (receipt.status === 'accepted') summary.pushed += 1;
         if (receipt.status === 'duplicate') summary.duplicates += 1;

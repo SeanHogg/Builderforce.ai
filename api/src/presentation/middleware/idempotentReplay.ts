@@ -37,13 +37,13 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 
 const SOURCE = 'presentation/middleware/idempotentReplay.ts';
 
-export interface IdempotentReplayOptions {
+export interface IdempotentReplayOptions<E extends HonoEnv = HonoEnv> {
   /** The calling tenant. Default: `tenantId` set by the route's auth middleware. A route
    *  that authenticates inside its handler passes its own resolver. `null` = unknown
    *  caller: the request runs unguarded and the handler answers it (401). */
-  tenantOf?(c: Context<HonoEnv>): number | null | Promise<number | null>;
+  tenantOf?(c: Context<E>): number | null | Promise<number | null>;
   /** Override the store (tests). */
-  store?(c: Context<HonoEnv>): IdempotencyStore;
+  store?(c: Context<E>): IdempotencyStore;
   /** Bind the key to the request BODY as well as the route: reusing a key with a different
    *  body answers 422. For writes whose body decides what runs (`/executions`, `/tasks/submit`). */
   bindBody?: boolean;
@@ -53,17 +53,18 @@ export interface IdempotentReplayOptions {
  *  requests racing into one isolate cannot both pass. The store reservation covers the rest. */
 const IN_FLIGHT = new Set<string>();
 
-const inFlightResponse = (c: Context<HonoEnv>, key: string): Response => c.json({
+const inFlightResponse = <E extends HonoEnv>(c: Context<E>, key: string): Response => c.json({
   error: `A request with ${IDEMPOTENCY_KEY_HEADER} '${key}' is still being processed. Retry shortly to receive its result.`,
   code: 'idempotency_request_in_flight',
 }, 409);
 
-const tenantFromAuth = (c: Context<HonoEnv>): number | null => {
+const tenantFromAuth = <E extends HonoEnv>(c: Context<E>): number | null => {
   const tenantId: unknown = c.get('tenantId');
   return typeof tenantId === 'number' ? tenantId : null;
 };
 
-export function idempotentReplay(opts: IdempotentReplayOptions = {}): MiddlewareHandler<HonoEnv> {
+/** Generic over the route's env so a router with wider Bindings (e.g. the runtime router's Durable Object namespace) mounts it without a cast. */
+export function idempotentReplay<E extends HonoEnv = HonoEnv>(opts: IdempotentReplayOptions<E> = {}): MiddlewareHandler<E> {
   return async (c, next) => {
     const key = parseIdempotencyKey(c.req.header(IDEMPOTENCY_KEY_HEADER));
     if (key === null) return next();

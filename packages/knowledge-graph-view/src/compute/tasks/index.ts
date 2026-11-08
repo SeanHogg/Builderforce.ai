@@ -5,7 +5,7 @@ import type { TaskKind } from '../protocol';
 import { edgeBufferTask, edgePaths, rankEdgesTask } from './edges';
 import { once, type Handler } from './handler';
 import { layout2d, layout3d } from './layout';
-import { antiPatterns, focus, insights, matrix } from './reads';
+import { antiPatterns, insights, matrix } from './reads';
 import { path, surface } from './surface';
 
 export const HANDLERS: { [K in TaskKind]: Handler<K> } = {
@@ -20,5 +20,4 @@ export const HANDLERS: { [K in TaskKind]: Handler<K> } = {
     insights,
     partitionMatrix: matrix,
     antiPatterns,
-    focus,
 };

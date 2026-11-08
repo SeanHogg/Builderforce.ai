@@ -7,6 +7,7 @@
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { fileRefOf, stationOfRef, type Station, type StationModel } from './stations';
 import type { Line } from './lines';
+import { unorderedPairKey } from '../pairKey';
 
 export interface PathStop { id: string; name: string; layer?: string }
 export interface PathHop {
@@ -33,9 +34,8 @@ export function pathOfLine(line: Line | null, byId: ReadonlyMap<string, Station>
 
 type HopCounts = ReadonlyMap<number, number>;
 
-/** What a station-pair hop count is keyed by: the two station numbers, smaller first (a hop counts both directions). */
-const pairKey = (a: number, b: number): number => (a < b ? a * STATION_SPAN + b : b * STATION_SPAN + a);
-const STATION_SPAN = 2 ** 26;
+// A station-pair hop count is keyed by `unorderedPairKey` of the two station numbers (a hop counts both directions).
+
 
 const hopCountsMemo = new WeakMap<readonly Pick<KEdge, 'from' | 'to' | 'kind'>[], { stationOf: StationModel['stationOf']; counts: HopCounts; slots: ReadonlyMap<string, number> }>();
 
@@ -55,7 +55,7 @@ function hopCountsOf(model: Pick<StationModel, 'stationOf'>, edges: readonly Pic
         if (from === undefined) continue;
         const to = stationOfRef(model, e.to);
         if (to === undefined || from === to) continue;
-        const key = pairKey(slotOf(from), slotOf(to));
+        const key = unorderedPairKey(slotOf(from), slotOf(to));
         counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     const built = { stationOf: model.stationOf, counts, slots };
@@ -87,7 +87,7 @@ export function pathOfStations(
     const { counts, slots } = hopCountsOf(model, edges);
     const between = (a: string, b: string): number => {
         const x = slots.get(a), y = slots.get(b);
-        return x === undefined || y === undefined ? 0 : counts.get(pairKey(x, y)) ?? 0;
+        return x === undefined || y === undefined ? 0 : counts.get(unorderedPairKey(x, y)) ?? 0;
     };
     return { stops, hops: stops.slice(1).map((s, i) => ({ kind: 'references', count: between(stops[i]!.id, s.id) })) };
 }

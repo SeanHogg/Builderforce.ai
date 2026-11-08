@@ -37,12 +37,14 @@
  * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here.
  */
 import { createServer, request as httpRequest } from 'node:http';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { connect as netConnect } from 'node:net';
 // The web-scan TLS stage exists precisely because a Cloudflare Worker has no socket:
 // `node:tls` is what lets this process read the peer certificate the Worker cannot.
 import { connect as tlsConnect } from 'node:tls';
-import { chmod, mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { mkdtemp } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
@@ -50,9 +52,29 @@ import { promisify } from 'node:util';
 // GitHub Actions runner inlines, so both transports serve one implementation.
 // Side-effect import, FIRST among our modules: spawned git/npm/pip must trust the egress CA.
 import './egressTrust.mjs';
-import { bootJobIdPrefix, closeSandboxBox, createSandboxBox, gitAuthOf, runGit, runShell, serveSandbox, shellUser, spawnShell } from './sandboxCore.mjs';
+import { bootJobIdPrefix, closeSandboxBox, cloneWorkspace, createSandboxBox, runShell, serveSandbox, shellUser, spawnShell, verifyShellIsolation } from './sandboxCore.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
+
+/**
+ * The control routes (`/sandbox/*`, `/web-scan`) are reachable on localhost from the model's own shell, so they need
+ * more than a network position: AgentContainerDO generates a per-instance secret, passes it in this container's env at
+ * start and sends it as a header on every request it forwards. It is read ONCE and removed from `process.env`
+ * (a shell is spawned with an allowlisted env anyway, and the `BUILDERFORCE_` prefix is on the shell's denylist).
+ * With no secret configured the routes are open only outside production (local dev, unit tests).
+ */
+const CONTROL_SECRET = process.env.BUILDERFORCE_CONTROL_SECRET || '';
+delete process.env.BUILDERFORCE_CONTROL_SECRET;
+const CONTROL_HEADER = 'x-bf-control-secret';
+const digest = (s) => createHash('sha256').update(s).digest();
+/** Constant-time check of the control header (both sides hashed first, so lengths never leak). */
+function controlAuthorized(req) {
+  if (!CONTROL_SECRET) return process.env.NODE_ENV !== 'production';
+  const got = req.headers[CONTROL_HEADER];
+  return typeof got === 'string' && timingSafeEqual(digest(got), digest(CONTROL_SECRET));
+}
+/** The workspace helper: a sibling file the sandbox runs as the shell user (the only code that touches a working tree). */
+const HELPER_PATH = fileURLToPath(new URL('./workspaceAgent.mjs', import.meta.url));
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
 // Worker's preview ingress proxies `preview.builderforce.ai/<token>/*` here as
 // `/__preview__/*`, which we reverse-proxy (HTTP + WebSocket/HMR) to that dev server.
@@ -126,7 +148,9 @@ async function op(spec, body) {
  * failure path reports `failed` (so the panel can say why) and returns, and the caller
  * ignores the result.
  */
-async function startPreviewDevServer(spec, workdir) {
+async function startPreviewDevServer(spec, box) {
+  const { workdir } = box;
+  const fs = (body) => serveSandbox(box, '/sandbox/fs', body);
   // Ask the Worker to acquire an instance. This is where the global budget, the
   // per-tenant cap and the plan gate are applied, so a refusal here is final.
   const started = await op(spec, { op: 'preview', args: { action: 'start' } }).catch(() => null);
@@ -144,30 +168,21 @@ async function startPreviewDevServer(spec, workdir) {
   const written = [];
   for (const file of Array.isArray(step.files) ? step.files : []) {
     if (!file || typeof file.path !== 'string' || typeof file.contents !== 'string') continue;
-    const abs = join(workdir, file.path);
-    if (!abs.startsWith(workdir)) continue; // never escape the workspace
-    try {
-      await mkdir(dirname(abs), { recursive: true });
-      await writeFile(abs, file.contents, 'utf8');
-      written.push(file.path);
-    } catch (e) {
-      await fail(`could not write ${file.path}: ${e.message}`);
+    // Every touch of the workspace goes through the workspace helper (it runs as the shell user and keeps
+    // the path inside the repository); this process never reads or writes the tree itself.
+    const wrote = await fs({ op: 'write', path: file.path, content: file.contents });
+    if (!wrote.ok) {
+      await fail(`could not write ${file.path}: ${wrote.error}`);
       return;
     }
+    written.push(file.path);
   }
   // The overrides are preview plumbing, not the user's code: keep them out of anything
   // the agent stages (`git add -A`) so they can never ride into the run's PR.
   // `.git/info/exclude` is local to this clone, so the repo's own .gitignore is untouched.
   if (written.length) {
-    try {
-      const exclude = join(workdir, '.git', 'info', 'exclude');
-      const current = await readFile(exclude, 'utf8').catch(() => '');
-      const missing = written.filter((p) => !current.split('\n').includes(p));
-      if (missing.length) {
-        await mkdir(dirname(exclude), { recursive: true });
-        await writeFile(exclude, `${current}${current && !current.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`, 'utf8');
-      }
-    } catch { /* not a git clone — nothing to keep clean */ }
+    const excluded = await box.workspace.call({ op: 'exclude', paths: written });
+    if (!excluded.ok) console.warn(`[container] could not exclude the preview files from git: ${excluded.error}`);
   }
 
   // 2. Install dependencies when the clone has none. A fresh clone never carries
@@ -175,10 +190,9 @@ async function startPreviewDevServer(spec, workdir) {
   //    missing module and the preview reports "exited immediately". Skipped when the
   //    agent (or a previous start) already installed.
   if (typeof step.installCommand === 'string' && step.installCommand) {
-    let hasPackageJson = true;
-    try { await readFile(join(workdir, 'package.json')); } catch { hasPackageJson = false; }
-    let installed = true;
-    try { await readdir(join(workdir, 'node_modules')); } catch { installed = false; }
+    const hasPackageJson = (await fs({ op: 'read', path: 'package.json' })).ok === true;
+    const modules = await box.workspace.call({ op: 'stat', path: 'node_modules' });
+    const installed = modules.ok === true && modules.exists === true;
     if (hasPackageJson && !installed) {
       const install = await runShell(step.installCommand, workdir);
       if (install.exitCode !== 0) {
@@ -192,9 +206,14 @@ async function startPreviewDevServer(spec, workdir) {
   //    package.json script is present. Expo projects also carry a `dev` script, so the
   //    marker alone would start the wrong server — both pieces of evidence are needed.
   let scripts = {};
-  try {
-    scripts = JSON.parse(await readFile(join(workdir, 'package.json'), 'utf8')).scripts ?? {};
-  } catch { scripts = {}; }
+  const pkg = await fs({ op: 'read', path: 'package.json' });
+  if (pkg.ok) {
+    try {
+      scripts = JSON.parse(pkg.content).scripts ?? {};
+    } catch (e) {
+      console.warn(`[container] preview: package.json is not valid JSON (${e.message})`);
+    }
+  }
 
   let chosen = null;
   for (const candidate of step.candidates) {
@@ -205,7 +224,7 @@ async function startPreviewDevServer(spec, workdir) {
       let found = false;
       for (const marker of markers) {
         if (typeof marker !== 'string') continue;
-        try { await readFile(join(workdir, marker)); found = true; break; } catch { /* try the next name */ }
+        if ((await fs({ op: 'read', path: marker })).ok === true) { found = true; break; } // else try the next name
       }
       if (!found) continue;
     }
@@ -278,42 +297,44 @@ const sandboxes = new Map();
 /** In-flight opens, so two concurrent first calls clone once. */
 const opening = new Map();
 
-/** Clone the ticket's HEAD branch (prior runs' WIP), falling back to base on run #1. */
-async function cloneInto(spec, workdir) {
-  const { headBranch, baseBranch } = spec.repo;
-  // The clone URL carries NO credential and the run token is supplied for this command only (see runGit), so
-  // neither `origin` in .git/config nor the model shell's environ ever holds it. The shell user shares the
-  // tree through the group: group-writable worktree files (umask) and a group-shared repository.
-  if (shellUser()) process.umask(0o002);
-  const auth = gitAuthOf(spec);
-  const cloneArgs = ['clone', '-c', 'core.sharedRepository=group'];
-  // FULL clone (no `--depth`): a shallow clone hid earlier passes and had no merge-base
-  // with the base branch, so `git_sync_latest` / `git diff main` could not work.
-  let clone = headBranch
-    ? await runGit([...cloneArgs, '-b', headBranch, auth.url, '.'], workdir, auth)
-    : { exitCode: 1, output: 'no head branch' };
-  let checkedOut = clone.exitCode === 0 ? headBranch : null;
-  if (clone.exitCode !== 0) {
-    clone = await runGit([...cloneArgs, ...(baseBranch ? ['-b', baseBranch] : []), auth.url, '.'], workdir, auth);
-    if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
-  }
-  return { ok: clone.exitCode === 0, branch: checkedOut, output: clone.output };
+/** Where workspaces live when a shell user is configured: a directory the shell user owns (the Dockerfile makes it).
+ *  Without a shell user (local dev) a temp dir is used, as it always was. */
+const WORKSPACE_ROOT = process.env.BUILDERFORCE_WORKSPACE_ROOT || '';
+
+/** A fresh workspace directory path (the workspace helper creates it, as the shell user). */
+async function newWorkdir(executionId) {
+  if (shellUser() && WORKSPACE_ROOT) return join(WORKSPACE_ROOT, `bf-exec-${executionId}-${Math.random().toString(36).slice(2, 8)}`);
+  return mkdtemp(join(tmpdir(), `bf-exec-${executionId}-`));
 }
 
 async function openSandbox(spec) {
   const existing = sandboxes.get(spec.executionId);
   if (existing) return { ok: true, branch: existing.branch, reused: true };
   if (!spec.repo || typeof spec.repo.cloneUrl !== 'string') return { ok: false, error: 'no repository to clone' };
-  const workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
-  // mkdtemp makes 0700: open the clone to the shell user's group (setgid so new entries keep it).
-  await chmod(workdir, 0o2775);
-  const cloned = await cloneInto(spec, workdir);
-  if (!cloned.ok) {
-    await rm(workdir, { recursive: true, force: true }).catch(() => {});
-    localServiceEvent(spec, 'runtime.clone', { phase: 'failed' }, `clone failed: ${cloned.output.slice(0, 200)}`);
-    return { ok: false, error: `clone failed: ${cloned.output.slice(-300)}` };
+  const workdir = await newWorkdir(spec.executionId);
+  const box = createSandboxBox({ spec, workdir, helperPath: HELPER_PATH, jobIdPrefix: bootJobIdPrefix(), emit: (toolName, detail, result) => localServiceEvent(spec, toolName, detail, result) });
+  const abandon = async (error) => {
+    await closeSandboxBox(box, { destroy: true }).catch((e) => console.error(`[container] could not dispose a failed open: ${e.message}`));
+    return { ok: false, error };
+  };
+  // The workspace belongs to the shell user: its helper makes the directory, and the sandbox refuses to serve
+  // unless the shell provably cannot reach this process's secrets, sudo, or the Docker socket.
+  const made = await box.workspace.call({ op: 'init' });
+  if (!made.ok) return abandon(`could not create the workspace: ${made.error}`);
+  if (shellUser()) {
+    try {
+      verifyShellIsolation({ user: shellUser(), workdir });
+    } catch (e) {
+      localServiceEvent(spec, 'runtime.isolation', { phase: 'failed' }, e.message);
+      return abandon(e.message);
+    }
   }
-  const box = createSandboxBox({ spec, workdir, branch: cloned.branch, jobIdPrefix: bootJobIdPrefix(), emit: (toolName, detail, result) => localServiceEvent(spec, toolName, detail, result) });
+  const cloned = await cloneWorkspace(box);
+  if (!cloned.ok) {
+    localServiceEvent(spec, 'runtime.clone', { phase: 'failed' }, `clone failed: ${cloned.output.slice(0, 200)}`);
+    return abandon(`clone failed: ${cloned.output.slice(-300)}`);
+  }
+  box.branch = cloned.branch;
   box.previewStarted = false;
   sandboxes.set(spec.executionId, box);
   localServiceEvent(spec, 'runtime.clone', { branch: cloned.branch, requestedHead: spec.repo.headBranch ?? null, base: spec.repo.baseBranch ?? null },
@@ -322,7 +343,7 @@ async function openSandbox(spec) {
   // preview that never answers must not delay or fail the run.
   if (spec.preview) {
     box.previewStarted = true;
-    void startPreviewDevServer(spec, workdir).catch(() => { /* reported via the preview op */ });
+    void startPreviewDevServer(spec, box).catch((e) => console.error(`[container] preview start crashed: ${e instanceof Error ? e.message : String(e)}`));
   }
   return { ok: true, branch: cloned.branch };
 }
@@ -332,11 +353,10 @@ async function closeSandbox(executionId) {
   const box = sandboxes.get(executionId);
   if (!box) return { ok: true };
   sandboxes.delete(executionId);
-  // Background jobs die with the run (a live preview is a separate process, not a job).
-  await closeSandboxBox(box).catch(() => {});
-  // A live preview serves out of this clone, so it outlives the run; the preview sweep
+  // This box's background jobs die with the run (a live preview is a separate process, not a job, and is not swept).
+  // A live preview serves out of the workspace, so it outlives the run and the workspace stays; the preview sweep
   // stops the whole instance when it goes idle.
-  if (!box.previewStarted) await rm(box.workdir, { recursive: true, force: true }).catch(() => {});
+  await closeSandboxBox(box, { destroy: !box.previewStarted }).catch((e) => console.error(`[container] close failed: ${e instanceof Error ? e.message : String(e)}`));
   return { ok: true };
 }
 
@@ -356,7 +376,7 @@ async function handleSandbox(path, body, res) {
   if (path === '/sandbox/close') return [200, await closeSandbox(body.executionId)];
   const box = sandboxes.get(body.executionId);
   if (!box) return [409, { ok: false, error: 'not_open' }];
-  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks', '/sandbox/job/start', '/sandbox/job/poll', '/sandbox/job/kill', '/sandbox/job/active'].includes(path)) return [404, { ok: false, error: 'not found' }];
+  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks', '/sandbox/git', '/sandbox/job/start', '/sandbox/job/poll', '/sandbox/job/kill', '/sandbox/job/active'].includes(path)) return [404, { ok: false, error: 'not found' }];
   // The engine aborting its fetch (a cancel) closes the connection: kill the command. The
   // RESPONSE's 'close' — the request's has already fired once its body was read, so a
   // listener on it would never hear the cancel.
@@ -554,6 +574,11 @@ const server = createServer((req, res) => {
     return;
   }
   if (isPreviewUrl(req.url)) { proxyPreviewHttp(req, res); return; }
+  if (req.method === 'POST' && (req.url.startsWith('/sandbox/') || req.url === '/web-scan') && !controlAuthorized(req)) {
+    sendJson(res, 401, { ok: false, error: 'unauthorized' });
+    req.resume();
+    return;
+  }
   if (req.method === 'POST' && req.url.startsWith('/sandbox/')) {
     void readJson(req).then(async (body) => {
       if (!body) { sendJson(res, 400, { ok: false, error: 'bad request' }); return; }

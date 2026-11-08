@@ -205,26 +205,28 @@ export interface ChatQuestionVM {
  * it to its bearer-fetch REST client. Same panel, same endpoints, different host.
  */
 export interface ChatTicketsAdapter {
-  listTickets(chatId: number): Promise<TicketLinkVM[]>;
-  linkTicket(chatId: number, input: { kind: TicketKind; ref: string; linkType: LinkType }): Promise<void>;
-  unlinkTicket(chatId: number, kind: TicketKind, ref: string): Promise<void>;
+  // A chat id is a server id (number) or a local chat's client id (string): a host that keeps the
+  // rail's copy on the device answers either.
+  listTickets(chatId: string | number): Promise<TicketLinkVM[]>;
+  linkTicket(chatId: string | number, input: { kind: TicketKind; ref: string; linkType: LinkType }): Promise<void>;
+  unlinkTicket(chatId: string | number, kind: TicketKind, ref: string): Promise<void>;
   listTicketChats(kind: TicketKind, ref: string): Promise<LineageVM[]>;
-  consolidate(targetChatId: number, sourceChatIds: number[]): Promise<void>;
-  listAgents(chatId: number): Promise<ChatAgentVM[]>;
+  consolidate(targetChatId: string | number, sourceChatIds: number[]): Promise<void>;
+  listAgents(chatId: string | number): Promise<ChatAgentVM[]>;
   /**
    * Every run started against a ticket this chat links — the half of "is anything
    * happening?" that the ticket list cannot answer. Read by the diagnostics capture, so
    * a report can state what EXECUTED rather than only what was filed and who was invited.
    */
-  listRuns(chatId: number): Promise<ChatRunHistoryVM>;
-  inviteAgent(chatId: number, input: { agentRef: string; agentKind: string }): Promise<void>;
-  removeAgent(chatId: number, assignmentId: string): Promise<void>;
+  listRuns(chatId: string | number): Promise<ChatRunHistoryVM>;
+  inviteAgent(chatId: string | number, input: { agentRef: string; agentKind: string }): Promise<void>;
+  removeAgent(chatId: string | number, assignmentId: string): Promise<void>;
   loadAgentPool(): Promise<AgentOptionVM[]>;
   /** Human participants of the chat (shared access, migration 0288). */
-  listMembers(chatId: number): Promise<ChatMemberVM[]>;
+  listMembers(chatId: string | number): Promise<ChatMemberVM[]>;
   /** Invite a human by email; returns the resolution ('active' | 'pending'). */
-  inviteMember(chatId: number, email: string): Promise<{ status: string }>;
-  removeMember(chatId: number, memberId: number): Promise<void>;
+  inviteMember(chatId: string | number, email: string): Promise<{ status: string }>;
+  removeMember(chatId: string | number, memberId: number): Promise<void>;
   /** Server-side typeahead over ONE tier: up to N (ref,label) hits whose
    *  title/name/goal/key matches `query` (empty = newest first). Replaces the old
    *  "load EVERY ticket then filter in the DOM" — fast AND complete on a huge tenant. */
@@ -249,7 +251,7 @@ export interface ChatTicketsAdapter {
     kind: TicketKind,
     ref: string,
     agentRef: string,
-    chatId: number,
+    chatId: string | number,
   ): Promise<{ started: boolean; agentName: string | null }>;
   /**
    * Whether this host currently permits DISPATCHING a run, and if not, why.
@@ -269,7 +271,7 @@ export interface ChatTicketsAdapter {
    */
   canRunTicket?(): { allowed: boolean; reason?: string };
   /** Pending question/feedback requests for work linked to this chat. */
-  listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+  listQuestions(chatId: string | number): Promise<ChatQuestionVM[]>;
   /** Deliver an answer and resume the waiting run. */
   answerQuestion(id: string, responseText: string): Promise<void>;
 }

@@ -31,22 +31,6 @@ describe('the review recorder', () => {
         });
     });
 
-    it('records only the uploads skipped DURING this review, named by file, with their byte size', () => {
-        // A long-lived client: its list is cumulative across reviews.
-        const client = { skipped: [{ path: 'src:r::old.ts', bytes: 5, reason: 'too-large' }] as Array<{ path: string; bytes: number; reason: string }> };
-        const store = reviewRecordStore();
-        const recorder = createReviewRecorder({ rootId: 'r', store, client });
-        recorder.planned({ byPack: {}, skipped: [] });
-        recorder.begin();
-        client.skipped.push({ path: 'src:r::big/é.ts', bytes: 12, reason: 'too-large' });
-        recorder.finish();
-        expect(store.get('r')?.skipped).toEqual([{ path: 'big/é.ts', bytes: 12, reason: 'too-large' }]);
-        // The next review starts from the new length, so nothing repeats.
-        recorder.begin();
-        recorder.finish();
-        expect(store.get('r')?.skipped).toEqual([]);
-    });
-
     it('records the repo map edge count, and keeps the last measured one when a review builds no map', () => {
         const store = reviewRecordStore();
         const recorder = createReviewRecorder({ rootId: 'r', store });

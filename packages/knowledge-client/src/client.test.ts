@@ -56,15 +56,13 @@ describe('createKnowledgeClient', () => {
     });
   });
 
-  it('maps extracted get/put to the hash routes, a 404 to undefined', async () => {
-    const { fetch, seen } = fakeFetch((path, init) =>
-      init?.method === 'PUT' ? json({ ok: true }) : path.endsWith('/h1') ? json({ extracted: [] }) : json({ error: 'not found' }, 404));
+  it('maps extracted get to the hash route, a 404 to undefined', async () => {
+    const { fetch, seen } = fakeFetch((path) =>
+      path.endsWith('/h1') ? json({ extracted: [] }) : json({ error: 'not found' }, 404));
     const client = createKnowledgeClient({ fetch, projectId: 5 });
-    await client.store.putExtracted!('h1', []);
     expect(await client.store.getExtracted!('h1')).toEqual([]);
     expect(await client.store.getExtracted!('h2')).toBeUndefined();
     expect(seen.map((s) => `${s.method} ${s.path}`)).toEqual([
-      'PUT /api/projects/5/knowledge/extracted/h1',
       'GET /api/projects/5/knowledge/extracted/h1',
       'GET /api/projects/5/knowledge/extracted/h2',
     ]);
@@ -233,33 +231,6 @@ describe('createKnowledgeClient', () => {
     expect(seen).toHaveLength(1);
   });
 
-  it('skips and counts a 413 on putExtracted instead of throwing', async () => {
-    const { fetch, seen } = fakeFetch(() => json({ error: 'payload_too_large', code: 'payload_too_large' }, 413));
-    const client = createKnowledgeClient({ fetch, projectId: 9 });
-    await expect(client.store.putExtracted!('h1', [])).resolves.toBeUndefined();
-    await expect(client.putExtracted('h2', [])).resolves.toBeUndefined();
-    const skipped = client.skipped!;
-    expect(skipped).toHaveLength(2);
-    expect(skipped[0]).toMatchObject({ path: 'extracted/h1', bytes: 2, reason: 'too-large' });
-    expect(seen).toHaveLength(2);
-  });
-
-  it('names a skipped upload by its source ref and sizes it in encoded bytes', async () => {
-    const { fetch } = fakeFetch(() => json({ error: 'payload_too_large', code: 'payload_too_large' }, 413));
-    const client = createKnowledgeClient({ fetch, projectId: 9 });
-    const entry = { sourceRef: 'src:r::a/é.ts', sourceHash: 'h', nodes: [], edges: [] } as unknown as Parameters<typeof client.putExtracted>[1][number];
-    await client.putExtracted('h3', [entry]);
-    const text = JSON.stringify([entry]);
-    expect(client.skipped).toEqual([{ path: 'src:r::a/é.ts', bytes: new TextEncoder().encode(text).length, reason: 'too-large' }]);
-    expect(new TextEncoder().encode(text).length).toBeGreaterThan(text.length);
-  });
-
-  it('still throws a 400 source_hash_mismatch from putExtracted', async () => {
-    const { fetch } = fakeFetch(() => json({ error: 'hash mismatch', code: 'source_hash_mismatch' }, 400));
-    const client = createKnowledgeClient({ fetch, projectId: 9 });
-    await expect(client.store.putExtracted!('h1', [])).rejects.toMatchObject({ status: 400, code: 'source_hash_mismatch' });
-    expect(client.skipped).toHaveLength(0);
-  });
 
   it('store.batched runs the work as-is; writes inside it still chunk with scope on the last chunk', async () => {
     const { fetch, seen } = fakeFetch();

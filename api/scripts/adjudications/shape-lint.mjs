@@ -639,4 +639,8 @@ export default {
   replay_smart_events:
     'not an event LOG — a rule table. Each row is a site’s DEFINITION of a named moment (`rule_kind`, `match`, `match_mode`), applied retroactively to marks that already happened (PRD 33 §3.4 `SmartEventRule`). Nothing in it records that anything occurred: the occurrences are the recordings’ `events` arrays and the rollups. `activity_log` would need an actor and a verb for a row that has neither.',
 
+
+  deferred_dispatches:
+    'matches `delivery` only by the word "dispatch": this is a retry queue for one-shot AGENT RUNS that admission deferred (CI auto-fix, incident triage, security audit, validation review), not a delivery of anything to anyone. A row is the parked request (`payload`), its lease (`claimed_at`), attempts and backoff (`next_attempt_at`), and a settle state; the partial unique index on (tenant, ticket, kind) WHERE pending is what makes re-parking idempotent, which `deliveries` has no key for. It replaced `dispatch.deferred` rows in the append-only audit table, which had no claim, attempt or backoff.',
+
 };

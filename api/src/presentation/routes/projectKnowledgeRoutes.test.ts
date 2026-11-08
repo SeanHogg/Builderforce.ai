@@ -55,9 +55,6 @@ vi.mock('../../application/knowledge/getKnowledgeGraph', async (importOriginal) 
 import { createProjectKnowledgeRoutes } from './projectKnowledgeRoutes';
 import type { FrontDoor } from '../middleware/frontDoor';
 import { errorHandler } from '../middleware/errorHandler';
-import { r2ExtractedCache } from '../../application/knowledge/knowledgeBlobs';
-import { invalidateHealedBody } from '../../application/knowledge/knowledgeHeal';
-import { fakeLedger, newWorld } from '../../application/knowledge/sync/syncFakes.test-util';
 
 const db = {} as never;
 const routes = () => createProjectKnowledgeRoutes(db);
@@ -241,85 +238,6 @@ describe('project knowledge routes', () => {
     }, {});
     expect(res.status).toBe(413);
     expect(mocks.putAnalysis).not.toHaveBeenCalled();
-  });
-
-  it('answers extracted output over 1 MB with 413', async () => {
-    const big = [{ sourceRef: 'src:r::a.md', sourceHash: 'h', nodes: [], edges: [], keys: [{ ref: 'src:r::a.md', key: 'x'.repeat(400) }] }];
-    const body = JSON.stringify(Array.from({ length: 3000 }, () => big[0]));
-    const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body }, {});
-    expect(res.status).toBe(413);
-  });
-
-  it('answers extracted output whose entries are not at the uploaded hash with 400, storing nothing', async () => {
-    const put = vi.fn();
-    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
-      env: {}, db, tenantId, projectId, store: { markRelationsStale: vi.fn() }, extracted: { get: vi.fn(async () => undefined), put },
-    }));
-    const entry = { sourceRef: 'src:r::a.md', sourceHash: 'other', nodes: [], edges: [], keys: [] };
-    const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify([entry]) }, {});
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: 'source_hash_mismatch' });
-    expect(put).not.toHaveBeenCalled();
-  });
-  it('tolerates an over-long ref: stores the rest, 200 with skippedRefs, and drops nothing valid', async () => {
-    const put = vi.fn();
-    const markRelationsStale = vi.fn(async () => 1);
-    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
-      env: {}, db, tenantId, projectId, store: { markRelationsStale }, extracted: { get: vi.fn(async () => undefined), put },
-    }));
-    const long = 'src:r::' + 'x'.repeat(600); // a deep-path ref a producer emitted over the 512 bound
-    const entry = {
-      sourceRef: 'src:r::a.md', sourceHash: 'h1',
-      nodes: [
-        { ref: 'src:r::a.md', kind: 'file', label: 'a.md', pack: 'docs', importance: 0, origin: 'extracted' },
-        { ref: long, kind: 'symbol', label: 'over-long', pack: 'docs', importance: 0, origin: 'extracted' },
-      ],
-      edges: [],
-      keys: [{ ref: long, key: 'k' }],
-    };
-    const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify([entry]) }, {});
-    expect(res.status).toBe(200);
-    const body = await res.json() as { ok: boolean; hash: string; skippedRefs: number };
-    expect(body).toMatchObject({ ok: true, hash: 'h1' });
-    expect(body.skippedRefs).toBeGreaterThanOrEqual(1);
-    // The stored object dropped the over-long node and key but kept the valid node.
-    const stored = put.mock.calls[0]![1] as Array<{ nodes: Array<{ ref: string }>; keys: Array<{ ref: string }> }>;
-    expect(stored[0]!.nodes.map((n) => n.ref)).toEqual(['src:r::a.md']);
-    expect(stored[0]!.keys).toEqual([]);
-  });
-
-  it('regression: PUT then GET answers the MERGED body (the index row the put wrote is not dropped behind it)', async () => {
-    const objects = new Map<string, Uint8Array>();
-    const bucket = {
-      put: async (key: string, body: string | Uint8Array) => { objects.set(key, typeof body === 'string' ? new TextEncoder().encode(body) : body); },
-      get: async (key: string, opts?: { range?: { offset: number; length: number } }) => {
-        const bytes = objects.get(key);
-        if (!bytes) return null;
-        const slice = opts?.range ? bytes.slice(opts.range.offset, opts.range.offset + opts.range.length) : bytes;
-        return { arrayBuffer: async () => slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength), json: async () => JSON.parse(new TextDecoder().decode(slice)) as unknown };
-      },
-      head: async (key: string) => (objects.has(key) ? { key } : null),
-      delete: async (key: string) => { objects.delete(key); },
-    } as unknown as R2Bucket;
-    const world = newWorld();
-    const ledger = fakeLedger(world);
-    const extracted = r2ExtractedCache({ UPLOADS: bucket }, 8, 42, { ledger, onHealed: invalidateHealedBody });
-    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
-      env: {}, db, tenantId, projectId, store: { markRelationsStale: vi.fn(async () => 0) }, extracted, ledger,
-    }));
-    const entry = (path: string, nodeLabel: string) => ({
-      sourceRef: `src:r::${path}`, sourceHash: 'h1',
-      nodes: [{ ref: `src:r::${path}`, kind: 'file', label: nodeLabel, pack: 'docs', importance: 0, origin: 'extracted' }], edges: [], keys: [],
-    });
-    const put = (body: unknown) => routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, {});
-    expect((await put([entry('a.md', 'first')])).status).toBe(200);
-    expect((await put([entry('b.md', 'second')])).status).toBe(200);
-    expect((await put([entry('a.md', 'newer')])).status).toBe(200);
-    expect(world.index.get('h1')).toBeDefined(); // the row the put wrote is still there
-    const res = await routes().request('/42/knowledge/extracted/h1', {}, {});
-    expect(res.status).toBe(200);
-    const got = ((await res.json()) as { extracted: Array<{ sourceRef: string; nodes: Array<{ label: string }> }> }).extracted;
-    expect(got.map((e) => [e.sourceRef, e.nodes[0]!.label]).sort()).toEqual([['src:r::a.md', 'newer'], ['src:r::b.md', 'second']]);
   });
 
   it('answers a model relation on a source with no sourceHash with 400', async () => {

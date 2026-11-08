@@ -27,16 +27,20 @@
  */
 
 import { factKeyOf, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
-import { KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, factRightsCache, humanFactBatch, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
+import {
+  KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, currentSourcesOf, dirtyFileName, factRightsCache, humanFactBatch,
+  type PumpSource, type SkippedFolder,
+} from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, ReviewControl, ReviewRequest, ReviewTarget } from '@builderforce/knowledge-graph-view';
-import { openManifest } from './manifestStore';
+import { openBrowserKnowledge, type BrowserKnowledge } from './browserKnowledge';
+import { createBrowserReplica } from './browserReplica';
 import { runReview, type WorkerFactory } from './reviewWorkerClient';
 import type { ReviewPorts } from './reviewJob';
 import { watchDirectory } from './liveWatch';
 import { estimateReview, type CallPricePort } from './reviewEstimate';
 import { rootKindOf, type KnowledgeDegradedReporter } from './directorySourceKit';
-import { browserSyncStatus, reviewRecords } from './syncStatus';
+import { browserSyncStatus, localCountsOf, reviewRecords } from './syncStatus';
 import { pinpointImage, type PinpointHost } from './pinpoint';
 import { lastSeenMemory } from './lastSeen';
 

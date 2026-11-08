@@ -3180,4 +3180,6 @@ export const deferredDispatches = pgTable('deferred_dispatches', {
 }, (t) => [
   uniqueIndex('uq_deferred_dispatches_pending').on(t.tenantId, t.taskId, t.kind).where(sql`state = 'pending'`),
   index('idx_deferred_dispatches_due').on(t.nextAttemptAt).where(sql`state = 'pending'`),
+  index('idx_deferred_dispatches_settled').on(t.updatedAt).where(sql`state IN ('done', 'abandoned')`),
+  index('idx_deferred_dispatches_task').on(t.taskId),
 ]);

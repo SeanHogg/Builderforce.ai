@@ -61,7 +61,6 @@ function fakeStore(over: Partial<KnowledgeStorePort> = {}): KnowledgeStorePort {
 function fakeBlobs(): ExtractedCachePort {
   return {
     get: vi.fn(async () => undefined),
-    put: vi.fn(async () => undefined),
     setSource: vi.fn(async () => undefined),
     rootExtracted: vi.fn(async () => [extractedA]),
     deleteRootSources: vi.fn(async () => 0),

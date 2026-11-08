@@ -3,8 +3,9 @@
  * review composition the editor runs (`@builderforce/agent-tools/knowledge` `reviewRunner`):
  *
  *   source     — the container fs (`containerKnowledgeFs.ts`), the ONE walker;
- *   store      — the platform (`@builderforce/knowledge-client`) with this agent's key, through
- *                the agent-host door, for the project the host is linked to — on-prem
+ *   store      — the workspace folder's LOCAL store (`onPremReplica.ts`), replicated to the
+ *                project the host is linked to as one pack (`@builderforce/knowledge-client`
+ *                with this agent's key, through the agent-host door) — on-prem
  *                has no local-only mode: unlinked, it offers no review;
  *   review     — the agent runtime: the on-prem symbol index, the code pack's analyzers
  *                through this runtime's shell (the snapshot uploaded, `PUT …/code-analysis`),
@@ -19,12 +20,11 @@ import path from "node:path";
 import { basename, resolve } from "node:path";
 import { realpath, stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
-import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history.js";
-import { migrateLegacyKnowledge, nodeIngestManifest } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  claimSimilarity, forgetRootPorts, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail,
-  reviewIndexPort, reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
+  claimSimilarity, indexedSymbolSource, planKnowledgeReviewDetail,
+  reviewIndexPort, reviewPacks, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource,
+  type KnowledgeReviewPorts, type PumpSource,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import {
   graphShown, knowledgeSurfaceQuery, readPartitions, withKnowledgeRows, type KnowledgeRowsHost,
@@ -38,8 +38,11 @@ import { getKnowledgeLoopService } from "../../infra/knowledge-loop.js";
 import { authHeaders, type ProjectEvermindSyncConfig } from "../../infra/project-evermind-sync.js";
 import { normalizeBaseUrl } from "../../utils/normalize-base-url.js";
 import { onPremSymbolIndex } from "../on-prem-symbol-index.js";
-import { containerKnowledgeFiles, containerKnowledgeFs } from "./containerKnowledgeFs.js";
+import { containerKnowledgeFs } from "./containerKnowledgeFs.js";
 import { loggedFallback } from "./loggedFallback.js";
+import {
+  adoptServerReviewedRoot, closeOnPremManifests, drainAfterReview, onPremPumpSource, onPremReplicaHost, onPremRootPorts,
+} from "./onPremReplica.js";
 import { getHostKnowledgeIndex, onPremLegacyRootId, onPremRootId } from "./index/onPremKnowledgeIndex.js";
 
 const DEFAULT_WEB_URL = "https://builderforce.ai";
@@ -152,53 +155,28 @@ export interface OnPremKnowledgeDeps {
   linked: { client: KnowledgeClient; projectId: number };
 }
 
-/** One connection per workspace folder (manifest keys carry their root id, so every root shares it), closed when the process exits. */
-const onPremManifests = new Map<string, ReturnType<typeof nodeIngestManifest>>();
-let closeManifestsAtExit = false;
-
-/** Closes every folder's manifest connection (shutdown; tests). */
-export function closeOnPremManifests(): void {
-  for (const manifest of onPremManifests.values()) manifest.close();
-  onPremManifests.clear();
-  forgetRootPorts(); // the per-root manifest cache holds the closed handles
-}
+export { closeOnPremManifests };
 
 /**
- * The root's review manifest: a table in the workspace's knowledge SQLite file (G03), committed directly (on-prem keeps no local
- * fact store). The folder's connection is shared by its roots; the root's old `<stem>.manifest.json` is imported once, and the
- * first read waits for it.
+ * The review ports for one folder of the workspace, walked from `rootPath` (its absolute path), and the pump source that
+ * sends the root's LOCAL store to the project. The review writes the local store; the replica host uploads it as one pack.
  */
-function onPremManifest(workspaceRoot: string, rootId: string, legacyRootId: string | undefined): IngestManifest {
-  let manifest = onPremManifests.get(workspaceRoot);
-  if (!manifest) {
-    onPremManifests.set(workspaceRoot, (manifest = nodeIngestManifest(workspaceRoot)));
-    if (!closeManifestsAtExit) {
-      closeManifestsAtExit = true;
-      process.once("exit", closeOnPremManifests);
-    }
-  }
-  void migrateLegacyKnowledge(migratingRootFiles(containerKnowledgeFiles(workspaceRoot), rootId, legacyRootId), manifest, rootId, {
-    ...(legacyRootId ? { legacyRootId } : {}),
-    log: (line) => logDebug(`[knowledge] ${line}`),
-  }).catch(loggedFallback("legacy manifest import", undefined));
-  return manifest;
-}
-
-/** The review ports for one folder of the workspace, walked from `rootPath` (its absolute path). */
-async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: string, title: string, rootPath: string): Promise<KnowledgeReviewPorts> {
+async function reviewPorts(
+  deps: OnPremKnowledgeDeps, rel: string, rootId: string, title: string, rootPath: string,
+): Promise<{ ports: KnowledgeReviewPorts; pump: PumpSource }> {
   const { workspaceRoot, caps, linked } = deps;
   const partitions = await readPartitions({ caps });
   const symbols = await onPremSymbolIndex(workspaceRoot).filesUnder(rel || undefined).catch(loggedFallback("symbol index", []));
   const index = await getHostKnowledgeIndex(rootId).catch(loggedFallback("knowledge index", undefined));
   const history = await gitHistoryPort(rootPath, { onWarn: (message) => logDebug(`[knowledge] history: ${message}`) });
-  // The root's ONE manifest (the review and the folder watch share it). The store is the
-  // linked client's, taken fresh each time so a rotated API key is picked up. A root reviewed
-  // under its old, name-based id keeps its manifest: migrated on first read.
-  const shared = {
-    store: linked.client.store,
-    manifest: rootManifest(rootId, () => onPremManifest(workspaceRoot, rootId, onPremLegacyRootId(workspaceRoot, rel)), workspaceRoot),
-  };
-  return {
+  // The root's ONE local store and manifest (the review and the folder watch share them); the store
+  // replicates to the linked project through the shared host. A root reviewed under its old,
+  // name-based id keeps its manifest: migrated on first read.
+  const root = onPremRootPorts(workspaceRoot, rootId, onPremLegacyRootId(workspaceRoot, rel));
+  await adoptServerReviewedRoot(rootId, root);
+  const pump = onPremPumpSource(rootId, root, linked);
+  const shared = { store: onPremReplicaHost().replicatedStoreOf(rootId, root.files, root.local, pump, false), manifest: root.manifest };
+  const ports: KnowledgeReviewPorts = {
     source: createFsDirectorySource({
       fs: containerKnowledgeFs, rootPath, rootId, title,
     }),
@@ -220,15 +198,20 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
     rootFiles: { fs: containerKnowledgeFs, rootPath },
     // After the review the root's graph feeds the knowledge index (the shared runner does it).
     index: reviewIndexPort(() => getHostKnowledgeIndex(rootId)),
-    platformGraph: (id) => linked.client.graph(id),
+    // No platformGraph: the server's graph is stale until the drain, so the index is built from the local store.
     onIndexError: loggedFallback("knowledge index update", undefined),
     ...(index ? { similar: claimSimilarity(index, shared.store, rootId) } : {}),
   };
+  return { ports, pump };
 }
 
 export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRowsHost {
   const root = resolve(deps.workspaceRoot);
   const base = onPremRootId(root);
+  // A queue already bound to this project resumes its pending upload; an unbound root is untouched (no pump before its first local review).
+  const baseRoot = onPremRootPorts(root, base, onPremLegacyRootId(root, ""));
+  const replicaHost = onPremReplicaHost();
+  void replicaHost.resumeReplica(onPremPumpSource(base, baseRoot, deps.linked)).catch(loggedFallback("replica resume", undefined));
   return {
     async openReview(dir) {
       const target = resolve(root, dir || ".");
@@ -245,12 +228,14 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
       return {
         rootId,
         title,
-        plan: async () => planKnowledgeReviewDetail(await reviewPorts(deps, rel, rootId, title, await resolveRoot())),
+        plan: async () => planKnowledgeReviewDetail((await reviewPorts(deps, rel, rootId, title, await resolveRoot())).ports),
         async review(plan, signal) {
           const real = await resolveRoot();
-          const p = await reviewPorts(deps, rel, rootId, title, real);
-          const report = await runKnowledgeReview(p, { signal, plan });
-          keepFresh(rootId, real, p);
+          const { ports, pump } = await reviewPorts(deps, rel, rootId, title, real);
+          // The host raises the root's bulk-upload window around the run; the pack goes up once, after it.
+          const report = await replicaHost.duringReview(rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan }));
+          keepFresh(rootId, real, ports);
+          await drainAfterReview(rootId);
           return report;
         },
       };

@@ -71,9 +71,10 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
         const file = image(dropped) ?? dropped?.[0];
         if (file) run(file);
     };
-    const diagnose = (result: PinpointResult) => {
+    const diagnose = async (result: PinpointResult) => {
         const refs = result.matches.map((m) => m.ref);
-        const path = pathOfStations(refs, stations, mapEdges(graph)).stops.map((s) => s.name).join(' → ');
+        // The path scans every outline link per hop: the compute worker builds it.
+        const path = (await getComputeClient().once('path', { graph, refs, stations })).stops.map((s) => s.name).join(' → ');
         const onPath = new Set(refs.flatMap((r) => stationOfRef(stations, r) ?? []));
         const findings = scopeFindings(graph.findings, stations, onPath).map((f) => findingRequest(f, labels, index)).join(' ');
         onCompose?.(fillTemplate(t.diagnoseText, { description: result.description, path: path || t.noFindings, findings: findings || t.noFindings }));

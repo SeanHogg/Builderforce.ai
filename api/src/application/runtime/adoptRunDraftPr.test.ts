@@ -10,7 +10,7 @@ const h = vi.hoisted(() => ({
   ready: vi.fn(async (..._a: unknown[]) => ({ ok: true }) as { ok: true } | { ok: false; reason: string }),
   record: vi.fn(async (..._a: unknown[]) => undefined),
   report: vi.fn(),
-  recordRow: vi.fn(async (..._a: unknown[]) => ({ id: 'row-9' })),
+  recordRow: vi.fn(async (..._a: unknown[]) => ({ id: 'row-9', written: true })),
 }));
 vi.mock('../repos/platformDraftPullRequest', () => ({ findPlatformDraftPullRequest: h.find, markPlatformDraftOpen: h.open, PLATFORM_DRAFT_STATUS: 'draft' }));
 vi.mock('../repos/recordTaskPullRequest', () => ({ recordTaskPullRequest: h.recordRow }));
@@ -58,6 +58,14 @@ describe('adoptRunDraftPr', () => {
     h.find.mockResolvedValueOnce({ ...draft, status: 'open' });
     expect(await adoptRunDraftPr(db, args)).toMatchObject({ number: 7, rowId: 'row-1' });
     expect(h.ready).toHaveBeenCalledWith(expect.objectContaining({ number: 7, text }));
+  });
+
+  it('regression: a recovered PR whose row the reconciler already settled (not written) is no draft: not marked ready, not adopted', async () => {
+    h.find.mockResolvedValueOnce(null);
+    h.recordRow.mockResolvedValueOnce({ id: 'row-closed', written: false });
+    expect(await adoptRunDraftPr(db, { ...args, recovered: { number: 11, url: 'https://x/pull/11' } })).toBeNull();
+    expect(h.ready).not.toHaveBeenCalled();
+    expect(h.open).not.toHaveBeenCalled();
   });
 
   it('regression: a dead claim\'s own unrecorded draft (resolved by the finalize create) is recorded as the platform draft, then marked ready with the final text', async () => {

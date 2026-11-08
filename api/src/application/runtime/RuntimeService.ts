@@ -19,6 +19,7 @@ import {
   PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON,
 } from './orphanReasons';
 import { parseExecutor, parseCloudAgentRef, stripAdmissionStamps } from './cloudDispatch';
+import { ADMISSION_CANCEL_ACTOR } from './admissionActor';
 import { isSubagentRun } from './cloudChildRuns';
 import { ticketKindForTaskType } from '../brain/ChatTicketService';
 import type { RuntimePorts, RuntimeServiceOptions } from './ports';
@@ -451,7 +452,8 @@ export class RuntimeService {
     // Narrate the cancellation into the ticket's linked chats. update() has no CANCELLED transition (its
     // lane sync, managed callback, attribution and failure telemetry are all keyed on running / completed /
     // failed), so cancel's own effects - runner signal, audit, this milestone - are the complete set.
-    await this.postLifecycleMilestone(saved, 'cancelled');
+    // A run refused by admission never started: there is nothing to narrate to the ticket's chats (the refusal is on its timeline).
+    if (cancelledBy !== ADMISSION_CANCEL_ACTOR) await this.postLifecycleMilestone(saved, 'cancelled');
 
     return saved;
   }

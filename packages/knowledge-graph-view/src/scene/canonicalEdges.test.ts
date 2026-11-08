@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
-import { canonicalEdges, canonicalEdgesTask } from './canonicalEdges';
+import { buildCanonicalTask, canonicalEdges, canonicalEdgesTask } from './canonicalEdges';
 import { rankEdges } from './edgeBudget';
 import { layoutTask } from './layout3d';
 
@@ -69,5 +69,21 @@ describe('canonicalEdges', () => {
         const { refs, edges } = fixture(10, 50);
         const task = canonicalEdgesTask(edges, rankOf(refs));
         expect(() => task.result()).toThrow(/before step/);
+    });
+
+    it('takes the comparator fallback when the packed key would exceed the limit, with the same order', () => {
+        const { refs, edges } = fixture(40, 3000);
+        const rank = rankOf(refs);
+        const task = buildCanonicalTask(edges, rank, 1); // a limit nothing fits under
+        while (!task.step());
+        const out = task.result();
+        expect(out).toEqual(naive(edges, rank));
+        expect(out).toEqual(canonicalEdges(edges, rank));
+    });
+
+    it('returns a frozen shared result outside production', () => {
+        const { refs, edges } = fixture(10, 50);
+        const out = canonicalEdges(edges, rankOf(refs));
+        expect(Object.isFrozen(out)).toBe(true);
     });
 });

@@ -91,6 +91,12 @@ export interface ReplicaQueue {
     projectId(): Promise<number | undefined>;
     /** Binds the set to `projectId`; one filled for another project is discarded. True when keys were. */
     adopt(projectId: number): Promise<boolean>;
+    /**
+     * ADDITIVE mode: the root was reviewed straight against the server before this store existed, so the server holds leaves this
+     * store lacks. While on, the pump never deletes a server leaf because it is missing locally (explicitly dirty keys still go).
+     */
+    additive(): Promise<boolean>;
+    setAdditive(on: boolean): Promise<void>;
     /** Drops everything. */
     clear(): Promise<void>;
     /** Makes the set durable now. */
@@ -112,7 +118,7 @@ export function memoryReplicaPersistence(): ReplicaPersistence {
     return { read: async () => text, write: async (t) => { text = t; } };
 }
 
-interface Parsed { keys: string[]; projectId?: number; ack?: ReplicaAck; analysis?: ReplicaAnalysis; corrupt: boolean; legacy: boolean }
+interface Parsed { keys: string[]; projectId?: number; ack?: ReplicaAck; analysis?: ReplicaAnalysis; additive?: boolean; corrupt: boolean; legacy: boolean }
 
 /** The keys an old op log owed: its fact and relation keys, and the files its stale marks named. */
 function keysOfLegacyOps(ops: unknown[]): string[] {
@@ -133,7 +139,7 @@ function keysOfLegacyOps(ops: unknown[]): string[] {
 function parse(text: string | undefined): Parsed {
     if (!text) return { keys: [], corrupt: false, legacy: false };
     try {
-        const p = JSON.parse(text) as { version?: number; dirty?: unknown; ops?: unknown; projectId?: unknown; ack?: unknown; analysis?: unknown } | null;
+        const p = JSON.parse(text) as { version?: number; dirty?: unknown; ops?: unknown; projectId?: unknown; ack?: unknown; analysis?: unknown; additive?: unknown } | null;
         if (!p || typeof p !== 'object') return { keys: [], corrupt: true, legacy: false };
         const projectId = typeof p.projectId === 'number' ? p.projectId : undefined;
         if (Array.isArray(p.ops)) return { keys: keysOfLegacyOps(p.ops), ...(projectId !== undefined ? { projectId } : {}), corrupt: false, legacy: true };
@@ -145,6 +151,7 @@ function parse(text: string | undefined): Parsed {
             ...(projectId !== undefined ? { projectId } : {}),
             ...(a && Number.isSafeInteger(a.generation) && typeof a.digest === 'string' ? { ack: { generation: a.generation!, digest: a.digest } } : {}),
             ...(an && typeof an.sha === 'string' ? { analysis: { sha: an.sha, snapshot: an.snapshot } } : {}),
+            ...(p.additive === true ? { additive: true } : {}),
             corrupt: false, legacy: false,
         };
     } catch {
@@ -159,6 +166,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
     let project: number | undefined;
     let ack: ReplicaAck | undefined;
     let analysis: ReplicaAnalysis | undefined;
+    let isAdditive = false;
     /** The analysis changed since it was last written to its own file. */
     let analysisChanged = false;
     let loaded: Promise<void> | undefined;
@@ -194,6 +202,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             project ??= from.projectId;
             if (!from.legacy) {
                 ack ??= from.ack;
+                if (from.additive) isAdditive = true;
                 if (from.analysis) { analysis ??= from.analysis; if (opts.analysis) analysisChanged = true; } // moved out of the dirty file on the next save
             }
             if (opts.analysis) {
@@ -219,7 +228,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready(); // never write before the file was read: that would replace what it held
             await persistence.write(JSON.stringify({
                 version: 2, ...(project !== undefined ? { projectId: project } : {}), ...(ack ? { ack } : {}),
-                dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}),
+                dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}), ...(isAdditive ? { additive: true } : {}),
             }));
             if (opts.analysis && analysisChanged) {
                 analysisChanged = false;

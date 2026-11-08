@@ -37,7 +37,7 @@ function deps(version: string): KnowledgeGraphDeps {
       deleteFactsBySource: vi.fn(async () => ({ keys: [], relations: 0 })), humanRelationKeys: vi.fn(async () => new Set<string>()), deleteRelationsUnder: vi.fn(async () => 0), factAuthor: vi.fn(async () => null),
     },
     extracted: {
-      get: vi.fn(async () => undefined), put: vi.fn(async () => undefined), setSource: vi.fn(async () => undefined),
+      get: vi.fn(async () => undefined), setSource: vi.fn(async () => undefined),
       rootExtracted: vi.fn(async () => extracted), deleteRootSources: vi.fn(async () => 0), snapshotReview: vi.fn(async () => undefined), reviewExtracted: vi.fn(async () => null),
     },
     analysis: { put: vi.fn(), clear: vi.fn(), latest: vi.fn(async () => null) },

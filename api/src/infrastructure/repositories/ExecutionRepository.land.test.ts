@@ -37,6 +37,8 @@ describe('land()', () => {
     expect(landed.won).toBe(true);
     expect(landed.execution.status).toBe('completed');
     expect(sets[0]).toMatchObject({ status: 'completed', result: 'done' });
+    // A finished run releases its cloud admission stamp, so it drops out of the cap's partial index (1330).
+    expect(sets[0]).toHaveProperty('cloudAdmittedSeq', null);
     expect(onTerminal).toHaveBeenCalledTimes(1);
   });
 

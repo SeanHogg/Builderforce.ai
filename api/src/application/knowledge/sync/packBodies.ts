@@ -4,7 +4,7 @@
  *   - a diff is expanded against the prior body, which is read with ONE `getMany` for the whole pack; a prior the
  *     server lacks, or a diff that does not fit it (positions out of order or range), is `409 prior_missing`, so the
  *     client falls back to sending the body whole;
- *   - an entry is sanitised and clamped exactly as `putExtracted` does (one line per label, no ref past the bound);
+ *   - an entry is sanitised and clamped (`sanitizeExtracted` + `clampExtracted`) (one line per label, no ref past the bound);
  *   - a hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (`mergeBody`).
  *
  * The merge is a read-modify-write, so it is only valid while nothing else changed those hashes: `basisOf` records the
@@ -28,7 +28,7 @@ async function storedBodies(extracted: ExtractedCachePort, hashes: readonly stri
   return out;
 }
 
-/** One body as it is stored: the hash it claims, one line per label, no ref over the graph's bound (see `putExtracted`). */
+/** One body as it is stored: the hash it claims, one line per label, no ref over the graph's bound (see `knowledgePrivacy.ts`). */
 function storable(hash: string, entries: readonly Extracted[]): Extracted[] {
   const stray = entries.find((e) => e.sourceHash !== hash);
   if (stray) throw new KnowledgeSyncError(422, 'bad_pack', `extracted output for ${stray.sourceRef} is at hash '${stray.sourceHash}', not the '${hash}' it was sent under`);

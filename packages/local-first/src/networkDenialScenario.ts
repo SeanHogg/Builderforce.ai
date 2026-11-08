@@ -202,6 +202,8 @@ async function replayBatchLater(
     for (const event of batch.events) {
       await tx.putReceipt({
         eventId: event.eventId,
+        entityType: event.entityType,
+        clientEntityId: event.clientEntityId,
         status: 'accepted',
         receivedAt: REPLAYED_AT,
         detail: 'in_process_replay',

@@ -31,7 +31,9 @@
   "dependencies": {
     "@seanhogg/builderforce-memory": "^2026.10.59",
     "@seanhogg/builderforce-memory-engine": "^2026.10.59",
+    "fflate": "^0.8.2",
     "tree-sitter-wasms": "^0.1.11",
+    "unpdf": "^1.8.1",
     "web-tree-sitter": "^0.22.6"
   },
   "devDependencies": {

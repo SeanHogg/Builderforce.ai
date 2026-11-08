@@ -27,11 +27,12 @@
  */
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db, type Tx } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { liveExecution } from '../rehearsal/executionMode';
 import { AUTO_RUN_REASON_TEXT } from '../swimlane/evaluateAutoRun';
+import { ADMISSION_CANCEL_ACTOR } from './admissionActor';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { enforceConcurrentRunCap, liveCloudExecutionIds, resolveConcurrentRunLimit } from './concurrentRunCap';
 import { parkDeferredDispatch, type DeferredDispatchParams } from './deferredDispatch';
@@ -68,7 +69,7 @@ const capRefusal = (limit: number, current: number, effectivePlan: string): Admi
 
 /** The live runs of one ticket, oldest first. */
 async function liveRunsForTask(
-  db: Db, tenantId: number, taskId: number,
+  db: Db | Tx, tenantId: number, taskId: number,
 ): Promise<Array<{ id: number; status: string }>> {
   return db
     .select({ id: executions.id, status: executions.status })
@@ -84,7 +85,7 @@ async function liveRunsForTask(
 
 /** The ticket's live run (the newest, matching the autonomy evaluator's `already_running`), or null. */
 export async function findLiveExecutionForTask(
-  db: Db, tenantId: number, taskId: number,
+  db: Db | Tx, tenantId: number, taskId: number,
 ): Promise<{ id: number; status: string } | null> {
   const rows = await liveRunsForTask(db, tenantId, taskId);
   return findLiveExecution([...rows].reverse());
@@ -129,24 +130,36 @@ export interface AdmitAfterInsertArgs {
  * inserted owns the ticket), or when this run's rank in ADMISSION order among the tenant's
  * live cloud runs is past the cap. Null = this run may start.
  */
-export async function admitAfterInsert(db: Db, args: AdmitAfterInsertArgs): Promise<AdmissionRefusal | null> {
+export async function admitAfterInsert(db: Db | Tx, args: AdmitAfterInsertArgs): Promise<AdmissionRefusal | null> {
   try {
-    const taskRuns = await liveRunsForTask(db, args.tenantId, args.taskId);
-    const older = taskRuns.find((r) => r.id < args.executionId);
-    if (older) return dedupeRefusal(args.taskId, older);
-
-    if (args.limit === null) return null;
-    const ids = await liveCloudExecutionIds(db, args.tenantId);
-    const rank = ids.indexOf(args.executionId);
-    if (rank >= args.limit) {
-      return capRefusal(args.limit, Math.min(ids.length - 1, args.limit), args.effectivePlan ?? 'current');
-    }
-    return null;
+    return await rankAdmission(db, args);
   } catch (error) {
     reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'admitAfterInsert' });
     return null;
   }
 }
+
+/**
+ * The rank itself, THROWING on a lookup error. {@link admitAfterInsert} swallows (fails open); the locked transaction in
+ * {@link admitCloudRun} calls this one so a failure rolls the stamp back and the unlocked fallback runs, instead of a
+ * stamped run silently admitted without a verdict.
+ */
+async function rankAdmission(db: Db | Tx, args: AdmitAfterInsertArgs): Promise<AdmissionRefusal | null> {
+  const taskRuns = await liveRunsForTask(db, args.tenantId, args.taskId);
+  const older = taskRuns.find((r) => r.id < args.executionId);
+  if (older) return dedupeRefusal(args.taskId, older);
+
+  if (args.limit === null) return null;
+  const ids = await liveCloudExecutionIds(db, args.tenantId);
+  const rank = ids.indexOf(args.executionId);
+  if (rank >= args.limit) {
+    return capRefusal(args.limit, Math.min(ids.length - 1, args.limit), args.effectivePlan ?? 'current');
+  }
+  return null;
+}
+
+/** How long an admission waits for its tenant's lock before dropping to the (reported) unlocked fallback. */
+const ADMISSION_LOCK_TIMEOUT = '5s';
 
 export interface AdmitCloudRunArgs {
   tenantId: number;
@@ -162,6 +175,11 @@ export interface AdmitCloudRunArgs {
 /**
  * THE post-insert admission. For a cloud run it stamps `cloud_admitted_seq` (so the run
  * counts itself and is visible to its peers) in ONE UPDATE, then runs {@link admitAfterInsert}.
+ * Stamp, rank and (for a refused run) the stamp's release are ONE transaction under a per-tenant
+ * advisory lock, so concurrent admissions of a tenant take turns instead of each ranking against
+ * a set that does not yet hold the others' stamps. The transaction runs on a short-lived pool
+ * (`inTransaction`), which works from the HTTP-driver handle; if it cannot open, admission falls
+ * back to the unlocked stamp-then-rank (reported), never to starting the run unchecked.
  * A refused run is settled (CANCELLED by `system:admission`, so the auto-run circuit breaker
  * never counts it), its typed reason is written to the run's timeline, subscribers are told,
  * and the settled execution is returned carrying the refusal ({@link admissionRefusalOf}).
@@ -172,20 +190,44 @@ export async function admitCloudRun(
 ): Promise<unknown | null> {
   let refusal: AdmissionRefusal | null;
   try {
-    if (args.cloudBound) {
-      await db.update(executions)
-        .set({ cloudAdmittedSeq: sql<number>`nextval('executions_cloud_admitted_seq')` })
-        .where(and(eq(executions.tenantId, args.tenantId), eq(executions.id, args.executionId)));
-    }
     const cap = args.cloudBound
       ? await resolveConcurrentRunLimit(db, args.tenantId, env, { actingUserId: args.actingUserId })
       : null;
-    refusal = await admitAfterInsert(db, {
-      tenantId: args.tenantId,
-      taskId: args.taskId,
-      executionId: args.executionId,
-      limit: cap?.limit ?? null,
-      effectivePlan: cap?.effectivePlan,
+    /** Stamp this run, rank it, and release the stamp again if the rank refuses it - ONE unit, see below. */
+    const stampAndRank = async (q: Db | Tx, strict: boolean): Promise<AdmissionRefusal | null> => {
+      if (args.cloudBound) {
+        await q.update(executions)
+          .set({ cloudAdmittedSeq: sql<number>`nextval('executions_cloud_admitted_seq')` })
+          .where(and(eq(executions.tenantId, args.tenantId), eq(executions.id, args.executionId)));
+      }
+      // Inside the transaction (`strict`) a rank error must THROW: the stamp rolls back and the unlocked fallback below decides.
+      // Outside it, the rank fails open as it always did.
+      const rank = strict ? rankAdmission : admitAfterInsert;
+      const verdict = await rank(q, {
+        tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId,
+        limit: cap?.limit ?? null, effectivePlan: cap?.effectivePlan,
+      });
+      // A refused run must stop holding its slot BEFORE the lock is released, or the next contender ranks behind a run that will never start.
+      if (verdict && args.cloudBound) {
+        await q.update(executions).set({ cloudAdmittedSeq: null })
+          .where(and(eq(executions.tenantId, args.tenantId), eq(executions.id, args.executionId)));
+      }
+      return verdict;
+    };
+    refusal = await inTransaction(db, async (tx) => {
+      // Admissions of one tenant are SERIALISED: without the lock, two contenders each stamp, each rank against a set that
+      // does not yet hold the other's stamp, and both start past the cap. The lock is transaction-scoped (released on
+      // commit or rollback), so a dead worker cannot strand it. Different tenants hash apart and never wait on each other.
+      // The wait is bounded: a lock held too long (or a stuck holder) times out into the reported unlocked fallback.
+      await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${ADMISSION_LOCK_TIMEOUT}'`));
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`cloud-admission:${args.tenantId}`}))`);
+      return stampAndRank(tx, true);
+    }).catch(async (error: unknown) => {
+      // No transaction available (a pool that will not open), the lock timed out, or the rank threw (the transaction rolled
+      // back): admit the way this always did - stamp, then rank - rather than fail open and start the run unchecked. Racy
+      // under a burst, which is exactly what it was before the lock.
+      reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'admitCloudRun:lock', level: 'warning', context: { logMessage: '[dispatch-admission] could not take the per-tenant admission lock; admitting without it', details: { tenantId: args.tenantId } } });
+      return stampAndRank(db, false);
     });
   } catch (error) {
     reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'admitCloudRun' });
@@ -238,7 +280,7 @@ export async function admitResumedRun(
 async function settleRefusedRun(db: Db, runtimeService: RuntimeService, tenantId: number, executionId: number): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      await runtimeService.cancel(executionId, 'system:admission');
+      await runtimeService.cancel(executionId, ADMISSION_CANCEL_ACTOR);
       return;
     } catch (error) {
       if (attempt === 1) reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'settleRefusedRun', level: 'warning', context: { logMessage: '[dispatch-admission] could not cancel a refused run; releasing its slot', details: { executionId } } });

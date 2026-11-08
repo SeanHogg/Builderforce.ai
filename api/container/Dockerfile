@@ -24,7 +24,9 @@ COPY egressTrust.mjs ./
 # THE tool-output policy (@builderforce/tool-output-policy), compiled by
 # api/scripts/gen-container-shared.mjs, the post-edit fast checks (D7 / D1) and the
 # background-job table (`run_command` background / `command_status`).
-COPY toolOutputPolicy.mjs postEditChecks.mjs sandboxJobs.mjs ./
+COPY toolOutputPolicy.mjs postEditChecks.mjs sandboxJobs.mjs workspaceClient.mjs sandboxGit.mjs ./
+# The workspace helper: the one process that touches the working tree, run as the shell user.
+COPY workspaceAgent.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -37,14 +39,17 @@ EXPOSE 8080
 # THE uid split. The server (user `node`, uid 1000) holds the run token in its memory and environ;
 # every shell the model can influence (run_command, background jobs, the preview dev server) runs as a
 # DIFFERENT unprivileged user, `bfagent`, so it can read neither /proc/<server pid>/environ nor
-# /proc/<server pid>/mem. `bfagent` has `node` as its primary group (the clone is group-writable, setgid) and
-# no sudo rights; `node` may sudo to `bfagent` and to nothing else (no root). sandboxJobs.mjs builds the
+# /proc/<server pid>/mem. `bfagent` has its OWN group (never `node`'s) and no sudo rights, and owns the workspace
+# root (/workspaces); `node` may sudo to `bfagent` and to nothing else (no root). The server never touches a
+# workspace: workspaceAgent.mjs does, as `bfagent`. sandboxJobs.mjs builds the
 # `sudo -n -u bfagent env -i … bash -lc …` spawn; `!use_pty` keeps the shell in a process group the kill can reach.
-RUN useradd --create-home --shell /bin/bash --gid node --no-user-group bfagent \
+RUN useradd --create-home --shell /bin/bash --user-group bfagent \
+  && install -d -o bfagent -g bfagent -m 0755 /workspaces \
   && printf 'node ALL=(bfagent) NOPASSWD: ALL\nDefaults:node !use_pty\n' > /etc/sudoers.d/zz-bf-agent \
   && chmod 0440 /etc/sudoers.d/zz-bf-agent \
   && visudo -cf /etc/sudoers.d/zz-bf-agent
 ENV BUILDERFORCE_SHELL_USER=bfagent
+ENV BUILDERFORCE_WORKSPACE_ROOT=/workspaces
 
 # The server itself still runs as the unprivileged node user (never root).
 USER node

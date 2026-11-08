@@ -36,6 +36,8 @@ export interface VsCodeChatRailProps {
   spendLabels: TicketRail['spendLabels'];
   ticketChatList: TicketRail['ticketChatList'];
   onTicketsChanged: TicketRail['onTicketsChanged'];
+  /** The local-first header (sync summary, freshness) and per-ticket sync badge, from the host's local copy. */
+  localRail: TicketRail['localRail'];
   pendingChangesExtension: ChatTicketsExtension | null | undefined;
   railRefresh: Audience['railRefresh'];
   subagentRoster: Audience['subagentRoster'];
@@ -51,7 +53,7 @@ export function railHasContent(serverChatId: number | null, activeChat: BrainCha
 
 function VsCodeChatRailInner(props: VsCodeChatRailProps) {
   const {
-    init, persistence, chatId, serverChatId, activeChat, ticketAdapter, ticketLabels, spendLabels, ticketChatList, onTicketsChanged,
+    init, persistence, chatId, serverChatId, activeChat, ticketAdapter, ticketLabels, spendLabels, ticketChatList, onTicketsChanged, localRail,
     pendingChangesExtension, railRefresh, subagentRoster, chatVisibility, chatIsOwner, setChatVisibility,
   } = props;
   const projectId = init.project?.id ?? null;
@@ -101,6 +103,9 @@ function VsCodeChatRailInner(props: VsCodeChatRailProps) {
       locale={init.locale}
       // The chat's first prompt, kept verbatim (1245) - rides the chat row like spend.
       originalRequest={activeChat?.originalRequest}
+      // The device's sync summary + freshness, and each ticket's sync status - from the local copy.
+      railHeader={localRail.railHeader}
+      ticketBadge={localRail.ticketBadge}
     />
   );
 }

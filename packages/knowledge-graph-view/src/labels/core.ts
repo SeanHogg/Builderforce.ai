@@ -117,6 +117,11 @@ export interface CoreLabels {
     nodePack: string;
     nodePartition: string;
     nodeOrigin: string;
+    /** An asset file's rows: its media type and size. */
+    nodeMediaType: string;
+    nodeSize: string;
+    /** Stands where "nothing is remembered" would: an asset is stored, never read. */
+    assetNoFacts: string;
     origins: Record<'extracted' | 'model' | 'human' | 'agent', string>;
     staleMark: string;
     factsTitle: string;
@@ -328,6 +333,9 @@ nodeKind: 'Kind',
 nodePack: 'Pack',
 nodePartition: 'Partition',
 nodeOrigin: 'Origin',
+nodeMediaType: 'Media type',
+nodeSize: 'Size',
+assetNoFacts: 'Stored as a file. It is not read, so there is nothing to remember about its contents.',
 origins: { extracted: 'Read from the source', model: 'Judged by a model', human: 'Added by a person', agent: 'Added by an agent' },
 staleMark: 'Stale: the source changed after this was judged',
 factsTitle: 'Facts',

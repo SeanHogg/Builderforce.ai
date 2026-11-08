@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { trustEgressCa } from '../../../container/egressTrust.mjs';
 
@@ -22,7 +22,8 @@ describe('trustEgressCa', () => {
     writeFileSync(join(dir, 'sys.crt'), 'SYSTEM-ROOTS');
     const env: Record<string, string | undefined> = {};
     const bundle = trustEgressCa(env, join(dir, 'ca.crt'), join(dir, 'sys.crt'), dir);
-    expect(bundle).toBe(join(dir, 'bf-egress-ca-bundle.crt'));
+    expect(dirname(bundle!).startsWith(join(dir, 'bf-egress-ca-'))).toBe(true); // a fresh mkdtemp directory, not a fixed name
+    expect(bundle!.endsWith('bundle.crt')).toBe(true);
     expect(readFileSync(bundle!, 'utf8')).toContain('SYSTEM-ROOTS');
     expect(readFileSync(bundle!, 'utf8')).toContain('PLATFORM-CA');
     expect(env.GIT_SSL_CAINFO).toBe(bundle);

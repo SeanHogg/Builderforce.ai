@@ -8,11 +8,12 @@ import type { StationLookup } from './protocol';
 import type { StationModel } from '../surface/stations';
 
 const held = new WeakMap<object, StationLookup>();
+let nextKey = 1;
 
 export function lookupOf(model: Pick<StationModel, 'stationOf' | 'byId'>): StationLookup {
     let lookup = held.get(model);
     if (!lookup) {
-        lookup = { stationOf: model.stationOf, byId: new Map([...model.byId].map(([id, s]) => [id, { id: s.id, name: s.name, ...(s.layer ? { layer: s.layer } : {}) }] as const)) };
+        lookup = { key: nextKey++, stationOf: model.stationOf, byId: new Map([...model.byId].map(([id, s]) => [id, { id: s.id, name: s.name, ...(s.layer ? { layer: s.layer } : {}) }] as const)) };
         held.set(model, lookup);
     }
     return lookup;

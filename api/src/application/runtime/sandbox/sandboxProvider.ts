@@ -72,6 +72,8 @@ export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions):
       kill: (id: string) => jobs.kill(id),
     } : {}),
     ...(opts.trackedBranch ? { trackedBranch: opts.trackedBranch } : {}),
+    // The clone has no credential: the sandbox does the remote half of git_sync_latest / git_undo / git_redo for the tracked branch.
+    ...(opts.trackedBranch && sandbox.git ? { git: sandbox.git } : {}),
   };
 }
 

@@ -241,6 +241,11 @@ export type {
 export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
 export { OriginalRequest } from './chatTickets/OriginalRequest';
+// The local-first rail pieces a host hands the panel through its optional props (G21 / G23).
+export { SyncStatusBadge, RailFreshnessLine, RailSyncSummary } from './chatTickets/localRail/components';
+export { DEFAULT_LOCAL_RAIL_LABELS, localRailLabelsFrom, localRailLabelsFromBundle } from './chatTickets/localRail/labels';
+export type { LocalRailLabels } from './chatTickets/localRail/labels';
+export type { RailFreshnessVM, RailSyncStatus, RailSyncSummaryVM } from './chatTickets/localRail/vm';
 export type { ChatTicketsExtension } from './chatTickets/types';
 // The chat↔ticket REST client, ONE implementation. The web app and the VS Code
 // webview each carried a hand-written copy, and the VSIX one had lost the run’s

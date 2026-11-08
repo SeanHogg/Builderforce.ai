@@ -37488,6 +37488,9 @@
     "nodePack": "Paquete",
     "nodePartition": "Partición",
     "nodeOrigin": "Origen",
+    "nodeMediaType": "Tipo de medio",
+    "nodeSize": "Tamaño",
+    "assetNoFacts": "Almacenado como archivo. No se lee, así que no hay nada que recordar sobre su contenido.",
     "origins": {
       "extracted": "Leído de la fuente",
       "model": "Juzgado por un modelo",
@@ -38432,6 +38435,7 @@
           "tileFiles": "Archivos",
           "tileUnchanged": "Sin cambios desde la última revisión",
           "tileLeftOut": "Excluidos",
+          "tileAssets": "Almacenados como archivos",
           "readTitle": "Qué leer",
           "choiceChanged": "Lo que cambió",
           "choiceAll": "Todo otra vez",

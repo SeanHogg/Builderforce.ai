@@ -71,7 +71,7 @@ const IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.
  * mirrors a surface-owned branch names it (`ShellCapability.trackedBranch`), and the
  * script then absorbs that branch first and publishes to it after.
  */
-export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; trackedBranch?: string }): string {
+export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; trackedBranch?: string; remoteViaSandbox?: boolean }): string {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
   // A workspace root is not always the repository root: a monorepo checkout, or simply a
@@ -83,10 +83,15 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
   // that branch before moving history (the surface may have committed since) and
   // publish the result, or the pull request never sees the sync / rewind.
   const tracked = safeGitArg(opts?.trackedBranch);
+  // `remoteViaSandbox`: the clone has no credential and no network of its own (a cloud sandbox). The SANDBOX does the
+  // remote half — `ShellGit.sync` brings `origin/<branch>` up to date BEFORE this script, `ShellGit.publish` pushes AFTER
+  // it — so the script keeps only the local half (no `git fetch`, no `git push`).
+  const viaSandbox = opts?.remoteViaSandbox === true;
+  const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
   const absorb = tracked
-    ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `git fetch origin "${tracked}" 2>/dev/null && git merge --ff-only "origin/${tracked}" 2>/dev/null || true`]
+    ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `${fetchTracked}git merge --ff-only "origin/${tracked}" 2>/dev/null || true`]
     : [];
-  const publish = (force: boolean): string[] => (tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : []);
+  const publish = (force: boolean): string[] => (tracked && !viaSandbox ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : []);
   switch (action) {
     case "status":
       return "git status --short --branch";
@@ -103,7 +108,7 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
         ...(tracked ? absorb : ["set -e"]),
         resolveBase,
         ...(tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME]),
-        'git fetch origin "$BASE"',
+        ...(viaSandbox ? [] : ['git fetch origin "$BASE"']),
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
         ...publish(false),
         'echo "Synced with origin/$BASE"',
@@ -148,12 +153,25 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
   const refused = invalidRepoResult(action, opts.repo);
   if (refused) return refused;
   const trackedBranch = ctx.caps.shell?.trackedBranch;
+  // A sandbox clone has no credential: the sandbox itself does the remote half of the history-moving verbs (see
+  // `buildGitCommand`'s `remoteViaSandbox`). Only those verbs, and only when the surface owns the branch.
+  const remote = trackedBranch && (action === "sync_latest" || action === "undo" || action === "redo") ? ctx.caps.shell?.git : undefined;
+  let baseBranch = opts.baseBranch;
+  if (remote) {
+    const synced = await remote.sync({ baseBranch: opts.baseBranch });
+    if (!synced.ok) return { data: { ok: false, action, error: `could not fetch from the remote: ${synced.error ?? "unknown error"}` } };
+    baseBranch = synced.baseBranch ?? baseBranch;
+  }
   // "fatal: not a git repository" at the root is not the end of the road: the checkout
   // the path names, then the run's default — and if none is a repository, NAME the
   // candidates (never send the model to `list_files` for a list we can produce here).
   const ran = await runInRepoScope(ctx, opts, (repo, path) =>
-    shellRunWithStop(ctx, buildGitCommand(action, { baseBranch: opts.baseBranch, limit: opts.limit, path, ...(trackedBranch ? { trackedBranch } : {}) }), safeRepoArg(repo) ?? undefined));
+    shellRunWithStop(ctx, buildGitCommand(action, { baseBranch, limit: opts.limit, path, ...(trackedBranch ? { trackedBranch } : {}), ...(remote ? { remoteViaSandbox: true } : {}) }), safeRepoArg(repo) ?? undefined));
   if (!ran) return notARepoWithCandidates(action, ctx);
+  if (remote && ran.r.ok) {
+    const published = await remote.publish({ force: action !== "sync_latest" });
+    if (!published.ok) return { data: { ok: false, action, error: `the change was made locally but could not be published: ${published.error ?? "unknown error"}` } };
+  }
   const result = gitToolResult(action, ran.r);
   // Say WHERE it ran whenever that was not the obvious place, so a later command in
   // the same run does not have to rediscover the scope.

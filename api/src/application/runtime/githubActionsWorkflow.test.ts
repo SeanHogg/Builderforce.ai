@@ -74,19 +74,31 @@ describe('renderAgentWorkflow', () => {
 describe('renderAgentRunnerScript', () => {
   const script = renderAgentRunnerScript();
 
-  it('neutralises a persisted checkout credential and isolates the shell user BEFORE it asks for the spec', () => {
-    const serve = script.slice(script.indexOf('async function serve()'));
-    const scrub = serve.indexOf('scrubCheckoutCredentials(WORKDIR)');
-    const provision = serve.indexOf('provisionShellUser(');
-    const exportUser = serve.indexOf('process.env.BUILDERFORCE_SHELL_USER');
-    const spec = serve.indexOf("op('spec'");
+  it('scrubs the checkout and isolates the shell user BEFORE it asks for the spec, reporting a failure first', () => {
+    const isolate = script.slice(script.indexOf('async function isolateShell()'), script.indexOf('async function writeWorkspaceHelper()'));
+    const scrub = isolate.indexOf('scrubCheckoutCredentials(WORKDIR)');
+    const provision = isolate.indexOf('provisionShellUser(');
+    const exportUser = isolate.indexOf('process.env.BUILDERFORCE_SHELL_USER');
     expect(scrub).toBeGreaterThan(-1);
     expect(provision).toBeGreaterThan(scrub);
     expect(exportUser).toBeGreaterThan(provision);
-    expect(spec).toBeGreaterThan(exportUser);
-    // The inlined core carries the one spawn helper and the unset of the old extraheader.
+    const serve = script.slice(script.indexOf('async function serve()'));
+    const isolated = serve.indexOf('await isolateShell()');
+    const failureEvent = serve.indexOf("'runtime.isolation'");
+    expect(isolated).toBeGreaterThan(-1);
+    expect(failureEvent).toBeGreaterThan(isolated); // the engine is told WHY before the runner exits
+    expect(serve.indexOf("op('spec'")).toBeGreaterThan(failureEvent);
+    // The checkout goes back to the runner without its .git however serve() ends.
+    expect(serve.indexOf('releaseShellWorkspace(')).toBeGreaterThan(serve.indexOf('finally'));
+    expect(serve).toContain('sweepShellProcesses()');
+  });
+
+  it('inlines the one spawn helper, the mirror git and the unset of the old extraheader; ships the workspace helper as a file', () => {
     expect(script).toContain('function spawnShell(');
+    expect(script).toContain('function mirrorGitCommand(');
     expect(script).toContain('http.https://github.com/.extraheader');
+    expect(script).toContain('const WORKSPACE_AGENT_SOURCE = "');
+    expect(script).toContain('function createWorkspace(');
   });
 
   it('serves THE sandbox core — the same primitives the container serves — inlined', () => {

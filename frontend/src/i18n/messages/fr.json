@@ -37488,6 +37488,9 @@
     "nodePack": "Pack",
     "nodePartition": "Partition",
     "nodeOrigin": "Origine",
+    "nodeMediaType": "Type de média",
+    "nodeSize": "Taille",
+    "assetNoFacts": "Stocké comme fichier. Il n’est pas lu, donc rien n’est mémorisé sur son contenu.",
     "origins": {
       "extracted": "Lu dans la source",
       "model": "Jugé par un modèle",
@@ -38432,6 +38435,7 @@
           "tileFiles": "Fichiers",
           "tileUnchanged": "Inchangés depuis le dernier examen",
           "tileLeftOut": "Écartés",
+          "tileAssets": "Stockés comme fichiers",
           "readTitle": "Quoi lire",
           "choiceChanged": "Ce qui a changé",
           "choiceAll": "Tout refaire",

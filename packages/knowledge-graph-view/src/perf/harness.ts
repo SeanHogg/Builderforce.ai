@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * The measuring kit of the perf harness: `time` (a pure step, median of 3 runs + max) and `task` (an idle-step
  * task: total and the longest single step, since one step over 50 ms is what locks the screen), a sorted table
@@ -32,6 +33,18 @@ const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floo
 
 export interface IdleTaskLike<T> { step(): boolean; result(): T }
 
+/** Names for the n-th `step()` call (0-based); `total` is how many calls the task is expected to take, when known. */
+export interface StepLabels { at(n: number): string | undefined; total?: number }
+
+/** Labels from an ordered list of `[name, number of step() calls]` groups; steps past the list are named `tail N`. */
+export function stepLabels(groups: ReadonlyArray<readonly [string, number]>, tail = 'step', exact = true): StepLabels {
+    const names: string[] = [];
+    for (const [name, count] of groups) {
+        for (let i = 0; i < count; i++) names.push(count > 1 ? `${name} [${i + 1}/${count}]` : name);
+    }
+    return { at: (n) => names[n] ?? `${tail} ${n + 1 - names.length}`, ...(exact ? { total: names.length } : {}) };
+}
+
 export class Recorder {
     readonly rows: StepRow[] = [];
 
@@ -55,21 +68,25 @@ export class Recorder {
     }
 
     /** An idle-step task driven to completion: `make` (the work done in the task's start) counts as the first step. */
-    task<T>(step: string, views: string, inputs: string, make: () => IdleTaskLike<T>, labels: readonly string[] = []): T | undefined {
+    task<T, A = undefined>(step: string, views: string, inputs: string, make: (a: A) => IdleTaskLike<T>, labels: readonly string[] | StepLabels = [], fresh?: () => A): T | undefined {
         const runs: Array<{ total: number; steps: Array<{ label: string; ms: number }> }> = [];
         let out: T | undefined;
+        const name = (n: number): string => (Array.isArray(labels) ? (labels as readonly string[])[n] : (labels as StepLabels).at?.(n)) ?? `step ${n + 1}`;
+        const expected = Array.isArray(labels) ? undefined : (labels as StepLabels).total;
         try {
             for (let i = 0; i < RUNS; i++) {
                 const steps: Array<{ label: string; ms: number }> = [];
+                const arg = fresh ? fresh() : (undefined as A);
                 let t = performance.now();
-                const task = make();
+                const task = make(arg);
                 steps.push({ label: 'start()', ms: performance.now() - t });
                 for (let n = 0; ; n++) {
                     t = performance.now();
                     const done = task.step();
-                    steps.push({ label: labels[n] ?? `step ${n + 1}`, ms: performance.now() - t });
+                    steps.push({ label: name(n), ms: performance.now() - t });
                     if (done) break;
                 }
+                if (expected !== undefined && steps.length - 1 !== expected && i === 0) inputs += ` [labels expected ${expected} steps, ran ${steps.length - 1}: labels approximate]`;
                 t = performance.now();
                 out = task.result();
                 steps.push({ label: 'result()', ms: performance.now() - t });
@@ -98,6 +115,14 @@ export class Recorder {
     /** A step that cannot be reached at all, with the reason. */
     unreachable(step: string, views: string, reason: string): void {
         this.rows.push({ step, views, median: 0, max: 0, longestStep: null, steps: null, inputs: '', error: reason });
+    }
+
+    /** The key metric: the longest single main-thread step of every sliced pipeline and of the worker path's main-thread halves. */
+    longestSteps(): Array<{ step: string; ms: number; over: boolean }> {
+        return this.rows
+            .filter((r) => !r.error && (r.longestStep !== null || r.step.startsWith('worker main-thread')))
+            .map((r) => ({ step: r.step, ms: r.longestStep ?? r.max, over: (r.longestStep ?? r.max) > LOCK_MS }))
+            .sort((a, b) => b.ms - a.ms);
     }
 
     table(): string {

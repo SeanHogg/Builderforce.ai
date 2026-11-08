@@ -76,7 +76,18 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **Knowledge view freezes the screen on a real graph (in progress 2026-11-08).** On `agentic` (2000/3138 nodes, 104,972 drawn edges, 20,738 findings, 389 stations) every camera blocks the main thread for 1.5–4.5 s. The `src/perf` harness (`KG_PERF=1`) measured `insightsOf` 1.5 s, the `rankTask` sort as a single 1.07 s step, `pathOfStations` 1.3 s, `canonicalEdges` computed three times, and the surface model (`buildStations`/`buildLines`) run synchronously in `useSurface`. In flight: (A1) fix the pure algorithms; (A2) build ONE compute worker (results passed back as indices), migrate every heavy call site, and coalesce wheel zoom. Done when no main-thread task in the harness exceeds 50 ms. Then: one shared 3D stage for every camera, design first.
+- **Knowledge view freezes the screen on a real graph (in progress 2026-11-08).** On `agentic` (2000/3138 nodes, 104,972 drawn edges, 20,738 findings, 389 stations) every camera blocks the main thread for 1.5–4.5 s. The `src/perf` harness (`KG_PERF=1`) measured `insightsOf` 1.5 s, the `rankTask` sort as a single 1.07 s step, `pathOfStations` 1.3 s, `canonicalEdges` computed three times, and the surface model (`buildStations`/`buildLines`) run synchronously in `useSurface`. Landed on main without verification (swept into 3a2c752db/ee2222212):
+  - (A1) algorithm fixes: one shared `canonicalEdges` with a typed-array sort split into 30k-edge slices, packed-key ranking, a station-pair index for `pathOfStations`, single-pass memoised insights;
+  - (A2) ONE compute worker under `src/compute/`, with results passed back as indices.
+
+  Still open:
+  - finish migrating the call sites (`useSurface`, reviews panel);
+  - coalesce wheel zoom;
+  - run typecheck, tests and both builds;
+  - re-run the harness cold, since memo hits currently skew the medians;
+  - review the diff.
+
+  Done when no main-thread task in the harness exceeds 50 ms. Then: one shared 3D stage for every camera, design first.
 - **No source of recorded runtime values for the knowledge view (PRD 38).** Several features are wired and tested but have nothing to show yet:
   - The Simulate drawer's recorded and editable values, which use the optional `recordedValues` source port.
   - Path-hop payload sizes ("PUT 1.4 MB"), which need a `payloadBytes` file badge.
@@ -89,6 +100,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
   *Blocker: no runtime trace recorder exists. It is a new subsystem, a candidate for PRD 41's run delta.*
 - **Predicted measures over the knowledge graph: P4 and P7 not started, P1 not yet consumed.** P1 Louvain partitions shipped in builderforce-memory 2026.10.57 (published as 2026.10.58; every package now pins ^2026.10.59). Builderforce does not read them yet: knowledge-graph-view needs the `placementOf` fallback, and the `kg:v5` / `kg-outline:v1` cache keys must move so old layouts are not served. Still open: P4 co-change impact and P7 Markov transitions for Simulate (graph-only formulas, stored as badges), and P2 (Part D results on the map). The shared maths stays in the builderforce-memory `stats` module (D13) ([PRD 38 › Predicted measures](./docs/specs/38-prd-knowledge-graph.md)).
+- **[agents] Knowledge review drops binary files and stalls the judge (in progress, 2026-11-08).** `plan.ts:120` skips every binary-extension file with no node, so 30 files in a hired.video review were "not stored" and code references to icons resolve to nothing. `mediaTypeOfPath` returns `text/plain` for `.png`. No host extracts PDF/DOCX text, so résumés are never read. Separately, the judge's flat 60 s timeout tripped the 5-in-a-row breaker on large README/package.json requests (0 sections judged). Done when: binaries are stored as asset file nodes (`mediaType`, `size`, `asset`), `EXTRACTOR_VERSION` is 4, a shared `documents` pack plus `withDocumentText` reads PDF/OOXML text in every host, the judge timeout scales with request size (60 s + 15 s per 4k chars, cap 300 s), the visualizer shows asset type and size, and builderforce-memory and the VSIX are released.
 - **No run delta yet: PRD 41 WS2 (SQLite fact store) is open ([PRD 41](./docs/specs/41-prd-offline-understanding-and-run-delta.md)).** WS1 (offline closure) shipped in 325f4faaf (see DONE.md). Still open: WS2, the SQLite fact store in `.builderforce/cache/` (Opus-reviewed), and the run delta that reads recorded change sets (`brainRunHostPorts.ts`). Another session is building the node:sqlite store (`packages/agent-tools/src/node-knowledge/*`).
 - **Cloud run isolation (G1/G2, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)): egress allowlist built but off; secret containment under rework (in progress 2026-11-08).**
   - G1 egress: the outbound allowlist and its lifecycle shipped (`sandboxEgressLifecycle.ts`, b55198fc0 / adc99aa42 / e867b3bd1) behind `SANDBOX_EGRESS_ENFORCE`, which stays off. *Blocker: a live probe in a deployed container (raw TCP/DNS blocked, HTTPS through the proxy to an allowed registry, interception installed before start, `ctx.exports.ContainerProxy` resolves) before the flag is turned on.*
@@ -108,6 +120,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
 
+- **The Reviews-panel fix (3574c0d77) is not in an installed VSIX yet.** Package and install the next VSIX. *Blocker:* the shared working tree has other sessions' half-applied edits that break the webview build: `knowledge-graph-view/src/surface/StatusStrip.tsx` is deleted but `SurfaceHeader.tsx` still imports it, `Toolbar.tsx` uses undefined `panels`/`overlays`, and `perf/sceneSteps.ts` uses undefined `stepLabels`. Clears when those land.
 - **G27: no packaged acceptance suite runs with the network denied.** `deniedNetworkAcceptance.test.ts` mocks `vscode`. Assert zero platform requests and local-only completion in the packaged VSIX, Rovr and Web. Unblocks claiming offline behaviour.
 - **G21 + G23: bound-chat rail and sync status (in progress 2026-11-08).**
   - Done: the chat-ticket link entity, its API importer and the server-record ingestion all shipped with the sync residuals (see DONE.md).
@@ -120,7 +133,6 @@ Source: [offline-first review](./docs/design/vsix-offline-first-architecture-rev
 ### Autonomous delivery `[delivery]`
 
 Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs failed. The manager's census tracks this.
-- **The Reviews-panel fix (3574c0d77) is not in an installed VSIX yet.** Package and install the next VSIX. *Blocker:* the shared working tree has other sessions' half-applied edits that break the webview build: `knowledge-graph-view/src/surface/StatusStrip.tsx` is deleted but `SurfaceHeader.tsx` still imports it, `Toolbar.tsx` uses undefined `panels`/`overlays`, and `perf/sceneSteps.ts` uses undefined `stepLabels`. Clears when those land.
 
 - **Release health: main is still red after the 3a2c752db sweep.** Part 1 is in DONE.md, but the fixes are not committed yet. A Haiku re-run on 2026-11-08 found these still failing.
   - **From the autonomous-delivery pass:**
@@ -375,7 +387,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
   - The API "OpenAPI" is `api/src/openapi/schema.ts`: TypeScript interfaces documenting 9 endpoints, against 2,554 route registrations in 280 modules under `presentation/routes`; only 12 modules have zod request schemas (`*.schemas.ts`). There is no machine-readable spec, so there is no contract testing and no Postman export.
   
   Fixing this unblocks the visualizer's Coverage lens and API view. *The visualizer's Coverage and API panels shipped on 2026-11-05 (VS Code 2026.10.130). They show coverage as "Not set up" and every route as undocumented until this is fixed in the repo: v8 coverage with `all: true` per package, and an OpenAPI 3.1 document generated from the routes.*
-- **`builderforceApi.ts` 9,988 lines.** Split to `lib/api/<domain>.ts`.
+- **`builderforceApi.ts` 9,965 lines.** Split to `lib/api/<domain>.ts`. Board rosters (`boardRostersApi.ts`) and Discovery (`discoveryApi.ts`) are out; their changes are uncommitted.
 - **Unused primitives:** ~21 `fetchProjects()` callers, 128 raw storage sites, 76 `canEdit` guards, 55 `smoothstep` literals; `stage.connect` has no production caller.
 - **Canvas real-browser pass** misses the `+` command bar, bottom nav and Brain-not-covering.
 - **PRD 21 nav:** M3 seat workbench, M5 dimmed-row preview.

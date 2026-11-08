@@ -25,8 +25,7 @@ export const bundleKey = (tenantId: number, digest: string): string => `${bundle
 
 /**
  * A hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (the arrival wins for the same
- * ref), so two roots that share a content hash never evict each other's entries. The ONE merge: pack sync and the
- * legacy per-hash upload both use it.
+ * ref), so two roots that share a content hash never evict each other's entries. Used by `mergeBody`, which pack sync calls.
  */
 function mergeBodies(stored: readonly Extracted[] | undefined, arrival: readonly Extracted[]): Extracted[] {
   const arrived = new Set(arrival.map((e) => e.sourceRef));
@@ -38,7 +37,7 @@ const entrylessOf = (loc: Pick<ExtractedLoc, 'sourceRefs'> | undefined): string[
   (loc?.sourceRefs ?? []).filter((r) => r.startsWith(ENTRYLESS_PREFIX)).map((r) => r.slice(ENTRYLESS_PREFIX.length));
 
 /**
- * The ONE merge of a stored body with an arrival (pack sync and the legacy upload both use it): the entries merge by
+ * The ONE merge of a stored body with an arrival (pack sync uses it): the entries merge by
  * `sourceRef`, and the sources declared entry-less stay so — those the index already names (carried ONLY when the stored
  * body was actually read, so an unreadable object never keeps a source "held" with nothing behind it), and `declared` now.
  * A source that has an entry after the merge is no longer entry-less: a real body always wins.

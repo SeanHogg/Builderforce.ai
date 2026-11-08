@@ -5,14 +5,16 @@
  * the review ran. A source with no badge anywhere is `absent` (not set up), never a number.
  *
  *   server   the platform graph's `stats` (agent-tools `graphCounts`);
- *   local    the last review's recorded plan counts (files and docs, skipped files not
- *            counted), kept in sessionStorage; zeros when none was recorded;
+ *   local    the local store's reviewed files and docs when it holds the root, else the last
+ *            review's recorded plan counts (skipped files not counted), kept in sessionStorage;
+ *            zeros when none was recorded;
+ *   replica  the replica queue's state (what is still to send), when the source has one;
  *   skipped  the last review's recorded list (plan skips, skipped folders, uploads skipped
  *            during it); absent when none was recorded = unknown, not "none".
  */
 
-import { CODE_BADGES, graphCounts, reviewRecordStore, type RecordPersistence, type ReviewRecord } from '@builderforce/agent-tools/knowledge';
-import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { CODE_BADGES, graphCounts, isCodePath, reviewRecordStore, type RecordPersistence, type ReviewRecord } from '@builderforce/agent-tools/knowledge';
+import { isDocumentPath, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { SyncStatus } from '@builderforce/knowledge-graph-view';
 
 type Counts = SyncStatus['local'];
@@ -46,14 +48,24 @@ export function sourceStates(graph: KnowledgeGraph | null, counts: Counts, revie
 export interface BrowserSyncInput {
   graph: KnowledgeGraph | null;
   record: ReviewRecord | undefined;
+  /** The local store's counts, when it holds the root; they win over the session record. */
+  local?: Counts;
+  /** The replica queue (what is still to send to the project): the view renders it and its Retry. */
+  replica?: SyncStatus['replica'];
+}
+
+/** The local store's counts from the reviewed files (root-relative paths) its manifest lists. */
+export function localCountsOf(paths: readonly string[]): Counts {
+  return { files: paths.filter(isCodePath).length, docs: paths.filter(isDocumentPath).length };
 }
 
 export function browserSyncStatus(input: BrowserSyncInput): SyncStatus {
   const server = input.graph ? graphCounts(input.graph) : undefined;
-  const local: Counts = { files: input.record?.counts.files ?? 0, docs: input.record?.counts.docs ?? 0 };
+  const local: Counts = input.local ?? { files: input.record?.counts.files ?? 0, docs: input.record?.counts.docs ?? 0 };
   return {
     local,
     ...(server ? { server } : {}),
+    ...(input.replica ? { replica: input.replica } : {}),
     ...(input.record ? { skipped: input.record.skipped } : {}),
     sources: sourceStates(input.graph, server ?? local, !!input.record || !!server),
   };

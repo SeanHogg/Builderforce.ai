@@ -1,9 +1,16 @@
 /** Types for `sandboxCore.mjs` — lets the api's TypeScript tests drive the run sandbox. */
 
+export interface WorkspaceClient {
+  /** One request to the workspace helper (the only code that touches the working tree, run as the shell user). */
+  call(req: Record<string, unknown>): Promise<Record<string, unknown> & { ok: boolean; error?: string }>;
+  close(): void;
+}
+
 export interface SandboxBox {
   readonly spec: Record<string, unknown>;
   readonly workdir: string;
   readonly branch: string | null;
+  readonly workspace: WorkspaceClient;
 }
 
 /** Registers `kill` with the transport (a cancel); returns the function that unregisters it. */
@@ -16,17 +23,19 @@ export function createSandboxBox(args: {
   /** Put before every background job id (`<prefix>job-N`); transports pass a per-boot one. */
   jobIdPrefix?: string;
   emit?: (toolName: string, detail: unknown, result: string) => void;
+  /** The workspace helper script (`workspaceAgent.mjs`); required. */
+  helperPath: string;
 }): SandboxBox;
 
 export function serveSandbox(box: SandboxBox, path: string, body: Record<string, unknown>, onAbort?: SandboxOnAbort): Promise<Record<string, unknown>>;
 
-/** Kill every background job the run left running. */
-export function closeSandboxBox(box: SandboxBox): Promise<void>;
+/** Kill every background job this box tracks, release the workspace helper and the mirror; `destroy` also deletes the workspace. */
+export function closeSandboxBox(box: SandboxBox, opts?: { destroy?: boolean }): Promise<void>;
 
 /** A fresh per-boot prefix for background job ids, so ids never alias across a restart. */
 export function bootJobIdPrefix(): string;
 
-/** The environment a model-run shell gets: `env` minus the credential variables (BUILDERFORCE_*, the Actions OIDC/runtime tokens). */
+/** The environment a model-run shell gets: an allowlist of `env` plus the names in `BUILDERFORCE_SHELL_ENV`. */
 export function shellEnv(env?: Record<string, string | undefined>): Record<string, string | undefined>;
 
 /** The unprivileged user model-run shells run as (`BUILDERFORCE_SHELL_USER`), or null ⇒ the server's own user. */
@@ -38,20 +47,39 @@ export function shellInvocation(
   opts?: { env?: Record<string, string | undefined>; user?: string | null; extraEnv?: Record<string, string> },
 ): { file: string; args: string[]; env: Record<string, string | undefined> };
 
-/** THE spawn for every shell the model can influence (foreground, background job, preview server). */
+/** THE spawn for every shell the model can influence (foreground, background job, preview server, workspace helper). */
 export function spawnShell(
   command: string,
   opts?: { cwd?: string; stdio?: unknown; extraEnv?: Record<string, string>; env?: Record<string, string | undefined> },
 ): import('node:child_process').ChildProcess;
 
-/** GitHub Actions: create the unprivileged shell user and open the checkout to its group; throws (fail closed) when it cannot. */
+/** GitHub Actions: create the isolated shell user, hand it the checkout and prove the isolation; throws (fail closed). */
 export function provisionShellUser(args: { user: string; workdir: string }): string;
+/** Prove, as the shell user, that it cannot sudo, write the Docker socket or read the server's environ, and can write the workspace. Throws. */
+export function verifyShellIsolation(args: { user: string; workdir: string }): void;
+/** Give the checkout back to the runner without its `.git`. */
+export function releaseShellWorkspace(args: { workdir: string }): void;
+/** Kill every process the shell user owns — only where `BUILDERFORCE_SHELL_SWEEP=1` (the Actions runner). */
+export function sweepShellProcesses(): Promise<void>;
 
-/** Where, and as whom, the server talks git to the Worker's container-git proxy (credential-free URL + run token). */
-export function gitAuthOf(spec: Record<string, unknown>): { url: string; token: string | null };
+/** Where, and as whom, the server talks git to the Worker's container-git proxy; null when the spec names no remote. */
+export function gitAuthOf(spec: Record<string, unknown>): { url: string; token: string | null } | null;
 
-/** `git <args>` run by the server itself with the run token supplied for that one command only (never in a URL, on disk or in the shell's environ). */
-export function runGit(args: string[], cwd: string, auth?: { url: string; token: string | null } | null): Promise<{ exitCode: number; output: string }>;
+/** ONE git command in the private mirror: explicit minimal env (no `process.env` spread), no system/global config, hooks off, https only when authenticated. */
+export function mirrorGitCommand(
+  dir: string,
+  args: string[],
+  auth?: { url: string; token: string | null } | null,
+  source?: Record<string, string | undefined>,
+): { args: string[]; env: Record<string, string>; cwd: string };
 
 /** Remove a persisted `actions/checkout` credential from the checkout's `.git/config` (an absent key is fine). */
 export function scrubCheckoutCredentials(workdir: string): Promise<{ ok: boolean; output?: string }>;
+
+/** Open the workspace from the mirror (bundle in, clone as the shell user). */
+export function cloneWorkspace(box: SandboxBox): Promise<{ ok: boolean; branch: string | null; output: string }>;
+/** Fast-forward the workspace to the run branch as the remote holds it. */
+export function absorbHead(box: SandboxBox): Promise<boolean>;
+
+/** The `git bundle create` argv for `branches`, excluding what the other side holds (`basis`: branch → sha). */
+export function bundleCreateArgs(file: string, branches: string[], basis?: Record<string, string>): string[];

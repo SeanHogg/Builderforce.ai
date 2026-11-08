@@ -37488,6 +37488,9 @@
     "nodePack": "包",
     "nodePartition": "分区",
     "nodeOrigin": "来源",
+    "nodeMediaType": "媒体类型",
+    "nodeSize": "大小",
+    "assetNoFacts": "已作为文件存储。它不会被读取，因此没有关于其内容的记忆。",
     "origins": {
       "extracted": "从源文件读取",
       "model": "由模型判断",
@@ -38432,6 +38435,7 @@
           "tileFiles": "文件",
           "tileUnchanged": "自上次审阅未变",
           "tileLeftOut": "已排除",
+          "tileAssets": "作为文件存储",
           "readTitle": "读取范围",
           "choiceChanged": "仅变更部分",
           "choiceAll": "全部重来",

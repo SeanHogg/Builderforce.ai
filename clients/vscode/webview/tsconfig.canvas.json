@@ -59,6 +59,9 @@
       "@builderforce/interaction-contract": [
         "../../../packages/interaction-contract/src/index.ts"
       ],
+      "@builderforce/secret-redaction": [
+        "../../../packages/secret-redaction/src/index.ts"
+      ],
       "@builderforce/write-outbox": [
         "../../../packages/write-outbox/src/index.ts"
       ],

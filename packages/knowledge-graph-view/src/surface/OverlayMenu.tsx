@@ -31,8 +31,8 @@ export interface OverlayMenuProps {
 }
 
 const WIDE: CSSProperties = { width: 'min(560px, 92vw)', gap: 9, padding: '12px 14px' };
-// Absolute against the status strip (the menu's `anchor="container"`), spanning it, so a trigger mid-strip cannot push the
-// panel off screen and the panel still works inside a docked host (nothing is fixed to the viewport).
+// Absolute against the scene overlay (the menu's `anchor="container"`: `SceneOverlay` is the nearest positioned ancestor and stacks in flow on a phone),
+// spanning it, so a trigger mid-row cannot push the panel off screen and the panel still works inside a docked host (nothing is fixed to the viewport).
 const NARROW: CSSProperties = { insetInlineStart: 12, insetInlineEnd: 12, width: 'auto', maxWidth: 'none', gap: 9, padding: '12px 14px' };
 
 const SMALL: CSSProperties = { height: 26, padding: '0 8px', fontSize: TYPE.meta.fontSize };

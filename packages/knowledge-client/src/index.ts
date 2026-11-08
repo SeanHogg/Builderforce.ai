@@ -22,5 +22,4 @@ export {
   type KnowledgeScopeRecord,
   type KnowledgeViewer,
   type PackScopeProvenance,
-  type SkippedUpload,
 } from './types.js';

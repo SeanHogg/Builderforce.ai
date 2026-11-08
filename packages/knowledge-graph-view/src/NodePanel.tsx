@@ -11,6 +11,7 @@ import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memo
 import { AntiPatternBlock } from './AntiPatternBlock';
 import type { TowerHighlight } from './surface/towerHighlight';
 import type { KnowledgeGraphLabels } from './labels';
+import { formatBytes } from './formatBytes';
 import { knowledgeAbout, nodeIndex } from './graphModel';
 import { kindLabel, packLabel } from './names';
 import { PartitionPicker } from './PartitionPicker';
@@ -77,6 +78,8 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
     const [actions, setActions] = useState<FactActions | undefined>(undefined);
     const [arming, setArming] = useState(false);
     const isFact = node !== undefined && node.origin !== 'extracted' && node.ref.startsWith('fact:');
+    /** A stored binary file (image, font, archive, unextractable document): memory marks it with `badges.asset === 1`. */
+    const asset = node?.badges?.asset === 1;
 
     useEffect(() => {
         let live = true;
@@ -157,6 +160,8 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
                     )
                     : <Row name={labels.nodePartition} value={node.partition ?? labels.partitionNone} />}
                 <Row name={labels.nodeOrigin} value={labels.origins[node.origin]} />
+                {asset && typeof node.badges?.mediaType === 'string' && <Row name={labels.nodeMediaType} value={node.badges.mediaType} />}
+                {asset && Number.isFinite(Number(node.badges?.size)) && <Row name={labels.nodeSize} value={formatBytes(Number(node.badges?.size))} />}
             </dl>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={button} onClick={onTrace}>{labels.trace}</button>
@@ -170,8 +175,8 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
             {failure === 'delete' && <p role="alert" style={{ margin: 0, fontSize: 12, color: cssVar('errorText') }}>{labels.factDeleteFailed}</p>}
             <KnowledgeList title={labels.factsTitle} nodes={about.facts} labels={labels} onSelect={onSelect} />
             <KnowledgeList title={labels.claimsTitle} nodes={about.claims} labels={labels} onSelect={onSelect} />
-            {about.facts.length === 0 && about.claims.length === 0 && <p style={{ ...muted, margin: 0 }}>{labels.noFacts}</p>}
-            {source.rememberFact && !isFact && (
+            {about.facts.length === 0 && about.claims.length === 0 && <p style={{ ...muted, margin: 0 }}>{asset ? labels.assetNoFacts : labels.noFacts}</p>}
+            {source.rememberFact && !isFact && !asset && (
                 <form onSubmit={(e) => { e.preventDefault(); void save(); }} style={{ display: 'grid', gap: 8 }}>
                     <label style={{ fontSize: 12, fontWeight: 700 }} htmlFor={`kg-fact-${nodeRef}`}>{labels.addFact}</label>
                     <textarea

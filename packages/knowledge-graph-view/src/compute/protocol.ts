@@ -55,6 +55,8 @@ export interface RankRaw {
 
 /** What `pathOfStations` and `groupAntiPatterns` read of the stations: the file → station map and each station's name and layer. */
 export interface StationLookup {
+    /** Names the model this was slimmed from (one number per model): the worker keeps a lookup per graph and reuses it while the key holds, so memos keyed on its maps hit. */
+    key: number;
     stationOf: Map<string, string>;
     byId: Map<string, Pick<Station, 'id' | 'name' | 'layer'>>;
 }
@@ -63,8 +65,6 @@ export interface AntiPatternGroupRaw extends Omit<AntiPatternGroup, 'findings'> 
 
 export interface SurfaceRaw { stations: StationModel; lines: LinesModel }
 export interface MatrixRaw { partitions: string[]; cells: Map<string, PartitionCell> }
-/** `whole`: the focus is the graph itself (the very same arrays), so nothing else is sent. */
-export interface FocusRaw { whole: boolean; nodes: Uint32Array; edges: Uint32Array }
 
 /** Every task: what the main thread asks (`req`) and what the worker answers (`raw`). */
 export interface TaskTable {
@@ -81,7 +81,6 @@ export interface TaskTable {
     insights: { req: { graph: GraphId }; raw: Insights };
     partitionMatrix: { req: { graph: GraphId }; raw: MatrixRaw };
     antiPatterns: { req: { graph: GraphId; layer: string | null; stations?: StationLookup }; raw: AntiPatternGroupRaw[] };
-    focus: { req: { graph: GraphId; max: number; keep: string[] }; raw: FocusRaw };
 }
 
 export type TaskKind = keyof TaskTable;

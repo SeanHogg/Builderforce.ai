@@ -12,6 +12,8 @@ export interface ViewBox { x: number; y: number; w: number; h: number }
 export const MIN_SCALE = 0.2;
 export const MAX_SCALE = 8;
 const DRAG_SLOP = 4;
+/** Quiet time after the last wheel/pinch tick before the view is committed to React state. */
+const SETTLE_MS = 150;
 
 /** `view` zoomed by `factor` about the fractional point (fx, fy) of itself, scale kept within the cap relative to `base`. */
 export function zoomedView(view: ViewBox, base: ViewBox, factor: number, fx = 0.5, fy = 0.5): ViewBox {
@@ -53,7 +55,14 @@ export function usePanZoom(base: ViewBox | null, fitKey: unknown): PanZoom {
     const moved = useRef(false);
     const lastKey = useRef(fitKey);
 
-    const commit = useCallback((v: ViewBox | null) => { viewRef.current = v; setView(v); }, []);
+    const frame = useRef<number | null>(null);
+    const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cancelLive = useCallback(() => {
+        if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null; }
+        if (settle.current !== null) { clearTimeout(settle.current); settle.current = null; }
+    }, []);
+    const commit = useCallback((v: ViewBox | null) => { cancelLive(); viewRef.current = v; setView(v); }, [cancelLive]);
+    useEffect(() => cancelLive, [cancelLive]);
     useEffect(() => {
         if (lastKey.current !== fitKey) { lastKey.current = fitKey; moved.current = false; }
         if (!moved.current) commit(base);
@@ -63,7 +72,7 @@ export function usePanZoom(base: ViewBox | null, fitKey: unknown): PanZoom {
     const gesture = useRef({ moved: 0, dragging: false, pinch: 0 });
     const dragged = useRef(false);
 
-    const zoomAt = useCallback((factor: number, clientX?: number, clientY?: number) => {
+    const zoomAt = useCallback((factor: number, clientX?: number, clientY?: number, live = false) => {
         const b = baseRef.current, v = viewRef.current;
         if (!b || !v) return;
         const r = svgRef.current?.getBoundingClientRect();
@@ -71,7 +80,25 @@ export function usePanZoom(base: ViewBox | null, fitKey: unknown): PanZoom {
             ? [(clientX - r.left) / r.width, (clientY - r.top) / r.height] as const
             : [0.5, 0.5] as const;
         moved.current = true;
-        commit(zoomedView(v, b, factor, at[0], at[1]));
+        const next = zoomedView(v, b, factor, at[0], at[1]);
+        if (!live) { commit(next); return; }
+        // Wheel / pinch: accumulate in the ref, write the attribute at most once per frame, and
+        // commit to React once the gesture settles, so a tick never re-renders the graph.
+        viewRef.current = next;
+        if (frame.current === null) {
+            frame.current = requestAnimationFrame(() => {
+                frame.current = null;
+                const cur = viewRef.current;
+                if (cur) svgRef.current?.setAttribute('viewBox', `${cur.x} ${cur.y} ${cur.w} ${cur.h}`);
+            });
+        }
+        if (settle.current !== null) clearTimeout(settle.current);
+        settle.current = setTimeout(() => {
+            settle.current = null;
+            if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null; }
+            const cur = viewRef.current;
+            if (cur) { svgRef.current?.setAttribute('viewBox', `${cur.x} ${cur.y} ${cur.w} ${cur.h}`); setView(cur); }
+        }, SETTLE_MS);
     }, [commit]);
 
     const attached = view !== null;
@@ -79,7 +106,7 @@ export function usePanZoom(base: ViewBox | null, fitKey: unknown): PanZoom {
         const el = svgRef.current;
         if (!el) return undefined;
         // Non-passive on purpose: the wheel must not scroll the page behind the graph.
-        const onWheel = (e: WheelEvent) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); };
+        const onWheel = (e: WheelEvent) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY, true); };
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
     }, [zoomAt, attached]);
@@ -107,7 +134,7 @@ export function usePanZoom(base: ViewBox | null, fitKey: unknown): PanZoom {
             if (pointers.current.size >= 2) {
                 const [a, b] = [...pointers.current.values()];
                 const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-                if (g.pinch > 0 && d > 0) zoomAt(d / g.pinch, (a!.x + b!.x) / 2, (a!.y + b!.y) / 2);
+                if (g.pinch > 0 && d > 0) zoomAt(d / g.pinch, (a!.x + b!.x) / 2, (a!.y + b!.y) / 2, true);
                 g.pinch = d;
                 dragged.current = true;
                 return;

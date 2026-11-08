@@ -8,15 +8,20 @@
  */
 
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import type { GraphId, LoadField, Refs } from './protocol';
+import { mapEdges } from '../surface/outlineGraph';
+import { indexOfArray, type Element, type Field } from './fields';
+import { Lru } from './lru';
+import type { GraphId, LoadField, Refs, StationLookup } from './protocol';
 
 /** Graphs held at once: the one on screen, its Before/After twin and a stand-alone array set (a view mounted without a graph). */
 export const MAX_RESIDENT = 3;
-/** Derived values kept at once, oldest out. */
-const MAX_MEMO = 12;
+/** Subsets kept at once, oldest out. */
+const MAX_DERIVED = 12;
+/** Rankings kept at once: their own pool, so a burst of subsets never evicts the ranking a click is about to slice. */
+const MAX_RANKED = 8;
 
-type Field = 'nodes' | 'edges' | 'findings';
-type Element = KNode | KEdge | Finding;
+/** Which bounded pool a kept value lives in. */
+export type Pool = 'derived' | 'ranked';
 
 interface Building {
     shell: object;
@@ -33,7 +38,9 @@ export interface Subset { nodes: KNode[]; edges: KEdge[]; findings: Finding[] }
 export class ComputeStore {
     private readonly resident = new Map<GraphId, KnowledgeGraph>();
     private readonly building = new Map<GraphId, Building>();
-    private readonly memo = new Map<string, unknown>();
+    private readonly pools: Record<Pool, Lru<unknown>> = { derived: new Lru(MAX_DERIVED), ranked: new Lru(MAX_RANKED) };
+    /** Per-graph values that are never evicted before their graph is (an identity other memos key on must survive). */
+    private readonly pinnedBy = new Map<GraphId, Map<string, unknown>>();
 
     /** The in-process store holds the main thread's own graph: nothing is copied. */
     adopt(id: GraphId, graph: KnowledgeGraph): void {
@@ -73,8 +80,9 @@ export class ComputeStore {
     drop(id: GraphId): void {
         this.resident.delete(id);
         this.building.delete(id);
+        this.pinnedBy.delete(id);
         const prefix = `${id}:`;
-        for (const key of [...this.memo.keys()]) if (key.startsWith(prefix)) this.memo.delete(key);
+        for (const pool of Object.values(this.pools)) pool.dropPrefix(prefix);
     }
 
     has(id: GraphId): boolean { return this.resident.has(id); }
@@ -101,31 +109,43 @@ export class ComputeStore {
         }));
     }
 
-    /** element → its place in the graph's array, built once per graph and field (to name elements a pure function handed back). */
+    /** element → its place in the graph's array, built once per array (to name elements a pure function handed back). */
     indexOf(id: GraphId, field: Field): Map<Element, number> {
-        return this.remember(`${id}:index:${field}`, () => new Map((this.graph(id)[field] as Element[]).map((e, i) => [e, i] as const)));
+        return indexOfArray(this.graph(id)[field] as Element[]);
+    }
+
+    /** The edges the surface reads (the outline's, else the graph's), the SAME array for the life of the graph so memos keyed on it hit. */
+    surfaceEdges(id: GraphId): readonly KEdge[] {
+        return this.pinned(id, 'surfaceEdges', () => mapEdges(this.graph(id)));
+    }
+
+    /**
+     * The station lookup of a request. The wire clones it per request, which would give every request a fresh `stationOf` map
+     * and defeat the pure functions' memos keyed on it; the lookup a request names by `key` is kept once per graph.
+     */
+    stationLookup(id: GraphId, lookup: StationLookup): StationLookup {
+        const kept = this.pinned(id, 'stations', () => ({ held: lookup }));
+        if (kept.held.key !== lookup.key) kept.held = lookup;
+        return kept.held;
+    }
+
+    /** `make()` once per graph and name; dropped with the graph. */
+    pinned<T>(id: GraphId, name: string, make: () => T): T {
+        let per = this.pinnedBy.get(id);
+        if (!per) { per = new Map(); this.pinnedBy.set(id, per); }
+        if (!per.has(name)) per.set(name, make());
+        return per.get(name) as T;
     }
 
     /** What was kept under `key`, if anything. */
-    recall<T>(key: string): T | undefined {
-        if (!this.memo.has(key)) return undefined;
-        const hit = this.memo.get(key) as T;
-        this.memo.delete(key); // most recently used goes last
-        this.memo.set(key, hit);
-        return hit;
-    }
+    recall<T>(key: string, pool: Pool = 'derived'): T | undefined { return this.pools[pool].get(key) as T | undefined; }
 
     /** Keeps `value` under `key` (which must start with the graph's id, `${id}:…`) and returns it. */
-    keep<T>(key: string, value: T): T {
-        this.memo.delete(key);
-        this.memo.set(key, value);
-        while (this.memo.size > MAX_MEMO) this.memo.delete(this.memo.keys().next().value as string);
-        return value;
-    }
+    keep<T>(key: string, value: T, pool: Pool = 'derived'): T { return this.pools[pool].set(key, value) as T; }
 
     /** `make()` once per key. */
-    remember<T>(key: string, make: () => T): T {
-        return this.recall<T>(key) ?? this.keep(key, make());
+    remember<T>(key: string, make: () => T, pool: Pool = 'derived'): T {
+        return this.recall<T>(key, pool) ?? this.keep(key, make(), pool);
     }
 
     private evict(): void {

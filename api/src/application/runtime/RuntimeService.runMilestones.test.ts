@@ -156,6 +156,12 @@ describe('RuntimeService run-milestone narration (chat awareness)', () => {
     expect(milestones[0]).toMatchObject({ phase: 'cancelled', executionId: EXEC_ID });
   });
 
+  it('regression: a run cancelled by `system:admission` (refused, never started) posts NO `cancelled` milestone', async () => {
+    const { svc, milestones } = makeService({ taskStatus: TaskStatus.IN_PROGRESS });
+    await svc.cancel(EXEC_ID, 'system:admission');
+    expect(milestones).toHaveLength(0);
+  });
+
   it('narrates `failed` when the read-path orphan reaper kills a silent run (was a silent death)', async () => {
     const staleSince = new Date(Date.now() - 24 * 60 * 60_000);
     const { svc, milestones, getSavedExec } = makeService({

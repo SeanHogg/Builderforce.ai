@@ -170,7 +170,6 @@ export function fakeExtracted(w: World): ExtractedCachePort {
       for (const h of hashes) { const body = await get(h); if (body) out.set(h, body); }
       return out;
     },
-    put: async (hash, extracted) => { w.puts.push('legacy-body'); w.legacyBodies.set(hash, [...extracted]); },
     setSource: async () => undefined,
     rootExtracted: async () => [], deleteRootSources: async () => 0, snapshotReview: async () => undefined, reviewExtracted: async () => null,
   };

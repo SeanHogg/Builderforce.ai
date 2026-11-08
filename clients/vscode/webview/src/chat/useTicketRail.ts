@@ -8,14 +8,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { serverChatIdOf, type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
-import { chatTicketsLabelsFromBundle } from '@seanhogg/builderforce-brain-ui';
+import { chatTicketsLabelsFromBundle, localRailLabelsFromBundle } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
 import { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { useChatChangedFiles } from '../useChatChangedFiles';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
-import { getToken, refreshToken, type InitData } from '../vscodeBridge';
+import { getToken, onHostMessage, refreshToken, type InitData } from '../vscodeBridge';
 import { request } from '../bridgeTransport';
-import { useCapability } from '../useCapability';
+import { useCapability, webviewCapability } from '../useCapability';
+import type { ChatRailFrame, ChatRailRequest } from '../../../src/chatRail/railProtocol';
+import { createLocalRailAdapter, createRailStore } from './localRailAdapter';
+import { useLocalRailPieces, useRailSnapshot } from './localRailPieces';
 import { spendLabelsFrom } from './composerLabels';
 
 /** A linked ticket as the composer's `#` typeahead lists it. */
@@ -36,13 +39,26 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
   reloadChats: () => void;
   reloadMessages: () => void;
 }) {
-  // Same gateway endpoints as the web app's panel, over the webview's bearer fetch.
+  // The rail's tickets and runs are the HOST's local copy (`local.chatRail`), and link/unlink write
+  // local records through it; only merge, invite, run and the rest use the gateway endpoints the
+  // web app's panel uses, over the webview's bearer fetch.
+  const railStore = useMemo(() => createRailStore(), []);
   const ticketAdapter = useMemo(
     // A 401 re-mints (one shared exchange per burst) and retries the read once — a
     // fire-and-forget refresh left the rail empty until something else refreshed it.
-    () => createChatTicketsAdapter(init.baseUrl, getToken, refreshToken),
-    [init.baseUrl],
+    () => createLocalRailAdapter(
+      createChatTicketsAdapter(init.baseUrl, getToken, refreshToken),
+      {
+        call: <T,>(body: ChatRailRequest) => request<T>('local.chatRail', body as unknown as Record<string, unknown>),
+        connected: () => webviewCapability('connected'),
+      },
+      railStore,
+    ),
+    [init.baseUrl, railStore],
   );
+  const localRailLabels = useMemo(() => localRailLabelsFromBundle(init.labels), [init.labels]);
+  const railSnapshot = useRailSnapshot(railStore, serverChatId);
+  const localRail = useLocalRailPieces(railSnapshot, localRailLabels, init.locale);
   // The rail's copy — the host's `ct.*` l10n keys (`src/chatTicketsLabels.ts`).
   const ticketLabels = useMemo(() => chatTicketsLabelsFromBundle(init.labels), [init.labels]);
   const spendLabels = useMemo(() => spendLabelsFrom(init.labels), [init.labels]);
@@ -65,6 +81,13 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
     window.addEventListener('bf:mcp-write', bumpTicketRefresh);
     return () => window.removeEventListener('bf:mcp-write', bumpTicketRefresh);
   }, [bumpTicketRefresh]);
+
+  // The host pushes the chat's rail whenever a commit touches it (a link, a refresh, a sync receipt):
+  // keep the snapshot and reload what the panel shows from the store.
+  useEffect(() => onHostMessage<ChatRailFrame>('local.chatRail', (frame) => {
+    railStore.push(frame.rail);
+    bumpTicketRefresh();
+  }), [railStore, bumpTicketRefresh]);
 
   // The composer's #-ticket typeahead: the chat's linked tickets. Read here, by the
   // SERVER id, beside every other rail read — the composer read them by the local view
@@ -114,6 +137,6 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
 
   return {
     ticketAdapter, ticketLabels, spendLabels, ticketChatList, onTicketsChanged,
-    ticketRefresh, pendingChangesExtension, linkTicket, typeaheadTickets,
+    ticketRefresh, pendingChangesExtension, linkTicket, typeaheadTickets, localRail,
   };
 }

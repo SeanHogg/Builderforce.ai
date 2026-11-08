@@ -399,11 +399,11 @@ export function stripClientPolicyGates(payload: string | undefined): string | un
   return JSON.stringify(rest);
 }
 
-/** Keys only the dispatch/admission path may write: where a run landed, and its admission stamp. */
-const SERVER_STAMPED_KEYS = ['executor', 'cloud_admitted_seq', 'cloudAdmittedSeq'] as const;
+/** Keys only the dispatch path may write: where a run landed. (The admission stamp is a COLUMN, never a payload key.) */
+const SERVER_STAMPED_KEYS = ['executor'] as const;
 
 /**
- * A run payload without the keys only the server stamps (`executor`, an admission stamp). A
+ * A run payload without the keys only the server stamps (`executor`). A
  * client- or prior-run-supplied value would otherwise ride into a new run claiming a landing
  * it never had; dispatch re-stamps the real one.
  */

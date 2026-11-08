@@ -2,9 +2,8 @@ import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
-import type { Context, MiddlewareHandler } from 'hono';
-import { idempotentReplay } from '../middleware/idempotentReplay';
-import { admissionRefusalToResponse, executionAdmissionGate, steerRateAdmission, steerTextAdmission } from './executionAdmissionGate';
+import type { Context } from 'hono';
+import { admissionRefusalToResponse, replayOnIdempotencyKey, steerRateAdmission, steerTextAdmission, submitRunGates } from './executionAdmissionGate';
 import { admissionRefusalOf } from '../../application/runtime/dispatchAdmission';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { dispatchGithubActionsRun, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
@@ -19,6 +18,7 @@ import {
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, stripClientPolicyGates, withDefaultModel,
 } from '../../application/runtime/cloudDispatch';
 import { verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { receivePackDenial } from '../../application/runtime/containerPushScope';
 import { loadSandboxRunContext } from '../../application/runtime/cloudAgent/runContext';
 import { handleSandboxCallback } from '../../application/runtime/sandbox/sandboxCallbacks';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
@@ -81,7 +81,6 @@ import { ideAgents, taskFileChanges } from '../../infrastructure/database/schema
 import { readDispatchFileChanges } from '../../application/task/taskFileChangeFeed';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
-import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 import { markLifecycleNeutral, describeAuthority, MANAGED_OVERRIDE_EVENT } from '../../application/runtime/executionAuthority';
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
@@ -128,10 +127,6 @@ type RuntimeHonoEnv = HonoEnv & {
     AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
-
-/** `Idempotency-Key` replay for the submit routes (PRD 09 D6): the same tenant + key within
- *  24h answers with the ORIGINAL response instead of starting a second billable run. */
-const replayOnIdempotencyKey = idempotentReplay({ bindBody: true }) as unknown as MiddlewareHandler<RuntimeHonoEnv>;
 
 // The approval-gate primitives now live in the application layer so system callers
 // (autonomous lane trigger / cron sweep) can apply the SAME gate without a request
@@ -381,7 +376,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!resolved.ok) return c.json({ error: resolved.reason }, 400);
     // Same forwarding body as /api/git-proxy and the agent-host mount; only this door
     // (run-token auth, repo from the run's ticket) is container-specific.
-    return proxyGitSmartHttp(c, resolved.ctx, resolved.ctx.token, subPath, method);
+    // The run token authorises the TENANT's credential, so it is scoped: a push may update this run's own branch only.
+    return proxyGitSmartHttp(c, resolved.ctx, resolved.ctx.token, subPath, method, (body) => receivePackDenial(body, resolved.ctx.branch));
   };
   for (const { subPath, method } of GIT_PROXY_SUBPATHS) {
     const path = `/internal/container-git/:executionId.git/${subPath}`;
@@ -404,7 +400,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // STARTS a billable run (legacy BuilderForce Link submit path).
-  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey, async (c) => {
+  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey<RuntimeHonoEnv>(), async (c) => {
     const body = await parseBody(c, SubmitRunBody);
 
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
@@ -436,37 +432,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const authorization = await authorizeManagedTaskExecution(db, c.get('tenantId'), body.taskId, body.payload);
     if (!authorization.allowed) return c.json({ error: authorization.reason }, 409);
 
-    const admissionBlock = await executionAdmissionGate(c, db, {
-      taskId: taskRow.id,
-      pinnedHost: (agentHostIdFromHeader ?? body.agentHostId ?? taskRow.assignedAgentHostId) != null,
-    });
-    if (admissionBlock) return admissionBlock;
-
-    // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
-    // board Run agree and the superadmin bypass is applied once). Fails open on a
-    // scan error; superadmin / unlimited tenants pass through.
-    const tokenBlock = await executionTokenGate(c, db);
-    if (tokenBlock) return tokenBlock;
-
-    const gate = await evaluateExecutionApprovalGate(
-      db,
-      c.get('tenantId'),
-      c.get('userId'),
-      taskRow,
-      agentHostIdFromHeader ?? body.agentHostId ?? null,
-      { payload: body.payload },
-    );
-    if (!gate.allowed) {
-      return c.json(
-        {
-          status: 'awaiting_approval',
-          approvalId: gate.approvalId,
-          taskId: taskRow.id,
-          reason: gate.reason,
-        },
-        202,
-      );
-    }
+    // Admission (dedupe / cap / budget floor), the token gate and the approval gate — one shared helper.
+    const gateBlock = await submitRunGates(c, db, { task: taskRow, agentHostId: agentHostIdFromHeader ?? body.agentHostId ?? null, payload: body.payload });
+    if (gateBlock) return gateBlock;
 
     const execution = await runtimeService.submit({
       taskId:      body.taskId,
@@ -499,7 +467,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Submit a task for execution — the primary "start a billable run" entry point.
-  router.post('/executions', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey, async (c) => {
+  router.post('/executions', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey<RuntimeHonoEnv>(), async (c) => {
     const body = await parseBody(c, SubmitRunBody);
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
@@ -527,38 +495,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Task not found' }, 404);
     }
 
-    // Live-run dedupe + concurrent cap + budget floor (PRD 09 D6/D8/B3) — one shared gate.
-    const admissionBlock = await executionAdmissionGate(c, db, {
-      taskId: taskRow.id,
-      pinnedHost: (agentHostIdFromHeader ?? body.agentHostId ?? taskRow.assignedAgentHostId) != null,
-    });
-    if (admissionBlock) return admissionBlock;
-
-    // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
-    // board Run agree and the superadmin bypass is applied once). Fails open on a
-    // scan error; superadmin / unlimited tenants pass through.
-    const tokenBlock = await executionTokenGate(c, db);
-    if (tokenBlock) return tokenBlock;
-
-    const gate = await evaluateExecutionApprovalGate(
-      db,
-      c.get('tenantId'),
-      c.get('userId'),
-      taskRow,
-      agentHostIdFromHeader ?? body.agentHostId ?? null,
-      { payload: body.payload },
-    );
-    if (!gate.allowed) {
-      return c.json(
-        {
-          status: 'awaiting_approval',
-          approvalId: gate.approvalId,
-          taskId: taskRow.id,
-          reason: gate.reason,
-        },
-        202,
-      );
-    }
+    // Admission (dedupe / cap / budget floor), the token gate and the approval gate — one shared helper.
+    const gateBlock = await submitRunGates(c, db, { task: taskRow, agentHostId: agentHostIdFromHeader ?? body.agentHostId ?? null, payload: body.payload });
+    if (gateBlock) return gateBlock;
 
     const execution = await runtimeService.submit({
       taskId:      body.taskId,

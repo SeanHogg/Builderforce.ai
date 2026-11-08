@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { WORKSPACE_HELPER } from './containerTestHelper';
 import { closeSandboxBox, createSandboxBox, serveSandbox, type SandboxBox, type SandboxOnAbort } from '../../../container/sandboxCore.mjs';
 
 const posix = process.platform !== 'win32';
@@ -21,7 +22,7 @@ let box: SandboxBox;
 beforeEach(async () => {
   if (!posix) return;
   workdir = await mkdtemp(join(tmpdir(), 'bf-sandbox-tree-'));
-  box = createSandboxBox({ spec: {}, workdir });
+  box = createSandboxBox({ spec: {}, workdir, helperPath: WORKSPACE_HELPER });
 });
 
 afterEach(async () => {
@@ -155,7 +156,7 @@ describe.skipIf(!posix)('job replies and ids', () => {
 
   it('puts the boot prefix before every id, and none by default', async () => {
     expect(await serve('/sandbox/job/start', { command: 'true' })).toMatchObject({ id: 'job-1' });
-    const prefixed = createSandboxBox({ spec: {}, workdir, jobIdPrefix: 'ab12-' });
+    const prefixed = createSandboxBox({ spec: {}, workdir, helperPath: WORKSPACE_HELPER, jobIdPrefix: 'ab12-' });
     expect(await serveSandbox(prefixed, '/sandbox/job/start', { command: 'true' })).toMatchObject({ id: 'ab12-job-1' });
     // The same number under another boot is a different job, so a stale poll finds nothing.
     expect(await serveSandbox(prefixed, '/sandbox/job/poll', { id: 'job-1' })).toMatchObject({ status: 'unknown' });

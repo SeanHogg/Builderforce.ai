@@ -5,6 +5,7 @@
  */
 
 import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { buildIndex } from './fields';
 import type { PlacedWire } from './protocol';
 
 const placeOf = new WeakMap<readonly KNode[], Map<string, number>>();
@@ -12,7 +13,7 @@ const placeOf = new WeakMap<readonly KNode[], Map<string, number>>();
 /** ref → place in `nodes`, built once per array. */
 function placesIn(nodes: readonly KNode[]): Map<string, number> {
     let held = placeOf.get(nodes);
-    if (!held) { held = new Map(nodes.map((n, i) => [n.ref as string, i] as const)); placeOf.set(nodes, held); }
+    if (!held) { held = buildIndex(nodes, (n) => n.ref as string); placeOf.set(nodes, held); }
     return held;
 }
 

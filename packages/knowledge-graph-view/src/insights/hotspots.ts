@@ -6,11 +6,9 @@
 
 import type { KEdge } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
+import { pairKey } from '../pairKey';
 
 export interface Hotspot { id: string; value: number; refs: string[] }
-
-/** The pair key's multiplier: refs are numbered from 0, far below this. */
-const SPAN = 2 ** 26;
 
 export interface Hotspots { fanIn: Hotspot[]; fanOut: Hotspot[] }
 
@@ -28,7 +26,7 @@ export function hotspotsOf(edges: readonly KEdge[], kinds: ReadonlySet<string>, 
     for (const e of edges) {
         if (e.from === e.to || !kinds.has(e.kind)) continue;
         const a = intern(e.from), b = intern(e.to);
-        const key = a * SPAN + b;
+        const key = pairKey(a, b);
         if (pairs.has(key)) continue;
         pairs.add(key);
         from.push(a); to.push(b);

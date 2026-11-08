@@ -15,13 +15,17 @@ import { upsertPullRequestRow, type RecordPullRequestInput } from './recordPullR
 
 export type RecordTaskPullRequestInput = RecordPullRequestInput & { taskId: number; number: number; url: string; branchName: string };
 
-/** Upsert the PR row (on the provider identity) and stamp the task together; returns the row. Throws (and writes neither) on failure. */
+/** Upsert the PR row (on the provider identity) and stamp the task together; returns the row plus `written` (false: the row was already merged/closed, left untouched, and the task NOT stamped). Throws (and writes neither) on failure. */
 export async function recordTaskPullRequest(db: Db, input: RecordTaskPullRequestInput) {
   return inTransaction(db, async (tx) => {
-    const row = await upsertPullRequestRow(tx, input);
-    await tx.update(tasks)
-      .set({ gitBranch: input.branchName, githubPrUrl: input.url, githubPrNumber: input.number, updatedAt: new Date() })
-      .where(scopedToTenant(tasks, input.tenantId, eq(tasks.id, input.taskId)));
-    return row;
+    const { row, written } = await upsertPullRequestRow(tx, input);
+    // A row the reconciler already settled (merged/closed) was left untouched: the task must not be stamped with a PR whose
+    // record this write did not make (the stamp would name a dead PR and settle the single-PR claim for good).
+    if (written) {
+      await tx.update(tasks)
+        .set({ gitBranch: input.branchName, githubPrUrl: input.url, githubPrNumber: input.number, updatedAt: new Date() })
+        .where(scopedToTenant(tasks, input.tenantId, eq(tasks.id, input.taskId)));
+    }
+    return { ...row, written };
   });
 }

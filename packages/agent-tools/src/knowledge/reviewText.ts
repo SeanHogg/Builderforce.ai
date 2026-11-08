@@ -18,6 +18,7 @@ export function planDetailLine(plan: ReviewPlan, title?: string): string {
         `≈ ${plural(plan.estimatedModelCalls, 'model call')}`,
     ];
     if (plan.skipped.length > 0) parts.push(`${plan.skipped.length} skipped`);
+    if (plan.assets > 0) parts.push(`${plural(plan.assets, 'asset')} stored`);
     return `${title ? `${title}: ` : ''}${parts.join(' · ')}`;
 }
 

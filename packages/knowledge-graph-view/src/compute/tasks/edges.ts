@@ -1,6 +1,6 @@
 /**
  * The edge tasks: the ranking, and the drawn edges of the 2D and 3D views. The ranking is per subset of the graph and is
- * kept (under the subset's key), so the paths or buffers asked for next read it instead of ranking again.
+ * kept (under the subset's key, in the store's own pool for rankings), so the paths or buffers asked for next read it instead of ranking again.
  */
 
 import type { KEdge } from '@seanhogg/builderforce-memory/knowledge';
@@ -8,6 +8,7 @@ import { pathsOf } from '../../graph2d/edgePaths';
 import { edgeBuffers, groupEdges } from '../../scene/buffers';
 import { pickEdges, rankEdges, rankTask, type RankedEdges } from '../../scene/edgeBudget';
 import type { Layout3D } from '../../scene/layout3d';
+import { indexOfArray } from '../fields';
 import { unpackPlaced } from '../placed';
 import type { RankRaw, Refs } from '../protocol';
 import type { ComputeStore } from '../store';
@@ -18,12 +19,12 @@ const rankKey = (refs: Refs): string => `${refs.key}|ranked`;
 /** The ranking of a request's edges: the kept one, else computed in one go. */
 function rankedFor(store: ComputeStore, refs: Refs): RankedEdges {
     const { nodes, edges } = store.subset(refs);
-    return store.remember(rankKey(refs), () => rankEdges(edges, nodes));
+    return store.remember(rankKey(refs), () => rankEdges(edges, nodes), 'ranked');
 }
 
 /** The ranking by position in `edges`, flat. */
 function packRanked(ranked: RankedEdges, edges: readonly KEdge[]): RankRaw {
-    const at = new Map<KEdge, number>(edges.map((e, i) => [e, i] as const));
+    const at = indexOfArray(edges);
     const places = (list: readonly KEdge[]): Uint32Array => Uint32Array.from(list, (e) => at.get(e)!);
     const refs = [...ranked.incident.keys()];
     const offsets = new Uint32Array(refs.length + 1);
@@ -35,12 +36,12 @@ function packRanked(ranked: RankedEdges, edges: readonly KEdge[]): RankRaw {
 
 export const rankEdgesTask: Handler<'rankEdges'> = (store, { refs }) => {
     const { nodes, edges } = store.subset(refs);
-    const kept = store.recall<RankedEdges>(rankKey(refs));
+    const kept = store.recall<RankedEdges>(rankKey(refs), 'ranked');
     if (kept) return once(() => packRanked(kept, edges));
     const task = rankTask(edges, nodes);
     return {
         step: () => task.step(),
-        result: () => packRanked(store.keep(rankKey(refs), task.result()), edges),
+        result: () => packRanked(store.keep(rankKey(refs), task.result(), 'ranked'), edges),
     };
 };
 

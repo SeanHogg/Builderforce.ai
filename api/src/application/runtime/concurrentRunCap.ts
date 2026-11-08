@@ -34,7 +34,7 @@
  */
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import type { Db, Tx } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { resolveConcurrentCloudRuns } from '../../domain/tenant/PlanLimits';
@@ -66,7 +66,7 @@ export async function countLiveCloudExecutions(db: Db, tenantId: number): Promis
 }
 
 /** The ids of the tenant's live cloud runs in ADMISSION order - the order the cap ranks by. */
-export async function liveCloudExecutionIds(db: Db, tenantId: number): Promise<number[]> {
+export async function liveCloudExecutionIds(db: Db | Tx, tenantId: number): Promise<number[]> {
   const rows = await db
     .select({ id: executions.id })
     .from(executions)

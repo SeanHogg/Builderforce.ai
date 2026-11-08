@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { redactAuditRow, redactDeep, redactSecrets, redactThenCap } from './redactSecrets';
+import { DEFAULT_SECRET_PATTERNS, findSecretShapes, redactText } from '@builderforce/secret-redaction';
+import { maskTail, redactAuditRow, redactDeep, redactJsonText, redactSecrets, redactThenCap } from './redactSecrets';
 
 const tail = 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4';
 
@@ -31,7 +32,7 @@ describe('redactSecrets', () => {
   });
 
   it('still redacts the existing patterns', () => {
-    const bearer = 'eyJhbGciOiJIUzI1NiJ9abcdefghij1234567890';
+    const bearer = 'eyJhbGciOiJIUzI1NiJ9' + 'abcdefghij1234567890';
     expect(redactSecrets(`Authorization: Bearer ${bearer}`)).not.toContain(bearer);
     expect(redactSecrets('{"apiKey":"supersecretvalue123456"}')).not.toContain('supersecretvalue123456');
     expect(redactSecrets('run --token abcdefghijklmnop1234')).not.toContain('abcdefghijklmnop1234');
@@ -243,5 +244,135 @@ describe('redactDeep keys and structure', () => {
     const out = redactDeep({ text: 'x'.repeat(50), list: [1, 2, 3, 4] }, { maxString: 10, maxEntries: 2 }) as { text: string; list: number[] };
     expect(out.text).toBe('xxxxxxxxxx…[truncated]');
     expect(out.list).toEqual([1, 2]);
+  });
+});
+
+describe('regression: M4 text redaction over JSON text', () => {
+  it('regression: an escaped-quoted ENV value in JSON text is redacted and the JSON stays valid', () => {
+    const text = JSON.stringify({ cmd: 'API_TOKEN="xyz123secret" run' });
+    const out = redactJsonText(text);
+    expect(() => JSON.parse(out)).not.toThrow();
+    expect(out).not.toContain('xyz123secret');
+    expect(JSON.parse(out).cmd).toContain('run');
+  });
+
+  it('regression: a multi-word escaped-quoted value (DB_PASSWORD=\\"a b c\\") is fully removed', () => {
+    const out = redactJsonText(JSON.stringify({ cmd: 'DB_PASSWORD="a b c" deploy' }));
+    expect(out).not.toContain('a b c');
+    expect(JSON.parse(out).cmd).toContain('deploy');
+  });
+
+  it('regression: plain-text redaction of JSON text no longer captures a lone backslash (secret gone, JSON still parses)', () => {
+    for (const [blob, secret] of [['{"cmd":"API_TOKEN=\\"xyz123secret\\" run"}', 'xyz123secret'], ['{"cmd":"DB_PASSWORD=\\"a b c\\" run"}', 'a b c']] as const) {
+      const out = redactSecrets(blob);
+      expect(out).not.toContain(secret);
+      expect(() => JSON.parse(out)).not.toThrow();
+    }
+  });
+
+  it('regression: redactThenCap and redactDeep treat a JSON string (a `result` / `payload` column) structurally', () => {
+    const json = JSON.stringify({ ok: 'fine', cmd: 'API_TOKEN="xyz123secret" run' });
+    expect(redactThenCap(json, 10_000)).not.toContain('xyz123secret');
+    expect(() => JSON.parse(redactThenCap(json, 10_000))).not.toThrow();
+    const deep = redactDeep({ execution: { payload: json } });
+    expect(deep.execution.payload).not.toContain('xyz123secret');
+    expect(() => JSON.parse(deep.execution.payload)).not.toThrow();
+  });
+});
+
+describe('regression: M6 missed spellings', () => {
+  it('regression: snake_case JSON keys inside text (access_token, refresh_token, client_secret) are redacted', () => {
+    const blob = '{"access_token":"ya29.a0AfH6SMBxxxxxxxxxxxxxxxxxxxxx","refresh_token":"1//0gabcdefghijklmnop","client_secret":"GOCSPX-abcdefghijklmnopqrstuvwxyz1"}';
+    const out = redactSecrets(blob);
+    for (const secret of ['ya29.a0AfH6SMB', '1//0gabcdefghijklmnop', 'GOCSPX-abcdefghijklmnop']) expect(out).not.toContain(secret);
+  });
+
+  it.each(['refresh_token=abcdefgh12345678', 'id_token=abcdefgh12345678', 'auth_token=abcdefgh12345678', 'export github_token=abcdefgh12345678', 'SECRET_KEY_BASE=abcdefgh12345678', 'API_KEY_2=abcdefgh12345678'])(
+    'regression: %s is redacted', (text) => {
+      expect(redactSecrets(text)).not.toContain('abcdefgh12345678');
+    });
+
+  it.each([
+    ['bfk', 'bfk_' + '0123456789abcdef0123456789abcdef'],
+    ['bfa', 'bfa_' + '0123456789abcdef0123456789abcdef'],
+    ['bfr', 'bfr_' + '0123456789abcdef0123456789abcdef'],
+    ['clk', 'clk_' + '0123456789abcdef0123456789abcdef'],
+    ['Google access token', 'ya29.' + 'a0AfH6SMBabcdefghijklmnop'],
+    ['Google client secret', 'GOCSPX-' + 'abcdefghijklmnopqrstuvwxyz12'],
+  ])('regression: our own / Google credential %s is redacted', (_label, key) => {
+    expect(redactSecrets(`using ${key} now`)).not.toContain(key);
+  });
+});
+
+describe('regression: M7 over-reach', () => {
+  it('regression: source code that merely mentions token/password is left alone', () => {
+    const code = 'const token = getToken(); interface U { password: string; }';
+    expect(redactSecrets(code)).toBe(code);
+    expect(redactSecrets('const token = process.env.X;')).toBe('const token = process.env.X;');
+  });
+
+  it('regression: "Authorization: denied for user" is prose, not a credential', () => {
+    expect(redactSecrets('Authorization: denied for user')).toBe('Authorization: denied for user');
+  });
+
+  it('regression: sk- needs a key-shaped run, so "sk-learn-components" is untouched while real OpenAI keys are masked', () => {
+    expect(redactSecrets('pip install sk-learn-components')).toBe('pip install sk-learn-components');
+    const proj = 'sk-' + 'proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefgh';
+    const legacy = 'sk-' + 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefghijkl';
+    expect(redactSecrets(`k ${proj}`)).not.toContain(proj);
+    expect(redactSecrets(`k ${legacy}`)).not.toContain(legacy);
+  });
+
+  it('regression: keys that reference a secret (Id / Count / Name / Consent / page tokens) are not masked', () => {
+    const value = { credentialId: 'c-1', apiKeyId: 12, secretCount: 3, nextPageToken: 'abc', pageToken: 'def', cookieConsent: true, secretName: 'prod-db' };
+    expect(redactDeep(value)).toEqual(value);
+    expect(redactSecrets('nextPageToken: abcdefghijklmnop')).toBe('nextPageToken: abcdefghijklmnop');
+  });
+
+  it('regression: a JSON-schema `properties` map keeps its password/apiKey/token field definitions (an eval case replays them)', () => {
+    const schema = { type: 'object', properties: { password: { type: 'string' }, apiKey: { type: 'string' }, token: { type: 'string' }, name: { type: 'string' } } };
+    expect(redactDeep(schema)).toEqual(schema);
+    // …while a data object that happens to be called `properties` is still masked.
+    expect((redactDeep({ properties: { password: 'hunter2hunter2' } }) as { properties: { password: string } }).properties.password).toBe('[REDACTED]');
+  });
+});
+
+describe('regression: M8 one redactor, one shape list', () => {
+  it('regression: findSecretShapes exposes the shared prefix list for detection-only callers', () => {
+    expect(findSecretShapes('x AKIA' + 'ABCDEFGHIJKLMNOP y').map((s) => s.id)).toContain('aws-access-key');
+    expect(findSecretShapes('nothing here')).toEqual([]);
+    expect(findSecretShapes('bfk_' + '0123456789abcdef0123456789abcdef').some((s) => s.label === 'BuilderForce API key')).toBe(true);
+  });
+
+  it('regression: redactText can tag a span with the caller\'s label (the diff scanner\'s [REDACTED:id])', () => {
+    const out = redactText('const k = "AKIA' + 'ABCDEFGHIJKLMNOP";', DEFAULT_SECRET_PATTERNS, 'strict', (id) => `[REDACTED:secret.${id}]`);
+    expect(out).toContain('[REDACTED:secret.aws-access-key]');
+    expect(out).not.toContain('AKIA' + 'ABCDEFGHIJKLMNOP');
+  });
+
+  it('regression: an unterminated PEM block (a capped output) is redacted to its end', () => {
+    expect(redactSecrets('x -----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBgkq\nabcd')).not.toContain('MIIEvQIBADANBgkq');
+  });
+
+  it('regression: maskTail shows only the last four characters', () => {
+    expect(maskTail('abcdefghijkl')).toBe('****ijkl');
+    expect(maskTail('abcd')).toBe('****');
+  });
+});
+
+describe('regression: structural walk', () => {
+  it('regression: a DAG of shared nodes is walked once per depth, not once per path', () => {
+    let node: Record<string, unknown> = { leaf: 'x' };
+    for (let i = 0; i < 40; i++) node = { a: node, b: node };
+    const started = Date.now();
+    redactDeep(node, { maxDepth: 100 });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('regression: AggregateError.errors (non-enumerable) are included and redacted', () => {
+    const out = redactDeep(new AggregateError([new Error('x ghp_' + tail)], 'agg')) as unknown as { errors: unknown[] };
+    expect(Array.isArray(out.errors)).toBe(true);
+    expect(out.errors).toHaveLength(1);
+    expect(JSON.stringify(out)).not.toContain(tail);
   });
 });

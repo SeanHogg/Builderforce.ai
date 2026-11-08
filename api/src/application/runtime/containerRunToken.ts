@@ -27,7 +27,7 @@ export async function verifyContainerRunToken(secret: string, executionId: numbe
 }
 
 /** The container-git proxy's smart-HTTP URL for one execution — CREDENTIAL-FREE. The run token is supplied per git
- * command by the sandbox (`runGit` in container/sandboxCore.mjs: an `http.<url>.extraHeader` for that one process),
+ * command by the sandbox (`mirrorGitCommand` in container/sandboxGit.mjs: an `http.<url>.extraHeader` for that one process, in a private mirror),
  * so it is never in a URL, in `.git/config` (`origin`), or in the model shell's environ. The upstream provider
  * credential remains in the Worker-side proxy. */
 export function containerGitUrl(internalBaseUrl: string, executionId: number): string {

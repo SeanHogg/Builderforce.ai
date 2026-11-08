@@ -120,6 +120,14 @@ export interface ServerMapping {
 
 export interface SyncReceipt {
   eventId: string;
+  /**
+   * The record the receipt settles. A receipt outlives its event (the event is acknowledged and
+   * deleted, the receipt stays), so without the entity a later status read cannot tell whose it is.
+   * Absent on a receipt written before the fields existed: such a receipt is never assumed to
+   * belong to any particular record.
+   */
+  entityType?: LocalEntityType;
+  clientEntityId?: ClientEntityId;
   status: 'accepted' | 'duplicate' | 'conflict' | 'rejected' | 'dependency_pending';
   receivedAt: string;
   serverId?: string;

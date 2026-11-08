@@ -1,11 +1,12 @@
 /**
- * The header row under the status strip (56px): the spine, the ask bar (flex), the Panels group
- * and the Risk overlays menu. The ask bar is a 40px rounded search whose placeholder is the
+ * The header row (56px): the spine, the ask bar (flex) and, at the right end, ONE action slot (the
+ * review status chip + button, `surface/ReviewAction.tsx`). The ask bar is a 40px rounded search whose placeholder is the
  * active question as a sentence (its value until something is typed, with the sentence also the
  * placeholder), with ONE mono note on its right (answer mode · answer, or just "not set up") and
  * the screenshot picker inside it. On a narrow container the row stacks: spine, then a full-width
- * 44px ask bar, then the Panels group scrolling sideways (the overlays move to the status strip).
- * The cameras, the questions and the lenses are the centre controls (`surface/SceneOverlay.tsx`).
+ * 44px ask bar, then the lines toggle and the action in one sideways-scrolling row.
+ * The cameras, the Panels and overlay tools, the questions, the commit scrubber and the lenses are the
+ * canvas controls (`surface/SceneOverlay.tsx`).
  */
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
@@ -27,10 +28,8 @@ export interface ToolbarProps {
     narrow: boolean;
     /** The drill path. */
     spine?: ReactNode;
-    /** The Panels group. */
-    panels?: ReactNode;
-    /** The overlay menu (wide containers; a narrow one has it in the status strip). */
-    overlays?: ReactNode;
+    /** The review action (status chip + button): the right end of the row; on a narrow container, beside the lines toggle. */
+    action?: ReactNode;
     /**
      * Wraps the ask bar so the pinpoint input catches a paste or a drop anywhere on it and puts
      * its screenshot button inside: it calls `bar` with that button.
@@ -46,7 +45,7 @@ const searchIcon = (
     </svg>
 );
 
-export function Toolbar({ labels, onSearch, question, askName, answer, narrow, spine, panels, overlays, askWrap, linesToggle }: ToolbarProps) {
+export function Toolbar({ labels, onSearch, question, askName, answer, narrow, spine, action, askWrap, linesToggle }: ToolbarProps) {
     // null = nothing typed: the box shows the active question as its value, in the normal text colour; typing replaces it.
     const [typed, setTyped] = useState<string | null>(null);
     const s = labels.surface;
@@ -83,16 +82,16 @@ export function Toolbar({ labels, onSearch, question, askName, answer, narrow, s
     const ask = askWrap ? askWrap(bar) : bar(null);
     const row: CSSProperties = narrow
         ? { display: 'grid', gap: 10, padding: '10px 12px' }
-        // One 56px line from COMPACT_WIDTH up: the spine and the ask bar shrink (min-width 0), the Panels group is a menu below 900px.
+        // One 56px line from COMPACT_WIDTH up: the spine and the ask bar shrink (min-width 0); the action keeps its size.
         : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', height: 56, padding: '0 16px' };
     return (
         <div style={{ ...row, boxSizing: 'border-box', flex: 'none', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
             {spine}
             {ask}
             {narrow ? (
-                (panels || linesToggle) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', maxWidth: '100%' }}>{linesToggle}{panels}</div>
+                (action || linesToggle) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', maxWidth: '100%', padding: 3, margin: -3 }}>{linesToggle}{action}</div>
             ) : (
-                <>{linesToggle}{panels}{overlays}</>
+                <>{linesToggle}{action}</>
             )}
         </div>
     );

@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildCoreToolRegistry, type CapabilityProvider } from '@builderforce/agent-tools';
+import { WORKSPACE_HELPER } from '../containerTestHelper';
 import { closeSandboxBox, createSandboxBox, serveSandbox, type SandboxBox } from '../../../../container/sandboxCore.mjs';
 
 vi.mock('../cloudAgent/runContext', () => ({ SANDBOX_COMMAND_HEARTBEAT_MS: 60_000 }));
@@ -27,7 +28,7 @@ beforeEach(async () => {
   if (!posix) return;
   workdir = await mkdtemp(join(tmpdir(), 'bf-sandbox-tools-'));
   await mkdir(join(workdir, 'app'));
-  box = createSandboxBox({ spec: {}, workdir });
+  box = createSandboxBox({ spec: {}, workdir, helperPath: WORKSPACE_HELPER });
 });
 
 afterEach(async () => {

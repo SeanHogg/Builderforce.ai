@@ -296,6 +296,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           spendLabels={rail.spendLabels}
           ticketChatList={rail.ticketChatList}
           onTicketsChanged={rail.onTicketsChanged}
+          localRail={rail.localRail}
           pendingChangesExtension={rail.pendingChangesExtension}
           railRefresh={audience.railRefresh}
           subagentRoster={audience.subagentRoster}

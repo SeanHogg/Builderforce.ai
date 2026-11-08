@@ -13,11 +13,15 @@ const input = {
   branchName: 'builderforce/task-3', baseBranch: 'main', status: 'draft',
 };
 
-function fakeDb(opts: { stampFails?: boolean } = {}) {
+function fakeDb(opts: { stampFails?: boolean; settled?: boolean } = {}) {
   const writes: string[] = [];
   const outside = vi.fn();
   const tx = {
-    insert: () => ({ values: (v: Record<string, unknown>) => ({ onConflictDoUpdate: () => ({ returning: async () => { writes.push(`insert:${String(v.status)}:${String(v.platformDraftExecutionId)}`); return [{ id: 'row-1' }]; } }) }) }),
+    insert: () => ({ values: (v: Record<string, unknown>) => ({ onConflictDoUpdate: () => ({ returning: async () => {
+      if (opts.settled) return []; // the conflict was skipped by `setWhere`: the row is merged/closed
+      writes.push(`insert:${String(v.status)}:${String(v.platformDraftExecutionId)}`); return [{ id: 'row-1' }];
+    } }) }) }),
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 'settled-row' }] }) }) }),
     update: () => ({
       set: (v: Record<string, unknown>) => ({
         where: async () => {
@@ -34,12 +38,18 @@ function fakeDb(opts: { stampFails?: boolean } = {}) {
 describe('recordTaskPullRequest', () => {
   it('writes the row and the stamp through the transaction handle, and returns the row', async () => {
     const { db, writes, outside } = fakeDb();
-    expect(await recordTaskPullRequest(db, { ...input, platformDraftExecutionId: 42 })).toEqual({ id: 'row-1' });
+    expect(await recordTaskPullRequest(db, { ...input, platformDraftExecutionId: 42 })).toEqual({ id: 'row-1', written: true });
     expect(writes).toEqual(['insert:draft:42', 'stamp:7']);
     expect(outside).not.toHaveBeenCalled();
   });
 
-  it('regression: M1 - a failed stamp rejects the whole write (the caller sees the partial write, not a half-recorded PR)', async () => {
+  it('regression: a row the reconciler already settled (merged/closed) is returned untouched and the task is NOT stamped', async () => {
+    const { db, writes } = fakeDb({ settled: true });
+    expect(await recordTaskPullRequest(db, input)).toEqual({ id: 'settled-row', written: false });
+    expect(writes).toEqual([]);
+  });
+
+  it('regression: M1 -a failed stamp rejects the whole write (the caller sees the partial write, not a half-recorded PR)', async () => {
     const { db, outside } = fakeDb({ stampFails: true });
     await expect(recordTaskPullRequest(db, input)).rejects.toThrow('stamp failed');
     expect(outside).not.toHaveBeenCalled();

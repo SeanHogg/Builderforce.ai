@@ -47,6 +47,16 @@ function sameRecord(entityType: LocalRecord['entityType'], id: string, record: L
   return entityType === record.entityType && id === record.id;
 }
 
+/**
+ * A receipt that names its record counts only for that record. One written before receipts named
+ * theirs carries neither field and is passed through: the caller that holds the record's mapping
+ * decides (see `presentRecordSyncStatus`), this function cannot tell whose it is.
+ */
+function receiptBelongsTo(receipt: SyncReceipt, record: LocalRecord): boolean {
+  if (receipt.entityType === undefined && receipt.clientEntityId === undefined) return true;
+  return receipt.entityType === record.entityType && receipt.clientEntityId === record.id;
+}
+
 function compareEvents(left: JournalEvent, right: JournalEvent): number {
   if (left.localSequence !== right.localSequence) return left.localSequence - right.localSequence;
   if (left.occurredAt !== right.occurredAt) return left.occurredAt < right.occurredAt ? -1 : 1;
@@ -92,7 +102,9 @@ export function deriveRecordSyncStatus(input: SyncStatusInput): SyncStatus {
       .filter((event) => !sameRecord(event.entityType, event.clientEntityId, input.record))
       .map((event) => event.eventId),
   );
-  const receipts = (input.receipts ?? []).filter((receipt) => !foreignEventIds.has(receipt.eventId));
+  const receipts = (input.receipts ?? []).filter(
+    (receipt) => !foreignEventIds.has(receipt.eventId) && receiptBelongsTo(receipt, input.record),
+  );
   const pending = rawEvents
     .filter((event) => sameRecord(event.entityType, event.clientEntityId, input.record))
     .slice()

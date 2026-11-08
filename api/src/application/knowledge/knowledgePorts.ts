@@ -92,7 +92,6 @@ export interface ExtractedCachePort {
   get(hash: string): Promise<Extracted[] | undefined>;
   /** `get` for many hashes at once: ONE index query and coalesced ranged reads (the bulk preload), then the legacy objects for the rest. */
   getMany?(hashes: readonly string[]): Promise<Map<string, Extracted[]>>;
-  put(hash: string, extracted: readonly Extracted[]): Promise<void>;
   /** Records the current hash of a source (`''` = removed) as that source's own object. */
   setSource(sourceRef: NodeRef, hash: string): Promise<void>;
   /** Every extracted entry the root's source objects name, current hashes only. */

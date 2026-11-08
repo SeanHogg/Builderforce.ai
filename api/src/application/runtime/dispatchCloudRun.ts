@@ -47,6 +47,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { executions, projectRepositories, projects, tasks } from '../../infrastructure/database/schema';
 import { deliverToPinnedHosts, getDispatchTargets, type DispatchMessage } from './hostDelivery';
 import { admissionOutcome, admissionRefusalOf, admitCloudRun, preAdmitRun } from './dispatchAdmission';
+import type { DeferredParkRequest } from './deferredDispatch';
 import { submittingUserId } from './dispatcherLabel';
 
 export type ExecutionTaskRow = {
@@ -193,7 +194,7 @@ export async function dispatchCloudRunForTask(
      *  validation): a `deferred` admission is parked and retried by the `deferred-dispatch`
      *  sweep instead of being dropped. Lane and role dispatchers leave this unset (`auto-exec`
      *  re-sweeps them). */
-    parkIfDeferred?: boolean;
+    parkIfDeferred?: DeferredParkRequest;
     /**
      * A request-scoped memo of the ticket's execution rows (DISP-R1). Supplying it
      * saves ONE query on a path that just read the same list — the lane trigger,
@@ -317,7 +318,7 @@ export async function dispatchCloudRunForTask(
   const admissionCtx = {
     tenantId: params.tenantId, taskId: params.taskId, cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
     lane: taskRow.status as string | null, submittedBy, force: params.force === true,
-    ...(params.parkIfDeferred ? { park: { payload: params.payload, agentHostId: params.agentHostId } } : {}),
+    ...(params.parkIfDeferred ? { park: { ...params.parkIfDeferred, payload: params.payload, agentHostId: params.agentHostId } } : {}),
   };
   const preAdmission = await preAdmitRun(env, db, { tenantId: params.tenantId, taskId: params.taskId, actingUserId, checkCap: !hostPinned });
   if (preAdmission) return admissionOutcome(env, db, preAdmission, admissionCtx);

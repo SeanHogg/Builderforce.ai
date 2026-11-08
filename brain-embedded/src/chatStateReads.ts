@@ -14,12 +14,12 @@
 export type ChatStateGet = <T>(path: string) => Promise<T | undefined>;
 
 /** `GET /api/brain/chats/:id/tickets` — the chat's linked tickets ([] when the body has none). Rejects as `get` does. */
-export async function readChatTicketLinks<T>(get: ChatStateGet, chatId: number): Promise<T[]> {
+export async function readChatTicketLinks<T>(get: ChatStateGet, chatId: string | number): Promise<T[]> {
   const r = await get<{ tickets?: T[] }>(`/api/brain/chats/${chatId}/tickets`);
   return r?.tickets ?? [];
 }
 
 /** `GET /api/brain/chats/:id/runs` — the chat's run history, as the server sends it. Rejects as `get` does. */
-export function readChatRunHistory<H>(get: ChatStateGet, chatId: number): Promise<H | undefined> {
+export function readChatRunHistory<H>(get: ChatStateGet, chatId: string | number): Promise<H | undefined> {
   return get<H>(`/api/brain/chats/${chatId}/runs`);
 }

@@ -29,6 +29,7 @@ import { copyMap, foldCopyFindings, systemsOf } from '../surface/systems';
 import { highlightFor, stationRolesOf } from '../surface/towerHighlight';
 import { docStations } from '../surface/transit/docs';
 import { groupTermini } from '../surface/transit/termini';
+import { coldGraph } from './cold';
 import type { Recorder } from './harness';
 import type { PerfGraph } from './syntheticGraph';
 
@@ -47,14 +48,14 @@ export interface Shared {
 export function runModelSteps(rec: Recorder, p: PerfGraph, out: Shared = {}): Shared {
     const { graph } = p;
     const size = `nodes=${graph.nodes.length} edges=${graph.edges.length} findings=${graph.findings.length}`;
-    const cold = (): KnowledgeGraph => ({ ...graph, outline: { ...graph.outline! } });
+    const cold = (): KnowledgeGraph => coldGraph(graph);
 
     rec.time('foldCopyFindings', 'all (KnowledgeGraphView, every render of a new graph)', size, () => foldCopyFindings(graph));
     rec.time('outlineView decode (cold)', 'Transit map, Tower map, Systems', `outline files=${graph.outline!.files.length} links=${graph.outline!.links.length}`, (g: KnowledgeGraph) => outlineView(g), cold);
     const view = outlineView(graph);
     rec.time('fileNodesOf + mapEdges (warm)', 'Transit map, Tower map', `files=${view?.files.length} edges=${view?.edges.length}`, () => { fileNodesOf(graph); return mapEdges(graph); });
     rec.time('systemsOf + copyMap (cold)', 'Transit map, stations, lines', size, (g: KnowledgeGraph) => copyMap(systemsOf(g)), () => ({ ...graph }));
-    rec.time('dataCoverage', 'Transit map overlay, Tower map, Lines panel', size, () => dataCoverage(graph));
+    rec.time('dataCoverage (cold)', 'Transit map overlay, Tower map, Lines panel', size, (g: KnowledgeGraph) => dataCoverage(g), cold);
 
     // Focus and lens: the drawn subset.
     out.visible = rec.time('focusGraph (top 2000, cold)', 'Graph 2D, 3D scene, Towers', size, (g: Pick<KnowledgeGraph, 'nodes' | 'edges'>) => focusGraph(g, MAX_DRAWN_NODES, []), () => ({ nodes: graph.nodes, edges: [...graph.edges] }));
@@ -67,9 +68,9 @@ export function runModelSteps(rec: Recorder, p: PerfGraph, out: Shared = {}): Sh
     const index = rec.time('nodeIndex', 'all', `nodes=${graph.nodes.length}`, () => nodeIndex(graph));
 
     // The surface: stations, lines, overlay, question, path.
-    out.stations = rec.time('buildStations', 'Transit map, Tower map, 3D Towers, Lines panel', `outline files=${view?.files.length}, findings=${graph.findings.length}`, () => buildStations(graph, { changed: new Set(changedRefs(graph, null)) }));
+    out.stations = rec.time('buildStations (cold)', 'Transit map, Tower map, 3D Towers, Lines panel', `outline files=${view?.files.length}, findings=${graph.findings.length}`, (g: KnowledgeGraph) => buildStations(g, { changed: new Set(changedRefs(g, null)) }), cold);
     const stations = rec.need(out.stations, 'buildStations');
-    out.lines = rec.time('buildLines', 'Transit map, Tower map, Sequence, Lines panel', `stations=${stations.stations.length}, outline links=${view?.edges.length}`, () => buildLines(graph, stations));
+    out.lines = rec.time('buildLines (cold)', 'Transit map, Tower map, Sequence, Lines panel', `stations=${stations.stations.length}, outline links=${view?.edges.length}`, (g: KnowledgeGraph) => buildLines(g, stations), cold);
     const lines = rec.need(out.lines, 'buildLines');
     out.overlay = rec.time('makeOverlay + style per station + lineWidth', 'Transit map, Tower map, 3D Towers', `stations=${stations.stations.length}`, () => {
         const o = makeOverlay(PRESETS.risk, stations.stations);
@@ -81,7 +82,8 @@ export function runModelSteps(rec: Recorder, p: PerfGraph, out: Shared = {}): Sh
     rec.time('litStations (every question)', 'Transit map, Tower map, Act rail', `questions=${QUESTIONS.length} stations=${stations.stations.length}`, () => QUESTIONS.map((q) => litStations(q.id, stations.stations, ctx)));
     out.path = rec.time('pathOfLine', 'Sequence, Path strip', `stops=${lines.lines[0]?.stops.length}`, () => pathOfLine(lines.lines[0] ?? null, stations.byId));
     const pinned = (lines.lines[0]?.stops ?? []).map((id) => stations.byId.get(id)?.refs[0]).filter((r): r is string => !!r);
-    rec.time('pathOfStations (pinpoint; scans every outline edge per hop)', 'Sequence, Path strip, Transit map', `pinned=${pinned.length} edges=${mapEdges(graph).length}`, () => pathOfStations(pinned, stations, mapEdges(graph)));
+    rec.time('pathOfStations (cold: fresh outline edges array)', 'Sequence, Path strip, Transit map', `pinned=${pinned.length} edges=${mapEdges(graph).length}`, (e: ReturnType<typeof mapEdges>) => pathOfStations(pinned, stations, e), () => mapEdges(graph).slice());
+    rec.time('pathOfStations (warm: station-pair memo hit)', 'Sequence, Path strip, Transit map', `pinned=${pinned.length}`, () => pathOfStations(pinned, stations, mapEdges(graph)));
     rec.time('hopRouteLabels + pathMermaid', 'Sequence, Path strip', `hops=${out.path?.hops.length}`, () => (out.path ? [hopRouteLabels(out.path, stations.byId, index!), pathMermaid(out.path, L)] : null));
     rec.time('groupTermini + docStations (legend extras)', 'Transit map, Tower map', `lines=${lines.lines.length}`, () => ({ t: groupTermini(lines.lines, stations.byId, graph), d: docStations(graph, stations) }));
 
@@ -91,10 +93,12 @@ export function runModelSteps(rec: Recorder, p: PerfGraph, out: Shared = {}): Sh
     const scoped = rec.time('scopeFindings (path scope)', 'Act rail, Findings panel', `findings=${graph.findings.length} scope stations=${scope.size}`, () => scopeFindings(graph.findings, stations, scope)) ?? [];
     rec.time('lensFindings (every lens) + scopeFindings', 'Findings panel (Details list)', `findings=${graph.findings.length}`, () => lenses.map((l) => scopeFindings(lensFindings(l, graph), stations, null)));
     rec.time('actionCards', 'Act rail', `findings=${scoped.length}`, () => actionCards(scoped, true));
-    rec.time('insightsOf', 'Insights panel (Details), all views', size, () => insightsOf(graph));
-    rec.time('partitionMatrix', 'Partition matrix, Insights', `edges=${graph.edges.length}`, () => partitionMatrix(graph));
+    rec.time('insightsOf (cold)', 'Insights panel (Details), all views', size, (g: KnowledgeGraph) => insightsOf(g), cold);
+    rec.time('insightsOf (warm: memo hit)', 'Insights panel (Details), all views', size, () => insightsOf(graph));
+    rec.time('partitionMatrix (cold)', 'Partition matrix, Insights', `edges=${graph.edges.length}`, (g: KnowledgeGraph) => partitionMatrix(g), cold);
+    rec.time('partitionMatrix (warm: memo hit)', 'Partition matrix, Insights', `edges=${graph.edges.length}`, () => partitionMatrix(graph));
     rec.time('groupAntiPatterns', 'Anti-patterns drawer, Act rail', `findings=${graph.findings.length}`, () => groupAntiPatterns(graph.findings));
-    rec.time('patternMatrix', 'Patterns drawer', `nodes=${graph.nodes.length} findings=${graph.findings.length}`, () => patternMatrix(graph, stations));
+    rec.time('patternMatrix (cold)', 'Patterns drawer', `nodes=${graph.nodes.length} findings=${graph.findings.length}`, (g: KnowledgeGraph) => patternMatrix(g, stations), cold);
     rec.time('fixQueueCounts', 'Act rail, header', `findings=${graph.findings.length}`, () => fixQueueCounts(graph.findings, graph.findings.length, new Set()));
     const violations = graph.findings.filter((f) => f.kind === 'partition-violation');
     const lit = rec.time('highlightFor (all violations) + stationRolesOf', 'Towers, Tower map (Show in Tower)', `findings=${violations.length}`, () => { const h = highlightFor(violations); return stationRolesOf(h.roles, stations); });

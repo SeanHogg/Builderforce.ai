@@ -22,11 +22,15 @@ interface Row { id: number; taskId: number; status: string; seq: number | null }
 const LIVE = new Set(['pending', 'submitted', 'running', 'paused']);
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 
-const state = { limit: 2 as number, counter: 0, rows: [] as Row[], cancelFails: false };
+const state = { limit: 2 as number, counter: 0, rows: [] as Row[], cancelFails: false, noTransaction: false, rankFailsOnce: false, log: [] as string[], timeouts: [] as string[] };
 
 const reset = (limit: number, rows: Array<Partial<Row> & Pick<Row, 'id' | 'taskId'>>) => {
   state.limit = limit;
   state.cancelFails = false;
+  state.noTransaction = false;
+  state.rankFailsOnce = false;
+  state.timeouts = [];
+  state.log = [];
   state.counter = 0;
   state.rows = rows.map((r) => ({ status: 'pending', seq: null, ...r }));
   for (const r of state.rows) if (r.seq !== null) state.counter = Math.max(state.counter, r.seq);
@@ -34,8 +38,9 @@ const reset = (limit: number, rows: Array<Partial<Row> & Pick<Row, 'id' | 'taskI
 
 /** One contender's view of the shared rows (the fake cannot read a WHERE clause, so it is told its own row). */
 function dbFor(executionId: number, taskId: number): Db {
-  return {
+  const self = {
     select: (fields: Record<string, unknown>) => {
+      if (state.rankFailsOnce) { state.rankFailsOnce = false; throw new Error('lookup failed'); }
       const rows = 'status' in fields
         ? state.rows.filter((r) => r.taskId === taskId && LIVE.has(r.status)).sort((a, b) => a.id - b.id).map(({ id, status }) => ({ id, status }))
         : state.rows.filter((r) => r.seq !== null && RUNNING.has(r.status)).sort((a, b) => (a.seq! - b.seq!) || (a.id - b.id)).map(({ id }) => ({ id }));
@@ -49,11 +54,28 @@ function dbFor(executionId: number, taskId: number): Db {
         where: async () => {
           const row = state.rows.find((r) => r.id === executionId)!;
           row.seq = values.cloudAdmittedSeq === null ? null : ++state.counter;
+          state.log.push(values.cloudAdmittedSeq === null ? `clear:${executionId}` : `stamp:${executionId}`);
         },
       }),
     }),
-  } as unknown as Db;
+    // The per-tenant advisory lock: recorded, and modelled as a mutex held for the whole transaction body.
+    execute: async (q: unknown) => {
+      // `SET LOCAL lock_timeout` is the bound on the wait for the lock below; it is noted apart so the lock/stamp order stays readable.
+      if (JSON.stringify(q).includes('lock_timeout')) { state.timeouts.push(`${executionId}:${state.log.length}`); return; }
+      state.log.push(`lock:${executionId}`);
+    },
+    transaction: async (work: (tx: unknown) => Promise<unknown>) => {
+      if (state.noTransaction) throw new Error('no transaction available');
+      const turn = tenantLock.then(() => work(self));
+      tenantLock = turn.then(() => undefined, () => undefined);
+      return turn;
+    },
+  };
+  return self as unknown as Db;
 }
+
+/** Tail of the chain of transactions: each one starts only after the previous one finished (what `pg_advisory_xact_lock` does). */
+let tenantLock: Promise<void> = Promise.resolve();
 
 const runtime = (executionId: number): RuntimeService => ({
   cancel: async () => {
@@ -131,5 +153,45 @@ describe('admission refusal marker', () => {
     expect(admissionRefusalOf(withAdmissionRefusal({ id: 1, status: 'failed' }, refusal))).toEqual(refusal);
     expect(admissionRefusalOf({ id: 1, status: 'pending' })).toBeNull();
     expect(admissionRefusalOf(undefined)).toBeNull();
+  });
+
+  it('regression: Minor 1 - stamp and rank run in ONE transaction under the per-tenant advisory lock, and a refused run releases its stamp inside it', async () => {
+    reset(1, [{ id: 1, taskId: 1, seq: 1, status: 'running' }, { id: 2, taskId: 2 }]);
+    expect(admissionRefusalOf(await admit(2, 2))).toMatchObject({ code: 'concurrent_run_limit' });
+    // lock first, then the stamp, then the refused run's stamp cleared - all before the transaction ended
+    expect(state.log).toEqual(['lock:2', 'stamp:2', 'clear:2']);
+  });
+
+  it('regression: Minor 1 - contenders for the same tenant are serialised, so a parallel burst still starts exactly the cap', async () => {
+    reset(2, [1, 2, 3, 4].map((id) => ({ id, taskId: 100 + id })));
+    const results = await Promise.all(state.rows.map((r) => admit(r.id, r.taskId)));
+    expect(results.filter((r) => r === null)).toHaveLength(2);
+    // never two stamps in a row from different runs: each contender's lock -> stamp (-> clear) is contiguous
+    const locks = state.log.filter((e) => e.startsWith('lock:'));
+    expect(locks).toHaveLength(4);
+    for (let i = 0; i < state.log.length; i++) {
+      if (state.log[i]!.startsWith('lock:')) expect(state.log[i + 1]).toBe(`stamp:${state.log[i]!.slice(5)}`);
+    }
+  });
+
+  it('regression: Minor 2 - the lock wait is bounded (SET LOCAL lock_timeout runs BEFORE the lock, inside the transaction)', async () => {
+    reset(1, [{ id: 1, taskId: 1, seq: 1, status: 'running' }, { id: 2, taskId: 2 }]);
+    await admit(2, 2);
+    expect(state.timeouts).toEqual(['2:0']); // issued before the lock (nothing logged yet)
+  });
+
+  it('regression: Minor 2 - a rank error inside the transaction is NOT swallowed into "admitted": it falls back to the unlocked stamp-then-rank, which refuses', async () => {
+    reset(1, [{ id: 1, taskId: 1, seq: 1, status: 'running' }, { id: 2, taskId: 2 }]);
+    state.rankFailsOnce = true;
+    expect(admissionRefusalOf(await admit(2, 2))).toMatchObject({ code: 'concurrent_run_limit' });
+    // locked attempt stamped then threw (rolled back in real Postgres); the fallback stamped, ranked and released again
+    expect(state.log).toEqual(['lock:2', 'stamp:2', 'stamp:2', 'clear:2']);
+  });
+
+  it('when no transaction can be opened it admits without the lock rather than starting the run unchecked', async () => {
+    reset(1, [{ id: 1, taskId: 1, seq: 1, status: 'running' }, { id: 2, taskId: 2 }]);
+    state.noTransaction = true;
+    expect(admissionRefusalOf(await admit(2, 2))).toMatchObject({ code: 'concurrent_run_limit' });
+    expect(state.log).toEqual(['stamp:2', 'clear:2']);
   });
 });

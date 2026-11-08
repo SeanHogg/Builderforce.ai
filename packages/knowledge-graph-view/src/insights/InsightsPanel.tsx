@@ -4,15 +4,19 @@
  * composition, hotspots, coupling and findings. Nothing here calls a model.
  */
 
-import { useMemo } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { useComputed } from '../compute/useComputed';
+import { isSmall } from '../compute/size';
 import { camelKind, fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { kindLabel } from '../names';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { heading } from '../styles';
 import type { LensId } from '../types';
 import { BarChart, type ChartRow } from './BarChart';
-import { insightsOf, type Bar, type MetricId } from './insightsModel';
+import type { Bar, Insights, MetricId } from './insightsModel';
+
+/** Shown while the worker reads a big graph. */
+const EMPTY_INSIGHTS: Insights = { metrics: [], kinds: [], composition: { by: 'area', bars: [] }, fanIn: [], fanOut: [], coupling: [], findingKinds: [] };
 
 export interface InsightsPanelProps {
     graph: KnowledgeGraph;
@@ -32,7 +36,7 @@ const rows = (bars: readonly Bar[], word: (b: Bar) => string): ChartRow[] =>
     bars.map((b) => ({ key: b.id, label: word(b), value: b.value, refs: b.refs }));
 
 export function InsightsPanel({ graph, labels, lenses, onLens, onShow, findingKinds = true }: InsightsPanelProps) {
-    const insights = useMemo(() => insightsOf(graph), [graph]);
+    const insights = useComputed('insights', { graph }, [graph], EMPTY_INSIGHTS, { inline: isSmall(graph), scope: [graph] }).value ?? EMPTY_INSIGHTS;
     const part = (id: string): string => id || labels.partitionNone;
     const tiles = insights.metrics.filter((m) => CORE.has(m.id) || m.value > 0);
     const charts: Array<{ title: string; rows: ChartRow[]; tone: ThemeTone }> = [

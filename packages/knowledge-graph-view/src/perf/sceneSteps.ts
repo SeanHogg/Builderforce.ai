@@ -11,12 +11,12 @@ import { LENSES } from '../lenses';
 import { canonicalEdges } from '../scene/canonicalEdges';
 import { edgeBuffers, groupEdges, nodeInstances } from '../scene/buffers';
 import { nodeChannels, pipeWidthOf, pipes, towerBodies } from '../scene/channels';
-import { DEFER_EDGES_ABOVE, incidentOf, pickEdges, rankTask, type RankedEdges } from '../scene/edgeBudget';
+import { DEFER_EDGES_ABOVE, incidentOf, pickEdges, rankEdges, rankTask, type RankedEdges } from '../scene/edgeBudget';
 import { applyRoles } from '../scene/highlightRoles';
 import { layoutTask, planeOrder, type Layout3D } from '../scene/layout3d';
 import { layoutSprings } from '../scene/layoutSprings';
 import { highlightFor } from '../surface/towerHighlight';
-import type { Recorder } from './harness';
+import { stepLabels, type Recorder } from './harness';
 import type { Shared } from './modelSteps';
 import type { PerfGraph } from './syntheticGraph';
 
@@ -33,11 +33,23 @@ export function runSceneSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
     const sortedRefs = [...nodes].map((n) => n.ref as string).sort();
     const rank = new Map(sortedRefs.map((r, i) => [r, i] as const));
     const sorted = canonicalEdges(edges, rank);
-    rec.time('canonicalEdges (standalone)', '3D scene, Graph 2D, edge ranking', size, () => canonicalEdges(edges, rank));
-    rec.time('layoutSprings (standalone)', '3D scene, Graph 2D', `sorted edges=${sorted.length}`, () => layoutSprings(sorted, rank));
+    // Every timed iteration is COLD: the memos (canonicalEdges, rankStages, ...) are WeakMaps keyed by the edges array, so each
+    // run gets a fresh array (built untimed). The "(warm)" rows keep the memo-hit cost, reported separately.
+    const coldEdges = (): readonly KEdge[] => edges.slice();
+    rec.time('canonicalEdges (standalone, cold)', '3D scene, Graph 2D, edge ranking', size, (e: readonly KEdge[]) => canonicalEdges(e, rank), coldEdges);
+    rec.time('canonicalEdges (warm: memo hit)', '3D scene, Graph 2D, edge ranking', size, () => canonicalEdges(edges, rank));
+    rec.time('layoutSprings (standalone)', '3D scene, Graph 2D', `sorted edges=${sorted.length}`, (s: readonly KEdge[]) => layoutSprings(s, rank), () => sorted.slice());
 
-    const layout: Layout3D | undefined = rec.task('layoutTask (3D; start + every idle step)', '3D scene, Towers', size, () => layoutTask(rootId, nodes, edges), ['canonicalEdges', 'layoutSprings + createRelaxation (layoutRelax)']);
-    rec.task('layout2dTask (start + every idle step + project)', 'Graph 2D', size, () => layout2dTask(rootId, nodes, edges), ['canonicalEdges', 'layoutSprings + createRelaxation (layoutRelax)']);
+    // Step labels mirror the real step functions: canonicalEdges.build (kinds / SLICE-sized resolves / packed sort), then the
+    // consumer's own stages. `ranked` (untimed) supplies the counts the rank stages slice over.
+    const SLICE = 30_000; // canonicalEdges.ts and rankStages.ts both slice at 30,000 (not exported)
+    const slices = (n: number): number => Math.max(1, Math.ceil(n / SLICE));
+    const canonGroups = (n: number): Array<readonly [string, number]> => [['canonicalEdges: kinds', 1], ['canonicalEdges: resolve slice', slices(n)], ['canonicalEdges: packed key sort', 1]];
+    const layoutLabels = stepLabels([...canonGroups(edges.length), ['layoutSprings + createRelaxation', 1]], 'relax pass', false);
+    const coldPair = (): { nodes: readonly KNode[]; edges: readonly KEdge[] } => ({ nodes: nodes.slice(), edges: edges.slice() });
+
+    const layout: Layout3D | undefined = rec.task('layoutTask (3D; start + every idle step, cold)', '3D scene, Towers', size, (c: { nodes: readonly KNode[]; edges: readonly KEdge[] }) => layoutTask(rootId, c.nodes, c.edges), layoutLabels, coldPair);
+    rec.task('layout2dTask (start + every idle step + project, cold)', 'Graph 2D', size, (c: { nodes: readonly KNode[]; edges: readonly KEdge[] }) => layout2dTask(rootId, c.nodes, c.edges), layoutLabels, coldPair);
     const l2 = layout2dTask(rootId, nodes, edges);
     while (!l2.step());
     const layout2 = l2.result() ?? EMPTY_LAYOUT_2D;
@@ -50,7 +62,15 @@ export function runSceneSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
         return out;
     });
 
-    const ranked: RankedEdges | undefined = rec.task('rankTask (edge ranking)', 'Graph 2D, 3D scene (lines) ' + defer, size, () => rankTask(edges, nodes), ['index maps', 'canonicalEdges', 'split + importance sort', 'incident index']);
+    const counted = rankEdges(edges.slice(), nodes); // untimed: how many links the split stages slice over
+    const quiet = counted.rest.length;
+    const rankLabels = stepLabels([
+        ['index maps', 1], ...canonGroups(edges.length),
+        ['classify links (loud / weighted)', slices(counted.total)], ['distinct weights', 1],
+        ['packed weight keys', slices(quiet)], ['keys sort', 1], ['materialise rest + breaking', slices(quiet)],
+        ['incident index', slices(counted.total)],
+    ]);
+    const ranked: RankedEdges | undefined = rec.task('rankTask (edge ranking, cold)', 'Graph 2D, 3D scene (lines) ' + defer, size, (e: readonly KEdge[]) => rankTask(e, nodes), rankLabels, coldEdges);
     const r = rec.need(ranked, 'rankTask');
     const picked = rec.time('pickEdges (no selection)', 'Graph 2D, 3D scene', `ranked=${r.total}, cap=15000`, () => pickEdges(r, null)) ?? [];
     rec.time('pickEdges (hub selected)', 'Graph 2D, 3D scene (every selection)', `hub in-edges=${incidentOf(r, p.hub).length}`, () => pickEdges(r, p.hub));
@@ -69,7 +89,7 @@ export function runSceneSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
             const roles = highlightFor(violations).roles;
             rec.time('applyRoles (anti-pattern highlight)', '3D Towers', `bodies=${bodies.length} roles=${roles.size}`, () => applyRoles(bodies, roles));
             const radius = pipeWidthOf(stations, overlay);
-            rec.time('pipes', '3D Towers (pipes replace lines)', `edges=${edges.length} bodies=${bodies.length}, cap=1500`, () => pipes(edges, bodies, radius));
+            rec.time('pipes', '3D Towers (pipes replace lines)', `edges=${edges.length} bodies=${bodies.length}, cap=1500`, () => pipes(edges, bodies, radius ?? (() => null)));
         }
     }
 }

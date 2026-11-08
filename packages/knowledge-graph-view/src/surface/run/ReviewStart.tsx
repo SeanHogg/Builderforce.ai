@@ -111,6 +111,7 @@ export function ReviewStart({ labels, review, state, history, queued }: ReviewSt
                     <Tile label={r.tileFiles} value={everything.toLocaleString()} />
                     <Tile label={r.tileUnchanged} value={plan.unchanged.toLocaleString()} />
                     <Tile label={r.tileLeftOut} value={plan.skipped.length.toLocaleString()} />
+                    {plan.assets > 0 && <Tile label={r.tileAssets} value={plan.assets.toLocaleString()} />}
                 </div>
             </Section>
             <Section title={r.readTitle}>

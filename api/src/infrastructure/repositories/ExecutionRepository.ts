@@ -181,7 +181,7 @@ export class ExecutionRepository implements IExecutionRepository {
       .limit(limit));
     const failed: ReapedExecutionRow[] = await this.db
       .update(executionsTable)
-      .set({ status: 'failed', errorMessage: redactSecrets(errorMessage), completedAt: sql`now()`, updatedAt: sql`now()` })
+      .set({ status: 'failed', errorMessage: redactSecrets(errorMessage), completedAt: sql`now()`, updatedAt: sql`now()`, cloudAdmittedSeq: null })
       .where(acrossTenants(executionsTable, 'scheduled_sweep', predicate, bounded))
       .returning({
         id: executionsTable.id, tenant_id: executionsTable.tenantId, agent_host_id: executionsTable.agentHostId,
@@ -216,6 +216,8 @@ export class ExecutionRepository implements IExecutionRepository {
         // `?? undefined` is load-bearing: a null (not judged) never overwrites a verdict `finalizeCloudRun` already wrote.
         produced:     fields.produced ?? undefined,
         completedAt:  fields.completedAt ?? now,
+        // A finished run holds no cloud slot: clearing the admission stamp drops the row out of the partial index the cap reads (1330).
+        cloudAdmittedSeq: null,
         updatedAt:    now,
       })
       .where(and(eq(executionsTable.id, id), inArray(executionsTable.status, [...(from ?? EXECUTION_NON_TERMINAL_STATUSES)])))

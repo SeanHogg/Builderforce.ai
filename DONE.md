@@ -67,17 +67,21 @@
 - **Write timing:** `client.build_file_write` spans for the 35.7s write investigation.
 - **Reviews:** Opus reviewed voice, payments, publish signing and the drawing CRDT; Sonnet reviewed the editors. Every finding was fixed. The open verification gaps are recorded under ROADMAP "Canvas runtimes verification gaps".
 
-## ✅ RESOLVED 2026-11-08: main's Release goes green again: the 3a2c752db sweep's broken tests, guards and VS Code checks repaired, and the canvas webview is type-checked in CI (Release health)
+## ✅ RESOLVED 2026-11-08: the 3a2c752db sweep's failures, part 1: autonomous-delivery tests, cloud admission scoping, frontend ratchets and the VS Code extension checks (Release health)
 
 - **Autonomous-delivery tests and guards.** The `laneEntryTrigger.*` mocks keep the real `evaluateAutoRun` exports. `boardBudget` asserts the two cache keys one credit clears. `boardMilestones` reads date params from the query chunks instead of stringifying a self-referencing SQL object. The backlog-disposition report uses a raw `not exists` fragment: three round trips, and the query is scoped to the tenant. Its apply test now covers the tenant-scoped "Superseded by" quote. `kernel/accountLedger.test.ts` is new. The empty catches in `conductMarker.ts` and `incidentVoice.ts` now report.
 - **Cloud admission.** The three `executions` updates in `dispatchAdmission.ts` are scoped by tenant. `followUpRun.admission.test.ts` stubs the side modules that admission pulls in. The four silent `.catch(() => null)` sites in `fetchBuildError.ts` report through `reportedFallback`.
 - **Frontend ratchets.** The redundant `'use client'` in `KanbanTemplatePreviewPanel` is gone. `BoardBudgetControl` derives its display per board with no reset effects. Board rosters, investor milestones and Discovery each have their own client module (`boardRostersApi.ts`, `investorMilestonesApi.ts`, `discoveryApi.ts`), so `builderforceApi.ts`, `founderOpsApi.ts` and `TaskMgmtContent.tsx` are back under their ceilings. Session storage goes through `lib/storage.ts`.
 - **VS Code extension.**
   - `VoiceMarketplaceScreen.tsx` moved from the strict webview project to `webview/tsconfig.canvas.json`.
-  - The `type-check` script now runs `tsc -p webview/tsconfig.canvas.json`, so the canvas webview has CI coverage for the first time.
   - The `externalUrl` test feeds a real backslash (`"/\\evil.com"`). The resolver was already correct.
   - `knowledgeLinkedDenied.acceptance` closes and clears the folder's SQLite cache between runs.
   - The `--integration` esbuild branch gets `importMetaUrlShim`, so the real-VS Code activation test finds `node:sqlite`.
+- **Verified (Haiku, 2026-11-08) in the shared working tree:**
+  - api: all of these pass — `laneEntryTrigger.*`, `findOrCreateBoard`, `RuntimeService.policyGates`/`.landing`, `boardBudget`, `boardMilestones`, `backlogDispositionApply`/`Pass.report`, `accountLedger`, `followUpRun.admission`, `fetchBuildError`, `executionLandedEffects`, `laneCoordinatorAdmission`, `prConductSweep`, `conductMarker` and `validatorSlotBridge`.
+  - clients/vscode: the `externalUrl` and `knowledgeLinkedDenied` tests pass, and the integration bundle carries the shim.
+  - frontend: `useKanbanTemplateCheckout` and `TaskMgmtContent` pass.
+  - What is still red is in the open Release health entry in ROADMAP.md.
 
 ## ✅ RESOLVED 2026-11-08: a folder's knowledge lives in one SQLite file the editor and on-prem agent both open (Local-first · G03 · PRD 41 WS2)
 
@@ -173,7 +177,6 @@
   - SEO impressions now go through the KV hit buffer (`seo.impression`, published rows, per-IP limited) instead of a Postgres UPDATE per request.
 - **`.page-inner` retired.** Facts and RFP detail use `PageContainer width="readable"`, and both CSS rules are deleted.
 - **Existing translation bugs fixed.** `{idea}` was dropped in four `creationCanvas.noticeIdea*` keys (and German showed a different sentence), and the zh `{count}` arm was missing.
-
 
 ## ✅ RESOLVED 2026-11-08: sync pulls never skip a late commit, a push batches its events, and a purged dependency stops waiting (Local-first · sync residuals)
 

@@ -16,8 +16,42 @@
  * `sandboxCore.mjs` (`api/scripts/gen-sandbox-core-source.mjs`).
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { accessSync, constants as fsConstants } from 'node:fs';
 import { userInfo } from 'node:os';
 import { SHELL_CAPTURE_CHARS, keepTail } from './toolOutputPolicy.mjs';
+
+/**
+ * The binaries THIS process (which holds the run's credentials) executes — git, sudo, id, kill, pkill, chown, rm —
+ * are resolved to ABSOLUTE paths from a FIXED list of root-owned directories, never from the inherited `PATH`: a
+ * directory on `PATH` the model's shell can write would otherwise let it plant `git` or `sudo` and have the server run it.
+ */
+export const TRUSTED_BIN_DIRS = ['/usr/bin', '/bin', '/usr/sbin', '/sbin'];
+/** git alone may also come from `/usr/local/bin` (a source-built or pinned install). */
+const TRUSTED_GIT_DIRS = [...TRUSTED_BIN_DIRS, '/usr/local/bin'];
+/** The PATH handed to every privileged helper this process spawns (and to `sudo`'s own env). */
+export const TRUSTED_PATH = TRUSTED_BIN_DIRS.join(':');
+
+const trustedCache = new Map();
+
+/**
+ * `name` as an absolute path inside {@link TRUSTED_BIN_DIRS} (`git`: also `/usr/local/bin`). Resolved once and cached.
+ * Not found ⇒ the first trusted directory's path, so a spawn fails loudly (ENOENT) rather than searching `PATH`.
+ * Windows has no such layout: it keeps the bare name (local development only; there is no shell user there).
+ */
+export function trustedBinary(name, platform = process.platform) {
+  if (platform === 'win32') return name;
+  if (!/^[a-z][a-z0-9_-]*$/.test(name)) throw new Error(`not a binary name: ${name}`);
+  const hit = trustedCache.get(name);
+  if (hit) return hit;
+  const dirs = name === 'git' ? TRUSTED_GIT_DIRS : TRUSTED_BIN_DIRS;
+  let found = null;
+  for (const dir of dirs) {
+    try { accessSync(`${dir}/${name}`, fsConstants.X_OK); found = `${dir}/${name}`; break; } catch { /* next directory */ }
+  }
+  const resolved = found ?? `${dirs[0]}/${name}`;
+  trustedCache.set(name, resolved);
+  return resolved;
+}
 
 /** Finished jobs kept for a late poll; past this the oldest finished go first. */
 const MAX_JOBS = 32;
@@ -62,6 +96,8 @@ const SHELL_ENV_DENY = [
   /^BUILDERFORCE_/,
   /^ACTIONS_(ID_TOKEN_|RUNTIME_|CACHE_|RESULTS_)/,
   /^(GITHUB_TOKEN|GH_TOKEN|NODE_AUTH_TOKEN)$/,
+  // `COREPACK_*` is allowlisted for its settings (home, registry URL…), but its credential-bearing names are not.
+  /^COREPACK_.*(TOKEN|PASSWORD|SECRET|AUTH)/i,
 ];
 
 /** `NODE_OPTIONS` that preloads code (`--require`, `--import`, a loader) could run the server's code path in the
@@ -118,9 +154,10 @@ export function shellInvocation(command, { env = process.env, user = shellUser(e
     .filter(([name, value]) => SHELL_ENV_NAME.test(name) && typeof value === 'string' && !value.includes('\0'))
     .map(([name, value]) => `${name}=${value}`);
   return {
-    file: 'sudo',
+    file: trustedBinary('sudo'),
     args: ['-n', '-u', user, 'env', '-i', ...pairs, 'bash', '-lc', command],
-    env: { PATH: env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+    // The wrapper resolves `env` from the fixed trusted list, never from the inherited PATH.
+    env: { PATH: TRUSTED_PATH },
   };
 }
 
@@ -133,9 +170,12 @@ export function spawnShell(command, { cwd, stdio, extraEnv, env = process.env } 
 
 /** Run `args` as the shell user (a kill has to be delivered by the uid that owns the target). */
 function asShellUser(user, args) {
-  const p = spawn('sudo', ['-n', '-u', user, ...args], { stdio: 'ignore', env: { PATH: process.env.PATH || '/usr/bin:/bin' } });
-  p.on('error', (e) => console.error(`[sandbox] could not signal the shell user's processes: ${e.message}`));
-  p.unref();
+  return new Promise((resolve) => {
+    const p = spawn(trustedBinary('sudo'), ['-n', '-u', user, ...args], { stdio: 'ignore', env: { PATH: TRUSTED_PATH } });
+    p.on('error', (e) => { console.error(`[sandbox] could not signal the shell user's processes: ${e.message}`); resolve(); });
+    p.on('close', () => resolve());
+    p.unref();
+  });
 }
 
 /** SIGKILL the job's whole process group (it was spawned detached, so it leads one): a
@@ -148,7 +188,7 @@ export function killTree(child) {
     try { child.kill('SIGKILL'); } catch { /* already gone */ }
   }
   const user = shellUser();
-  if (user && child.pid) asShellUser(user, ['kill', '-KILL', '--', `-${child.pid}`]);
+  if (user && child.pid) asShellUser(user, [trustedBinary('kill'), '-KILL', '--', `-${child.pid}`]);
 }
 
 /** Kill EVERY process the shell user owns — a daemon that escaped its process group (`setsid`) included. ONLY where
@@ -156,7 +196,7 @@ export function killTree(child) {
  *  other runs' processes share the user and must survive a run's close. */
 export function sweepShellProcesses() {
   const user = shellUser();
-  if (user && process.env.BUILDERFORCE_SHELL_SWEEP === '1') asShellUser(user, ['kill', '-KILL', '--', '-1']);
+  return user && process.env.BUILDERFORCE_SHELL_SWEEP === '1' ? asShellUser(user, [trustedBinary('kill'), '-KILL', '--', '-1']) : Promise.resolve();
 }
 
 /** Whether anything in the child's process group is still alive (signal 0 delivers nothing). EPERM means the
@@ -166,29 +206,45 @@ function groupAlive(child) {
 }
 
 /** Run a file synchronously; a non-zero exit is a thrown, descriptive error (these are all fail-closed setup steps). */
-function mustRun(file, args, what) {
-  const r = spawnSync(file, args, { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`${what} (${file} exited ${r.status}): ${String(r.stderr || r.stdout || r.error || '').trim().slice(0, 300)}`);
+function mustRun(name, args, what) {
+  const r = spawnSync(trustedBinary(name), args, { encoding: 'utf8', env: { PATH: TRUSTED_PATH } });
+  if (r.status !== 0) throw new Error(`${what} (${name} exited ${r.status}): ${String(r.stderr || r.stdout || r.error || '').trim().slice(0, 300)}`);
   return String(r.stdout || '');
+}
+
+/** Run a binary for its side effect only: a failure (nothing to kill, no crontab) is the normal case. */
+function tryRun(name, args) {
+  spawnSync(trustedBinary(name), args, { stdio: 'ignore', env: { PATH: TRUSTED_PATH } });
+}
+
+/** The PATH directories the shell user must not be able to write: absolute, deduplicated, free of NUL. */
+function pathDirsOf(pathValue) {
+  return [...new Set(String(pathValue || '').split(':').filter((d) => d.startsWith('/') && !d.includes('\0')))];
 }
 
 /**
  * Prove the shell user is isolated, AS that user. Every line must hold or the sandbox refuses to serve:
  * it cannot write the Docker socket (root by another name), cannot sudo, cannot read this process's environ
- * or its parent's, and can write the workspace. Also verifies the account itself has only its own group.
+ * (and its PARENT's — the pids are passed in, not read from `$PPID` of the probe's own shell), cannot write any
+ * directory on this process's PATH (a planted binary there would be run by whatever resolves it), and can write the
+ * workspace. Also verifies the account itself has only its own group.
  * Throws a descriptive error naming the failed check.
  */
-export function verifyShellIsolation({ user, workdir }) {
+export function verifyShellIsolation({ user, workdir, serverPid = process.pid, parentPid = process.ppid, pathDirs = pathDirsOf(process.env.PATH) }) {
   const groups = mustRun('id', ['-Gn', user], `could not read ${user}'s groups`).trim().split(/\s+/);
   if (groups.length !== 1 || groups[0] !== user) throw new Error(`the shell user must belong only to its own group; ${user} is in: ${groups.join(' ')}`);
+  for (const pid of [serverPid, parentPid]) if (!Number.isSafeInteger(pid) || pid < 1) throw new Error(`the isolation probe needs real pids, got ${pid}`);
+  // Positional args: $1 workspace, $2 server pid, $3 its parent pid, then every PATH directory.
   const script = [
     'if test -w /var/run/docker.sock; then echo "can write /var/run/docker.sock"; exit 11; fi',
     'if sudo -n true >/dev/null 2>&1; then echo "can sudo"; exit 12; fi',
-    `if cat /proc/${process.pid}/environ >/dev/null 2>&1; then echo "can read the sandbox server's environ"; exit 13; fi`,
-    'if cat /proc/$PPID/environ >/dev/null 2>&1; then echo "can read its parent environ"; exit 14; fi',
+    'if cat "/proc/$2/environ" >/dev/null 2>&1; then echo "can read the sandbox server\'s environ"; exit 13; fi',
+    'if cat "/proc/$3/environ" >/dev/null 2>&1; then echo "can read the server\'s parent environ"; exit 14; fi',
     'if ! test -w "$1"; then echo "cannot write the workspace"; exit 15; fi',
+    'shift 3',
+    'for d in "$@"; do if test -w "$d"; then echo "can write $d, a directory on the server\'s PATH"; exit 16; fi; done',
   ].join('\n');
-  const r = spawnSync('sudo', ['-n', '-u', user, 'env', '-i', `PATH=${process.env.PATH || '/usr/bin:/bin'}`, 'bash', '-c', script, 'bash', workdir], { encoding: 'utf8' });
+  const r = spawnSync(trustedBinary('sudo'), ['-n', '-u', user, 'env', '-i', `PATH=${TRUSTED_PATH}`, 'bash', '-c', script, 'bash', workdir, String(serverPid), String(parentPid), ...pathDirs], { encoding: 'utf8', env: { PATH: TRUSTED_PATH } });
   if (r.status !== 0) throw new Error(`the run shell is not isolated (${user}): ${String(r.stdout || r.stderr || r.error || `exit ${r.status}`).trim().slice(0, 300)}`);
 }
 
@@ -201,17 +257,22 @@ export function verifyShellIsolation({ user, workdir }) {
  */
 export function provisionShellUser({ user, workdir }) {
   const owner = userInfo().username;
-  const exists = spawnSync('id', ['-u', user], { stdio: 'ignore' }).status === 0;
+  const exists = spawnSync(trustedBinary('id'), ['-u', user], { stdio: 'ignore', env: { PATH: TRUSTED_PATH } }).status === 0;
   if (exists) {
     const listing = mustRun('sudo', ['-n', '-l', '-U', user], `could not read ${user}'s sudo rights`);
     if (!/is not allowed to run sudo/.test(listing)) throw new Error(`the existing user ${user} has sudo rights; refusing to run the shell as it`);
+    // A self-hosted runner keeps the account between jobs: nothing a previous run left may survive into this one —
+    // not a process, a cron job, nor a dotfile (a `.bashrc` or `.npmrc` planted last run would execute in this one).
+    tryRun('sudo', ['-n', trustedBinary('pkill'), '-KILL', '-u', user]);
+    tryRun('sudo', ['-n', trustedBinary('crontab'), '-r', '-u', user]);
+    mustRun('sudo', ['-n', 'sh', '-c', 'for p in "$2"/* "$2"/.[!.]* "$2"/..?*; do if [ -e "$p" ] || [ -L "$p" ]; then "$1" -rf -- "$p"; fi; done', 'sh', trustedBinary('rm'), `/home/${user}`], `could not wipe ${user}'s home`);
   } else {
     mustRun('sudo', ['-n', 'useradd', '--create-home', '--shell', '/bin/bash', '--user-group', user], `could not create ${user}`);
   }
   const dropIn = '/etc/sudoers.d/zz-bf-agent';
   const staging = '/etc/sudoers.d/.zz-bf-agent.new'; // sudo ignores names with a dot: never loaded half-written
   mustRun('sudo', ['-n', 'sh', '-c', 'set -e; printf "Defaults:%s !use_pty\\n" "$1" > "$2"; chmod 0440 "$2"; visudo -cf "$2"; mv -f "$2" "$3"', 'sh', owner, staging, dropIn], 'could not install the sudoers drop-in');
-  mustRun('sudo', ['-n', 'chown', '-R', `${user}:${user}`, workdir], 'could not hand the checkout to the shell user');
+  mustRun('sudo', ['-n', trustedBinary('chown'), '-R', `${user}:${user}`, workdir], 'could not hand the checkout to the shell user');
   verifyShellIsolation({ user, workdir });
   return user;
 }
@@ -223,7 +284,21 @@ export function provisionShellUser({ user, workdir }) {
  */
 export function releaseShellWorkspace({ workdir }) {
   const owner = userInfo().username;
-  mustRun('sudo', ['-n', 'sh', '-c', 'set -e; rm -rf -- "$1/.git"; chown -R "$2" "$1"', 'sh', workdir, owner], 'could not release the workspace');
+  mustRun('sudo', ['-n', 'sh', '-c', 'set -e; "$3" -rf -- "$1/.git"; "$4" -R "$2" "$1"', 'sh', workdir, owner, trustedBinary('rm'), trustedBinary('chown')], 'could not release the workspace');
+}
+
+/**
+ * The SYNCHRONOUS teardown for a signal handler (an Actions cancel or timeout SIGTERMs the runner and skips its `finally`):
+ * kill every process the shell user owns, then hand the checkout back. Never throws; returns the failure message or null.
+ */
+export function teardownShellSync({ user, workdir }) {
+  tryRun('sudo', ['-n', trustedBinary('pkill'), '-KILL', '-u', user]);
+  try {
+    releaseShellWorkspace({ workdir });
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 

@@ -6,7 +6,8 @@
 
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from './lenses';
-import { weakMemo } from './memo';
+import { devFreeze, weakMemo } from './memo';
+import { linkEdge } from './scene/incident';
 import { cmp } from './order';
 
 /** Nodes at a phone's width (PRD 38 §4.6: "the view opens focused, top 60"). */
@@ -66,12 +67,11 @@ export function focusGraph(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>, max: 
     // no per-graph incident index is built for a selection that is usually a single node.
     const added = new Set(extra.map((n) => n.ref as string));
     const touching = new Map<string, KEdge[]>();
-    const link = (ref: string, e: KEdge): void => { const l = touching.get(ref); if (l) l.push(e); else touching.set(ref, [e]); };
     for (const e of graph.edges) {
         const f = added.has(e.from), t = added.has(e.to);
         if (!f && !t) continue;
-        if (f) link(e.from, e);
-        if (t && e.to !== e.from) link(e.to, e);
+        if (f) linkEdge(touching, e.from, e);
+        if (t && e.to !== e.from) linkEdge(touching, e.to, e);
     }
     const edges = new Set<KEdge>();
     for (const n of extra) for (const e of touching.get(n.ref) ?? []) if (refs.has(e.from) && refs.has(e.to)) edges.add(e);
@@ -176,7 +176,7 @@ function computePartitionMatrix(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>):
     return { partitions: names.filter((_, i) => seen[i]).sort(), cells };
 }
 
-const matrixMemo = weakMemo(computePartitionMatrix, (g) => g.edges, (g) => g.nodes);
+const matrixMemo = weakMemo((g: Pick<KnowledgeGraph, 'nodes' | 'edges'>) => devFreeze(computePartitionMatrix(g)), (g) => g.edges, (g) => g.nodes);
 
 /** The partition matrix of a graph, computed ONCE per graph (Insights and the matrix component share it): read-only. */
 export const partitionMatrix = (graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): { partitions: string[]; cells: Map<string, PartitionCell> } => matrixMemo(graph);

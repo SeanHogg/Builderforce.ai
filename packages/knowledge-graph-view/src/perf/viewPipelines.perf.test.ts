@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Profiling harness (a measurement, not a gate): which pure computation of each view blocks the main thread for the
  * real user graph that freezes the UI (see `PERF_STATS`). Skipped unless `KG_PERF=1`.

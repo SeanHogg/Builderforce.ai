@@ -33,37 +33,17 @@ import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
-import { buildBundle, mergeBody, readBundled } from './knowledgeBundles';
-import type { ExtractedLoc, KnowledgeLedgerPort } from './knowledgeLedger';
-import { KnowledgeSyncError } from './sync/knowledgeSyncPorts';
+import { readBundled } from './knowledgeBundles';
+import type { KnowledgeLedgerPort } from './knowledgeLedger';
 
 const SOURCE = 'application/knowledge/knowledgeBlobs.ts';
 /** Blobs fetched per graph build when the bundle is cold; the rest arrive on the next build. */
 export const MAX_BLOB_FETCHES_PER_BUILD = 600;
 const FETCH_CONCURRENCY = 8;
 const LIST_PAGE = 1000;
-/** Re-merges of a legacy upload whose body moved under it before it gives up (409). */
-const PUT_ATTEMPTS = 3;
 
 type Bundle = Record<string, Extracted[]>;
 export interface SourceEntry { path: string; hash: string }
-
-/** A body that was unreadable and has been rewritten from an upload: the old index row and what the rewritten body keeps. */
-export interface HealedBody {
-  hash: string;
-  prior: Pick<ExtractedLoc, 'sourceRefs'>;
-  kept: { entries: readonly Pick<Extracted, 'sourceRef'>[]; entryless: readonly string[] };
-}
-
-/**
- * The ledger the adapter stores through, WITH the heal it owes: a ledger is never given without its hook. `onHealed` runs inside
- * the transaction (under the sync lock) that wrote the healed body's index row; the manifest work a heal owes the other roots
- * belongs to the application (`knowledgeHeal.ts`), never to this adapter.
- */
-export interface LedgerBinding {
-  ledger: KnowledgeLedgerPort;
-  onHealed(locked: KnowledgeLedgerPort, healed: HealedBody): Promise<unknown>;
-}
 
 const seg = (s: string): string => encodeURIComponent(s);
 
@@ -162,8 +142,7 @@ export async function listRootSources(
   return [...byId.values()];
 }
 
-export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, binding?: LedgerBinding): ExtractedCachePort {
-  const ledger = binding?.ledger;
+export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, projectId: number, ledger?: KnowledgeLedgerPort): ExtractedCachePort {
   const keys = knowledgeBlobKeys(tenantId, projectId);
   const bucket = (): R2Bucket => {
     if (!env.UPLOADS) throw new Error('knowledge storage (R2) is not configured');
@@ -211,46 +190,6 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
     async getMany(hashes) {
       if (!env.UPLOADS) return new Map();
       return bodiesOf(env.UPLOADS, hashes);
-    },
-
-    /**
-     * The legacy per-hash upload. With a ledger it MERGES by `sourceRef` with the stored body (the same `mergeBody` as a
-     * pack) under the project's sync lock, and stores the result as a one-body bundle + index row, so a pack's
-     * read-merge-write sees the change (its basis key moves) and neither evicts the other's entries. Without a ledger
-     * (a store with no database) it replaces the per-hash object, as before.
-     */
-    async put(hash, extracted) {
-      if (ledger) {
-        // As the pack path: read + merge + write the bundle OUTSIDE the lock (no R2 I/O while it is held), then one locked,
-        // CONDITIONAL index write. A body that moved meanwhile (a pack, another upload) is merged again, a few times.
-        let written = 0;
-        for (let attempt = 0; attempt < PUT_ATTEMPTS && written === 0; attempt++) {
-          const loc = (await ledger.index.locate([hash]))[0];
-          const prior = loc?.bundleKey ?? null;
-          const current = (await bodiesOf(bucket(), [hash])).get(hash);
-          // An index row whose stored body cannot be read is healed (the upload is written on its own, the index naming only its sources), never wedged on.
-          const unreadable = !!loc && !current;
-          if (unreadable) reportCaughtError(new Error(`knowledge: the stored body of ${hash} could not be read; rewritten from the upload`), { source: SOURCE, operation: 'healUnreadableBody', level: 'warning', context: { hash } });
-          const merged = mergeBody(unreadable ? undefined : loc, current, extracted);
-          const bundle = buildBundle(tenantId, [{ hash, ...merged }]);
-          await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
-          written = await ledger.exclusive(async (locked) => {
-            const n = await locked.index.upsert(bundle.locs, new Map([[hash, prior]]));
-            // The roots that shared the lost body send it again on their next sync: the application's hook, in this transaction.
-            if (n > 0 && unreadable) await binding!.onHealed(locked, { hash, prior: loc!, kept: merged });
-            return n;
-          });
-        }
-        if (written === 0) throw new KnowledgeSyncError(409, 'body_conflict', `the extracted body of ${hash} kept changing; retry`, { hashes: [hash] });
-      } else {
-        await writeJson(bucket(), keys.extracted(hash), extracted);
-      }
-      // A root-level output has no `markStale` of its own: register it now.
-      if (!hash.startsWith('~')) return;
-      for (const e of extracted) {
-        const parts = splitSourceRef(e.sourceRef);
-        if (parts) await putSource(parts.rootId, parts.path, hash);
-      }
     },
 
     async setSource(sourceRef: NodeRef, hash: string) {

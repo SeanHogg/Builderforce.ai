@@ -14,7 +14,7 @@
  * a root digest and a bucket that differ, fetches that bucket's leaves, and `leafDelta` lists exactly those files as
  * differing; the pack builder then asks `have`, the index answers "not held", and the body is sent again. Nothing else is.
  *
- * Runs inside the pack's (or the legacy upload's) transaction, under the project's sync lock, after the index row is written.
+ * Runs inside the pack's transaction, under the project's sync lock, after the index row is written.
  * A pack calls it AFTER its own root's generation advanced, so the applying root is covered too: its OTHER paths that shared
  * the lost hash (and that this pack did not re-supply) are invalidated the same way. A root with no acknowledged state (no
  * roots row) is skipped: its next sync is a full pack, which clears its leaves, so nothing is lost by leaving them.
@@ -22,7 +22,6 @@
 import { bucketOf, fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import { splitSourceRef } from '@builderforce/agent-tools';
-import type { HealedBody } from './knowledgeBlobs';
 import { commitLeaves, ensureBuckets } from './knowledgeBuckets';
 import { ENTRYLESS_PREFIX, type ExtractedLoc, type KnowledgeLedgerPort } from './knowledgeLedger';
 
@@ -43,10 +42,6 @@ export function lostRefsOf(
   const named = loc.sourceRefs.map((r) => (r.startsWith(ENTRYLESS_PREFIX) ? r.slice(ENTRYLESS_PREFIX.length) : r));
   return [...new Set(named)].filter((r) => !keep.has(r));
 }
-
-/** The legacy upload's hook (`r2ExtractedCache`): the heal of one rewritten body, run inside its locked transaction. */
-export const invalidateHealedBody = (locked: KnowledgeLedgerPort, healed: HealedBody): Promise<InvalidatedRoot[]> =>
-  invalidateLostBodies(locked, [{ hash: healed.hash, refs: lostRefsOf(healed.prior, healed.kept) }]);
 
 /**
  * Makes every root that named a lost body send it again on its next sync. The caller holds the project's sync lock and runs

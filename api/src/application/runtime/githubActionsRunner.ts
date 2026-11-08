@@ -29,7 +29,7 @@
  * `npm install` may not have run.
  */
 
-import { SANDBOX_CORE_IMPORTS, SANDBOX_CORE_INLINE } from './generated/sandboxCoreSource';
+import { SANDBOX_CORE_IMPORTS, SANDBOX_CORE_INLINE, WORKSPACE_AGENT_SOURCE } from './generated/sandboxCoreSource';
 import { BUILDERFORCE_AGENT_OIDC_AUDIENCE } from './githubActionsWorkflow';
 
 /**
@@ -135,39 +135,71 @@ function cancelWatch(kill) {
   return () => clearInterval(timer);
 }
 
-/** The unprivileged user every model-run shell runs as (no sudo; shares the checkout through the runner's group). */
+/** The unprivileged user every model-run shell runs as: its own group, no sudo, and it owns the checkout while the run lasts. */
 const SHELL_USER = 'bfagent';
 
-async function serve() {
-  // BEFORE any request is served. (1) A checkout made by an older tenant workflow (no \`persist-credentials: false\`)
-  // holds the job's GITHUB_TOKEN in .git/config: remove it. (2) The model's shell must not share this process's uid
-  // (it would read /proc/<pid>/environ — BUILDERFORCE_TOKEN and the OIDC request token — or /proc/<pid>/mem), so
-  // create the sudo-less shell user and open the checkout to its group. Both fail CLOSED.
+/** The workspace helper (api/container/workspaceAgent.mjs, verbatim): the only code that touches the checkout, run as the shell user. */
+const WORKSPACE_AGENT_SOURCE = ${JSON.stringify(WORKSPACE_AGENT_SOURCE)};
+
+/**
+ * BEFORE any request is served. (1) A checkout made by an older tenant workflow (no \`persist-credentials: false\`)
+ * holds the job's GITHUB_TOKEN in .git/config: remove it. (2) The model's shell must not share this process's uid (it
+ * would read /proc/<pid>/environ — BUILDERFORCE_TOKEN and the OIDC request token — or /proc/<pid>/mem), so create the
+ * sudo-less shell user with its own group, hand it the checkout, and PROVE it is isolated. All of it fails CLOSED.
+ */
+async function isolateShell() {
   const scrubbed = await scrubCheckoutCredentials(WORKDIR);
   if (!scrubbed.ok) throw new Error('could not remove the persisted checkout credential: ' + String(scrubbed.output || '').trim().slice(0, 300));
   provisionShellUser({ user: SHELL_USER, workdir: WORKDIR });
   process.env.BUILDERFORCE_SHELL_USER = SHELL_USER;
-  const spec = await op('spec', {});
-  if (!spec || spec.error) throw new Error('could not load the sandbox spec: ' + ((spec && spec.error) || 'unknown'));
-  const box = createSandboxBox({
-    spec,
-    workdir: WORKDIR,
-    branch: (spec.repo && spec.repo.headBranch) || null,
-    jobIdPrefix: bootJobIdPrefix(),
-    emit: (toolName, detail, result) => {
-      op('event', { toolName, category: 'tool', detail, result: String(result).slice(0, 300) })
-        .catch((error) => console.error('[bf-runner] ' + toolName + ' event not recorded', error));
-    },
-  });
-  await op('event', {
-    toolName: 'runtime.checkout', category: 'planning',
-    detail: { workdir: WORKDIR, branch: box.branch },
-    result: 'serving the run sandbox from the GitHub Actions checkout at ' + WORKDIR,
-  }).catch((error) => console.error('[bf-runner] checkout telemetry failed', error));
+  // One run owns this machine: at the end every process the shell user owns is swept (the container never does).
+  process.env.BUILDERFORCE_SHELL_SWEEP = '1';
+}
 
-  // Serve until the run releases us (finished, cancelled, or parked on a question). However
-  // that ends, the run's background jobs end with it.
+/** The helper script in a directory only this process can write, readable by the shell user. */
+async function writeWorkspaceHelper() {
+  const dir = await mkdtemp(join(tmpdir(), 'bf-helper-'));
+  await chmod(dir, 0o755);
+  const file = join(dir, 'workspaceAgent.mjs');
+  await writeFile(file, WORKSPACE_AGENT_SOURCE, { mode: 0o644 });
+  return file;
+}
+
+async function serve() {
+  let isolated = false;
+  let box = null;
   try {
+    try {
+      await isolateShell();
+      isolated = true;
+    } catch (e) {
+      // Say WHY before exiting, so the engine is not left waiting out its own timeout for a runner that is already gone.
+      const reason = e instanceof Error ? e.message : String(e);
+      await op('event', { toolName: 'runtime.isolation', category: 'planning', detail: { phase: 'failed' }, result: ('the run shell could not be isolated: ' + reason).slice(0, 300) })
+        .catch((error) => console.error('[bf-runner] isolation failure not reported', error));
+      throw e;
+    }
+    const helperPath = await writeWorkspaceHelper();
+    const spec = await op('spec', {});
+    if (!spec || spec.error) throw new Error('could not load the sandbox spec: ' + ((spec && spec.error) || 'unknown'));
+    box = createSandboxBox({
+      spec,
+      workdir: WORKDIR,
+      helperPath,
+      branch: (spec.repo && spec.repo.headBranch) || null,
+      jobIdPrefix: bootJobIdPrefix(),
+      emit: (toolName, detail, result) => {
+        op('event', { toolName, category: 'tool', detail, result: String(result).slice(0, 300) })
+          .catch((error) => console.error('[bf-runner] ' + toolName + ' event not recorded', error));
+      },
+    });
+    await op('event', {
+      toolName: 'runtime.checkout', category: 'planning',
+      detail: { workdir: WORKDIR, branch: box.branch },
+      result: 'serving the run sandbox from the GitHub Actions checkout at ' + WORKDIR,
+    }).catch((error) => console.error('[bf-runner] checkout telemetry failed', error));
+
+    // Serve until the run releases us (finished, cancelled, or parked on a question).
     for (;;) {
       const next = await op('sandbox_next', {});
       if (!next || next.close) return;
@@ -182,7 +214,18 @@ async function serve() {
       await op('sandbox_result', { id, result }).catch((error) => console.error('[bf-runner] result not delivered', error));
     }
   } finally {
-    await closeSandboxBox(box);
+    // However it ends: the run's background jobs and helper end with it, every process the shell user owns is swept,
+    // and the checkout goes back to the runner WITHOUT its .git (shell-written config and hooks must never be run by
+    // the job's later steps, such as actions/checkout's post step).
+    if (box) await closeSandboxBox(box);
+    if (isolated) {
+      await sweepShellProcesses();
+      try {
+        releaseShellWorkspace({ workdir: WORKDIR });
+      } catch (e) {
+        console.error('[bf-runner] could not release the workspace: ' + (e instanceof Error ? e.message : String(e)));
+      }
+    }
   }
 }
 

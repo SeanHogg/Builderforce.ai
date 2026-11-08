@@ -62,7 +62,16 @@ export async function proxyGitSmartHttp(
   token: string,
   subPath: string,
   method: 'GET' | 'POST',
+  /** A door that scopes what its credential may push (the container-git door): given the receive-pack request body, a
+   *  refusal message or null. A compressed body cannot be inspected, so it is refused outright when this is set. */
+  authorizePush?: (body: Uint8Array) => string | null,
 ): Promise<Response> {
+  const body = method === 'POST' ? await c.req.arrayBuffer() : undefined;
+  if (authorizePush && subPath === 'git-receive-pack') {
+    if (c.req.header('Content-Encoding')) return c.json({ error: 'a compressed push cannot be scoped to the run branch' }, 403);
+    const denial = authorizePush(new Uint8Array(body ?? new ArrayBuffer(0)));
+    if (denial) return c.json({ error: denial }, 403);
+  }
   const result = await executeGitProxy({
     repo,
     token,
@@ -70,7 +79,7 @@ export async function proxyGitSmartHttp(
     method,
     query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
     contentType: c.req.header('Content-Type'),
-    body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
+    body,
   });
   if (!result.ok) return c.json({ error: result.error }, 400);
   return result.response;

@@ -16,7 +16,11 @@ import { useSelection } from '../../useSelection';
 import { stationOfRef } from '../stations';
 import { useShowInTower } from '../useShowInTower';
 import type { PanelProps } from '../registry';
-import { groupAntiPatterns } from './antiPatternGroups';
+import type { AntiPatternGroup } from './antiPatternGroups';
+import { useComputed } from '../../compute/useComputed';
+import { isSmall } from '../../compute/size';
+
+const NO_GROUPS: AntiPatternGroup[] = [];
 import { AntiPatternList } from './AntiPatternList';
 import { AntiPatternPreview } from './AntiPatternPreview';
 import { PatternMatrixTable } from './PatternMatrixTable';
@@ -32,7 +36,7 @@ export function PatternsPanel({ graph, labels, surface, source, onShow, onCamera
     const selection = useSelection();
     const matrix = useMemo(() => patternMatrix(graph, surface.stations), [graph, surface.stations]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
-    const groups = useMemo(() => groupAntiPatterns(graph.findings, { layer, model: surface.stations }), [graph.findings, layer, surface.stations]);
+    const groups = useComputed('antiPatterns', { graph, layer, stations: surface.stations }, [graph, layer, surface.stations], NO_GROUPS, { inline: isSmall(graph), scope: [graph] }).value ?? NO_GROUPS;
     const chosen = useMemo(() => groups.filter((g) => selection.selected.has(g.id)), [groups, selection.selected]);
     const tower = useShowInTower({ surface, onShow, onCamera, cameras });
     // The selection belongs to what is listed: a different layer is a different list.

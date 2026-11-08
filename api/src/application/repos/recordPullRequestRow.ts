@@ -88,7 +88,8 @@ function rowValues(input: RecordPullRequestInput) {
 /**
  * Insert a pull_requests row, or — when the provider's own identity `(tenant, repo, number)` already has one (the PR
  * reconciler inserts a row for every PR it sees, possibly before we get to) — take that row over: the task, status,
- * branch and marker are set from this write. Returns the row.
+ * branch and marker are set from this write. Returns the row and whether THIS call wrote it: `written: false` is a row the
+ * reconciler already settled (`merged`, `closed`), returned untouched - a caller must not act on it as if it had recorded it.
  */
 export async function upsertPullRequestRow(db: Db | Tx, input: RecordPullRequestInput) {
   const values = rowValues(input);
@@ -102,9 +103,17 @@ export async function upsertPullRequestRow(db: Db | Tx, input: RecordPullRequest
         taskId: values.taskId, status: values.status, url: values.url, branchName: values.branchName,
         baseBranch: values.baseBranch, platformDraftExecutionId: values.platformDraftExecutionId, updatedAt: values.updatedAt,
       },
+      // A row the reconciler already settled (`merged`, `closed`) is final: this write is a late echo of an earlier state
+      // (a retried open, the orphan sweep's recovery) and must not reopen it or hand it a draft marker.
+      setWhere: sql`${pullRequests.status} not in ('merged', 'closed')`,
     })
     .returning();
-  return row;
+  if (row) return { row, written: true as const };
+  // The conflict was skipped by `setWhere`: return the settled row untouched, as the caller expects a row.
+  const [settled] = await db.select().from(pullRequests)
+    .where(scopedToTenant(pullRequests, input.tenantId, eq(pullRequests.repoId, values.repoId!), eq(pullRequests.number, values.number!)))
+    .limit(1);
+  return { row: settled, written: false as const };
 }
 
 /** Insert a pull_requests row and return it. */

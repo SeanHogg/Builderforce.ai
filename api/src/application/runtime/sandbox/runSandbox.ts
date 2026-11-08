@@ -14,7 +14,7 @@
  * re-opens and retries once: the ticket branch already carries every committed write, so
  * a fresh clone IS the run's working tree.
  */
-import type { ShellJobStart, ShellJobStatus, ShellResult } from '@builderforce/agent-tools';
+import type { ShellGit, ShellJobStart, ShellJobStatus, ShellResult } from '@builderforce/agent-tools';
 import type { SandboxOpenSpec } from './sandboxOpenSpec';
 import { isSandboxCapacityFailure } from './sandboxCapacity';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
@@ -69,6 +69,9 @@ export interface RunSandbox {
   run(command: string, signal?: AbortSignal, timeoutMs?: number): Promise<ShellResult>;
   /** Background jobs; absent ⇒ the sandbox runs everything in the foreground. */
   jobs?: SandboxJobs;
+  /** The remote half of `git_sync_latest` / `git_undo` / `git_redo`: the clone has no credential or network, so the
+   *  sandbox server fetches and pushes through its private mirror. Absent ⇒ the git tools talk to `origin` themselves. */
+  git?: ShellGit;
   /** The project's fast checks over the edits since the last drain — null when nothing
    *  was judged (or the run's levers do not run them). */
   checks(): Promise<SandboxCheckVerdict | null>;
@@ -135,6 +138,23 @@ export function sandboxJobsOver(request: SandboxRequest): SandboxJobs {
   };
 }
 
+/** One `/sandbox/git` request to the sandbox — a transport's own way of asking. */
+export type SandboxGitRequest = (body: Record<string, unknown>) => Promise<{ ok: boolean; error?: string; base?: string; output?: string }>;
+
+/** {@link ShellGit} over any transport — ONE mapping for both. */
+export function sandboxGitOver(request: SandboxGitRequest): ShellGit {
+  return {
+    sync: async (opts) => {
+      const r = await request({ op: 'sync', ...(opts?.baseBranch ? { base: opts.baseBranch } : {}) });
+      return { ok: r.ok === true, ...(r.error ? { error: r.error } : {}), ...(r.base ? { baseBranch: r.base } : {}) };
+    },
+    publish: async (opts) => {
+      const r = await request({ op: 'publish', force: opts.force });
+      return { ok: r.ok === true, ...(r.error ? { error: r.error } : {}), ...(r.output ? { output: r.output } : {}) };
+    },
+  };
+}
+
 /** A `/sandbox/checks` reply's verdict, or null when nothing was judged — ONE parse for both transports. */
 export function toCheckVerdict(r: unknown): SandboxCheckVerdict | null {
   const v = r && typeof r === 'object' ? (r as { verdict?: SandboxCheckVerdict | null }).verdict : null;
@@ -197,6 +217,12 @@ export function createContainerSandbox(args: {
     // A recycled instance has lost its jobs, so only a START re-opens it; a poll or kill
     // there answers `unknown` rather than cloning a repo to look for a job that is gone.
     jobs: sandboxJobsOver(<T>(path: SandboxJobPath, body: Record<string, unknown>, signal?: AbortSignal) => call<T>(path, body, signal, path === '/sandbox/job/start').catch(failed)),
+    // A sync may re-open a recycled instance (a fresh clone of the branch is a correct place to sync into); a PUBLISH
+    // may not: a fresh clone holds none of the run's local commits, so "nothing to publish" would hide lost work.
+    git: {
+      sync: (opts) => sandboxGitOver((body) => call<{ ok: boolean; error?: string; base?: string }>('/sandbox/git', body).catch(failed)).sync(opts),
+      publish: (opts) => sandboxGitOver((body) => call<{ ok: boolean; error?: string; output?: string }>('/sandbox/git', body, undefined, false).catch(failed)).publish(opts),
+    },
     // A recycled instance has drained nothing: a fresh clone has no edits to judge.
     checks: async () => toCheckVerdict(await call<unknown>('/sandbox/checks', {}, undefined, false).catch(failed)),
     close: async () => {

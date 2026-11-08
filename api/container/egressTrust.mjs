@@ -8,7 +8,7 @@
  * bundle (system roots + the platform CA) under /tmp and points the tools' env at it.
  * Imported once by server.mjs; spawned shells inherit `process.env`. No CA file ⇒ no-op.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,10 +23,15 @@ export function trustEgressCa(env = process.env, caPath = EGRESS_CA_PATH, system
     delete env.NODE_EXTRA_CA_CERTS;
     return null;
   }
-  const bundlePath = join(outDir, 'bf-egress-ca-bundle.crt');
+  let bundlePath;
   try {
+    // A FRESH directory this process creates (never a fixed /tmp name another user could pre-create, symlink or swap).
+    // 0755 / 0644: the model's shell (another uid) must be able to READ the bundle through GIT_SSL_CAINFO & co., never write it.
+    const dir = mkdtempSync(join(outDir, 'bf-egress-ca-'));
+    chmodSync(dir, 0o755);
+    bundlePath = join(dir, 'bundle.crt');
     const system = existsSync(systemBundle) ? readFileSync(systemBundle, 'utf8') : '';
-    writeFileSync(bundlePath, `${system}\n${readFileSync(caPath, 'utf8')}\n`);
+    writeFileSync(bundlePath, `${system}\n${readFileSync(caPath, 'utf8')}\n`, { mode: 0o644 });
   } catch (error) {
     // Never crash boot over trust setup: the sandbox still serves; TLS to intercepted hosts fails loudly.
     console.error(`egressTrust: could not write the CA bundle: ${error?.message ?? error}`);

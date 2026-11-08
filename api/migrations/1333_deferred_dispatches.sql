@@ -8,7 +8,12 @@
 --
 -- `kind` is the dispatcher (one pending row per tenant + ticket + kind); `payload` is `{ dispatchPayload, meta }`
 -- (the dispatch params and what the kind's after-start bookkeeping needs). `claimed_at` is a lease: a claim older
--- than the sweep's lease is retakeable, so a tick that died mid-batch does not strand its rows.
+-- than the sweep's lease is retakeable, so a tick that died mid-batch does not strand its rows; it is also the
+-- fencing token the sweep settles under (a stale holder cannot overwrite the row's new holder).
+--
+-- Retention: the sweep deletes `done` / `abandoned` rows older than 14 days (a bounded batch per tick).
+-- Accepted: a PENDING security row cascaded away by deleting its task never runs its `onAbandoned` hook (the audit
+-- left `running`); the audit has its own staleness handling, so nothing here compensates for it.
 CREATE TABLE IF NOT EXISTS deferred_dispatches (
   id              BIGSERIAL PRIMARY KEY,
   tenant_id       INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -31,3 +36,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_deferred_dispatches_pending
 
 CREATE INDEX IF NOT EXISTS idx_deferred_dispatches_due
   ON deferred_dispatches (next_attempt_at) WHERE state = 'pending';
+
+-- The sweep's retention delete (settled rows past 14 days) walks this instead of the whole table.
+CREATE INDEX IF NOT EXISTS idx_deferred_dispatches_settled
+  ON deferred_dispatches (updated_at) WHERE state IN ('done', 'abandoned');
+
+-- The task_id foreign key's cascade (deleting a task) scans by task.
+CREATE INDEX IF NOT EXISTS idx_deferred_dispatches_task
+  ON deferred_dispatches (task_id);

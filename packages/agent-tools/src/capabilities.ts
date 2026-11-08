@@ -251,6 +251,21 @@ export interface ShellCapability {
    * IS the source of truth and the commands are unchanged.
    */
   trackedBranch?: string;
+  /**
+   * The remote half of the history-moving git verbs, for a shell whose clone has NO credential and no network of its own
+   * (a cloud sandbox: the run's token lives in the sandbox server, never in the model's shell). Set ⇒ `git_sync_latest`,
+   * `git_undo` and `git_redo` call `sync` before their local script and `publish` after it instead of `git fetch` /
+   * `git push`. Unset (the editor, on-prem) ⇒ the commands are unchanged and talk to `origin` themselves.
+   */
+  git?: ShellGit;
+}
+
+/** See {@link ShellCapability.git}. */
+export interface ShellGit {
+  /** Bring `origin/<tracked branch>` and `origin/<base>` up to date in the clone. `baseBranch` names the base; absent ⇒ the run's. */
+  sync(opts?: { baseBranch?: string }): Promise<{ ok: boolean; error?: string; baseBranch?: string }>;
+  /** Push the clone's checked-out run branch. `force` is a lease-guarded rewrite (undo / redo). */
+  publish(opts: { force: boolean }): Promise<{ ok: boolean; error?: string; output?: string }>;
 }
 
 /** Static, shell-free validation of written config files. */

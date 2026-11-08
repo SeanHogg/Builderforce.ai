@@ -1,33 +1,30 @@
 // @vitest-environment jsdom
-/** The status strip: a status chip joined to ONE action button, then the scrubber. Both open the Reviews panel, in every state. */
+/** The review action: a status chip joined to ONE action button. Both open the Reviews panel, in every state. */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import type { ReviewState } from '../useReviewRun';
-import { StatusStrip, type StatusStripProps } from './StatusStrip';
+import { ReviewAction, type ReviewActionProps } from './ReviewAction';
 import { stripAction, syncPill, type SyncPillInput } from './syncPill';
 import { RetryUploadContext } from './run/useRetryUpload';
 
 const pillOf = (over: Partial<SyncPillInput> = {}) => syncPill({ labels: L, review: { status: 'idle' }, stale: false, refreshFailed: false, sync: null, ...over });
 
-const strip = (over: Partial<StatusStripProps> = {}, input: Partial<SyncPillInput> = {}) => {
+const strip = (over: Partial<ReviewActionProps> = {}, input: Partial<SyncPillInput> = {}) => {
     const pill = pillOf(input);
-    const p: StatusStripProps = {
-        labels: L, narrow: false, pill, action: stripAction(L, pill, 'Docs'), onOpen: vi.fn(),
-        time: <div data-testid="scrubber">scrubber</div>, overlays: <span data-testid="overlays" />, ...over,
-    };
-    const utils = render(<StatusStrip {...p} />);
+    const p: ReviewActionProps = { labels: L, narrow: false, pill, action: stripAction(L, pill, 'Docs'), onOpen: vi.fn(), ...over };
+    const utils = render(<ReviewAction {...p} />);
     return { p, ...utils };
 };
 
-describe('StatusStrip', () => {
-    it('is one line with the chip, the one action button and the scrubber on a wide container', () => {
+describe('ReviewAction', () => {
+    it('is the chip and the one action button, joined in one group', () => {
         strip();
         const row = screen.getByTestId('kg-status-strip');
+        expect(row.getAttribute('role')).toBe('group');
+        expect(row.getAttribute('aria-label')).toBe(L.surface.header.statusLabel);
         expect(within(row).getAllByTestId('kg-review-action')).toHaveLength(1);
         expect(within(row).getByTestId('kg-status-chip')).toBeTruthy();
-        expect(screen.queryByTestId('kg-scrubber-line')).toBeNull();
-        expect(screen.getByTestId('scrubber')).toBeTruthy();
     });
 
     it('holds no parity line, no ⋯ menu and no review card', () => {
@@ -38,16 +35,12 @@ describe('StatusStrip', () => {
         expect(within(screen.getByTestId('kg-status-strip')).getAllByRole('button')).toHaveLength(2);
     });
 
-    it('on a narrow container shrinks the chip to its dot (the words stay in its name), keeps the verb, and scrolls the scrubber on a second line', () => {
+    it('on a narrow container shrinks the chip to its dot (the words stay in its name) and keeps the verb', () => {
         strip({ narrow: true }, { review: { status: 'planning' } });
         const chip = screen.getByTestId('kg-status-chip');
         expect(chip.textContent).toBe('');
         expect(chip.getAttribute('aria-label')).toContain(L.surface.run.review.chipCountingPlain);
         expect(screen.getByTestId('kg-review-action').textContent).toBe(L.surface.run.review.actionStart);
-        const line = screen.getByTestId('kg-scrubber-line');
-        expect(line.style.overflowX).toBe('auto');
-        expect(within(line).getByTestId('scrubber')).toBeTruthy();
-        expect(screen.getByTestId('overlays')).toBeTruthy(); // the overlay menu lives in the strip on a phone
     });
 
     it('says the state in words as well as colour', () => {
@@ -112,14 +105,14 @@ describe('StatusStrip', () => {
         it('a failed upload with a retry port (from context): the button is Retry upload, retries at once instead of opening the panel, and is disabled while it runs', () => {
             const retry = vi.fn();
             const pill = pillOf({ sync: failedSync });
-            const p: StatusStripProps = { labels: L, narrow: false, pill, action: stripAction(L, pill, 'Docs'), onOpen: vi.fn() };
-            const view = render(<RetryUploadContext.Provider value={{ retry, running: false, failed: false }}><StatusStrip {...p} /></RetryUploadContext.Provider>);
+            const p: ReviewActionProps = { labels: L, narrow: false, pill, action: stripAction(L, pill, 'Docs'), onOpen: vi.fn() };
+            const view = render(<RetryUploadContext.Provider value={{ retry, running: false, failed: false }}><ReviewAction {...p} /></RetryUploadContext.Provider>);
             expect(screen.getByTestId('kg-review-action').textContent).toBe(L.surface.run.review.actionRetryUpload);
             fireEvent.click(screen.getByTestId('kg-review-action'));
             expect(retry).toHaveBeenCalledTimes(1);
             expect(p.onOpen).not.toHaveBeenCalled();
 
-            view.rerender(<RetryUploadContext.Provider value={{ retry, running: true, failed: false }}><StatusStrip {...p} /></RetryUploadContext.Provider>);
+            view.rerender(<RetryUploadContext.Provider value={{ retry, running: true, failed: false }}><ReviewAction {...p} /></RetryUploadContext.Provider>);
             const busy = screen.getByTestId('kg-review-action') as HTMLButtonElement;
             expect(busy.disabled).toBe(true);
             expect(busy.textContent).toBe(L.surface.run.review.uploadRetrying);

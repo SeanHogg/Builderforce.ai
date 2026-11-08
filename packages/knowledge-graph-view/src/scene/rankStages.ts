@@ -10,6 +10,7 @@ import { cmp, importanceOf } from '../order';
 import { isLoudEdge } from './buffers';
 import { canonicalEdgesTask } from './canonicalEdges';
 import type { RankedEdges } from './edgeBudget';
+import { linkBothEnds } from './incident';
 
 /** Links handled per step by the loops below (each is a few milliseconds). */
 const SLICE = 30_000;
@@ -109,11 +110,9 @@ export function rankStages(edges: readonly KEdge[], nodes: readonly Pick<KNode, 
         () => {
             const total = breaking.length + rest.length;
             const end = Math.min(total, linked + SLICE);
-            const link = (ref: string, e: KEdge): void => { const l = incident.get(ref); if (l) l.push(e); else incident.set(ref, [e]); };
             for (; linked < end; linked++) {
                 const e = linked < breaking.length ? breaking[linked]! : rest[linked - breaking.length]!;
-                link(e.from, e);
-                if (e.to !== e.from) link(e.to, e);
+                linkBothEnds(incident, e);
             }
             return linked >= total;
         },

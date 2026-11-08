@@ -14,7 +14,6 @@
  *   GET  /:projectId/knowledge/extracted/:hash              extracted output by content hash
  *   POST /:projectId/knowledge/extracted/bulk               extracted outputs for a batch of hashes
  *                                                           (one miss yields entries: null, not 404)
- *   PUT  /:projectId/knowledge/extracted/:hash              … upload (≤ 1 MB; the browser and on-prem stores still use it)
  *   POST /:projectId/knowledge/sync  (+ sync/manifest, sync/have)  pack sync — see projectKnowledgeSyncRoutes.ts (PRD 41 A11)
  *   PUT  /:projectId/code-analysis/:sha?root=               code-pack analyzer snapshot (≤ 2 MB), stored per root
  *                                                           and sha (a root's paths are its own)
@@ -44,7 +43,7 @@ import { searchKnowledge } from '../../application/knowledge/knowledgeIndexPort'
 import { writeKnowledge } from '../../application/knowledge/writeKnowledge';
 import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
 import {
-  KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, MAX_EXTRACTED_BYTES, putAnalysisSnapshot, putExtracted,
+  KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, MAX_EXTRACTED_BYTES, putAnalysisSnapshot,
 } from '../../application/knowledge/knowledgePerception';
 import { MAX_JUDGE_ITEMS, clientJudgementSpec, judgeKnowledge } from '../../application/knowledge/judgeKnowledge';
 import { admitClientResult } from './clientResultHttp';
@@ -66,13 +65,6 @@ const MAX_SEARCH_K = 50;
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 const zRef = z.string().min(5).max(512).regex(/^(src|ent|fact):/, 'a NodeRef (src: | ent: | fact:)');
-/**
- * A ref inside an EXTRACTED upload is admitted at up to 4096 chars: a producer can emit a
- * longer one (a deep path plus a long section slug), and one over-long ref must not 400 the
- * whole review — `putExtracted` drops what exceeds the graph's 512-char bound and reports
- * the count. WriteBody facts/relations/stale keep the strict 512 zRef.
- */
-const zExtractedRef = z.string().min(5).max(4096).regex(/^(src|ent|fact):/, 'a NodeRef (src: | ent: | fact:)');
 /** The origin is admitted as any of the four so the WRITER answers `extracted` (400), not zod. */
 const zOrigin = z.enum(['extracted', 'model', 'human', 'agent']);
 const zAnchor = z.object({
@@ -121,24 +113,6 @@ const WriteBody = z.object({
   relations: z.array(zRelation).default([]),
   stale: z.array(z.object({ sourceRef: zRef, currentHash: z.string().max(160) })).default([]),
 });
-const zKNode = z.object({
-  ref: zExtractedRef, kind: z.string().max(64), label: z.string().max(2048), pack: z.string().max(64),
-  partition: z.string().max(128).optional(), area: zExtractedRef.optional(), importance: z.number(),
-  origin: zOrigin, sourceHash: z.string().max(160).optional(), stale: z.boolean().optional(),
-  badges: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
-});
-const zKEdge = z.object({
-  from: zExtractedRef, to: zExtractedRef, kind: z.string().max(32), weight: z.number(), origin: zOrigin,
-  confidence: z.number().optional(), verdict: z.enum(['allowed', 'same', 'skips', 'upward']).optional(),
-  cycle: z.boolean().optional(),
-});
-const ExtractedBody = z.array(z.object({
-  sourceRef: zExtractedRef,
-  sourceHash: z.string().max(160),
-  nodes: z.array(zKNode),
-  edges: z.array(zKEdge),
-  keys: z.array(z.object({ ref: zExtractedRef, key: z.string().max(512) })),
-}));
 const AnalysisBody = z.object({
   version: z.literal(1),
   id: z.string().max(200),
@@ -275,20 +249,6 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     const get = p.extracted.get?.bind(p.extracted);
     const extracted = await Promise.all(body.hashes.map(async (hash) => ({ hash, entries: (get ? await get(hash) : null) ?? null })));
     return json({ extracted });
-  }));
-
-  router.put('/:projectId/knowledge/extracted/:hash', (c) => withPorts(c, async (p) => {
-    const hash = c.req.param('hash');
-    if (!KNOWLEDGE_HASH_PATTERN.test(hash)) return json({ error: 'invalid hash' }, 400);
-    if (declaredTooLarge(c, MAX_EXTRACTED_BYTES)) return tooLarge(MAX_EXTRACTED_BYTES);
-    const extracted = await parseBody(c, ExtractedBody);
-    if (byteLength(extracted) > MAX_EXTRACTED_BYTES) return tooLarge(MAX_EXTRACTED_BYTES);
-    try {
-      const { skippedRefs } = await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
-      return json({ ok: true, hash, skippedRefs });
-    } catch (error) {
-      return writeRefusal(error);
-    }
   }));
 
   router.put('/:projectId/code-analysis/:sha', (c) => withPorts(c, async (p) => {

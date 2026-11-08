@@ -12,7 +12,6 @@ import { r2ExtractedCache } from './knowledgeBlobs';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 import { drizzleKnowledgeStore } from './knowledgeStore';
 import { drizzleLedger } from './knowledgeLedger';
-import { invalidateHealedBody } from './knowledgeHeal';
 
 export interface KnowledgeWritePorts {
   store: KnowledgeStorePort;
@@ -22,6 +21,6 @@ export interface KnowledgeWritePorts {
 export function knowledgeWritePortsFor(env: Env, db: Db, tenantId: number, projectId: number): KnowledgeWritePorts {
   return {
     store: drizzleKnowledgeStore(db, tenantId, projectId),
-    extracted: r2ExtractedCache(env, tenantId, projectId, { ledger: drizzleLedger(db, tenantId, projectId), onHealed: invalidateHealedBody }),
+    extracted: r2ExtractedCache(env, tenantId, projectId, drizzleLedger(db, tenantId, projectId)),
   };
 }

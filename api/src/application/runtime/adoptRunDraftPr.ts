@@ -17,9 +17,9 @@
  *
  * Marking it ready can fail (provider hiccup, a missing permission). The PR is adopted anyway and its row is still
  * flipped to `open`: the approval flow, the merge sweep and the manager read `open`, and a PR they cannot see is worse
- * than one still marked draft on the provider. The failure is reported, and the marker is KEPT: the reconciler may
- * revert the row to `draft` from the provider, and the orphan sweep (`sweepOrphanedDraftPrs`) then retries the
- * mark-ready — for a marked row only, so a human's draft is never fought over.
+ * than one still marked draft on the provider. The failure is reported, and the marker is KEPT: the orphan sweep
+ * (`sweepOrphanedDraftPrs`) selects the `open` + marker row and retries the mark-ready (status only, never the
+ * PR's text) — for a marked row only, so a human's draft is never fought over.
  *
  * Only finding/recording can throw (the finalize treats that as "no draft"); the telemetry after them cannot.
  */
@@ -52,7 +52,9 @@ export async function adoptRunDraftPr(
       number: a.recovered.number, url: a.recovered.url, branchName: repoCtx.branch, baseBranch: base,
       status: PLATFORM_DRAFT_STATUS, platformDraftExecutionId: a.executionId,
     });
-    draft = { id: row!.id, number: a.recovered.number, url: a.recovered.url, status: PLATFORM_DRAFT_STATUS };
+    // A row the reconciler already settled (merged/closed) was left untouched and the task not stamped: that is no draft of ours.
+    if (!row.written) return null;
+    draft = { id: row.id, number: a.recovered.number, url: a.recovered.url, status: PLATFORM_DRAFT_STATUS };
   }
   if (!draft) return null;
   const adopted = { number: draft.number, url: draft.url, rowId: draft.id };

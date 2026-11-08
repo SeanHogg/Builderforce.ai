@@ -19,9 +19,6 @@
  *                     at graph build from the anchor hash vs the source's current hash.
  *   judgeEstimate()   GET  …/knowledge/judge/estimate → ≈ USD of one judged section (+ local)
  *   getExtracted      GET  …/knowledge/extracted/:hash (404 → undefined)
- *   putExtracted      PUT  …/knowledge/extracted/:hash — a 413 (payload_too_large) is SKIPPED
- *                     and listed on `store.skipped` ({path, bytes, reason}), never thrown; a 400
- *                     source_hash_mismatch still throws
  *   preloadExtracted  POST …/knowledge/extracted/bulk in chunks of PRELOAD_CHUNK hashes —
  *                     a best-effort hint: returned entries are cached per hash and
  *                     `getExtracted` then answers without a round trip; it NEVER throws,
@@ -63,7 +60,6 @@ import {
   type KnowledgeClient,
   type KnowledgeClientOptions,
   type KnowledgeScopeRecord,
-  type SkippedUpload,
 } from './types.js';
 
 /** Rows (facts + relations + stale marks) one write call carries — the server's bound. */
@@ -110,7 +106,7 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
 
   /**
    * `call` with bounded retry on HTTP 429: honors the `Retry-After` header (seconds, capped
-   * at 5s), at most 3 retries. Only for idempotent knowledge/extracted GET/PUT and bulk POSTs —
+   * at 5s), at most 3 retries. Only for idempotent knowledge/extracted GET and bulk POSTs —
    * never for the judge POST (a retried judgement could double-bill).
    */
   const callRetried = async (path: string, init?: RequestInit): Promise<Response> => {
@@ -216,37 +212,14 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
     };
   };
 
-  const putExtracted = async (hash: string, extracted: Extracted[]): Promise<void> => {
-    try {
-      await callRetried(`/knowledge/extracted/${encodeURIComponent(hash)}`, send('PUT', extracted));
-    } catch (error) {
-      // payload_too_large: the file's extracted output exceeds the server's 1MB bound. Skip and
-      // count — the review keeps going and the file's facts are still written. Anything else
-      // (e.g. 400 source_hash_mismatch) still throws.
-      if (error instanceof KnowledgeApiError && error.status === 413) {
-        // Named by the file's source ref (the extracted entries carry it), sized in encoded bytes.
-        skipped.push({
-          path: extracted[0]?.sourceRef ?? `extracted/${hash}`,
-          bytes: new TextEncoder().encode(JSON.stringify(extracted)).length,
-          reason: 'too-large',
-        });
-        return;
-      }
-      throw error;
-    }
-  };
-
   // ---------------------------------------------------------------------------
   // Extracted cache: `preloadExtracted` fills it from the bulk route; `getExtracted`
   // answers a cached hash (including cached misses) without a round trip.
   // ---------------------------------------------------------------------------
   const extractedCache = new Map<string, Extracted[] | undefined>();
-  const skipped: SkippedUpload[] = [];
 
-  // The client store exposes KnowledgeStore plus the skipped-upload list (not part of the
-  // interface — a host reads it for progress/reporting and sync status).
+  // The client store exposes KnowledgeStore plus the extracted read-through hint (not part of the interface).
   const store: KnowledgeStore & {
-    readonly skipped: readonly SkippedUpload[];
     readonly preloadExtracted: (hashes: readonly string[]) => Promise<void>;
     batched: <T>(work: (flush: () => Promise<void>) => Promise<T>) => Promise<T>;
   } = {
@@ -262,7 +235,6 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
         const out = await orNull(jsonCallRetried<{ extracted: Extracted[] }>(`/knowledge/extracted/${encodeURIComponent(hash)}`));
         return out?.extracted;
       },
-      putExtracted,
       /**
        * Best-effort bulk hint: POSTs the hashes to `/knowledge/extracted/bulk` in chunks of
        * ~200 and caches every returned entry (including nulls = cache misses) by hash. NEVER
@@ -291,17 +263,10 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
        * last chunk, so there is nothing to flush or bound locally — `work` runs as-is.
        */
       batched: async <T>(work: (flush: () => Promise<void>) => Promise<T>): Promise<T> => work(async () => {}),
-      /** `putExtracted` calls skipped, with path, size and reason (413 => 'too-large'). */
-      get skipped(): readonly SkippedUpload[] {
-        return skipped;
-      },
   };
 
   return {
     store,
-    get skipped(): readonly SkippedUpload[] {
-      return skipped;
-    },
     judgement: {
       judge: (req: JudgementRequest): Promise<JudgementResult> => {
         const post = (clientResult?: unknown) =>
@@ -329,7 +294,6 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
     async putAnalysis(sha: string, snapshot: AnalysisSnapshotPayload) {
       await call(`/code-analysis/${encodeURIComponent(sha)}`, send('PUT', snapshot));
     },
-    putExtracted,
     async deleteFact(key: string) {
       await call(`/facts/${encodeURIComponent(key)}`, { method: 'DELETE' });
     },

@@ -62,10 +62,10 @@ describe('review snapshots', () => {
   });
 
   it('builds a past review from its snapshot by hash, while the current sources differ', async () => {
-    const { bucket } = fakeBucket();
+    const { bucket, objects } = fakeBucket();
     const cache = r2ExtractedCache({ UPLOADS: bucket }, 4, 9);
-    await cache.put('ha', [entry('a.md', 'ha')]);
-    await cache.put('ha2', [entry('a.md', 'ha2')]);
+    // Bodies written before bundles existed: one object per hash.
+    for (const hash of ['ha', 'ha2']) objects.set(knowledgeBlobKeys(4, 9).extracted(hash), { body: JSON.stringify([entry('a.md', hash)]) });
     await cache.setSource(`src:${ROOT}::a.md`, 'ha');
     await cache.snapshotReview(ROOT, 'd1');
     await cache.setSource(`src:${ROOT}::a.md`, 'ha2');

@@ -5,7 +5,6 @@
  */
 
 import type {
-  Extracted,
   IndexHit,
   JudgementPort,
   JudgementRequest,
@@ -84,13 +83,6 @@ export interface KnowledgeScopeRecord extends ScopeRecord {
   kind?: 'pack' | 'review';
 }
 
-/** An upload the client skipped instead of throwing; nothing is dropped without a trace. */
-export interface SkippedUpload {
-  path: string;
-  bytes: number;
-  reason: string;
-}
-
 /** Code-pack analyzer snapshot, as produced by agent-tools `codeAnalysis.ts`. Opaque here. */
 export type AnalysisSnapshotPayload = Record<string, unknown>;
 
@@ -108,8 +100,6 @@ export interface JudgeEstimate {
 export interface KnowledgeClient {
   /** KnowledgeStore over POST …/knowledge/write, GET …/knowledge/scopes, extracted cache routes. */
   store: KnowledgeStore;
-  /** Uploads this client skipped (path, bytes, reason); a host lists them in its sync status. */
-  readonly skipped?: readonly SkippedUpload[];
   /** JudgementPort over POST …/knowledge/judge (a routed, usage-attributed model call). */
   judgement: JudgementPort;
   scopes(): Promise<KnowledgeScopeRecord[]>;
@@ -145,8 +135,6 @@ export interface KnowledgeClient {
    * notes, an agent's facts, a model row with no leaf — each written under its own credential's rules.
    */
   writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
-  /** PUT …/knowledge/extracted/:hash */
-  putExtracted(hash: string, extracted: Extracted[]): Promise<void>;
   /** DELETE …/facts/:key — author or project admin only; also removes the fact's relations. */
   deleteFact(key: string): Promise<void>;
   /** DELETE …/knowledge/scopes/:rootId — removes an UPLOADED PACK root (the server refuses a reviewed one with 400). */

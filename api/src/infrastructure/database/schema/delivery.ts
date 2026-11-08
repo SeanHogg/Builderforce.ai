@@ -271,6 +271,9 @@ export const tasks = pgTable('tasks', {
    *  null) if the create fails, so a retry can re-claim. Distinct from githubPrUrl,
    *  which is only known AFTER the create returns. */
   prOpeningAt:       timestamp('pr_opening_at'),
+  /** When the orphan-draft sweep last examined this task's unrecorded draft PR without acting on it (1335). It
+   *  re-examines only after the grace period, so a stale claim with nothing to settle cannot crowd out the rest. */
+  orphanDraftCheckedAt: timestamp('orphan_draft_checked_at'),
   assignedAgentHostId:    integer('assigned_agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   /** ide_agents.id of the cloud agent working this ticket — the agent self-assigns
    *  when it starts a run (agents are first-class assignees). No FK (raw-SQL table). */

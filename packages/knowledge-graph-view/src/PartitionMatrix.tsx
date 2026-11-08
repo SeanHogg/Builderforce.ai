@@ -4,15 +4,18 @@
  * Partitions lens. Scrolls sideways at phone width rather than shrinking the numbers.
  */
 
-import { useMemo } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
-import { matrixKey, partitionMatrix } from './graphModel';
+import { matrixKey, type PartitionCell } from './graphModel';
+import { useComputed } from './compute/useComputed';
+import { isSmall } from './compute/size';
+
+const EMPTY_MATRIX = { partitions: [] as string[], cells: new Map<string, PartitionCell>() };
 import { cssVar } from './scene/themeColors';
 import { heading, muted } from './styles';
 
 export function PartitionMatrix({ graph, labels }: { graph: KnowledgeGraph; labels: KnowledgeGraphLabels }) {
-    const { partitions, cells } = useMemo(() => partitionMatrix(graph), [graph]);
+    const { partitions, cells } = useComputed('partitionMatrix', { graph }, [graph], EMPTY_MATRIX, { inline: isSmall(graph), scope: [graph] }).value ?? EMPTY_MATRIX;
     if (partitions.length === 0) return <p style={muted}>{labels.matrixEmpty}</p>;
     const cellStyle = { padding: '8px 10px', borderBottom: `1px solid ${cssVar('border')}`, textAlign: 'center' as const, minWidth: 44 };
     return (

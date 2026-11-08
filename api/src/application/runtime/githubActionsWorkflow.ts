@@ -189,9 +189,15 @@ jobs:
           node-version: '${nodeVersion}'
 
       - name: Run Builderforce agent
+        # The agent's shell runs as a separate, unprivileged user with a MINIMAL environment: PATH, HOME, locale,
+        # CI, proxy/CA settings, npm_config_* and COREPACK_*. It sees none of this step's variables or secrets.
+        # To expose a secret your build needs (a private-registry token, say), set it below AND list its name in
+        # BUILDERFORCE_SHELL_ENV (comma-separated). Whatever you list, the agent can read and print.
         env:
           BUILDERFORCE_API: ${apiOrigin}
           BUILDERFORCE_EXECUTION_ID: \${{ inputs.execution_id }}
+          # BUILDERFORCE_SHELL_ENV: NPM_TOKEN
+          # NPM_TOKEN: (its value, from your repository secret store)
         run: |
           set -euo pipefail
 

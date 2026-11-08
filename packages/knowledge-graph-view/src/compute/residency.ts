@@ -1,22 +1,28 @@
 /**
  * Which graphs the compute context holds, and how the main thread names parts of them.
  *
- * A graph gets an id when it is first used (`graphId`); at most {@link MAX_RESIDENT} are held, the least recently used goes
- * (`onEvict` tells the worker). A view that draws a SUBSET of a graph (the nodes and edges it was handed) names them with
- * `locate`: as indices into whichever held graph contains them. The subsets are almost always runs of the graph's own arrays
- * (`focusGraph` filters, `lensGraph` filters), so the indices come from one merge-style scan; only a subset that is out of
- * order falls back to an element → index map. A view mounted with arrays that belong to no held graph (a test, a host that
- * draws bare arrays) gets a stand-alone graph made of exactly those arrays.
+ * EDIT CONTRACT: GRAPHS ARE IMMUTABLE. The worker holds a copy of each resident graph, and everything here (ids, the
+ * element → index caches, the located subsets) is keyed on the identity of the graph and of its arrays. So an edit never
+ * changes a graph in place: it produces a NEW graph object with NEW `nodes`/`edges` arrays, which gets a new id and is
+ * streamed to the worker afresh. In development the `nodes` and `edges` arrays are frozen when they become resident, so an
+ * in-place `push`/`splice`/`sort` throws at the call that does it (see `immutable.ts`).
+ *
+ * A graph gets an id when it is first used (`graphId`, idempotent and free of worker traffic, so a render may call it); at
+ * most {@link MAX_RESIDENT} are held, the least recently used goes. The eviction (and the `drop` it sends the worker) is
+ * deferred to a microtask, never done inside the render that asked. A view that draws a SUBSET of a graph (the nodes and
+ * edges it was handed) names them with `locate`: as indices into whichever held graph contains them. The subsets are almost
+ * always runs of the graph's own arrays (`focusGraph` filters, `lensGraph` filters), so the indices come from one
+ * merge-style scan; only a subset that is out of order falls back to an element → index map. A view mounted with arrays
+ * that belong to no held graph (a test, a host that draws bare arrays) gets a stand-alone graph made of exactly those arrays.
  */
 
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { FIELDS, indexOfArray, type Field } from './fields';
+import { freezeGraph } from './immutable';
 import { MAX_RESIDENT } from './store';
 import type { GraphId, Refs } from './protocol';
 
 export interface GraphHandle { id: GraphId; graph: KnowledgeGraph; live: boolean }
-
-type Field = 'nodes' | 'edges' | 'findings';
-const FIELDS: readonly Field[] = ['nodes', 'edges', 'findings'];
 
 export interface Parts { nodes?: readonly KNode[]; edges?: readonly KEdge[]; findings?: readonly Finding[] }
 
@@ -24,14 +30,14 @@ export class Residency {
     private readonly held: GraphHandle[] = []; // most recently used first
     private readonly byGraph = new WeakMap<object, GraphHandle>();
     private readonly located = new WeakMap<readonly object[], Map<GraphId, Uint32Array | null>>();
-    private readonly maps = new WeakMap<readonly object[], Map<object, number>>();
     private readonly tokens = new WeakMap<object, number>();
     private nextId = 1;
     private nextToken = 1;
+    private trimming = false;
 
     constructor(private readonly onEvict: (id: GraphId) => void) {}
 
-    /** The id of `graph`, holding it if it is new. */
+    /** The id of `graph`, holding it if it is new. Idempotent. */
     graphId(graph: KnowledgeGraph): GraphId {
         const known = this.byGraph.get(graph);
         if (known?.live) { this.touch(known); return known.id; }
@@ -58,15 +64,26 @@ export class Residency {
     }
 
     private hold(graph: KnowledgeGraph): GraphHandle {
+        freezeGraph(graph);
         const handle: GraphHandle = { id: this.nextId++, graph, live: true };
         this.byGraph.set(graph, handle);
         this.held.unshift(handle);
-        while (this.held.length > MAX_RESIDENT) {
-            const old = this.held.pop()!;
-            old.live = false;
-            this.onEvict(old.id);
-        }
+        if (this.held.length > MAX_RESIDENT) this.scheduleTrim();
         return handle;
+    }
+
+    /** Evicts down to the limit in a microtask: the render that held the graph stays free of side effects. */
+    private scheduleTrim(): void {
+        if (this.trimming) return;
+        this.trimming = true;
+        queueMicrotask(() => {
+            this.trimming = false;
+            while (this.held.length > MAX_RESIDENT) {
+                const old = this.held.pop()!;
+                old.live = false;
+                this.onEvict(old.id);
+            }
+        });
     }
 
     private touch(h: GraphHandle): void {
@@ -114,8 +131,7 @@ export class Residency {
             }
             if (!ok) {
                 // Out of order: look each one up.
-                let map = this.maps.get(parent);
-                if (!map) { map = new Map(parent.map((e, i) => [e, i] as const)); this.maps.set(parent, map); }
+                const map = indexOfArray(parent);
                 ok = true;
                 for (let i = 0; i < sub.length && ok; i++) {
                     const at = map.get(sub[i]!);

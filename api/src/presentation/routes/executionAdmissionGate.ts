@@ -1,4 +1,7 @@
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
+import { idempotentReplay } from '../middleware/idempotentReplay';
+import { evaluateExecutionApprovalGate, type ApprovalGateTask } from '../../application/runtime/executionApprovalGate';
+import { executionTokenGate } from './executionTokenGate';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -65,4 +68,41 @@ export async function steerRateAdmission<E extends HonoEnv>(c: Context<E>, execu
   if (retryAfter == null) return null;
   c.header('Retry-After', String(retryAfter));
   return c.json({ error: 'Too many messages to this run. Slow down.', code: 'steer_rate_limited', retryAfterSeconds: retryAfter }, 429);
+}
+
+/**
+ * `Idempotency-Key` replay for the submit routes (PRD 09 D6): the same tenant + key within 24h answers with the
+ * ORIGINAL response instead of starting a second billable run. Bound to the request body, because the body decides
+ * what runs. Generic over the route's env, so the runtime router (wider Bindings) mounts it without a cast.
+ */
+export function replayOnIdempotencyKey<E extends HonoEnv>(): MiddlewareHandler<E> {
+  return idempotentReplay<E>({ bindBody: true });
+}
+
+/**
+ * EVERY pre-row gate of the two submit routes (`/executions`, `/tasks/submit`), in order, so the routes cannot drift:
+ *   1. admission - live-run dedupe, concurrent cap, budget floor (PRD 09 D6/D8/B3) -> 409 / 429;
+ *   2. the token gate - no budget, no run (shared with Run-now and the board Run; the superadmin bypass lives there) -> 429;
+ *   3. the approval gate - a ticket that needs sign-off answers 202 `awaiting_approval` instead of running.
+ * Returns the Response to return straight from the handler, or null to proceed.
+ *
+ * `agentHostId` is the host the caller named (header, else body); the ticket's own pinned host only counts for admission.
+ */
+export async function submitRunGates<E extends HonoEnv>(
+  c: Context<E>,
+  db: Db,
+  a: { task: ApprovalGateTask; agentHostId: number | null; payload?: string },
+): Promise<Response | null> {
+  const admissionBlock = await executionAdmissionGate(c, db, {
+    taskId: a.task.id,
+    pinnedHost: (a.agentHostId ?? a.task.assignedAgentHostId) != null,
+  });
+  if (admissionBlock) return admissionBlock;
+
+  const tokenBlock = await executionTokenGate(c, db);
+  if (tokenBlock) return tokenBlock;
+
+  const gate = await evaluateExecutionApprovalGate(db, c.get('tenantId'), c.get('userId'), a.task, a.agentHostId, { payload: a.payload });
+  if (gate.allowed) return null;
+  return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: a.task.id, reason: gate.reason }, 202);
 }

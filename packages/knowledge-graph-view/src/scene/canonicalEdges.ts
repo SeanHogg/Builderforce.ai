@@ -11,6 +11,7 @@
  */
 
 import type { KEdge } from '@seanhogg/builderforce-memory/knowledge';
+import { devFreeze } from '../memo';
 import { cmp } from '../order';
 
 /** The edges resolved per step (one step is a few milliseconds even at 150k edges). */
@@ -34,7 +35,11 @@ const sameRank = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>
     return true;
 };
 
-function build(edges: readonly KEdge[], rank: ReadonlyMap<string, number>): CanonicalTask {
+/** Packed keys must stay exact integers: above this the comparator sort is used instead. */
+const PACKED_KEY_LIMIT = 2 ** 53;
+
+/** Exported for tests only: `packedKeyLimit` lets a small graph take the comparator fallback. */
+export function buildCanonicalTask(edges: readonly KEdge[], rank: ReadonlyMap<string, number>, packedKeyLimit: number = PACKED_KEY_LIMIT): CanonicalTask {
     const count = edges.length;
     let kinds: Map<string, number> | null = null;
     const from = new Int32Array(count), to = new Int32Array(count), kind = new Int32Array(count), at = new Int32Array(count);
@@ -73,7 +78,7 @@ function build(edges: readonly KEdge[], rank: ReadonlyMap<string, number>): Cano
         () => {
             const n = top + 1, k = kinds!.size;
             const out: KEdge[] = new Array(placed);
-            if (plain && n * n * Math.max(1, k) * Math.max(1, placed) < 2 ** 53) {
+            if (plain && n * n * Math.max(1, k) * Math.max(1, placed) < packedKeyLimit) {
                 const keys = new Float64Array(placed);
                 for (let j = 0; j < placed; j++) keys[j] = ((from[j]! * n + to[j]!) * k + kind[j]!) * placed + j;
                 keys.sort();
@@ -83,7 +88,7 @@ function build(edges: readonly KEdge[], rank: ReadonlyMap<string, number>): Cano
                 order.sort((a, b) => from[a]! - from[b]! || to[a]! - to[b]! || kind[a]! - kind[b]!);
                 for (let j = 0; j < placed; j++) out[j] = edges[at[order[j]!]!]!;
             }
-            sorted = out;
+            sorted = devFreeze(out);
             return true;
         },
     ];
@@ -106,7 +111,7 @@ export function canonicalEdgesTask(edges: readonly KEdge[], rank: ReadonlyMap<st
     const entries = memo.get(edges) ?? [];
     let entry = entries.find((e) => sameRank(e.rank, rank));
     if (!entry) {
-        entry = { rank, task: build(edges, rank) };
+        entry = { rank, task: buildCanonicalTask(edges, rank) };
         entries.push(entry);
         if (entries.length > KEEP) entries.shift();
         memo.set(edges, entries);

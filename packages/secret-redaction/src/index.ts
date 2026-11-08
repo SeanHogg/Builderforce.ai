@@ -95,24 +95,30 @@ export function findSecretShapes(text: string): SecretShape[] {
 // a lone `\` captured into a value is what used to corrupt escaped JSON text (`API_TOKEN=\"x\" run`).
 const TYPE_WORD = String.raw`(?:string|number|boolean|null|undefined|true|false)`;
 const VALUE_ENV = String.raw`(?:\\"([^"\\\n]*)\\"|"((?:[^"\\\n]|\\.)*)"|'([^'\n]*)'|([^\s"'\\]+))`;
-// A lower-case assignment is also prose and source code, so it needs a secret-LIKE value: quoted 4+ chars that is not a
-// bare type word, or an unquoted run of 8+ that is not a type word, not a call (`getToken()`), and is not cut off by `;`/`(`.
+// A lower-case assignment is also prose and source code, so it needs a secret-LIKE value: quoted 3+ chars that is not a
+// bare type word, or an unquoted run of 6+ that is not a type word, not a call (`getToken()`) and not a dotted member path
+// (`process.env.X;`). An unquoted value may contain `;` (it stops at whitespace, quotes, `,` and `&`).
+// `NOT_MASKED`: a value an earlier pattern already masked in `display` mode (`abcdef…ghij`) is not masked again down to `***`.
+const NOT_MASKED = String.raw`(?![^\s"'\\]*…)`;
 const VALUE_CONFIG =
-  String.raw`(?:\\"(?!${TYPE_WORD}\\")([^"\\\n]{4,})\\"|"(?!${TYPE_WORD}")([^"\\\n]{4,})"|'(?!${TYPE_WORD}')([^'\\\n]{4,})'|` +
-  String.raw`(?!${TYPE_WORD}\b)(?![A-Za-z_$][\w$.]*\()([^\s"',;&\\]{8,})(?=[\s"',&)\]}\\]|$))`;
+  String.raw`(?:\\"${NOT_MASKED}(?!${TYPE_WORD}\\")([^"\\\n]{3,})\\"|"${NOT_MASKED}(?!${TYPE_WORD}")([^"\\\n]{3,})"|'${NOT_MASKED}(?!${TYPE_WORD}')([^'\\\n]{3,})'|` +
+  String.raw`${NOT_MASKED}(?!${TYPE_WORD}\b)(?![A-Za-z_$][\w$.]*\()(?![A-Za-z_$][\w$]*(?:\.[\w$]+)+;?(?:[\s"',&)\]}\\]|$))([^\s"',&\\]{6,})(?=[\s"',&)\]}\\]|$))`;
 const SECRET_WORD = String.raw`(?:password|passwd|passphrase|secret|token|api[-_]?key|private[-_]?key|access[-_]?key)`;
 
 /** The pattern set. Order matters only in that assignments run before prefix shapes. */
 export const DEFAULT_SECRET_PATTERNS: readonly SecretPattern[] = [
-  // ENV-style assignments: an UPPER_CASE name containing KEY/TOKEN/SECRET/PASSWORD/PASSWD, with an optional suffix
-  // (`SECRET_KEY_BASE=…`, `API_KEY_2=…`). Case-sensitive so `primaryKey: id` and `monkey: banana` are not assignments.
-  // The value may be quoted and contain spaces. `(?<key>…)` lets the guard skip a benign name (`TOKEN_COUNT`, `KEY_ID`).
-  { id: 'env-assignment', re: new RegExp(String.raw`\b(?<key>[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD)(?:_[A-Z0-9]+)*)\b\s*[=:]\s*${VALUE_ENV}`, 'g') },
-  // Lower-case / camelCase / snake_case config, CLI and source assignments (`password=hunter2hunter2`, `export github_token=…`,
-  // `refresh_token=…`), only for a whole secret word and a secret-LIKE value.
-  { id: 'assignment', re: new RegExp(String.raw`\b(?<key>[\w-]*?${SECRET_WORD}(?:[-_]\w+)*)\b\s*[=:]\s*${VALUE_CONFIG}`, 'gi') },
+  // ENV-style assignments: an UPPER_CASE name in which KEY/TOKEN/SECRET/PASSWORD/PASSWD is a whole `_`-delimited word
+  // (`SECRET_KEY_BASE=…`, `API_KEY_2=…`, `GITHUB_TOKEN=…`), so `MONKEY` / `HOTKEY` are not assignments; `isBenignKey` then skips
+  // a name that is a reference or a database/cache key (`TOKEN_COUNT`, `KEY_ID`, `PRIMARY_KEY`, `SORT_KEY`). Case-sensitive.
+  // The value may be quoted and contain spaces. NO nested quantifiers: the lookahead finds the word once, the name is one
+  // unambiguous run (a regex that is quadratic or exponential here is a ReDoS on attacker-controlled tool output).
+  { id: 'env-assignment', re: new RegExp(String.raw`(?<![A-Za-z0-9_])(?=(?:[A-Z0-9]+_+)*?(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|APIKEY)(?![A-Z0-9]))(?<key>[A-Z][A-Z0-9]*(?:_+[A-Z0-9]+)*)\s*[=:]\s*${VALUE_ENV}`, 'g') },
+  // Lower-case / camelCase / snake_case config, CLI and source assignments (`password=hunter2`, `export github_token=…`,
+  // `refresh_token=…`), only for a name containing a secret word and a secret-LIKE value. The key is ONE `[\w-]+` run found by
+  // a lookahead (no nested quantifier, starts only at a run boundary) and `isBenignKey` then judges the whole captured key.
+  { id: 'assignment', re: new RegExp(String.raw`(?<![\w-])(?=[\w-]*?${SECRET_WORD})(?<key>[\w-]+)\s*[=:]\s*${VALUE_CONFIG}`, 'gi') },
   // JSON fields inside text, any spelling of the key (`apiKey`, `access_token`, `client_secret`).
-  { id: 'json-field', re: new RegExp(String.raw`"(?<key>[\w.-]*${SECRET_WORD}[\w.-]*)"\s*:\s*"((?:[^"\\]|\\.)+)"`, 'gi') },
+  { id: 'json-field', re: new RegExp(String.raw`"(?=[\w.-]*?${SECRET_WORD})(?<key>[\w.-]+)"\s*:\s*"((?:[^"\\]|\\.)+)"`, 'gi') },
   // CLI flags (`--token x`, `--token "x"`, `--token=x`).
   { id: 'cli-flag', re: /--(?:api[-_]?key|token|secret|password|passwd)(?:\s+|=)(\\"|["']?)([^\s"'\\]+)\1/gi },
   // Authorization headers: a scheme (`Bearer x`, `Basic x`, `token x`) or a bare token-shaped credential (20+ chars with a digit).
@@ -205,12 +211,27 @@ export function redactSecrets(text: string): string {
  * Never throws.
  */
 export function redactJsonText(text: string, options: RedactDeepOptions = {}): string {
+  return redactJsonTextAt(text, options, 0);
+}
+
+/** A JSON document whose number tokens a parse/stringify round trip would change: an integer of 16+ digits (above 2^53) or a huge exponent (`1e400` -> null). */
+const LOSSY_NUMBER = /(?<![\w."])-?\d{16,}|\d[eE][+-]?\d{3,}/;
+/** Text-mode redaction above this size: parsing and re-serialising a megabyte string per leaf is unbounded work. */
+const MAX_JSON_PARSE_CHARS = 1_048_576;
+/** How many levels of JSON-inside-a-JSON-string are parsed before a string leaf is treated as plain text. */
+const MAX_JSON_NESTING = 3;
+
+function redactJsonTextAt(text: string, options: RedactDeepOptions, jsonDepth: number): string {
   if (!text) return text;
   const first = text.trimStart()[0];
   if (first !== '{' && first !== '[') return redactSecrets(text);
+  // Text mode where structural mode would be lossy or unbounded. Accepted loss: duplicate keys in an object collapse
+  // to the last one when the structural path re-serialises (`{"a":1,"a":2}` -> `{"a":2}`); big numbers are not accepted
+  // loss, hence the text-mode fallback for them.
+  if (jsonDepth >= MAX_JSON_NESTING || text.length > MAX_JSON_PARSE_CHARS || LOSSY_NUMBER.test(text)) return redactSecrets(text);
   try {
     const parsed: unknown = JSON.parse(text);
-    const clean = JSON.stringify(redactDeep(parsed, options));
+    const clean = JSON.stringify(walk(parsed, 0, newWalkContext(options, jsonDepth + 1)));
     return clean === JSON.stringify(parsed) ? text : clean;
   } catch {
     // Not JSON after all: the text form is the fail-safe. A redactor must never throw into its caller.
@@ -247,11 +268,23 @@ export function compileSecretPattern(raw: string): RegExp | null {
 // ---- structural redaction -------------------------------------------------------------------
 
 /** Normalised (lower-cased, `-`/`_`/`.` removed) key names whose VALUE is a secret whatever its shape. */
-const SECRET_KEY_ANYWHERE = /password|passwd|passphrase|credential|secret|privatekey|apikey|accesskey|authorization|cookie/;
-const SECRET_KEY_SUFFIX = /token$/;
+// `secret` is not `secretary` / `secretly`; a URL/URI to a token (`signedTokenUrl`, `tokenUri`) is itself a bearer credential.
+const SECRET_KEY_ANYWHERE = /password|passwd|passphrase|credential|secret(?!ar|ly)|privatekey|apikey|accesskey|authorization|cookie/;
+const SECRET_KEY_SUFFIX = /token(?:url|uri)?$/;
 
-/** A key whose LAST word says it is not a secret but a reference to / a fact about one: `credentialId`, `secretCount`, `apiKeyName`, `cookieConsent`. */
-const BENIGN_LAST_WORDS: ReadonlySet<string> = new Set(['id', 'ids', 'count', 'name', 'consent', 'url', 'uri', 'path', 'file', 'type', 'length']);
+/**
+ * A key whose LAST word says it is not a secret but a reference to / a fact about one: `credentialId`, `secretCount`,
+ * `apiKeyName`, `cookieConsent`, `passwordPolicy`, `cookiesEnabled`, `authorizationStatus`, `credentialsProvided`.
+ * Deliberately NOT `url` / `uri` / `path` / `file`: `webhookSecretUrl` and `signedTokenUrl` carry the credential.
+ */
+const BENIGN_LAST_WORDS: ReadonlySet<string> = new Set([
+  'id', 'ids', 'count', 'name', 'consent', 'type', 'length',
+  'policy', 'status', 'enabled', 'provided', 'provider', 'mode', 'kind', 'required',
+]);
+/** `PRIMARY_KEY`, `SORT_KEY`, `HOT_KEY`…: a database / cache / UI key, not a credential. */
+const NON_SECRET_KEY_QUALIFIERS: ReadonlySet<string> = new Set([
+  'primary', 'foreign', 'sort', 'partition', 'cache', 'hot', 'shortcut', 'row', 'index', 'hash', 'lookup', 'unique', 'composite',
+]);
 /** `nextPageToken`, `pageToken`, `continuationToken`: pagination cursors, not credentials. */
 const CURSOR_WORDS: ReadonlySet<string> = new Set(['page', 'next', 'prev', 'previous', 'continuation']);
 
@@ -265,6 +298,7 @@ export function isBenignKey(key: string): boolean {
   const last = words.at(-1);
   if (last === undefined) return false;
   if (BENIGN_LAST_WORDS.has(last)) return true;
+  if (last === 'key' && words.length > 1 && NON_SECRET_KEY_QUALIFIERS.has(words[words.length - 2]!)) return true;
   return last === 'token' && words.length > 1 && CURSOR_WORDS.has(words[words.length - 2]!);
 }
 
@@ -295,7 +329,14 @@ interface WalkContext {
   path: Set<object>;
   /** Finished nodes by `depth|schemaMap`, so a shared node is walked once per depth, not once per path (F^D blow-up). */
   done: WeakMap<object, Map<string, unknown>>;
+  /** How many JSON-text-inside-a-string levels deep this walk already is (bounds `redactJsonTextAt` recursion). */
+  jsonDepth: number;
+  /** Count of `[CIRCULAR]` markers emitted so far: a node whose subtree emitted one is path-dependent and is not memoised. */
+  circularHits: number;
 }
+
+const newWalkContext = (options: RedactDeepOptions, jsonDepth: number): WalkContext =>
+  ({ options, path: new Set(), done: new WeakMap(), jsonDepth, circularHits: 0 });
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v) && !(v instanceof Date) && !(v instanceof Map) && !(v instanceof Set) && !(v instanceof Error);

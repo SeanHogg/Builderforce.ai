@@ -18,12 +18,13 @@ import { execFile } from 'node:child_process';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { TRUSTED_PATH, shellUser, trustedBinary } from './sandboxJobs.mjs';
 
 /** A clone or fetch of a large repository may legitimately take minutes. */
 const GIT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** The only names the mirror's git inherits: where to find git and the egress-interception CA, never a credential. */
-const MIRROR_ENV_PASSTHROUGH = ['PATH', 'LANG', 'TZ', 'SSL_CERT_FILE', 'GIT_SSL_CAINFO', 'CURL_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy'];
+const MIRROR_ENV_PASSTHROUGH = ['LANG', 'TZ', 'SSL_CERT_FILE', 'GIT_SSL_CAINFO', 'CURL_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy'];
 
 /** A git-safe ref name, or null. */
 export function safeRef(v) {
@@ -59,6 +60,8 @@ export function mirrorGitCommand(dir, args, auth = null, source = process.env) {
   }
   const env = {};
   for (const name of MIRROR_ENV_PASSTHROUGH) if (typeof source[name] === 'string') env[name] = source[name];
+  // git's own lookups (a transport helper, a credential helper) resolve from the fixed trusted list, never the inherited PATH.
+  if (process.platform === 'win32') { if (typeof source.PATH === 'string') env.PATH = source.PATH; } else env.PATH = TRUSTED_PATH;
   Object.assign(env, { HOME: dirname(dir), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_COUNT: String(config.length) });
   config.forEach(([key, value], i) => { env[`GIT_CONFIG_KEY_${i}`] = key; env[`GIT_CONFIG_VALUE_${i}`] = value; });
   return { args: ['-c', 'core.hooksPath=/dev/null', '-c', 'protocol.file.allow=never', ...args], env, cwd: dir };
@@ -67,7 +70,7 @@ export function mirrorGitCommand(dir, args, auth = null, source = process.env) {
 /** Run a {@link mirrorGitCommand}. The credential is masked out of whatever git prints. */
 function execGit(cmd, token = null) {
   return new Promise((resolve) => {
-    execFile('git', cmd.args, { cwd: cmd.cwd, env: cmd.env, timeout: GIT_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(trustedBinary('git'), cmd.args, { cwd: cmd.cwd, env: cmd.env, timeout: GIT_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
       const exitCode = error ? (typeof error.code === 'number' ? error.code : -1) : 0;
       const output = `${stdout}${stderr}`;
       resolve({ exitCode, output: token ? output.split(token).join('***') : output });
@@ -77,7 +80,7 @@ function execGit(cmd, token = null) {
 
 /** One sandbox's mirror. Created empty (nothing on disk until the first git op needs it). */
 export function createMirror(spec) {
-  return { auth: gitAuthOf(spec), privateDir: null, repo: null, handoffDir: null, seq: 0, tips: new Map(), chain: Promise.resolve() };
+  return { auth: gitAuthOf(spec), privateDir: null, repo: null, handoffDir: null, handoffGroup: null, seq: 0, tips: new Map(), chain: Promise.resolve() };
 }
 
 /** Serialise operations on one mirror: two overlapping fetch/bundle/push sequences would trample each other. */
@@ -95,7 +98,32 @@ async function prepare(m) {
   if (init.exitCode !== 0) throw new Error(`could not create the git mirror: ${init.output.trim().slice(-200)}`);
   // The handoff dir is where bundles are put for the shell user to read: it can list and read them, never write.
   m.handoffDir = await mkdtemp(join(tmpdir(), 'bf-handoff-'));
-  await chmod(m.handoffDir, 0o755);
+  m.handoffGroup = await restrictToShellGroup(m.handoffDir);
+}
+
+/**
+ * Hand `dir` to the shell user's GROUP (0750: owner = this process, group = shell user, nobody else). Without a
+ * shell user nothing else reads it: 0700. When the group cannot be assigned (this process is not a member of it, so
+ * `chgrp` is refused) it falls back to world-readable 0755 and says so: the contents are repository data the shell
+ * user can read anyway. Returns the group name bundles must be given too, or null.
+ */
+async function restrictToShellGroup(dir) {
+  const group = shellUser();
+  if (!group) { await chmod(dir, 0o700); return null; }
+  const done = await new Promise((resolve) => execFile(trustedBinary('chgrp'), [group, dir], { env: { PATH: TRUSTED_PATH } }, (error) => resolve(!error)));
+  if (done) { await chmod(dir, 0o750); return group; }
+  console.error(`[sandbox] could not give ${dir} to group ${group}; the handoff directory stays world-readable`);
+  await chmod(dir, 0o755);
+  return null;
+}
+
+/** Make a handoff file readable by the shell user's group (0640), or world-readable when the group could not be assigned. */
+async function releaseHandoffFile(m, file) {
+  if (m.handoffGroup) {
+    const done = await new Promise((resolve) => execFile(trustedBinary('chgrp'), [m.handoffGroup, file], { env: { PATH: TRUSTED_PATH } }, (error) => resolve(!error)));
+    if (done) { await chmod(file, 0o640); return; }
+  }
+  await chmod(file, m.handoffGroup || !shellUser() ? 0o640 : 0o644);
 }
 
 /** Remove the mirror and the handoff dir (the run is over). */
@@ -122,12 +150,17 @@ const tipOf = async (m, ref) => {
   return r.exitCode === 0 ? r.output.trim() : null;
 };
 
+/** The `git bundle create` argv for `branches`, leaving out what the other side already holds (`basis`: branch → sha). */
+export function bundleCreateArgs(file, branches, basis = {}) {
+  return ['bundle', 'create', file, ...branches.map((b) => `refs/heads/${b}`), ...branches.filter((b) => basis[b]).map((b) => `^${basis[b]}`)];
+}
+
 /** A bundle of `branches` in the handoff dir (readable by the shell user), leaving out what it already holds (`basis`: branch → sha). */
 async function bundleBranches(m, branches, basis = {}) {
   const file = join(m.handoffDir, `${++m.seq}.bundle`);
-  const made = await mirrorGit(m, ['bundle', 'create', file, ...branches.map((b) => `refs/heads/${b}`), ...branches.filter((b) => basis[b]).map((b) => `^${basis[b]}`)]);
+  const made = await mirrorGit(m, bundleCreateArgs(file, branches, basis));
   if (made.exitCode !== 0) return { ok: false, error: `could not bundle: ${made.output.trim().slice(-200)}` };
-  await chmod(file, 0o644);
+  await releaseHandoffFile(m, file);
   return { ok: true, file };
 }
 
@@ -199,6 +232,28 @@ export async function absorbHead(box) {
   return (await box.workspace.call({ op: 'absorb', branch: head })).ok === true;
 }
 
+/** A full object id from the workspace helper (sha1 or sha256 repository): validated before it reaches `rev-parse` / `update-ref`. */
+const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * Import `refs/heads/<head>` from a bundle FILE the server chose into the mirror: `git bundle verify` (its prerequisites
+ * are present and it is well-formed), `git bundle unbundle` (which stores the objects and prints `<sha> <ref>`), then
+ * `update-ref` with the sha it reported. The bundle comes from the shell user, so it is not run through the `fetch`
+ * transport (which the mirror's `protocol.file.allow=never` refuses, and which should stay refused for everything else).
+ * `{ ok: true, sha }` or `{ ok: false, error }`.
+ */
+export async function importBundle(m, file, head) {
+  const verified = await mirrorGit(m, ['bundle', 'verify', file]);
+  if (verified.exitCode !== 0) return { ok: false, error: verified.output.trim().slice(-200) };
+  const unbundled = await mirrorGit(m, ['bundle', 'unbundle', file]);
+  if (unbundled.exitCode !== 0) return { ok: false, error: unbundled.output.trim().slice(-200) };
+  const line = unbundled.output.split('\n').map((l) => l.trim().split(/\s+/)).find((p) => p[1] === `refs/heads/${head}`);
+  const sha = line && line[0];
+  if (!sha || !GIT_OBJECT_ID.test(sha)) return { ok: false, error: `the bundle does not carry refs/heads/${head}` };
+  const moved = await mirrorGit(m, ['update-ref', `refs/heads/${head}`, sha]);
+  return moved.exitCode === 0 ? { ok: true, sha } : { ok: false, error: moved.output.trim().slice(-200) };
+}
+
 /**
  * Publish the workspace's checked-out run branch (`git push origin HEAD`, which the clone cannot do itself): the helper
  * bundles it, the server imports the bundle into the mirror and pushes from there. `force` is for a rewind
@@ -213,6 +268,7 @@ export function publishHead(box, { force = false } = {}) {
     const at = await box.workspace.call({ op: 'head' });
     if (!at.ok) return { ok: false, error: at.error ?? 'could not read the workspace HEAD' };
     if (at.branch !== head) return { ok: false, error: `the clone is on '${at.branch}', not the run's branch '${head}'; refusing to publish` };
+    if (typeof at.sha !== 'string' || !GIT_OBJECT_ID.test(at.sha)) return { ok: false, error: 'the workspace HEAD is not a commit id' };
     await prepare(m);
     const { fetched } = await fetchBranches(m, [head]);
     const remoteTip = fetched.length ? await tipOf(m, `refs/heads/${head}`) : null;
@@ -225,9 +281,9 @@ export function publishHead(box, { force = false } = {}) {
       if (!out.ok) return { ok: false, error: out.error ?? 'could not bundle the branch' };
       const file = join(m.privateDir, `out-${++m.seq}.bundle`);
       await writeFile(file, Buffer.from(out.bundle, 'base64'), { mode: 0o600 });
-      const imported = await mirrorGit(m, ['fetch', '-q', file, `+refs/heads/${head}:refs/heads/${head}`]);
+      const imported = await importBundle(m, file, head);
       await rm(file, { force: true });
-      if (imported.exitCode !== 0) return { ok: false, error: `the branch bundle did not import: ${imported.output.trim().slice(-200)}` };
+      if (!imported.ok) return { ok: false, error: `the branch bundle did not import: ${imported.error}` };
     }
     const lease = force && remoteTip ? [`--force-with-lease=refs/heads/${head}:${remoteTip}`] : [];
     const pushed = await mirrorGit(m, ['push', '-q', ...lease, m.auth.url, `refs/heads/${head}:refs/heads/${head}`], { network: true });
@@ -246,6 +302,17 @@ const GIT_CONFIG_KEY_NOT_SET = 5;
  * as the mirror. `{ ok: false, output }` when git could not run the command; an absent key is the normal case.
  */
 export async function scrubCheckoutCredentials(workdir) {
-  const r = await execGit(mirrorGitCommand(workdir, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader']));
-  return r.exitCode === 0 || r.exitCode === GIT_CONFIG_KEY_NOT_SET ? { ok: true } : { ok: false, output: r.output };
+  const fixed = await execGit(mirrorGitCommand(workdir, ['config', '--local', '--unset-all', 'http.https://github.com/.extraheader']));
+  if (fixed.exitCode !== 0 && fixed.exitCode !== GIT_CONFIG_KEY_NOT_SET) return { ok: false, output: fixed.output };
+  // Any OTHER host's extraheader, and any `include`/`includeIf` (which can pull a credential-bearing file into the config),
+  // go too. `-z` separates entries with NUL (`key\nvalue`), so a value with spaces cannot be mistaken for a key.
+  const found = await execGit(mirrorGitCommand(workdir, ['config', '--local', '-z', '--get-regexp', '^(includeif\\..*|include\\.path|http\\..*extraheader)$']));
+  if (found.exitCode === 1) return { ok: true }; // no match
+  if (found.exitCode !== 0) return { ok: false, output: found.output };
+  const keys = [...new Set(found.output.split('\0').map((entry) => entry.split('\n')[0]).filter(Boolean))];
+  for (const key of keys) {
+    const r = await execGit(mirrorGitCommand(workdir, ['config', '--local', '--unset-all', key]));
+    if (r.exitCode !== 0 && r.exitCode !== GIT_CONFIG_KEY_NOT_SET) return { ok: false, output: r.output };
+  }
+  return { ok: true };
 }
