@@ -8,7 +8,7 @@
 
 import type { DirectorySource, JudgementPort, KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
-import { contentHash, withDocumentText } from './directorySourceKit';
+import { bytesHash, contentHash, withDocumentText } from './directorySourceKit';
 import { runReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, READ_BYTES, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
 
@@ -37,7 +37,7 @@ function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPo
     ...(start.hashesAreContentHash ? { hashOf: contentHash } : {}),
   };
   // `withDocumentText` also maps the extracted text back to the listing hash (`withDocumentHashes`), which stays the file's.
-  const source = withDocumentText(proxied, proxied.readBytes);
+  const source = withDocumentText(proxied, proxied.readBytes, start.hashesAreContentHash ? bytesHash : undefined);
   const store: KnowledgeStore = {
     scopes: () => call('store', 'scopes'),
     facts: (s) => call('store', 'facts', [s]),

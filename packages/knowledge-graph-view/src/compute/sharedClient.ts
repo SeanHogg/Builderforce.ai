@@ -1,14 +1,24 @@
 /** The one compute client of the page, and the seam a host uses to say how its worker is built. */
 
-import { ComputeClient } from './client';
+import { ComputeClient, type ComputeProbe } from './client';
 import { currentSpawn, setSpawn, type Spawn } from './workerFactory';
 
 let shared: ComputeClient | null = null;
+let probe: ComputeProbe | null = null;
 
 /** The one client of the page, built on first use. */
 export function getComputeClient(): ComputeClient {
-    shared ??= new ComputeClient(currentSpawn);
+    if (!shared) { shared = new ComputeClient(currentSpawn); shared.probe = probe; }
     return shared;
+}
+
+/**
+ * Observes where every compute task runs (internal: a profiler imports it by path). Kept here, not on a client, so it
+ * survives `setWorkerFactory` replacing the shared client.
+ */
+export function setComputeProbe(next: ComputeProbe | null): void {
+    probe = next;
+    if (shared) shared.probe = next;
 }
 
 /**

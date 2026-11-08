@@ -29,9 +29,10 @@ vi.mock('./browserReplica', async (original) => {
 vi.mock('./reviewWorkerClient', () => ({
   runReview: vi.fn(async (job: { mode: string }, ports: import('./reviewJob').ReviewPorts) => {
     if (job.mode === 'plan') return { rootId: 'r', files: 1, byPack: { docs: 1 }, unchanged: 0, changed: ['a.md'], removed: [], skipped: [], estimatedModelCalls: 0 };
-    const scope = { rootId: 'r', title: 'r', packs: ['docs'] } as unknown as ScopeRecord;
+    const scope = { rootId: 'r', title: 'r', packs: ['docs'], lastDigest: 'dg1', lastReviewedAt: '2026-11-08T00:00:00Z' } as ScopeRecord;
     await ports.store.write({ scope, facts: [], relations: [] });
-    await ports.store.putExtracted!('h1', [{ sourceRef: 'src:r::a.md' } as never]);
+    // A whole extraction (nodes, edges, keys): the pack encoder counts them.
+    await ports.store.putExtracted!('h1', [{ sourceRef: 'src:r::a.md', sourceHash: 'h1', nodes: [], edges: [], keys: [] }]);
     await ports.manifest.set(filesManifestKey('r'), [{ id: 'a.md', hash: 'h1' }]);
     return { rootId: 'r', unjudged: 0, aborted: false };
   }),
@@ -91,10 +92,14 @@ describe('browser knowledge source: ONE upload path (the pack)', () => {
     await source.dispose();
   });
 
-  it('keeps a fresh root non-additive, and makes a root adopted from a server-reviewed manifest additive', async () => {
+  it('keeps a root additive until a COMPLETED review of it exists locally (root ids are shared across a project), and a root adopted from a server-reviewed manifest too', async () => {
     const fresh = createKnowledgeSource({ projectId: 7, client: fakeClient() as unknown as KnowledgeClient, directorySources: async () => [provider], onDegraded: vi.fn() });
     await review(fresh);
-    expect(env.hosts[0]!.markAdditive).not.toHaveBeenCalled();
+    // Nothing reviewed here yet: another host may already have synced this root, so the first review is additive.
+    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledTimes(1);
+    await review(fresh);
+    // The first review completed (its scope carries a digest): the second is no longer additive.
+    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledTimes(1);
     await fresh.dispose();
 
     // A root reviewed against the server before the local store existed: manifest entries (version 1 record), no rows.

@@ -33,6 +33,11 @@ import type { Spawn, WorkerLike } from './workerFactory';
 
 export interface Callbacks<R> { done(result: R): void; fail(error: unknown): void }
 
+/** Where a task ran: the worker, the main thread through the idle-step scheduler, or the main thread synchronously (`runSync`). */
+export type ComputeRealm = 'worker' | 'main-idle' | 'main-inline';
+export interface ComputeTaskEvent { kind: TaskKind; realm: ComputeRealm; graph: GraphId; attempt: number }
+export interface ComputeProbe { task(event: ComputeTaskEvent): void }
+
 /** How long the worker is kept after its last user is gone (a remount in this window finds the graph still loaded). */
 const KEEP_ALIVE_MS = 10_000;
 /** How many times a request whose graph was evicted under it is sent again before it runs in-process. */
@@ -41,6 +46,8 @@ const MAX_RETRIES = 2;
 /** A request in flight at the worker. */
 interface Pending {
     graph: GraphId;
+    /** The attempt of the dispatch that created it (reported to the probe). */
+    attempt: number;
     posted: boolean;
     receive(raw: unknown): void;
     fail(error: unknown): void;
@@ -70,6 +77,9 @@ export class ComputeClient {
     /** Graphs the worker could not take (a clone error while streaming): their requests run in-process, the worker stays. */
     private readonly localOnly = new Set<GraphId>();
 
+    /** Observes where each task actually ran (set by a profiler; null costs one check per task). */
+    probe: ComputeProbe | null = null;
+
     constructor(private readonly spawn: Spawn) {
         this.revive();
     }
@@ -97,6 +107,7 @@ export class ComputeClient {
     /** Computes on the main thread, now, with the same handler: for the small graphs where a round trip would cost more than the work. */
     runSync<K extends TaskKind>(kind: K, input: KindInput<K>): KindResult<K> {
         const { graph, req } = this.encode(kind, input);
+        this.emit(kind, 'main-inline', graph, 0);
         const task = handlerOf(kind)(this.adopted(graph, this.residency.handleOf(graph)?.graph), req);
         while (!task.step());
         return CODECS[kind].decode(task.result() as never, input as never) as KindResult<K>;
@@ -153,12 +164,13 @@ export class ComputeClient {
         // Captured now: a graph evicted before the idle callback runs is still the one this request's indices name.
         const source = this.residency.handleOf(graph)?.graph;
         const inProcess = (): void => {
+            this.emit(kind, 'main-idle', graph, attempt); // the moment the work is committed to the main thread, reruns included
             const then = (next: (v: unknown) => void) => (v: unknown): void => { try { next(v); } finally { this.releaseLocal(graph); } };
             stopLocal = runIdleTask(() => handlerOf(kind)(this.adopted(graph, source), req), then(hooks.deliver), then(hooks.fail));
         };
         if (this.inProcess || !this.worker || attempt > MAX_RETRIES || this.localOnly.has(graph)) { inProcess(); return () => stopLocal(); }
         const id = ++this.seq;
-        const entry: Pending = { graph, posted: false, receive: hooks.deliver, fail: hooks.fail, rerun: inProcess, retry: hooks.relaunch };
+        const entry: Pending = { graph, attempt, posted: false, receive: hooks.deliver, fail: hooks.fail, rerun: inProcess, retry: hooks.relaunch };
         this.pending.set(id, entry);
         void this.ensureLoaded(graph).then(() => this.post(id, entry, kind, req));
         return () => {
@@ -175,12 +187,19 @@ export class ComputeClient {
         try {
             entry.posted = true;
             this.worker.postMessage({ type: 'run', id, graph: entry.graph, kind, req });
+            this.emit(kind, 'worker', entry.graph, entry.attempt);
         } catch (error) {
             // One request that cannot be cloned runs here; the worker stays for the rest.
             this.pending.delete(id);
             entry.rerun();
             this.warn(error);
         }
+    }
+
+    /** Reports one execution to the probe. A probe is an observer: it can never break compute. */
+    private emit(kind: TaskKind, realm: ComputeRealm, graph: GraphId, attempt: number): void {
+        if (!this.probe) return;
+        try { this.probe.task({ kind, realm, graph, attempt }); } catch { /* observers do not break compute */ }
     }
 
     /** Runs `action` for a request, failing the request if the action throws. */

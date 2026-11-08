@@ -97,9 +97,14 @@ export interface JudgeEstimate {
   local: boolean;
 }
 
+/** What a host reads through the client: relations (the seed) and the extracted cache (`preloadExtracted` is a best-effort hint). */
+export type KnowledgeClientStore = Pick<KnowledgeStore, 'relations' | 'getExtracted'> & {
+  readonly preloadExtracted: (hashes: readonly string[]) => Promise<void>;
+};
+
 export interface KnowledgeClient {
-  /** KnowledgeStore over POST …/knowledge/write, GET …/knowledge/scopes, extracted cache routes. */
-  store: KnowledgeStore;
+  /** The read-through store: the server's relations and the extracted cache. Writes are packs or `writeRows`. */
+  store: KnowledgeClientStore;
   /** JudgementPort over POST …/knowledge/judge (a routed, usage-attributed model call). */
   judgement: JudgementPort;
   scopes(): Promise<KnowledgeScopeRecord[]>;

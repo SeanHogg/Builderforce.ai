@@ -16,8 +16,8 @@
  *             `reopen` (no picker), so Live runs on a root reviewed in an earlier session.
  *             The reload is `load` itself, with the query the view last loaded the root by
  *   estimate → the plan's model calls × the host's `callPrice` port (none ⇒ calls only)
- *   syncStatus → server counts from the graph, local from the open directory, skipped from
- *             the client; source states from the badges the graph carries (`syncStatus.ts`).
+ *   syncStatus → server counts from the graph, local from the local store (else the last review's record), skipped from
+ *             the review's record; source states from the badges the graph carries (`syncStatus.ts`).
  *   pinpoint → when the host passes `pinpoint` (vision + catalogs): the shared matching core
  *             over a literal scan of the open directory, else the server search (`pinpoint.ts`).
  *             No `history`/`applyFix`: the browser has no git and no shell, so the view hides those controls
@@ -30,8 +30,8 @@
 
 import { factKeyOf, filesManifestKey, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import {
-  KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, currentSourcesOf, dirtyFileName, factRightsCache, humanFactBatch,
-  type PumpSource, type SkippedFolder,
+  KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, dirtyFileName, factRightsCache, humanFactBatch,
+  shouldStayAdditive, type PumpSource, type SkippedFolder,
 } from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, ReviewControl, ReviewRequest, ReviewTarget } from '@builderforce/knowledge-graph-view';
@@ -95,19 +95,19 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
   const resumeQueues = async (rootIds: readonly string[]): Promise<void> => {
     const kn = await knowledge();
     for (const rootId of rootIds) {
-      if (await kn.files.read(dirtyFileName(rootId))) await host.resumeReplica(pumpOf(kn, rootId));
+      if (!(await kn.files.read(dirtyFileName(rootId)))) continue;
+      await adoptRule(kn, rootId);
+      await host.resumeReplica(pumpOf(kn, rootId));
     }
   };
   /**
-   * A root this host holds no rows for, or whose rows cannot outlive the page, must never make the pump delete server data:
-   *  - the in-memory fallback is empty after every reload;
-   *  - a root reviewed against the server before the local store existed has manifest entries but NO scope here, so an
-   *    incremental review would leave only the changed files locally (the server's copy seeds the unchanged ones through readThrough).
+   * A root this host has not COMPLETED a review of must never make the pump delete server data (root ids are shared across a
+   * project: another user may have synced it; the in-memory fallback is empty after every reload; a root reviewed against the
+   * server before the local store existed has no scope here). The ONE rule is agent-tools' `shouldStayAdditive`; it is applied
+   * before every review and every resume.
    */
-  const needsAdditive = async (kn: BrowserKnowledge, rootId: string): Promise<boolean> => {
-    if (kn.degraded) return true;
-    if ((await kn.store.scopes()).some((s) => s.rootId === rootId)) return false;
-    return (await currentSourcesOf(kn.manifest, rootId)).length > 0;
+  const adoptRule = async (kn: BrowserKnowledge, rootId: string): Promise<void> => {
+    if (kn.degraded || (await shouldStayAdditive(kn.store, rootId))) await host.markAdditive(rootId, kn.files);
   };
   /** Every directory a review opened this session: a re-review (Continue) reuses its handle, and Live watches those that can. */
   const opened = new Map<string, DirectorySource>();
@@ -191,14 +191,14 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     opened.set(dir.rootId, dir);
     const kn = await knowledge();
     const pump = pumpOf(kn, dir.rootId);
-    if (await needsAdditive(kn, dir.rootId)) await host.markAdditive(dir.rootId, kn.files);
+    await adoptRule(kn, dir.rootId);
     // The review writes the LOCAL store; the replicated store queues what changed, and the pump sends it as ONE pack.
     const ports: ReviewPorts = { source: dir, store: host.replicatedStoreOf(dir.rootId, kn.files, kn.store, pump, true), judgement: client.judgement, manifest: kn.manifest };
     const base = { force: !!req.force, modelCalls: KNOWLEDGE_REVIEW_MODEL_CALLS };
     const workerOpts = opts.createWorker ? { createWorker: opts.createWorker } : {};
     const plan = await runReview({ ...base, mode: 'plan' }, ports, workerOpts);
     const estimate = await estimateReview(plan, opts.callPrice, onDegraded);
-    // What this review leaves out is recorded per root (plan counts and skips, uploads skipped DURING it) for the sync status.
+    // What this review leaves out is recorded per root (plan counts, plan skips and skipped folders) for the sync status.
     const recorder = createReviewRecorder({
       rootId: dir.rootId, store: reviewRecords,
       folders: () => (dir as { skippedFolders?: () => SkippedFolder[] }).skippedFolders?.() ?? [],
@@ -215,7 +215,9 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     // One batch per review, as the editor's: the local store persists in checkpoints, not once per file.
     const batched = (): Promise<ReviewReport> => (ports.store.batched ? ports.store.batched(review) : review());
     void (async () => {
-      const report = await replica.duringReview(dir.rootId, kn.files, pump, batched, { full: !!req.force });
+      // The whole tree was covered when the review was forced, or (a first review) nothing was unchanged or skipped: only then may it end additive mode.
+      const covered = !!req.force || (plan.unchanged === 0 && plan.skipped.length === 0);
+      const report = await replica.duringReview(dir.rootId, kn.files, pump, batched, { full: covered && !kn.degraded });
       // The result is on the server when `done` is shown (the graph is server-built); a pump still sending after the wait goes on in the background.
       await host.drainedWithin(dir.rootId, REPLICA_DRAIN_MS).catch((error: unknown) => { onDegraded('replica drain', error, { rootId: dir.rootId }); });
       // The new review IS the files' current state: nothing is pending against it.

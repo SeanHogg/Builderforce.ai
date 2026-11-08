@@ -3,6 +3,10 @@
  * Its pump must never tombstone them; once a complete review ends additive mode it reconciles as before.
  */
 import { describe, expect, it } from 'vitest';
+import { filesManifestKey } from '@seanhogg/builderforce-memory/knowledge';
+import { createReplicaHost } from './replicaHost.js';
+import { shouldStayAdditive } from './replicaAdoption.js';
+import { pathOfRef } from './replicaPack.js';
 import { createReplicaQueue, memoryReplicaPersistence } from './replicaQueue.js';
 import { pumpReplica, type ReplicaClient } from './replicaPump.js';
 import { fakeServer, ROOT, world, type World } from './replicaTestkit.test-util.js';
@@ -61,6 +65,66 @@ describe('regression: an additive root never loses a server leaf it lacks locall
         expect(srv.s.facts.has('note:abc')).toBe(true);
         expect(srv.s.files.size).toBe(2); // the reconcile ran: the model leaves the store lacks were tombstoned
         expect(deletesOf(srv).flatMap((d) => d.facts ?? [])).not.toContain('note:abc');
+    });
+
+    it('regression: two additive hosts, the second holding less than the server, send NO pack and leave the generation alone', async () => {
+        const { srv, local } = await adopted();
+        const before = srv.s.generation;
+        await local.queue.setAdditive(true);
+        const state = await pump(local, srv.client);
+        expect(srv.syncs()).toEqual([]); // only server-only leaves differ: nothing is this host's to send
+        expect(srv.s.generation).toBe(before);
+        expect(state.dirty).toBe(0);
+    });
+
+    it('regression: an ABORTED first review on a root the server already holds deletes nothing; a complete one ends additive mode', async () => {
+        const { srv, local } = await adopted();
+        const files = { read: async (n: string) => store.get(n), write: async (n: string, t: string) => { store.set(n, t); } };
+        const store = new Map<string, string>();
+        const manifest = {
+            get: async (key: string) => (key === filesManifestKey(ROOT) ? local.sources.map((s) => ({ id: pathOfRef(ROOT, s.ref), hash: s.hash })) : undefined),
+            set: async () => undefined, delete: async () => undefined,
+        };
+        const source = { rootId: ROOT, files, local: local.local, client: srv.client as never, projectId: 1, manifest: manifest as never };
+        const host = createReplicaHost();
+        const queue = host.replicaQueueFor(ROOT, files);
+        await queue.adopt(1);
+        queue.markDirty(local.sources.map((s) => `f:${pathOfRef(ROOT, s.ref)}`));
+
+        // The local store has no completed review of this root: the shared rule keeps it additive before the review starts.
+        expect(await shouldStayAdditive(local.local, ROOT)).toBe(true);
+        await host.markAdditive(ROOT, files);
+        await host.duringReview(ROOT, files, source, async () => ({ aborted: true }), { full: true });
+        await host.replicaDrained(ROOT);
+        expect(deletesOf(srv)).toEqual([]);
+        expect(srv.s.files.size).toBe(4);
+        expect(await queue.additive()).toBe(true);
+
+        await host.duringReview(ROOT, files, undefined, async () => ({ aborted: false }), { full: true });
+        expect(await queue.additive()).toBe(false);
+        await host.disposeReplicas();
+    });
+
+    it('shouldStayAdditive: false only once the local store holds a completed review of the root', async () => {
+        const w = world();
+        expect(await shouldStayAdditive(w.local, ROOT)).toBe(true);
+        await w.local.write({ scope: { rootId: ROOT, title: 't', packs: [], lastDigest: 'dg' }, facts: [], relations: [] });
+        expect(await shouldStayAdditive(w.local, ROOT)).toBe(false);
+    });
+
+    it('a second tab\'s additive mark survives this tab\'s save (the file is merged, never overwritten with false)', async () => {
+        const persistence = memoryReplicaPersistence();
+        const tabA = createReplicaQueue(persistence);
+        const tabB = createReplicaQueue(persistence);
+        expect(await tabA.additive()).toBe(false); // A loaded the file: not additive
+        await tabB.setAdditive(true);
+        await tabB.flush();
+        tabA.markDirty(['f:x.ts']);
+        await tabA.flush(); // A saves its state back
+        expect(await createReplicaQueue(persistence).additive()).toBe(true);
+        await tabA.setAdditive(false); // an explicit turn-off IS written
+        await tabA.flush();
+        expect(await createReplicaQueue(persistence).additive()).toBe(false);
     });
 
     it('persists in the dirty file, and a file without the field reads as not additive', async () => {

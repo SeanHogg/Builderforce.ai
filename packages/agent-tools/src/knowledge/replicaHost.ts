@@ -71,7 +71,10 @@ export interface ReplicaHost {
         rootId: string, files: KnowledgeFiles, local: KnowledgeStore, pump: PumpSource | undefined, readThrough: boolean,
         resolve?: () => PumpSource | undefined,
     ): KnowledgeStore;
-    /** `opts.full`: a COMPLETE review that was not aborted ends additive mode before the pump starts. */
+    /**
+     * `opts.full`: the review covered the WHOLE tree (forced, or a first review with nothing unchanged or skipped). When it also was
+     * not aborted and read every file, it ends additive mode before the pump starts; any other review leaves the flag as it was.
+     */
     duringReview<T>(rootId: string, files: KnowledgeFiles, pump: PumpSource | undefined, run: () => Promise<T>, opts?: { full?: boolean }): Promise<T>;
     setRootReviewing(rootId: string, files: KnowledgeFiles, active: boolean): void;
     isRootReviewing(rootId: string): boolean;
@@ -108,6 +111,8 @@ interface Entry {
     corrupt: boolean;
     /** Epoch ms the last pump started: live edits wait until `MIN_SEND_INTERVAL_MS` after it. */
     lastStartAt?: number;
+    /** The last pump returned without sending because another host held the root's lock: nothing of ours has drained. */
+    lockMissed?: boolean;
     /** The source of the last pump, so a sign-in can restart one that paused on auth. */
     lastSource?: PumpSource;
     /** Runs once the queue has drained for `projectId` (marks the first sync done). */
@@ -116,6 +121,11 @@ interface Entry {
 
 /** A review report that says it was aborted (memory's `ReviewReport.aborted`); a thrown review never gets here. */
 const wasAborted = (result: unknown): boolean => typeof result === 'object' && result !== null && (result as { aborted?: unknown }).aborted === true;
+/** A report that says a file could not be read or extracted: that file is missing from the local tree, so the review did not cover it. */
+const hadFileErrors = (result: unknown): boolean => {
+    const r = (typeof result === 'object' && result !== null ? result : {}) as { readErrors?: unknown; extractErrors?: unknown };
+    return (typeof r.readErrors === 'number' && r.readErrors > 0) || (typeof r.extractErrors === 'number' && r.extractErrors > 0);
+};
 
 export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
     const lock = opts.lock ?? fileReplicaLock();
@@ -196,7 +206,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             let complete = false;
             try {
                 const result = await run();
-                complete = reviewOpts?.full === true && !wasAborted(result);
+                complete = reviewOpts?.full === true && !wasAborted(result) && !hadFileErrors(result);
                 return result;
             } finally {
                 host.setRootReviewing(rootId, files, false);
@@ -225,7 +235,8 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                 (timer as { unref?: () => void }).unref?.();
             });
             try {
-                return await Promise.race([running.then(() => 'drained' as const), late]);
+                // A pump that returned because another tab held the lock sent nothing: that is not "drained".
+                return await Promise.race([running.then(() => (entries.get(rootId)?.lockMissed ? 'pending' as const : 'drained' as const)), late]);
             } finally {
                 if (timer) clearTimeout(timer);
             }
@@ -254,6 +265,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             const running: Promise<void> = (async () => {
                 // Only the host holding the lock pumps: another host's pump on this root is not ours to double.
                 const held2 = await lock.acquire(source.files, source.rootId).catch(() => undefined);
+                held.lockMissed = !held2;
                 if (!held2) return;
                 try {
                     const state = await pumpReplica({

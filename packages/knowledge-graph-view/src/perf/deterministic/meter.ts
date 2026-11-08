@@ -124,5 +124,6 @@ export function unwrapDeep<T>(value: T, meters: readonly WorkMeter[]): T {
         for (const k of Object.keys(t)) out[k] = walk((t as Record<string, unknown>)[k], depth + 1);
         return out;
     };
-    return meters.length === 0 ? (walk(value, 0) as T) : meters.reduceRight<() => T>((next, m) => () => m.without(next), () => walk(value, 0) as T)();
+    const paused = meters.reduce<() => T>((next, m) => () => m.without(next), () => walk(value, 0) as T);
+    return paused();
 }

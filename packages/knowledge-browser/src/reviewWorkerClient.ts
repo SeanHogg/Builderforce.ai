@@ -13,7 +13,7 @@
 import type { ReviewPlan, ReviewProgress, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, READ_BYTES, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
-import { isByteReadable, isContentHashed, withDocumentText } from './directorySourceKit';
+import { bytesHash, isByteReadable, isContentHashed, withDocumentText } from './directorySourceKit';
 import { createReviewWorker } from './workerFactory';
 
 export type WorkerFactory = () => Worker | null;
@@ -46,7 +46,7 @@ async function answer(ports: ReviewPorts, port: ReviewPortName, method: string, 
 
 function inThread(ports: ReviewPorts): ReviewPorts {
   const { source } = ports;
-  return isByteReadable(source) ? { ...ports, source: withDocumentText(source, (path, signal) => source.readBytes(path, signal)) } : ports;
+  return isByteReadable(source) ? { ...ports, source: withDocumentText(source, (path, signal) => source.readBytes(path, signal), isContentHashed(source) ? bytesHash : undefined) } : ports;
 }
 
 export interface RunReviewOptions {

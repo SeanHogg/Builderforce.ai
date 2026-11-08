@@ -15,6 +15,14 @@ function fakeVfs(files: Record<string, string | undefined>) {
   return { fs, watch, unsubscribe, emit: (path: string, type = 'change') => listener?.({ type, path }) };
 }
 
+describe('vfs documents', () => {
+  it('does not list a pdf/office file: the VFS holds text, so it would be read as raw UTF-8', async () => {
+    const { fs } = fakeVfs({ '/a.md': 'a', '/b.pdf': '%PDF-garbage', '/c.docx': 'PK' });
+    const out = await listed(createVfsDirectorySource({ fs, rootId: 'web:vfs:x', title: 'x' }));
+    expect(out.map((e) => e.path)).toEqual(['a.md']);
+  });
+});
+
 interface Listed { path: string; hash: string; size: number }
 
 async function listed(source: DirectorySource): Promise<Listed[]> {

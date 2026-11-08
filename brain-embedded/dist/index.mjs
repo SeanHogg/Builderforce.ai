@@ -1529,10 +1529,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 28e-8],
+  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 97533e-10],
+  "~moonshotai/kimi-latest": [17e-8, 97533e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1606,7 +1606,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [434e-10, 28e-8],
+  "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
@@ -1838,7 +1838,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [19e-9, 7e-8],
+  "openai/gpt-oss-120b": [14e-9, 52e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -9138,18 +9138,35 @@ var ANALYZER_VERSIONS = {
 };
 
 // ../packages/agent-tools/src/knowledge/workspaceFingerprint.ts
-import { hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
+import { hashText } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 import { mediaTypeOfPath as mediaTypeOfPath2, sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
-import { hashText } from "@seanhogg/builderforce-memory/ingest";
 import { isDocumentPath, mediaTypeOfPath } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/documents/documentText.ts
 import { DEFAULT_MAX_FILE_BYTES } from "@seanhogg/builderforce-memory/knowledge";
-var MAX_ENTRY_BYTES = 32 * 1024 * 1024;
+var PDF_MEDIA_TYPE = "application/pdf";
+var DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+var XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+var PPTX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+var ODT_MEDIA_TYPE = "application/vnd.oasis.opendocument.text";
+var ODS_MEDIA_TYPE = "application/vnd.oasis.opendocument.spreadsheet";
+var ODP_MEDIA_TYPE = "application/vnd.oasis.opendocument.presentation";
+var EXTRACTABLE_DOCUMENT_MEDIA_TYPES = [
+  PDF_MEDIA_TYPE,
+  DOCX_MEDIA_TYPE,
+  XLSX_MEDIA_TYPE,
+  PPTX_MEDIA_TYPE,
+  ODT_MEDIA_TYPE,
+  ODS_MEDIA_TYPE,
+  ODP_MEDIA_TYPE
+];
+var isExtractableDocumentType = (mediaType) => EXTRACTABLE_DOCUMENT_MEDIA_TYPES.includes(mediaType.trim().toLowerCase());
+var MAX_ENTRY_BYTES = 8 * 1024 * 1024;
+var MAX_TOTAL_BYTES = 16 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
@@ -9254,7 +9271,7 @@ async function readFingerprint(ctx) {
   const changes = status2.split("\n").filter((line2) => line2.trim() && !isBuilderforceState(pathOfStatusLine(line2)));
   if (changes.length === 0) return { commit, branch, dirty: false, prefix };
   const tree = await workingTreeId(ctx);
-  return { commit, branch, dirty: true, prefix, ...tree ? { dirtyHash: hashText2(tree).slice(0, 16) } : {} };
+  return { commit, branch, dirty: true, prefix, ...tree ? { dirtyHash: hashText(tree).slice(0, 16) } : {} };
 }
 var memos = /* @__PURE__ */ new WeakMap();
 async function workspaceFingerprint(ctx) {
@@ -10439,7 +10456,7 @@ import {
   loadPartitions,
   normalizeKey
 } from "@seanhogg/builderforce-memory/knowledge";
-import { CONTENT_HASH_FIELD, hashText as hashText4 } from "@seanhogg/builderforce-memory/ingest";
+import { CONTENT_HASH_FIELD, hashText as hashText3 } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/codeComplexity.ts
 var TERNARY = String.raw`\?(?![.:,)=]|\(\s*\)\s*:)`;
@@ -10449,7 +10466,7 @@ var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
 import { canonicalJson, srcRef } from "@seanhogg/builderforce-memory/knowledge";
 import { areaOfPath } from "@seanhogg/builderforce-memory/working";
-import { hashText as hashText3 } from "@seanhogg/builderforce-memory/ingest";
+import { hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
 import { compareStr, GOD_MODULE_LIMITS } from "@seanhogg/builderforce-memory/knowledge";
@@ -10516,12 +10533,12 @@ import { DOCS_PACK as DOCS_PACK2 } from "@seanhogg/builderforce-memory/knowledge
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
 import { DOCS_PACK } from "@seanhogg/builderforce-memory/knowledge";
-import { isBinaryDocumentType, plainTextParser } from "@seanhogg/builderforce-memory/ingest";
+import { plainTextParser } from "@seanhogg/builderforce-memory/ingest";
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
   ...plainTextParser,
   id: "documents",
-  accepts: (source) => source.content.kind === "text" && isBinaryDocumentType(source.content.mediaType ?? "")
+  accepts: (source) => source.content.kind === "text" && isExtractableDocumentType(source.content.mediaType ?? "")
 };
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
@@ -10550,7 +10567,7 @@ import { sha256Hex as sha256Hex2 } from "@seanhogg/builderforce-memory/knowledge
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
 import { canonicalJson as canonicalJson2, compareStr as compareStr6 } from "@seanhogg/builderforce-memory/knowledge";
-import { hashText as hashText5 } from "@seanhogg/builderforce-memory/ingest";
+import { hashText as hashText4 } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
@@ -10571,7 +10588,7 @@ import {
 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-import { hashText as hashText6 } from "@seanhogg/builderforce-memory/ingest";
+import { hashText as hashText5 } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
 import { ignoreMatcher, ignoreSourcesOf } from "@seanhogg/builderforce-memory/knowledge";

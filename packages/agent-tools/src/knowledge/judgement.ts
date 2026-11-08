@@ -130,7 +130,9 @@ export function fallbackJudgement(ports: ReadonlyArray<JudgementPort>): Judgemen
             throw last;
         },
     };
-}/** After the timer fires the real call is aborted; the wrapper waits up to this long (never more than the timeout itself) for it to end before it gives up on it (a port that ignores its signal). */
+}
+
+/** After the timer fires the real call is aborted; the wrapper waits up to this long (never more than the timeout itself) for it to end before it gives up on it (a port that ignores its signal). */
 export const JUDGEMENT_ABORT_GRACE_MS = 10_000;
 
 /** Thrown for a request that did not settle in time: a failed call (the section stays UNJUDGED and owed), never an answer. */
@@ -150,7 +152,9 @@ export class JudgementTimeout extends Error {
 export function judgementWithTimeout(port: JudgementPort, timeout: number | ((req: JudgementRequest) => number) = defaultJudgementTimeoutMs): JudgementPort {
     return {
         async judge(req: JudgementRequest): Promise<JudgementResult> {
-            const ms = typeof timeout === "function" ? timeout(req) : timeout;
+            const asked = typeof timeout === "function" ? timeout(req) : timeout;
+            // A function-valued timeout that answers NaN, 0 or a negative falls back to the 60 s base.
+            const ms = Number.isFinite(asked) && asked > 0 ? asked : DEFAULT_JUDGEMENT_TIMEOUT_MS;
             const own = new AbortController();
             const relay = (): void => own.abort(req.signal?.reason);
             if (req.signal?.aborted) relay(); else req.signal?.addEventListener("abort", relay, { once: true });

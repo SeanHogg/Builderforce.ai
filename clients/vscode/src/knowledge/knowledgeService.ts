@@ -178,7 +178,7 @@ export function onKnowledgeChanged(cb: (rootId: string) => void): () => void {
 export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opts: { seed?: boolean } = {}): RootReview {
   const open = openRoot(secrets, root, { readThrough: !!opts.seed });
   // What this review skips (plan, folders, coverage, uploads during the run) is recorded per root for the sync status.
-  const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, ...(open.client ? { client: open.client } : {}), folders: () => open.source.skippedFolders() });
+  const recorder = createReviewRecorder({ rootId: root.rootId, store: reviewRecords, folders: () => open.source.skippedFolders() });
   const ports = reviewPortsFor({ secrets, open, recorder, log, hashCache: persistentHashCache(open.files, root.rootPath, hashCache) });
   return {
     open,

@@ -30,20 +30,19 @@ export type ReconcilePlan =
     /** The server holds no leaf of the root: one full pack, at the server's generation (0 when the root has no row). */
     | { kind: 'full'; touched: string[]; baseGeneration: number }
     /** Exactly these keys differ; `owned` are the ones only the server holds (this root's leaves to tombstone). */
-    | { kind: 'delta'; touched: string[]; baseGeneration: number; owned: Set<string> };
+    | { kind: 'delta'; touched: string[]; baseGeneration: number; owned: Set<string>; /** The server's root digest this plan was read at. */ serverDigest: string };
 
 /**
  * ADDITIVE mode (see `ReplicaQueue.additive`): a leaf only the server holds is not this store's to delete, so it leaves the plan.
  * A key the dirty set names (a file the review saw removed) is explicit work and stays, tombstone included.
+ * Nothing left to send is `equal` at the server's own generation and digest: no empty pack, no generation bump.
  */
 export function additivePlan(plan: ReconcilePlan, dirty: readonly string[]): ReconcilePlan {
     if (plan.kind !== 'delta') return plan;
     const explicit = new Set(dirty);
-    return {
-        ...plan,
-        touched: plan.touched.filter((k) => !plan.owned.has(k) || explicit.has(k)),
-        owned: new Set([...plan.owned].filter((k) => explicit.has(k))),
-    };
+    const touched = plan.touched.filter((k) => !plan.owned.has(k) || explicit.has(k));
+    if (touched.length === 0) return { kind: 'equal', ack: { generation: plan.baseGeneration, digest: plan.serverDigest } };
+    return { ...plan, touched, owned: new Set([...plan.owned].filter((k) => explicit.has(k))) };
 }
 
 /** Bucket ids asked for per leaf request. */
@@ -70,7 +69,7 @@ export async function planReconcile(args: {
     if (server.digest === tree.root) {
         return pending.length === 0
             ? { kind: 'equal', ack: { generation: server.generation, digest: server.digest } }
-            : { kind: 'delta', touched: pending, baseGeneration: server.generation, owned: new Set() };
+            : { kind: 'delta', touched: pending, baseGeneration: server.generation, owned: new Set(), serverDigest: server.digest };
     }
     // Every LEAF goes — model rows and files. A person's note, an agent's fact or a row seeded from the project is
     // not sent here: only those the dirty set names (written locally since) reach the project, through their own writer.
@@ -91,6 +90,6 @@ export async function planReconcile(args: {
     }
     const delta = leafDelta(tree, remote, differing);
     return {
-        kind: 'delta', touched: [...new Set([...delta.upsert, ...delta.remove, ...pending])], baseGeneration: server.generation, owned: new Set(delta.remove),
+        kind: 'delta', touched: [...new Set([...delta.upsert, ...delta.remove, ...pending])], baseGeneration: server.generation, owned: new Set(delta.remove), serverDigest: server.digest,
     };
 }

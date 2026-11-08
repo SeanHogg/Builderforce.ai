@@ -106,6 +106,13 @@ describe("a worker that reads its own file (PRD 41 A10)", () => {
     expect(out).toEqual({ extracted: [], binary: true });
   });
 
+  it("stops a read whose abort signal fired (a Stop never waits on a document)", async () => {
+    writeFileSync(join(dir, "stopped.md"), "# t\n");
+    const ctl = new AbortController();
+    ctl.abort();
+    await expect(handleExtractJob({ ...stub("stopped.md"), readFrom: { rootPath: dir, path: "stopped.md", hash: await sha256Hex(Buffer.from("# t\n")) } }, undefined, ctl.signal)).rejects.toThrow("timeout");
+  });
+
   it("fails a file over the size cap and a path outside the root", async () => {
     writeFileSync(join(dir, "huge.txt"), Buffer.alloc(DEFAULT_MAX_FILE_BYTES + 1, 97));
     await expect(handleExtractJob({ ...stub("huge.txt"), readFrom: { rootPath: dir, path: "huge.txt", hash: "h" } })).rejects.toThrow("too large");

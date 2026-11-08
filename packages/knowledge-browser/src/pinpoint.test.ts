@@ -58,6 +58,15 @@ describe('pinpointImage', () => {
     ]);
   });
 
+  it('never scans a pdf/office file as raw text (the page source would hand back the bytes as UTF-8)', async () => {
+    let read: string[] = [];
+    const dir = directory({ 'src/Review.tsx': 'label: Judging', 'spec.docx': 'PK Judging', 'spec.pdf': '%PDF Judging' });
+    const spied: DirectorySource = { ...dir, read: async (path: string) => { read = [...read, path]; return dir.read(path); } };
+    const out = await pinpointImage(deps({ directory: async () => spied }), PNG(), ROOT);
+    expect(read).toEqual(['src/Review.tsx']);
+    expect(out.matches.filter((m) => m.provenance === 'exact').map((m) => m.ref)).toEqual([ref('src/Review.tsx')]);
+  });
+
   it('without an open directory it uses the server search only through a catalog key', async () => {
     const out = await pinpointImage(deps({
       host: { describe: async () => REPLY, catalogKeys: async (t) => (t === 'Judging' ? ['review.judging'] : []) },

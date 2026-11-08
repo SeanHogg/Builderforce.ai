@@ -12,7 +12,7 @@ import * as path from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import type { KnowledgeReviewOptions, SymbolLookup } from "@builderforce/agent-tools/knowledge";
 import type { ExtractPool } from "@seanhogg/builderforce-memory/knowledge";
-import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
+import { DOCUMENT_EXTRACT_MS, handleExtractJob, type HostExtractJob } from "./extractJobHandler";
 import { createExtractPool, defaultExtractPoolSize, type ExtractPoolHandle } from "./extractPool";
 
 /** The bundle entry esbuild writes beside `out/extension.js`. */
@@ -45,7 +45,7 @@ function poolHandle(): ExtractPoolHandle | undefined {
     return undefined;
   }
   handle = createExtractPool({
-    size, workerFile, fallback: (job) => handleExtractJob(job as HostExtractJob), onDown: (reason) => { downReason = reason; },
+    size, workerFile, fallback: (job, signal) => handleExtractJob(job as HostExtractJob, undefined, signal), onDown: (reason) => { downReason = reason; },
   });
   return handle;
 }
@@ -65,9 +65,9 @@ export function withIndexSymbols(pool: ExtractPool, lookup: SymbolLookup | undef
 }
 
 /** The parallelism a review runs with: the pool and its width when there is one, always the judge width. */
-export function reviewParallelism(lookup?: SymbolLookup, rootPath?: string): Pick<KnowledgeReviewOptions, "extractPool" | "concurrency" | "judgeConcurrency" | "deferRead"> {
+export function reviewParallelism(lookup?: SymbolLookup, rootPath?: string): Pick<KnowledgeReviewOptions, "extractPool" | "concurrency" | "judgeConcurrency" | "deferRead" | "timeouts"> {
   const pool = poolHandle();
-  return { judgeConcurrency: JUDGE_CONCURRENCY, ...(pool ? { extractPool: withIndexSymbols(pool.pool, lookup, rootPath), concurrency: pool.size, ...(rootPath ? { deferRead: true } : {}) } : {}) };
+  return { judgeConcurrency: JUDGE_CONCURRENCY, ...(pool ? { extractPool: withIndexSymbols(pool.pool, lookup, rootPath), concurrency: pool.size, timeouts: { extractMs: DOCUMENT_EXTRACT_MS }, ...(rootPath ? { deferRead: true } : {}) } : {}) };
 }
 
 /** Creates the pool and starts its workers now, so the first file of a confirmed review meets a loaded worker (PRD 41 A10 rule 8). No pool ⇒ nothing. */

@@ -21,6 +21,7 @@ import { pickEdges } from '../scene/edgeBudget';
 import { stepLabels, type Recorder } from './harness';
 import type { Shared } from './modelSteps';
 import type { PerfGraph } from './syntheticGraph';
+import { sceneInputs } from './taskInputs';
 
 
 interface AnyCodec { encode(input: never, residency: Residency): { graph: number; req: unknown }; decode(raw: never, input: never): unknown }
@@ -73,13 +74,13 @@ export function runWorkerSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
         stepLabels([['nodes slice', slices(graph.nodes.length)], ['edges slice', slices(graph.edges.length)], ['findings slice', slices(graph.findings.length)], ['outline files slice', slices(graph.outline?.files.length ?? 0)], ['outline links slice', slices(graph.outline?.links.length ?? 0, LINK_SLICE)]]));
 
     const size = `nodes=${drawn.nodes.length} edges=${drawn.edges.length}`;
-    const rootId = graph.scope.rootId;
-    const layout2 = roundTrip(rec, p, 'layout2d', 'Graph 2D', size, { rootId, nodes: drawn.nodes, edges: drawn.edges });
-    const layout3 = roundTrip(rec, p, 'layout3d', '3D scene, Towers', size, { rootId, nodes: drawn.nodes, edges: drawn.edges });
-    const ranked = roundTrip(rec, p, 'rankEdges', 'Graph 2D, 3D scene (lines)', size, { nodes: drawn.nodes, edges: drawn.edges });
+    const input = sceneInputs(graph.scope.rootId, drawn);
+    const layout2 = roundTrip(rec, p, 'layout2d', 'Graph 2D', size, input.layout2d);
+    const layout3 = roundTrip(rec, p, 'layout3d', '3D scene, Towers', size, input.layout3d);
+    const ranked = roundTrip(rec, p, 'rankEdges', 'Graph 2D, 3D scene (lines)', size, input.rankEdges);
     if (!ranked) return;
     const picked = pickEdges(ranked, null);
     const pickedSize = `nodes=${drawn.nodes.length} picked edges=${picked.length}`;
-    if (layout2) roundTrip(rec, p, 'edgePaths', 'Graph 2D', pickedSize, { nodes: drawn.nodes, edges: picked, layout: layout2 });
-    if (layout3) roundTrip(rec, p, 'edgeBuffers', '3D scene (lines)', pickedSize, { nodes: drawn.nodes, edges: picked, layout: layout3, selected: null });
+    if (layout2) roundTrip(rec, p, 'edgePaths', 'Graph 2D', pickedSize, input.edgePaths(picked, layout2));
+    if (layout3) roundTrip(rec, p, 'edgeBuffers', '3D scene (lines)', pickedSize, input.edgeBuffers(picked, layout3));
 }

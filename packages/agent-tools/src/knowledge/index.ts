@@ -40,7 +40,7 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
-export { extractDocumentText, withDocumentHashes, withDocumentText } from './documents/index.js';
+export { documentDoc, EXTRACTABLE_DOCUMENT_MEDIA_TYPES, extractDocumentText, withDocumentHashes, withDocumentText } from './documents/index.js';
 export { extractedLogFileName, manifestFileName, migratingRootFiles, analysisPendingFileName, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
     createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, fileKey,
@@ -112,4 +112,5 @@ export {
     type PumpSource, type ReplicaHost, type ReplicaHostOptions, type UploadMarks,
 } from './replicaHost.js';
 export { type ReplicaHostClient, type SeedPort } from './replicaHostParts.js';
+export { shouldStayAdditive } from './replicaAdoption.js';
 export { additivePlan } from './replicaReconcile.js';

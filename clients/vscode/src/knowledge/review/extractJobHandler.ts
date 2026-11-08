@@ -14,11 +14,14 @@
 import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
-import { extractDocumentText, reviewPacks, textDocument } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, mediaTypeOfPath, reasonOf, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { documentDoc, reviewPacks } from "@builderforce/agent-tools/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, reasonOf, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
 export const READ_TIMEOUT_MS = 5_000;
+/** A pdf/office file reads and parses slower: its read (and the review's per-job `extractMs`, see `DOCUMENT_EXTRACT_MS`) gets 60 s, as the source's `readTimeoutMs` does. */
+export const DOCUMENT_READ_TIMEOUT_MS = 60_000;
+export const DOCUMENT_EXTRACT_MS = 60_000;
 
 /**
  * A job that makes the WORKER read the file (PRD 41 A10 rule 8): `rootPath` + `path` name it and `hash` is the
@@ -33,13 +36,14 @@ export type HostExtractJob = ExtractJob & { symbols?: readonly CodeSymbol[]; rea
 export type HostExtractResult = ExtractJobResult & { binary?: true };
 
 /** The file of a `readFrom` job as a document (hashed and decoded from the SAME bytes). Throws `timeout`, `too large`, `changed since plan`, or the read's own error; a path outside the root is refused. */
-async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: number) {
+async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: number, signal?: AbortSignal) {
   const root = nodePath.resolve(from.rootPath);
   const abs = nodePath.resolve(root, from.path);
   if (abs !== root && !abs.startsWith(root + nodePath.sep)) throw new Error("path outside the review root");
   let bytes: Uint8Array;
   try {
-    bytes = await readFile(abs, { signal: AbortSignal.timeout(timeoutMs) });
+    const deadline = AbortSignal.timeout(isDocumentPath(from.path) ? Math.max(timeoutMs, DOCUMENT_READ_TIMEOUT_MS) : timeoutMs);
+    bytes = await readFile(abs, { signal: signal ? AbortSignal.any([deadline, signal]) : deadline });
   } catch (error) {
     const name = (error as { name?: string } | undefined)?.name;
     throw name === "TimeoutError" || name === "AbortError" ? new Error("timeout") : error;
@@ -47,21 +51,15 @@ async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: numb
   if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) throw new Error("too large");
   // Hash FIRST, over the raw bytes (as `createFsDirectorySource` does): a stale plan must not store an extract under the wrong hash.
   if ((await sha256Hex(bytes)) !== from.hash) throw new Error("changed since plan");
-  // A pdf/office file is read as the text of its content (the documents pack claims it); anything else is decoded as UTF-8.
-  if (isDocumentPath(from.path)) {
-    const mediaType = mediaTypeOfPath(from.path);
-    const text = await extractDocumentText(bytes, mediaType);
-    // An unreadable document stays binary (a NUL), exactly as `withDocumentText` reports it.
-    return { id: from.path, tenantId: job.rootId, title: from.path, content: { kind: "text" as const, text: text ?? "\u0000", mediaType } };
-  }
-  return textDocument(job.rootId, from.path, new TextDecoder("utf-8").decode(bytes));
+  // The shared bytes → document rule (agent-tools `documentDoc`): a pdf/office file is the text of its content, anything else UTF-8.
+  return documentDoc(job.rootId, from.path, bytes, signal);
 }
 
-export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: number = READ_TIMEOUT_MS): Promise<HostExtractResult> {
+export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: number = READ_TIMEOUT_MS, signal?: AbortSignal): Promise<HostExtractResult> {
   const symbols = job.sectionsOnly ? undefined : job.symbols;
   let ready: ExtractJob = job;
   if (job.readFrom) {
-    const doc = await readDocument(job, job.readFrom, readTimeoutMs);
+    const doc = await readDocument(job, job.readFrom, readTimeoutMs, signal);
     if (doc.content.kind === "text" && isBinaryText(doc.content.text)) return { extracted: [], binary: true };
     // The job's source becomes the document the worker read, at the planned hash.
     const { readByPool: _unread, doc: _stale, ...base } = job;

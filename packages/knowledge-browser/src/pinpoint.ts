@@ -17,7 +17,7 @@
 import {
   blobDataUrl, checkPinpointImage, matchAnchors, parseVisionReply, sourcePathOf, type PinpointHit, type PinpointMatchResult,
 } from '@builderforce/agent-tools/knowledge';
-import type { DirectorySource, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { isDocumentPath, type DirectorySource, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeClient } from '@builderforce/knowledge-client';
 
 /** Files a literal scan reads at most, and the largest it reads. */
@@ -53,6 +53,8 @@ async function readCorpus(dir: DirectorySource): Promise<Map<string, string>> {
   for await (const entry of dir.list()) {
     if (corpus.size >= SCAN_MAX_FILES || chars >= SCAN_MAX_TOTAL_CHARS) break;
     if (entry.size > SCAN_MAX_FILE_BYTES) continue;
+    // pdf/office files are bytes; the page source's read() would hand back raw UTF-8 of a zip. Extraction is the review's, not this scan's.
+    if (isDocumentPath(entry.path)) continue;
     try {
       const doc = await dir.read(entry.path);
       if (doc.content.kind !== 'text') continue;

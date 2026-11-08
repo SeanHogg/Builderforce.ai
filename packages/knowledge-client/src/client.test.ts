@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
-import { createKnowledgeClient, MAX_WRITE_ROWS } from './client.js';
+import type { StoredFact } from '@seanhogg/builderforce-memory/knowledge';
+import { createKnowledgeClient } from './client.js';
 import { KnowledgeApiError } from './types.js';
 
 interface Seen { path: string; method: string; body: unknown }
@@ -17,45 +17,9 @@ function fakeFetch(respond: (path: string, init?: RequestInit) => Response = () 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const fact = (i: number): StoredFact => ({ key: `claim:${i}`, content: `c${i}`, source: 'knowledge-review', importance: 0.5, origin: 'model', fileAnchors: [] });
-const relation = (i: number): StoredRelation => ({ from: `fact:claim:${i}`, to: 'src:r::a.md', kind: 'about', weight: 1, origin: 'model' });
 const scope = { rootId: 'r', title: 'R', packs: ['docs'], lastDigest: 'd1' };
 
 describe('createKnowledgeClient', () => {
-  it('chunks a write into batches of at most 500 rows, scope on the last one only', async () => {
-    const { fetch, seen } = fakeFetch();
-    const client = createKnowledgeClient({ fetch, projectId: 12 });
-    await client.store.write({
-      scope,
-      facts: Array.from({ length: 700 }, (_, i) => fact(i)),
-      relations: Array.from({ length: 350 }, (_, i) => relation(i)),
-    });
-    expect(seen.map((s) => s.path)).toEqual(Array(3).fill('/api/projects/12/knowledge/write'));
-    const sizes = seen.map((s) => {
-      const b = s.body as { facts: unknown[]; relations: unknown[] };
-      return b.facts.length + b.relations.length;
-    });
-    expect(sizes).toEqual([MAX_WRITE_ROWS, MAX_WRITE_ROWS, 50]);
-    expect(seen.map((s) => 'scope' in (s.body as object))).toEqual([false, false, true]);
-    // The root rides every chunk (the server stamps and fences a pack upload by it).
-    expect(seen.map((s) => (s.body as { root?: string }).root)).toEqual(Array(3).fill((seen[2]!.body as { scope: { rootId: string } }).scope.rootId));
-  });
-
-  it('sends a scope-only write as one call', async () => {
-    const { fetch, seen } = fakeFetch();
-    await createKnowledgeClient({ fetch, projectId: 1 }).store.write({ scope, facts: [], relations: [] });
-    expect(seen).toHaveLength(1);
-    expect(seen[0]!.body).toMatchObject({ scope, facts: [], relations: [] });
-  });
-
-  it('marks stale through the single writer', async () => {
-    const { fetch, seen } = fakeFetch();
-    await createKnowledgeClient({ fetch, projectId: 3 }).store.markStale({ rootId: 'r' }, 'src:r::a.md', 'h2');
-    expect(seen[0]).toEqual({
-      path: '/api/projects/3/knowledge/write', method: 'POST',
-      body: { facts: [], relations: [], stale: [{ sourceRef: 'src:r::a.md', currentHash: 'h2' }] },
-    });
-  });
-
   it('maps extracted get to the hash route, a 404 to undefined', async () => {
     const { fetch, seen } = fakeFetch((path) =>
       path.endsWith('/h1') ? json({ extracted: [] }) : json({ error: 'not found' }, 404));
@@ -140,16 +104,13 @@ describe('createKnowledgeClient', () => {
     expect(out?.facts.map((f) => [f.key, f.origin, f.createdBy])).toEqual([
       ['claim:1', 'human', 'u1'], ['claim:2', 'model', null], ['claim:3', 'model', null],
     ]);
-    const viaStore = await client.store.facts({ rootId: 'vscode:r:' });
-    expect(viaStore.map((f) => f.createdBy)).toEqual(['u1', null, null]);
     expect(seen.map((s) => s.path).every((p) => p.includes('/knowledge/facts?'))).toBe(true);
   });
 
-  it('answers an unknown root with null facts, and an empty list through the store', async () => {
+  it('answers an unknown root with null facts', async () => {
     const { fetch } = fakeFetch(() => json({ error: 'unknown knowledge root' }, 404));
     const client = createKnowledgeClient({ fetch, projectId: 4 });
     expect(await client.facts('nope')).toBeNull();
-    expect(await client.store.facts({ rootId: 'nope' })).toEqual([]);
   });
 
   it('preloads extracted in one bulk POST and answers preloaded hashes without further calls', async () => {
@@ -231,24 +192,6 @@ describe('createKnowledgeClient', () => {
     expect(seen).toHaveLength(1);
   });
 
-
-  it('store.batched runs the work as-is; writes inside it still chunk with scope on the last chunk', async () => {
-    const { fetch, seen } = fakeFetch();
-    const client = createKnowledgeClient({ fetch, projectId: 10 });
-    let flushable = false;
-    const out = await client.store.batched!(async (flush) => {
-      flushable = true;
-      await flush(); // identity: a no-op, must not throw
-      await client.store.write({ scope, facts: Array.from({ length: 600 }, (_, i) => fact(i)), relations: [] });
-      return 'done';
-    });
-    expect(out).toBe('done');
-    expect(flushable).toBe(true);
-    expect(seen.map((s) => s.path)).toEqual(Array(2).fill('/api/projects/10/knowledge/write'));
-    const sizes = seen.map((s) => (s.body as { facts: unknown[] }).facts.length);
-    expect(sizes).toEqual([MAX_WRITE_ROWS, 100]);
-    expect(seen.map((s) => 'scope' in (s.body as object))).toEqual([false, true]);
-  });
 
   it('reads the judge estimate from the project’s door, keeping a null price and a local flag', async () => {
     const { fetch, seen } = fakeFetch(() => json({ perCallUsd: null, model: 'ollama/llama3', local: true }));

@@ -15,7 +15,7 @@
 
 import { isVcsMetadataName, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
 import {
-  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleContentHash, textDocument,
+  byPath, bytesHash, contentHash, hashesByBytes, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleContentHash, textDocument,
   type ByteReadableSource, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
@@ -122,9 +122,11 @@ export function createFsAccessDirectorySource(
       await walk();
       for (const [path, entry] of byPath(files)) {
         const file = await entry.getFile();
-        const hash = hashesByContent(path, file.size)
-          ? await subtleContentHash(await file.text())
-          : metadataHash(path, file.size, file.lastModified);
+        const hash = hashesByBytes(path, file.size)
+          ? bytesHash(new Uint8Array(await file.arrayBuffer()))
+          : hashesByContent(path, file.size)
+            ? await subtleContentHash(await file.text())
+            : metadataHash(path, file.size, file.lastModified);
         yield { path, hash, size: file.size };
       }
     },

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ComputeClient } from './client';
+import { ComputeClient, type ComputeTaskEvent } from './client';
+import { getComputeClient, setComputeProbe, setWorkerFactory } from './sharedClient';
 import { FakeWorker, flush, makeGraph } from './testKit';
 
 const RAW = { ok: 1 } as never;
@@ -169,5 +170,73 @@ describe('ComputeClient in-process fallback', () => {
         const client = new ComputeClient(() => { throw new Error('CSP blocked the worker'); });
         expect(client.isInProcess).toBe(true);
         expect(String((console.warn as unknown as { mock: { calls: string[][] } }).mock.calls[0]![0])).toContain('CSP blocked the worker');
+    });
+});
+
+describe('ComputeClient probe', () => {
+    const recorder = () => { const events: ComputeTaskEvent[] = []; return { events, probe: { task: (e: ComputeTaskEvent) => { events.push(e); } } }; };
+
+    it('a run at the worker emits one worker event', async () => {
+        const { client, ask } = setup();
+        const { events, probe } = recorder();
+        client.probe = probe;
+        ask();
+        await flush();
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ kind: 'insights', realm: 'worker', attempt: 0 });
+    });
+
+    it('with no worker, a run emits main-idle', async () => {
+        const client = new ComputeClient(() => null);
+        const { events, probe } = recorder();
+        client.probe = probe;
+        const calls = { done: vi.fn(), fail: vi.fn() };
+        client.run('insights', { graph: makeGraph(0) }, calls);
+        expect(events.map((e) => e.realm)).toEqual(['main-idle']);
+        await vi.waitFor(() => expect(calls.done.mock.calls.length + calls.fail.mock.calls.length).toBe(1), { timeout: 5000 });
+    });
+
+    it('runSync emits main-inline', () => {
+        const client = new ComputeClient(() => null);
+        const { events, probe } = recorder();
+        client.probe = probe;
+        client.runSync('insights', { graph: makeGraph(0) });
+        expect(events).toMatchObject([{ kind: 'insights', realm: 'main-inline', attempt: 0 }]);
+    });
+
+    it('a worker failOver rerun emits main-idle after the worker event', async () => {
+        const { client, ask, worker, calls } = setup();
+        const { events, probe } = recorder();
+        client.probe = probe;
+        ask();
+        await flush();
+        worker().onerror?.({});
+        await settled(calls);
+        expect(events.map((e) => e.realm)).toEqual(['worker', 'main-idle']);
+    });
+
+    it('a probe that throws does not break the run', async () => {
+        const { client, ask, calls, worker } = setup();
+        client.probe = { task: () => { throw new Error('probe bug'); } };
+        ask();
+        await flush();
+        const [run] = worker().runs();
+        worker().done(run!, RAW);
+        expect(calls.done).toHaveBeenCalledWith(RAW);
+    });
+
+    it('setComputeProbe reaches a client built after setWorkerFactory', () => {
+        const { probe } = recorder();
+        try {
+            setComputeProbe(probe);
+            expect(getComputeClient().probe).toBe(probe);
+            setWorkerFactory(() => new FakeWorker());
+            expect(getComputeClient().probe).toBe(probe);
+            setComputeProbe(null);
+            expect(getComputeClient().probe).toBeNull();
+        } finally {
+            setComputeProbe(null);
+            setWorkerFactory(null);
+        }
     });
 });

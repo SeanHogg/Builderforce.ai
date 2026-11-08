@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./symbols": "./src/symbols.ts",
     "./knowledge": "./src/knowledge/index.ts",
+    "./documents": "./src/documents.ts",
     "./knowledge-index": "./src/knowledge-index.ts",
     "./prefetch": "./src/prefetch/index.ts",
     "./node-path": "./src/node-path.ts",
@@ -29,8 +30,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.60",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.60",
+    "@seanhogg/builderforce-memory": "^2026.10.62",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.62",
     "fflate": "^0.8.2",
     "tree-sitter-wasms": "^0.1.11",
     "unpdf": "^1.8.1",

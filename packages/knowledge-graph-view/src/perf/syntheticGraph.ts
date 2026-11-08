@@ -20,8 +20,6 @@ export const PERF_STATS = {
 } as const;
 
 export const PREFIX = 'src:perf::';
-const USED_AREAS = 281; // 389 stations = 281 areas + 108 entry splits
-const OUTLINE_LINKS = 150_000;
 const PARTITIONS = ['application', 'domain', 'entry', 'infrastructure', 'presentation']; // sorted, as an outline holds them
 const TOPS = ['Builderforce.ai', '.claude', '.vscode', ''] as const; // '' = a root-level area
 
@@ -51,27 +49,64 @@ export interface PerfGraph {
     offBase: string;
 }
 
-export function buildPerfGraph(): PerfGraph {
+type Widen<T> = { -readonly [K in keyof T]: T[K] extends number ? number : Widen<T[K]> };
+/** The counts a build uses: `PERF_STATS` plus the three sizes the builder derives (areas that hold files, outline links, files in real areas). */
+type BuildStats = Widen<typeof PERF_STATS> & { usedAreas: number; outlineLinks: number; realFiles: number };
+
+/**
+ * The build counts at `scale` (1 = exactly `PERF_STATS`). Every count that sets the SIZE of the graph shrinks proportionally
+ * (at least 1); the few tiny structural ones stay as they are: `missing`, `links` and the single broken-link / orphan /
+ * unpartitioned findings, and the per-area file counts (20 in a layered area, 40 in an unlayered one). The unpartitioned share
+ * stays 36%. Edge and finding totals are NOT re-derived from each other: they scale independently by the same factor, so
+ * their ratios hold to rounding.
+ */
+function buildStats(scale: number): BuildStats {
+    const n = (v: number): number => (scale === 1 ? v : Math.max(1, Math.round(v * scale)));
+    const L = PERF_STATS.stationLayers;
+    const layers = { entry: n(L.entry), presentation: n(L.presentation), application: n(L.application), domain: n(L.domain), infrastructure: n(L.infrastructure), other: n(L.other) };
+    const usedAreas = layers.presentation + layers.application + layers.domain + layers.infrastructure + layers.other;
+    const S = PERF_STATS;
+    return {
+        nodes: n(S.nodes), areas: Math.max(n(S.areas), usedAreas + 1), files: n(S.files), missing: S.missing,
+        edges: n(S.edges), references: n(S.references), contains: n(S.contains), coChanged: n(S.coChanged), links: S.links,
+        drawnNodes: n(S.drawnNodes), drawnEdges: n(S.drawnEdges),
+        findings: n(S.findings), partitionViolation: n(S.partitionViolation), godModule: n(S.godModule),
+        brokenLink: S.brokenLink, orphan: S.orphan, unpartitioned: S.unpartitioned,
+        outlineFiles: n(S.outlineFiles), entryPoints: n(S.entryPoints), unpartitionedShare: S.unpartitionedShare,
+        stationLayers: layers, stations: n(S.stations),
+        usedAreas: scale === 1 ? 281 : usedAreas, // 389 stations = 281 areas + 108 entry splits
+        outlineLinks: n(150_000), realFiles: n(12_160),
+    };
+}
+
+export interface PerfGraphOptions {
+    /** Shrinks the graph proportionally (0 < scale <= 1, default 1 = the real graph's size, exactly). */
+    scale?: number;
+}
+
+export function buildPerfGraph(opts: PerfGraphOptions = {}): PerfGraph {
+    const scale = opts.scale ?? 1;
+    const P = buildStats(scale);
     const r = rng(0x5eed);
 
     // Areas: 95 'other' (no layer), the rest spread over the layers as the real stations are.
     const layers: Array<string | undefined> = [];
-    const L = PERF_STATS.stationLayers;
+    const L = P.stationLayers;
     for (const [layer, n] of [['domain', L.domain], ['presentation', L.presentation], ['application', L.application], ['infrastructure', L.infrastructure]] as const) for (let i = 0; i < n; i++) layers.push(layer);
     for (let i = 0; i < L.other; i++) layers.push(undefined);
     for (let i = layers.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [layers[i], layers[j]] = [layers[j], layers[i]]; }
 
     // Sizes: an 'other' area has 40 files; the rest share 12,160 by a power law (20 each at least). Sum = 15,960.
     const real = layers.map((l, i) => (l ? i : -1)).filter((i) => i >= 0);
-    const extraTotal = 12_160 - real.length * 20;
+    const extraTotal = P.realFiles - real.length * 20;
     const weight = real.map((_, k) => 1 / (k + 2) ** 0.8);
     const wsum = weight.reduce((a, b) => a + b, 0);
     const sizes = layers.map(() => 40);
     let used = 0;
     real.forEach((area, k) => { const s = 20 + Math.floor((extraTotal * weight[k]!) / wsum); sizes[area] = s; used += s; });
-    sizes[real[0]!]! += 12_160 - used;
+    sizes[real[0]!]! += P.realFiles - used;
 
-    const entryAreas = new Set(Array.from({ length: PERF_STATS.entryPoints }, (_, j) => Math.floor((j * USED_AREAS) / PERF_STATS.entryPoints)));
+    const entryAreas = new Set(Array.from({ length: P.entryPoints }, (_, j) => Math.floor((j * P.usedAreas) / P.entryPoints)));
     const areaBase = (i: number): string => {
         const top = TOPS[i % 10 < 6 ? 0 : i % 10 < 8 ? 1 : i % 10 < 9 ? 2 : 3];
         return top === '' ? `scripts${i}` : `${top}/pkg${i % 23}/area${i}`;
@@ -79,7 +114,7 @@ export function buildPerfGraph(): PerfGraph {
 
     const recs: FileRec[] = [];
     const owners = ['platform', 'web', 'api', 'data', 'infra', 'growth'];
-    for (let a = 0; a < USED_AREAS; a++) {
+    for (let a = 0; a < P.usedAreas; a++) {
         for (let n = 0; n < sizes[a]!; n++) {
             const entry = n === 0 && entryAreas.has(a);
             const bucket = n % 7 === 0 ? '' : `s${n % 6}/`;
@@ -95,7 +130,7 @@ export function buildPerfGraph(): PerfGraph {
         }
     }
     // Exactly 36% of the files are unpartitioned: 'other' areas already are; flip more from the tail (never an entry, never an area's first file).
-    const target = Math.round(PERF_STATS.unpartitionedShare * recs.length);
+    const target = Math.round(P.unpartitionedShare * recs.length);
     let loose = recs.filter((f) => f.layer === undefined).length;
     for (let i = recs.length - 1; i >= 0 && loose < target; i--) {
         const f = recs[i]!;
@@ -106,7 +141,7 @@ export function buildPerfGraph(): PerfGraph {
     // The outline: files sorted by ref (their indexes are the links' ends).
     const sorted = [...recs].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     const slot = new Map<FileRec, number>(sorted.map((f, i) => [f, i] as const));
-    const areaRefs = Array.from({ length: USED_AREAS }, (_, i) => areaRef(`A${i}`));
+    const areaRefs = Array.from({ length: P.usedAreas }, (_, i) => areaRef(`A${i}`));
     const outlineFiles: OutlineFile[] = sorted.map((f) => {
         const badges: Record<string, number | string> = {};
         for (const k of OUTLINE_BADGE_KEYS) if (f.badges[k] !== undefined) badges[k] = f.badges[k]!;
@@ -124,7 +159,7 @@ export function buildPerfGraph(): PerfGraph {
     const pick = (list: readonly number[], skew: number): number => list[Math.floor(list.length * r() ** skew)]!;
     const seen = new Set<number>();
     const links: Array<[number, number, number, number]> = [];
-    while (links.length < OUTLINE_LINKS) {
+    while (links.length < P.outlineLinks) {
         const from = r() < 0.05 ? pick(entries, 1) : Math.floor(sorted.length * r() ** 1.4);
         const k = rank(sorted[from]!);
         const to = k >= 0 && k < 4 && r() < 0.6 ? pick(pools[k + 1]!, 2.5) : Math.floor(sorted.length * r() ** 2.5);
@@ -139,26 +174,26 @@ export function buildPerfGraph(): PerfGraph {
     const outline: GraphOutline = { prefix: PREFIX, areas: areaRefs, partitions: PARTITIONS, files: outlineFiles, links, capped: false };
 
     // The cut graph: the 1990 most important files, every area node, 10 missing targets.
-    const top = [...sorted].sort((a, b) => b.importance - a.importance || (a.path < b.path ? -1 : 1)).slice(0, PERF_STATS.files);
+    const top = [...sorted].sort((a, b) => b.importance - a.importance || (a.path < b.path ? -1 : 1)).slice(0, P.files);
     const fileNode = (f: FileRec, godModule: boolean): KNode => ({
         ref: ref(f.path), kind: 'file', label: f.path.slice(f.path.lastIndexOf('/') + 1), pack: 'code', ...(f.layer ? { partition: f.layer } : {}),
         area: areaRefs[f.area]!, importance: f.importance, origin: 'extracted', sourceHash: `h${slot.get(f)}`,
         badges: godModule ? { ...f.badges, patterns: 'god-module', lines: 900, exports: 40 } : f.badges,
     });
-    const godAt = new Set(Array.from({ length: PERF_STATS.godModule }, (_, i) => i * 19));
+    const godAt = new Set(Array.from({ length: P.godModule }, (_, i) => i * 19));
     const graphFiles = top.map((f, i) => fileNode(f, godAt.has(i)));
-    const areaNodes: KNode[] = Array.from({ length: PERF_STATS.areas }, (_, i) => ({
-        ref: i < USED_AREAS ? areaRefs[i]! : areaRef(`X${i}`), kind: 'area', label: i < USED_AREAS ? `Area ${i}` : `Extra ${i}`, pack: 'code',
+    const areaNodes: KNode[] = Array.from({ length: P.areas }, (_, i) => ({
+        ref: i < P.usedAreas ? areaRefs[i]! : areaRef(`X${i}`), kind: 'area', label: i < P.usedAreas ? `Area ${i}` : `Extra ${i}`, pack: 'code',
         importance: 0.001 + 0.009 * r(), origin: 'extracted',
     }));
-    const missing: KNode[] = Array.from({ length: PERF_STATS.missing }, (_, i) => ({
+    const missing: KNode[] = Array.from({ length: P.missing }, (_, i) => ({
         ref: ref(`docs/missing${i}.md`), kind: 'missing', label: `missing${i}.md`, pack: 'docs', importance: 0.5, origin: 'extracted',
     }));
 
     // Edges: hubs by a skewed pick (a few files take thousands of in-edges); the rest of the references point at areas.
     const gf = graphFiles.map((n) => n.ref);
     const edge = (from: string, to: string, kind: string, extra: Partial<KEdge> = {}): KEdge => ({ from: from as NodeRef, to: to as NodeRef, kind, weight: 1, origin: 'extracted', ...extra });
-    const fileRefs = PERF_STATS.drawnEdges - PERF_STATS.coChanged - PERF_STATS.links;
+    const fileRefs = P.drawnEdges - P.coChanged - P.links;
     const inDegree = new Map<string, number>();
     const edges: KEdge[] = [];
     const findings: Finding[] = [];
@@ -176,7 +211,7 @@ export function buildPerfGraph(): PerfGraph {
         let from = gf[Math.floor(gf.length * r() ** 1.4)]!, to = gf[Math.floor(gf.length * r() ** 2.5)]!;
         if (from === to) { from = gf[(gf.indexOf(from) + 1) % gf.length]!; }
         inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
-        acc += PERF_STATS.partitionViolation;
+        acc += P.partitionViolation;
         if (acc >= fileRefs) {
             acc -= fileRefs;
             const verdict = i % 10 < 7 ? 'skips' : 'upward';
@@ -190,13 +225,13 @@ export function buildPerfGraph(): PerfGraph {
             edges.push(edge(from, to, 'references', i % 5 === 0 ? {} : { verdict: i % 5 < 3 ? 'allowed' : 'same' }));
         }
     }
-    const toArea = PERF_STATS.references - fileRefs;
+    const toArea = P.references - fileRefs;
     for (let i = 0; i < toArea; i++) edges.push(edge(gf[Math.floor(gf.length * r())]!, areaNodes[Math.floor(areaNodes.length * r() ** 2)]!.ref, 'references'));
-    for (let i = 0; i < PERF_STATS.coChanged; i++) edges.push(edge(gf[(i * 7) % gf.length]!, gf[(i * 13 + 5) % gf.length]!, 'co-changed', { weight: 0.5 }));
-    for (let i = 0; i < PERF_STATS.links; i++) edges.push(edge(gf[i * 3]!, missing[i]!.ref, 'links'));
-    for (let i = 0; i < PERF_STATS.contains; i++) edges.push(edge(areaNodes[i]!.ref, gf[i * 11]!, 'contains'));
+    for (let i = 0; i < P.coChanged; i++) edges.push(edge(gf[(i * 7) % gf.length]!, gf[(i * 13 + 5) % gf.length]!, 'co-changed', { weight: 0.5 }));
+    for (let i = 0; i < P.links; i++) edges.push(edge(gf[i * 3]!, missing[i]!.ref, 'links'));
+    for (let i = 0; i < P.contains; i++) edges.push(edge(areaNodes[i]!.ref, gf[i * 11]!, 'contains'));
 
-    for (let i = 0; i < PERF_STATS.godModule; i++) {
+    for (let i = 0; i < P.godModule; i++) {
         const n = graphFiles[i * 19]!;
         findings.push({ id: fid('god-module', [n.ref]), kind: 'god-module', pack: 'code', nodes: [n.ref], severity: 'warn', params: { lines: 900, exports: 40, complexity: 80, linesLimit: 500, exportsLimit: 20, complexityLimit: 50 }, requestKey: 'knowledgeGraph.fix.godModule' });
     }
@@ -215,7 +250,7 @@ export function buildPerfGraph(): PerfGraph {
         outline,
     };
     const hub = [...inDegree].sort((a, b) => b[1] - a[1])[0]![0];
-    return { graph, graphFiles, hub, offBase: areaNodes[USED_AREAS]!.ref };
+    return { graph, graphFiles, hub, offBase: areaNodes[P.usedAreas]!.ref };
 }
 
 /** The numbers `PERF_STATS` names, measured from a built graph (the test asserts they match). */

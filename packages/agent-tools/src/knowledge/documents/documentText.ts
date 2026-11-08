@@ -14,7 +14,7 @@
  * Pure of fs/network, Worker-safe; pdf.js is imported lazily so only a PDF pays for it.
  */
 
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
 import { DEFAULT_MAX_FILE_BYTES } from '@seanhogg/builderforce-memory/knowledge';
 
 export const PDF_MEDIA_TYPE = 'application/pdf';
@@ -121,21 +121,58 @@ const ODF_SPEC: ScanSpec = { allText: true, paragraphEnds: ['/text:p', '/text:h'
 
 const slideNumber = (name: string): number => Number(/slide(\d+)\.xml$/.exec(name)?.[1] ?? 0);
 
-/** Unzip only the wanted entries. Declared sizes are checked in the filter, BEFORE fflate allocates for inflating. */
-function unzipEntries(bytes: Uint8Array, wanted: (name: string) => boolean, signal?: AbortSignal): Record<string, Uint8Array> {
+/**
+ * Compressed bytes fed per push. Deflate expands at most ~1032:1, so one push can inflate at most ~4 MB: the
+ * process never holds more than that beyond the caps, and the signal/caps are checked between pushes.
+ */
+const PUSH_BYTES = 4096;
+
+/**
+ * Unzip only the wanted entries, STREAMING: the declared size is a cheap pre-check, but the caps are enforced on the
+ * ACTUAL inflated byte count (a header may lie), and inflating stops the moment a cap is passed.
+ * `onChunk` (a test seam) is called with every inflated chunk of a wanted entry.
+ */
+export function unzipEntries(
+    bytes: Uint8Array, wanted: (name: string) => boolean, signal?: AbortSignal, onChunk?: (chunk: Uint8Array) => void,
+): Record<string, Uint8Array> {
+    const out: Record<string, Uint8Array> = {};
     let seen = 0;
     let total = 0;
-    return unzipSync(bytes, {
-        filter: (f) => {
+    const unzip = new Unzip((file) => {
+        signal?.throwIfAborted();
+        if (++seen > MAX_ZIP_ENTRIES) throw new DocumentLimitError('document: too many zip entries');
+        if (!wanted(file.name)) return;
+        const declared = file.originalSize ?? 0;
+        if (declared > MAX_ENTRY_BYTES) throw new DocumentLimitError('document: zip entry too large');
+        if (total + declared > MAX_TOTAL_BYTES) throw new DocumentLimitError('document: zip inflates too large');
+        const parts: Uint8Array[] = [];
+        let entryBytes = 0;
+        file.ondata = (err, chunk, final) => {
+            if (err) throw err;
             signal?.throwIfAborted();
-            if (++seen > MAX_ZIP_ENTRIES) throw new DocumentLimitError('document: too many zip entries');
-            if (!wanted(f.name)) return false;
-            if (f.originalSize > MAX_ENTRY_BYTES) throw new DocumentLimitError('document: zip entry too large');
-            total += f.originalSize;
+            entryBytes += chunk.length;
+            total += chunk.length;
+            if (entryBytes > MAX_ENTRY_BYTES) throw new DocumentLimitError('document: zip entry too large');
             if (total > MAX_TOTAL_BYTES) throw new DocumentLimitError('document: zip inflates too large');
-            return true;
-        },
+            onChunk?.(chunk);
+            parts.push(chunk);
+            if (final) {
+                const joined = new Uint8Array(entryBytes);
+                let at = 0;
+                for (const p of parts) { joined.set(p, at); at += p.length; }
+                out[file.name] = joined;
+            }
+        };
+        file.start();
     });
+    unzip.register(UnzipInflate);
+    unzip.register(UnzipPassThrough);
+    if (bytes.length === 0) unzip.push(bytes, true);
+    for (let at = 0; at < bytes.length; at += PUSH_BYTES) {
+        signal?.throwIfAborted();
+        unzip.push(bytes.subarray(at, at + PUSH_BYTES), at + PUSH_BYTES >= bytes.length);
+    }
+    return out;
 }
 
 function ooxmlText(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): string | undefined {
@@ -181,7 +218,8 @@ async function pdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<string>
         }
         return pages.join('\n');
     } finally {
-        await pdf.destroy();
+        // The runtime proxy has destroy(); the installed pdfjs types omit it, so call it through a structural guard.
+        await (pdf as { destroy?: () => Promise<void> }).destroy?.();
     }
 }
 

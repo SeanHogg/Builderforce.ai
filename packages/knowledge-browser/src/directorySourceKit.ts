@@ -6,17 +6,18 @@
  * come from.
  *
  * The listing hash is the CONTENT hash (SHA-256 of the UTF-8 text) wherever the content is
- * local, so the extracted cache on the API (`PUT …/knowledge/extracted/:hash`) is shared
- * across hosts. A file the plan skips anyway (binary by extension, over the size cap) is
+ * local, so the extracted bodies the pack carries (`…/knowledge/sync`, keyed by hash) are
+ * shared across hosts. A file the plan skips anyway (binary by extension, over the size cap) is
  * not read for it; its hash is taken from its metadata instead.
  */
 
-import { DEFAULT_MAX_FILE_BYTES, isBinaryPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
+import { DEFAULT_MAX_FILE_BYTES, isBinaryPath, isDocumentPath, sha256Hex, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import { rootIdFor } from '@builderforce/agent-tools/knowledge';
 
 /**
  * A `DirectorySource` that DECLARES its `list()` hashes are `contentHash` of the text `read()` returns (upload, File System
- * Access and the in-memory VFS; never a Cloud Drive's metadata hash). `hashOf` alone proves nothing about what `list()` hashed,
+ * Access and the in-memory VFS; never a Cloud Drive's metadata hash). A byte-readable one lists a pdf/office file (`hashesByBytes`)
+ * by {@link bytesHash} of its bytes instead, which the review's `withDocumentText` re-checks with the same function. `hashOf` alone proves nothing about what `list()` hashed,
  * so the review worker trusts only this declared kind.
  */
 export type ContentHashedSource = DirectorySource & { readonly hashKind: 'content' };
@@ -58,6 +59,19 @@ export function hashesByContent(path: string, size: number): boolean {
 
 export function contentHash(text: string): string {
   return sha256Hex(text);
+}
+
+/**
+ * A pdf/office file's listing hash is over its BYTES (its text is extracted by the review, and the "changed since plan" check
+ * re-hashes the bytes it read with {@link bytesHash} — `withDocumentText`'s `hashBytes`). Only a document the plan would read.
+ */
+export function hashesByBytes(path: string, size: number): boolean {
+  return isDocumentPath(path) && size <= DEFAULT_MAX_FILE_BYTES;
+}
+
+/** SHA-256 of a file's bytes: THE byte hash a content-hashed source lists documents with and `withDocumentText` re-checks with. */
+export function bytesHash(bytes: Uint8Array): string {
+  return sha256Hex(bytes);
 }
 
 /**

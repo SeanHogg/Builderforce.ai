@@ -9,8 +9,8 @@
  *            review's recorded plan counts (skipped files not counted), kept in sessionStorage;
  *            zeros when none was recorded;
  *   replica  the replica queue's state (what is still to send), when the source has one;
- *   skipped  the last review's recorded list (plan skips, skipped folders, uploads skipped
- *            during it); absent when none was recorded = unknown, not "none".
+ *   skipped  the last review's recorded list (plan skips, skipped folders, coverage files the
+ *            signals skipped); absent when none was recorded = unknown, not "none".
  */
 
 import { CODE_BADGES, graphCounts, isCodePath, reviewRecordStore, type RecordPersistence, type ReviewRecord } from '@builderforce/agent-tools/knowledge';

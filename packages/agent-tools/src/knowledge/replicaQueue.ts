@@ -167,6 +167,8 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
     let ack: ReplicaAck | undefined;
     let analysis: ReplicaAnalysis | undefined;
     let isAdditive = false;
+    /** Additive was explicitly turned off since the last save: only then may a save write `additive: false` over a file that says true. */
+    let additiveOff = false;
     /** The analysis changed since it was last written to its own file. */
     let analysisChanged = false;
     let loaded: Promise<void> | undefined;
@@ -226,6 +228,11 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
         changedSinceSave = false;
         saving = saving.then(async () => {
             await ready(); // never write before the file was read: that would replace what it held
+            // Another tab may have marked the root additive since this one loaded: never write `additive: false` over it unless it was turned off HERE.
+            if (!isAdditive && !additiveOff) {
+                try { if (parse(await persistence.read()).additive) isAdditive = true; } catch (error) { opts.onError?.(error); }
+            }
+            additiveOff = false;
             await persistence.write(JSON.stringify({
                 version: 2, ...(project !== undefined ? { projectId: project } : {}), ...(ack ? { ack } : {}),
                 dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}), ...(isAdditive ? { additive: true } : {}),
@@ -281,14 +288,14 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready();
             if (project === projectId) return false;
             const discarded = project !== undefined && dirty.size > 0;
-            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; }
+            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; additiveOff = true; }
             project = projectId;
             touch();
             return discarded;
         },
         async additive() { await ready(); return isAdditive; },
-        async setAdditive(on) { await ready(); if (isAdditive !== on) { isAdditive = on; touch(); } },
-        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; touch(); },
+        async setAdditive(on) { await ready(); if (!on) additiveOff = true; if (isAdditive !== on) { isAdditive = on; touch(); } },
+        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; additiveOff = true; touch(); },
         async flush() { await ready(); await save(); },
         onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
     };

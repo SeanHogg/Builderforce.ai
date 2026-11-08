@@ -44,6 +44,23 @@ async function listAll(source: ReturnType<typeof createFsAccessDirectorySource>)
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe('fs access readBytes', () => {
+  it("hands out a file's raw bytes and leaves read() as the plain text read", async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const handle: FsDirectoryHandleLike = {
+      kind: 'directory',
+      name: 'docs',
+      async *values() {
+        yield { kind: 'file', name: 'a.pdf', async getFile() { return { size: 3, lastModified: 1, text: async () => 'raw', arrayBuffer: async () => bytes.buffer }; } } as FsFileHandleLike;
+      },
+    };
+    const source = createFsAccessDirectorySource(handle, 'web');
+    expect(await source.readBytes('a.pdf')).toEqual(bytes);
+    expect(await source.readBytes('nope.pdf')).toEqual(new Uint8Array());
+    expect((await source.read('a.pdf')).content).toMatchObject({ kind: 'text', text: 'raw' });
+  });
+});
+
 describe('File System Access directory source', () => {
   const tree: Tree = {
     'README.md': '# Lease\nNotice is 30 days.',
