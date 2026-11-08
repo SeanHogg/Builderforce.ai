@@ -195,6 +195,8 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
     /** Marks that arrived before the file was read. */
     const early: string[] = [];
     let changedSinceSave = false;
+    /** Counts saves begun: a reload whose read raced a save treats this queue as holding unsaved work. */
+    let savesBegun = 0;
     let saving: Promise<void> = Promise.resolve();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const listeners = new Set<() => void>();
@@ -245,6 +247,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
         if (timer) { clearTimeout(timer); timer = undefined; }
         if (!changedSinceSave) return saving;
         changedSinceSave = false;
+        savesBegun += 1;
         saving = saving.then(async () => {
             await ready(); // never write before the file was read: that would replace what it held
             // Another tab may have marked the root additive since this one loaded: never write `additive: false` over it unless it was turned off HERE.
@@ -319,17 +322,21 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
         async reload() {
             await ready();
             await saving; // a save in flight is part of the file
+            const savesBefore = savesBegun;
             let text: string | undefined;
             try { text = await persistence.read(); } catch (error) { opts.onError?.(error); return; }
             if (!text) return; // nothing persisted: memory is the truth
             const from = parse(text);
             if (from.corrupt || from.legacy) return;
             if (from.projectId !== undefined && from.projectId !== project) return; // another project's queue is not ours to merge
-            if (!changedSinceSave) { dirty.clear(); add(from.keys); ack = from.ack; }
+            // Nothing unsaved here, and no save began while the file was read: the file IS this queue, as another opener left it.
+            if (!changedSinceSave && savesBegun === savesBefore) { dirty.clear(); add(from.keys); ack = from.ack; }
             else {
                 // Our unsaved marks stay and the other opener's unsent keys join them (a resend is harmless, a lost key is not); the newer ack wins.
+                const before = dirty.size;
                 for (const k of from.keys) if (!dirty.has(k)) dirty.set(k, ++seq);
                 if (from.ack && (!ack || from.ack.generation > ack.generation)) ack = from.ack;
+                if (dirty.size > before) touch(); // a save that raced the read may have written without them
             }
             // OR-ed in, unless this queue turned it off since its last save (a complete review here outranks the file).
             if (from.additive && !additiveOff) isAdditive = true;
