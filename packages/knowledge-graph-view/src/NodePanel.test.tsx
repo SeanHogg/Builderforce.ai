@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { NodePanel } from './NodePanel';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { packLabel } from './names';
@@ -38,7 +39,7 @@ describe('NodePanel: what the node is', () => {
 describe('NodePanel: a stored asset', () => {
   it('shows its media type and size, and says nothing is remembered about its contents', () => {
     const base = docsFixture();
-    const png = { ...base.nodes[0]!, ref: 'src:docs::logo.png', label: 'logo.png', badges: { asset: 1, mediaType: 'image/png', size: 2048 } };
+    const png: KNode = { ...base.nodes[0]!, ref: 'src:docs::logo.png' as KNode['ref'], label: 'logo.png', badges: { asset: 1, mediaType: 'image/png', size: 2048 } };
     const assetGraph = { ...base, nodes: [...base.nodes, png] };
     render(
       <NodePanel

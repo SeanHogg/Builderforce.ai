@@ -72,7 +72,7 @@ export function createDriveDirectorySource(
       return textDocument(rootId, path, await file.text());
     },
   };
-  return withDocumentText(source, async (path) => {
+  return withDocumentText(source, async (path: string) => {
     await walk();
     const item = items.get(path);
     return item ? new Uint8Array(await (await driveApi.fetchFile(connection.id, item)).arrayBuffer()) : new Uint8Array();

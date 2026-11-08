@@ -7,7 +7,8 @@ const base: SyncStatus = { local: { files: 10, docs: 0 }, sources: [] };
 describe('syncGap', () => {
     it('takes the missing count and the too-large part from ONE reading', () => {
         const gap = syncGap({ ...base, skipped: [{ path: 'a', reason: 'too-large' }, { path: 'b', reason: 'binary' }, { path: 'c', reason: 'too-large' }] });
-        expect(gap).toEqual({ missing: 3, tooLarge: 2 });
+        // The 'binary' skip is stored as an asset node, so it is not "missing".
+        expect(gap).toEqual({ missing: 2, tooLarge: 2 });
         expect(gap.tooLarge).toBeLessThanOrEqual(gap.missing);
     });
     it('falls back to the count gap, with nothing called too large', () => {

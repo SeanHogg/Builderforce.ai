@@ -10,10 +10,10 @@
  */
 
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
-import { filesManifestKey, type KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
+import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  createReplicaHost, forgetRootPorts, migratingRootFiles, rootManifest, rootStore,
+  createReplicaHost, forgetRootPorts, migratingRootFiles, rootManifest, rootStore, shouldStayAdditive,
   type KnowledgeFiles, type PumpSource, type ReplicaHost,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -50,9 +50,29 @@ let host: ReplicaHost | undefined;
 export function onPremReplicaHost(): ReplicaHost {
   if (!host) {
     host = createReplicaHost({ report: (what, error) => logDebug(`[knowledge] replica ${what}: ${error instanceof Error ? error.message : String(error)}`) });
-    process.once("exit", () => { void host?.disposeReplicas(); });
+    flushReplicasOnExit();
   }
   return host;
+}
+
+/**
+ * Queue marks are flushed (awaited) before the process leaves: `beforeExit` (a drained loop) and SIGINT/SIGTERM. A signal
+ * handler suppresses Node's default exit, so once flushed it re-raises the signal unless another handler owns the exit.
+ * `exit` keeps a synchronous best effort (async work cannot finish there).
+ */
+function flushReplicasOnExit(): void {
+  const flush = (): Promise<void> => host?.disposeReplicas().catch(() => undefined) ?? Promise.resolve();
+  process.once("beforeExit", () => { void flush(); });
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    const onSignal = (): void => {
+      void flush().then(() => {
+        process.off(signal, onSignal);
+        if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+      });
+    };
+    process.once(signal, onSignal);
+  }
+  process.once("exit", () => { void host?.disposeReplicas(); });
 }
 
 /** A root's local ports: its files (legacy ids migrated), its ONE local store and its manifest, shared by the review and the watcher. */
@@ -92,14 +112,12 @@ export function onPremPumpSource(rootId: string, ports: OnPremRootPorts, linked:
 }
 
 /**
- * A root reviewed against the server before the local-first path (its manifest has entries but the local store has no scope for it)
- * is ADDITIVE: its pump must never delete a server leaf the new, empty local store lacks.
+ * Before every review and every resume: a root with no completed local review is ADDITIVE (the ONE shared rule,
+ * `shouldStayAdditive`) — its pump must never delete a server leaf the not-yet-complete local store lacks.
  */
-export async function adoptServerReviewedRoot(rootId: string, ports: OnPremRootPorts): Promise<void> {
-  await ports.migrated; // a root with only a legacy manifest has its entries only once the import has run
-  if ((await ports.local.scopes()).some((s) => s.rootId === rootId)) return;
-  if (((await ports.manifest.get(filesManifestKey(rootId))) ?? []).length === 0) return;
-  await onPremReplicaHost().markAdditive(rootId, ports.files);
+export async function markAdditiveUntilReviewed(rootId: string, ports: OnPremRootPorts): Promise<void> {
+  await ports.migrated; // the legacy import must have run before the local store is judged
+  if (await shouldStayAdditive(ports.local, rootId)) await onPremReplicaHost().markAdditive(rootId, ports.files);
 }
 
 /** Waits (bounded) for the root's upload to drain; logs when it is still sending. Never throws, never hangs. */

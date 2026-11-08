@@ -6,9 +6,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_CLAIM_TEXT_CHARS, MAX_QUOTE_CHARS, MAX_QUOTE_LINES, clampClaim, type Extracted,
+  MAX_CLAIM_TEXT_CHARS, MAX_QUOTE_CHARS, MAX_QUOTE_LINES, clampClaim, type Extracted, type NodeRef,
 } from '@seanhogg/builderforce-memory/knowledge';
-import { clampExtracted } from './knowledgePrivacy';
+import { clampExtracted, sanitizeExtracted } from './knowledgePrivacy';
 
 describe('clampClaim (memory’s, as the writer applies it to a model’s fact)', () => {
   it('keeps at most MAX_QUOTE_LINES lines of a claim', () => {
@@ -58,5 +58,39 @@ describe('clampExtracted', () => {
     expect(out[0]!.nodes[0]!.label.startsWith('first line')).toBe(true);
     expect(out[0]).toMatchObject({ sourceRef: 'src:r::a.md', sourceHash: 'h', edges: [], keys: [] });
     expect(extracted[0]!.nodes[0]!.label).toContain('\n');
+  });
+});
+
+const entry = (path: string, hash: string): Extracted => ({
+  sourceRef: `src:r::${path}`, sourceHash: hash,
+  nodes: [{ ref: `src:r::${path}`, kind: 'file', label: 'a.md', pack: 'docs', importance: 0, origin: 'extracted' }],
+  edges: [], keys: [],
+});
+
+describe('sanitizeExtracted', () => {
+  it('drops individual refs over 512 chars, keeps the rest, and reports the skipped count', () => {
+    const long = `src:r::${'a'.repeat(600)}` as NodeRef; // a deep-path ref a producer emitted over the bound
+    const bad = entry('bad.md', 'h');
+    bad.nodes.push({ ref: long, kind: 'symbol', label: 'over-long', pack: 'docs', importance: 0, origin: 'extracted' });
+    bad.edges.push({ from: `src:r::bad.md`, to: long, kind: 'calls', weight: 1, origin: 'extracted' });
+    bad.keys.push({ ref: long, key: 'k' });
+    const good = entry('good.md', 'h');
+    const { entries: stored, skippedRefs } = sanitizeExtracted([bad, good]);
+    expect(skippedRefs).toBe(3);
+    expect(stored.map((e) => e.sourceRef)).toEqual(['src:r::bad.md', 'src:r::good.md']);
+    expect(stored[0]!.nodes.map((n) => n.ref)).toEqual(['src:r::bad.md']);
+    expect(stored[0]!.edges).toEqual([]);
+    expect(stored[0]!.keys).toEqual([]);
+    for (const e of stored) {
+      expect(e.sourceRef.length).toBeLessThanOrEqual(512);
+      for (const n of e.nodes) expect(n.ref.length).toBeLessThanOrEqual(512);
+    }
+  });
+
+  it('drops an entire entry whose sourceRef is over 512 chars, counting everything it carried', () => {
+    const bad = entry(`${'b'.repeat(600)}.md`, 'h');
+    const { entries: stored, skippedRefs } = sanitizeExtracted([bad, entry('good.md', 'h')]);
+    expect(skippedRefs).toBe(2); // the entry + its one node
+    expect(stored.map((e) => e.sourceRef)).toEqual(['src:r::good.md']);
   });
 });

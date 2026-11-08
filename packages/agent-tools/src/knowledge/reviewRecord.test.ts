@@ -5,7 +5,8 @@ import { createReviewRecorder, graphCounts, repoGraphEdgeCount, reviewRecordStor
 const PLAN = {
     byPack: { code: 7, docs: 3 },
     skipped: [
-        { path: 'img.png', reason: 'binary' as const },
+        // A pre-2026.10.60 stored plan still carries 'binary'; the record keeps any reason string verbatim.
+        { path: 'img.png', reason: 'binary' as unknown as 'ignored' },
         { path: 'node_modules/x.js', reason: 'ignored' as const },
     ],
 };

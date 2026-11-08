@@ -2,7 +2,7 @@
  * Retry upload: the source's own `retrySync` port (an editor that pumps a replica; the web has none). The host answers once the upload has STARTED, never when it ends (an upload can outlast
  * any request timeout): `running` covers the call, the sync status is read again when it returns, and `useSyncStatus` polls it while the replica sends. A rejection of the start is `failed`
  * (said in words by the panel) and the button is enabled again.
- * The object travels by context: the status strip and the Server tab both read it, and an absent port means no Retry anywhere.
+ * The object travels by context: the review action and the Server tab both read it, and an absent port means no Retry anywhere.
  */
 
 import { createContext, useCallback, useContext, useState } from 'react';

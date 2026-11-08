@@ -9,8 +9,7 @@ export const rankEdges: Codec<'rankEdges'> = {
         return { graph: refs.graph, req: { refs } };
     },
     decode: (raw, { edges }) => {
-        const incident = new Map<string, KEdge[]>();
-        raw.refs.forEach((ref, i) => incident.set(ref, mapBack(raw.edges.subarray(raw.offsets[i]!, raw.offsets[i + 1]!), edges)));
+        const incident = new LazyIncident(raw.refs, raw.offsets, raw.edges, edges);
         return { total: raw.total, breaking: mapBack(raw.breaking, edges), rest: mapBack(raw.rest, edges), incident } satisfies RankedEdges;
     },
 };

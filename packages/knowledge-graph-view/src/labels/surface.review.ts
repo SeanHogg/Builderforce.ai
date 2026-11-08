@@ -1,4 +1,4 @@
-/** The words of the Reviews panel (tabs, start, watch, stop, runs, server, diagnostics) and of the status strip's chip and action button: English defaults, typed by their own shape. */
+/** The words of the Reviews panel (tabs, start, watch, stop, runs, server, diagnostics) and of the review action's chip and button: English defaults, typed by their own shape. */
 
 export const REVIEW_WORDS = {
     /** The strip's status chip. `{files}` is a counted phrase ("18,886 files"), `{date}`, `{age}`, `{stored}`, `{done}`, `{total}`, `{eta}`, `{pct}`, `{left}`. */
