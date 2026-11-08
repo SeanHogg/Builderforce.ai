@@ -3,7 +3,7 @@ import { createFsAccessDirectorySource, type FsDirectoryHandleLike, type FsFileH
 
 const file = (name: string): FsFileHandleLike => ({
   kind: 'file', name,
-  getFile: async () => ({ size: 1, lastModified: 1, text: async () => name }),
+  getFile: async () => ({ size: 1, lastModified: 1, text: async () => name, arrayBuffer: async () => new ArrayBuffer(0) }),
 });
 const dir = (name: string, ...entries: Array<FsFileHandleLike | FsDirectoryHandleLike>): FsDirectoryHandleLike => ({
   kind: 'directory', name, values: async function* () { yield* entries; },

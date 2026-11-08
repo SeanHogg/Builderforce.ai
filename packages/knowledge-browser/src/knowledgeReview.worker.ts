@@ -35,6 +35,7 @@ function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPo
     // Only a source whose hashes ARE contentHash of the text (the page said so) can check the text it reads against the plan.
     ...(start.hashesAreContentHash ? { hashOf: contentHash } : {}),
   };
+  const source = withDocumentHashes(proxied);
   const store: KnowledgeStore = {
     scopes: () => call('store', 'scopes'),
     facts: (s) => call('store', 'facts', [s]),

@@ -17,7 +17,8 @@
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp, importanceOf, round } from '../order';
 import { canonicalEdgesTask } from './canonicalEdges';
-import { layoutSprings } from './layoutSprings';
+import { layoutSpringsTask } from './layoutSprings';
+import { NONE_PARTITION, planeOrderTask } from './planeOrder';
 import { createRelaxation, type Relaxation } from './layoutRelax';
 
 export interface Layout3D {
@@ -32,6 +33,8 @@ export interface LayoutOptions {
     partitionOrder?: readonly string[];
     iterations?: number;
 }
+
+export { planeOrder } from './planeOrder';
 
 export const PLANE_GAP = 6;
 
@@ -50,7 +53,7 @@ export function towerHeight(level: number | undefined): number {
 export const LAYOUT_ITERATIONS = 40;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const AREA_SPACING = 4.5;
-const NONE = '';
+const NONE = NONE_PARTITION;
 
 /** FNV-1a 32-bit. */
 export function hash32(text: string): number {
@@ -74,38 +77,6 @@ function rng(seed: number): () => number {
     };
 }
 
-/** Partitions top-down: by explicit order, else by net outgoing cross-partition edges. */
-export function planeOrder(nodes: readonly KNode[], edges: readonly KEdge[], explicit?: readonly string[]): string[] {
-    const present = [...new Set(nodes.map((n) => n.partition ?? NONE))];
-    // Partitions as small integers, so the edge loop adds to a typed array instead of rewriting a string-keyed map twice per edge.
-    const slot = new Map(present.map((p, i) => [p, i] as const));
-    const partOf = new Map<string, number>();
-    for (const n of nodes) partOf.set(n.ref, slot.get(n.partition ?? NONE)!);
-    const tally = new Float64Array(present.length);
-    for (const e of edges) {
-        const a = partOf.get(e.from);
-        if (a === undefined) continue;
-        const b = partOf.get(e.to);
-        if (b === undefined || a === b) continue;
-        tally[a]! += 1;
-        tally[b]! -= 1;
-    }
-    const score = new Map<string, number>(present.map((p, i) => [p, tally[i]!] as const));
-    const rank = (p: string): number => {
-        if (p === NONE) return Number.POSITIVE_INFINITY;
-        const at = explicit?.indexOf(p) ?? -1;
-        return at >= 0 ? at : Number.NaN;
-    };
-    return present.sort((a, b) => {
-        const ra = rank(a), rb = rank(b);
-        if (ra === Number.POSITIVE_INFINITY || rb === Number.POSITIVE_INFINITY) return ra === rb ? 0 : ra === Number.POSITIVE_INFINITY ? 1 : -1;
-        if (!Number.isNaN(ra) && !Number.isNaN(rb)) return ra - rb;
-        if (!Number.isNaN(ra)) return -1;
-        if (!Number.isNaN(rb)) return 1;
-        return (score.get(b) ?? 0) - (score.get(a) ?? 0) || cmp(a, b);
-    });
-}
-
 /** A layout in progress: call `step()` (one relaxation pass) until it returns true, then read `result()`. */
 export interface LayoutTask {
     step(): boolean;
@@ -119,8 +90,9 @@ export function layoutTask(
     opts: LayoutOptions = {},
 ): LayoutTask {
     const nodes = [...nodesIn].sort((a, b) => cmp(a.ref, b.ref));
-    const order = planeOrder(nodes, edgesIn, opts.partitionOrder);
-    const planeY = new Map(order.map((p, i) => [p, round((order.length - 1 - i) * PLANE_GAP)] as const));
+    const planes = planeOrderTask(nodes, edgesIn, opts.partitionOrder);
+    let order: string[] = [];
+    let planeY = new Map<string, number>();
     const random = rng(hash32(rootId));
 
     // Areas: the node's area, else its partition plane as one area.
@@ -159,11 +131,19 @@ export function layoutTask(
     let relax: Relaxation | null = null;
     // Nodes are indexed in ref order, so `index` is the rank the canonical edge order needs.
     const canon = canonicalEdgesTask(edgesIn, index);
+    let springTask: ReturnType<typeof layoutSpringsTask> | null = null;
     const stages: Array<() => boolean> = [
+        () => {
+            if (!planes.step()) return false;
+            order = planes.result();
+            planeY = new Map(order.map((p, i) => [p, round((order.length - 1 - i) * PLANE_GAP)] as const));
+            return true;
+        },
         () => { if (!canon.step()) return false; sorted = canon.result(); return true; },
+        () => { springTask ??= layoutSpringsTask(sorted, index); return springTask.step(); },
         () => {
             relax = createRelaxation({
-                x, z, home, groups: [...members.values()], springs: layoutSprings(sorted, index), iterations: opts.iterations ?? LAYOUT_ITERATIONS,
+                x, z, home, groups: [...members.values()], springs: springTask!.result(), iterations: opts.iterations ?? LAYOUT_ITERATIONS,
             });
             return true;
         },

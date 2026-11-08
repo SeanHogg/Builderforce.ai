@@ -79,7 +79,8 @@ export class Residency {
         queueMicrotask(() => {
             this.trimming = false;
             while (this.countable() > MAX_RESIDENT) {
-                const at = this.held.findLastIndex(Residency.counts);
+                let at = this.held.length - 1;
+                while (at > 0 && !Residency.counts(this.held[at]!)) at--;
                 const [old] = this.held.splice(at, 1);
                 old!.live = false;
                 this.onEvict(old!.id);

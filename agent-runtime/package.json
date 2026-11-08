@@ -159,6 +159,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "fake-indexeddb": "*",
+    "fflate": "^0.8.2",
     "file-type": "^21.3.0",
     "grammy": "^1.40.0",
     "https-proxy-agent": "^7.0.6",
@@ -181,6 +182,7 @@
     "tslog": "^4.10.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "undici": "^7.22.0",
+    "unpdf": "^1.8.1",
     "ws": "^8.19.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"

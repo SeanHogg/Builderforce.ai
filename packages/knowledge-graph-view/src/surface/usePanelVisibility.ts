@@ -3,7 +3,7 @@
  * viewer in localStorage. This is the only module that touches storage for it, and every read and write is guarded, so a blocked store just means "not remembered".
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export type PanelSlot = 'left' | 'bottom' | 'right';
 export type PanelVisibility = Record<PanelSlot, boolean>;
@@ -31,7 +31,9 @@ function write(v: PanelVisibility): void {
 }
 
 export function usePanelVisibility() {
-    const [visibility, setVisibility] = useState<PanelVisibility>(read);
+    // All shown on the first render (server and client agree); the stored choice is read after mount.
+    const [visibility, setVisibility] = useState<PanelVisibility>(ALL_SHOWN);
+    useEffect(() => { setVisibility(read()); }, []);
     const toggle = useCallback((id: PanelSlot) => {
         setVisibility((v) => {
             const next = { ...v, [id]: !v[id] };

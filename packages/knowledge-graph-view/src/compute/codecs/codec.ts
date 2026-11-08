@@ -10,4 +10,9 @@ export interface Codec<K extends TaskKind> {
 }
 
 /** The elements at `indices` of the caller's array: its own objects, so identity survives the trip. */
-export const mapBack = <T>(indices: Uint32Array, source: readonly T[]): T[] => Array.from(indices, (i) => source[i]!);
+export function mapBack<T>(indices: Uint32Array, source: readonly T[]): T[] {
+    // A plain loop: `Array.from(typed, fn)` goes through the iterator protocol, ~10x slower at 100k+ elements.
+    const out = new Array<T>(indices.length);
+    for (let i = 0; i < indices.length; i++) out[i] = source[indices[i]!]!;
+    return out;
+}

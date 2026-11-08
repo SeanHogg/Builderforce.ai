@@ -8,13 +8,14 @@ import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { EMPTY_LAYOUT_2D, fitView, layout2dTask } from '../graph2d/layout2d';
 import { byImportance } from '../graphModel';
 import { LENSES } from '../lenses';
-import { canonicalEdges } from '../scene/canonicalEdges';
+import { canonicalEdges, EDGE_SLICE } from '../scene/canonicalEdges';
 import { edgeBuffers, groupEdges, nodeInstances } from '../scene/buffers';
 import { nodeChannels, pipeWidthOf, pipes, towerBodies } from '../scene/channels';
 import { DEFER_EDGES_ABOVE, incidentOf, pickEdges, rankEdges, rankTask, type RankedEdges } from '../scene/edgeBudget';
 import { applyRoles } from '../scene/highlightRoles';
 import { layoutTask, planeOrder, type Layout3D } from '../scene/layout3d';
 import { layoutSprings } from '../scene/layoutSprings';
+import { sortStepCount } from '../scene/chunkedSort';
 import { highlightFor } from '../surface/towerHighlight';
 import { stepLabels, type Recorder } from './harness';
 import type { Shared } from './modelSteps';
@@ -42,10 +43,10 @@ export function runSceneSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
 
     // Step labels mirror the real step functions: canonicalEdges.build (kinds / SLICE-sized resolves / packed sort), then the
     // consumer's own stages. `ranked` (untimed) supplies the counts the rank stages slice over.
-    const SLICE = 30_000; // canonicalEdges.ts and rankStages.ts both slice at 30,000 (not exported)
+    const SLICE = EDGE_SLICE; // the real slice size, shared with canonicalEdges / rankStages / layoutSprings / planeOrder
     const slices = (n: number): number => Math.max(1, Math.ceil(n / SLICE));
-    const canonGroups = (n: number): Array<readonly [string, number]> => [['canonicalEdges: kinds', 1], ['canonicalEdges: resolve slice', slices(n)], ['canonicalEdges: packed key sort', 1]];
-    const layoutLabels = stepLabels([...canonGroups(edges.length), ['layoutSprings + createRelaxation', 1]], 'relax pass', false);
+    const canonGroups = (n: number, placed: number = n): Array<readonly [string, number]> => [['canonicalEdges: kinds', 1], ['canonicalEdges: resolve slice', slices(n)], ['canonicalEdges: packed key sort', sortStepCount(placed)], ['canonicalEdges: materialise slice', slices(placed)]];
+    const layoutLabels = stepLabels([['plane order slice', slices(edges.length)], ...canonGroups(edges.length, sorted.length), ['layoutSprings slice', slices(sorted.length)], ['createRelaxation', 1]], 'relax pass', false);
     const coldPair = (): { nodes: readonly KNode[]; edges: readonly KEdge[] } => ({ nodes: nodes.slice(), edges: edges.slice() });
 
     const layout: Layout3D | undefined = rec.task('layoutTask (3D; start + every idle step, cold)', '3D scene, Towers', size, (c: { nodes: readonly KNode[]; edges: readonly KEdge[] }) => layoutTask(rootId, c.nodes, c.edges), layoutLabels, coldPair);
@@ -65,9 +66,9 @@ export function runSceneSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
     const counted = rankEdges(edges.slice(), nodes); // untimed: how many links the split stages slice over
     const quiet = counted.rest.length;
     const rankLabels = stepLabels([
-        ['index maps', 1], ...canonGroups(edges.length),
-        ['classify links (loud / weighted)', slices(counted.total)], ['distinct weights', 1],
-        ['packed weight keys', slices(quiet)], ['keys sort', 1], ['materialise rest + breaking', slices(quiet)],
+        ['index maps', 1], ...canonGroups(edges.length, sorted.length),
+        ['classify links (loud / weighted)', slices(counted.total)], ['distinct weights (sort)', sortStepCount(counted.rest.length)],
+        ['packed weight keys', slices(quiet)], ['keys sort', sortStepCount(quiet)], ['materialise rest + breaking', slices(quiet)],
         ['incident index', slices(counted.total)],
     ]);
     const ranked: RankedEdges | undefined = rec.task('rankTask (edge ranking, cold)', 'Graph 2D, 3D scene (lines) ' + defer, size, (e: readonly KEdge[]) => rankTask(e, nodes), rankLabels, coldEdges);

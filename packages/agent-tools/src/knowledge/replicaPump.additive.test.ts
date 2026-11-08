@@ -53,6 +53,16 @@ describe('regression: an additive root never loses a server leaf it lacks locall
         expect(srv.s.files.size).toBe(3); // f2 stays: only the explicit key went
     });
 
+    it('regression: a server-only human fact (written straight to the server) survives a NON-additive reconcile', async () => {
+        const { srv, local } = await adopted();
+        const note = { key: 'note:abc', content: 'a person wrote this', source: 'knowledge-graph', importance: 0.6, origin: 'human' as const, fileAnchors: [{ path: 'src/f0.ts' }] };
+        await srv.client.writeRows(ROOT, { facts: [note], relations: [] }); // Web / Rovr write human facts to the server only
+        await pump(local, srv.client); // additive is off
+        expect(srv.s.facts.has('note:abc')).toBe(true);
+        expect(srv.s.files.size).toBe(2); // the reconcile ran: the model leaves the store lacks were tombstoned
+        expect(deletesOf(srv).flatMap((d) => d.facts ?? [])).not.toContain('note:abc');
+    });
+
     it('persists in the dirty file, and a file without the field reads as not additive', async () => {
         const persistence = memoryReplicaPersistence();
         const a = createReplicaQueue(persistence);

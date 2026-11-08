@@ -24,7 +24,7 @@ function fakeTree(name: string, tree: Tree, reads = new Map<string, number>(), p
             name: child,
             async getFile() {
               reads.set(path, (reads.get(path) ?? 0) + 1);
-              return { size, lastModified: 42, text: async () => text };
+              return { size, lastModified: 42, text: async () => text, arrayBuffer: async () => new ArrayBuffer(0) };
             },
           };
           yield file;
@@ -95,8 +95,8 @@ describe('File System Access directory source', () => {
       kind: 'directory',
       name: 'r',
       async *values() {
-        yield { kind: 'file', name: 'logo.png', getFile: async () => ({ size: 10, lastModified: 7, text: async () => { texts(); return ''; } }) };
-        yield { kind: 'file', name: 'huge.md', getFile: async () => ({ size: big.length, lastModified: 8, text: async () => { texts(); return big; } }) };
+        yield { kind: 'file', name: 'logo.png', getFile: async () => ({ size: 10, lastModified: 7, arrayBuffer: async () => new ArrayBuffer(0), text: async () => { texts(); return ''; } }) };
+        yield { kind: 'file', name: 'huge.md', getFile: async () => ({ size: big.length, lastModified: 8, arrayBuffer: async () => new ArrayBuffer(0), text: async () => { texts(); return big; } }) };
       },
     };
     const listed = await listAll(createFsAccessDirectorySource(handle, 'rovr'));

@@ -8,12 +8,11 @@
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp, importanceOf } from '../order';
 import { isLoudEdge } from './buffers';
-import { canonicalEdgesTask } from './canonicalEdges';
+import { canonicalEdgesTask, EDGE_SLICE } from './canonicalEdges';
+import { chunkedSort, type SortTask } from './chunkedSort';
 import type { RankedEdges } from './edgeBudget';
 import { linkBothEnds } from './incident';
 
-/** Links handled per step by the loops below (each is a few milliseconds). */
-const SLICE = 30_000;
 
 export interface RankStages {
     /** One slice of work; true when the whole ranking is done. */
@@ -47,6 +46,8 @@ export function rankStages(edges: readonly KEdge[], nodes: readonly Pick<KNode, 
     let distinct = new Float64Array(0);
     let keys = new Float64Array(0);
     let linked = 0;
+    let sorter: SortTask | null = null;
+    let sortedWeights = new Float64Array(0);
 
     const stages: Array<() => boolean> = [
         () => {
@@ -66,7 +67,7 @@ export function rankStages(edges: readonly KEdge[], nodes: readonly Pick<KNode, 
         },
         // Classify: warning links first, the rest weighted by their end points' importance.
         () => {
-            const end = Math.min(canonical.length, at + SLICE);
+            const end = Math.min(canonical.length, at + EDGE_SLICE);
             for (; at < end; at++) {
                 const e = canonical[at]!;
                 if (isLoudEdge(e)) { loud[at] = 1; continue; }
@@ -80,7 +81,10 @@ export function rankStages(edges: readonly KEdge[], nodes: readonly Pick<KNode, 
         },
         // The distinct weights, ascending: a weight's rank among them replaces the weight in the packed key.
         () => {
-            const sorted = weights.slice(0, quiet).sort();
+            if (!sorter) { sortedWeights = weights.slice(0, quiet); sorter = chunkedSort(sortedWeights); }
+            if (!sorter.step()) return false;
+            sorter = null;
+            const sorted = sortedWeights;
             let n = 0;
             for (let i = 0; i < sorted.length; i++) if (i === 0 || sorted[i] !== sorted[n - 1]) sorted[n++] = sorted[i]!;
             distinct = sorted.subarray(0, n);
@@ -88,18 +92,23 @@ export function rankStages(edges: readonly KEdge[], nodes: readonly Pick<KNode, 
             return true;
         },
         () => {
-            const end = Math.min(quiet, at + SLICE);
+            const end = Math.min(quiet, at + EDGE_SLICE);
             const top = distinct.length - 1;
             for (; at < end; at++) keys[at] = (top - lowerBound(distinct, weights[at]!)) * quiet + at;
             if (at < quiet) return false;
             at = 0;
             return true;
         },
-        () => { keys.sort(); return true; },
+        () => {
+            sorter ??= chunkedSort(keys);
+            if (!sorter.step()) return false;
+            sorter = null;
+            return true;
+        },
         // Materialise both lists in their final order.
         () => {
             if (at === 0) { breaking = []; rest = new Array(quiet); }
-            const end = Math.min(quiet, at + SLICE);
+            const end = Math.min(quiet, at + EDGE_SLICE);
             for (; at < end; at++) rest[at] = canonical[quietAt[keys[at]! % quiet]!]!;
             if (at < quiet) return false;
             for (let i = 0; i < canonical.length; i++) if (loud[i]) breaking.push(canonical[i]!);
@@ -109,7 +118,7 @@ export function rankStages(edges: readonly KEdge[], nodes: readonly Pick<KNode, 
         // The incident index: breaking links first, then the rest, each in priority order.
         () => {
             const total = breaking.length + rest.length;
-            const end = Math.min(total, linked + SLICE);
+            const end = Math.min(total, linked + EDGE_SLICE);
             for (; linked < end; linked++) {
                 const e = linked < breaking.length ? breaking[linked]! : rest[linked - breaking.length]!;
                 linkBothEnds(incident, e);

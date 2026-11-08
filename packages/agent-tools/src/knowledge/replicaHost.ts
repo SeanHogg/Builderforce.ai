@@ -22,9 +22,9 @@ import type { KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeFiles } from './fileManifest.js';
 import { analysisPendingFileName, dirtyFileName, replicaFileName } from './fileManifest.js';
 import { currentSourcesOf, enqueueFirstSync } from './replicaFirstSync.js';
-import { persistenceOf, readThroughOf, type ReplicaHostClient, type SeedPort } from './replicaHostParts.js';
+import { persistenceOf, readThroughOf, type ReplicaHostClient } from './replicaHostParts.js';
 import { fileReplicaLock, type ReplicaLockPort } from './replicaLock.js';
-import { GENERATION_CHECK_INTERVAL_MS, emptyReplicaState, pumpReplica, type ReplicaClient, type ReplicaState } from './replicaPump.js';
+import { GENERATION_CHECK_INTERVAL_MS, emptyReplicaState, pumpReplica, type ReplicaState } from './replicaPump.js';
 import { createReplicaQueue, type ReplicaQueue } from './replicaQueue.js';
 import { replicatedKnowledgeStore } from './replicatedStore.js';
 

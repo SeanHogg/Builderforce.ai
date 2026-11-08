@@ -4,13 +4,14 @@
  * the `postMessage` structured clone of the request (`structuredClone` stands in for it), and on the way back the reply's
  * deserialisation (`structuredClone` of the raw reply) plus `decode` (map it onto the caller's own objects). The worker's compute
  * is produced UNTIMED, by the same `HANDLERS` the worker runs, to give `decode` a real reply. Graph upload is measured as the
- * `ComputeClient.stream` loop does it: slices of SLICE elements, each cloned by one `postMessage` (one task step per slice).
+ * `ComputeClient.stream` loop does it: slices of UPLOAD_SLICE elements, each cloned by one `postMessage` (one task step per slice).
  *
  * Cold: every encode gets a fresh `Residency` (its index caches are WeakMaps keyed by the arrays), so the first-use cost shows.
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { CODECS } from '../compute/codecs';
+import { LINK_SLICE, UPLOAD_SLICE } from '../compute/loader';
 import type { KindInput, KindResult } from '../compute/kinds';
 import type { TaskKind } from '../compute/protocol';
 import { Residency } from '../compute/residency';
@@ -21,8 +22,6 @@ import { stepLabels, type Recorder } from './harness';
 import type { Shared } from './modelSteps';
 import type { PerfGraph } from './syntheticGraph';
 
-/** ComputeClient's SLICE (not exported): elements per posted slice of the graph. */
-const POST_SLICE = 8000;
 
 interface AnyCodec { encode(input: never, residency: Residency): { graph: number; req: unknown }; decode(raw: never, input: never): unknown }
 
@@ -54,10 +53,10 @@ function uploadTask(graph: KnowledgeGraph): { step(): boolean; result(): number 
     const fields: Array<readonly unknown[]> = [graph.nodes, graph.edges, graph.findings, graph.outline?.files ?? []];
     const links = graph.outline?.links ?? [];
     const jobs: Array<() => void> = [];
-    for (const list of fields) for (let at = 0; at < list.length; at += POST_SLICE) jobs.push(() => { structuredClone(list.slice(at, at + POST_SLICE)); });
-    for (let at = 0; at < links.length; at += POST_SLICE) {
+    for (const list of fields) for (let at = 0; at < list.length; at += UPLOAD_SLICE) jobs.push(() => { structuredClone(list.slice(at, at + UPLOAD_SLICE)); });
+    for (let at = 0; at < links.length; at += LINK_SLICE) {
         jobs.push(() => {
-            const flat = new Uint32Array(Math.min(POST_SLICE, links.length - at) * 4);
+            const flat = new Uint32Array(Math.min(LINK_SLICE, links.length - at) * 4);
             for (let i = 0; i < flat.length / 4; i++) flat.set(links[at + i]!, i * 4);
             structuredClone(flat, { transfer: [flat.buffer] });
         });
@@ -69,9 +68,9 @@ function uploadTask(graph: KnowledgeGraph): { step(): boolean; result(): number 
 export function runWorkerSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
     const drawn = rec.need(s.drawn, 'the drawn graph');
     const { graph } = p;
-    const slices = (n: number): number => Math.max(1, Math.ceil(n / POST_SLICE));
+    const slices = (n: number, size: number = UPLOAD_SLICE): number => Math.max(1, Math.ceil(n / size));
     rec.task('worker main-thread: graph upload (one postMessage clone per slice)', 'all (first task on a graph)', `nodes=${graph.nodes.length} edges=${graph.edges.length} findings=${graph.findings.length} outline files=${graph.outline?.files.length ?? 0}`, () => uploadTask(graph),
-        stepLabels([['nodes slice', slices(graph.nodes.length)], ['edges slice', slices(graph.edges.length)], ['findings slice', slices(graph.findings.length)], ['outline files slice', slices(graph.outline?.files.length ?? 0)], ['outline links slice', slices(graph.outline?.links.length ?? 0)]]));
+        stepLabels([['nodes slice', slices(graph.nodes.length)], ['edges slice', slices(graph.edges.length)], ['findings slice', slices(graph.findings.length)], ['outline files slice', slices(graph.outline?.files.length ?? 0)], ['outline links slice', slices(graph.outline?.links.length ?? 0, LINK_SLICE)]]));
 
     const size = `nodes=${drawn.nodes.length} edges=${drawn.edges.length}`;
     const rootId = graph.scope.rootId;

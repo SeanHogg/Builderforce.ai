@@ -102,7 +102,7 @@ export function SceneOverlay(p: SceneOverlayProps) {
     const controls = useRef<HTMLDivElement>(null);
     useSceneTop(rootRef, controls, !narrow);
     const root: CSSProperties = narrow
-        ? { display: 'grid', gap: 6, padding: '4px 0' }
+        ? { position: 'relative', display: 'grid', gap: 6, padding: '4px 0' }
         : { position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column', pointerEvents: 'none', padding: '0 0 10px', minHeight: 0 };
 
     return (

@@ -13,9 +13,10 @@
 import type { KEdge } from '@seanhogg/builderforce-memory/knowledge';
 import { devFreeze } from '../memo';
 import { cmp } from '../order';
+import { chunkedSort, type SortTask } from './chunkedSort';
 
-/** The edges resolved per step (one step is a few milliseconds even at 150k edges). */
-const SLICE = 30_000;
+/** Links handled per step by the canonical order and the ranking (each step stays under ~15 ms at 150k links). */
+export const EDGE_SLICE = 10_000;
 
 export interface CanonicalTask {
     /** Does one slice of the work; true when the order is ready. Safe to call again once done. */
@@ -45,6 +46,8 @@ export function buildCanonicalTask(edges: readonly KEdge[], rank: ReadonlyMap<st
     const from = new Int32Array(count), to = new Int32Array(count), kind = new Int32Array(count), at = new Int32Array(count);
     let seen = 0, placed = 0, top = 0, plain = true;
     let sorted: KEdge[] | null = null;
+    let keys: Float64Array | null = null, sorter: SortTask | null = null, filled = 0;
+    let out: KEdge[] = [];
 
     const phases: Array<() => boolean> = [
         () => {
@@ -58,7 +61,7 @@ export function buildCanonicalTask(edges: readonly KEdge[], rank: ReadonlyMap<st
             return true;
         },
         () => {
-            const end = Math.min(count, seen + SLICE);
+            const end = Math.min(count, seen + EDGE_SLICE);
             const ids = kinds!;
             let lastKind: string | null = null, lastId = 0;
             for (; seen < end; seen++) {
@@ -75,19 +78,30 @@ export function buildCanonicalTask(edges: readonly KEdge[], rank: ReadonlyMap<st
             }
             return seen >= count;
         },
+        // The sort: packed keys sorted in steps (the comparator fallback, for graphs too big to pack, stays one step).
         () => {
-            const n = top + 1, k = kinds!.size;
-            const out: KEdge[] = new Array(placed);
-            if (plain && n * n * Math.max(1, k) * Math.max(1, placed) < packedKeyLimit) {
-                const keys = new Float64Array(placed);
-                for (let j = 0; j < placed; j++) keys[j] = ((from[j]! * n + to[j]!) * k + kind[j]!) * placed + j;
-                keys.sort();
-                for (let j = 0; j < placed; j++) out[j] = edges[at[keys[j]! % placed]!]!;
-            } else {
-                const order = Array.from({ length: placed }, (_, j) => j);
-                order.sort((a, b) => from[a]! - from[b]! || to[a]! - to[b]! || kind[a]! - kind[b]!);
-                for (let j = 0; j < placed; j++) out[j] = edges[at[order[j]!]!]!;
+            if (!sorter) {
+                const n = top + 1, k = kinds!.size;
+                out = new Array(placed);
+                if (plain && n * n * Math.max(1, k) * Math.max(1, placed) < packedKeyLimit) {
+                    keys = new Float64Array(placed);
+                    for (let j = 0; j < placed; j++) keys[j] = ((from[j]! * n + to[j]!) * k + kind[j]!) * placed + j;
+                    sorter = chunkedSort(keys);
+                } else {
+                    const order = Array.from({ length: placed }, (_, j) => j);
+                    order.sort((a, b) => from[a]! - from[b]! || to[a]! - to[b]! || kind[a]! - kind[b]!);
+                    for (let j = 0; j < placed; j++) out[j] = edges[at[order[j]!]!]!;
+                    sorted = devFreeze(out);
+                    return true;
+                }
             }
+            return sorter.step();
+        },
+        () => {
+            if (!keys) return true; // the comparator fallback already filled `sorted`
+            const end = Math.min(placed, filled + EDGE_SLICE);
+            for (; filled < end; filled++) out[filled] = edges[at[keys[filled]! % placed]!]!;
+            if (filled < placed) return false;
             sorted = devFreeze(out);
             return true;
         },

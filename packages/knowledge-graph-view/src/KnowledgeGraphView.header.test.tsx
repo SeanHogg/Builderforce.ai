@@ -291,14 +291,11 @@ describe('the canvas tools and panel toggles', () => {
     it('hides the Act panel when the right toggle is pressed, and brings it back', async () => {
         window.localStorage.removeItem('kg.panelVisibility.v1');
         await mount(sourceOf());
-        const toggle = () => within(screen.getByTestId('kg-scene-overlay')).getByRole('button', { name: /./, pressed: undefined } as never);
-        void toggle;
-        const right = () => screen.getByRole('button', { name: L.surface.panelToggles.hideRight });
-        expect(document.querySelector('[data-testid="kg-act-panel"]')).not.toBeNull();
-        fireEvent.click(right());
-        expect(document.querySelector('[data-testid="kg-act-panel"]')).toBeNull();
+        expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.hideRight }));
+        expect(screen.queryByTestId('kg-act-title')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.showRight }));
-        expect(document.querySelector('[data-testid="kg-act-panel"]')).not.toBeNull();
+        expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
         window.localStorage.removeItem('kg.panelVisibility.v1');
     });
 });

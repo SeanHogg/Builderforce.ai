@@ -6,7 +6,8 @@
 import type { Extracted, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeFiles } from './fileManifest.js';
 import type { ReplicaClient } from './replicaPump.js';
-import type { ReadThrough, ReplicaPersistence } from './replicaQueue.js';
+import type { ReplicaPersistence } from './replicaQueue.js';
+import type { ReadThrough } from './replicatedStore.js';
 
 /** What the "use the server's copy" seed reads from the client beyond the pump's own calls (a `KnowledgeClient` satisfies it). */
 export interface SeedPort {
@@ -36,7 +37,7 @@ export function persistenceOf(files: KnowledgeFiles, name: string): ReplicaPersi
 /** The server's copy as the seed reads it: extracted output by hash, and the root's human-authored facts. */
 export function readThroughOf(client: SeedPort, rootId: string): ReadThrough {
     return {
-        preloadExtracted: async (hashes) => { await client.store.preloadExtracted?.(hashes); },
+        preloadExtracted: async (hashes) => { await client.store.preloadExtracted?.([...hashes]); },
         getExtracted: (hash) => client.store.getExtracted?.(hash) ?? Promise.resolve(undefined),
         async humanKnowledge() {
             const [facts, relations] = await Promise.all([client.facts(rootId), client.store.relations({ rootId })]);

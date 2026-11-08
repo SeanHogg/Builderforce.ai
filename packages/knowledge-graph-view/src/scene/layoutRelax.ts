@@ -22,8 +22,8 @@ export interface Relaxation {
     step(): boolean;
 }
 
-/** Pair interactions per step: about 10 ms of repulsion. */
-export const PAIR_BUDGET = 1_000_000;
+/** Pair interactions per step: about 4 ms of repulsion. */
+export const PAIR_BUDGET = 400_000;
 
 export function createRelaxation({ x, z, home, groups, springs, iterations }: RelaxInput): Relaxation {
     const n = x.length;

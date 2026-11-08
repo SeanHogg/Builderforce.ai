@@ -68,7 +68,8 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, t
                 {tools && !stacked && <div data-testid="kg-scene-tools" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', pointerEvents: 'auto' }}>{tools}</div>}
                 {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
                 {mode === 'sequence' && <button type="button" data-back-to-map style={zoomButton} onClick={() => onMode('transit')}>{labels.surface.sequence.backToMap}</button>}
-                <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none' }}>
+                {/* No popovers here, so it may scroll sideways when the container is narrow. */}
+                <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: '0 1 auto', minWidth: 0, overflowX: 'auto', pointerEvents: 'auto' }}>
                     {outTo && onOut && (
                         <button type="button" data-out style={zoomButton} onClick={onOut}>{fillTemplate(labels.surface.overlay.outTo, { name: outTo })}</button>
                     )}
