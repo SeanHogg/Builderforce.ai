@@ -1,6 +1,7 @@
 /** Client for a board's LIVE rosters: lane staffing and ticket owners, each in one request. */
 import { apiRequest } from './apiClient';
 import type { SwimlaneAgent } from './builderforceApi';
+import { recordedFailure } from './reportError';
 
 /**
  * An agent host that OWNS open tickets in a lane (`tasks.assigned_agent_host_id`) -
@@ -24,10 +25,7 @@ export const boardRostersApi = {
    * chips, so it degrades to "no owners" - and is logged, never swallowed.
    */
   ticketOwnersOrEmpty: (boardId: string): Promise<Record<string, BoardTicketOwner[]>> =>
-    boardRostersApi.ticketOwners(boardId).catch((error: unknown) => {
-      console.warn('[board] ticket owners failed to load; showing staffed agents only', error);
-      return {};
-    }),
+    boardRostersApi.ticketOwners(boardId).catch(recordedFailure('Reading board ticket owners', {} as Record<string, BoardTicketOwner[]>)),
 
   /** Every lane's staffed agents, keyed by swimlane id, in one request. */
   laneAgents: (boardId: string): Promise<Record<string, SwimlaneAgent[]>> =>

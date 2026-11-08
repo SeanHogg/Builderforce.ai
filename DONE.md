@@ -1,3 +1,29 @@
+## ✅ RESOLVED 2026-11-08: canvas runtimes and studio: six editors, drawing block, Room media, voice marketplace and provenance (Canvas)
+
+- **Six editing runtimes:** `image, animation, podcast, comic, cad, model3d` are registry rows in `bodies/registry.ts`.
+  - They share one export helper (`exportArtifact.ts`) and one token palette (`--export-*`).
+  - Formats: STEP AP214, DXF R2000, RSS with enclosure length and publish-signed chapters, and PDF.
+  - Animation export is encoded frame by frame, within a pixel budget.
+  - Private canvas media sits under `private/media` keys, read with authentication through `useAuthedMediaUrl`.
+- **Knowledge `drawing` block:**
+  - `bf-drawing` fence, with CRDT strokes stored as a Y.Array of Y.Map.
+  - Newest-wins retention and a 40k point budget.
+  - Room state is stored in chunks, and oversize updates are refused.
+  - AI apply keeps drawings through `[[bf-drawing:N]]` placeholders.
+  - `CollaborationRoomDO` is split into frames, admission, persister, budget and relay modules.
+- **Studio is installable:** `@webdit/*` and `voice-provenance` are bundled, and `check-publishable-deps` runs on every release leg.
+- **Workflow:** claim→report test, plus credential and connection pickers on the step form.
+- **Voice:**
+  - Embeddings are sealed server-side (AAD and HKDF) and cached per user in IndexedDB.
+  - Web and VS Code marketplace, with Stripe checkout. Refunds and lost disputes reverse the licence and the ledger, and the refund/completion race is covered.
+  - Provenance manifest plus audio watermark.
+  - Public verify page with server trust levels: `verified` / `self_reported` / `watermark_only`.
+- **Video engine:** WebM fallback, and a WGSL selective scan for `advanceState`.
+- **ORT 404:** fixed by the shared asset-cap decision, with one `setOrtWasmBase`.
+- **Room:** voice and video with a perfect-negotiation mesh, plus a media-room access registry and scoped ICE credentials.
+- **Write timing:** `client.build_file_write` spans for the 35.7s write investigation.
+- **Reviews:** Opus reviewed voice, payments, publish signing and the drawing CRDT; Sonnet reviewed the editors. Every finding was fixed. The open verification gaps are recorded under ROADMAP "Canvas runtimes verification gaps".
+
 ## ✅ RESOLVED 2026-11-08: main's Release goes green again: the 3a2c752db sweep's broken tests, guards and VS Code checks repaired, and the canvas webview is type-checked in CI (Release health)
 
 - **Autonomous-delivery tests and guards.** The `laneEntryTrigger.*` mocks keep the real `evaluateAutoRun` exports. `boardBudget` asserts the two cache keys one credit clears. `boardMilestones` reads date params from the query chunks instead of stringifying a self-referencing SQL object. The backlog-disposition report uses a raw `not exists` fragment: three round trips, and the query is scoped to the tenant. Its apply test now covers the tenant-scoped "Superseded by" quote. `kernel/accountLedger.test.ts` is new. The empty catches in `conductMarker.ts` and `incidentVoice.ts` now report.

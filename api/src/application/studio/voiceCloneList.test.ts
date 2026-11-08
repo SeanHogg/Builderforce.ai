@@ -42,7 +42,7 @@ describe('listUsableClones', () => {
     // The licensed lookup is by license ids (acrossTenants), not by the buyer's tenant.
     expect(wheres.filter((w) => w.table === studioVoiceClones)).toHaveLength(2);
 
-    const json = JSON.stringify(list.map(toPublicClone));
+    const json = JSON.stringify(list.map((c) => toPublicClone(c)));
     expect(json).toContain('Seller voice');
     expect(json).not.toMatch(/embedding|v2:secret|k\.wav/);
   });

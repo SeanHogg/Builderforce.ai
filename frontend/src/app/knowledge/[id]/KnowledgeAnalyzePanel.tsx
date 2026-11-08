@@ -1,5 +1,3 @@
-'use client';
-
 import { useRef, useState } from 'react';
 import type { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
@@ -83,16 +81,16 @@ export function AnalyzePanel({
       </button>
       {open && (
         <div style={{ padding: 16, paddingTop: 0 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>{t('analyzeHint')}</p>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 0 }}>{t('analyzeHint')}</p>
           <button type="button" onClick={run} disabled={busy} style={btnPrimary}>
             {busy ? t('analyzing') : t('analyzeRun')}
           </button>
           {error && <div style={{ color: 'var(--error-text, var(--error))', marginTop: 8 }}>{error}</div>}
           {result && (
             <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
-              {result.summary && <p style={{ margin: 0, fontSize: 14 }}>{result.summary}</p>}
+              {result.summary && <p style={{ margin: 0, fontSize: 'var(--font-size-body)' }}>{result.summary}</p>}
               {result.findings.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('analyzeNoFindings')}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('analyzeNoFindings')}</div>
               ) : (
                 <div style={{ display: 'grid', gap: 8 }}>
                   {result.findings.map((f, i) => (
@@ -102,11 +100,11 @@ export function AnalyzePanel({
                     >
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                         <span style={{ ...badge, ...severityColor(f.severity) }}>{t(`severity_${f.severity}`)}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t(`category_${f.category}`)}</span>
+                        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t(`category_${f.category}`)}</span>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{f.issue}</div>
+                      <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 600 }}>{f.issue}</div>
                       {f.recommendation && (
-                        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>
                           → {f.recommendation}
                         </div>
                       )}
@@ -116,7 +114,7 @@ export function AnalyzePanel({
               )}
               {result.improvedFlow && (
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, margin: '4px 0 6px' }}>{t('analyzeImprovedFlow')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, margin: '4px 0 6px' }}>{t('analyzeImprovedFlow')}</div>
                   <div
                     style={{
                       padding: 12,

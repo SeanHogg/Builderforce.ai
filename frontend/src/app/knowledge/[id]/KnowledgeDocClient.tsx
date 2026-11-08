@@ -91,7 +91,8 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   // dirty: it already reached the server through whoever typed it, and every
   // connected client autosaving on every remote keystroke would be a PATCH storm
   // proportional to participants × keystrokes.
-  const editorDoc: BlockDocument = withDirtyTracking(blockDoc, () => { dirtyRef.current = true; });
+  const markDirty = useCallback(() => { dirtyRef.current = true; }, []);
+  const editorDoc: BlockDocument = withDirtyTracking(blockDoc, markDirty);
 
   const reload = useCallback(() => {
     knowledgeApi

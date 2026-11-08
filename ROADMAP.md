@@ -140,16 +140,18 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### Canvas runtimes and studio `[canvas]`
 
-- **Six kinds have no editing runtime:** `image, animation, podcast, comic, cad, model3d`. Port one per slice from hired.video through `creationObjectRegistry` data.
-- **Knowledge editor has no `drawing` block.** Add a `BlockType` using the canvas drawing runtime.
-- **Published `@seanhogg/builderforce-studio` can't be installed:** runtime deps are `file:` paths to private `@webdit/*`. *Blocker: decide to bundle or publish.*
-- **Workflow builder:** claim→report has no test; no credential capture on the step form.
-- **Voice:** provenance missing for GA; no in-IDE marketplace; embeddings localStorage-only.
-- **Video engine:** `advanceState()` is a CPU placeholder; no learned interpolation, ControlNet, inpainting or WebM fallback.
+- **Video engine models:** no learned interpolation, ControlNet or inpainting. The WebM fallback and GPU `advanceState` shipped. *Blocker: trained weights.*
 - **3 WebDiT models `available: false`** (wan2.5, mochi-1, ltx2-distilled). *Blocker: ONNX exports on R2.*
-- **In-editor voice cloning:** `/ort/ort-wasm-simd-threaded.jsep.wasm` 404s. Keep `onnxruntime-web` at `1.22.0-dev.20250409-89f8206ba4` (asset cap).
-- **One build-file write took 35.7s vs 38ms median.** *Blocker: a profile of a build turn with preview running.*
-- **Room** has no video or audio.
+- **One build-file write took 35.7s vs 38ms median.** `client.build_file_write` spans now ship. *Blocker: a telemetry sample from a real build turn with preview running.*
+- **Voice embedding plaintext column** (pre-1326 `embedding` jsonb) is still read and resealed. *Blocker: drop it in push 2, after push 1 has deployed (expand/contract).*
+- **Canvas runtimes verification gaps (2026-11-08).**
+  - The 2026-11-08 canvas runtimes pass wasn't fully verified. The full API test list was never run.
+  - `frontend/src/lib/markdownPipeline.test.tsx` hung during load. The `React.lazy` fix in `DocumentMarkdown.tsx` is unconfirmed.
+  - `voiceEmbeddingStore.test.ts` has a `vi.hoisted` fix that hasn't been rerun.
+  - The VS Code webview build and VSIX package are blocked by another session's `packages/brain-ui` `ChatTicketsPanel.tsx` type errors, and by the missing `AnalyzerProgress` export from builderforce-memory.
+  - The release notes and marketing for the six editors, the drawing block, Room voice and video, and the voice marketplace and provenance are not written yet.
+- **CORS still accepts localhost in production.** Return URLs are now gated. *Blocker: operator decision on whether local development against the production API is supported.*
+- **Podcast uploads:** `.m4a` / `audio/mp4` are rejected by the asset allow-list.
 
 ### Mobile `[canvas]`
 

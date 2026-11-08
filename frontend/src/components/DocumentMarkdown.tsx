@@ -1,5 +1,4 @@
-import dynamic from 'next/dynamic';
-import { Children, isValidElement, type ComponentProps, type ReactNode } from 'react';
+import { Children, isValidElement, lazy, Suspense, type ComponentProps, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 
@@ -13,13 +12,13 @@ function drawingFenceJson(children: ReactNode): string | null {
 }
 
 /** Loaded only when a page holds a drawing, so the drawing model stays out of every first paint. */
-const ReadOnlyDrawing = dynamic(() => import('@/components/drawing/MarkdownDrawing').then((m) => m.ReadOnlyDrawing));
+const ReadOnlyDrawing = lazy(() => import('@/components/drawing/MarkdownDrawing').then((m) => ({ default: m.ReadOnlyDrawing })));
 
 /** Code fences render as `<pre>`, except a `bf-drawing` fence, which renders as the picture. */
 const DRAWING_AWARE_COMPONENTS: Components = {
   pre({ children, node: _node, ...rest }: ComponentProps<'pre'> & { node?: unknown }) {
     const json = drawingFenceJson(children);
-    return json === null ? <pre {...rest}>{children}</pre> : <ReadOnlyDrawing json={json} />;
+    return json === null ? <pre {...rest}>{children}</pre> : <Suspense fallback={null}><ReadOnlyDrawing json={json} /></Suspense>;
   },
 };
 
