@@ -6801,6 +6801,7 @@ function createLocalBrainPersistence(options) {
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,
+        clientId: record3.id,
         ...serverId !== void 0 ? { serverId } : {},
         ...spend ? { spend } : {}
       };

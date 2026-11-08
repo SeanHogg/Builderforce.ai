@@ -4,7 +4,7 @@ import { buildSyncSummary, readSyncSummary, summaryDestination } from "./syncSum
 
 const event = (id: string, payload: unknown, extra: Partial<JournalEvent> = {}): JournalEvent => ({
   eventId: id, clientEntityId: id, entityType: "ticket", operation: "create", schemaVersion: 1, localSequence: 1,
-  occurredAt: "2026-11-08T00:00:00.000Z", dependsOn: [], destination: { kind: "unbound" }, payload, payloadHash: id,
+  occurredAt: "2026-11-08T00:00:00.000Z", dependsOn: [], destination: { kind: "bound", tenantId: "tenant-1" }, payload, payloadHash: id,
   ...extra,
 });
 const receipt = (eventId: string, status: SyncReceipt["status"], receivedAt: string): SyncReceipt => ({ eventId, status, receivedAt });
@@ -41,6 +41,18 @@ describe("buildSyncSummary", () => {
     expect(summary.lastPullAt).toBe("2026-11-08T08:00:00.000Z");
     expect(summary.mode).toBe("hybrid");
     expect(summary.destination).toEqual({ kind: "bound", label: "tenant-1" });
+  });
+
+  it("does not count an unbound write's marker as queued: it is never sent", () => {
+    const summary = buildSyncSummary({
+      events: [
+        event("bound", { title: "abc" }),
+        event("marker", null, { destination: { kind: "unbound" } }),
+      ],
+      receipts: [],
+      conflicts: [],
+    }, { mode: "hybrid", destination: { kind: "bound", tenantId: "tenant-1" } });
+    expect(summary.queued).toEqual({ items: 1, bytes: 15 });
   });
 
   it("an empty store is local-only with nothing queued and no push or pull", () => {

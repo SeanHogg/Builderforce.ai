@@ -11,7 +11,8 @@
  * takes its facts and its last-pull time from ports. No `vscode`, no network.
  */
 
-import type { EntityDestination, InferenceMode, LocalFirstSnapshot } from "@builderforce/local-first";
+import type { EntityDestination, InferenceMode } from "@builderforce/local-first";
+import type { LocalFirstView } from "../localFirstView";
 
 export type SyncSummaryDestination =
   | { kind: "unbound" }
@@ -31,7 +32,7 @@ export interface SyncSummary {
   lastPullAt?: string;
 }
 
-export type SyncSummaryFacts = Pick<LocalFirstSnapshot, "events" | "receipts" | "conflicts">;
+export type SyncSummaryFacts = Pick<LocalFirstView, "events" | "receipts" | "conflicts">;
 
 export interface SyncSummaryContext {
   mode: InferenceMode;
@@ -65,6 +66,9 @@ export function buildSyncSummary(facts: SyncSummaryFacts, context: SyncSummaryCo
       deadLetters += 1;
       continue;
     }
+    // An unbound write journals a MARKER (no payload) that is never sent: nothing is waiting on it
+    // until a bind replaces it with a real import, which counts then.
+    if (event.destination?.kind !== "bound") continue;
     items += 1;
     bytes += payloadBytes(event.payload);
   }

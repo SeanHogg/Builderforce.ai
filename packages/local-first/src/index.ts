@@ -97,6 +97,7 @@ export {
 export {
   deriveRecordSyncStatus,
   deriveSyncStatus,
+  receiptsFor,
   syncShownAsDone,
   type StoreSyncStatus,
   type SyncStatus,

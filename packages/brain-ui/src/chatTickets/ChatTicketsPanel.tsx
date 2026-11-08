@@ -15,12 +15,13 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HealthRing } from '../HealthRing';
+import { TicketChip } from './TicketChip';
+import { LineageDrawer } from './LineageDrawer';
 import { resolveRunGate } from './runGate';
 import { rollupChatTicketHealth } from '@builderforce/agent-loop';
 import { useChatProgressSync } from './useChatProgressSync';
 // The rail's ONE palette, shared with every part it composes (see tokens.ts).
 import { V } from './tokens';
-import { TicketParentLine } from './TicketParentLine';
 import { AgentsSection } from './AgentsSection';
 import { SpendPill } from '../spend/SpendPill';
 import type { SpendLabels } from '../spend/labels';
@@ -95,6 +96,12 @@ export interface ChatTicketsPanelProps {
   /** A host's per-ticket marker drawn under each ticket's meta line (the sync-status badge).
    *  Omit and nothing is drawn: the web app passes none. */
   ticketBadge?: (tk: TicketLinkVM) => ReactNode;
+  /** The tickets as a host's local copy last pushed them: shown as they change, without a read.
+   *  Omit and the panel reads through the adapter only (the web app passes none). */
+  liveTickets?: readonly TicketLinkVM[];
+  /** False for a chat the platform does not know (only on this device): agents, people, merge,
+   *  questions, lineage and run are not offered or read. Linking still works. Defaults to true. */
+  platformSections?: boolean;
 }
 
 /** The action-row drawers the panel ships with; extension keys must not collide. */
@@ -109,7 +116,7 @@ const COLLAPSE_THRESHOLD = 8;
 
 const NO_SUBAGENTS: readonly ChatSubagentVM[] = [];
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale, originalRequest, railHeader, ticketBadge }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale, originalRequest, railHeader, ticketBadge, liveTickets, platformSections = true }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -143,24 +150,34 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   // disagree with it, the host refetches so all three show one figure.
   const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
 
-  const load = useCallback(async () => {
-    const [tk, ag, mem, qs] = await Promise.all([
-      adapter.listTickets(chatId).catch(() => [] as TicketLinkVM[]),
-      adapter.listAgents(chatId).catch(() => [] as ChatAgentVM[]),
-      adapter.listMembers(chatId).catch(() => [] as ChatMemberVM[]),
-      adapter.listQuestions(chatId).catch(() => [] as ChatQuestionVM[]),
-    ]);
+  const showTickets = useCallback((tk: TicketLinkVM[]) => {
     setTickets(tk);
     syncChatProgress(tk);
+    // Auto-collapse a long list on first load; never override a user's own choice.
+    if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
+  }, [syncChatProgress]);
+
+  const load = useCallback(async () => {
+    // A chat only on this device has no agents, people or questions on the platform: never asked.
+    const none = <T,>() => Promise.resolve([] as T[]);
+    const [tk, ag, mem, qs] = await Promise.all([
+      adapter.listTickets(chatId).catch(() => [] as TicketLinkVM[]),
+      platformSections ? adapter.listAgents(chatId).catch(() => [] as ChatAgentVM[]) : none<ChatAgentVM>(),
+      platformSections ? adapter.listMembers(chatId).catch(() => [] as ChatMemberVM[]) : none<ChatMemberVM>(),
+      platformSections ? adapter.listQuestions(chatId).catch(() => [] as ChatQuestionVM[]) : none<ChatQuestionVM>(),
+    ]);
+    showTickets(tk);
     setAgents(ag);
     setMembers(mem);
     setQuestions(qs);
-    // Auto-collapse a long list on first load; never override a user's own choice.
-    if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
-  }, [adapter, chatId, syncChatProgress]);
+  }, [adapter, chatId, platformSections, showTickets]);
 
   useEffect(() => { void load(); }, [load, refreshSignal]);
-  useEffect(() => { adapter.loadAgentPool().then(setPool).catch(() => setPool([])); }, [adapter]);
+  // A host push (the device's copy changed) repaints the tickets alone: no read, no platform call.
+  useEffect(() => { if (liveTickets) showTickets([...liveTickets]); }, [liveTickets, showTickets]);
+  useEffect(() => {
+    if (platformSections) adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
+  }, [adapter, platformSections]);
 
   const flash = (m: string) => { setMsg(m); if (typeof window !== 'undefined') window.setTimeout(() => setMsg(null), 3500); };
   const poolName = useCallback((ref: string) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
@@ -271,87 +288,44 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           <span style={S.muted}>{labels.allDone}</span>
         ) : displayedTickets.map((tk) => {
           const key = `${tk.kind}:${tk.ref}`;
-          const parentTk = parentLink(tk);
           return (
-            <div key={tk.linkId} style={S.chip}>
-              <HealthRing percent={tk.progressPct} size={36} caption={tk.total > 0 ? `${tk.done}/${tk.total}` : undefined} muted={!tk.exists} ariaLabel={labels.ringAria(tk.label, tk.progressPct)} />
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: 160 }}>
-                {onOpenTicket && tk.exists ? (
-                  <button type="button" title={`${labels.open} · ${tk.label}`} onClick={() => onOpenTicket(tk)} style={S.ticketLink}>{tk.label}</button>
-                ) : (
-                  <span style={S.ticketLabel} title={tk.label}>{tk.label}</span>
-                )}
-                <span style={S.ticketMeta}>{labels.kind[tk.kind]} · {tk.status}{tk.linkType === 'created' ? ` · ${labels.spawned}` : ''}</span>
-                {/* Which work item this ticket belongs to. Clickable only when the
-                    parent is ALSO one of this chat's links, so the host is handed a
-                    real TicketLinkVM rather than a fabricated health row. */}
-                <TicketParentLine
-                  parent={tk.parent}
-                  inParent={labels.inParent}
-                  openTitle={labels.open}
-                  onOpen={onOpenTicket && parentTk ? () => onOpenTicket(parentTk) : undefined}
-                />
-                {ticketBadge?.(tk)}
-              </div>
-              <div style={{ display: 'flex', gap: 2 }}>
-                {onOpenTicket && tk.exists && (
-                  <button type="button" title={`${labels.open} · ${tk.label}`} onClick={() => onOpenTicket(tk)} style={S.icon}>↗</button>
-                )}
-                {RUNNABLE.has(tk.kind) && tk.exists && (
-                  <button
-                    type="button"
-                    // Disabled + explained, not hidden: a viewer should see that
-                    // running exists and why they can't, matching every other
-                    // dispatch control. Previously this always looked live and
-                    // failed at click time with a role error.
-                    disabled={!runGate.allowed}
-                    aria-disabled={!runGate.allowed}
-                    title={runGate.allowed ? labels.run : (runGate.reason ?? labels.run)}
-                    onClick={() => setRunKey(runKey === key ? null : key)}
-                    style={runGate.allowed ? S.icon : { ...S.icon, opacity: 0.45, cursor: 'not-allowed' }}
-                  >▶</button>
-                )}
-                <button type="button" title={labels.lineage} onClick={() => void openLineage(tk)} style={S.icon}>⑃</button>
-                <button type="button" title={labels.unlink} disabled={busy} onClick={() => void unlink(tk)} style={S.icon}>✕</button>
-              </div>
-              {runKey === key && (
-                <select aria-label={labels.pickAgent} value="" onChange={(e) => { if (e.target.value) void runTicket(tk, e.target.value); }} style={S.select}>
-                  <option style={S.option} value="">{labels.pickAgent}</option>
-                  {agents.map((a) => <option style={S.option} key={a.id} value={a.agentRef}>★ {poolName(a.agentRef)}</option>)}
-                  {pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => <option style={S.option} key={p.ref} value={p.ref}>{p.name}</option>)}
-                </select>
-              )}
-            </div>
+            <TicketChip
+              key={tk.linkId}
+              tk={tk}
+              labels={labels}
+              parentTk={parentLink(tk)}
+              onOpenTicket={onOpenTicket}
+              badge={ticketBadge?.(tk)}
+              runnable={platformSections && RUNNABLE.has(tk.kind)}
+              runGate={runGate}
+              lineage={platformSections}
+              runOpen={runKey === key}
+              onToggleRun={() => setRunKey(runKey === key ? null : key)}
+              onRun={(agentRef) => void runTicket(tk, agentRef)}
+              onLineage={() => void openLineage(tk)}
+              onUnlink={() => void unlink(tk)}
+              busy={busy}
+              agents={agents}
+              pool={pool}
+              poolName={poolName}
+            />
           );
         })}
       </div>
       )}
 
       {/* Lineage drawer */}
-      {lineageKey && (
-        <div style={S.drawer}>
-          <strong style={{ color: V.text }}>{labels.lineageTitle}</strong>
-          {lineage.length === 0 ? <span style={{ marginLeft: 8, ...S.muted }}>{labels.lineageEmpty}</span> : (
-            <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-              {lineage.map((c) => (
-                <li key={c.chatId} style={{ marginBottom: 2 }}>
-                  <span style={{ fontWeight: c.chatId === chatId ? 700 : 400 }}>{c.title}</span>
-                  {c.linkType === 'created' ? <em style={{ color: V.accent, marginLeft: 6 }}>{labels.spawned}</em> : null}
-                  {c.isArchived ? <span style={{ marginLeft: 6, ...S.muted }}>({labels.merged})</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {lineageKey && <LineageDrawer lineage={lineage} chatId={chatId} labels={labels} />}
 
       {/* Action toggles — the conversation's cost pill closes the row at the bottom-right
           (its wrap carries `margin-left: auto`; the popover anchors right). */}
       <div style={S.actionRow}>
         <button type="button" onClick={() => togglePanel('link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
-        <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length + subagents.length ? ` (${agents.length + subagents.length})` : ''}</button>
-        <button type="button" onClick={() => togglePanel('people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
-        <button type="button" onClick={() => togglePanel('merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
+        {platformSections && <>
+          <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length + subagents.length ? ` (${agents.length + subagents.length})` : ''}</button>
+          <button type="button" onClick={() => togglePanel('people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
+          <button type="button" onClick={() => togglePanel('merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
+        </>}
         {questions.length > 0 && <button type="button" onClick={() => togglePanel('questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
         {extensions?.map((ext) => (
           <button

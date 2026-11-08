@@ -30,6 +30,7 @@ export interface RailTicket {
   linkId: number;
   kind: string;
   ref: string;
+  /** Empty for a work item linked before the device read it: the reader formats it from `kind` and `ref`. */
   label: string;
   status: string;
   progressPct: number;
@@ -79,7 +80,10 @@ export interface RailRunHistory {
 export interface RailFreshness {
   /** When this device last took the rail from the platform (or last saw the platform change it). */
   lastIngestedAt?: string;
-  /** `server-observed` once the platform reported any of the rail's rows; `device` while it is all local. */
+  /**
+   * `server-observed` when the chat is bound to the platform (read yet or not) or the platform reported
+   * any of its rows; `device` while the chat and its rail exist only on this device.
+   */
   source: "device" | "server-observed";
 }
 

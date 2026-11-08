@@ -5,8 +5,10 @@
  *
  *  - a chat bound to the platform shows the shared `ChatTicketsPanel` (linked tickets, agents, people, spend, and the
  *    chat's original request);
- *  - a chat only on this machine (PRD 36) has no platform rail, but still has a first prompt and a cost: both show,
- *    through the same shared parts (`OriginalRequest`, `SpendPill`) the platform rail draws them with.
+ *  - a chat only on this machine (PRD 36) shows the same panel over its LOCAL tickets and links, without the platform's
+ *    sections (agents, people, merge, questions, run);
+ *  - a chat the rail cannot name at all still shows its first prompt and cost through the same shared parts
+ *    (`OriginalRequest`, `SpendPill`).
  */
 
 import { memo, useCallback, useMemo } from 'react';
@@ -38,6 +40,10 @@ export interface VsCodeChatRailProps {
   onTicketsChanged: TicketRail['onTicketsChanged'];
   /** The local-first header (sync summary, freshness) and per-ticket sync badge, from the host's local copy. */
   localRail: TicketRail['localRail'];
+  /** What the rail names the chat by: its server id when bound, else its local client id. */
+  railChatId: TicketRail['railChatId'];
+  /** The tickets the host's last push carried, shown without a read. */
+  liveTickets: TicketRail['liveTickets'];
   pendingChangesExtension: ChatTicketsExtension | null | undefined;
   railRefresh: Audience['railRefresh'];
   subagentRoster: Audience['subagentRoster'];
@@ -46,15 +52,15 @@ export interface VsCodeChatRailProps {
   setChatVisibility: (v: 'shared' | 'locked') => void;
 }
 
-/** Whether the rail has anything to draw: a platform chat always has its panel; a local one only a first prompt or a cost. */
-export function railHasContent(serverChatId: number | null, activeChat: BrainChat | null): boolean {
-  return serverChatId != null || !!activeChat?.spend || !!activeChat?.originalRequest?.trim();
+/** Whether the rail has anything to draw: a chat the rail can name always has its panel; otherwise a first prompt or a cost. */
+export function railHasContent(railChatId: string | number | null, activeChat: BrainChat | null): boolean {
+  return railChatId != null || !!activeChat?.spend || !!activeChat?.originalRequest?.trim();
 }
 
 function VsCodeChatRailInner(props: VsCodeChatRailProps) {
   const {
     init, persistence, chatId, serverChatId, activeChat, ticketAdapter, ticketLabels, spendLabels, ticketChatList, onTicketsChanged, localRail,
-    pendingChangesExtension, railRefresh, subagentRoster, chatVisibility, chatIsOwner, setChatVisibility,
+    railChatId, liveTickets, pendingChangesExtension, railRefresh, subagentRoster, chatVisibility, chatIsOwner, setChatVisibility,
   } = props;
   const projectId = init.project?.id ?? null;
   const setVisibility = useCallback(async (v: 'shared' | 'locked') => {
@@ -68,9 +74,9 @@ function VsCodeChatRailInner(props: VsCodeChatRailProps) {
   // "Changes (N)" beside Link ticket / Agents / People; a clean tree adds nothing.
   const extensions = useMemo(() => (pendingChangesExtension ? [pendingChangesExtension] : undefined), [pendingChangesExtension]);
 
-  if (serverChatId == null) {
-    // A chat only on this machine has no platform rail - its original request and its spend, folded on the device from its
-    // run usage ledger, still show.
+  if (railChatId == null) {
+    // A chat the rail cannot name (no server id, no local record) - its original request and its spend, folded on the
+    // device from its run usage ledger, still show.
     if (!activeChat || !railHasContent(null, activeChat)) return null;
     return (
       <div style={LOCAL_RAIL_STYLE}>
@@ -85,7 +91,11 @@ function VsCodeChatRailInner(props: VsCodeChatRailProps) {
   }
   return (
     <ChatTicketsPanel
-      chatId={serverChatId}
+      chatId={railChatId}
+      // A chat only on this machine: its tickets and links are local; agents, people, merge, questions and run are the
+      // platform's and are not offered.
+      platformSections={serverChatId != null}
+      liveTickets={liveTickets}
       projectId={projectId}
       chatList={ticketChatList}
       adapter={ticketAdapter}

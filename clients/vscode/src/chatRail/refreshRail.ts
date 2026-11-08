@@ -28,6 +28,13 @@ export interface RailRefreshPorts {
   now?: () => Date;
 }
 
+/**
+ * The store read mark a chat's rail refresh records (`markRead`): when the rail was last taken from
+ * the platform, kept in the store so "Updated <time>" survives a reload and a refresh that changed
+ * no row still counts.
+ */
+export const railReadMark = (chatClientId: string): string => `chatRail:${chatClientId}`;
+
 /** A platform read that failed. Distinct from "the platform listed nothing". */
 export class RailReadError extends Error {
   constructor(path: string, cause?: unknown) {
@@ -80,6 +87,6 @@ export async function refreshRail(
     ...ticketRows(listed, chat.destination, at),
     ...runRows(runs, chat.clientId, chat.destination, at),
     ...linkRows(listed, chat.clientId, chat.destination, at),
-  ], { completeListFor: { chatClientId: chat.clientId }, now: ports.now });
+  ], { completeListFor: { chatClientId: chat.clientId }, markRead: railReadMark(chat.clientId), now: ports.now });
   return { status: "ok", written: result.written, tombstoned: result.tombstoned };
 }

@@ -23,4 +23,10 @@ export const V = {
   text2: 'var(--text-secondary, var(--bf-text, inherit))',
   muted: 'var(--text-muted, var(--bf-text-muted, #6b7280))',
   accent: 'var(--accent, var(--bf-accent, #3b82f6))',
+  // Status colours (the sync badge, the summary's conflict / failure counts): the web app's
+  // semantic tokens, then the webview's `--bf-*` theme variables, then the editor's own. No literal:
+  // each host's theme owns the hue, so there is no second palette here.
+  success: 'var(--success, var(--bf-success, var(--vscode-testing-iconPassed)))',
+  warning: 'var(--warning, var(--bf-warning, var(--vscode-editorWarning-foreground)))',
+  danger: 'var(--danger, var(--bf-danger, var(--vscode-errorForeground)))',
 };

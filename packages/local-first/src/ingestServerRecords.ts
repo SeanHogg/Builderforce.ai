@@ -203,6 +203,9 @@ export async function ingestServerRecords(
         result.tombstoned += 1;
       }
     }
+    if (options.markRead !== undefined && (await tx.readMark(options.markRead)) !== at) {
+      await tx.setReadMark(options.markRead, at);
+    }
     return result;
   });
 }

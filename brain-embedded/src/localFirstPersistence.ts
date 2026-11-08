@@ -153,6 +153,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,
+        clientId: record.id,
         ...(serverId !== undefined ? { serverId } : {}),
         ...(spend ? { spend } : {}),
       };

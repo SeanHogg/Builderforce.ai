@@ -10,13 +10,13 @@ import { V } from '../tokens';
 import type { LocalRailLabels } from './labels';
 import type { RailFreshnessVM, RailSyncStatus, RailSyncSummaryVM } from './vm';
 
-/** Status colours: the editor's own semantic tokens first, then a literal. */
+/** Status colours: the rail's ONE palette (`../tokens`), never a second set of literals. */
 const STATUS_COLOR: Record<RailSyncStatus, string> = {
   pending: V.muted,
-  syncing: 'var(--vscode-charts-blue, var(--accent, #3b82f6))',
-  synced: 'var(--vscode-testing-iconPassed, var(--success, #22c55e))',
-  conflict: 'var(--vscode-editorWarning-foreground, var(--warning, #d97706))',
-  'dead-letter': 'var(--vscode-errorForeground, var(--danger, #dc2626))',
+  syncing: V.accent,
+  synced: V.success,
+  conflict: V.warning,
+  'dead-letter': V.danger,
 };
 
 const badge: React.CSSProperties = {
@@ -55,7 +55,10 @@ function timeText(iso: string, locale?: string): string {
   return Number.isNaN(at.getTime()) ? iso : at.toLocaleString(locale);
 }
 
-/** "Updated <time>", "Only on this device" or "Not read from the platform yet". */
+/**
+ * "Updated <time>" once the rail was taken from the platform; before that, a bound chat says it was
+ * "Not read from the platform yet" and only a chat that lives on this device alone says so.
+ */
 export function RailFreshnessLine({ freshness, labels, locale }: { freshness: RailFreshnessVM; labels: LocalRailLabels; locale?: string }) {
   const text = freshness.lastIngestedAt
     ? fill(labels.freshnessUpdated, { time: timeText(freshness.lastIngestedAt, locale) })
@@ -63,10 +66,20 @@ export function RailFreshnessLine({ freshness, labels, locale }: { freshness: Ra
   return <span style={line}>{text}</span>;
 }
 
-function sizeText(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+/**
+ * A ticket's label, or, for one stored untitled (linked before the device read it), its tier's
+ * name and ref in the reader's language: formatted here, at render time, never stored.
+ */
+export function railTicketLabel(label: string, kindName: string, ref: string, labels: LocalRailLabels): string {
+  return label || fill(labels.untitledTicket, { kind: kindName, ref });
+}
+
+/** A byte count in the host's units and number format. */
+export function sizeText(bytes: number, labels: LocalRailLabels, locale?: string): string {
+  const number = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 1 });
+  if (bytes < 1024) return fill(labels.sizeBytes, { n: number(bytes) });
+  if (bytes < 1024 * 1024) return fill(labels.sizeKilobytes, { n: number(bytes / 1024) });
+  return fill(labels.sizeMegabytes, { n: number(bytes / (1024 * 1024)) });
 }
 
 function modeWord(mode: RailSyncSummaryVM['mode'], labels: LocalRailLabels): string {
@@ -82,7 +95,7 @@ export function RailSyncSummary({ summary, labels, locale }: { summary: RailSync
     <div style={summaryRow} role="group" aria-label={labels.summaryAria}>
       <span>{fill(labels.summaryMode, { mode: modeWord(summary.mode, labels) })}</span>
       <span>{summary.destination.kind === 'bound' ? fill(labels.summaryDestination, { destination: summary.destination.label }) : labels.summaryNoAccount}</span>
-      <span>{fill(labels.summaryQueued, { n: summary.queued.items, size: sizeText(summary.queued.bytes) })}</span>
+      <span>{fill(labels.summaryQueued, { n: summary.queued.items, size: sizeText(summary.queued.bytes, labels, locale) })}</span>
       <span style={summary.conflicts > 0 ? { color: STATUS_COLOR.conflict } : undefined}>
         {fill(labels.summaryConflicts, { n: summary.conflicts })}
       </span>

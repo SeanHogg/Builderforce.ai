@@ -242,7 +242,7 @@ export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
 export { OriginalRequest } from './chatTickets/OriginalRequest';
 // The local-first rail pieces a host hands the panel through its optional props (G21 / G23).
-export { SyncStatusBadge, RailFreshnessLine, RailSyncSummary } from './chatTickets/localRail/components';
+export { SyncStatusBadge, RailFreshnessLine, RailSyncSummary, railTicketLabel } from './chatTickets/localRail/components';
 export { DEFAULT_LOCAL_RAIL_LABELS, localRailLabelsFrom, localRailLabelsFromBundle } from './chatTickets/localRail/labels';
 export type { LocalRailLabels } from './chatTickets/localRail/labels';
 export type { RailFreshnessVM, RailSyncStatus, RailSyncSummaryVM } from './chatTickets/localRail/vm';
@@ -251,7 +251,7 @@ export type { ChatTicketsExtension } from './chatTickets/types';
 // webview each carried a hand-written copy, and the VSIX one had lost the run’s
 // chat binding entirely — see chatTickets/restAdapter.ts.
 export { chatSwitcherLabel } from './chatTickets/chatSwitcherLabel';
-export { createChatTicketsRestAdapter } from './chatTickets/restAdapter';
+export { chatQuestionsReader, createChatTicketsRestAdapter } from './chatTickets/restAdapter';
 export type { ChatTicketsRequest, ChatTicketsRestOptions } from './chatTickets/restAdapter';
 export { useChatParticipants } from './chatTickets/useChatParticipants';
 export { useChatActivitySignal } from './chatTickets/useChatActivitySignal';

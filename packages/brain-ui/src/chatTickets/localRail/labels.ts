@@ -29,6 +29,12 @@ export interface LocalRailLabels {
   summaryLastPush: string;
   summaryLastPull: string;
   summaryNever: string;
+  /** Byte units; `{n}` is the formatted number. */
+  sizeBytes: string;
+  sizeKilobytes: string;
+  sizeMegabytes: string;
+  /** A linked work item the device has not read a title for yet; `{kind}` is its tier's name. */
+  untitledTicket: string;
 }
 
 export const DEFAULT_LOCAL_RAIL_LABELS: LocalRailLabels = {
@@ -54,6 +60,10 @@ export const DEFAULT_LOCAL_RAIL_LABELS: LocalRailLabels = {
   summaryLastPush: 'Last push: {time}',
   summaryLastPull: 'Last pull: {time}',
   summaryNever: 'never',
+  sizeBytes: '{n} B',
+  sizeKilobytes: '{n} KB',
+  sizeMegabytes: '{n} MB',
+  untitledTicket: '{kind} {ref}',
 };
 
 export function localRailLabelsFrom(lookup: LabelLookup): LocalRailLabels {

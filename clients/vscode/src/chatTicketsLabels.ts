@@ -116,5 +116,9 @@ export function chatTicketsLabels(): Record<string, string> {
     "ct.summaryLastPush": t("Last push: {time}"),
     "ct.summaryLastPull": t("Last pull: {time}"),
     "ct.summaryNever": t("never"),
+    "ct.sizeBytes": t("{n} B"),
+    "ct.sizeKilobytes": t("{n} KB"),
+    "ct.sizeMegabytes": t("{n} MB"),
+    "ct.untitledTicket": t("{kind} {ref}"),
   };
 }

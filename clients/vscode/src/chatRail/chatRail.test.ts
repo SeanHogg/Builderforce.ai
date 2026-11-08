@@ -8,6 +8,8 @@ import {
 import { buildSyncSummary } from "../sync/syncSummary";
 import { refreshRail } from "./refreshRail";
 import { createChatRailService } from "./railService";
+import { touchesRail } from "./railWatch";
+import { watchRailFor } from "./railWebviewWatch";
 
 const DEST: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "tenant-1" };
 const CHAT = "00000000-0000-4000-8000-0000000000c1";
@@ -90,6 +92,95 @@ describe("refreshRail", () => {
     const again = await refreshRail(store, platform({ tickets: [ticket(1)], runs: [] }), SERVER_CHAT);
     expect(again).toMatchObject({ status: "ok", tombstoned: 1 });
   });
+
+  it("a body without a tickets array is a failed read: nothing is ingested, no link is tombstoned", async () => {
+    const store = await seededStore();
+    await refreshRail(store, platform({ tickets: [ticket(1)], runs: [] }), SERVER_CHAT);
+    const before = await snapshotOf(store);
+    for (const body of [{}, { tickets: null }, { tickets: "nope" }]) {
+      const get = (async (path: string) => (path.endsWith("/tickets") ? body : { runs: [] })) as never;
+      const outcome = await refreshRail(store, { ...platform({ tickets: [], runs: [] }), get }, SERVER_CHAT);
+      expect(outcome.status).toBe("error");
+    }
+    const noRuns = (async (path: string) => (path.endsWith("/tickets") ? { tickets: [] } : {})) as never;
+    expect((await refreshRail(store, { ...platform({ tickets: [], runs: [] }), get: noRuns }, SERVER_CHAT)).status).toBe("error");
+    expect(await snapshotOf(store)).toBe(before);
+  });
+
+  it("one refresh is ONE store transaction: tickets, runs and links commit together", async () => {
+    const store = await seededStore();
+    let commits = 0;
+    store.subscribe(() => { commits += 1; });
+    await refreshRail(store, platform({ tickets: [ticket(1), ticket(2)], runs: [run(9)] }), SERVER_CHAT);
+    expect(commits).toBe(1);
+    const records = (await store.export()).records;
+    expect(records.filter((r) => r.entityType === "chat-ticket-link" && !r.deletedAt)).toHaveLength(2);
+  });
+
+  it("a rail refresh keeps a locally authored ticket's own fields (it owns only title, status and progress)", async () => {
+    const store = await seededStore();
+    const LOCAL = "00000000-0000-4000-8000-0000000000d1";
+    await store.transact(async (tx) => {
+      await tx.put(newLocalRecord({
+        id: LOCAL, entityType: "ticket", deviceId: "device-1", destination: DEST,
+        payload: { projectId: "00000000-0000-4000-8000-0000000000e1", title: "Mine", description: "Written here", status: "todo", archived: true, chatClientId: CHAT },
+      }));
+      // The device's ticket reached the platform as task 1: its mapping names it.
+      await tx.putMapping({ destination: DEST, entityType: "ticket", clientEntityId: LOCAL, serverId: "1", serverVersion: 1 });
+    });
+    await refreshRail(store, platform({ tickets: [ticket(1, { label: "Renamed on the platform", status: "done", progressPct: 100 })], runs: [] }), SERVER_CHAT);
+    const merged = (await store.export()).records.find((r) => r.id === LOCAL)!.payload as Record<string, unknown>;
+    expect(merged).toMatchObject({
+      projectId: "00000000-0000-4000-8000-0000000000e1", description: "Written here", archived: true, chatClientId: CHAT,
+      title: "Renamed on the platform", status: "done", progressPct: 100,
+    });
+  });
+
+  it("a link to a tier with no numeric id carries its kind and ref for the importer", async () => {
+    const store = await seededStore();
+    await refreshRail(store, platform({ tickets: [ticket(1, { kind: "spec", ref: "abc-uuid" })], runs: [] }), SERVER_CHAT);
+    const link = (await store.export()).records.find((r) => r.entityType === "chat-ticket-link")!;
+    expect(link.payload).toMatchObject({ ticketKind: "spec", ticketRef: "abc-uuid", linkType: "linked" });
+  });
+});
+
+describe("touchesRail", () => {
+  const change = (types: string[], extra: { events?: boolean; syncState?: boolean } = {}) => ({
+    records: new Map(types.map((type) => [type, new Set(["x"])])) as never,
+    events: extra.events ?? false,
+    syncState: extra.syncState ?? false,
+  });
+  it("reacts only to links, tickets and runs, never to the queue or the sync state", () => {
+    expect(touchesRail(change(["chat-ticket-link"]))).toBe(true);
+    expect(touchesRail(change(["ticket"]))).toBe(true);
+    expect(touchesRail(change(["execution"]))).toBe(true);
+    expect(touchesRail(change(["message", "chat"], { events: true, syncState: true }))).toBe(false);
+    expect(touchesRail(undefined)).toBe(true);
+  });
+});
+
+describe("watchRailFor", () => {
+  function harness() {
+    const stops: string[] = [];
+    const disposers: Array<() => void> = [];
+    const source = { watch: vi.fn((ref: string | number) => () => { stops.push(String(ref)); }) };
+    const webview = { postMessage: vi.fn() };
+    const owner = { onDidDispose: vi.fn((listener: () => void) => { disposers.push(listener); }) };
+    return { stops, disposers, source, webview, owner };
+  }
+  it("holds one watch per webview: a chat switch releases the previous one, dispose the last", () => {
+    const h = harness();
+    watchRailFor(h.source, h.webview, h.owner, 7);
+    watchRailFor(h.source, h.webview, h.owner, 7);
+    expect(h.source.watch).toHaveBeenCalledTimes(1);
+    watchRailFor(h.source, h.webview, h.owner, CHAT);
+    expect(h.stops).toEqual(["7"]);
+    expect(h.owner.onDidDispose).toHaveBeenCalledTimes(1);
+    h.disposers[0]!();
+    expect(h.stops).toEqual(["7", CHAT]);
+    watchRailFor(h.source, h.webview, h.owner, 8);
+    expect(h.source.watch).toHaveBeenCalledTimes(2);
+  });
 });
 
 function service(store: LocalFirstStore, allowed: boolean, answers = { tickets: [] as unknown[], runs: [] as unknown[] }) {
@@ -145,6 +236,32 @@ describe("chat rail service", () => {
     expect(rail.links).toHaveLength(0);
     const gone = (await store.export()).records.find((r) => r.entityType === "chat-ticket-link");
     expect(gone?.deletedAt).toBeTruthy();
+  });
+
+  it("freshness: a bound chat never read is not 'only on this device', and the read time survives a new service", async () => {
+    const store = await seededStore();
+    expect((await service(store, false).read(SERVER_CHAT)).freshness).toEqual({ source: "server-observed" });
+    await service(store, true, { tickets: [], runs: [] }).refresh(SERVER_CHAT);
+    // A refresh that listed nothing still counts as a read, and a fresh service (a reload) reads it from the store.
+    expect((await service(store, false).read(SERVER_CHAT)).freshness).toEqual({ lastIngestedAt: "2026-11-08T12:00:00.000Z", source: "server-observed" });
+  });
+
+  it("a chat only on this device has a rail: it links by its client id, with no server chat and no bind", async () => {
+    const store = createMemoryLocalFirstStore();
+    const LOCAL_CHAT = "00000000-0000-4000-8000-0000000000c9";
+    await store.transact(async (tx) => {
+      await tx.put(newLocalRecord({
+        id: LOCAL_CHAT, entityType: "chat", deviceId: "device-1", destination: { kind: "unbound" },
+        payload: { clientId: LOCAL_CHAT, chat: { id: 3, title: "Local" } },
+      }));
+    });
+    const local = service(store, false);
+    expect(await local.link(LOCAL_CHAT, { kind: "task", ref: "55" }, "linked")).toEqual({ ok: true });
+    const rail = await local.read(LOCAL_CHAT);
+    expect(rail.found).toBe(true);
+    expect(rail.tickets).toHaveLength(1);
+    expect(rail.tickets[0]).toMatchObject({ kind: "task", ref: "55", label: "" });
+    expect(rail.freshness).toEqual({ source: "device" });
   });
 
   it("refuses a link for a chat the store does not hold", async () => {

@@ -13,8 +13,15 @@ import type { LocalFirstStore } from "@builderforce/local-first";
 import type { PresentedSyncStatus } from "../syncStatusPresenter";
 import { createLocalWorkModel, type LocalWorkFacts, type LocalWorkModel, type LocalWorkNode } from "./localWorkModel";
 import type { LocalWorkRepository } from "../localWorkRepository";
+import { TASK_LANES } from "../taskLanes";
 
 const REFRESH_DELAY_MS = 150;
+
+/** A ticket status in the editor's language: the board lanes' ONE label list (`taskLanes.ts`). */
+export function ticketStatusText(status: string): string {
+  const lane = TASK_LANES.find((candidate) => candidate.key === status);
+  return lane ? vscode.l10n.t(lane.label) : status;
+}
 
 function syncText(status: PresentedSyncStatus): string {
   switch (status) {
@@ -50,7 +57,7 @@ export function localWorkTreeItem(node: LocalWorkNode): vscode.TreeItem {
   item.id = node.key;
   item.contextValue = node.kind === "project" ? "localWork.project" : "localWork.ticket";
   item.iconPath = syncIcon(node.sync);
-  const parts = [node.workStatus, node.sync ? syncText(node.sync) : undefined].filter((part): part is string => !!part);
+  const parts = [node.workStatus ? ticketStatusText(node.workStatus) : undefined, node.sync ? syncText(node.sync) : undefined].filter((part): part is string => !!part);
   item.description = parts.join(" · ");
   item.tooltip = `${node.label}\n${parts.join("\n")}`;
   return item;

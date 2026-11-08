@@ -16,7 +16,7 @@ import { linkRailTicket, unlinkRailTicket } from "./railLinks";
 import type {
   ChatRailMutationOutcome, ChatRailRefreshOutcome, ChatRef, RailLinkType, RailSnapshot, RailTicketRef,
 } from "./railProtocol";
-import { refreshRail, type RailRefreshPorts } from "./refreshRail";
+import { railReadMark, refreshRail, type RailRefreshPorts } from "./refreshRail";
 import { watchRail } from "./railWatch";
 import type { SyncSummary } from "../sync/syncSummary";
 
@@ -40,13 +40,13 @@ export interface ChatRailService {
 }
 
 export function createChatRailService(deps: ChatRailDeps): ChatRailService {
-  /** When each chat's rail was last taken from the platform (a refresh that changed nothing still counts). */
-  const refreshedAt = new Map<string, string>();
-
   async function read(ref: ChatRef): Promise<RailSnapshot> {
     const [facts, summary] = await Promise.all([deps.facts(), deps.summary()]);
     const clientId = chatClientIdOf(facts, ref);
-    const rail = readRailFromFacts(facts, ref, clientId ? refreshedAt.get(clientId) : undefined);
+    // When the rail was last taken from the platform: the store's read mark, which a refresh that
+    // changed no row still moves, and which survives a reload.
+    const refreshedAt = clientId ? await deps.store.read((tx) => tx.readMark(railReadMark(clientId))) : undefined;
+    const rail = readRailFromFacts(facts, ref, refreshedAt);
     return {
       chatId: ref,
       found: rail.found,
@@ -63,24 +63,15 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
     read,
     async refresh(ref) {
       const outcome = await refreshRail(deps.store, deps.platform, ref);
-      if (outcome.status === "ok") {
-        const clientId = chatClientIdOf(await deps.facts(), ref);
-        if (clientId) refreshedAt.set(clientId, (deps.platform.now ?? (() => new Date()))().toISOString());
-      }
       return { outcome, rail: await read(ref) };
     },
     link: (ref, ticket, linkType) => linkRailTicket(deps.store, deps, ref, ticket, linkType),
     unlink: (ref, ticket) => unlinkRailTicket(deps.store, deps, ref, ticket),
     watch(ref, post) {
-      // The chat's client id is learned from the first snapshot (a number names a SERVER chat).
-      let clientId: string | undefined = typeof ref === "string" ? ref : undefined;
       const repost = () => {
-        void read(ref).then((rail) => {
-          clientId = rail.chatClientId ?? clientId;
-          post(rail);
-        }).catch(() => { /* a failed local read leaves the last posted rail standing */ });
+        void read(ref).then(post).catch(() => { /* a failed local read leaves the last posted rail standing */ });
       };
-      return watchRail(deps.store, () => clientId, repost);
+      return watchRail(deps.store, repost);
     },
   };
 }

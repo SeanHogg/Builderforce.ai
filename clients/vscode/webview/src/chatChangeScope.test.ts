@@ -8,9 +8,12 @@ const changes = [
 ];
 
 describe('scopeChangesToChat', () => {
-  it('keeps every change when the chat files are unknown or empty', () => {
+  it('keeps every change when the chat files are unknown (null)', () => {
     expect(scopeChangesToChat(changes, null)).toEqual(changes);
-    expect(scopeChangesToChat(changes, [])).toEqual(changes);
+  });
+
+  it('filters to nothing when the chat recorded no files of its own', () => {
+    expect(scopeChangesToChat(changes, [])).toEqual([]);
   });
 
   it('matches a recorded repo-relative path exactly', () => {

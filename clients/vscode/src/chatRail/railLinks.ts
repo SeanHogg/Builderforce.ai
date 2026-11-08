@@ -5,12 +5,14 @@
  *
  * The webview names a work item by `(kind, ref)` as the platform does. This resolves it to a local
  * ticket: by its server mapping, else by being a local client id. A work item the device has not
- * seen (picked from the platform's typeahead) lands as a minimal server-observed ticket first, so
- * the link has both ends; the next refresh fills in its title and progress.
+ * seen (picked from the platform's typeahead) lands as a minimal server-observed ticket first (an
+ * empty title with its kind and ref, labelled where it is drawn), so the link has both ends; the
+ * next refresh fills in its title and progress. A chat only on this device links the same way: its
+ * client id names it, no server chat is needed.
  */
 
 import { ingestServerRecords, linkChatTicket, unlinkChatTicket, type LocalFirstStore } from "@builderforce/local-first";
-import { ticketServerId } from "./railPayloads";
+import { linkTierFields, ticketServerId } from "./railPayloads";
 import type { ChatRailMutationOutcome, ChatRef, RailLinkType, RailTicketRef } from "./railProtocol";
 import { ticketRows } from "./railRows";
 import { resolveChat, type ResolvedChat } from "./resolveChat";
@@ -55,7 +57,15 @@ export async function linkRailTicket(
     const at = (ports.now ?? (() => new Date()))().toISOString();
     const ticketClientId = await ticketForLink(store, chat, ticket, at);
     if (!ticketClientId) return { ok: false, error: "ticket_not_found" };
-    await linkChatTicket(store, { chatClientId: chat.clientId, ticketClientId, linkType, deviceId: ports.deviceId, occurredAt: at });
+    await linkChatTicket(store, {
+      chatClientId: chat.clientId,
+      ticketClientId,
+      linkType,
+      deviceId: ports.deviceId,
+      occurredAt: at,
+      // A tier with no numeric server id (spec, objective …) is resolved by the importer from these.
+      ...linkTierFields(ticket.kind, ticket.ref),
+    });
     return { ok: true };
   } catch (error) {
     return failure(error);

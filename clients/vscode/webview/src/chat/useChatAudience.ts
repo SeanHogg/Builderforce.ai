@@ -7,12 +7,12 @@
 import { useEffect, useMemo } from 'react';
 import { chatRosterFromParticipants, type BrainMessage, type ChatRosterAgent, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useChatActivitySignal, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
-import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
+import type { ChatTicketsAdapter } from '@seanhogg/builderforce-brain-ui';
 import { useCapability } from '../useCapability';
 import { childParticipants, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
 export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages, ticketRefresh, draftStore, personaAgents, onRoster }: {
-  ticketAdapter: ReturnType<typeof createChatTicketsAdapter>;
+  ticketAdapter: ChatTicketsAdapter;
   /** The chat's local view key — what its live sub-agents run under on this machine. */
   chatId: number | null;
   /** The chat's bound SERVER id (PRD 36) — who is invited lives on the platform. Null when unbound. */

@@ -3,19 +3,26 @@
  * ticket's presented sync status and how fresh the copy is. Pure: it takes a snapshot, so it
  * answers with the platform denied and is the same code a test and the host run.
  *
- * Status comes from `presentSurfaceSyncStatus` / `presentStoreSyncStatus` over a snapshot narrowed
- * to the one record (the presenter looks a record up by scanning its `records`, so a whole-store
- * list per ticket would make the rail O(tickets x store)).
+ * - Each row's status is `presentRecordSyncStatus` (the ONE presenter over a record and the store's
+ *   facts): it keeps only that record's own events and receipts, so a receipt for another record
+ *   never moves this one.
+ * - Freshness: when the rail was last taken from the platform (the store's read mark, or the newest
+ *   server-observed link or run; never a ticket, which a link to an unseen work item stubs), and
+ *   whether the chat is bound at all. A bound chat never read says so; only
+ *   an unbound chat is "only on this device".
+ * - An untitled ticket (linked before the device read it) keeps an empty label; the webview formats
+ *   it from its kind and ref in the reader's language.
  */
 
-import type { LocalFirstSnapshot, LocalRecord, ChatTicketLinkValue } from "@builderforce/local-first";
-import { presentStoreSyncStatus, presentSurfaceSyncStatus } from "../syncStatusPresenter";
+import type { ChatTicketLinkValue, LocalRecord } from "@builderforce/local-first";
+import type { LocalFirstView } from "../localFirstView";
+import { presentRecordSyncStatus } from "../syncStatusPresenter";
 import type { RailRunPayload, RailTicketPayload } from "./railPayloads";
 import type {
   ChatRef, RailFreshness, RailLink, RailRun, RailRunHistory, RailTicket,
 } from "./railProtocol";
 
-export type RailFacts = Pick<LocalFirstSnapshot, "records" | "mappings" | "events" | "receipts" | "conflicts">;
+export type RailFacts = Pick<LocalFirstView, "records" | "mappings" | "events" | "receipts" | "conflicts">;
 
 export interface RailRead {
   found: boolean;
@@ -41,14 +48,13 @@ export function chatClientIdOf(facts: Pick<RailFacts, "records" | "mappings">, r
   return live ? mapping.clientEntityId : undefined;
 }
 
-function narrow(facts: RailFacts, record: LocalRecord) {
-  return { records: [record], events: facts.events, receipts: facts.receipts, conflicts: facts.conflicts };
-}
-
 function numeric(value: string | undefined): number | undefined {
   const parsed = value === undefined ? NaN : Number(value);
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
+
+const newest = (values: ReadonlyArray<string | undefined>): string | undefined =>
+  values.reduce<string | undefined>((best, at) => (at !== undefined && (best === undefined || at > best) ? at : best), undefined);
 
 export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?: string): RailRead {
   const chatClientId = chatClientIdOf(facts, ref);
@@ -60,9 +66,9 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
   for (const mapping of facts.mappings) serverIds.set(`${mapping.entityType}\u0000${mapping.clientEntityId}`, mapping.serverId);
   const serverIdOf = (type: string, id: string) => serverIds.get(`${type}\u0000${id}`);
 
-  const tickets = new Map<string, LocalRecord<RailTicketPayload>>();
-  const linkRecords: LocalRecord<ChatTicketLinkValue>[] = [];
-  const runRecords: LocalRecord<RailRunPayload>[] = [];
+  const tickets = new Map<string, Readonly<LocalRecord<RailTicketPayload>>>();
+  const linkRecords: Readonly<LocalRecord<ChatTicketLinkValue>>[] = [];
+  const runRecords: Readonly<LocalRecord<RailRunPayload>>[] = [];
   for (const row of facts.records) {
     if (row.deletedAt) continue;
     if (row.entityType === "ticket") tickets.set(row.id, row as LocalRecord<RailTicketPayload>);
@@ -76,7 +82,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
   const railTickets: RailTicket[] = [];
   const links: RailLink[] = [];
   const observed: string[] = [];
-  const noteObserved = (row: LocalRecord) => {
+  const noteObserved = (row: Readonly<LocalRecord>) => {
     if (row.provenance?.evidence === "server-observed") observed.push(row.updatedAt);
   };
 
@@ -90,7 +96,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
       clientId: link.id,
       ticketClientId: ticket.id,
       linkType: link.payload.linkType,
-      syncStatus: presentStoreSyncStatus(narrow(facts, link), { entityType: "chat-ticket-link", id: link.id }),
+      syncStatus: presentRecordSyncStatus(facts, link),
     });
     railTickets.push({
       clientId: ticket.id,
@@ -105,10 +111,10 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
       exists: payload.exists ?? true,
       linkType: link.payload.linkType,
       ...(payload.parent ? { parent: payload.parent } : {}),
-      syncStatus: presentSurfaceSyncStatus(narrow(facts, ticket), "ticket", ticket.id),
+      syncStatus: presentRecordSyncStatus(facts, ticket),
     });
+    // A ticket is not evidence of a read: linking an unseen work item lands a stub of it.
     noteObserved(link);
-    noteObserved(ticket);
   });
 
   const runs: RailRun[] = runRecords
@@ -120,11 +126,8 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     })
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : b.executionId - a.executionId));
 
-  const lastObserved = observed.reduce<string | undefined>((best, at) => (best === undefined || at > best ? at : best), undefined);
-  const lastIngestedAt = [lastObserved, lastRefreshAt].reduce<string | undefined>(
-    (best, at) => (at !== undefined && (best === undefined || at > best) ? at : best),
-    undefined,
-  );
+  const lastIngestedAt = newest([newest(observed), lastRefreshAt]);
+  const bound = serverIdOf("chat", chatClientId) !== undefined;
 
   return {
     found: true,
@@ -139,7 +142,7 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
     },
     freshness: {
       ...(lastIngestedAt !== undefined ? { lastIngestedAt } : {}),
-      source: lastObserved !== undefined || lastRefreshAt !== undefined ? "server-observed" : "device",
+      source: bound || lastIngestedAt !== undefined ? "server-observed" : "device",
     },
   };
 }

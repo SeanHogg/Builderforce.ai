@@ -74,6 +74,13 @@ export interface BrainChat {
    * made. Absent on a server chat (its `id` IS the server id) and on an unbound one.
    */
   serverId?: number;
+  /**
+   * The chat's LOCAL client id (its local-first record id) — a projection, like `serverId`, set
+   * on a chat this device holds. What a device-addressed call names a chat by when the platform
+   * does not know it (the editor's ticket rail on a chat only on this machine). Absent on a chat
+   * read from the server alone.
+   */
+  clientId?: string;
 }
 
 /**

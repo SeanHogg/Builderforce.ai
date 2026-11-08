@@ -35,9 +35,9 @@ export interface SyncStatusInput {
   /** Pending journal events. Events for other records are ignored. */
   readonly events?: readonly JournalEvent[];
   /**
-   * Receipts for this record, including receipts whose events were already
-   * acknowledged and dropped from the journal. A receipt whose event id
-   * belongs to a different record in `events` is ignored.
+   * Receipts; the whole store's set may be passed. Only this record's count (see `receiptsFor`):
+   * a receipt that names its record counts for that record alone, and one written before
+   * receipts named theirs counts only when its event id is one of this record's events.
    */
   readonly receipts?: readonly SyncReceipt[];
   readonly conflicts?: readonly SyncConflict[];
@@ -48,13 +48,30 @@ function sameRecord(entityType: LocalRecord['entityType'], id: string, record: L
 }
 
 /**
- * A receipt that names its record counts only for that record. One written before receipts named
- * theirs carries neither field and is passed through: the caller that holds the record's mapping
- * decides (see `presentRecordSyncStatus`), this function cannot tell whose it is.
+ * Whether `receipt` settles `record`. A receipt that names its record (entityType and
+ * clientEntityId) counts only for that record. A receipt written before receipts named theirs
+ * counts only when its event id is one of the record's own events: once the event is gone
+ * nothing ties it to any record, so it never counts for one (C7).
  */
-function receiptBelongsTo(receipt: SyncReceipt, record: LocalRecord): boolean {
-  if (receipt.entityType === undefined && receipt.clientEntityId === undefined) return true;
+function receiptBelongsTo(receipt: SyncReceipt, record: LocalRecord, ownEventIds: ReadonlySet<string>): boolean {
+  if (receipt.entityType === undefined && receipt.clientEntityId === undefined) return ownEventIds.has(receipt.eventId);
   return receipt.entityType === record.entityType && receipt.clientEntityId === record.id;
+}
+
+/**
+ * The receipts that belong to `record`, out of any set (typically every receipt in the store).
+ * `events` are journal events; only the record's own are used, to claim legacy receipts that
+ * carry no entity fields.
+ */
+export function receiptsFor(
+  record: LocalRecord,
+  receipts: readonly SyncReceipt[],
+  events: readonly JournalEvent[] = [],
+): SyncReceipt[] {
+  const ownEventIds = new Set(
+    events.filter((event) => sameRecord(event.entityType, event.clientEntityId, record)).map((event) => event.eventId),
+  );
+  return receipts.filter((receipt) => receiptBelongsTo(receipt, record, ownEventIds));
 }
 
 function compareEvents(left: JournalEvent, right: JournalEvent): number {
@@ -72,6 +89,7 @@ function isSettling(receipt: SyncReceipt): boolean {
   return receipt.status === 'accepted' || receipt.status === 'duplicate';
 }
 
+/** `receipts` must already be this record's (`receiptsFor`); another record's conflict receipt never opens one here. */
 function isOpenConflict(
   record: LocalRecord,
   conflicts: readonly SyncConflict[],
@@ -97,14 +115,7 @@ function noNewerPending(receipt: SyncReceipt, pending: readonly JournalEvent[]):
  */
 export function deriveRecordSyncStatus(input: SyncStatusInput): SyncStatus {
   const rawEvents = input.events ?? [];
-  const foreignEventIds = new Set(
-    rawEvents
-      .filter((event) => !sameRecord(event.entityType, event.clientEntityId, input.record))
-      .map((event) => event.eventId),
-  );
-  const receipts = (input.receipts ?? []).filter(
-    (receipt) => !foreignEventIds.has(receipt.eventId) && receiptBelongsTo(receipt, input.record),
-  );
+  const receipts = receiptsFor(input.record, input.receipts ?? [], rawEvents);
   const pending = rawEvents
     .filter((event) => sameRecord(event.entityType, event.clientEntityId, input.record))
     .slice()

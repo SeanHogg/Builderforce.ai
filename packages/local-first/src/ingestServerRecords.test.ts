@@ -198,6 +198,48 @@ describe('ingestServerRecords: complete lists and mappings', () => {
     expect(byChat.get(OTHER_CHAT + TICKET_B)?.deletedAt).toBeUndefined();
   });
 
+  it('tombstoning a chat\'s dropped link spares every other chat\'s links, even to the same ticket', async () => {
+    const store = await seeded();
+    await linkChatTicket(store, link(CHAT, TICKET_A));
+    await linkChatTicket(store, link(CHAT, TICKET_B));
+    await linkChatTicket(store, link(OTHER_CHAT, TICKET_B));
+    await syncedAway(store);
+    // CHAT's complete list no longer names TICKET_B: only CHAT's link to it goes.
+    const result = await ingestServerRecords(store, [linkRow(CHAT, TICKET_A, '501')], { completeListFor: { chatClientId: CHAT }, now: NOW });
+    expect(result.tombstoned).toBe(1);
+    const byPair = new Map((await linksOf(store)).map((row) => [row.payload.chatClientId + row.payload.ticketClientId, row]));
+    expect(byPair.get(CHAT + TICKET_B)?.deletedAt).toBeTruthy();
+    expect(byPair.get(CHAT + TICKET_A)?.deletedAt).toBeUndefined();
+    expect(byPair.get(OTHER_CHAT + TICKET_B)?.deletedAt).toBeUndefined();
+  });
+
+  it('records a read mark in the same transaction, and a repeat at the same instant writes nothing', async () => {
+    const store = await seeded();
+    let commits = 0;
+    store.subscribe(() => { commits += 1; });
+    await ingestServerRecords(store, [], { markRead: 'chatRail:x', now: NOW });
+    expect(await store.read((tx) => tx.readMark('chatRail:x'))).toBe(NOW().toISOString());
+    expect(commits).toBe(1);
+    await ingestServerRecords(store, [], { markRead: 'chatRail:x', now: NOW });
+    expect(commits).toBe(1);
+  });
+
+  it('a merge hook keeps the fields the row does not own', async () => {
+    const store = await seeded();
+    await syncedAway(store);
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: ACCOUNT, entityType: 'ticket', clientEntityId: TICKET_A, serverId: '77', serverVersion: 1 });
+    });
+    const row: ServerRecordRow = {
+      ...ticketRow('77', 'From the server'),
+      payload: { projectId: '999', title: 'From the server', status: 'done' },
+      merge: (existing, incoming) => ({ ...(existing as object), title: (incoming as TicketValue).title }),
+    };
+    await ingestServerRecords(store, [row], { now: NOW });
+    const ticket = (await ticketsOf(store)).find((t) => t.id === TICKET_A)!;
+    expect(ticket.payload).toMatchObject({ projectId: '3', title: 'From the server', status: 'backlog' });
+  });
+
   it('does not reset an existing derived-id mapping to version 1', async () => {
     const store = await seeded();
     const created = await linkChatTicket(store, link(CHAT, TICKET_A));

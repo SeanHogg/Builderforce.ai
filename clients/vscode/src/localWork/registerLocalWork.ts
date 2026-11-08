@@ -12,7 +12,7 @@ import { localBrainApplication } from "../localFirstStore";
 import { createLocalWorkRepository } from "../localWorkRepository";
 import { openWorkspace } from "../openWorkspace";
 import { boundChatOf, type LocalWorkNode } from "./localWorkModel";
-import { LocalWorkTreeProvider } from "./localWorkTreeProvider";
+import { LocalWorkTreeProvider, ticketStatusText } from "./localWorkTreeProvider";
 
 export const LOCAL_WORK_VIEW = "builderforce.localWork";
 const CREATE_TICKET = "builderforce.localWork.createTicket";
@@ -73,10 +73,14 @@ export function registerLocalWork(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(SET_STATUS, guarded("localWork.setStatus", vscode.l10n.t("Could not change the status"), async (node) => {
       if (node?.kind !== "ticket") return;
       const status = await vscode.window.showQuickPick(
-        LOCAL_TICKET_STATUSES.map((value) => ({ label: value, description: value === node.workStatus ? vscode.l10n.t("current") : undefined })),
+        LOCAL_TICKET_STATUSES.map((value) => ({
+          label: ticketStatusText(value),
+          value,
+          description: value === node.workStatus ? vscode.l10n.t("current") : undefined,
+        })),
         { title: vscode.l10n.t("Set ticket status") },
       );
-      if (status) await repo.changeTicketStatus(node.id, status.label);
+      if (status) await repo.changeTicketStatus(node.id, status.value);
     })),
     vscode.commands.registerCommand(ARCHIVE, guarded("localWork.archive", vscode.l10n.t("Could not archive the ticket"), async (node) => {
       if (node?.kind === "ticket") await repo.setTicketArchived(node.id, true);

@@ -52,6 +52,7 @@ import {
   removeOrphanedTemporaries,
 } from "./localFirstMigration";
 import { hostLog } from "./hostLog";
+import type { LocalFirstView } from "./localFirstView";
 
 const fs = nodeFs.promises;
 
@@ -80,7 +81,7 @@ export interface DurableLocalFirstStore extends LocalFirstStore {
    * holds a whole chat history). Read-only and valid until the next commit: derive from it, never
    * mutate or retain a row. What the rail and the sync summary read their statuses from.
    */
-  view(): Promise<LocalFirstSnapshot>;
+  view(): Promise<LocalFirstView>;
   /**
    * Only snapshot eligible to be uploaded or logged.
    * Rule: `VSIX_LOCAL_FIRST_REDACTION_RULE`, which is `INDEXEDDB_REDACTION_RULE`.

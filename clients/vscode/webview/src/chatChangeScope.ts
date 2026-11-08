@@ -8,9 +8,10 @@
  * file name, so `a.ts` claims neither `data.ts` nor `src/a.ts`. Case-insensitive, as
  * Windows paths are.
  *
- * `null` (no chat, or the list could not be loaded) and an empty list (the chat has
- * recorded no changes yet) both keep every change: the pill never hides work it
- * cannot attribute.
+ * `null` (no chat, the chat is only local, or the list could not be loaded) keeps
+ * every change: the pill never hides work it cannot attribute. An EMPTY list means
+ * the chat recorded no changes of its own — so it filters to nothing, and the pill
+ * shows no count rather than claiming the workspace's pre-existing uncommitted work.
  */
 export interface ScopableChange {
   /** Absolute path. */
@@ -22,7 +23,13 @@ export interface ScopableChange {
 const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
 
 export function scopeChangesToChat<T extends ScopableChange>(changes: readonly T[], chatFiles: readonly string[] | null): T[] {
-  if (!chatFiles || chatFiles.length === 0) return [...changes];
+  // `null` = unknown / local-only / failed to load — keep everything rather than
+  // hide work we cannot attribute. An empty list = the chat recorded NO files of its
+  // own, so it owns none of the pending changes — filter to nothing. Treating `[]`
+  // like `null` here is what made a fresh chat inherit the workspace's pre-existing
+  // uncommitted dirt (the "Changes (24)" a read-only turn never made).
+  if (chatFiles === null) return [...changes];
+  if (chatFiles.length === 0) return [];
   const files = chatFiles.map(norm).filter(Boolean);
   return changes.filter((change) => {
     const rel = norm(change.path);

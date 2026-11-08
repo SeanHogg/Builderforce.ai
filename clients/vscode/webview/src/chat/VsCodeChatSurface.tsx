@@ -210,7 +210,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // The chat OFF this machine (PRD 36): every server-addressed call — the rail, who is
   // invited, the diagnostics — names its bound server id, or is not made.
   const serverChatId = serverChatIdOf(activeChat);
-  const rail = useTicketRail({ init, apiReq, serverChatId, chats, persistence, reloadChats, reloadMessages: conv.reloadMessages });
+  const rail = useTicketRail({ init, apiReq, serverChatId, chatClientId: activeChat?.clientId ?? null, chats, persistence, reloadChats, reloadMessages: conv.reloadMessages });
   const { ticketAdapter, ticketRefresh, linkTicket } = rail;
   // A host intent switches chat the way a row does: History closes onto it.
   useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput: draftStore.set, reloadChats, linkTicket, t });
@@ -284,7 +284,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           onVisualize={init.boardBeside ? () => post('visualization.open') : undefined}
         />
       )}
-      rail={chatId != null && !historyOpen && railHasContent(serverChatId, activeChat) && (
+      rail={chatId != null && !historyOpen && railHasContent(rail.railChatId, activeChat) && (
         <VsCodeChatRail
           init={init}
           persistence={persistence}
@@ -297,6 +297,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           ticketChatList={rail.ticketChatList}
           onTicketsChanged={rail.onTicketsChanged}
           localRail={rail.localRail}
+          railChatId={rail.railChatId}
+          liveTickets={rail.liveTickets}
           pendingChangesExtension={rail.pendingChangesExtension}
           railRefresh={audience.railRefresh}
           subagentRoster={audience.subagentRoster}

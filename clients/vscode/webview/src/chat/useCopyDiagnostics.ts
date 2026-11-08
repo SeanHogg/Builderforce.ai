@@ -25,7 +25,7 @@ import {
 import { chatDiagnosticsReads } from '@seanhogg/builderforce-brain-ui';
 import { decodeTokenClaims } from '@/lib/tokenClaims';
 import type { AuthedFetch } from '../authedFetch';
-import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
+import type { ChatTicketsAdapter } from '@seanhogg/builderforce-brain-ui';
 import { fetchPlanSnapshot } from '../planSnapshot';
 import { buildTranscript, hasTranscriptContent } from '../transcript';
 import { getToken, post, type InitData } from '../vscodeBridge';
@@ -48,7 +48,7 @@ export function useCopyDiagnostics({
   associatedProject: { id: number; name: string } | null;
   associatedProjectId: number | null;
   modelSurface: ReturnType<typeof useComposerModels>['modelSurface'];
-  ticketAdapter: ReturnType<typeof createChatTicketsAdapter>;
+  ticketAdapter: ChatTicketsAdapter;
   apiReq: AuthedFetch;
   t: (key: string, fallback: string) => string;
 }) {

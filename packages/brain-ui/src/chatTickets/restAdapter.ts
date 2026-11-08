@@ -60,8 +60,28 @@ const RUNNABLE = new Set(RUNNABLE_KINDS);
 interface WorkforceAgent { id: string | number; name: string; title?: string; base_model?: string }
 interface RegisteredAgent { id: string | number; name: string; type: string; isActive: boolean }
 
+/**
+ * The pending questions for a chat, given the links it has: the ONE filter ("a question or feedback
+ * request on a runnable ticket this chat links"), over whichever copy of the links a host holds.
+ * The REST adapter hands it the platform's links; the editor hands it its local rail copy, so its
+ * questions read never fetches the chat's links from the webview.
+ */
+export function chatQuestionsReader(req: ChatTicketsRequest): (links: readonly TicketLinkVM[]) => Promise<ChatQuestionVM[]> {
+  return async (links) => {
+    const taskIds = new Set(links.filter((link) => RUNNABLE.has(link.kind)).map((link) => Number(link.ref)));
+    if (taskIds.size === 0) return [];
+    // `kind` is on the wire but not on the VM — the panel renders a question
+    // without caring which flavour it is, while the FILTER cares about nothing
+    // else. Typing the wire row here keeps both true.
+    const pending = await req<{ approvals: Array<ChatQuestionVM & { kind: string }> }>('/api/approvals?status=pending').then((r) => r.approvals);
+    return pending.filter((q) =>
+      (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
+  };
+}
+
 export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): ChatTicketsAdapter {
   const { request: req } = opts;
+  const questionsFor = chatQuestionsReader(req);
 
   /**
    * The agent pool is stable tenant data (which agents EXIST), unchanged by
@@ -197,20 +217,8 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
       return { started: !!res.executionId, agentName: res.agentRef };
     },
 
-    listQuestions: async (chatId): Promise<ChatQuestionVM[]> => {
-      const [links, pending] = await Promise.all([
-        readChatTicketLinks<TicketLinkVM>(req, chatId),
-        // `kind` is on the wire but not on the VM — the panel renders a question
-        // without caring which flavour it is, while the FILTER cares about nothing
-        // else. Typing the wire row here keeps both true.
-        req<{ approvals: Array<ChatQuestionVM & { kind: string }> }>('/api/approvals?status=pending').then((r) => r.approvals),
-      ]);
-      const taskIds = new Set(
-        links.filter((link) => RUNNABLE.has(link.kind)).map((link) => Number(link.ref)),
-      );
-      return pending.filter((q) =>
-        (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
-    },
+    listQuestions: async (chatId): Promise<ChatQuestionVM[]> =>
+      questionsFor(await readChatTicketLinks<TicketLinkVM>(req, chatId)),
 
     answerQuestion: (id, responseText) =>
       req(`/api/approvals/${encodeURIComponent(id)}`, {

@@ -10,6 +10,7 @@ import {
   isLocalAuditComplete,
   localAuditCompletionRequiresReceipt,
   localWorkComplete,
+  receiptsFor,
   syncShownAsDone,
   type StoreSyncStatus,
   type SyncStatus,
@@ -45,8 +46,14 @@ function event(partial: Partial<JournalEvent> & Pick<JournalEvent, 'eventId' | '
   };
 }
 
-function receipt(eventId: string, status: SyncReceipt['status']): SyncReceipt {
-  return { eventId, status, receivedAt: '2026-10-19T00:01:00.000Z' };
+/** `owner` names the record the receipt settles, as sync writes it; omitted = a pre-entity receipt. */
+function receipt(eventId: string, status: SyncReceipt['status'], owner?: LocalRecord): SyncReceipt {
+  return {
+    eventId,
+    status,
+    receivedAt: '2026-10-19T00:01:00.000Z',
+    ...(owner ? { entityType: owner.entityType, clientEntityId: owner.id } : {}),
+  };
 }
 
 function conflict(recordId: string, entityType: LocalRecord['entityType'], resolvedAt?: string): SyncConflict {
@@ -103,7 +110,7 @@ describe('deriveSyncStatus', () => {
     const row = record('ticket', 'ticket-1');
     const pending = [event({ eventId: 'e1', clientEntityId: 'ticket-1', entityType: 'ticket', localSequence: 3 })];
     expect(deriveSyncStatus({ record: row, events: pending, receipts: [receipt('e1', 'accepted')] })).toBe('synced');
-    expect(deriveSyncStatus({ record: row, events: [], receipts: [receipt('e1', 'duplicate')] })).toBe('synced');
+    expect(deriveSyncStatus({ record: row, events: [], receipts: [receipt('e1', 'duplicate', row)] })).toBe('synced');
     expect(syncShownAsDone(row, 'synced')).toBe(true);
   });
 
@@ -163,7 +170,7 @@ describe('deriveSyncStatus', () => {
     expect(deriveSyncStatus({
       record: row,
       events: [],
-      receipts: [receipt('e1', 'accepted')],
+      receipts: [receipt('e1', 'accepted', row)],
       conflicts: [conflict('chat-1', 'chat', '2026-10-19T00:04:00.000Z')],
     })).toBe('synced');
   });
@@ -214,7 +221,7 @@ describe('deriveSyncStatus', () => {
     const pending = [event({ eventId: 'e1', clientEntityId: 'chat-1', entityType: 'chat' })];
     expect(deriveSyncStatus({ record: row, events: pending, receipts: [receipt('e1', 'rejected')] })).toBe('syncing');
     expect(deriveSyncStatus({ record: row, events: pending, receipts: [receipt('e1', 'dependency_pending')] })).toBe('syncing');
-    expect(deriveSyncStatus({ record: row, events: [], receipts: [receipt('e1', 'rejected')] })).toBe('dead-letter');
+    expect(deriveSyncStatus({ record: row, events: [], receipts: [receipt('e1', 'rejected', row)] })).toBe('dead-letter');
     expect(syncShownAsDone(row, 'syncing')).toBe(false);
     expect(localWorkComplete(row, 'syncing')).toBe(false);
     expect(localWorkComplete(row, 'local')).toBe(false);
@@ -285,7 +292,7 @@ describe('deriveSyncStatus', () => {
       const deniedAfterDrop = deriveRecordSyncStatus({
         record: row,
         events: [],
-        receipts: [receipt('e1', 'rejected')],
+        receipts: [receipt('e1', 'rejected', row)],
       });
       expect(deniedAfterDrop).toBe('dead-letter');
       expect(syncShownAsDone(row, deniedAfterDrop)).toBe(false);
@@ -294,11 +301,59 @@ describe('deriveSyncStatus', () => {
       const waitingAfterDrop = deriveRecordSyncStatus({
         record: row,
         events: [],
-        receipts: [receipt('e1', 'dependency_pending')],
+        receipts: [receipt('e1', 'dependency_pending', row)],
       });
       expect(waitingAfterDrop).not.toBe('synced');
       expect(syncShownAsDone(row, waitingAfterDrop)).toBe(false);
     }
+  });
+});
+
+describe('receipts are scoped to their record (C7)', () => {
+  const a = record('ticket', 'ticket-a');
+  const b = record('ticket', 'ticket-b');
+
+  it('regression: an orphaned accepted receipt from record B does not make record A (no events) synced', () => {
+    // B's event was acknowledged and deleted; its receipt stays in the store.
+    const status = deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('b-e1', 'accepted', b)] });
+    expect(status).toBe('local');
+  });
+
+  it('regression: an orphaned conflict receipt from record B does not make record A conflict', () => {
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('b-e1', 'conflict', b)] })).toBe('local');
+    const pending = [event({ eventId: 'a-e1', clientEntityId: a.id, entityType: a.entityType })];
+    expect(deriveRecordSyncStatus({
+      record: a,
+      events: pending,
+      receipts: [receipt('a-e1', 'accepted', a), receipt('b-e1', 'conflict', b)],
+    })).toBe('synced');
+  });
+
+  it('a record\'s own accepted receipt still gives synced, with or without its event', () => {
+    const pending = [event({ eventId: 'a-e1', clientEntityId: a.id, entityType: a.entityType })];
+    expect(deriveRecordSyncStatus({ record: a, events: pending, receipts: [receipt('a-e1', 'accepted', a)] })).toBe('synced');
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('a-e1', 'accepted', a)] })).toBe('synced');
+  });
+
+  it('an old receipt without entity fields does not count for an unrelated record', () => {
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('b-e1', 'accepted')] })).toBe('local');
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('b-e1', 'conflict')] })).toBe('local');
+    const bEvents = [event({ eventId: 'b-e1', clientEntityId: b.id, entityType: b.entityType })];
+    expect(deriveRecordSyncStatus({ record: a, events: bEvents, receipts: [receipt('b-e1', 'accepted')] })).toBe('local');
+  });
+
+  it('an old receipt without entity fields still counts while its event is the record\'s own', () => {
+    const pending = [event({ eventId: 'a-e1', clientEntityId: a.id, entityType: a.entityType })];
+    expect(deriveRecordSyncStatus({ record: a, events: pending, receipts: [receipt('a-e1', 'accepted')] })).toBe('synced');
+  });
+
+  it('receiptsFor keeps only the record\'s receipts', () => {
+    const own = receipt('a-e1', 'accepted', a);
+    const legacyOwn = receipt('a-e2', 'accepted');
+    const pending = [event({ eventId: 'a-e2', clientEntityId: a.id, entityType: a.entityType })];
+    const all = [own, legacyOwn, receipt('b-e1', 'accepted', b), receipt('x-e1', 'conflict')];
+    expect(receiptsFor(a, all, pending)).toEqual([own, legacyOwn]);
+    expect(receiptsFor(a, all)).toEqual([own]);
   });
 });
 

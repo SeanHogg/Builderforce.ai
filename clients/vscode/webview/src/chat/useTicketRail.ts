@@ -1,67 +1,73 @@
 /**
- * The chat's ticket rail, bound to the editor — the shared `ChatTicketsPanel`'s adapter
- * (the gateway's chat↔ticket endpoints over the webview's bearer fetch), its localized
- * copy, the refresh signal the Brain's MCP writes bump, the "Changes (N)" pill, and
- * linking the work item a chat was opened for. Lifted out of the chat surface: the
- * surface only places the rail; everything it is fed with is decided here.
+ * The chat's ticket rail, bound to the editor — the shared `ChatTicketsPanel`'s adapter, its
+ * localized copy, the refresh signal the Brain's MCP writes bump, the "Changes (N)" pill, and
+ * linking the work item a chat was opened for. Lifted out of the chat surface: the surface only
+ * places the rail; everything it is fed with is decided here.
+ *
+ * The rail's tickets, runs and links are the HOST'S local copy (`local.chatRail`); only merge,
+ * invite, run and the rest use the gateway endpoints, over the webview's bearer fetch. The rail
+ * names a chat by `railChatId`: its bound SERVER id, else its local client id (a chat only on this
+ * machine still has a rail, without the platform-only sections).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { serverChatIdOf, type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
-import { chatTicketsLabelsFromBundle, localRailLabelsFromBundle } from '@seanhogg/builderforce-brain-ui';
+import { chatTicketsLabelsFromBundle, localRailLabelsFromBundle, railTicketLabel, type TicketKind } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
-import { createChatTicketsAdapter } from '../chatTicketsAdapter';
+import { createChatTicketsPlatform } from '../chatTicketsAdapter';
 import { useChatChangedFiles } from '../useChatChangedFiles';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { getToken, onHostMessage, refreshToken, type InitData } from '../vscodeBridge';
 import { request } from '../bridgeTransport';
 import { useCapability, webviewCapability } from '../useCapability';
-import type { ChatRailFrame, ChatRailRequest } from '../../../src/chatRail/railProtocol';
-import { createLocalRailAdapter, createRailStore } from './localRailAdapter';
+import type { ChatRailFrame, ChatRailRequest, ChatRef } from '../../../src/chatRail/railProtocol';
+import { createLocalRailAdapter, createRailStore, isFrameFor, ticketVm } from './localRailAdapter';
 import { useLocalRailPieces, useRailSnapshot } from './localRailPieces';
 import { spendLabelsFrom } from './composerLabels';
 
 /** A linked ticket as the composer's `#` typeahead lists it. */
 export type TypeaheadTicket = { id: number; title: string; status?: string; key?: string };
 
-/**
- * Every call the rail makes is SERVER-addressed (`/api/brain/chats/{id}/…`), so it names
- * the chat's bound server id (PRD 36) — never the local view key, which named whichever
- * server chat shared its number. `serverChatId` null = the chat is only on this machine:
- * no rail call is made.
- */
-export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, reloadChats, reloadMessages }: {
+export function useTicketRail({ init, apiReq, serverChatId, chatClientId, chats, persistence, reloadChats, reloadMessages }: {
   init: InitData;
   apiReq: AuthedFetch;
+  /** The chat's bound SERVER id (PRD 36), or null when it lives only on this machine. */
   serverChatId: number | null;
+  /** The chat's local client id, when this device holds it. */
+  chatClientId: string | null;
   chats: BrainChat[];
   persistence: BrainPersistenceAdapter;
   reloadChats: () => void;
   reloadMessages: () => void;
 }) {
-  // The rail's tickets and runs are the HOST's local copy (`local.chatRail`), and link/unlink write
-  // local records through it; only merge, invite, run and the rest use the gateway endpoints the
-  // web app's panel uses, over the webview's bearer fetch.
+  const railChatId: ChatRef | null = serverChatId ?? chatClientId;
   const railStore = useMemo(() => createRailStore(), []);
-  const ticketAdapter = useMemo(
-    // A 401 re-mints (one shared exchange per burst) and retries the read once — a
-    // fire-and-forget refresh left the rail empty until something else refreshed it.
-    () => createLocalRailAdapter(
-      createChatTicketsAdapter(init.baseUrl, getToken, refreshToken),
-      {
-        call: <T,>(body: ChatRailRequest) => request<T>('local.chatRail', body as unknown as Record<string, unknown>),
-        connected: () => webviewCapability('connected'),
-      },
-      railStore,
-    ),
-    [init.baseUrl, railStore],
-  );
   const localRailLabels = useMemo(() => localRailLabelsFromBundle(init.labels), [init.labels]);
-  const railSnapshot = useRailSnapshot(railStore, serverChatId);
-  const localRail = useLocalRailPieces(railSnapshot, localRailLabels, init.locale);
   // The rail's copy — the host's `ct.*` l10n keys (`src/chatTicketsLabels.ts`).
   const ticketLabels = useMemo(() => chatTicketsLabelsFromBundle(init.labels), [init.labels]);
   const spendLabels = useMemo(() => spendLabelsFrom(init.labels), [init.labels]);
+  const untitled = useCallback(
+    (kind: TicketKind, ref: string) => railTicketLabel('', ticketLabels.kind[kind] ?? kind, ref, localRailLabels),
+    [ticketLabels, localRailLabels],
+  );
+  const ticketAdapter = useMemo(() => {
+    // A 401 re-mints (one shared exchange per burst) and retries the read once.
+    const platform = createChatTicketsPlatform(init.baseUrl, getToken, refreshToken);
+    return createLocalRailAdapter(
+      platform.adapter,
+      {
+        call: <T,>(body: ChatRailRequest) => request<T>('local.chatRail', body as unknown as Record<string, unknown>),
+        connected: () => webviewCapability('connected'),
+        questionsFor: platform.questionsFor,
+        untitled,
+      },
+      railStore,
+    );
+  }, [init.baseUrl, railStore, untitled]);
+  const railSnapshot = useRailSnapshot(railStore, railChatId);
+  const localRail = useLocalRailPieces(railSnapshot, localRailLabels, init.locale);
+  // What a host push shows: the snapshot's tickets, handed to the panel without a read.
+  const liveTickets = useMemo(() => railSnapshot?.tickets.map((tk) => ticketVm(tk, untitled)), [railSnapshot, untitled]);
 
   // Stable references so a keystroke / streaming token doesn't hand the memoized
   // <ChatTicketsPanel> fresh props and force its whole subtree to re-render.
@@ -82,16 +88,16 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
     return () => window.removeEventListener('bf:mcp-write', bumpTicketRefresh);
   }, [bumpTicketRefresh]);
 
-  // The host pushes the chat's rail whenever a commit touches it (a link, a refresh, a sync receipt):
-  // keep the snapshot and reload what the panel shows from the store.
+  // The host pushes the chat's rail whenever a commit touches it (a link, a refresh). The push only
+  // lands in the store: the panel repaints from `liveTickets`, with no read and no platform call.
+  // A frame for another chat (a late one from before a switch) is dropped.
+  const railChatRef = useRef(railChatId);
+  useEffect(() => { railChatRef.current = railChatId; }, [railChatId]);
   useEffect(() => onHostMessage<ChatRailFrame>('local.chatRail', (frame) => {
-    railStore.push(frame.rail);
-    bumpTicketRefresh();
-  }), [railStore, bumpTicketRefresh]);
+    if (isFrameFor(frame, railChatRef.current)) railStore.push(frame.rail);
+  }), [railStore]);
 
-  // The composer's #-ticket typeahead: the chat's linked tickets. Read here, by the
-  // SERVER id, beside every other rail read — the composer read them by the local view
-  // key (`/chats/6/tickets` for a chat bound to 172, a 404 on every refresh).
+  // The composer's #-ticket typeahead: the chat's linked tickets, from the local rail copy.
   //
   // OFFLINE `#`: when the platform is denied there is no server chat to read links
   // from, so the typeahead lists the host's LOCAL tickets (G05 `localWorkRepository`
@@ -118,25 +124,25 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
   const chatFiles = useChatChangedFiles(apiReq, serverChatId, ticketRefresh);
   const pendingChangesExtension = usePendingChangesExtension(init.labels, chatFiles);
 
-  // Link a work item to a LOCAL chat — the work item that opened it (a task/epic/gap from
-  // the tree or board, a roadmap/spec row from a project page) or one `#`-tagged in the
-  // composer. A local chat's id names no server chat, so it is bound first; a signed-out
-  // editor has no platform chat to link to, and links nothing.
+  // Link a work item to a chat — the work item that opened it (a task/epic/gap from the tree or
+  // board, a roadmap/spec row from a project page) or one `#`-tagged in the composer. The link is a
+  // LOCAL record on the chat (its server id when bound, else its client id), never a bind first:
+  // it syncs to the platform once the chat does.
   const linkTicket = useCallback(
     async (localChatId: number, ticket: { kind: string; ref: string }) => {
       try {
-        const linkChatId = await persistence.bindChat?.(localChatId);
+        const chat = await persistence.getChat(localChatId);
+        const linkChatId = serverChatIdOf(chat) ?? chat.clientId;
         if (linkChatId == null) return;
         await ticketAdapter.linkTicket(linkChatId, { kind: ticket.kind as never, ref: ticket.ref, linkType: 'linked' });
         reloadChats();
-        bumpTicketRefresh();
       } catch { /* linking is best-effort — a failed link never blocks the chat */ }
     },
-    [persistence, ticketAdapter, reloadChats, bumpTicketRefresh],
+    [persistence, ticketAdapter, reloadChats],
   );
 
   return {
     ticketAdapter, ticketLabels, spendLabels, ticketChatList, onTicketsChanged,
-    ticketRefresh, pendingChangesExtension, linkTicket, typeaheadTickets, localRail,
+    ticketRefresh, pendingChangesExtension, linkTicket, typeaheadTickets, localRail, railChatId, liveTickets,
   };
 }

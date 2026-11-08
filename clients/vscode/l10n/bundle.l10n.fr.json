@@ -1246,5 +1246,9 @@
   "Conflicts: {n}": "Conflits : {n}",
   "Failed: {n}": "Échecs : {n}",
   "Last push: {time}": "Dernier envoi : {time}",
-  "Last pull: {time}": "Dernière récupération : {time}"
+  "Last pull: {time}": "Dernière récupération : {time}",
+  "{n} B": "{n} o",
+  "{n} KB": "{n} Ko",
+  "{n} MB": "{n} Mo",
+  "{kind} {ref}": "{kind} {ref}"
 }

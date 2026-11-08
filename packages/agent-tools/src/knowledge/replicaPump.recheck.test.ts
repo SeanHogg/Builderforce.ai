@@ -24,7 +24,7 @@ function source(reads: string[]): DirectorySource {
 }
 
 describe('regression: a root with files that have no stored output is settled by the next review, through the store alone', () => {
-    it('regression: pump holds the files back and asks for a re-check; the real review stores [] for the binary and extracts the text; the next pump settles', async () => {
+    it('regression: pump holds the files back and asks for a re-check; the real review stores an asset file node for the binary and extracts the text; the next pump settles', async () => {
         const w = world();
         const reads: string[] = [];
         const manifest = new InMemoryIngestManifest();
@@ -45,7 +45,13 @@ describe('regression: a root with files that have no stored output is settled by
         expect(await w.local.recheckHashes!()).toEqual([hashFor('a.md'), hashFor('blob.txt')].sort());
 
         await reviewDirectory({ source: source(reads), store: w.local, manifest, packs: [DOCS_PACK], budget: { modelCalls: 0, ms: 60_000 } });
-        expect(await w.local.getExtracted!(hashFor('blob.txt'))).toEqual([]);
+        // memory 2026.10.62 stores a binary file as ONE asset file node (no text claims), not `[]`.
+        const blob = await w.local.getExtracted!(hashFor('blob.txt'));
+        expect(blob).toHaveLength(1);
+        expect(blob![0]!.edges).toEqual([]);
+        expect(blob![0]!.nodes).toEqual([
+            expect.objectContaining({ kind: 'file', ref: srcRef(ROOT, 'blob.txt'), sourceHash: hashFor('blob.txt'), badges: expect.objectContaining({ asset: 1 }) }),
+        ]);
         expect((await w.local.getExtracted!(hashFor('a.md')))!.length).toBeGreaterThan(0);
         expect(await w.local.recheckHashes!()).toEqual([]);
 

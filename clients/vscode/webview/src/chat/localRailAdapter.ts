@@ -7,28 +7,34 @@
  *     background, at most once per `REFRESH_EVERY_MS` per chat and never for a read that a host push
  *     caused (a push is the store already changing; refreshing on it would loop).
  *   - `linkTicket` / `unlinkTicket` write local link records through the host.
+ *   - `listQuestions` filters the platform's pending approvals by the LOCAL copy's links
+ *     (`chatQuestionsReader`), so nothing in this webview reads a chat's links from the platform.
  *   - Merge, invite, run and the rest stay with the platform adapter (`remote`), gated as before.
  *
- * The bearer-fetch path for the four calls above is not in this webview any more: `remote` is typed
- * without them.
+ * A chat is named by `ChatRef`: its server id when bound, its local client id when it lives only on
+ * this device. A local chat has no platform questions.
  */
 
-import type { ChatRunHistoryVM, ChatTicketsAdapter, TicketKind, TicketLinkVM } from '@seanhogg/builderforce-brain-ui';
+import type { ChatQuestionVM, ChatRunHistoryVM, ChatTicketsAdapter, TicketKind, TicketLinkVM } from '@seanhogg/builderforce-brain-ui';
 import type {
   ChatRailMutationOutcome, ChatRailRefreshOutcome, ChatRailRequest, ChatRef, RailSnapshot, RailTicket,
 } from '../../../src/chatRail/railProtocol';
 
 /** The platform adapter, without the calls the local copy answers. */
-export type RemoteChatTicketsAdapter = Omit<ChatTicketsAdapter, 'listTickets' | 'listRuns' | 'linkTicket' | 'unlinkTicket'>;
+export type RemoteChatTicketsAdapter = Omit<ChatTicketsAdapter, 'listTickets' | 'listRuns' | 'linkTicket' | 'unlinkTicket' | 'listQuestions'>;
 
 export interface LocalRailHost {
   call<T>(body: ChatRailRequest): Promise<T>;
   /** Whether the platform may be read now. */
   connected(): boolean;
+  /** The pending questions for a set of links (the platform's approvals, filtered by them). */
+  questionsFor(links: readonly TicketLinkVM[]): Promise<ChatQuestionVM[]>;
+  /** The label a ticket stored untitled is drawn with (its tier and ref, in the reader's language). */
+  untitled(kind: TicketKind, ref: string): string;
   now?: () => number;
 }
 
-const REFRESH_EVERY_MS = 30_000;
+export const REFRESH_EVERY_MS = 30_000;
 
 /** The latest snapshot per chat, and which chats' next read follows a host push. */
 export interface RailStore {
@@ -41,7 +47,12 @@ export interface RailStore {
   subscribe(listener: () => void): () => void;
 }
 
-const keyOf = (chatId: ChatRef): string => `${typeof chatId}:${chatId}`;
+export const railKeyOf = (chatId: ChatRef): string => `${typeof chatId}:${chatId}`;
+
+/** Whether a host push is for the chat the rail shows now (a late frame for another chat is dropped). */
+export function isFrameFor(frame: { chatId: ChatRef }, railChatId: ChatRef | null): boolean {
+  return railChatId != null && railKeyOf(frame.chatId) === railKeyOf(railChatId);
+}
 
 export function createRailStore(): RailStore {
   const snapshots = new Map<string, RailSnapshot>();
@@ -49,20 +60,21 @@ export function createRailStore(): RailStore {
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of [...listeners]) listener(); };
   return {
-    get: (chatId) => snapshots.get(keyOf(chatId)),
-    set(rail) { snapshots.set(keyOf(rail.chatId), rail); notify(); },
-    push(rail) { pushed.add(keyOf(rail.chatId)); snapshots.set(keyOf(rail.chatId), rail); notify(); },
-    takePushed: (chatId) => pushed.delete(keyOf(chatId)),
+    get: (chatId) => snapshots.get(railKeyOf(chatId)),
+    set(rail) { snapshots.set(railKeyOf(rail.chatId), rail); notify(); },
+    push(rail) { pushed.add(railKeyOf(rail.chatId)); snapshots.set(railKeyOf(rail.chatId), rail); notify(); },
+    takePushed: (chatId) => pushed.delete(railKeyOf(chatId)),
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   };
 }
 
-export function ticketVm(ticket: RailTicket): TicketLinkVM {
+export function ticketVm(ticket: RailTicket, untitled: (kind: TicketKind, ref: string) => string): TicketLinkVM {
+  const kind = ticket.kind as TicketKind;
   return {
     linkId: ticket.linkId,
-    kind: ticket.kind as TicketKind,
+    kind,
     ref: ticket.ref,
-    label: ticket.label,
+    label: ticket.label || untitled(kind, ticket.ref),
     status: ticket.status,
     progressPct: ticket.progressPct,
     done: ticket.done,
@@ -90,7 +102,7 @@ export function createLocalRailAdapter(remote: RemoteChatTicketsAdapter, host: L
   /** Ask the host to take the platform's copy, in the background; the answer lands in the store. */
   const refreshSoon = (chatId: ChatRef): void => {
     if (store.takePushed(chatId) || !host.connected()) return;
-    const key = keyOf(chatId);
+    const key = railKeyOf(chatId);
     const at = now();
     if (at - (lastRefresh.get(key) ?? -Infinity) < REFRESH_EVERY_MS) return;
     lastRefresh.set(key, at);
@@ -104,7 +116,7 @@ export function createLocalRailAdapter(remote: RemoteChatTicketsAdapter, host: L
     async listTickets(chatId) {
       const rail = await read(chatId);
       refreshSoon(chatId);
-      return rail.tickets.map(ticketVm);
+      return rail.tickets.map((tk) => ticketVm(tk, host.untitled));
     },
     async listRuns(chatId): Promise<ChatRunHistoryVM> {
       return (await read(chatId)).runHistory;
@@ -114,6 +126,12 @@ export function createLocalRailAdapter(remote: RemoteChatTicketsAdapter, host: L
     },
     async unlinkTicket(chatId, kind, ref) {
       mutation(await host.call<ChatRailMutationOutcome>({ action: 'unlink', chatId, kind, ref }));
+    },
+    async listQuestions(chatId) {
+      // A chat only on this device (a string ref) has no questions on the platform.
+      if (typeof chatId === 'string') return [];
+      const rail = store.get(chatId) ?? await read(chatId);
+      return host.questionsFor(rail.tickets.map((tk) => ticketVm(tk, host.untitled)));
     },
   };
 }

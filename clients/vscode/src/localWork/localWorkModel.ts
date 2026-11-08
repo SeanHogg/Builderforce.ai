@@ -4,19 +4,27 @@
  * lists the same rows offline, with the platform denied, and in a unit test. No `vscode`.
  *
  * - Tickets come from the repository (`listTickets`), never a platform read.
- * - A ticket whose project is not a local project (a platform project id, or none: the rail
- *   ingests platform tickets without one) goes under one "unfiled" node, so no row is dropped.
+ * - A ticket whose project is not a local project (a platform project id, or none) goes under one
+ *   "unfiled" node, but only when it is the DEVICE'S work: authored here, or bound to the chat it
+ *   was created in. A ticket the rail merely read off the platform belongs to that chat's rail, not
+ *   to this tree; otherwise every chat's linked tickets would flood "Unfiled".
  * - A platform tier that only the rail shows (an objective, a spec ...) is not a work item here.
- * - Each row's status is `presentSurfaceSyncStatus` / `presentStoreSyncStatus` over a snapshot
- *   narrowed to that one record (the presenter scans `records` to find it).
+ * - Each row's status is `presentRecordSyncStatus`, the ONE presenter over a record and the store's
+ *   facts (only that record's events and receipts count).
  */
 
-import type { LocalFirstSnapshot, LocalRecord } from "@builderforce/local-first";
+import type { LocalRecord, TicketValue } from "@builderforce/local-first";
 import { isRailOnlyTicket } from "../chatRail/railPayloads";
+import type { LocalFirstView } from "../localFirstView";
 import type { LocalWorkRepository } from "../localWorkRepository";
-import { presentStoreSyncStatus, presentSurfaceSyncStatus, type PresentedSyncStatus } from "../syncStatusPresenter";
+import { presentRecordSyncStatus, type PresentedSyncStatus } from "../syncStatusPresenter";
 
-export type LocalWorkFacts = Pick<LocalFirstSnapshot, "records" | "events" | "receipts" | "conflicts">;
+export type LocalWorkFacts = Pick<LocalFirstView, "records" | "events" | "receipts" | "conflicts">;
+
+/** A ticket with no local project shows under "Unfiled" only when it is this device's work. */
+export function isUnfiledWork(ticket: Readonly<LocalRecord<TicketValue>>): boolean {
+  return ticket.provenance?.source !== "imported" || Boolean((ticket.payload as { chatClientId?: string }).chatClientId);
+}
 
 export const UNFILED_NODE_ID = "unfiled";
 
@@ -31,10 +39,6 @@ export interface LocalWorkNode {
   workStatus?: string;
   sync?: PresentedSyncStatus;
   archived?: boolean;
-}
-
-function narrow(facts: LocalWorkFacts, record: LocalRecord) {
-  return { records: [record], events: facts.events, receipts: facts.receipts, conflicts: facts.conflicts };
 }
 
 export interface LocalWorkModel {
@@ -59,7 +63,7 @@ export function createLocalWorkModel(ports: {
       id: ticket.id,
       label: ticket.payload.title,
       workStatus: ticket.payload.status,
-      sync: presentSurfaceSyncStatus(narrow(facts, ticket), "ticket", ticket.id),
+      sync: presentRecordSyncStatus(facts, ticket),
       archived: ticket.payload.archived === true,
     };
   }
@@ -73,10 +77,10 @@ export function createLocalWorkModel(ports: {
         id: project.id,
         label: project.payload.name,
         ...(project.payload.status ? { workStatus: project.payload.status } : {}),
-        sync: presentStoreSyncStatus(narrow(facts, project), { entityType: "project", id: project.id }),
+        sync: presentRecordSyncStatus(facts, project),
       }));
       const projectIds = new Set(projects.map((project) => project.id));
-      if (tickets.some((ticket) => !projectIds.has(ticket.payload.projectId))) {
+      if (tickets.some((ticket) => !projectIds.has(ticket.payload.projectId) && isUnfiledWork(ticket))) {
         nodes.push({ key: UNFILED_NODE_ID, kind: "unfiled", id: "", label: "" });
       }
       return nodes;
@@ -88,7 +92,7 @@ export function createLocalWorkModel(ports: {
       const projectIds = new Set(projects.map((project) => project.id));
       const mine = node.kind === "project"
         ? tickets.filter((ticket) => ticket.payload.projectId === node.id)
-        : tickets.filter((ticket) => !projectIds.has(ticket.payload.projectId));
+        : tickets.filter((ticket) => !projectIds.has(ticket.payload.projectId) && isUnfiledWork(ticket));
       return mine.map((ticket) => ticketNode(ticket, facts));
     },
   };
@@ -96,7 +100,7 @@ export function createLocalWorkModel(ports: {
 
 /** The local chat a ticket is bound to: the chat it was created in, else a live link's chat. */
 export function boundChatOf(
-  facts: Pick<LocalFirstSnapshot, "records">,
+  facts: Pick<LocalFirstView, "records">,
   ticketId: string,
 ): { chatClientId: string; localChatId: number } | undefined {
   const ticket = facts.records.find((row) => row.entityType === "ticket" && row.id === ticketId && !row.deletedAt);

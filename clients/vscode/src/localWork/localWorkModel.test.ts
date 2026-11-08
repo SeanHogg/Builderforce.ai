@@ -49,6 +49,39 @@ describe("local work tree model (platform denied: nothing here reaches a network
     expect((await model.children(roots[1]!)).map((n) => n.label)).toEqual(["From platform"]);
   });
 
+  it("'Unfiled' lists only the device's own work: a ticket the rail read off the platform is not filed here", async () => {
+    const { store, repo, model } = harness();
+    const project = await repo.createProject({ name: "Alpha" });
+    const base = await repo.createTicket({ projectId: project.id, title: "Base" });
+    const imported = { deviceId: "server", source: "imported" as const, evidence: "server-observed" as const };
+    await store.transact(async (tx) => {
+      const row = (await tx.get("ticket", base.id))!;
+      const as = (id: string, payload: object, provenance = row.provenance) =>
+        tx.put({ ...row, id, payload: { ...(row.payload as object), projectId: "", ...payload }, ...(provenance ? { provenance } : {}) });
+      await as("00000000-0000-4000-8000-0000000000f1", { title: "Read by the rail" }, imported);
+      await as("00000000-0000-4000-8000-0000000000f2", { title: "Bound to its chat", chatClientId: "chat-1" }, imported);
+      await as("00000000-0000-4000-8000-0000000000f3", { title: "Written here" });
+    });
+    const roots = await model.roots();
+    const unfiled = roots.find((n) => n.kind === "unfiled")!;
+    expect((await model.children(unfiled)).map((n) => n.label).sort()).toEqual(["Bound to its chat", "Written here"]);
+  });
+
+  it("no 'Unfiled' node when the only project-less tickets are the rail's", async () => {
+    const { store, repo, model } = harness();
+    const project = await repo.createProject({ name: "Alpha" });
+    const base = await repo.createTicket({ projectId: project.id, title: "Base" });
+    await store.transact(async (tx) => {
+      const row = (await tx.get("ticket", base.id))!;
+      await tx.put({
+        ...row, id: "00000000-0000-4000-8000-0000000000f4",
+        payload: { ...(row.payload as object), projectId: "", title: "Read by the rail" },
+        provenance: { deviceId: "server", source: "imported", evidence: "server-observed" },
+      });
+    });
+    expect((await model.roots()).map((n) => n.kind)).toEqual(["project"]);
+  });
+
   it("an empty store lists nothing", async () => {
     expect(await harness().model.roots()).toEqual([]);
   });
