@@ -260,6 +260,9 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### CI and release `[platform]`
 
+- **Frontend Worker bundle over Cloudflare's limit.** `check-worker-size` fails: 10.82 MiB compressed vs 10.00 MiB (Release 42525421978). The shared webpack chunk is 7.58 MiB and carries WGSL shader text, a font parser and parse5. The tenant-site route `w/[owner]` is 0.82 MiB since its markdown moved server-side (`lib/markdownRender.ts`). Fix: keep the client-only renderers (WebGPU, drawing, fonts) out of the server graph with `dynamic(..., { ssr:false })`, and check which server components pull them in. Unblocks Build frontend and frontend deploy.
+- **Governance rule-audit endpoints need their review and tests.** 767cd3e2b (`governanceRuleAudits.ts`, `governanceRuleAuditRoutes.ts`) shipped without route or service tests or a security review. Still to check: tenant isolation, role gates, the 409 on a retried finalize, atomicity of finalize, and whether to cache the resolve read. The review agent was stopped before it reported.
+
 - **CI never runs frontend unit tests; 19 fail in 12 files.** Fix them and add a vitest job.
 - **Verify never bundles the Worker.** Add `wrangler deploy --dry-run`; make `deploy-frontend` and VS Code wait for `deploy-api`.
 - **A red commit still publishes to the CDN.** *Blocker: operator decision; release order is deliberate.*
