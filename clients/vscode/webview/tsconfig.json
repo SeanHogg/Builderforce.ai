@@ -29,6 +29,16 @@
       // `CodeAnalysisComparison`, so the webview needs the same specifier the
       // root tsconfig maps. Enforced by check:source-package-graph.
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
+      "@builderforce/agent-tools/node-desktop": ["../../../packages/agent-tools/src/node-desktop.ts"],
+      "@builderforce/agent-tools/node-path": ["../../../packages/agent-tools/src/node-path.ts"],
+      "@builderforce/agent-tools/node-posix-shell": ["../../../packages/agent-tools/src/node-posix-shell.ts"],
+      "@builderforce/agent-tools/node-research": ["../../../packages/agent-tools/src/node-research.ts"],
+      "@builderforce/agent-tools/node-symbols": ["../../../packages/agent-tools/src/node-symbols.ts"],
+      "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"],
+      "@builderforce/kimi-oauth": ["../../../packages/kimi-oauth/src/index.ts"],
+      "@builderforce/learned-routing": ["../../../packages/learned-routing/src/index.ts"],
+      "@builderforce/run-context": ["../../../packages/run-context/src/index.ts"],
+      "@builderforce/write-outbox": ["../../../packages/write-outbox/src/index.ts"],
       // The page-engine bridge protocol (`../src/pageEngineBridgeProtocol.ts`) names
       // the local-runtime ids, and the webview reaches it by a relative import.
       "@builderforce/json-schema": ["../../../packages/json-schema/src/index.ts"],
@@ -36,6 +46,7 @@
       "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
       // The composer's Connected accounts section lists, tests and reconnects through it.
       "@builderforce/provider-connect": ["../../../packages/provider-connect/src/index.ts"],
+      "@builderforce/provider-connect/accounts": ["../../../packages/provider-connect/src/connectedAccounts.ts"],
       // How a BuilderForce JWT names its workspace is one fact, and the canvas reads
       // it too, so the one copy lives in `frontend/src/lib`. Mapped MODULE BY MODULE
       // rather than as `@/*`: the wildcard would hand this project the frontend's
