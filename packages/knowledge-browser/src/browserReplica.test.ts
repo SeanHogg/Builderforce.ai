@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { replicaLockName, webLocksReplicaLock, type LockManagerLike } from './browserReplica';
 
 /** Exclusive Web Locks over one shared state (= one origin); each `webLocksReplicaLock(manager)` is a tab. */
-function fakeLockManager(): LockManagerLike & { held(name: string): boolean } {
+function fakeLockManager(opts: { defer?: boolean } = {}): LockManagerLike & { held(name: string): boolean } {
   const held = new Set<string>();
   const waiting = new Map<string, Array<() => void>>();
   const run = async (name: string, cb: (lock: unknown) => unknown): Promise<unknown> => {
@@ -12,7 +12,7 @@ function fakeLockManager(): LockManagerLike & { held(name: string): boolean } {
       waiting.get(name)?.shift()?.();
     }
   };
-  const request = (name: string, a: unknown, b?: unknown): Promise<unknown> => {
+  const grant = (name: string, a: unknown, b?: unknown): Promise<unknown> => {
     const options = typeof a === 'function' ? {} : (a as { ifAvailable?: boolean });
     const cb = (typeof a === 'function' ? a : b) as (lock: unknown) => unknown;
     if (!held.has(name)) return run(name, cb);
@@ -23,6 +23,9 @@ function fakeLockManager(): LockManagerLike & { held(name: string): boolean } {
       waiting.set(name, queue);
     });
   };
+  // A deferred manager grants on a later tick, so a request and its callback interleave with other calls.
+  const request = (name: string, a: unknown, b?: unknown): Promise<unknown> =>
+    opts.defer ? new Promise((r, j) => setTimeout(() => grant(name, a, b).then(r, j), 0)) : grant(name, a, b);
   return { request: request as LockManagerLike['request'], held: (name) => held.has(name) };
 }
 
@@ -88,5 +91,16 @@ describe('webLocksReplicaLock', () => {
     await pump!.release();
     expect(await review).toBe(1);
     expect(ran).toBe(true);
+  });
+
+  it('does not deadlock when a review is requested between the pump’s request and its grant', async () => {
+    const manager = fakeLockManager({ defer: true });
+    const tab = webLocksReplicaLock(manager);
+    const pump = tab.acquire({} as never, ROOT);
+    const review = tab.exclusive(ROOT, async () => 'reviewed');
+    expect(await pump).toBeUndefined();
+    expect(await review).toBe('reviewed');
+    await flush();
+    expect(manager.held(replicaLockName(ROOT))).toBe(false);
   });
 });

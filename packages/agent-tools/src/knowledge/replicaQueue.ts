@@ -39,7 +39,19 @@ export interface ReplicaPersistence {
     remove?(): Promise<void>;
 }
 
+/** The root a queue file belongs to (file names are hashed and cannot be inverted), or undefined for a file that predates the field or does not parse. */
+export function queuedRootIdOf(text: string): string | undefined {
+    try {
+        const id = (JSON.parse(text) as { rootId?: unknown } | null)?.rootId;
+        return typeof id === 'string' && id !== '' ? id : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 export interface ReplicaQueueOptions {
+    /** The root this queue is for: written into the file, so a host can resume every queue on disk (`queuedRootIdOf`). */
+    rootId?: string;
     /** A failed save or load is reported here, never thrown. */
     onError?(error: unknown): void;
     /** The saved file did not parse: it was kept aside and the set starts empty with no ack (the next sync reconciles). */
@@ -303,6 +315,19 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
         async setAdditive(on) { await ready(); if (!on) additiveOff = true; if (isAdditive !== on) { isAdditive = on; touch(); } },
         async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; additiveOff = true; touch(); },
         async flush() { await ready(); await save(); },
+        async reload() {
+            await ready();
+            await saving; // a save in flight is part of the file
+            let text: string | undefined;
+            try { text = await persistence.read(); } catch (error) { opts.onError?.(error); return; }
+            if (!text) return; // nothing persisted: memory is the truth
+            const from = parse(text);
+            if (from.corrupt || from.legacy) return;
+            if (from.projectId !== undefined && from.projectId !== project) return; // another project's queue is not ours to merge
+            if (!changedSinceSave) { dirty.clear(); add(from.keys); ack = from.ack; }
+            else if (from.ack && (!ack || from.ack.generation > ack.generation)) ack = from.ack; // our unsaved marks stay; the newer ack wins
+            if (from.additive) isAdditive = true;
+        },
         onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
     };
 }

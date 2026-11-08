@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-11-08: knowledge review stores binary files, reads PDF and Office text, and no longer stalls the judge (Knowledge · builderforce-memory 2026.10.62 · VSIX 2026.10.145)
+
+- **Symptom.** A hired.video review listed 30 files as "not stored" (png, ico, pdf, docx). `plan.ts` skipped every binary extension with no node, `mediaTypeOfPath` returned `text/plain` for `.png`, no host extracted PDF or DOCX text, and the judge's flat 60 s timeout tripped the 5-in-a-row breaker on large README and package.json requests (0 sections judged).
+- **Assets.** Binaries are planned, not skipped: each is a file node with badges `asset`, `mediaType` and `size` (`oversized` for a claimed document over the size cap). `EXTRACTOR_VERSION` 4 re-plans old manifests. Assets cost no model calls, sort last in importance, and are excluded from system metadata. `ReviewPlan.assets` lets hosts subtract them from ETAs.
+- **Documents.** `@builderforce/agent-tools/documents` extracts PDF (unpdf) and OOXML (streaming fflate, capped per entry, in total and by entry count) text. `withDocumentText` wraps any `DirectorySource`; `hashOf(text, path)` returns the hash of the bytes actually read, and `readTimeoutMs(path)` gives document reads a longer deadline. Wired in VS Code (extract pool), the browser review worker (READ_BYTES proxy, byte hashes in listings), cloud drive and the API résumé reader (old error codes kept).
+- **Judge timeout.** `defaultJudgementTimeoutMs`: 60 s plus 15 s per 4,000 characters, capped at 300 s; a bad function-valued timeout falls back to 60 s.
+- **Visualizer.** The node panel shows media type and size for assets; the sync drawer no longer reports assets as "not stored"; labels in all five catalogs.
+- **Release.** builderforce-memory 2026.10.60 → .61 (CI failure: the pool deadline always added the read default) → .62; every Builderforce.ai manifest and lockfile on ^2026.10.62.
+- **Known limits.** Two hosts with different pack sets re-extract documents in turn; streaming unzip ignores the central directory; fsAccess listing hashes document bytes on the page thread (≤2 MB each).
+
 ## ✅ RESOLVED 2026-11-08: the knowledge view no longer freezes the screen on a real graph (Knowledge · VSIX 2026.10.144)
 
 - **Symptom.** On `agentic` (3138 nodes, 158,663 edges, 20,738 findings, 389 stations), every camera blocked the main thread for 1.5–4.5 s.

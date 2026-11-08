@@ -2,7 +2,9 @@
  * The browser's replica host: ONE `createReplicaHost` (agent-tools) per knowledge source, locked across tabs with the Web Locks
  * API. Only the tab holding `bf-knowledge-replica:<root>` pumps that root's queue (the pump asks `ifAvailable` and holds the lock
  * until it stops); a REVIEW takes the same lock in wait mode, so two tabs never write one root's queue at once. Where this tab's
- * own pump already holds the lock the review does not wait on it (the pump idles while a review runs, so waiting would deadlock).
+ * own pump already holds the lock the review joins it instead of waiting (the pump idles while a review runs, so waiting would
+ * deadlock); the lock is requested once per tab and released only when the last in-tab holder (pump or review) leaves, and a pump
+ * whose grant arrives while a review of that root is pending gives the lock up so the review proceeds.
  * Without `navigator.locks` the host falls back to agent-tools' file lock over the same `KnowledgeFiles`.
  */
 
