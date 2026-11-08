@@ -1,5 +1,5 @@
 /**
- * The status strip's readings, as pure functions. The STATUS CHIP: what is true now ("Reviewed Nov 2 · 397 files not stored", "Reviewing · 5,205 of 18,845 · ~45 min left",
+ * The review action's readings, as pure functions. The STATUS CHIP: what is true now ("Reviewed Nov 2 · 397 files not stored", "Reviewing · 5,205 of 18,845 · ~45 min left",
  * "Stopped at 27% · 13,640 left"), its dot's state and the Reviews tab that explains it. The ACTION BUTTON: the next action for that situation. Both open the Reviews panel.
  * Also the server-parity line (the Server tab shows it). React-free.
  */

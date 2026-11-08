@@ -1,4 +1,4 @@
-/** The status strip's readings: the chip's state and words, the tab it opens, the action button's label, the parity line, relative time. */
+/** The review action's readings: the chip's state and words, the tab it opens, the action button's label, the parity line, relative time. */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import type { StoredReviewRun, SyncStatus } from '../types';

@@ -1,5 +1,5 @@
 /**
- * The commit scrubber of the status strip: "Review ●─●─● Now sha". A dot per commit from
+ * The commit scrubber, which lives in the question row: "Review ●─●─● Now sha". A dot per commit from
  * `source.history`, newest at the right. Picking one marks the stations that commit changed
  * (it feeds the "What changed?" question and the Changed metric through `useSurface`; the root
  * also switches the question, see `onPick`); "Now" clears it. Renders nothing when the source
