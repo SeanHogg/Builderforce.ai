@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS governance_policy_packs (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   segment_id  UUID REFERENCES segments(id) ON DELETE CASCADE,
-  -- NULL = tenant/segment-wide (org baseline); set = scoped to one project.
-  project_id  INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  -- BIGINT per directive; FK to projects.id intentionally omitted until projects.id migrates to bigint (tracked: PRD 20 bigint migration). NULL = tenant/segment-wide (org baseline); set = scoped to one project.
+  project_id  BIGINT,
   name        VARCHAR(255) NOT NULL,
   description TEXT,
   framework   VARCHAR(40),               -- soc2|owasp|gdpr|pci|internal|custom
@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS governance_audit_runs (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id    INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   segment_id   UUID REFERENCES segments(id) ON DELETE CASCADE,
-  project_id   INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  -- BIGINT per directive; FK to projects.id intentionally omitted until projects.id migrates to bigint (tracked: PRD 20 bigint migration).
+  project_id   BIGINT,
   repo_ref     VARCHAR(500),
   ref          VARCHAR(200),             -- branch/commit/PR audited
   trigger      VARCHAR(20) NOT NULL,     -- manual|agent_pr|schedule

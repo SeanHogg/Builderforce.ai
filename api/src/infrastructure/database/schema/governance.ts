@@ -15,6 +15,7 @@
  * exported table to keep that guarantee honest.
  */
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -952,8 +953,11 @@ export const governancePolicyPacks = pgTable('governance_policy_packs', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  /** NULL = tenant/segment-wide (the org baseline); set = scoped to one project. */
-  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  /**
+   * NULL = tenant/segment-wide (the org baseline); set = scoped to one project.
+   * FK to projects.id intentionally omitted until projects.id migrates to bigint (tracked: PRD 20 bigint migration).
+   */
+  projectId:   bigint('project_id', { mode: 'number' }),
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   framework:   varchar('framework', { length: 40 }),     // soc2|owasp|gdpr|pci|internal|custom
@@ -996,7 +1000,8 @@ export const governanceAuditRuns = pgTable('governance_audit_runs', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  /** FK to projects.id intentionally omitted until projects.id migrates to bigint (tracked: PRD 20 bigint migration). */
+  projectId:    bigint('project_id', { mode: 'number' }),
   repoRef:      varchar('repo_ref', { length: 500 }),           // repo url/id
   ref:          varchar('ref', { length: 200 }),                // branch/commit/PR audited
   trigger:      varchar('trigger', { length: 20 }).notNull(),   // manual|agent_pr|schedule
