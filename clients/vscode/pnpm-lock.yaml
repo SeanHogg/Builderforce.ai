@@ -41,14 +41,14 @@ importers:
         specifier: link:../../packages/brain-ui
         version: link:../../packages/brain-ui
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.54
+        specifier: ^2026.10.55
         version: 2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.10.54
+        specifier: ^2026.10.55
         version: 2026.10.55
       '@seanhogg/builderforce-memory-mcp':
-        specifier: ^2026.10.54
-        version: 2026.10.54(@seanhogg/builderforce-memory-engine@2026.10.55)(@seanhogg/builderforce-memory@2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55))(fake-indexeddb@6.2.5)
+        specifier: ^2026.10.55
+        version: 2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55)(@seanhogg/builderforce-memory@2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55))(fake-indexeddb@6.2.5)
       '@seanhogg/builderforce-studio':
         specifier: link:../../studio
         version: link:../../studio
@@ -1805,14 +1805,14 @@ packages:
     resolution: {integrity: sha512-2Tn8RmX6nDSVmnnHEzJP/9vdKRjm0q5lDtSs9yAPUY4gdMo/Lpb342dVmwjgmD5ZbILj8fxva4a3BDlUetcr1w==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.54':
-    resolution: {integrity: sha512-aTDJZCGNGb24tkKIzdE25VF/eFddcrDj83boFla1N6oCS/d/Ovyy7jAh4u7BJw6+7hyIYe+GlmdUijtnWxq+xg==}
+  '@seanhogg/builderforce-memory-mcp@2026.10.55':
+    resolution: {integrity: sha512-mT7ad/8AK1jVmBwzz9N00cgsRL/I1qS0CQXvbj2i0qUCOdBt9VGUhscfsP6/oVGf5ZF3izJW1XJU9wKAMeLGBA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
     peerDependencies:
       '@anthropic-ai/claude-agent-sdk': '>=0.1.0'
-      '@seanhogg/builderforce-memory': ^2026.10.54
-      '@seanhogg/builderforce-memory-engine': ^2026.10.54
+      '@seanhogg/builderforce-memory': ^2026.10.55
+      '@seanhogg/builderforce-memory-engine': ^2026.10.55
       fake-indexeddb: ^6.0.0
     peerDependenciesMeta:
       '@anthropic-ai/claude-agent-sdk':
@@ -6302,7 +6302,7 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.55': {}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.54(@seanhogg/builderforce-memory-engine@2026.10.55)(@seanhogg/builderforce-memory@2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55))(fake-indexeddb@6.2.5)':
+  '@seanhogg/builderforce-memory-mcp@2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55)(@seanhogg/builderforce-memory@2026.10.55(@seanhogg/builderforce-memory-engine@2026.10.55))(fake-indexeddb@6.2.5)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.1(zod@3.25.76)
       zod: 3.25.76

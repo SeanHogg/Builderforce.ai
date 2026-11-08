@@ -141,7 +141,7 @@ describe('replicatedKnowledgeStore', () => {
         expect(onError).toHaveBeenCalledTimes(1);
     });
 
-    it('regression: an entry for a source arriving where the body was [] (or lacked that source) marks its file dirty again, at the same hash', async () => {
+    it('regression: an entry arriving where the body was [] marks its file dirty again, at the same hash (a body that merely lacks the source does not: a copied file is marked by its own stale)', async () => {
         const local = memoryLocal();
         const queue = createReplicaQueue(memoryReplicaPersistence());
         const known = new Map([[srcRef(ROOT, 'a.md') as string, 'h1']]);

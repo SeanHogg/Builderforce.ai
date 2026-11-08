@@ -186,14 +186,14 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
     if (local.hasRecheck) store.hasRecheck = (hash) => local.hasRecheck!(hash);
     if (local.putExtracted) {
         store.putExtracted = async (hash, extracted) => {
-            // What this hash held before: a body that was `[]` (nothing extracted) or lacked a source now gets an entry for it, which replaces
+            // What this hash held before: a body that was `[]` (nothing extracted) now gets an entry, which replaces
             // the project's entry-less marker. The file's hash is unchanged, so nothing else would send it.
             const before = await local.getExtracted?.(hash);
             await local.putExtracted!(hash, extracted);
             const keys: string[] = [];
             for (const e of extracted) {
                 keys.push(...(await fileChanged(e.sourceRef, args.rootId, hash)));
-                if (before && replica && !before.some((b) => b.sourceRef === e.sourceRef)) keys.push(fileKey(pathOfRef(args.rootId ?? '', e.sourceRef), hash));
+                if (before && before.length === 0 && replica) keys.push(fileKey(pathOfRef(args.rootId ?? '', e.sourceRef), hash));
             }
             await mark(keys);
             // A file staled before its output was stored (a live edit) may already have been held back by a pump that ran in between: the same

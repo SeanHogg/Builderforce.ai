@@ -14,6 +14,7 @@ import { applyEntryDiffs, type PackExtr } from '@seanhogg/builderforce-memory/kn
 import { srcRef, type Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import type { ExtractedCachePort } from '../knowledgePorts';
 import { mergeBody } from '../knowledgeBundles';
+import { lostRefsOf, type LostBody } from '../knowledgeHeal';
 import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { clampExtracted, sanitizeExtracted } from '../knowledgePrivacy';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
@@ -39,12 +40,15 @@ export interface PackBodies {
   bodies: Array<{ hash: string; entries: Extracted[]; entryless: string[] }>;
   /** The bundle key each body's merge started from (null = the hash had no index row). Read BEFORE the bodies. */
   basis: Map<string, string | null>;
+  /** Bodies that were unreadable and are rewritten from this pack: the sources they no longer name (see `knowledgeHeal.ts`). */
+  lost: LostBody[];
 }
 
 export async function buildBodies(
   extracted: ExtractedCachePort, ledger: Pick<KnowledgeLedgerPort, 'index'>, packExtr: readonly PackExtr[], files: ReadonlyArray<{ path: string; hash: string }>, rootId: string,
 ): Promise<PackBodies> {
-  if (packExtr.length === 0) return { bodies: [], basis: new Map() };
+  if (packExtr.length === 0) return { bodies: [], basis: new Map(), lost: [] };
+  const lost: LostBody[] = [];
   const wanted = [...new Set(packExtr.flatMap((x) => (x.kind === 'diff' ? [x.hash, x.prior] : [x.hash])))];
   // The basis is read FIRST: if the index moves between this read and the bodies', the check at commit only ever errs towards a retry.
   const locations = await ledger.index.locate(wanted);
@@ -66,7 +70,8 @@ export async function buildBodies(
     }
     // An EXPLICIT empty body is the client saying nothing was extracted for these files (binary): recorded apart from real entries.
     // An index row whose stored body cannot be read (a missing object or range) is HEALED, not wedged on: the arrival is written on its own,
-    // with an index row naming only its sources. Other roots' pairs for this hash then answer "not held" and re-upload on their next pass.
+    // with an index row naming only its sources. Other roots' pairs for this hash then answer "not held", and the pack's transaction
+    // invalidates those roots' file leaves (`invalidateLostBodies`) so their next sync reconciles and sends the body again.
     const unreadable = locOf.has(x.hash) && !stored.has(x.hash);
     if (unreadable) {
       reportCaughtError(new Error(`knowledge: the stored body of ${x.hash} could not be read; rewritten from the pack`), {
@@ -75,7 +80,9 @@ export async function buildBodies(
     }
     const declared = x.kind === 'full' && x.entries.length === 0 ? files.filter((f) => f.hash === x.hash).map((f) => srcRef(rootId, f.path)) : [];
     const merged = mergeBody(unreadable ? undefined : locOf.get(x.hash), stored.get(x.hash), storable(x.hash, entries), declared);
+    // The sources the old row named and the rewritten one does not: their roots must send the body again (`invalidateLostBodies`).
+    if (unreadable) lost.push({ hash: x.hash, refs: lostRefsOf(locOf.get(x.hash)!, merged) });
     return { hash: x.hash, ...merged };
   });
-  return { bodies: bodies.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0)), basis };
+  return { bodies: bodies.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0)), basis, lost };
 }

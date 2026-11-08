@@ -43,6 +43,7 @@ import { authorizePackUpload } from '../packAccess';
 import { sourceId } from '../knowledgeBlobs';
 import { buildBundle } from '../knowledgeBundles';
 import { ensureBuckets, recomputeBuckets } from '../knowledgeBuckets';
+import { invalidateLostBodies } from '../knowledgeHeal';
 import { drizzleLedger, type KnowledgeLedgerPort, type SourceRow } from '../knowledgeLedger';
 import { drizzleKnowledgeStore } from '../knowledgeStore';
 import { decodeGuarded, peekGuarded } from './decodeGuarded';
@@ -228,7 +229,7 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
     const admin = (pack.deletes?.facts.length ?? 0) > 0 || migrated ? (await factViewer(deps.env, { userId: deps.userId, role: deps.actorRole })).canAdmin : false;
 
     // Objects and lookups that must not sit inside the transaction: the bodies as one bundle, the held sources.
-    const { bodies, basis } = await buildBodies(deps.extracted, deps.ledger, pack.extracted ?? [], pack.files ?? [], root);
+    const { bodies, basis, lost } = await buildBodies(deps.extracted, deps.ledger, pack.extracted ?? [], pack.files ?? [], root);
     const bundle = bodies.length > 0 ? buildBundle(deps.tenantId, bodies) : undefined;
     const plan = planSources(pack, await deps.sync.sources(root), migrated);
     if (bundle) await deps.sync.putBundle(bundle);
@@ -252,6 +253,8 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
         const moved = bundle.locs.filter((l) => (now.get(l.hash) ?? null) !== (basis.get(l.hash) ?? null)).map((l) => l.hash);
         if (moved.length > 0) throw bodyConflict(moved);
         if (await unit.ledger.index.upsert(bundle.locs, basis) !== bundle.locs.length) throw bodyConflict(bundle.locs.map((l) => l.hash));
+        // A body healed from this pack: the other roots that shared it send it again on their next sync.
+        await invalidateLostBodies(unit.ledger, lost, root);
       }
       const legacy = await reconcileLegacyRows(deps, unit, pack, plan.legacyPaths, admin);
       const tomb = await applyTombstones(deps, unit, pack, admin);

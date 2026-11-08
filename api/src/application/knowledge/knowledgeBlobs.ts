@@ -34,6 +34,8 @@ import { reportCaughtError, reportedFallback } from '../observability/caughtErro
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
 import { buildBundle, mergeBody, readBundled } from './knowledgeBundles';
 import type { KnowledgeLedgerPort } from './knowledgeLedger';
+import { invalidateLostBodies, lostRefsOf } from './knowledgeHeal';
+import { pathOfSourceRef, rootOfRef } from './knowledgeRefs';
 import { KnowledgeSyncError } from './sync/knowledgeSyncPorts';
 
 const SOURCE = 'application/knowledge/knowledgeBlobs.ts';
@@ -48,15 +50,6 @@ type Bundle = Record<string, Extracted[]>;
 export interface SourceEntry { path: string; hash: string }
 
 const seg = (s: string): string => encodeURIComponent(s);
-
-/** The root id of a `src:${rootId}::${path}` ref, else undefined. */
-export function rootOfRef(ref: string): string | undefined {
-  if (!ref.startsWith('src:')) return undefined;
-  const at = ref.indexOf('::');
-  return at > 4 ? ref.slice(4, at) : undefined;
-}
-
-const pathOfSourceRef = (ref: string): string => ref.slice(ref.indexOf('::') + 2);
 
 /** The object identity of a source: its path, or `~<tag>|<path>` for a root-level output. */
 export function sourceId(path: string, hash: string): string {
@@ -221,9 +214,15 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
           // An index row whose stored body cannot be read is healed (the upload is written on its own, the index naming only its sources), never wedged on.
           const unreadable = !!loc && !current;
           if (unreadable) reportCaughtError(new Error(`knowledge: the stored body of ${hash} could not be read; rewritten from the upload`), { source: SOURCE, operation: 'healUnreadableBody', level: 'warning', context: { hash } });
-          const bundle = buildBundle(tenantId, [{ hash, ...mergeBody(unreadable ? undefined : loc, current, extracted) }]);
+          const merged = mergeBody(unreadable ? undefined : loc, current, extracted);
+          const bundle = buildBundle(tenantId, [{ hash, ...merged }]);
           await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
-          written = await ledger.exclusive((locked) => locked.index.upsert(bundle.locs, new Map([[hash, prior]])));
+          written = await ledger.exclusive(async (locked) => {
+            const n = await locked.index.upsert(bundle.locs, new Map([[hash, prior]]));
+            // The other roots that shared the lost body send it again on their next sync (`knowledgeHeal.ts`).
+            if (n > 0 && unreadable) await invalidateLostBodies(locked, [{ hash, refs: lostRefsOf(loc!, merged) }]);
+            return n;
+          });
         }
         if (written === 0) throw new KnowledgeSyncError(409, 'body_conflict', `the extracted body of ${hash} kept changing; retry`, { hashes: [hash] });
       } else {

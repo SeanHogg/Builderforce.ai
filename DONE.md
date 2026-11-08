@@ -27,6 +27,10 @@
   - Show in Tower lights offenders and partners and dims the rest, with a good-vs-bad legend. The highlight clears when you leave the Tower or the graph changes.
   - Memory emits a `god-module` finding with measures against limits (`GOD_MODULE_LIMITS`). The file card names it, shows the bars, and offers Fix and Show in Tower.
 
+- **`KnowledgeGraphView.flows.test.tsx` no longer times out.** The view's own vitest config sets `testTimeout: 60_000` and the package runs its React tests itself (not through the frontend suite); the file passes in the 51-file graph-view run of 2026-11-08.
+
+- **Slow typing in the VS Code chat is gone (confirmed by the user on 2026.10.141, 2026-11-08).** The leading suspect, `GraphScene`'s always-on render loop, was removed in 2026.10.122, and the Graph now builds its edges on idle. The test-collection worry in the old entry does not apply: `clients/vscode/webview/src` has no `*.test.tsx` files, so nothing goes uncollected by `vitest.config.ts:43`.
+
 ## ✅ RESOLVED 2026-11-07 — One folder reads as many systems, a review maps in minutes, and sync is one compact pack (PRD 41 A9 + A10 + A11 · WS25 + WS26 · builderforce-memory 2026.10.46–48 · VS Code 2026.10.140)
 
 - **A9: a folder of many systems reads as many systems.**

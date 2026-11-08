@@ -6,7 +6,7 @@ import { pumpReplica } from './replicaPump.js';
 import { fakeServer } from './replicaTestkit.test-util.js';
 
 describe('the first-sync case (a pack, or a root reviewed before it was linked)', () => {
-    it("owes a reconcile, counts what the local store holds, and the pump sends the whole root as ONE full pack", async () => {
+    it("owes a reconcile, counts what the local store holds, and the pump sends ONE full pack of what it holds; a file never extracted is held, dirty, not sent", async () => {
         const root = 'pack:docs';
         const ref = srcRef(root, 'a.md');
         const ex: Extracted = { sourceRef: ref, sourceHash: 'h1', nodes: [], edges: [], keys: [] };
