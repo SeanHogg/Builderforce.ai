@@ -26,6 +26,12 @@ export function isRunSandboxName(name: string | undefined | null): boolean {
   return typeof name === 'string' && name.startsWith('exec:');
 }
 
+/** `exec:<id>` ⇒ the execution id, else null. A run sandbox only ever serves its own run. */
+export function execIdFromName(name: string | undefined | null): number | null {
+  const m = typeof name === 'string' ? /^exec:(\d+)$/.exec(name) : null;
+  return m ? Number(m[1]) : null;
+}
+
 /** Where the Worker answers when `INTERNAL_API_BASE_URL` is unset. */
 export const DEFAULT_INTERNAL_API_BASE_URL = 'https://api.builderforce.ai';
 

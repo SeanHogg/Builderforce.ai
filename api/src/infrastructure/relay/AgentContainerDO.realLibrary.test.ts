@@ -17,10 +17,11 @@ vi.mock('cloudflare:workers', () => ({
 vi.mock('../../application/observability/durableErrorReporter', () => ({ createDurableErrorReporter: () => vi.fn() }));
 vi.mock('../../application/runtime/previewSessions', () => ({ PREVIEW_CONTROL_STOP_PATH: '/__preview_control__/stop' }));
 
-function fakeCtx(name: string) {
-  const kv = new Map<string, unknown>();
+function fakeCtx(name: string | undefined, opts: { running?: boolean; persisted?: Record<string, unknown> } = {}) {
+  // One keyspace for the sync `kv` API and the async storage API, as in a real DO.
+  const kv = new Map<string, unknown>(Object.entries(opts.persisted ?? {}));
   const container = {
-    running: false,
+    running: opts.running ?? false,
     start: vi.fn(),
     monitor: vi.fn(async () => undefined),
     destroy: vi.fn(async () => undefined),
@@ -29,16 +30,17 @@ function fakeCtx(name: string) {
     interceptOutboundHttps: vi.fn(async () => undefined),
     interceptAllOutboundHttp: vi.fn(async () => undefined),
   };
+  container.destroy.mockImplementation(async () => { container.running = false; });
   const proxy = vi.fn(() => ({ fetch: vi.fn() }));
   const blocking: Array<Promise<unknown>> = [];
   const ctx = {
-    id: { name, toString: () => `id-${name}` },
+    id: { name, toString: () => `id-${name ?? 'nameless'}` },
     storage: {
       kv: { get: vi.fn((k: string) => kv.get(k)), put: vi.fn((k: string, v: unknown) => { kv.set(k, v); }) },
       sql: { exec: vi.fn(() => []) },
-      get: vi.fn(async () => undefined),
-      put: vi.fn(async () => undefined),
-      delete: vi.fn(async () => true),
+      get: vi.fn(async (k: string) => kv.get(k)),
+      put: vi.fn(async (k: string, v: unknown) => { kv.set(k, v); }),
+      delete: vi.fn(async (k: string) => kv.delete(k)),
       setAlarm: vi.fn(async () => undefined),
       getAlarm: vi.fn(async () => null),
       sync: vi.fn(async () => undefined),
@@ -94,6 +96,73 @@ describe('real Container class', () => {
     expect(f.container.interceptAllOutboundHttp).toHaveBeenCalledTimes(1);
     expect(f.container.interceptOutboundHttps).toHaveBeenCalledWith('*', expect.anything());
     expect(f.ctx.storage.kv.put.mock.calls.filter(([k]) => k === OUTBOUND_KEY).length).toBeGreaterThan(0);
+  });
+
+  // An evicted exec DO rebuilt around a still-running container, with its interception config persisted.
+  describe.each([['named exec:9', 'exec:9'], ['nameless', undefined]])('rebuild with persisted config + running container (%s)', (_label, name) => {
+    const persisted = () => ({
+      [OUTBOUND_KEY]: {
+        outboundByHostOverrides: {},
+        outboundHandlerOverride: { method: 'egressAllowlist', params: { executionId: 9, internalHost: 'api.builderforce.ai' } },
+        hasInterceptAllRegistration: true,
+      },
+    });
+
+    it('keeps the persisted handler override (registered before super) so the restored interception is NOT open', async () => {
+      const AgentContainerDO = await load();
+      // The marker says this container started restricted, so the DO leaves it running and the
+      // library's constructor-time restore applies interception to it. (Without the marker the DO
+      // destroys the container concurrently — covered below — and the library, finding it no longer
+      // running, has nothing to apply.)
+      const f = fakeCtx(name, { running: true, persisted: { ...persisted(), egressStartedRestricted: true } });
+      const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      await f.settled();
+      expect((container as unknown as { outboundHandlerOverride?: { method: string } }).outboundHandlerOverride?.method).toBe('egressAllowlist');
+      expect(f.proxy).toHaveBeenCalled();
+      const props = (f.proxy.mock.calls[0] as unknown as [{ props: { interceptAll?: boolean; outboundHandlerOverride?: { method: string } } }])[0].props;
+      expect(props.interceptAll).toBe(true);
+      expect(props.outboundHandlerOverride?.method).toBe('egressAllowlist');
+    });
+
+    it('keeps the override on the instance even when the DO destroys the unmarked container', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: persisted() });
+      const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      await f.settled();
+      expect((container as unknown as { outboundHandlerOverride?: { method: string } }).outboundHandlerOverride?.method).toBe('egressAllowlist');
+    });
+
+    it('destroys the running container proactively when it never recorded a restricted start', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: persisted() });
+      new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      await f.settled();
+      expect(f.container.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a container that DID record a restricted start alone', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: { ...persisted(), egressStartedRestricted: true } });
+      new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      await f.settled();
+      expect(f.container.destroy).not.toHaveBeenCalled();
+    });
+
+    it('does nothing of the kind with enforcement OFF', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: persisted() });
+      new AgentContainerDO(f.ctx as never, {} as never);
+      await f.settled();
+      expect(f.container.destroy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a nameless instance with NO persisted state is not destroyed (a scan / managed host)', async () => {
+    const AgentContainerDO = await load();
+    const f = fakeCtx(undefined, { running: true });
+    new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+    await f.settled();
+    expect(f.container.destroy).not.toHaveBeenCalled();
   });
 
   it('enforcement ON, registered AFTER construction: setOutboundHandler is a no-op until usingInterception is turned on', async () => {

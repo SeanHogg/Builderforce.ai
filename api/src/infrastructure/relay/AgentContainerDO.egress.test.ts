@@ -50,7 +50,7 @@ vi.mock('@cloudflare/containers', () => ({
 vi.mock('../../application/observability/durableErrorReporter', () => ({ createDurableErrorReporter: () => vi.fn() }));
 vi.mock('../../application/runtime/previewSessions', () => ({ PREVIEW_CONTROL_STOP_PATH: '/__preview_control__/stop' }));
 
-import { AgentContainerDO } from './AgentContainerDO';
+import { AgentContainerDO, DESTROY_TIMEOUT_MS } from './AgentContainerDO';
 
 const SPEC = { executionId: 9, internalBaseUrl: 'https://attacker.example', repo: { cloneUrl: 'https://attacker.example/x.git' } };
 const open = () => new Request('https://agent-container/sandbox/open', { method: 'POST', body: JSON.stringify(SPEC) });
@@ -67,6 +67,9 @@ function makeDo(opts: { name?: string | null; env?: Record<string, string>; runn
       delete: vi.fn(async (k: string) => storage.delete(k)),
     },
     container: { running: opts.running ?? false },
+    // The proactive destroy-if-started-open runs in the real library inside this; here it is a
+    // no-op so these tests drive the gate alone (the constructor path is in the realLibrary test).
+    blockConcurrencyWhile: async () => undefined,
   };
   return { container: new AgentContainerDO(ctx as never, (opts.env ?? INTERNAL) as never), storage, ctx };
 }
@@ -204,10 +207,63 @@ describe('enforcement ON', () => {
     expect(storage.get('egressStartedRestricted')).toBe(true);
   });
 
-  it('answers 503 for an unidentifiable instance with empty storage and a non-open request', async () => {
-    const { container } = makeDo({ name: null });
-    expect((await container.fetch(other())).status).toBe(503);
+  it('clears the marker on a start WITH internet — whatever the flag says (ON, OFF, ON toggle)', async () => {
+    for (const env of [INTERNAL, {}]) {
+      const storage = new Map<string, unknown>([['egressStartedRestricted', true]]);
+      const { container } = makeDo({ storage, env });
+      container.enableInternet = true;
+      await container.onStart();
+      expect(storage.has('egressStartedRestricted'), JSON.stringify(env)).toBe(false);
+    }
+  });
+
+  it('lets a nameless instance with nothing persisted through (no permanent 503), uncached, and gates it once it opens', async () => {
+    const { container, storage } = makeDo({ name: null });
+    expect((await container.fetch(other())).status).toBe(200);
+    expect((await container.fetch(other())).status).toBe(200);
+    expect(h.handlerCalls).toHaveLength(0);
+    expect(container.enableInternet).toBe(true);
+    await container.fetch(open());
+    expect(h.handlerCalls).toHaveLength(1);
+    expect(storage.get('egressPolicy')).toBeDefined();
+  });
+
+  it('restricts a nameless instance when persisted state says it was restricted', async () => {
+    const storage = new Map<string, unknown>([['egressPolicy', { executionId: 9, internalHost: 'api.builderforce.ai' }]]);
+    const { container } = makeDo({ name: null, storage });
+    await container.fetch(other());
+    expect(h.handlerCalls).toHaveLength(1);
+  });
+
+  it('rejects an open whose executionId does not match the exec:<id> name (enforcement on), not when off', async () => {
+    const { container, storage } = makeDo({ name: 'exec:5' });
+    const res = await container.fetch(open());
+    expect(res.status).toBe(400);
     expect(h.forwarded).toBe(0);
+    expect(storage.get('executionId')).toBeUndefined();
+    const off = makeDo({ name: 'exec:5', env: {} });
+    expect((await off.container.fetch(open())).status).toBe(200);
+  });
+
+  it('clears a stale restricted marker in the gate when the container is not running', async () => {
+    const storage = new Map<string, unknown>([['egressStartedRestricted', true]]);
+    const { container } = makeDo({ storage, running: false });
+    await container.fetch(open());
+    expect(storage.has('egressStartedRestricted')).toBe(false);
+  });
+
+  it('does not wedge the gate chain when destroy hangs: 503, then a later request recovers', async () => {
+    vi.useFakeTimers();
+    h.destroyGate = new Promise<void>(() => { /* never settles */ });
+    const { container } = makeDo({ running: true });
+    const first = container.fetch(open());
+    await vi.advanceTimersByTimeAsync(DESTROY_TIMEOUT_MS + 1_000);
+    expect((await first).status).toBe(503);
+    expect(h.forwarded).toBe(0);
+    h.destroyGate = null;
+    const second = await container.fetch(other());
+    expect(await second.text()).toBe('proxied');
+    expect(h.destroyed).toBe(2);
   });
 
   it('leaves a scan instance unrestricted and caches that verdict (no storage reads after the first)', async () => {
