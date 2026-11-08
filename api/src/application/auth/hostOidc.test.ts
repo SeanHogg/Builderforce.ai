@@ -6,14 +6,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // lazy-create/caching contract is covered by segmentResolver.test.ts, so we
 // assert here only that it was called with the verified claims — not re-derive
 // its internals through a fake DB.
-const resolveSegmentMock = vi.fn(async (_db: unknown, _tenantId: unknown, _claims: unknown, _env: unknown) => 'seg-acct-1|co-1');
 vi.mock('../../infrastructure/auth/segmentResolver', () => ({
-  resolveSegment: resolveSegmentMock,
+  resolveSegment: vi.fn(async () => 'seg-acct-1|co-1'),
 }));
 
 import { verifyHostOidcToken, resolveSegmentFromHostToken } from './hostOidc';
+import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+
+// The mocked resolver, captured from the import the mock replaced. vi.mock is
+// hoisted, so the mock must be defined inside the factory and read back here.
+const resolveSegmentMock = vi.mocked(resolveSegment);
 
 /**
  * The inbound host OIDC verifier is an AUTHORIZATION boundary (spec 05 §2.1):
