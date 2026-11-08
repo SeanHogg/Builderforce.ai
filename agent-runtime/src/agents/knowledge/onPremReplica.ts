@@ -9,13 +9,13 @@
  * source, and the adoption of a root that was reviewed against the server before this path existed.
  */
 
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, rootManifest, rootStore, shouldStayAdditive,
+  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore, shouldStayAdditive,
   type KnowledgeFiles, type PumpSource, type ReplicaHost,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -62,19 +62,29 @@ export function onPremReplicaHost(): ReplicaHost {
  * handler suppresses Node's default exit, so once flushed it re-raises the signal unless another handler owns the exit.
  * `exit` keeps a synchronous best effort (async work cannot finish there).
  */
-function flushReplicasOnExit(): void {
-  const flush = (): Promise<void> => host?.disposeReplicas().catch(() => undefined) ?? Promise.resolve();
-  process.once("beforeExit", () => { void flush(); });
+export function flushReplicasOnExit(proc: ExitSignals = process, flushMs = 5_000): void {
+  const flush = (): Promise<void> => {
+    const done = host?.disposeReplicas().catch(() => undefined) ?? Promise.resolve();
+    return Promise.race([done, new Promise<void>((resolve) => setTimeout(resolve, flushMs).unref?.())]);
+  };
+  proc.once("beforeExit", () => { void flush(); });
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    const onSignal = (): void => {
-      void flush().then(() => {
-        process.off(signal, onSignal);
-        if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
-      });
-    };
-    process.once(signal, onSignal);
+    // First in line, and the other handlers' presence is read NOW: by the time the flush ends they have removed themselves.
+    proc.prependOnceListener(signal, () => {
+      const others = proc.listenerCount(signal) > 0;
+      void flush().then(() => { if (!others) proc.kill(proc.pid, signal); });
+    });
   }
-  process.once("exit", () => { void host?.disposeReplicas(); });
+  proc.once("exit", () => { void host?.disposeReplicas(); });
+}
+
+/** The slice of `process` the exit flush uses (an EventEmitter-like fake in tests). */
+export interface ExitSignals {
+  once(event: string, listener: () => void): unknown;
+  prependOnceListener(event: string, listener: () => void): unknown;
+  listenerCount(event: string): number;
+  kill(pid: number, signal: string): unknown;
+  pid: number;
 }
 
 /** A root's local ports: its files (legacy ids migrated), its ONE local store and its manifest, shared by the review and the watcher. */
@@ -117,33 +127,42 @@ export function onPremPumpSource(rootId: string, ports: OnPremRootPorts, linked:
  * Before every review and every resume: a root with no completed local review is ADDITIVE (the ONE shared rule,
  * `shouldStayAdditive`) — its pump must never delete a server leaf the not-yet-complete local store lacks.
  */
-export async function markAdditiveUntilReviewed(rootId: string, ports: OnPremRootPorts): Promise<void> {
+export async function markAdditiveUntilReviewed(rootId: string, ports: OnPremRootPorts, projectId: number): Promise<void> {
   await ports.migrated; // the legacy import must have run before the local store is judged
-  if (await shouldStayAdditive(ports.local, rootId)) await onPremReplicaHost().markAdditive(rootId, ports.files);
+  if (await shouldStayAdditive(ports.local, rootId)) await onPremReplicaHost().markAdditive(rootId, ports.files, projectId);
 }
 
 /**
- * Resumes the pending upload of EVERY root of the workspace that has a queue (`*.dirty.json`), not just the base one. A queue file
- * name is a lossy stem of its root id, so the ids are the base root plus the roots the local store holds a scope for; each is
- * matched by `dirtyFileName`. Every failure is logged, never thrown.
+ * Resumes the pending upload of EVERY root of the workspace that has a queue (`*.dirty.json`), not just the base one. Each queue
+ * file records its own root id (`queuedRootIdOf`); an older file without one is matched by `dirtyFileName` against the base root
+ * and the roots the local store holds a scope for. Every failure is logged, never thrown.
  */
 export async function resumeQueuedReplicas(
   workspaceRoot: string, baseRootId: string, baseLegacyId: string | undefined, linked: { client: KnowledgeClient; projectId: number },
 ): Promise<void> {
   const resume = async (rootId: string, ports: OnPremRootPorts): Promise<void> => {
-    await markAdditiveUntilReviewed(rootId, ports);
+    await markAdditiveUntilReviewed(rootId, ports, linked.projectId);
     await onPremReplicaHost().resumeReplica(onPremPumpSource(rootId, ports, linked));
   };
   const base = onPremRootPorts(workspaceRoot, baseRootId, baseLegacyId);
   const failed = loggedFallback("replica resume", undefined);
   await resume(baseRootId, base).catch(failed);
   try {
-    const queued = new Set(await readdir(join(workspaceRoot, ".builderforce", "knowledge")).catch(() => [] as string[]));
-    if (![...queued].some((name) => name.endsWith(".dirty.json"))) return;
-    await base.migrated;
-    const ids = new Set((await base.local.scopes()).map((s) => s.rootId));
+    const dir = join(workspaceRoot, ".builderforce", "knowledge");
+    const dirty = (await readdir(dir).catch(() => [] as string[])).filter((name) => name.endsWith(".dirty.json"));
+    if (dirty.length === 0) return;
+    const ids = new Set<string>();
+    const legacy = new Set<string>(); // files with no recorded root id
+    for (const name of dirty) {
+      const id = queuedRootIdOf(await readFile(join(dir, name), "utf8").catch(() => ""));
+      if (id) ids.add(id); else legacy.add(name);
+    }
+    if (legacy.size > 0) {
+      await base.migrated;
+      for (const s of await base.local.scopes()) if (legacy.has(dirtyFileName(s.rootId))) ids.add(s.rootId);
+    }
     for (const rootId of ids) {
-      if (rootId === baseRootId || !queued.has(dirtyFileName(rootId))) continue;
+      if (rootId === baseRootId) continue;
       await resume(rootId, onPremRootPorts(workspaceRoot, rootId, undefined)).catch(failed);
     }
   } catch (error) {

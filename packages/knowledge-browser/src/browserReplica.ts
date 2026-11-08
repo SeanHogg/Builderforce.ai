@@ -30,6 +30,8 @@ export function webLocksReplicaLock(locks: LockManagerLike | undefined = (global
   // The Web Lock per root is requested ONCE; every in-tab holder (pump or review) counts, and the lock is released only when the
   // last one lets go, so a pump that stops mid-review cannot free the root for another tab.
   const holders = new Map<string, { count: number; end: () => void }>();
+  /** Reviews of a root that asked for the lock and are not holding it yet. */
+  const wanting = new Map<string, number>();
   /** Registers one holder on a root's entry; the returned leave is idempotent and ends the Web Lock with the last holder. */
   const leaver = (rootId: string, entry: { count: number; end: () => void }): (() => void) => {
     let left = false;
@@ -48,7 +50,9 @@ export function webLocksReplicaLock(locks: LockManagerLike | undefined = (global
         // A review of this root in this tab holds the lock: the pump stays out (it idles during a review anyway).
         if (holders.has(rootId)) { resolve(undefined); return; }
         locks.request(replicaLockName(rootId), { ifAvailable: true }, (lock) => {
-          if (!lock) { resolve(undefined); return; }
+          // A review of this root asked for the lock between this request and its grant: give it up so the review proceeds
+          // (the pump would only idle behind it).
+          if (!lock || (wanting.get(rootId) ?? 0) > 0) { resolve(undefined); return; }
           return new Promise<void>((end) => {
             const entry = { count: 1, end };
             holders.set(rootId, entry);
@@ -65,12 +69,18 @@ export function webLocksReplicaLock(locks: LockManagerLike | undefined = (global
         entry.count += 1;
         leave = leaver(rootId, entry);
       } else {
+        wanting.set(rootId, (wanting.get(rootId) ?? 0) + 1);
+        const stopWanting = (): void => {
+          const n = (wanting.get(rootId) ?? 1) - 1;
+          if (n > 0) wanting.set(rootId, n); else wanting.delete(rootId);
+        };
         leave = await new Promise<() => void>((got, fail) => {
           locks.request(replicaLockName(rootId), () => new Promise<void>((end) => {
+            stopWanting();
             const fresh = { count: 1, end };
             holders.set(rootId, fresh);
             got(leaver(rootId, fresh));
-          })).catch(fail);
+          })).catch((error) => { stopWanting(); fail(error); });
         });
       }
       try { return await run(); } finally { leave(); }

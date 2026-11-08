@@ -101,6 +101,12 @@ export interface ReplicaQueue {
     clear(): Promise<void>;
     /** Makes the set durable now. */
     flush(): Promise<void>;
+    /**
+     * Re-reads the persisted file, which another tab or process sharing it may have advanced: its ack (when newer), its additive flag
+     * (OR-ed in) and, when this queue holds nothing unsaved, its dirty keys. A pump calls it once it holds the lock, so it never
+     * reconciles from a stale view. A missing, corrupt, legacy or other-project file changes nothing.
+     */
+    reload(): Promise<void>;
     /** Told after every change. */
     onChange(cb: () => void): () => void;
 }

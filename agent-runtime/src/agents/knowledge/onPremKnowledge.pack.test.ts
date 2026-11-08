@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,8 @@ import { filesManifestKey } from "@seanhogg/builderforce-memory/knowledge";
 import { fakeServer } from "../../../../packages/agent-tools/src/knowledge/replicaTestkit.test-util.js";
 import { onPremOnlyPackSpies } from "./onPremKnowledge.pack.testkit.js";
 import { onPremKnowledgeRowsHost } from "./onPremKnowledge.js";
-import { closeOnPremManifests, onPremReplicaHost, onPremRootPorts } from "./onPremReplica.js";
+import { closeOnPremManifests, flushReplicasOnExit, onPremReplicaHost, onPremRootPorts, resumeQueuedReplicas, type ExitSignals } from "./onPremReplica.js";
+import { onPremRootId } from "./index/onPremKnowledgeIndex.js";
 
 const caps = {} as CapabilityProvider;
 
@@ -30,6 +32,48 @@ async function workspace(): Promise<string> {
 afterEach(async () => {
   await onPremReplicaHost().disposeReplicas();
   closeOnPremManifests();
+});
+
+describe("the exit flush", () => {
+  function fakeProcess() {
+    const emitter = new EventEmitter();
+    const kill = vi.fn();
+    return Object.assign(emitter, { pid: 1, kill }) as unknown as ExitSignals & EventEmitter & { kill: typeof kill };
+  }
+
+  it("re-raises the signal only when no other handler owns the exit", async () => {
+    const proc = fakeProcess();
+    flushReplicasOnExit(proc, 50);
+    proc.emit("SIGTERM");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(proc.kill).toHaveBeenCalledWith(1, "SIGTERM");
+  });
+
+  it("leaves the exit to another handler registered for the signal", async () => {
+    const proc = fakeProcess();
+    proc.once("SIGINT", () => undefined);
+    flushReplicasOnExit(proc, 50);
+    proc.emit("SIGINT");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(proc.kill).not.toHaveBeenCalled();
+  });
+});
+
+describe("resuming queues", () => {
+  it("resumes a subfolder root whose queue file records its root id, with no local scope", async () => {
+    const root = await workspace();
+    const { client } = packClient();
+    const host = onPremReplicaHost();
+    const sub = onPremRootPorts(root, onPremRootId(root, "docs"), undefined);
+    const subId = onPremRootId(root, "docs");
+    await host.markAdditive(subId, sub.files, 7); // writes the root's queue file (recording its root id)
+    await host.disposeReplicas();
+    const resumed: string[] = [];
+    const real = host.resumeReplica.bind(host);
+    vi.spyOn(host, "resumeReplica").mockImplementation(async (source) => { resumed.push(source.rootId); return real(source); });
+    await resumeQueuedReplicas(root, onPremRootId(root), undefined, { client, projectId: 7 });
+    expect(resumed).toContain(subId);
+  });
 });
 
 describe("the on-prem review uploads ONE pack", () => {

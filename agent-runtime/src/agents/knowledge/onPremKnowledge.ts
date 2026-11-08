@@ -173,7 +173,7 @@ async function reviewPorts(
   // replicates to the linked project through the shared host. A root reviewed under its old,
   // name-based id keeps its manifest: migrated on first read.
   const root = onPremRootPorts(workspaceRoot, rootId, onPremLegacyRootId(workspaceRoot, rel));
-  await markAdditiveUntilReviewed(rootId, root);
+  await markAdditiveUntilReviewed(rootId, root, linked.projectId);
   const pump = onPremPumpSource(rootId, root, linked);
   const shared = { store: onPremReplicaHost().replicatedStoreOf(rootId, root.files, root.local, pump, true), manifest: root.manifest };
   const ports: KnowledgeReviewPorts = {

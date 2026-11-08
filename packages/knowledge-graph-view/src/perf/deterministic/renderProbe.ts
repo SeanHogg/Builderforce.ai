@@ -113,20 +113,20 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         const seg = (id: string): HTMLButtonElement | null => container.querySelector<HTMLButtonElement>(`[data-seg="${id}"]`);
         const button = (text: string): HTMLButtonElement | undefined => [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === text && !b.disabled);
 
-        await visit('boot', () => { container = render(tree).container; });
+        await visit('boot', () => { container = host.render(tree); });
         const first = container.querySelector('[data-seg][aria-checked="true"]')?.getAttribute('data-seg');
         for (const id of VIEW_ORDER) {
             const target = seg(id);
             if (id === first) continue; // the boot record is this view's
             if (!target || target.disabled) { skipped.push(id); continue; }
-            await visit(id, () => { fireEvent.click(target); });
+            await visit(id, () => { host.click(target); });
         }
         // Sequence has no button in the bar: the path strip's toggle opens it, its "enlarge" switches the view to it.
         if (button(L.surface.path.sequence)) {
             await visit('sequence', () => {
-                fireEvent.click(button(L.surface.path.sequence)!);
+                host.click(button(L.surface.path.sequence)!);
                 const enlarge = button(L.surface.path.enlarge);
-                if (enlarge) fireEvent.click(enlarge);
+                if (enlarge) host.click(enlarge);
             });
             if (!container.querySelector('[data-testid="kg-sequence"]')) skipped.push('sequence');
         } else {
@@ -134,12 +134,10 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         }
         return { views, skipped, wire: loop.ledger.summary(), wireEntries: loop.ledger.entries, tasks: loop.tasks, probe };
     } finally {
-        cleanup();
+        host.cleanup();
         setWorkerFactory(null);
         setComputeProbe(null);
         loop.terminate();
-        vi.unstubAllGlobals();
-        webgl.mockRestore();
-        rect.mockRestore();
+        restore();
     }
 }
