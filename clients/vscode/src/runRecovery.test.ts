@@ -6,12 +6,12 @@ import {
   type RunRecoveryHostContext,
 } from "./installRunRecovery";
 import {
-  applyResumePlan,
+  listInterruptedRuns,
+  recordRunAcknowledged,
   recordRunCheckpoint,
   recordRunFinished,
   recordRunStarted,
   RUN_ID_REQUIRED,
-  type PendingStep,
   type RunLifecycleDeps,
 } from "./runRecovery";
 
@@ -28,23 +28,6 @@ function ports(store: LocalFirstStore) {
 
 async function statusOf(store: LocalFirstStore, id: string): Promise<string | undefined> {
   return store.read(async (tx) => (await tx.get<ExecutionValue>("execution", id))?.payload.status);
-}
-
-async function executePlan(
-  store: LocalFirstStore,
-  runId: string,
-  execute: (step: PendingStep) => void,
-): Promise<string[]> {
-  const installed = installRunRecovery(ctx(), ports(store));
-  const recovered = await installed.recovered;
-  const run = recovered.find((item) => item.runId === runId);
-  expect(run).toBeDefined();
-  const names: string[] = [];
-  await installed.applyResumePlan(installed.resumePlan(run!), async (step) => {
-    names.push(step.name ?? "");
-    execute(step);
-  });
-  return names;
 }
 
 describe("installRunRecovery", () => {
@@ -116,79 +99,6 @@ describe("installRunRecovery", () => {
     expect(snap.events.some((event) => event.idempotencyKey?.startsWith("execution:interrupted:"))).toBe(true);
   });
 
-  it("does not re-execute a step whose checkpoint is not safeToResume", async () => {
-    const store = createMemoryLocalFirstStore();
-    await recordRunStarted(store, deps, { runId: "run-unsafe" });
-    await recordRunCheckpoint(store, deps, {
-      runId: "run-unsafe",
-      step: 1,
-      safeToResume: false,
-      state: { pending: [{ name: "read_file", kind: "read", resultRecorded: true }] },
-    });
-
-    const executed: string[] = [];
-    const names = await executePlan(store, "run-unsafe", (step) => executed.push(step.name ?? ""));
-
-    expect(names).toEqual([]);
-    expect(executed).toEqual([]);
-    expect(await statusOf(store, "run-unsafe")).toBe("interrupted");
-  });
-
-  it("does not replay a shell command or external action merely because no result was recorded", async () => {
-    const store = createMemoryLocalFirstStore();
-    await recordRunStarted(store, deps, { runId: "run-shell" });
-    await recordRunCheckpoint(store, deps, {
-      runId: "run-shell",
-      step: 3,
-      safeToResume: true,
-      state: {
-        pending: [
-          { name: "read_file", kind: "read", resultRecorded: true },
-          { name: "run_command", kind: "shell" },
-          { name: "post_comment", kind: "external", external: true },
-          { name: "read_file", kind: "read" },
-        ],
-      },
-    });
-
-    const executed: string[] = [];
-    const installed = installRunRecovery(ctx(), ports(store));
-    const [run] = await installed.recovered;
-    expect(run.record.payload.status).toBe("interrupted");
-    expect(installed.safeToResume(run)).toBe(true);
-
-    const plan = installed.resumePlan(run);
-    expect(plan.resume).toBe(true);
-    expect(plan.steps.map((step) => step.name)).toEqual(["read_file"]);
-    expect(plan.blocked.map((step) => step.name)).toEqual(["run_command", "post_comment", "read_file"]);
-
-    const applied = await applyResumePlan(
-      { ...plan, steps: [...plan.steps, { name: "run_command", kind: "shell" }] },
-      async (step) => {
-        executed.push(step.name ?? "");
-      },
-    );
-
-    expect(executed).toEqual(["read_file"]);
-    expect(applied.blocked.map((step) => step.name)).toContain("run_command");
-    expect(await statusOf(store, "run-shell")).toBe("interrupted");
-  });
-
-  it("resumes only a recorded read after a safe checkpoint", async () => {
-    const store = createMemoryLocalFirstStore();
-    await recordRunStarted(store, deps, { runId: "run-safe" });
-    await recordRunCheckpoint(store, deps, {
-      runId: "run-safe",
-      step: 1,
-      safeToResume: true,
-      state: { pending: [{ name: "read_file", kind: "read", resultRecorded: true }] },
-    });
-
-    const names = await executePlan(store, "run-safe", () => undefined);
-    expect(names).toEqual(["read_file"]);
-    expect(await statusOf(store, "run-safe")).toBe("interrupted");
-  });
-
   it("journals a host start, and a restarted context recovers it as interrupted rather than completed", async () => {
     const store = createMemoryLocalFirstStore();
     const first = installRunRecovery(ctx(), ports(store));
@@ -203,7 +113,6 @@ describe("installRunRecovery", () => {
     expect(recovered[0].record.payload.chatId).toBe("42");
     expect(recovered[0].record.payload.ticketId).toBe("7");
     expect(restarted.safeToResume(recovered[0])).toBe(false);
-    expect(restarted.resumePlan(recovered[0]).steps).toEqual([]);
   });
 
   it("fails if recoverInterruptedRuns is never called from installRunRecovery", () => {
@@ -241,14 +150,6 @@ describe("installRunRecovery", () => {
     expect(run.runId).toBe("next-call");
     expect(run.record.payload.status).toBe("interrupted");
     expect(next.safeToResume(run)).toBe(true);
-    const plan = next.resumePlan(run);
-    expect(plan.steps.map((step) => step.name)).toEqual(["read_file"]);
-    expect(plan.blocked.map((step) => step.name)).toEqual(["run_command"]);
-    const executed: string[] = [];
-    await next.applyResumePlan(plan, async (step) => {
-      executed.push(step.name ?? "");
-    });
-    expect(executed).toEqual(["read_file"]);
     expect(await statusOf(store, "next-call")).toBe("interrupted");
   });
 
@@ -263,5 +164,32 @@ describe("installRunRecovery", () => {
     expect(second).toBe(first);
     await second.recovered;
     expect(await statusOf(store, "still-live")).toBe("running");
+  });
+
+  it("lists an interrupted run on later activations until it is acknowledged, then never again", async () => {
+    const store = createMemoryLocalFirstStore();
+    await recordRunStarted(store, deps, { runId: "dismissed", chatId: "4" });
+    await recordRunStarted(store, deps, { runId: "kept", chatId: "5" });
+
+    const first = installRunRecovery(ctx(), ports(store));
+    expect((await first.recovered).map((run) => run.runId).sort()).toEqual(["dismissed", "kept"]);
+
+    await first.recordAcknowledged("dismissed");
+    expect(await statusOf(store, "dismissed")).toBe("cancelled");
+    expect((await listInterruptedRuns(store)).map((run) => run.runId)).toEqual(["kept"]);
+
+    // The next activation: the dismissed run is neither recovered nor listed again.
+    const second = installRunRecovery(ctx(), ports(store));
+    expect(await second.recovered).toEqual([]);
+    expect((await second.interrupted()).map((run) => run.runId)).toEqual(["kept"]);
+  });
+
+  it("acknowledges only an interrupted run", async () => {
+    const store = createMemoryLocalFirstStore();
+    await recordRunStarted(store, deps, { runId: "live" });
+    await recordRunAcknowledged(store, deps, { runId: "live" });
+    expect(await statusOf(store, "live")).toBe("running");
+    await recordRunAcknowledged(store, deps, { runId: "missing" });
+    expect(await statusOf(store, "missing")).toBeUndefined();
   });
 });

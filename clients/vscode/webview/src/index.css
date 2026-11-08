@@ -297,6 +297,61 @@ select option {
   outline-offset: 2px;
 }
 
+/* Run list: runs the previous editor session left interrupted. */
+.bf-interrupted {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bf-border);
+  display: grid;
+  gap: 6px;
+}
+
+.bf-interrupted__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
+.bf-interrupted__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.bf-interrupted__row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bf-interrupted__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bf-interrupted__when {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.bf-interrupted__note {
+  font-size: 11px;
+  color: var(--vscode-errorForeground);
+}
+
+.bf-interrupted__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .bf-subagents__list {
   list-style: none;
   margin: 0;

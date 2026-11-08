@@ -1185,5 +1185,12 @@
   "Translating…": "Wird übersetzt…",
   "A review of this folder is already running.": "Für diesen Ordner läuft bereits eine Prüfung.",
   "That path cannot be excluded from review.": "Dieser Pfad kann nicht von der Prüfung ausgeschlossen werden.",
-  "Translation needs this browser's built-in translator":"Für die Übersetzung wird der integrierte Übersetzer dieses Browsers benötigt"
+  "Translation needs this browser's built-in translator":"Für die Übersetzung wird der integrierte Übersetzer dieses Browsers benötigt",
+  "Interrupted runs": "Unterbrochene Ausführungen",
+  "Interrupted {when}": "Unterbrochen {when}",
+  "Open chat": "Chat öffnen",
+  "Resume": "Fortsetzen",
+  "Continue the task that was interrupted when the editor closed.": "Setze die Aufgabe fort, die unterbrochen wurde, als der Editor geschlossen wurde.",
+  "Couldn't resume": "Fortsetzen nicht möglich",
+  "This chat is running": "Dieser Chat läuft gerade"
 }

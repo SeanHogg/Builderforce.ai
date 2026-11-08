@@ -35,6 +35,8 @@ export interface BrainInbound extends WebviewInbound {
   projectId?: number;
   /** For `run.start`: the serializable half of the run request (see `brainRunHost.ts`). */
   run?: WebviewRunStart;
+  /** For `run.acknowledgeInterrupted`: the interrupted run acknowledged. */
+  runId?: string;
   /** For `run.confirm`: the human's answer to the paused tool call. */
   ok?: boolean;
   /** For `run.steer`: image attachments the message was sent with, riding along as
@@ -295,6 +297,10 @@ export class WorkspaceSurface implements vscode.Disposable {
         break;
       case "run.resync":
         if (typeof msg.chatId === "number") hooks.runHost?.resync(msg.chatId);
+        break;
+      // A dismiss, or the ack of a run the webview resumed through the composer: ONE idempotent journal write.
+      case "run.acknowledgeInterrupted":
+        if (typeof msg.runId === "string") void hooks.runHost?.acknowledgeInterrupted?.(msg.runId);
         break;
       // Scoped to the chat the surface is showing: several chats run at once out in the
       // host, and a switch flipped in one must not answer a confirm parked in another.

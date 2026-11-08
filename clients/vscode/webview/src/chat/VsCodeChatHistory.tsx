@@ -15,6 +15,8 @@ import { ChatHistoryList, ChatHistoryRow, type ChatRowActions } from '@seanhogg/
 import type { LabelBundle } from '../vscodeBridge';
 import { chatHistoryLabels, makeT } from './chatLabels';
 import { useChatChildrenCount } from './chatChildren';
+import { InterruptedRuns } from './InterruptedRuns';
+import type { InterruptedResume } from './useInterruptedResume';
 import type { ChatRunStatus } from './useVsCodeChats';
 
 /** `$1.20` — always two decimals so the chip's width stays stable across rows. */
@@ -66,6 +68,14 @@ export interface VsCodeChatHistoryProps {
   /** Archived view toggle: false = live chats, true = archived chats. */
   showArchived: boolean;
   onToggleArchived: () => void;
+  /** Open a chat by id (an interrupted run's chat link). */
+  onOpenChat: (id: number) => void;
+  /** The editor's locale (`init.locale`). */
+  locale: string | undefined;
+  /** A chat's title by id (undefined when unknown), for the interrupted rows. */
+  chatTitleOf: (chatId: number) => string | undefined;
+  /** Resume state of the interrupted rows (`useInterruptedResume`). */
+  interrupted: InterruptedResume;
   /** The host's label bundle. */
   bundle: LabelBundle;
 }
@@ -87,11 +97,12 @@ function RunMarker({ status, label }: { status: Exclude<ChatRunStatus, null>; la
   );
 }
 
-export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf, runStatus, rows, query, onQueryChange, showArchived, onToggleArchived, bundle }: VsCodeChatHistoryProps) {
+export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf, runStatus, rows, query, onQueryChange, showArchived, onToggleArchived, onOpenChat, locale, chatTitleOf, interrupted, bundle }: VsCodeChatHistoryProps) {
   const labels = useMemo(() => chatHistoryLabels(bundle), [bundle]);
   const t = makeT(bundle);
 
   const filter = (
+    <>
     <div className="bf-history__controls">
       <input
         type="search"
@@ -110,6 +121,8 @@ export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf
         {showArchived ? t('app.historyShowLive', 'Live') : t('app.historyShowArchived', 'Archived')}
       </button>
     </div>
+    <InterruptedRuns bundle={bundle} locale={locale} titleOf={chatTitleOf} onOpenChat={onOpenChat} resume={interrupted} />
+    </>
   );
 
   return (

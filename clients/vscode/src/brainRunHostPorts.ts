@@ -23,6 +23,7 @@ import { recordEditorRunEnd } from "./editorRunEnd";
 import { boundServerIds } from "./sessionChats";
 import { recentActivitySection, RUN_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
 import { setLocalChatRuns } from "./attention";
+import { createInterruptedRuns } from "./interruptedRunsView";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
@@ -211,6 +212,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       hostLog(`[run journal] interrupted by the previous editor session: ${run.runId}${run.record.payload.chatId ? ` (chat ${run.record.payload.chatId})` : ""}`);
     }
   });
+  // The run list's "Interrupted" rows: host state, re-sent to every panel that attaches.
+  const interrupted = createInterruptedRuns({ recovery, log: hostLog });
   const lifecycle = createHostRunLifecycle({
     recovery,
     snapshot: (chatId) => getRunSnapshot(chatId),
@@ -232,6 +235,12 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // baseline capture is held until the host has claimed the chat (`hostStartGate.ts`).
   return {
     ...host,
+    attach: (sink) => {
+      const offRuns = host.attach(sink);
+      const offInterrupted = interrupted.attach(sink);
+      return () => { offRuns(); offInterrupted(); };
+    },
+    acknowledgeInterrupted: interrupted.acknowledge,
     ...gateStarts(host, (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
       if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId);

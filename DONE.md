@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-08: a run the editor lost on close waits in the History list until you resume or dismiss it (Local-first · VS Code)
+
+- **Interrupted runs are listed, not just logged.** The runs the previous editor session left running, queued or awaiting input are journaled `interrupted` at activation (`installRunRecovery.ts`). They now appear in the History panel as an "Interrupted runs" section, showing the chat's title and when the run stopped, in the editor's locale. The list is host state, read from the journal with `listInterruptedRuns`, so it survives a webview reload and an editor restart (`interruptedRunsView.ts`; message `run.interrupted`).
+- **Resume goes through the composer.** Resume opens the run's chat and sends a localized continuation through `useChatSend().continueChat`. That is the same door a typed turn uses, so the chat's history seed, model, project and spec come along. Composer attachments and the selected sub-agent are left out. The row is acknowledged only once a run event for that chat follows the send (`interruptedResume.ts`). A turn the door did not keep, a `run.failed`, or 30 s with no run shows "Couldn't resume". A run that starts late is still acknowledged. Resume is disabled while the chat is running, and both buttons are disabled while a resume is pending.
+- **Dismiss is one idempotent journal write.** `run.acknowledgeInterrupted` moves the run from `interrupted` to `cancelled` (`recordRunAcknowledged`), so it never comes back on the next activation.
+- **Dead code removed.** The step-replay plan nothing called is gone: `resumePlan`, `applyResumePlan`, `pendingStepsOf`, `mayReplayStep`, `isShellOrExternalStep` and their types and passthroughs.
+- Strings go through `vscode.l10n.t` with real de/es/fr/zh-cn translations, and the rows use only `--vscode-*` / `--bf-*` tokens and wrap at narrow widths.
+
 ## ✅ RESOLVED 2026-11-08 — Uploads no longer stall, a review stops when asked, the Graph loads, and anti-patterns explain themselves (builderforce-memory 2026.10.51–54 · VS Code 2026.10.141)
 
 - **The knowledge replica no longer stalls on `409 extracted_missing`.**

@@ -105,6 +105,8 @@ export const BRAIN_HOST_MESSAGES = [
   'run.clearError',
   /** The panel's copy of a run fell out of step; the host resends it whole. */
   'run.resync',
+  /** Acknowledge one interrupted run of the run list: dismissed, or resumed by the webview through the composer (`runId`; `interruptedRunsView.ts`). Idempotent. */
+  'run.acknowledgeInterrupted',
   'llm.fetch',
   'llm.abort',
   'model.set',

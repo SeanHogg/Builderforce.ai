@@ -254,6 +254,12 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
     sendOrQueue(answer, recipient);
   }, [recipient, sendOrQueue]);
 
+  // An interrupted run's continuation: through THE door like a typed turn, but with NO composer files
+  // (explicit empty snapshot - `takeAttachments` is never called), to the Brain (recipient null, not the
+  // selected sub-agent), and NEVER given back to the box when it is not kept: the text is not the person's.
+  // Resolves the door's answer (see `useInterruptedResume`: a `true` arrives when the turn has finished).
+  const continueChat = useCallback((text: string): Promise<boolean> => submitTurn({ text, recipient: null, attachments: [] }), [submitTurn]);
+
   // "Send again" on any transcript message — queues behind a running turn like a typed one.
   const replayMessage = useCallback((message: BrainMessage) => {
     sendOrQueue(message.content, recipient);
@@ -262,5 +268,5 @@ export function useChatSend({ conv, chatId, drafts, draftStore, input, setInput,
   // `stop` clears the held turns AND stops the chat's run — the composer's Stop.
   // Send's verb: whether a message typed now would steer the run or be held (the door's own predicate).
   const sendSteers = turns.steers({ directed: recipient != null, attachments: composerFiles });
-  return { queued: turns.queued, stop: turns.stop, submit, queueAfter, answerQuestion, replayMessage, sendSteers };
+  return { queued: turns.queued, stop: turns.stop, submit, queueAfter, answerQuestion, continueChat, replayMessage, sendSteers };
 }

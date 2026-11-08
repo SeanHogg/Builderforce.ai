@@ -16,23 +16,20 @@
  *     failure too.
  *
  * A run with a recorded terminal status is never rewritten to `interrupted` by the
- * next activation; a run the host died inside still is. Resume only the steps
- * `resumePlan` lists. A shell command or external action is not replayed merely
- * because no result was recorded.
+ * next activation; a run the host died inside still is. A continuation is a new turn
+ * through the composer (the webview row); no recorded step is ever replayed.
  */
 
 import type { EntityDestination, LocalFirstStore } from "@builderforce/local-first";
 import {
-  applyResumePlan,
+  listInterruptedRuns,
   recoverInterruptedRuns,
+  recordRunAcknowledged,
   recordRunCheckpoint,
   recordRunFinished,
   recordRunStarted,
-  resumePlan,
   safeToResume,
   type InterruptedRun,
-  type PendingStep,
-  type ResumePlan,
   type RunLifecycleDeps,
   type RunTerminalStatus,
 } from "./runRecovery";
@@ -74,12 +71,11 @@ export interface InstalledRunRecovery {
    * resolved — that promise resolves on failure too.
    */
   recordFinished(args: { runId: string; status: RunTerminalStatus }): Promise<void>;
+  /** Every run still `interrupted` and unacknowledged: this activation's and earlier ones'. */
+  interrupted(): Promise<InterruptedRun[]>;
+  /** The person dismissed or resumed an interrupted run; it is never listed or recovered again. */
+  recordAcknowledged(runId: string): Promise<void>;
   safeToResume(run: InterruptedRun): boolean;
-  resumePlan(run: InterruptedRun, pending?: readonly PendingStep[]): ResumePlan;
-  applyResumePlan(
-    plan: ResumePlan,
-    execute: (step: PendingStep) => Promise<void> | void,
-  ): Promise<{ executed: PendingStep[]; blocked: readonly PendingStep[] }>;
 }
 
 const DEVICE_KEY = "builderforce.localDeviceId";
@@ -157,9 +153,15 @@ function bindHandle(
       const { store, deps } = await afterRecovery();
       await recordRunFinished(store, deps, args);
     },
+    async interrupted() {
+      const { store } = await afterRecovery();
+      return listInterruptedRuns(store);
+    },
+    async recordAcknowledged(runId) {
+      const { store, deps } = await afterRecovery();
+      await recordRunAcknowledged(store, deps, { runId });
+    },
     safeToResume,
-    resumePlan,
-    applyResumePlan,
   };
 }
 

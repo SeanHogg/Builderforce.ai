@@ -9,8 +9,8 @@
  * transaction. Recovery never replays: an interrupted run is marked `interrupted` with
  * an explicit `safeToResume` marker, and only a checkpoint that was written as safe
  * (`recordRunCheckpoint` with `safeToResume: true` — e.g. after a pure read step) may be
- * resumed. A shell command or external action whose result was never recorded is
- * re-confirmed by a human, not re-executed, because replaying it could run it twice.
+ * continued. Nothing is replayed: a continuation is a NEW turn sent through the composer
+ * (the webview's interrupted-run row), never a re-execution of a recorded step.
  *
  * Activation calls `installRunRecovery` (`installRunRecovery.ts`); the run host records
  * start, checkpoints and the terminal status through it (`hostRunLifecycle.ts`), so a
@@ -204,104 +204,50 @@ export function safeToResume(run: InterruptedRun): boolean {
   return run.record.payload.status === "interrupted" && run.record.payload.checkpoint?.safeToResume === true;
 }
 
-/** Same rule as {@link safeToResume}. Kept so existing callers keep compiling. */
-export function canResumeSafely(run: InterruptedRun): boolean {
-  return safeToResume(run);
+/**
+ * Every run still `interrupted` and not yet acknowledged. A run recovered at an earlier
+ * activation stays here until a person resumes or dismisses it: recovery itself only
+ * marks `running`/`queued`/`awaiting_input` rows, so without this read an interrupted run
+ * would be listed once and lost on the next restart.
+ */
+export async function listInterruptedRuns(store: LocalFirstStore): Promise<InterruptedRun[]> {
+  return store.read(async (tx) =>
+    (await selectRecords<ExecutionValue>(tx, "execution", (record) => record.payload.status === "interrupted")).map((record) => ({
+      runId: record.id,
+      record,
+    })),
+  );
 }
 
 /**
- * A step the dead host may have been inside. `resultRecorded` is true only when a
- * durable result exists. Omitted or false is not evidence the action did not run.
+ * The person dismissed (or resumed) an interrupted run. It becomes terminal `cancelled`
+ * with `reason: "acknowledged"` on its journal event, so it is neither listed again by
+ * {@link listInterruptedRuns} nor touched by the next recovery. Only an `interrupted`
+ * run is acknowledged; anything else (running again, already finished) is left alone.
  */
-export interface PendingStep {
-  name?: string;
-  /** `read` | `analysis` may resume. `shell` | `external` | `command` never do. */
-  kind?: string;
-  /** True when the action leaves this process (HTTP, MCP, shell, push). */
-  external?: boolean;
-  resultRecorded?: boolean;
-}
-
-const SHELL_NAMES = new Set([
-  "run_command",
-  "run_terminal_cmd",
-  "run_shell_command",
-  "shell",
-  "bash",
-  "exec",
-]);
-
-/** Shell commands and external actions must not be re-executed from a missing result. */
-export function isShellOrExternalStep(step: PendingStep): boolean {
-  if (step.external === true) return true;
-  const kind = (step.kind ?? "").toLowerCase();
-  if (kind === "shell" || kind === "external" || kind === "command" || kind === "network" || kind === "remote") {
-    return true;
-  }
-  const name = (step.name ?? "").toLowerCase();
-  if (SHELL_NAMES.has(name)) return true;
-  return name.startsWith("shell") || name.includes("terminal");
-}
-
-/**
- * A step may be re-entered only when a durable result was recorded and the step is a
- * pure read or analysis. No recorded result is not permission to run it. A shell
- * command or external action is never replayed, even when a result was recorded —
- * replaying it could run it twice.
- */
-export function mayReplayStep(step: PendingStep): boolean {
-  if (isShellOrExternalStep(step)) return false;
-  if (step.resultRecorded !== true) return false;
-  const kind = (step.kind ?? "").toLowerCase();
-  return kind === "read" || kind === "analysis";
-}
-
-export interface ResumePlan {
-  /** Continue from the safe checkpoint. Never means "mark the run completed". */
-  resume: boolean;
-  /** Steps the host may re-enter. Shell and external actions are never included. */
-  steps: PendingStep[];
-  /** Steps that need a human. Not passed to an executor. */
-  blocked: PendingStep[];
-}
-
-/** Pending steps a checkpoint stored under `state.pending`, if any. */
-export function pendingStepsOf(run: InterruptedRun): PendingStep[] {
-  const state = run.record.payload.checkpoint?.state;
-  if (!state || typeof state !== "object" || Array.isArray(state)) return [];
-  const pending = (state as { pending?: unknown }).pending;
-  if (!Array.isArray(pending)) return [];
-  return pending.filter((step): step is PendingStep => !!step && typeof step === "object" && !Array.isArray(step));
-}
-
-/**
- * Resume only when the checkpoint was written safe. Steps without that flag, and every
- * shell or external action, are blocked — including when no result was recorded.
- */
-export function resumePlan(run: InterruptedRun, pending: readonly PendingStep[] = pendingStepsOf(run)): ResumePlan {
-  const blocked = pending.filter((step) => !mayReplayStep(step));
-  const resume = safeToResume(run);
-  return {
-    resume,
-    steps: resume ? pending.filter((step) => mayReplayStep(step)) : [],
-    blocked,
-  };
-}
-
-/**
- * Run only the plan's safe steps. A shell command or external action is not passed to
- * `execute`, even if a caller stuffed one into `steps`.
- */
-export async function applyResumePlan(
-  plan: ResumePlan,
-  execute: (step: PendingStep) => Promise<void> | void,
-): Promise<{ executed: PendingStep[]; blocked: readonly PendingStep[] }> {
-  const executed: PendingStep[] = [];
-  if (!plan.resume) return { executed, blocked: plan.blocked };
-  for (const step of plan.steps) {
-    if (!mayReplayStep(step) || isShellOrExternalStep(step)) continue;
-    await execute(step);
-    executed.push(step);
-  }
-  return { executed, blocked: plan.blocked };
+export async function recordRunAcknowledged(
+  store: LocalFirstStore,
+  deps: RunLifecycleDeps,
+  args: { runId: string },
+): Promise<void> {
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  await store.transact(async (tx) => {
+    const run = await tx.get<ExecutionValue>("execution", args.runId);
+    if (!run || run.payload.status !== "interrupted") return;
+    await tx.put<ExecutionValue>(
+      { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, status: "cancelled" } },
+      run.version,
+    );
+    await tx.append({
+      idempotencyKey: `execution:acknowledged:${args.runId}`,
+      clientEntityId: args.runId,
+      entityType: "execution",
+      operation: "update",
+      schemaVersion: run.schemaVersion,
+      occurredAt: at,
+      dependsOn: [],
+      destination: run.destination,
+      payload: { status: "cancelled", reason: "acknowledged" },
+    });
+  });
 }

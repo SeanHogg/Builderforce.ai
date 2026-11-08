@@ -1185,5 +1185,12 @@
   "Translating…": "正在翻译…",
   "A review of this folder is already running.": "此文件夹的审查正在进行中。",
   "That path cannot be excluded from review.": "无法将该路径排除在审查之外。",
-  "Translation needs this browser's built-in translator":"翻译需要此浏览器的内置翻译器"
+  "Translation needs this browser's built-in translator":"翻译需要此浏览器的内置翻译器",
+  "Interrupted runs": "已中断的运行",
+  "Interrupted {when}": "中断于 {when}",
+  "Open chat": "打开聊天",
+  "Resume": "恢复",
+  "Continue the task that was interrupted when the editor closed.": "请继续在编辑器关闭时被中断的任务。",
+  "Couldn't resume": "无法恢复",
+  "This chat is running": "此聊天正在运行"
 }

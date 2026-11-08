@@ -124,7 +124,7 @@ export class AuditExecution implements vscode.Disposable {
     const chatId = (await persistence.createChat({ title: vscode.l10n.t('Audit: {0}', auditId), projectId })).id;
     await persistence.sendMessages(chatId, [{ role: 'user', content: run.briefing }]);
     const detach = this.host.attach({ post: (message) => {
-      if (message.chatId === chatId && message.type === 'run.sync' && message.snapshot.pendingConfirm) {
+      if (message.type === 'run.sync' && message.chatId === chatId && message.snapshot.pendingConfirm) {
         void openWorkspace(this.ctx, { kind: 'focus', chatId });
       }
     } });
@@ -195,7 +195,7 @@ export class AuditExecution implements vscode.Disposable {
     await persistence.sendMessages(chat.id, [{ role: 'user', content: started.briefing }]);
     const unregister = registerAuditFindingsSink(started.runId, { store, deviceId });
     const detach = this.host.attach({ post: (message) => {
-      if (message.chatId === chat.id && message.type === 'run.sync' && message.snapshot.pendingConfirm) {
+      if (message.type === 'run.sync' && message.chatId === chat.id && message.snapshot.pendingConfirm) {
         void openWorkspace(this.ctx, { kind: 'focus', chatId: chat.id });
       }
     } });

@@ -16,6 +16,7 @@ import {
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ChildView } from "./childRuns";
+import type { InterruptedRunView } from "./interruptedRunsView";
 import { listDelta, sentOf, type SentList } from "./listDelta";
 
 /** The serializable half of a `BrainRunRequest`, as the webview posts it. */
@@ -85,6 +86,8 @@ export type RunHostMessage =
   | { type: "run.tools"; chatId: number; count: number }
   /** A chat's LIVE sub-agents — each is a run of its own, mirrored by its run key. */
   | { type: "run.children"; chatId: number; children: ChildView[] }
+  /** The runs the previous editor session left interrupted and nobody has resumed or dismissed - the run list's "Interrupted" rows (`interruptedRunsView.ts`). Whole list each time. */
+  | { type: "run.interrupted"; runs: InterruptedRunView[] }
   /** Hybrid's pick (`from`) failed and the turn was answered with Auto — the panel shows
    *  the one-line notice for this chat. `reason` is WHY (clamped), shown after the line. */
   | { type: "run.modelFallback"; chatId: number; from: string; reason?: string };

@@ -1185,5 +1185,12 @@
   "Translating…": "Translating…",
   "A review of this folder is already running.": "A review of this folder is already running.",
   "That path cannot be excluded from review.": "That path cannot be excluded from review.",
-  "Translation needs this browser's built-in translator":"Translation needs this browser's built-in translator"
+  "Translation needs this browser's built-in translator":"Translation needs this browser's built-in translator",
+  "Interrupted runs": "Interrupted runs",
+  "Interrupted {when}": "Interrupted {when}",
+  "Open chat": "Open chat",
+  "Resume": "Resume",
+  "Continue the task that was interrupted when the editor closed.": "Continue the task that was interrupted when the editor closed.",
+  "Couldn't resume": "Couldn't resume",
+  "This chat is running": "This chat is running"
 }

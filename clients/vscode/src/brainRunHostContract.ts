@@ -246,5 +246,7 @@ export interface BrainRunHost {
   isBusy(runKey: number): boolean;
   /** Watch the runs from a panel. The panel is brought up to date immediately. */
   attach(sink: RunSink): () => void;
+  /** The run list's interrupted rows (`interruptedRunsView.ts`): journal one as acknowledged (dismissed, or resumed by the webview through the composer). Idempotent. Absent on a host without a run journal. */
+  acknowledgeInterrupted?(runId: string): Promise<void>;
   dispose(): void;
 }

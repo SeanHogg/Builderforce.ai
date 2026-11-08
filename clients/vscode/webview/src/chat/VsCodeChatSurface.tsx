@@ -73,6 +73,7 @@ import { SubagentStrip } from './SubagentStrip';
 import { useChatAudience } from './useChatAudience';
 import { useChatMemory } from './useChatMemory';
 import { useChatSend } from './useChatSend';
+import { useInterruptedResume } from './useInterruptedResume';
 import { useAssociatedProject, useChatSystemPrompt } from './useChatSystemPrompt';
 import { useComposerModels } from './useComposerModels';
 import { useCopyDiagnostics } from './useCopyDiagnostics';
@@ -221,8 +222,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
   // (`brainRunHost.ts`), not here: runs outlive this view.
-  const { queued, submit, queueAfter, stop, answerQuestion, replayMessage, sendSteers } = useChatSend({
+  const { queued, submit, queueAfter, stop, answerQuestion, continueChat, replayMessage, sendSteers } = useChatSend({
     conv, chatId, drafts, draftStore, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
+  });
+  // An interrupted run's Resume: open its chat, send the continuation through THIS door (it builds the seed, model, project and spec), ack the run once the host claims it.
+  const interruptedResume = useInterruptedResume({
+    chatId, openChat, send: continueChat, isRunning: (id) => runStatus(id) != null,
+    continuation: t('ir.continue', 'Continue the task that was interrupted when the editor closed.'),
   });
 
   // The question this chat is BLOCKED on, restated at the composer — one shared predicate,
@@ -312,6 +318,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           onQueryChange={setQuery}
           showArchived={showArchived}
           onToggleArchived={toggleArchived}
+          onOpenChat={openChat}
+          locale={init.locale}
+          chatTitleOf={(id) => { const c = chats.find((x) => x.id === id); return c ? titleOf(c) : undefined; }}
+          interrupted={interruptedResume}
           bundle={init.labels}
         />
       ) : chatId == null && !conv.pendingTurn ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
