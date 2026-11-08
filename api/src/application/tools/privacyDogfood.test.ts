@@ -50,7 +50,7 @@ describe('Privacy diagnostic dogfood (real repo)', () => {
     const result = privacyScan(ctx);
 
     // eslint-disable-next-line no-console
-    console.log('\n================ COMPLIANCE AUDIT AGENT — BuilderForce.ai =======================');
+    console.log('\n================ COMPLIANCE AUDIT AGENT — Builderforce.ai =======================');
     console.log(`files scanned: ${repo.fileCount}`);
     console.log(`VERDICT: ${result.headline}`);
     console.log(result.summary ?? '');

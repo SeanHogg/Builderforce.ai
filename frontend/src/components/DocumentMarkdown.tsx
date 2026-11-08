@@ -1,4 +1,5 @@
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import { MARKDOWN_DRAWING_COMPONENTS } from '@/components/drawing/MarkdownDrawing';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 
 export interface DocumentMarkdownProps {
@@ -6,6 +7,8 @@ export interface DocumentMarkdownProps {
   content: string;
   /** Extra class names appended to the `.markdown-body` document wrapper. */
   className?: string;
+  /** Element overrides (e.g. link hardening for untrusted tenant content). */
+  components?: Components;
 }
 
 /**
@@ -18,10 +21,10 @@ export interface DocumentMarkdownProps {
  * (theme-token driven, defined once in globals.css) so every long-form surface
  * stays in lockstep. No per-element inline styles, no chat affordances.
  */
-export function DocumentMarkdown({ content, className }: DocumentMarkdownProps) {
+export function DocumentMarkdown({ content, className, components }: DocumentMarkdownProps) {
   return (
     <div className={className ? `markdown-body ${className}` : 'markdown-body'}>
-      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={components ? { ...MARKDOWN_DRAWING_COMPONENTS, ...components } : MARKDOWN_DRAWING_COMPONENTS}>{content}</ReactMarkdown>
     </div>
   );
 }

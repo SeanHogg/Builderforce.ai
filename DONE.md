@@ -1,3 +1,31 @@
+## ✅ RESOLVED 2026-11-08: public copy is held to its proof, the blog reads in five languages, and every vendor has a comparison page (Public surfaces, copy and SEO)
+
+- **Claims re-reviewed.** On 2026-11-07 the planner checked all six `MARKETING_CLAIMS` against their evidence:
+  - AES-256-GCM in `credentialCrypto.ts`;
+  - MIT in `agent-runtime/package.json`;
+  - the policy-gate test exists;
+  - the observability surface exists.
+  `browser-local-compute` and `evermindLlmVoice` cited a file with no WebGPU code. Both now cite `webgpu-trainer.ts`, `mamba-engine.ts`, `AITrainingPanel.tsx` and `voiceEngine.ts`. Every claim is set to `lastReviewed: 2026-11-07`, `reviewBy: 2027-02-05`.
+- **The release gate runs in CI.** The `verify-frontend` matrix entry "marketing claims" runs `capabilityProof`, `blogLocale`, `messages` (locale parity) and `localizePack`. `docs/marketing/CLAIMS-PROCESS.md` names the real registries (`lib/content/product.ts`, `compare.ts`) and states which check enforces what.
+- **Two guards in `pnpm run check`:**
+  - `check-public-copy-absolutes.mjs` covers every/always/never/zero/entire/guarantee/unlimited/100% across 23 public namespaces. It is a ratchet whose baseline stores the matched words. It fails on a new hit, on a changed word set, or on a public route reading a namespace it doesn't scan.
+  - `check-compare-vendor-facts.mjs` requires a sourced, ≤30-day record (`compareVendorFactSources.json`) for any price, percentage, count or version stated about a vendor.
+- **False absolutes rewritten in five locales.** That includes `compare.ctaDesc`, write-through cognition, "reads always reflect the latest truth", 82 further product, audit, cost and privacy claims, "Pro unlocks unlimited training", and four hired.video posts claiming unlimited seats and postings (Pro is one seat).
+- **Wordmark is `Builderforce.ai` everywhere**, through `BRAND.name`. `check-wordmark.mjs` scans `frontend/src`, `api/src` and `clients/*/src`. The legal DBA line `Fix Faster LLC dba BuilderForce.ai` and the API legal-document files are exempt, because the registered name is pinned by migration 0403.
+- **First-visit locale detection** now covers the marketing roots, `/blog/*` and `/compare/*` (`run_worker_first`, never `true`). Static blog assets are negated. `middleware.test.ts` keeps `LOCALE_ENTRY_ROOTS` equal to the wrangler list.
+- **Blog in five languages.** All 189 posts have de/es/fr/zh bodies; 422 were translated this pass. All five catalogs have a localized index title and description for each post, up from 22. The truncated `escape-your-diagramming-tool` title is fixed, and a dead in-page anchor is removed.
+- **Creation templates are localized.** `localizePack.ts` resolves a pack through the board's translator at placement (`creationCanvas.pack.<id>`, about 400 strings × 5). `buildLlmCourse` requires a translator, and its English default is gone. A coverage test fails on any unkeyed card string. `localeToBcp47()` in `i18n/config.ts` is the one locale-to-tag map.
+- **`/compare`: a leaf page for every vendor.** The 23 new leaves cover delivery, canvas, automation, gateway and talent, all criteria-first in five locales. Each arena links its leaves. `compareLeafGaps()` (asserted in `messages.test.ts`) keeps every column paired with a leaf.
+- **Related-article cards render for guests.** Verified: `BlogPostClient.tsx` renders `RelatedArticles` after `</main>`, outside any session gate, from static blog data.
+- **Tenant website pages render at `/w/<owner>/<path>`.**
+  - Server-rendered, with the canonical always under `/w/<owner>`.
+  - Tenant links carry `rel="nofollow ugc noopener noreferrer"`, and segments are validated before any fetch.
+  - A missing page is a real 404 from middleware. An API outage passes through instead of becoming a 404.
+  - The public read and the sitemap serve `status = 'live'` only. New tenant-scoped `publishWebsitePage`/`unpublishWebsitePage` routes (MANAGER) bump the version token, and misses are cached.
+  - SEO impressions now go through the KV hit buffer (`seo.impression`, published rows, per-IP limited) instead of a Postgres UPDATE per request.
+- **`.page-inner` retired.** Facts and RFP detail use `PageContainer width="readable"`, and both CSS rules are deleted.
+- **Existing translation bugs fixed.** `{idea}` was dropped in four `creationCanvas.noticeIdea*` keys (and German showed a different sentence), and the zh `{count}` arm was missing.
+
 ## ✅ RESOLVED 2026-11-08: a run the editor lost on close waits in the History list until you resume or dismiss it (Local-first · VS Code)
 
 - **Interrupted runs are listed, not just logged.** The runs the previous editor session left running, queued or awaiting input are journaled `interrupted` at activation (`installRunRecovery.ts`). They now appear in the History panel as an "Interrupted runs" section, showing the chat's title and when the run stopped, in the editor's locale. The list is host state, read from the journal with `listInterruptedRuns`, so it survives a webview reload and an editor restart (`interruptedRunsView.ts`; message `run.interrupted`).

@@ -1,7 +1,7 @@
 ---
 title: One local index for every AI tool on your machine
 date: 2026-09-26
-description: Synapse indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded.
+description: Synapse indexes your repositories on your own computer — its definitions, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. The index is built locally and stays on your computer.
 tags: [vs-code, agents, evermind, privacy, product]
 author: Sean Hogg
 ---

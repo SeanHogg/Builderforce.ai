@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
 import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
+import { publicWebsitePageUrl } from '@/lib/publicApi';
+import { websitePagePath } from '@/lib/websitePagePath';
 import { isCanvasInvitationRoute } from '@/lib/shellRouting';
 import { canvasAppPath, STUDIO_ROUTE } from '@/lib/studio/studioHost';
 import { productHostRedirect } from '@/lib/productHosts';
@@ -54,16 +56,40 @@ const PROTECTED_PATHS = [
 ];
 
 /**
+ * The public marketing entry pages where first-visit locale detection runs — the
+ * pages a stranger lands on from a search or a link, before any preference
+ * cookie exists. These are the roots in `frontend/wrangler.toml`'s
+ * `run_worker_first` (which must name each one explicitly, plus `/blog/*` and
+ * `/compare/*` for their children): a page the assets binding serves directly
+ * never reaches this middleware, so the cookie is only ever set where the Worker
+ * is invoked.
+ *
+ * COST BOUND: one Worker invocation per view of these pages, never `true` (that
+ * would bill every `_next/static/*` asset). The cookie is written only when
+ * `NEXT_LOCALE` is absent (`ensureLocaleCookie`), so detection happens once per
+ * visitor; later views still pass through the Worker but return unmodified.
+ * Keep this list, the wrangler list and the `/…/:path*` matcher rows below in step.
+ */
+export const LOCALE_ENTRY_ROOTS = [
+  'pricing', 'features', 'compare', 'blog', 'about', 'method', 'evermind', 'agents',
+  'creation-canvas', 'demo', 'facts', 'product', 'tutorials', 'open-source', 'media',
+  'book-demo', 'sell-builderforce',
+] as const;
+
+/**
  * Root segments middleware genuinely acts on. The `/:slug` matcher added for
  * the unknown-slug 404 check drags every public marketing path into the
  * Worker as a side effect; without this gate they would newly pick up the
  * locale `Set-Cookie` at the bottom of `middleware()`, which would make an
  * otherwise cacheable static page uncacheable. So a known root slug that is
- * not on this list leaves with exactly the response it had before.
+ * not on this list leaves with exactly the response it had before. The
+ * marketing entry pages (`LOCALE_ENTRY_ROOTS`) ARE on it, deliberately: they
+ * take the first-visit locale cookie.
  */
 const MIDDLEWARE_ROOT_SEGMENTS = new Set<string>([
   'embed', 'logs', 'timeline', 'observability', 'create', 'ide', 'tenants', 'studio',
   ...PROTECTED_PATHS.map((p) => p.slice(1)),
+  ...LOCALE_ENTRY_ROOTS,
 ]);
 
 function withHeaders(res: NextResponse, headers: Record<string, string>): NextResponse {
@@ -108,15 +134,50 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
  * HTTP again. Prerendered pages the Worker never sees get the same header from
  * `public/_headers`.
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const secureTarget = secureCanonicalRedirect(new URL(request.url), request.headers);
   if (secureTarget) return NextResponse.redirect(secureTarget, 301);
   // Past the redirect, every non-development request arrived over HTTPS.
-  const res = route(request);
+  const res = await route(request);
   return isLocalHost(request.nextUrl.hostname) ? res : withHeaders(res, HSTS_HEADERS);
 }
 
-function route(request: NextRequest): NextResponse {
+/**
+ * HARD 404 for a missing published website page (`/w/<owner>/<path…>`), decided
+ * before rendering starts for the same reason as `isUnknownRootSlug` below: a
+ * `notFound()` thrown in the edge route can stream a 200. An invalid segment or owner,
+ * or a page the API does not serve (unpublished included), rewrites to the hard-404
+ * route; a published page passes straight through, untouched (no locale cookie, so the
+ * page stays cacheable). Not a `/w` request: `null`, and `route` carries on.
+ *
+ * Only a definitive answer rewrites: an invalid path, the bare `/w`, or an HTTP 404 from
+ * the API. Any other failure (5xx, timeout, network) passes through, so an API blip is
+ * never cached as a 404 for a live page; the route's own `notFound()` is the backstop.
+ */
+async function websitePageGate(request: NextRequest): Promise<NextResponse | null> {
+  const { pathname } = request.nextUrl;
+  if (pathname !== '/w' && !pathname.startsWith('/w/')) return null;
+  const notFound = () => {
+    const url = request.nextUrl.clone();
+    url.pathname = NOT_FOUND_REWRITE_PATH;
+    return NextResponse.rewrite(url);
+  };
+  if (pathname === '/w') return notFound();
+  const [owner = '', ...rest] = pathname.slice('/w/'.length).split('/');
+  if (rest[rest.length - 1] === '') rest.pop(); // a trailing slash names the same page
+  const pagePath = websitePagePath(rest);
+  const target = pagePath === null ? null : publicWebsitePageUrl(owner, pagePath);
+  if (target === null) return notFound();
+  try {
+    const response = await fetch(target, { signal: AbortSignal.timeout(3000) });
+    if (response.status === 404) return notFound();
+  } catch {
+    // timeout / network: fall through to the route
+  }
+  return NextResponse.next();
+}
+
+async function route(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   // A product host (`studio.`, `spawn.`) sends its root to the product's route, and an
@@ -129,6 +190,10 @@ function route(request: NextRequest): NextResponse {
     if (productTarget.hostname) url.hostname = productTarget.hostname;
     return NextResponse.redirect(url);
   }
+
+  // After the host redirect, so a redirected request spends no API fetch.
+  const gated = await websitePageGate(request);
+  if (gated) return gated;
 
   // HARD 404 for unknown root-level slugs. `app/[burnrateDomain]/page.tsx` is a
   // catch-all over the whole root level, so every mistyped URL on the site
@@ -264,6 +329,17 @@ export const config = {
     // through untouched (see `isUnknownRootSlug`), so behaviour for every
     // existing route is unchanged.
     '/:slug',
+    // The marketing entry pages' children (`LOCALE_ENTRY_ROOTS`) — a visitor can land
+    // on a blog post or a comparison directly. Matchers must be static literals, so
+    // these cannot be derived from the list above.
+    // A path whose last segment has a file extension is a static asset (post art),
+    // not a page, so it is excluded from the Worker (the wrangler list negates the same).
+    '/blog/:path((?!.*\\.[A-Za-z0-9]+$).*)',
+    '/compare/:path((?!.*\\.[A-Za-z0-9]+$).*)',
+    // Published tenant website pages: middleware resolves existence before render so a
+    // missing page is a real 404 (see `websitePageGate`).
+    '/w',
+    '/w/:path*',
     '/embed/:path*',
     '/logs/:path*',
     '/timeline/:path*',

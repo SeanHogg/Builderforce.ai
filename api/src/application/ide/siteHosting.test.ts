@@ -21,7 +21,7 @@ describe('subdomainFromHost', () => {
   it('extracts a single-label site subdomain', () => {
     expect(subdomainFromHost('rumbledating.builderforce.ai')).toBe('rumbledating');
     expect(subdomainFromHost('rumbledating.builderforce.ai:443')).toBe('rumbledating');
-    expect(subdomainFromHost('My-App.BuilderForce.ai')).toBe('my-app');
+    expect(subdomainFromHost('My-App.Builderforce.ai')).toBe('my-app');
   });
 
   it('returns null for the apex itself and foreign hosts', () => {

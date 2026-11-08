@@ -2,7 +2,7 @@
 
 **LinkedIn Recruiter (2026):** Recruiter Lite ~$170/mes por licencia. Recruiter Corporate ~$1,080+/mes por licencia (un ~15% más que el año anterior). LinkedIn Hiring Assistant es un complemento de precio no publicado que se suma a los planes Corporate y RPS+, previa llamada con el equipo de ventas.
 
-**Builderforce Pro:** una tarifa mensual fija con licencias ilimitadas y una opción anual con descuento; la [página de precios](/pricing) recoge las cifras actuales. Incluye una asignación mensual de tokens de IA, el Agente Reclutador de IA v2, las Sesiones de Cribado en Vivo, la extensión de Chrome, publicaciones de empleo ilimitadas, puntuación de candidatos, clonación de voz y el Studio multiformato.
+**Builderforce Pro:** una tarifa mensual fija y una opción anual con descuento; la [página de precios](/pricing) recoge las cifras actuales. Incluye una asignación mensual de tokens de IA, el Agente Reclutador de IA v2, las Sesiones de Cribado en Vivo, la extensión de Chrome, publicaciones de empleo, puntuación de candidatos, clonación de voz y el Studio multiformato.
 
 La diferencia de precio es de ~108× en el nivel de entrada. La brecha de capacidades es mucho más estrecha de lo que sugiere esa proporción.
 
@@ -18,11 +18,11 @@ La diferencia de precio es de ~108× en el nivel de entrada. La brecha de capaci
 
 ## Dónde gana Builderforce
 
-**Precio.** Una suscripción fija frente a $1,080/mes *por licencia* para un conjunto de funciones comparable. La diferencia de precio se amortiza en la primera semana con cualquier volumen de captación significativo.
+**Precio.** Una suscripción fija frente a $1,080/mes *por licencia* para un conjunto de funciones comparable. Los modelos de precio son distintos: tarifa plana frente a cargos por licencia, así que la diferencia depende del tamaño del equipo y del volumen de captación.
 
-**Licencias ilimitadas.** LinkedIn cobra por licencia. Builderforce Pro es una única cifra fija para el reclutador, sin importar cuántos compañeros incorpores. Para un equipo de captación de 5 personas, solo LinkedIn Recruiter Corporate cuesta unos $63,600 al año; en Builderforce sigue siendo una única suscripción.
+**Plan fijo, no precio por licencia.** LinkedIn cobra por licencia. Builderforce Pro es un plan mensual fijo; los límites de licencias de cada plan figuran en la [página de precios](/pricing). Para un equipo de captación de 5 personas, solo LinkedIn Recruiter Corporate cuesta unos $63,600 al año.
 
-**Presentaciones de candidatos multiformato.** En Builderforce, los candidatos pueden enviar una presentación en video, cómic, pódcast, animación o juego, y la IA del estudio la genera a partir de su currículum en 60 segundos. En LinkedIn, los candidatos envían un PDF. Ahora que en 2026 los currículums generados por LLM inundan todos los ATS, la presentación multiformato se está convirtiendo en la única señal de diferenciación fiable.
+**Presentaciones de candidatos multiformato.** En Builderforce, los candidatos pueden enviar una presentación en video, cómic, pódcast, animación o juego, y la IA del estudio la genera a partir de su currículum. En LinkedIn, los candidatos envían un PDF. Ahora que en 2026 los currículums generados por LLM inundan todos los ATS, la presentación multiformato se está convirtiendo en una señal de diferenciación útil.
 
 **Cribado en vivo + integración con agentes.** El Agente Reclutador de IA v2 de Builderforce enlaza directamente con una sesión de Cribado en Vivo (`/sessions/:id/schedule`). LinkedIn obliga al reclutador a mover a mano a los candidatos preseleccionados entre Hiring Assistant y una herramienta de agenda externa.
 
@@ -32,8 +32,8 @@ La diferencia de precio es de ~108× en el nivel de entrada. La brecha de capaci
 
 | Función | Builderforce Pro | LinkedIn Recruiter Corporate |
 |---|---|---|
-| Costo mensual (por reclutador) | Tarifa fija, licencias ilimitadas ([ver precios](/pricing)) | ~$1,080+ |
-| Licencias ilimitadas | Sí | No (por licencia) |
+| Costo mensual (por reclutador) | Tarifa mensual fija ([ver precios](/pricing)) | ~$1,080+ |
+| Modelo de precios | Tarifa mensual fija | Por licencia |
 | Toma de requisitos semántica con IA (briefing → criterios) | Toma de requisitos del Agente v2 | Hiring Assistant (complemento) |
 | Puntuación de candidatos con IA | Incluida | Incluida |
 | Borradores de mensajes con IA | Incluidos | Hiring Assistant (complemento) |
@@ -54,15 +54,15 @@ La diferencia está en la distribución y las integraciones, no en la cobertura 
 
 **Elige LinkedIn Recruiter Corporate cuando:** seas una empresa de 200+ empleados con el presupuesto aprobado; tu contratación dependa de captar a través de conexiones de segundo grado; necesites integraciones con Greenhouse / Workday / Microsoft Teams desde el primer día; o un directivo haya impuesto expresamente LinkedIn como plataforma oficial.
 
-**Elige Builderforce Pro cuando:** el presupuesto sea una limitación real; quieras licencias de reclutador ilimitadas sin sustos de precio por cabeza; tu captación se apoye más en la toma de requisitos asistida por IA y el contacto personalizado que en las presentaciones de conocidos; quieras que los candidatos envíen presentaciones más ricas que un PDF; o valores un precio medido y transparente por encima de tarifas opacas por licencia.
+**Elige Builderforce Pro cuando:** el presupuesto sea una limitación real; quieras una tarifa fija en lugar de sustos de precio por cabeza; tu captación se apoye más en la toma de requisitos asistida por IA y el contacto personalizado que en las presentaciones de conocidos; quieras que los candidatos envíen presentaciones más ricas que un PDF; o valores un precio medido y transparente por encima de tarifas opacas por licencia.
 
-**Usa los dos:** muchos equipos en crecimiento mantienen una licencia de LinkedIn Recruiter para captar mediante presentaciones de conocidos y ponen al resto del equipo en Builderforce Pro para todo lo demás. Las cuentas salen con casi cualquier tamaño de equipo: una licencia de LinkedIn de $1,080 más una única suscripción fija de Builderforce supera por un margen enorme a N+1 licencias de $1,080.
+**Usa los dos:** muchos equipos en crecimiento mantienen una licencia de LinkedIn Recruiter para captar mediante presentaciones de conocidos y usan Builderforce Pro para todo lo demás. Consulta los límites de licencias de tu plan en la [página de precios](/pricing) al planificar el tamaño del equipo.
 
 ## Preguntas frecuentes
 
 ### ¿Tiene Builderforce una extensión de Chrome para captar candidatos, como LinkedIn?
 
-Sí. La extensión de Chrome de Builderforce extrae perfiles de candidatos de LinkedIn, Indeed, Glassdoor y 10+ portales de empleo más, y los incorpora a tu cantera de talento con deduplicación automática. También rellena automáticamente formularios de solicitud de empleo para quienes buscan trabajo.
+Sí. La extensión de Chrome de Builderforce extrae perfiles de candidatos de LinkedIn, Indeed, Glassdoor y otros portales de empleo, y los incorpora a tu cantera de talento con deduplicación automática. También rellena automáticamente formularios de solicitud de empleo para quienes buscan trabajo.
 
 ### ¿Puede Builderforce importar mis datos de LinkedIn Recruiter?
 
@@ -70,7 +70,7 @@ Las notas y los proyectos que ya tienes en LinkedIn Recruiter no cuentan con una
 
 ### ¿El precio de Pro es realmente todo incluido?
 
-Sí, para el conjunto de funciones indicado. Los complementos opcionales —conexiones de buzón adicionales y paquetes de recarga de tokens de IA— se detallan en la [página de precios](/pricing) junto a la tarifa actual de Pro. No hay cargos por licencia, ni nivel de Hiring Assistant, ni recargo empresarial.
+Sí, para el conjunto de funciones indicado. Los complementos opcionales —conexiones de buzón adicionales y paquetes de recarga de tokens de IA— se detallan en la [página de precios](/pricing) junto a la tarifa actual de Pro. No hay nivel de Hiring Assistant ni recargo empresarial; los límites de licencias de cada plan figuran en la [página de precios](/pricing).
 
 ---
 

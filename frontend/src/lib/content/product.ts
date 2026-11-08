@@ -250,7 +250,7 @@ export const PRODUCT_CAPABILITY_PROOF: Record<string, CapabilityProof> = {
   sessionLibrary: { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/lib/builderforceApi.ts', 'frontend/src/components/creation-sessions/SessionActionBar.tsx'], lastVerified: '2026-08-22' },
   workflowsEvaluation: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['account'], evidence: ['frontend/src/lib/creationCanvasAi.test.ts'], lastVerified: '2026-08-04' },
   websitesDataPrototypes: { status: 'beta', dataBoundary: 'hybrid', prerequisites: [], evidence: ['frontend/src/components/creation-canvas/creationObjectRegistry.ts'], lastVerified: '2026-08-04' },
-  evermindLlmVoice: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['webgpuDevice'], evidence: ['frontend/src/domains/workflow/presentation/EvermindBuildPanel.tsx'], lastVerified: '2026-08-04' },
+  evermindLlmVoice: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['webgpuDevice'], evidence: ['frontend/src/lib/webgpu-trainer.ts', 'frontend/src/lib/mamba-engine.ts', 'frontend/src/components/AITrainingPanel.tsx', 'frontend/src/lib/voiceEngine.ts'], lastVerified: '2026-08-04' },
   creationCanvasVsCode: { status: 'beta', dataBoundary: 'hybrid', prerequisites: ['vscodeExtension', 'sharedSessionsAccount'], evidence: ['packages/creation-canvas-contract/src/index.ts'], lastVerified: '2026-08-04' },
   workflowExecution: { status: 'beta', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/WorkflowDagView.tsx'], lastVerified: '2026-08-04' },
   projectsTasks: { status: 'available', dataBoundary: 'workspace-cloud', prerequisites: ['account'], evidence: ['frontend/src/components/TaskMgmtContent.tsx'], lastVerified: '2026-08-04' },
@@ -348,7 +348,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     scope: 'Supported Creation Canvas objects and named delivery paths',
     dataBoundaries: ['browser', 'workspace-cloud', 'hybrid'],
     evidence: ['frontend/src/components/creation-canvas/CreationCanvas.test.tsx'],
-    owner: 'Creation', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'not-required',
+    owner: 'Creation', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'not-required',
   },
   {
     id: 'human-approval-control',
@@ -357,7 +357,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     scope: 'Runtime paths wired to the effective policy resolver',
     dataBoundaries: ['workspace-cloud', 'hybrid'],
     evidence: ['api/src/application/runtime/RuntimeService.policyGates.test.ts'],
-    owner: 'Runtime & Governance', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
+    owner: 'Runtime & Governance', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'required',
   },
   {
     id: 'credential-encryption',
@@ -366,7 +366,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     scope: 'Credential stores covered by the integration encryption implementation',
     dataBoundaries: ['workspace-cloud', 'connected-service'],
     evidence: ['api/src/application/integrations/credentialCrypto.test.ts'],
-    owner: 'Security', lastReviewed: '2026-08-04', reviewBy: '2026-10-03', complianceReview: 'required',
+    owner: 'Security', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'required',
   },
   {
     id: 'browser-local-compute',
@@ -374,8 +374,8 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     status: 'beta',
     scope: 'Named WebGPU operations on compatible devices',
     dataBoundaries: ['browser', 'hybrid'],
-    evidence: ['frontend/src/domains/workflow/presentation/EvermindBuildPanel.tsx'],
-    owner: 'AI Studio', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
+    evidence: ['frontend/src/lib/webgpu-trainer.ts', 'frontend/src/lib/mamba-engine.ts', 'frontend/src/components/AITrainingPanel.tsx'],
+    owner: 'AI Studio', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'required',
   },
   {
     id: 'private-runtime-deployment',
@@ -384,7 +384,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     scope: 'BuilderForce Agents runtime, excluding hosted collaboration and publishing services',
     dataBoundaries: ['hybrid'],
     evidence: ['agent-runtime/package.json', 'agent-runtime/docs/CLOUD_DEPLOY.md'],
-    owner: 'Agent Runtime', lastReviewed: '2026-08-04', reviewBy: '2026-10-03', complianceReview: 'required',
+    owner: 'Agent Runtime', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'required',
   },
   {
     id: 'execution-observability',
@@ -393,7 +393,7 @@ export const MARKETING_CLAIMS: readonly MarketingClaim[] = [
     scope: 'Instrumented runtime and workflow paths',
     dataBoundaries: ['workspace-cloud', 'hybrid'],
     evidence: ['frontend/src/components/ObservabilityContent.tsx'],
-    owner: 'Observability', lastReviewed: '2026-08-04', reviewBy: '2026-11-02', complianceReview: 'required',
+    owner: 'Observability', lastReviewed: '2026-11-07', reviewBy: '2027-02-05', complianceReview: 'required',
   },
 ] as const;
 

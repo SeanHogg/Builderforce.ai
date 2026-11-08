@@ -92,6 +92,12 @@ const mapKey = (kind: string, key: string): string => `${kind}|${key}`;
 const kvName = (kind: string, key: string, seq: number): string =>
   `${PREFIX}${kind}|${encodeURIComponent(key)}|${isolateId()}|${seq}`;
 
+/** KV refuses keys over 512 bytes. A key that cannot fit (worst-case sequence number) is
+ *  never buffered: the caller writes it directly, with no failed `put` to report. */
+const KV_MAX_KEY_BYTES = 512;
+const fitsKvKey = (kind: string, key: string): boolean =>
+  new TextEncoder().encode(kvName(kind, key, Number.MAX_SAFE_INTEGER)).length <= KV_MAX_KEY_BYTES;
+
 function parseKvName(name: string): { kind: string; key: string } | null {
   if (!name.startsWith(PREFIX)) return null;
   const parts = name.slice(PREFIX.length).split('|');
@@ -164,7 +170,7 @@ function scheduleTail(env: CounterKv, fallback?: CounterFallback): void {
 }
 
 /** Add `n` to the isolate's pending delta. Returns false when KV writes are unavailable
- *  (namespace unbound, or `CACHE_L2_KV` off) so the caller can apply the write directly
+ *  (namespace unbound, `CACHE_L2_KV` off, or the encoded key would exceed 512 bytes) so the caller can apply the write directly
  *  instead of dropping it. `fallback` is that same direct write, used for any delta
  *  whose KV `put` fails at flush time. */
 export async function bufferCounter(
@@ -175,7 +181,7 @@ export async function bufferCounter(
   atMs: number,
   fallback?: CounterFallback,
 ): Promise<boolean> {
-  if (!cacheL2Kv(env)) return false;
+  if (!cacheL2Kv(env) || !fitsKvKey(kind, key)) return false;
   const k = mapKey(kind, key);
   const cur = pending.get(k);
   pending.set(k, { kind, key, n: (cur?.n ?? 0) + n, t: Math.max(cur?.t ?? 0, atMs) });

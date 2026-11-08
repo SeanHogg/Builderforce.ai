@@ -3,6 +3,7 @@ import { CompliancePage } from './CompliancePage';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { fetchLegalCurrent, legalDocHref, legalDocTitleKey, type LegalDocType } from '@/lib/legalDocs';
 import { getFormat } from "@/i18n/getFormat";
+import { BRAND } from '@/lib/content/brand';
 
 /**
  * The public page for a published legal instrument (Terms, Privacy).
@@ -46,7 +47,7 @@ export async function legalDocumentMetadata(type: LegalDocType) {
   const t = await getTranslations('legal');
   const title = t(legalDocTitleKey(type));
   return {
-    title: `${title} · BuilderForce.ai`,
+    title: `${title} · ${BRAND.name}`,
     description: t('metaDescription', { document: title }),
     alternates: { canonical: legalDocHref(type) },
   };

@@ -92,7 +92,7 @@ function underPrefix(pathname: string, prefix: string): boolean {
  * site header (see `PUBLIC_SHELL_PATHS`), and `/studio/<sessionId>` is a canvas board
  * presented through the Studio lens — an app route on the stage (`lib/canvasLens.ts`).
  */
-const NO_CHROME_PREFIXES = ['/embed', '/studio/project/', '/spawn', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
+const NO_CHROME_PREFIXES = ['/embed', '/studio/project/', '/spawn', '/auth/', '/book', '/deal', '/f/', '/p/', '/w/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.

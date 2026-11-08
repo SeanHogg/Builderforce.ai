@@ -40,7 +40,7 @@ export interface ReportErrorInput {
 }
 
 /**
- * File a user-reported error into BuilderForce.ai's product Quality feed. The
+ * File a user-reported error into Builderforce.ai's product Quality feed. The
  * collector key fixes the destination, so reporting never depends on the
  * visitor having an account or choosing one of their own projects.
  */

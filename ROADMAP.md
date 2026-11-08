@@ -239,19 +239,10 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ### Public surfaces, copy and SEO `[growth]`
 
-- **Expired claims.** `credential-encryption` and `private-runtime-deployment` passed `reviewBy` 2026-10-03, and the other four expire 2026-11-02, failing `capabilityProof.test.ts`. *Blocker: each claim's owner re-reviews.*
-- **Marketing release gate isn't enforced.** `capabilityProof.test.ts` runs in no CI job, and `docs/marketing/CLAIMS-PROCESS.md` claims CI fails on expiry and cites a missing `lib/content.ts`. Run it in the frontend vitest job and fix the doc. Vendor-fact and tested-wording rules have no check.
-- **Absolute wording in public copy.** 101 `every/always/never/zero` hits in en.json with no guard. `compare.ctaDesc` ("audit trail on every action") and `definedTerms.writeThroughCognition` ("never a stale-then-reconcile step") contradict Claim-to-Proof. Add a guard, rewrite the false ones.
-- **Wordmark spelled two ways.** `BRAND.name` is `Builderforce.ai`; `BuilderForce.ai` remains in places. *Blocker: operator confirms.*
-- **First-visit locale detection runs only on `/`.** *Blocker: cost decision.*
-- **Free-site badge removal** isn't on pricing. *Blocker: admin-UI action.*
-- **Chat/canvas merge (VSIX `2026.9.36`) has no `release_notes` row.** *Blocker: a superadmin session.*
-- **Blog translation partial:** 184 English posts, de 78 · es 86 · fr 71 · zh 84, titles for 22; `blogLocale.test.ts` fails. Check bodies for truncation. *Blocker: batch-vs-slice call.*
-- **English left in TS:** the fallback at `courseLms.ts:94`, `creationTemplates.ts:40`.
-- **`/compare`: six arenas, leaf pages for one.** *Blocker: operator picks which 23 vendors get a page.*
-- **Related-article cards may be missing after guest preview.** Check what it renders. *Blocker: placement decision.*
-- **Tenant web surface has no renderer** for `/api/public/web/:owner/p/*` or `/:tenantId/seo/impression`.
-- **`.page-inner` remains** in `FactsPageClient.tsx`, `RfpDetailClient.tsx`, `globals.css`.
+- **Free-site badge removal isn't on pricing.** The entitlement is `removeBranding` (`api/src/domain/tenant/PlanLimits.ts`: Free false, Pro and Teams true). The pricing bullets come from the published JSONB document in `platform_pricing_configuration` (`key = 'public'`), not from code. *Blocker: add the line to Free, Pro and Teams in the admin Pricing panel (`PricingPanel.tsx`), then publish.*
+- **Chat/canvas merge (VSIX `2026.9.36`) has no `release_notes` row.** *Blocker: a superadmin session in `ReleaseNotesPanel`.*
+- **SEO pages have no public renderer.** `marketing_seo_pages` rows hold a title, meta, params and structured data, but no body or template, and no frontend route reads them. So `POST /api/public/web/:owner/seo/impression` has no caller. The counter is ready: KV-buffered `seo.impression`, published rows only. *Blocker: a content model (a template per `pattern`) for what an SEO page renders.*
+- **Website pages can only be managed through the API.** `POST /api/web/website` (create, update, and since 2026-11-08 publish and unpublish) has no frontend client, so a tenant can't author or publish a `/w/<owner>/…` page from the product. Platform (NULL-tenant) pages are seed-only. Fix: a website-page editor and a publish control on the typed client. This is new authoring scope, not a regression.
 
 ### Distribution `[growth]`
 

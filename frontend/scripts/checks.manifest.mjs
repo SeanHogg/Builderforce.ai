@@ -21,6 +21,7 @@ export default [
   ['check:i18n-keys', 'check-i18n-keys.mjs'],
   ['check:route-exports', 'check-route-exports.mjs'],
   ['check:root-routes', 'check-root-routes.mjs'],
+  ['check:wordmark', 'check-wordmark.mjs'],
   ['check:root-layout-providers', 'check-root-layout-providers.mjs'],
   ['check:declared-deps', 'check-declared-deps.mjs'],
   ['check:methodology', 'check-methodology.mjs'],
@@ -30,6 +31,10 @@ export default [
   ['check:root-closure', 'check-root-closure.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   ['check:blog-index', 'publish-blog-content.mjs', '--check'],
+  // The marketing release gate (docs/marketing/CLAIMS-PROCESS.md): the tested-wording
+  // ratchet on public copy, and the vendor-fact rule on comparison content.
+  ['check:public-copy-absolutes', 'check-public-copy-absolutes.mjs'],
+  ['check:compare-vendor-facts', 'check-compare-vendor-facts.mjs'],
   // Repo-level: the WebLLM rows of the page engines' catalog are GENERATED from the
   // installed `@mlc-ai/web-llm` (packages/local-inference/src/webllmCatalog.generated.ts).
   // Here rather than in api's manifest because this install is the one that installs

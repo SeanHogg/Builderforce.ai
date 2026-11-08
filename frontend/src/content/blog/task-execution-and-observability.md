@@ -1,7 +1,7 @@
 ---
 title: Task Execution and the Observability Portal
 date: 2026-03-11
-description: How Builderforce tracks every task from creation through execution to completion — the task model, execution lifecycle, workflow telemetry, and how to use the portal's timeline and dashboard to understand what your agents are doing.
+description: How Builderforce tracks tasks from creation through execution to completion — the task model, execution lifecycle, workflow telemetry, and how to use the portal's timeline and dashboard to understand what your agents are doing.
 tags: [tasks, execution, observability, telemetry, timeline, workflows]
 author: Sean Hogg
 ---

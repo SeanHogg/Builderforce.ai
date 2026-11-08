@@ -12,7 +12,7 @@ type OpenReporter = (prefill?: ReportErrorPrefill) => void;
  * shared reporter panel and opens on the `REPORT_ERROR_EVENT` window event any
  * surface can fire through `requestReportError` (the global error toast's
  * "Report" action, a project page, an error boundary) — one door, above and
- * below this provider alike. Submitting files the error into BuilderForce.ai's fixed
+ * below this provider alike. Submitting files the error into Builderforce.ai's fixed
  * product Quality collector, including for visitors without an account.
  */
 export function ReportErrorProvider({ children }: { children: React.ReactNode }) {

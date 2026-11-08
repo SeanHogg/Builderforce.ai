@@ -16,6 +16,7 @@ import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 import { StatTile } from '@/components/ui/StatTile';
+import PageContainer from '@/components/PageContainer';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
@@ -159,7 +160,7 @@ export default function RfpDetailClient() {
   };
 
   return (
-    <div className="page-inner">
+    <PageContainer width="readable">
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.push('/projects?tab=rfp')} style={{ marginBottom: 14 }}>
         ← {t('backToList')}
       </button>
@@ -270,7 +271,7 @@ export default function RfpDetailClient() {
           )}
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

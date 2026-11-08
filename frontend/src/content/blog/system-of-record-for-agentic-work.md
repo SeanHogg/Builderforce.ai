@@ -1,7 +1,7 @@
 ---
 title: The System of Record for Agentic Work
 date: 2026-06-23
-description: In the agentic era, half your workforce is software — and for the first time, every unit of work is fully instrumented. Builderforce.ai turns that into one system of record where work is costed and attributed from idea to ship to learn.
+description: In the agentic era, half your workforce is software — and for the first time, work can be instrumented from end to end. Builderforce.ai turns that into one system of record where work is costed and attributed from idea to ship to learn.
 tags: [enterprise, system-of-record, observability, finops, agentic]
 author: Sean Hogg
 ---

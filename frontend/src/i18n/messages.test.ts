@@ -34,7 +34,7 @@ import {
   destTaglineKey,
   destTitleKey
 } from '@/lib/publicDestinations';
-import { COMPARE_ARENAS, COMPARE_PILLAR_ICONS } from '@/lib/content/compare';
+import { COMPARE_ARENAS, COMPARE_PILLAR_ICONS, compareLeafGaps } from '@/lib/content/compare';
 import { EVERMIND, QUOTABLE_IDS } from '@/lib/content/brand';
 import { AUTH_PANELS, authPanelKey, type AuthPanelId } from '@/lib/content/auth';
 import { contentKey } from '@/lib/content/copy';
@@ -532,10 +532,20 @@ describe('message catalogs', () => {
         `compare.arenas.${arena.key}.label`,
         `compare.arenas.${arena.key}.blurb`,
         ...arena.competitors.map((column) => `compare.competitorLabels.${column.key}`),
+        // ...and the leaf narrative each column's `/compare/{slug}` page renders.
+        ...arena.competitors.flatMap((column) => [
+          `compare.competitors.${column.key}.tagline`,
+          `compare.competitors.${column.key}.summary`,
+          `compare.competitors.${column.key}.verdict`,
+        ]),
       ]),
     ]);
     const missing = [...keys].filter((key) => t(key as never) === key).sort();
     expect(missing).toEqual([]);
+  });
+
+  it('every COMPARE_ARENAS column has exactly one leaf page', () => {
+    expect(compareLeafGaps()).toEqual([]);
   });
 
   /**

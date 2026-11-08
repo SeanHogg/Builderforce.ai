@@ -2,7 +2,7 @@
 
 **LinkedIn Recruiter (2026) :** Recruiter Lite ~170 $/mois par siège. Recruiter Corporate ~1 080 $+/mois par siège (en hausse d'environ 15 % sur un an). LinkedIn Hiring Assistant est une option au tarif non communiqué, qui s'ajoute aux offres Corporate et RPS+ et n'est accessible qu'après un appel commercial.
 
-**Builderforce Pro :** un tarif mensuel unique avec des sièges illimités, et une option annuelle à prix réduit — la [page des tarifs](/pricing) indique les montants en vigueur. Comprend une allocation mensuelle de jetons IA, l'agent Recruteur IA v2, les sessions de présélection en direct, l'extension Chrome, les offres d'emploi illimitées, la notation des candidats, le clonage de voix et le Studio multiformat.
+**Builderforce Pro :** un tarif mensuel unique, et une option annuelle à prix réduit — la [page des tarifs](/pricing) indique les montants en vigueur. Comprend une allocation mensuelle de jetons IA, l'agent Recruteur IA v2, les sessions de présélection en direct, l'extension Chrome, les offres d'emploi, la notation des candidats, le clonage de voix et le Studio multiformat.
 
 L'écart de prix est d'environ 108× sur l'offre d'entrée. L'écart de fonctionnalités est bien plus étroit que ce ratio ne le laisse penser.
 
@@ -18,11 +18,11 @@ L'écart de prix est d'environ 108× sur l'offre d'entrée. L'écart de fonction
 
 ## Là où Builderforce l'emporte
 
-**Le prix.** Un abonnement unique contre 1 080 $/mois *par siège* pour un périmètre fonctionnel comparable. L'écart de prix se rentabilise dès la première semaine pour tout volume de sourcing significatif.
+**Le prix.** Un abonnement unique contre 1 080 $/mois *par siège* pour un périmètre fonctionnel comparable. Les modèles tarifaires diffèrent : forfait contre frais par siège, l'écart dépend donc de la taille de l'équipe et du volume de sourcing.
 
-**Des sièges illimités.** LinkedIn facture par siège. Builderforce Pro est un montant unique pour le recruteur, quel que soit le nombre de collègues que vous intégrez. Pour une équipe de recrutement de 5 personnes, LinkedIn Recruiter Corporate coûte à lui seul environ 63 600 $ par an ; côté Builderforce, cela reste un seul abonnement.
+**Une offre forfaitaire, pas un prix par siège.** LinkedIn facture par siège. Builderforce Pro est un forfait mensuel ; les limites de sièges de chaque offre figurent sur la [page des tarifs](/pricing). Pour une équipe de recrutement de 5 personnes, LinkedIn Recruiter Corporate coûte à lui seul environ 63 600 $ par an.
 
-**Des candidatures multiformats.** Sur Builderforce, les candidats peuvent soumettre une candidature en vidéo, en bande dessinée, en podcast, en animation ou sous forme de jeu — et l'IA du studio les génère à partir de leur CV en 60 secondes. Sur LinkedIn, les candidats envoient un PDF. Alors que les CV générés par LLM inondent tous les ATS en 2026, la candidature multiformat devient le seul signal de différenciation fiable.
+**Des candidatures multiformats.** Sur Builderforce, les candidats peuvent soumettre une candidature en vidéo, en bande dessinée, en podcast, en animation ou sous forme de jeu — et l'IA du studio les génère à partir de leur CV. Sur LinkedIn, les candidats envoient un PDF. Alors que les CV générés par LLM inondent tous les ATS en 2026, la candidature multiformat devient un signal de différenciation utile.
 
 **Présélection en direct + intégration de l'agent.** L'agent Recruteur IA v2 de Builderforce passe directement le relais à une session de présélection en direct (`/sessions/:id/schedule`). LinkedIn oblige le recruteur à déplacer manuellement les candidats présélectionnés entre Hiring Assistant et un outil de planification externe.
 
@@ -32,8 +32,8 @@ L'écart de prix est d'environ 108× sur l'offre d'entrée. L'écart de fonction
 
 | Fonctionnalité | Builderforce Pro | LinkedIn Recruiter Corporate |
 |---|---|---|
-| Coût mensuel (par recruteur) | Tarif unique, sièges illimités ([voir les tarifs](/pricing)) | ~1 080 $+ |
-| Sièges illimités | Oui | Non (par siège) |
+| Coût mensuel (par recruteur) | Forfait mensuel ([voir les tarifs](/pricing)) | ~1 080 $+ |
+| Modèle tarifaire | Forfait mensuel | Par siège |
 | Cadrage sémantique par IA (brief → critères) | Cadrage par l'agent v2 | Hiring Assistant (option) |
 | Notation des candidats par IA | Inclus | Inclus |
 | Brouillons d'approche par IA | Inclus | Hiring Assistant (option) |
@@ -54,15 +54,15 @@ L'écart tient à la distribution et aux intégrations, pas à la couverture fon
 
 **Choisissez LinkedIn Recruiter Corporate si :** vous êtes une entreprise de plus de 200 salariés avec un budget validé ; votre recrutement dépend du sourcing via des contacts de deuxième degré ; vous avez besoin des intégrations Greenhouse / Workday / Microsoft Teams dès le premier jour ; un dirigeant a explicitement imposé LinkedIn comme plateforme de référence.
 
-**Choisissez Builderforce Pro si :** le budget est une vraie contrainte ; vous voulez des sièges recruteurs illimités sans mauvaise surprise par tête ; votre sourcing repose davantage sur le cadrage assisté par IA et l'approche personnalisée que sur les recommandations ; vous voulez que les candidats soumettent des candidatures plus riches qu'un PDF ; vous préférez une tarification transparente à l'usage à des frais opaques par siège.
+**Choisissez Builderforce Pro si :** le budget est une vraie contrainte ; vous voulez un forfait plutôt qu'une mauvaise surprise de prix par tête ; votre sourcing repose davantage sur le cadrage assisté par IA et l'approche personnalisée que sur les recommandations ; vous voulez que les candidats soumettent des candidatures plus riches qu'un PDF ; vous préférez une tarification transparente à l'usage à des frais opaques par siège.
 
-**Utilisez les deux :** beaucoup d'équipes en croissance gardent un siège LinkedIn Recruiter pour le sourcing par recommandation et mettent le reste de l'équipe sur Builderforce Pro pour tout le reste. Le calcul tient pour presque toutes les tailles d'équipe : un siège LinkedIn à 1 080 $ plus un seul abonnement Builderforce forfaitaire revient énormément moins cher que N+1 sièges à 1 080 $.
+**Utilisez les deux :** beaucoup d'équipes en croissance gardent un siège LinkedIn Recruiter pour le sourcing par recommandation et utilisent Builderforce Pro pour tout le reste. Vérifiez les limites de sièges de votre offre sur la [page des tarifs](/pricing) pour dimensionner l'équipe.
 
 ## Questions fréquentes
 
 ### Builderforce propose-t-il une extension Chrome de sourcing comme LinkedIn ?
 
-Oui. L'extension Chrome de Builderforce extrait les profils de candidats depuis LinkedIn, Indeed, Glassdoor et plus de 10 autres sites d'emploi, puis les dépose dans votre vivier de talents avec dédoublonnage automatique. Elle remplit aussi automatiquement les formulaires de candidature pour les chercheurs d'emploi.
+Oui. L'extension Chrome de Builderforce extrait les profils de candidats depuis LinkedIn, Indeed, Glassdoor et d'autres sites d'emploi, puis les dépose dans votre vivier de talents avec dédoublonnage automatique. Elle remplit aussi automatiquement les formulaires de candidature pour les chercheurs d'emploi.
 
 ### Builderforce peut-il importer mes données LinkedIn Recruiter ?
 
@@ -70,7 +70,7 @@ Vos Notes et Projets LinkedIn Recruiter existants ne disposent pas d'une API d'e
 
 ### Le prix Pro est-il vraiment tout compris ?
 
-Oui, pour l'ensemble des fonctionnalités listées. Les options facultatives — connexions de boîtes mail supplémentaires et packs de recharge de jetons IA — sont détaillées sur la [page des tarifs](/pricing), à côté du tarif Pro en vigueur. Aucuns frais par siège, aucun palier Hiring Assistant, aucun supplément entreprise.
+Oui, pour l'ensemble des fonctionnalités listées. Les options facultatives — connexions de boîtes mail supplémentaires et packs de recharge de jetons IA — sont détaillées sur la [page des tarifs](/pricing), à côté du tarif Pro en vigueur. Aucun palier Hiring Assistant, aucun supplément entreprise ; les limites de sièges de chaque offre figurent sur la [page des tarifs](/pricing).
 
 ---
 

@@ -1,5 +1,3 @@
-import { createTranslator } from 'next-intl';
-import { defaultMessages } from '@/i18n/catalog';
 import { practiceProgress, type CanvasPracticeAttempt, type CanvasPracticeQuestion } from './canvasPractice';
 import { zipFiles } from './zipFiles';
 
@@ -70,28 +68,18 @@ const LLM_COURSE_SHAPE = [
 const LLM_COURSE_CHOICES = ['a', 'b', 'c', 'd'] as const;
 const LLM_COURSE_LESSON_FIELDS = ['title', 'objective', 'content', 'activity'] as const;
 
-let englishCourseText: CourseTextTranslator | null = null;
-
-/** The English catalog as a course translator — the default for callers with no
- *  board (the marketplace pack's stored copy, tests). Built once, on first use. */
-function englishText(): CourseTextTranslator {
-  if (!englishCourseText) {
-    const t = createTranslator({ locale: 'en', messages: defaultMessages as never });
-    englishCourseText = (key) => t(`creationCanvas.${key}` as never);
-  }
-  return englishCourseText;
-}
-
 /**
  * A complete, editable worked course—not placeholder copy. Brain can replace any
  * field through the registry contract, while this gives the blog CTA a useful
  * local result even when the network model is unavailable.
  *
- * @param t The board's `creationCanvas` translator. Omitted → English.
+ * @param t The board's `creationCanvas` translator. REQUIRED — there is no English
+ *   default, so a caller cannot mint an English course into a non-English board
+ *   by forgetting to pass its locale's translator.
  * @param language The board's locale, recorded on the course (and so on the
  *   exported SCORM package's `<html lang>`).
  */
-export function buildLlmCourse(t: CourseTextTranslator = englishText(), language = 'en-US'): CanvasCourse {
+export function buildLlmCourse(t: CourseTextTranslator, language = 'en-US'): CanvasCourse {
   const s = (key: string) => t(`llmCourse.${key}`);
   const modules: CourseModule[] = LLM_COURSE_SHAPE.map((shape) => ({
     id: shape.id,

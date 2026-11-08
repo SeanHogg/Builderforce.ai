@@ -8,7 +8,7 @@ author: Sean Hogg
 
 # Studio makes the images your app needs
 
-> **Update, 4 October 2026:** you now see every image and video clip *before* it goes into your app. The Media panel shows what the agent made and waits for you to pick **Use it**, **Try again** or **Discard**. See [You see it first](#you-see-it-first) below.
+> **Update, 4 October 2026:** you now see every image and video clip *before* it goes into your app. The Media panel shows what the agent made and waits for you to pick **Use it**, **Try again** or **Discard**. See “You see it first” below.
 
 You ask for a landing page for a neighbourhood bakery. The layout is right, the copy is right and the menu section works. The hero is a grey box with "1200 × 600" in the middle of it.
 

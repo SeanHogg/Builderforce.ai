@@ -1,12 +1,12 @@
 ---
-title: No account, no GPU, no network — and you choose where every word goes
+title: No account, no GPU, no network — and you choose where your words go
 date: 2026-10-21
 description: Studio and Rovr now open with a working model and no account, no sign-up call and no GPU required. Every surface — the web, the VS Code extension and the Rovr side panel — asks one question about where your words run: Local only, Hybrid or one Specific model. And Hybrid learns, on your device, which turns to keep local.
 tags: [local-models, on-device, privacy, inference-modes, rovr, vscode, product]
 author: Sean Hogg
 ---
 
-# No account, no GPU, no network — and you choose where every word goes
+# No account, no GPU, no network — and you choose where your words go
 
 Starting something used to come with three conditions nobody wrote down.
 

@@ -1,5 +1,5 @@
 /**
- * Model Abstraction Layer — BuilderForce.ai
+ * Model Abstraction Layer — Builderforce.ai
  *
  * Defines the ModelProvider interface the on-device Mamba engine implements — in-page
  * ({@link MambaModelProvider}) or off the main thread ({@link ./mamba-worker-client}).

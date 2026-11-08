@@ -30,6 +30,17 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   de: 'Deutsch',
 };
 
+/**
+ * The BCP-47 tag for a UI locale — what speech synthesis, `lang` attributes and
+ * persisted documents (a course's `language`) expect. The ONE map; unknown input
+ * passes through unchanged.
+ */
+const BCP47: Record<Locale, string> = { en: 'en-US', zh: 'zh-CN', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+
+export function localeToBcp47(locale: string): string {
+  return isLocale(locale) ? BCP47[locale] : locale;
+}
+
 export function isLocale(value: unknown): value is Locale {
   return typeof value === 'string' && (LOCALES as readonly string[]).includes(value);
 }

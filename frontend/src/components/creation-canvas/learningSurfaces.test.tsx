@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreationNode } from './CreationNode';
+import { createTranslator } from 'next-intl';
+import en from '@/i18n/messages/en.json';
 import { buildLlmCourse, emptyCourse } from '@/lib/courseLms';
 import type { CreationNodeData } from './types';
 
@@ -90,7 +92,9 @@ describe('a course is pointed at a subject', () => {
   });
 
   it('keeps a knowledge-check answer on the object, with a score', () => {
-    const course = buildLlmCourse();
+    // No production English default: the test builds its English from the en catalog.
+    const boardText = createTranslator({ locale: 'en', messages: en as never, namespace: 'creationCanvas' as never, onError: () => {} });
+    const course = buildLlmCourse((key) => boardText(key as never));
     const onEditData = vi.fn();
     const { rerender } = renderNode({ kind: 'course', title: 'Build an LLM', course }, onEditData);
     fireEvent.click(screen.getByRole('button', { name: /Whenever prompts are inconvenient/ }));

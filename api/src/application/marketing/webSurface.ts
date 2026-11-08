@@ -669,6 +669,66 @@ export async function updateWebsitePage(
   return row;
 }
 
+/** The only way a website page's `status` reaches `live` (the value landing pages use).
+ *  Stamps `published_at` in the same write and bumps the owner's version token so the
+ *  cached public read sees it. */
+export async function publishWebsitePage(
+  db: Db,
+  env: Env,
+  tenantId: number | null,
+  actor: ActorIdentity,
+  id: number,
+) {
+  return setWebsitePageStatus(db, env, tenantId, actor, id, 'live');
+}
+
+/** Back to `draft`: the page leaves the public read and the sitemap. */
+export async function unpublishWebsitePage(
+  db: Db,
+  env: Env,
+  tenantId: number | null,
+  actor: ActorIdentity,
+  id: number,
+) {
+  return setWebsitePageStatus(db, env, tenantId, actor, id, 'draft');
+}
+
+type WebsitePageStatus = 'live' | 'draft';
+
+async function setWebsitePageStatus(
+  db: Db,
+  env: Env,
+  tenantId: number | null,
+  actor: ActorIdentity,
+  id: number,
+  status: WebsitePageStatus,
+) {
+  const publishing = status === LIVE;
+  const [row] = await db
+    .update(websitePages)
+    .set({
+      status,
+      ...(publishing ? { publishedAt: new Date() } : {}),
+      updatedAt: new Date(),
+    })
+    .where(scopedToNullableTenant(websitePages, tenantId, eq(websitePages.id, id)))
+    .returning();
+  if (!row) throw new WebSurfaceError('website page not found', 404);
+  await bumpCacheVersion(env, websitePagesVersionKey(tenantId));
+
+  if (tenantId !== null) {
+    await recordActivity(env, db, {
+      tenantId,
+      actor,
+      verb: publishing ? 'website_page.published' : 'website_page.unpublished',
+      targetType: 'website_page',
+      targetId: String(id),
+      metadata: { path: row.path },
+    });
+  }
+  return row;
+}
+
 /** Deleting a page re-parents its children onto ITS parent rather than orphaning
  *  them. A section head being removed should collapse the level, not delete the
  *  pages underneath it from the navigation. */
@@ -853,7 +913,11 @@ export async function publicWebsitePage(db: Db, tenantId: number | null, path: s
       shellKind: websitePages.shellKind,
     })
     .from(websitePages)
-    .where(scopedToNullableTenant(websitePages, tenantId, eq(websitePages.path, requirePath(path))))
+    .where(scopedToNullableTenant(
+      websitePages,
+      tenantId,
+      and(eq(websitePages.path, requirePath(path)), eq(websitePages.status, LIVE)),
+    ))
     .limit(1);
   return row ?? null;
 }
@@ -865,12 +929,15 @@ export async function publicWebsitePage(db: Db, tenantId: number | null, path: s
  */
 export async function publicWebsitePageCached(db: Db, env: Env, tenantId: number | null, path: string) {
   const version = await getCacheVersion(env, websitePagesVersionKey(tenantId));
-  return getOrSetCached(
+  // A sentinel, not null, so an unpublished/unknown path is cached as a miss too (probes
+  // would otherwise hit Postgres every time); publish/unpublish bumps the version token.
+  const hit = await getOrSetCached(
     env,
     `web:page:v:${version}:${tenantId ?? 'platform'}:${requirePath(path)}`,
-    () => publicWebsitePage(db, tenantId, path),
+    async () => (await publicWebsitePage(db, tenantId, path)) ?? ({ missing: true } as const),
     { kvTtlSeconds: 3600, l1TtlMs: 60_000 },
   );
+  return 'missing' in hit ? null : hit;
 }
 
 /**
@@ -908,16 +975,12 @@ export async function recordLandingPageConversion(env: Env, db: Db, tenantId: nu
   await applyHitDeltas(db, 'landing.convert', [{ kind: 'landing.convert', key: scopedHitKey(tenantId, id), n: 1, t: Date.now() }]);
 }
 
-/** An SEO page impression, by path, for pages that are still published. */
-export async function recordSeoImpression(db: Db, tenantId: number | null, path: string) {
-  await db
-    .update(marketingSeoPages)
-    .set({ impressionCount: sql`${marketingSeoPages.impressionCount} + 1` })
-    .where(scopedToNullableTenant(
-      marketingSeoPages,
-      tenantId,
-      and(eq(marketingSeoPages.path, requirePath(path)), eq(marketingSeoPages.status, 'published')),
-    ));
+/** A programmatic SEO page impression (`marketing_seo_pages`), by path. Buffered in KV and
+ *  applied by the `hit-counters` sweep. The sweep update is filtered to
+ *  `status = 'published'` (see HIT_COUNTERS), so a retired page is not counted. No renderer
+ *  beacons yet; the endpoint is ready for one. */
+export async function recordSeoImpression(env: Env, db: Db, tenantId: number | null, path: string) {
+  await recordHit(env, db, 'seo.impression', scopedHitKey(tenantId, requirePath(path)));
 }
 
 /** Everything the sitemap needs, in one read: published website pages and live
@@ -929,7 +992,7 @@ export async function sitemapEntries(db: Db, tenantId: number | null) {
   const site = await db
     .select({ path: websitePages.path, updatedAt: websitePages.updatedAt })
     .from(websitePages)
-    .where(scopedToNullableTenant(websitePages, tenantId))
+    .where(scopedToNullableTenant(websitePages, tenantId, eq(websitePages.status, LIVE)))
     .orderBy(asc(websitePages.path));
 
   const seo = await db

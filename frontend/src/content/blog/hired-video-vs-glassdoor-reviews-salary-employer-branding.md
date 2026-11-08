@@ -20,7 +20,7 @@ Builderforce's company reviews surface ships with **six sub-axis ratings** (cult
 
 Builderforce's **salary guides** are modelled and inspectable: a per-discipline anchor adjusted by seniority, region and work mode, with every multiplier shown on the page. The `/salary/:role/:city` grid gives you Glassdoor-style city × role pages, plus the city cross-links Glassdoor charges premium tiers for — and unlike a self-reported average, you can see exactly how the number was built.
 
-And Builderforce bundles the full **recruiter workflow** in the same product — the AI Recruiter Agent v2, Live Screening Sessions, ATS, unlimited postings. Glassdoor stops at branding + research.
+And Builderforce bundles the full **recruiter workflow** in the same product — the AI Recruiter Agent v2, Live Screening Sessions, ATS, job postings. Glassdoor stops at branding + research.
 
 ## Where Glassdoor Wins
 
@@ -40,7 +40,7 @@ And Builderforce bundles the full **recruiter workflow** in the same product —
 
 **Same surface for research and apply.** A candidate researching a company on Glassdoor has to leave to apply (via Indeed). On Builderforce the company profile, reviews, salary guide, and job postings are one surface — research-to-apply is one click.
 
-**Recruiter workflow included.** Glassdoor for Employers is a branding-only product. Builderforce Pro includes the AI Recruiter Agent, Live Screening, ATS, and unlimited postings in the same flat subscription.
+**Recruiter workflow included.** Glassdoor for Employers is a branding-only product. Builderforce Pro includes the AI Recruiter Agent, Live Screening, ATS, and job postings in the same flat monthly plan.
 
 **Verified reviews infrastructure.** Builderforce's review system stores `is_verified` + `verification_method` (email-domain match or was-a-buyer). Glassdoor moderates but doesn't expose verification status to candidates.
 

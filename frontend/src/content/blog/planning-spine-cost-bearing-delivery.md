@@ -1,7 +1,7 @@
 ---
 title: "The Planning Spine: One Dated, Cost-Bearing Hierarchy from Portfolio to Task"
 date: 2026-06-27
-description: Most teams keep strategy in a slide deck, delivery in a board, and cost in a spreadsheet — and reconcile them by hand. Builderforce.ai's Planning Spine unifies portfolio, initiative, epic and task into one dated timeline where every level carries its own rolled-up cost, split CAPEX vs OPEX.
+description: Most teams keep strategy in a slide deck, delivery in a board, and cost in a spreadsheet — and reconcile them by hand. Builderforce.ai's Planning Spine unifies portfolio, initiative, epic and task into one dated timeline where each level carries its own rolled-up cost, split CAPEX vs OPEX.
 tags: [planning, pmo, finops, capex-opex, portfolio, system-of-record]
 author: Sean Hogg
 ---

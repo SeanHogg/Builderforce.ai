@@ -11,9 +11,13 @@ function boardText(messages: Record<string, unknown>, locale: string) {
   return (key: string) => t(key as never);
 }
 
+/** The en catalog as a board translator — the test's own English, since production
+ *  has no English default: every caller passes its locale's translator. */
+const englishCourse = () => buildLlmCourse(boardText(en, 'en'));
+
 describe('the worked LLM course is minted in the board’s language', () => {
-  it('reads every field from the catalog, and defaults to English', () => {
-    const course = buildLlmCourse();
+  it('reads every field from the catalog', () => {
+    const course = englishCourse();
     const english = boardText(en, 'en');
     expect(course.subject).toBe(english('llmCourse.subject'));
     expect(course.modules[0].lessons[0].content).toBe(english('llmCourse.lesson.foundations-outcome.content'));
@@ -21,20 +25,20 @@ describe('the worked LLM course is minted in the board’s language', () => {
   });
 
   it('writes a zh board’s course in Chinese, with the same structure', () => {
-    const englishCourse = buildLlmCourse();
+    const enCourse = englishCourse();
     const zhCourse = buildLlmCourse(boardText(zh, 'zh'), 'zh');
     expect(zhCourse.language).toBe('zh');
-    expect(zhCourse.subject).not.toBe(englishCourse.subject);
-    expect(zhCourse.modules.map((m) => m.id)).toEqual(englishCourse.modules.map((m) => m.id));
-    expect(zhCourse.modules.flatMap((m) => m.lessons.map((l) => l.id))).toEqual(englishCourse.modules.flatMap((m) => m.lessons.map((l) => l.id)));
-    expect(zhCourse.modules.map((m) => m.assessment.answer)).toEqual(englishCourse.modules.map((m) => m.assessment.answer));
+    expect(zhCourse.subject).not.toBe(enCourse.subject);
+    expect(zhCourse.modules.map((m) => m.id)).toEqual(enCourse.modules.map((m) => m.id));
+    expect(zhCourse.modules.flatMap((m) => m.lessons.map((l) => l.id))).toEqual(enCourse.modules.flatMap((m) => m.lessons.map((l) => l.id)));
+    expect(zhCourse.modules.map((m) => m.assessment.answer)).toEqual(enCourse.modules.map((m) => m.assessment.answer));
     // No field fell back to a dotted key.
     const text = JSON.stringify(zhCourse);
     expect(text).not.toMatch(/llmCourse\./);
   });
 
   it('recognizes the worked course by structure in any language, and nothing else', () => {
-    expect(isWorkedLlmCourse(buildLlmCourse())).toBe(true);
+    expect(isWorkedLlmCourse(englishCourse())).toBe(true);
     expect(isWorkedLlmCourse(buildLlmCourse(boardText(zh, 'zh'), 'zh'))).toBe(true);
     expect(isWorkedLlmCourse({ modules: [] })).toBe(false);
     expect(isWorkedLlmCourse(undefined)).toBe(false);
@@ -48,14 +52,14 @@ describe('the worked LLM course is minted in the board’s language', () => {
 
 describe('course LMS standard', () => {
   it('ships a complete LLM learning path with stable progress', () => {
-    const course = buildLlmCourse();
+    const course = englishCourse();
     expect(course.modules).toHaveLength(6);
     expect(course.modules.every((module) => module.lessons.length >= 2 && module.assessment.choices.length >= 2)).toBe(true);
     expect(courseProgress({ ...course, completedLessonIds: [course.modules[0].lessons[0].id] })).toEqual({ completed: 1, total: 12, percent: 8 });
   });
 
   it('builds a SCORM 2004 package with a root manifest', () => {
-    const course = buildLlmCourse();
+    const course = englishCourse();
     const manifest = scormManifest(course, 'Build an LLM');
     expect(manifest).toContain('<schemaversion>2004 4th Edition</schemaversion>');
     expect(manifest).toContain('adlcp:scormType="sco"');
@@ -65,7 +69,7 @@ describe('course LMS standard', () => {
   });
 
   it('writes a valid archive whose members read back exactly', () => {
-    const course = buildLlmCourse();
+    const course = englishCourse();
     const members = unzipSync(buildScormPackage(course, 'Build an LLM'));
     expect(Object.keys(members).sort()).toEqual(['course.json', 'imsmanifest.xml', 'index.html', 'xapi-profile.json']);
     expect(strFromU8(members['imsmanifest.xml']!)).toBe(scormManifest(course, 'Build an LLM'));

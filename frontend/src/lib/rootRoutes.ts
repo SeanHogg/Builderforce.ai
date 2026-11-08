@@ -34,7 +34,7 @@ export const APP_ROUTE_SEGMENTS: readonly string[] = [
   'quality', 'realize', 'references', 'register', 'resume', 'reviews', 'salary', 'sales', 'seat',
   'security', 'sell-builderforce', 'settings', 'sign', 'skills', 'soc2', 'spawn', 'surveys',
   'studio', 'talent', 'tasks', 'templates', 'tenants', 'timeline', 'tools', 'training', 'tutorials',
-  'workflows', 'workforce',
+  'w', 'workflows', 'workforce',
 ];
 
 /**

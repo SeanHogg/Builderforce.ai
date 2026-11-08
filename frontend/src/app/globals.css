@@ -3872,13 +3872,6 @@ select.input option {
   .drawer-action .drawer-action-label { display: none; }
 }
 
-/* ── Page inner wrapper: responsive centered content ── */
-.page-inner {
-  padding: 24px;
-  max-width: 1100px;
-  margin: 0 auto;
-}
-
 /* ── Scrollable overflow for tables and wide list views ── */
 .scroll-x {
   overflow-x: auto;
@@ -4119,8 +4112,6 @@ select.input option {
     --content-pad-y: 8px;
     padding: var(--content-pad-y) var(--content-pad-x);
   }
-
-  .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
 
   /* Stacked on a phone: the sidebar becomes a capped, self-scrolling strip above
      the conversation, and the shell grows with its content (the page scrolls). */

@@ -17,18 +17,12 @@
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
+import { localeToBcp47 } from '@/i18n/config';
 
 export interface ReadAloudProps {
   /** Plain prose. Callers on the canvas get it from `canvasProseText`. */
   text: string;
   className?: string;
-}
-
-/** The voice locale for a page rendered in this locale — a French board read in
- * an English voice is worse than no voice. */
-function speechLang(locale: string): string {
-  const map: Record<string, string> = { en: 'en-US', zh: 'zh-CN', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
-  return map[locale] ?? locale;
 }
 
 export function ReadAloud({ text, className }: ReadAloudProps) {
@@ -55,7 +49,9 @@ export function ReadAloud({ text, className }: ReadAloudProps) {
   const speak = () => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = speechLang(locale);
+    // The voice locale for a page rendered in this locale — a French board read
+    // in an English voice is worse than no voice.
+    utterance.lang = localeToBcp47(locale);
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     setSpeaking(true);

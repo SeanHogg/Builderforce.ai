@@ -68,6 +68,43 @@ describe('the public reads cannot serve a draft', () => {
   });
 });
 
+describe('website pages: drafts are never public, publish and unpublish toggle it', () => {
+  const fnBody = (name: string) => {
+    const fn = src.slice(src.indexOf(`export async function ${name}`));
+    return fn.slice(0, fn.indexOf('\n/**'));
+  };
+
+  it('does not return a draft from the public read (published page is the only match)', () => {
+    expect(fnBody('publicWebsitePage(')).toContain('eq(websitePages.status, LIVE)');
+  });
+
+  it('keeps drafts out of the sitemap', () => {
+    expect(fnBody('sitemapEntries')).toContain('scopedToNullableTenant(websitePages, tenantId, eq(websitePages.status, LIVE))');
+  });
+
+  it('returns a published page: publish sets live and stamps published_at', () => {
+    const body = src.slice(src.indexOf('async function setWebsitePageStatus'));
+    expect(body).toContain('status,');
+    expect(body).toContain('publishedAt: new Date()');
+    expect(fnBody('publishWebsitePage')).toContain("LIVE");
+    expect(body).toContain('bumpCacheVersion(env, websitePagesVersionKey(tenantId))');
+  });
+
+  it('unpublish sets the page back to draft, hiding it again', () => {
+    expect(fnBody('unpublishWebsitePage')).toContain("'draft'");
+  });
+
+  it('never lets updateWebsitePage write status, which would bypass the stamp', () => {
+    const fn = src.slice(src.indexOf('export async function updateWebsitePage'));
+    expect(fn.slice(0, fn.indexOf('\n/**'))).not.toContain('values.status');
+  });
+
+  it('gates publish and unpublish at MANAGER, like update', () => {
+    expect(routes).toContain("router.post('/website/:id/publish', manager");
+    expect(routes).toContain("router.post('/website/:id/unpublish', manager");
+  });
+});
+
 describe('publication is a transition, not a column write', () => {
   it('stamps published_at in the same write that sets live', () => {
     const fn = src.slice(src.indexOf('export async function publishLandingPage'));

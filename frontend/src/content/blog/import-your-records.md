@@ -1,7 +1,7 @@
 ---
 title: Import a quarter of records at once — and see the board lenses move
 date: 2026-09-06
-description: The People, R&D, Quality and AI lenses on the Insights board always read from real tables, and for the datasets with no connector the only way in was one row at a time. Import now takes a file, maps its columns onto the server's own registry, checks every row before writing, and posts in batches you can watch land.
+description: The People, R&D, Quality and AI lenses on the Insights board read from real tables, and for the datasets with no connector the only way in was one row at a time. Import now takes a file, maps its columns onto the server's own registry, checks rows before writing, and posts in batches you can watch land.
 tags: [product-updates, insights, import, board-deck, measure]
 author: Sean Hogg
 ---

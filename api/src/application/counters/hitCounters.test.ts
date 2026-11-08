@@ -22,8 +22,16 @@ function kvStub() {
 
 function dbStub() {
   const statements: string[] = [];
-  const db = { execute: async (q: SQL) => { statements.push(new PgDialect().sqlToQuery(q).sql); return {}; } } as unknown as Db;
-  return { db, statements };
+  const params: unknown[][] = [];
+  const db = {
+    execute: async (q: SQL) => {
+      const built = new PgDialect().sqlToQuery(q);
+      statements.push(built.sql);
+      params.push(built.params);
+      return {};
+    },
+  } as unknown as Db;
+  return { db, statements, params };
 }
 
 describe('hit counters', () => {
@@ -75,6 +83,43 @@ describe('hit counters', () => {
     const { db, statements } = dbStub();
     await applyHitDeltas(db, 'landing.view', [{ kind: 'landing.view', key: 'no-tenant', n: 1, t: 0 }]);
     expect(statements).toHaveLength(0);
+  });
+
+  it('seo.impression updates marketing_seo_pages by path, platform (NULL tenant) and path containing ":" included', async () => {
+    const { db, statements, params } = dbStub();
+    await applyHitDeltas(db, 'seo.impression', [
+      { kind: 'seo.impression', key: scopedHitKey(null, '/salary/engineer/london'), n: 2, t: 0 },
+      { kind: 'seo.impression', key: scopedHitKey(7, '/a:b'), n: 1, t: 0 },
+    ]);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('"marketing_seo_pages"');
+    expect(statements[0]).toContain('"impression_count"');
+    expect(statements[0]).toContain('"path"');
+    // The split is on the FIRST ':' only: tenant part vs path part (which keeps its own ':').
+    const rows = JSON.parse(params[0]!.find((p) => typeof p === 'string' && p.startsWith('[')) as string) as
+      { k: string; tn: number | null }[];
+    expect(rows).toEqual([
+      expect.objectContaining({ k: '/salary/engineer/london', tn: null }),
+      expect.objectContaining({ k: '/a:b', tn: 7 }),
+    ]);
+  });
+
+  it('seo.impression only counts published pages; the other kinds carry no extra predicate', async () => {
+    const { db, statements } = dbStub();
+    await applyHitDeltas(db, 'seo.impression', [{ kind: 'seo.impression', key: scopedHitKey(null, '/p'), n: 1, t: 0 }]);
+    expect(statements[0]).toContain(`t.status = 'published'`);
+    const others = [
+      ['skill.download', 'a'],
+      ['agent.package', scopedHitKey(1, 'x')],
+      ['enrichment.hit', scopedHitKey(null, 4)],
+      ['landing.view', scopedHitKey(1, 2)],
+      ['landing.convert', scopedHitKey(1, 2)],
+    ] as const;
+    for (const [kind, key] of others) {
+      const probe = dbStub();
+      await applyHitDeltas(probe.db, kind, [{ kind, key, n: 1, t: 0 }]);
+      expect(probe.statements[0]).not.toContain(`'published'`);
+    }
   });
 
   it('writes straight to the database when CACHE_L2_KV is off — no KV write spent', async () => {

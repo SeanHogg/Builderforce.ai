@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
 import { CompliancePage } from '@/components/legal/CompliancePage';
 import { legalDocHref } from '@/lib/legalDocs';
+import { BRAND } from '@/lib/content/brand';
 import styles from './page.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { surfaceClassName } from '@/components/ui/Surface';
@@ -34,7 +35,7 @@ export default async function ComplianceCenter() {
       updated={null}
       eyebrow={t('center.eyebrow')}
       backHref="/"
-      backLabel="BuilderForce.ai"
+      backLabel={BRAND.name}
       currentHref="/legal/compliance"
     >
       <p className={styles.lead}>{t('center.lead')}</p>

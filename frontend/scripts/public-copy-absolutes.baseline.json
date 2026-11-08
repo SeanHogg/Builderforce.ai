@@ -1,0 +1,1096 @@
+{
+  "marketing.content.auth.login.bullets.vscode.title": {
+    "words": [
+      "never"
+    ],
+    "why": "idiomatic: feature headline, no guarantee"
+  },
+  "marketing.content.auth.freelancer.heading": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "marketing.content.auth.freelancer.intro": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every team on the platform' = marketplace visibility, descriptive"
+  },
+  "marketing.content.auth.freelancer.bullets.findWork.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every tenant' = marketplace matching scope, descriptive"
+  },
+  "marketing.content.auth.freelancer.bullets.approvePay.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: timecard approval is a product step, descriptive"
+  },
+  "marketing.content.auth.sales.bullets.markets.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'focus every campaign'"
+  },
+  "marketing.content.auth.startup.bullets.profile.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every profile field is editable, descriptive"
+  },
+  "marketing.content.auth.startup.bullets.inquiries.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: inquiries land in the inbound list, descriptive"
+  },
+  "marketing.content.auth.startup.bullets.pack.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: one invitation covers the company's rooms, descriptive"
+  },
+  "marketing.content.schema.projectsTasks.tasks.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every status = the board's status set"
+  },
+  "marketingNav.megaFoot": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: describes the signed-out route behaviour"
+  },
+  "marketingDeck.slides.1.title": {
+    "words": [
+      "zero"
+    ],
+    "why": "idiomatic: slide headline about onboarding friction"
+  },
+  "honestMarketing.lead": {
+    "words": [
+      "every",
+      "never"
+    ],
+    "why": "rhetorical: the honesty page's own framing, 'we never state something false' is the policy under test"
+  },
+  "honestMarketing.uses.0.description": {
+    "words": [
+      "every"
+    ],
+    "why": "rhetorical: describes repetition as a persuasion lever"
+  },
+  "honestMarketing.uses.3.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: refresh cadence of a counted number"
+  },
+  "home.canvas.alwaysOn": {
+    "words": [
+      "always"
+    ],
+    "why": "idiomatic: UI label for a persistent control"
+  },
+  "home.rolesHeading": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "home.steps.1.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every time the work moves forward'"
+  },
+  "home.ctaDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every week it waits'"
+  },
+  "home.homepageFaq.1.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every canvas' = the shared bottom bar, descriptive"
+  },
+  "home.tension.body": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: describes tool-switching cost"
+  },
+  "home.about.points.0.body": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: public pages are open to anyone, verifiable"
+  },
+  "home.founderGraph.note": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: each node is an object on the canvas, descriptive"
+  },
+  "featuresPage.badgeAllSeats": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: label"
+  },
+  "featuresPage.titleSub": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "featuresPage.lede": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every capability maps to somebody accountable'"
+  },
+  "featuresPage.foundationsTitle": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: heading"
+  },
+  "featuresPage.arcLede": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every destination sits in one arc stage, enforced by the nav registry"
+  },
+  "featuresPage.faq.0.a": {
+    "words": [
+      "never"
+    ],
+    "why": "scoped: nav registry is the single list, guarded by tests"
+  },
+  "featuresPage.faq.1.a": {
+    "words": [
+      "never"
+    ],
+    "why": "idiomatic: reassurance, no product guarantee"
+  },
+  "featuresPage.faq.4.a": {
+    "words": [
+      "never"
+    ],
+    "why": "scoped: catalogue and roster read one registry"
+  },
+  "compare.matrixScrollHint": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: UI hint"
+  },
+  "compare.arenas.delivery.faq.0.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: describes recorded runs per item"
+  },
+  "pricing.methodNote": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: free-on-every-plan is the pricing contract"
+  },
+  "product.sections.1.surfaces.2.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: cost roll-up described, per instrumented task"
+  },
+  "product.sections.3.surfaces.4.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every practice' = the listed practices"
+  },
+  "about.promises.items.1.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every tool'"
+  },
+  "about.system.lead": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every domain'"
+  },
+  "about.story.bodyTwo": {
+    "words": [
+      "entire"
+    ],
+    "why": "idiomatic: 'entire journey' narrative"
+  },
+  "about.principles.items.0.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: principle statement"
+  },
+  "evermind.law.lead": {
+    "words": [
+      "every"
+    ],
+    "why": "rhetorical: framing of frozen models"
+  },
+  "evermind.architecture.pillars.1.desc": {
+    "words": [
+      "always",
+      "zero"
+    ],
+    "why": "idiomatic: 'always-on backbone' is an architecture term"
+  },
+  "evermind.contrast.figcap": {
+    "words": [
+      "every"
+    ],
+    "why": "rhetorical: figure caption"
+  },
+  "evermind.contrast.rows.3.evermind": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: runtime targets described"
+  },
+  "evermind.edges.items.1.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: runtime targets described"
+  },
+  "evermind.faq.0.answer": {
+    "words": [
+      "always",
+      "every"
+    ],
+    "why": "idiomatic: 'always-on backbone' architecture term, 'every agent' = runtime targets"
+  },
+  "evermind.faq.5.answer": {
+    "words": [
+      "every",
+      "zero"
+    ],
+    "why": "scoped: runtime targets described"
+  },
+  "evermind.faq.7.answer": {
+    "words": [
+      "always",
+      "every"
+    ],
+    "why": "idiomatic: 'always-on backbone' architecture term"
+  },
+  "method.hero.lead": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every founder's journey'"
+  },
+  "methodology.proofsLede": {
+    "words": [
+      "never"
+    ],
+    "why": "rhetorical: 'never opens with the whole system' is the ordering rule"
+  },
+  "methodology.proofsNote": {
+    "words": [
+      "always",
+      "every"
+    ],
+    "why": "scoped: every option is listed, enforced by check-methodology"
+  },
+  "methodology.proof.clickable-prototype.prompt": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: prompt text for a prototype"
+  },
+  "routeMarketing.manager.closingTitle": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "routeMarketing.destination.inbox.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: inbox aggregates by definition"
+  },
+  "routeMarketing.destination.sales-admin.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: aggregate across associates"
+  },
+  "routeMarketing.destination.freelancer-disputes.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: list of the user's disputes"
+  },
+  "routeMarketing.destination.freelancer-earnings.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: statement across workspaces"
+  },
+  "routeMarketing.route.personas.faq.q3.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every time'"
+  },
+  "realize.pickHint": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every card leads with its question, enforced by check-methodology"
+  },
+  "marketing.content.faq.homepage.0.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every agent' = runtime targets"
+  },
+  "marketing.content.faq.homepage.10.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every invitee' in availability proposal"
+  },
+  "marketing.content.faq.homepage.27.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every project has its own Evermind, descriptive"
+  },
+  "marketing.content.faq.projectsTasks.0.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'everything' / 'every status' = the board's set"
+  },
+  "marketing.content.faq.projectsTasks.3.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every project' list view"
+  },
+  "marketing.content.definedTerms.evermind.description": {
+    "words": [
+      "always",
+      "every"
+    ],
+    "why": "scoped: 'every agent' = runtime targets"
+  },
+  "marketing.content.definedTerms.projectEvermind.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every run' feeds the project model"
+  },
+  "home.faq.0.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every agent' = runtime targets"
+  },
+  "home.faq.21.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every project has its own Evermind, descriptive"
+  },
+  "features.1.longDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every agent' = runtime targets"
+  },
+  "features.3.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "features.3.shortDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every project has its own model"
+  },
+  "features.3.longDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every run' feeds the project model"
+  },
+  "features.11.longDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every task' on the board"
+  },
+  "features.14.longDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every invitee' in availability proposal"
+  },
+  "features.16.longDesc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every bug it finds' lands on the board"
+  },
+  "agents.description": {
+    "words": [
+      "entire"
+    ],
+    "why": "idiomatic: 'entire mesh'"
+  },
+  "agents.capabilities.0.description": {
+    "words": [
+      "entire"
+    ],
+    "why": "idiomatic: 'entire workflow'"
+  },
+  "agents.capabilities.1.description": {
+    "words": [
+      "entire"
+    ],
+    "why": "idiomatic: 'entire team'"
+  },
+  "agents.acknowledgements.thanksBefore": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: thanks to every contributor"
+  },
+  "agents.acknowledgements.packagesIntro": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: thanks to every maintainer"
+  },
+  "agents.acknowledgements.packages.typescript": {
+    "words": [
+      "entire"
+    ],
+    "why": "idiomatic: 'entire runtime' describes use of TypeScript"
+  },
+  "agents.integrationsPage.metaDescription": {
+    "words": [
+      "entire"
+    ],
+    "why": "idiomatic: 'entire stack'"
+  },
+  "agents.shoutouts.metaDescription": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every day' testimonials framing"
+  },
+  "agents.workflowBuilder.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every workflow actually executes' describes the builder"
+  },
+  "agents.workflowBuilder.steps.0.body": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: nodes are configurable in a side panel"
+  },
+  "agents.workflowBuilder.capabilities.2.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: runs instantiate an execution record"
+  },
+  "agents.workflowBuilder.capabilities.3.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: workflows round-trip to YAML"
+  },
+  "openSource.seo.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: runtime behind canvas previews"
+  },
+  "openSource.hero.subtitle": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: runtime behind canvas previews"
+  },
+  "openSource.why.points.1.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: licence is MIT for each repository, verifiable"
+  },
+  "openSource.why.points.2.desc": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every day' usage"
+  },
+  "openSource.packages.webcontainers.usage": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every canvas preview' runs on the runtime"
+  },
+  "openSource.packages.memory.summary": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every session' / 'every MCP host' descriptive"
+  },
+  "openSource.packages.memory.problem": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: problem statement"
+  },
+  "openSource.packages.memory.status": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every result says which ranker it used'"
+  },
+  "openSource.packages.memory.quickStartNote": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: installer registers in each MCP host it finds"
+  },
+  "burnrateMarketing.shared.publicClosing": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: closing line"
+  },
+  "burnrateMarketing.shared.useCasesHeading": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: heading"
+  },
+  "burnrateMarketing.index.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: heading"
+  },
+  "burnrateMarketing.domains.productManagement.faq.4.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every item carries a score"
+  },
+  "burnrateMarketing.domains.businessIntelligence.hero": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "burnrateMarketing.domains.businessIntelligence.features.0.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every metric a board would ask about'"
+  },
+  "burnrateMarketing.domains.businessIntelligence.features.1.description": {
+    "words": [
+      "never",
+      "zero"
+    ],
+    "why": "scoped: 'never blended' is the observed/declared rule, enforced in UI"
+  },
+  "burnrateMarketing.domains.businessIntelligence.features.10.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every dashboard'"
+  },
+  "burnrateMarketing.domains.businessIntelligence.faq.0.answer": {
+    "words": [
+      "never"
+    ],
+    "why": "scoped: 'never blended' observed vs declared"
+  },
+  "burnrateMarketing.domains.businessIntelligence.faq.3.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every result names provenance"
+  },
+  "burnrateMarketing.domains.agileSurvival.tagline": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: tagline"
+  },
+  "burnrateMarketing.domains.agileSurvival.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'every sprint'"
+  },
+  "burnrateMarketing.domains.agileSurvival.features.1.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: estimates factor burn rate"
+  },
+  "burnrateMarketing.domains.agileSurvival.faq.2.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: cards can show cost"
+  },
+  "burnrateMarketing.domains.agileSurvival.faq.4.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: cost attached to every story, descriptive"
+  },
+  "burnrateMarketing.domains.salesRevenue.faq.1.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: prospects scored against the ICP"
+  },
+  "burnrateMarketing.domains.salesRevenue.faq.2.answer": {
+    "words": [
+      "entire"
+    ],
+    "why": "scoped: pause on reply on any channel"
+  },
+  "burnrateMarketing.domains.customerEngagement.hero": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "burnrateMarketing.domains.customerEngagement.features.0.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: submissions land in the pipeline"
+  },
+  "burnrateMarketing.domains.customerEngagement.faq.0.answer": {
+    "words": [
+      "always",
+      "every"
+    ],
+    "why": "scoped: pipeline tracks every lead"
+  },
+  "burnrateMarketing.domains.customerEngagement.faq.1.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: submissions scored by the classifier"
+  },
+  "burnrateMarketing.domains.investorIntelligence.features.4.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: tracks each promised metric"
+  },
+  "burnrateMarketing.domains.investorIntelligence.features.6.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: tracks each investment"
+  },
+  "burnrateMarketing.domains.investorIntelligence.useCases.2.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: portfolio view across companies"
+  },
+  "burnrateMarketing.domains.operationalCadence.faq.0.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: OKR cascade 'every team'"
+  },
+  "burnrateMarketing.domains.governanceSecurity.faq.4.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'nothing slips through the cracks'"
+  },
+  "burnrateMarketing.domains.marketingGrowth.features.0.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: heatmaps across tracked pages"
+  },
+  "burnrateMarketing.domains.marketingGrowth.features.5.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: rank updates are snapshotted"
+  },
+  "burnrateMarketing.domains.marketingGrowth.features.9.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: campaigns tie spend to pipeline"
+  },
+  "burnrateMarketing.domains.marketingGrowth.features.10.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'keeps every send on-voice'"
+  },
+  "burnrateMarketing.domains.marketingGrowth.features.12.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: posts tied to pipeline"
+  },
+  "burnrateMarketing.domains.marketingGrowth.faq.1.answer": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every signal is scored"
+  },
+  "burnrateMarketing.domains.aiCoach.tagline": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: tagline"
+  },
+  "burnrateMarketing.domains.aiCoach.hero": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "burnrateMarketing.domains.companiesContacts.hero": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: headline"
+  },
+  "blog.posts.tailor-your-resume-for-every-application.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.define-a-need-the-agentic-system-solves-it.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.agent-tech-stack-all-seven-layers.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'entire' layers framing"
+  },
+  "blog.posts.agentic-tester-autonomous-qa.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every bug it finds' lands on the board"
+  },
+  "blog.posts.evermind-self-updating-model.title": {
+    "words": [
+      "never"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.single-pane-board-connectors.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.every-role-operating-picture.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.every-role-operating-picture.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: description of the role views"
+  },
+  "blog.posts.sync-your-resume-everywhere-without-copy-paste.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.extract-skills-from-any-job-or-resume.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.extract-skills-from-any-job-or-resume.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: description"
+  },
+  "blog.posts.team-health-signals-every-manager-should-watch.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.every-diagram-format-the-canvas-reads.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.idea-make-run-measure-menu-as-methodology.description": {
+    "words": [
+      "every",
+      "never"
+    ],
+    "why": "idiomatic: description"
+  },
+  "blog.posts.whats-new-always-on-canvas-workspace.title": {
+    "words": [
+      "always"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.creation-canvas-templates-frames-branches-checkpoints.description": {
+    "words": [
+      "entire"
+    ],
+    "why": "scoped: descriptive"
+  },
+  "blog.posts.migrate-and-integrate-jira-monday-rally-gitlab-bitbucket.description": {
+    "words": [
+      "every",
+      "never"
+    ],
+    "why": "scoped: connector descriptive"
+  },
+  "blog.posts.one-folder-many-systems.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: descriptive"
+  },
+  "blog.posts.watch-your-codebase-review-run.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: descriptive"
+  },
+  "blog.posts.bring-your-skills-with-you.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.bring-your-skills-with-you.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: skills load on listed surfaces"
+  },
+  "blog.posts.builderforce-in-your-editors-agent-chat-area.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: descriptive"
+  },
+  "blog.posts.workspace-hooks-your-team-commits.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.workspace-hooks-your-team-commits.description": {
+    "words": [
+      "every",
+      "never"
+    ],
+    "why": "idiomatic: example directives"
+  },
+  "blog.posts.post-your-launch-video-to-youtube-from-a-campaign.description": {
+    "words": [
+      "every",
+      "never"
+    ],
+    "why": "idiomatic: 'never post to' describes the old limitation"
+  },
+  "blog.posts.schedule-your-board-pack-from-finance.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.builderforce-studio-describe-it-run-it.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.builderforce-studio-describe-it-run-it.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every agent turn is a version"
+  },
+  "blog.posts.ideas-scratchpad-on-the-canvas.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every canvas has the scratchpad"
+  },
+  "blog.posts.list-your-startup-and-meet-investors.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'the one number every founder acts on'"
+  },
+  "blog.posts.sign-measure-and-plug-in-inside-the-room.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: descriptive"
+  },
+  "blog.posts.delegate-the-search-not-the-decision.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'on every surface an agent runs on'"
+  },
+  "blog.posts.every-account-gets-a-sales-programme.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.every-account-gets-a-sales-programme.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every account owns one"
+  },
+  "blog.posts.one-canvas-inside-another.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: history of the limitation"
+  },
+  "blog.posts.see-what-the-agent-changed-before-you-commit.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every one is a click from its real diff'"
+  },
+  "blog.posts.grade-the-proof-and-close-the-loop.description": {
+    "words": [
+      "never"
+    ],
+    "why": "idiomatic: 'never what they learned'"
+  },
+  "blog.posts.boards-earn-budget-and-teammates-have-profiles.description": {
+    "words": [
+      "every",
+      "never"
+    ],
+    "why": "scoped: descriptive"
+  },
+  "blog.posts.run-your-app-on-the-canvas.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: app surface assembles every code card"
+  },
+  "blog.posts.the-canvas-gave-the-screen-back-to-the-board.description": {
+    "words": [
+      "never"
+    ],
+    "why": "idiomatic: 'collapse hides controls, never status' is a design rule"
+  },
+  "blog.posts.choose-who-answers-not-just-who-you-ask.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: 'every turn' describes chat"
+  },
+  "blog.posts.one-local-index-for-every-ai-tool.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.install-your-verticals-kpi-dashboard.description": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: 'Every company has a finance tab'"
+  },
+  "blog.posts.the-canvas-knows-where-you-are.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every canvas reads its board"
+  },
+  "blog.posts.see-what-every-conversation-costs.title": {
+    "words": [
+      "every"
+    ],
+    "why": "idiomatic: title"
+  },
+  "blog.posts.no-account-no-gpu-you-choose-where-it-runs.description": {
+    "words": [
+      "every"
+    ],
+    "why": "scoped: every surface asks one question"
+  },
+  "home.pricingTeaser.1.perks.1": {
+    "words": [
+      "unlimited"
+    ],
+    "why": "scoped: plan limit label; Pro maxProjects is -1 (unlimited) in api/src/domain/tenant/PlanLimits.ts"
+  },
+  "pricing.planFeatures.2": {
+    "words": [
+      "unlimited"
+    ],
+    "why": "scoped: plan limit label; Teams maxAgentHosts is -1 (unlimited) in api/src/domain/tenant/PlanLimits.ts"
+  },
+  "pricing.planFeatures.4": {
+    "words": [
+      "unlimited"
+    ],
+    "why": "scoped: plan limit label; Pro and Teams maxProjects is -1 (unlimited) in api/src/domain/tenant/PlanLimits.ts"
+  }
+}

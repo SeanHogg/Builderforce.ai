@@ -1,7 +1,7 @@
 ---
 title: "Proof of Participation: Role-Gated Delivery and the Accountability Report"
 date: 2026-07-12
-description: Builderforce.ai resolves the roles a ticket requires to the humans and agents capable of each, gates sign-off behind default-deny permissions, and records an immutable Accountability Report of Who, When, Verdict, Comments, and Contribution per role — so a Product Manager is never dispatched to write code and quality is proven at the board.
+description: Builderforce.ai resolves the roles a ticket requires to the humans and agents capable of each, gates sign-off behind default-deny permissions, and records an append-only Accountability Report of Who, When, Verdict, Comments, and Contribution per role — so on gated paths a Product Manager is not dispatched to write code and sign-off is recorded at the board.
 tags: [accountability, workforce, kanban, governance, roles, agents]
 author: Sean Hogg
 ---

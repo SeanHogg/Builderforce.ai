@@ -1,7 +1,7 @@
 ---
 title: Meet Rovr — a private assistant in your browser that remembers what it did
 date: 2026-10-16
-description: Your Builderforce agent could code in your editor and build on a canvas, but not help in the tab where most of your day happens. Rovr is a Chrome extension that reads the page, carries out tasks on sites you allow, runs on your own machine first, works offline, and syncs every action and task back to your chat.
+description: Your Builderforce agent could code in your editor and build on a canvas, but not help in the tab where most of your day happens. Rovr is a Chrome extension that reads the page, carries out tasks on sites you allow, runs on your own machine first, works offline, and syncs actions and tasks back to your chat.
 tags: [rovr, browser-assistant, local-models, offline, chrome-extension, product]
 author: Sean Hogg
 ---

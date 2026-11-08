@@ -30,7 +30,7 @@
     "slug": "read-anyones-message-in-your-language",
     "title": "Read anyone's message in your own language — translated on your own device",
     "date": "2026-11-06",
-    "description": "A teammate writes in Spanish, you read in English, and the text never leaves your computer. Translation now runs on-device first, falls back to a cloud translator that is free within daily limits, and always keeps the original one click away.",
+    "description": "A teammate writes in Spanish, you read in English, and on-device translation keeps the text on your computer. Translation now runs on-device first, falls back to a cloud translator that is free within daily limits, and keeps the original one click away.",
     "tags": [
       "translation",
       "on-device-ai",
@@ -101,7 +101,7 @@
   },
   {
     "slug": "no-account-no-gpu-you-choose-where-it-runs",
-    "title": "No account, no GPU, no network — and you choose where every word goes",
+    "title": "No account, no GPU, no network — and you choose where your words go",
     "date": "2026-10-21",
     "description": "Studio and Rovr now open with a working model and no account, no sign-up call and no GPU required. Every surface — the web, the VS Code extension and the Rovr side panel — asks one question about where your words run: Local only, Hybrid or one Specific model. And Hybrid learns, on your device, which turns to keep local.",
     "tags": [
@@ -163,7 +163,7 @@
     "slug": "see-what-every-conversation-costs",
     "title": "See what every conversation costs, and what memory saved you",
     "date": "2026-10-17",
-    "description": "Every chat now shows what it cost, split between your Builderforce plan and your own provider keys at list price, and what memory kept off the bill: answers replayed from memory, the provider's prompt cache, and context kept lean. Recorded figures and estimates are always shown apart. The same panel now appears in the web app, the editor and Rovr.",
+    "description": "Chats now show what they cost, split between your Builderforce plan and your own provider keys at list price, and what memory kept off the bill: answers replayed from memory, the provider's prompt cache, and context kept lean. Recorded figures and estimates are shown apart. The same panel now appears in the web app, the editor and Rovr.",
     "tags": [
       "cost",
       "evermind",
@@ -206,7 +206,7 @@
     "slug": "builderforce-webcontainers-open-source",
     "title": "BuilderForce WebContainers is open source — the in-browser dev runtime you can fork",
     "date": "2026-10-16",
-    "description": "The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, without requiring COOP/COEP headers, and with no session caps.",
+    "description": "The runtime behind Builderforce canvas previews, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, without requiring COOP/COEP headers, and with no session caps.",
     "tags": [
       "open-source",
       "webcontainers",
@@ -236,7 +236,7 @@
     "slug": "rovr-your-assistant-in-the-browser",
     "title": "Meet Rovr — a private assistant in your browser that remembers what it did",
     "date": "2026-10-16",
-    "description": "Your Builderforce agent could code in your editor and build on a canvas, but not help in the tab where most of your day happens. Rovr is a Chrome extension that reads the page, carries out tasks on sites you allow, runs on your own machine first, works offline, and syncs every action and task back to your chat.",
+    "description": "Your Builderforce agent could code in your editor and build on a canvas, but not help in the tab where most of your day happens. Rovr is a Chrome extension that reads the page, carries out tasks on sites you allow, runs on your own machine first, works offline, and syncs actions and tasks back to your chat.",
     "tags": [
       "rovr",
       "browser-assistant",
@@ -377,7 +377,7 @@
     "slug": "build-roblox-games-by-talking",
     "title": "Spawn — build Roblox games by talking",
     "date": "2026-10-04",
-    "description": "Spawn is a desktop builder for Roblox creators 13 and up. Describe the game, and it builds the parts, the Luau and the UI inside Roblox Studio. It connects by itself, every build is one undo step, failed builds are free, and safety rules for young creators are built in.",
+    "description": "Spawn is a desktop builder for Roblox creators 13 and up. Describe the game, and it builds the parts, the Luau and the UI inside Roblox Studio. It connects by itself, a build is one undo step, failed builds are free, and safety rules for young creators are built in.",
     "tags": [
       "spawn",
       "roblox",
@@ -502,7 +502,7 @@
     "slug": "one-local-index-for-every-ai-tool",
     "title": "One local index for every AI tool on your machine",
     "date": "2026-09-26",
-    "description": "Synapse indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded.",
+    "description": "Synapse indexes your repositories on your own computer — its definitions, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. The index is built locally and stays on your computer.",
     "tags": [
       "vs-code",
       "agents",
@@ -661,7 +661,7 @@
     "slug": "the-run-that-teaches-the-next-one",
     "title": "The run that teaches the next one",
     "date": "2026-09-07",
-    "description": "An agent that finishes verified work has just executed a procedure that works — and it used to vanish into a transcript. Agents now propose what they learned as a skill, your team approves it, and every later run follows it.",
+    "description": "An agent that finishes verified work has just executed a procedure that works — and it used to vanish into a transcript. Agents now propose what they learned as a skill, your team approves it, and later runs follow it.",
     "tags": [
       "agents",
       "skills",
@@ -689,7 +689,7 @@
     "slug": "import-your-records",
     "title": "Import a quarter of records at once — and see the board lenses move",
     "date": "2026-09-06",
-    "description": "The People, R&D, Quality and AI lenses on the Insights board always read from real tables, and for the datasets with no connector the only way in was one row at a time. Import now takes a file, maps its columns onto the server's own registry, checks every row before writing, and posts in batches you can watch land.",
+    "description": "The People, R&D, Quality and AI lenses on the Insights board read from real tables, and for the datasets with no connector the only way in was one row at a time. Import now takes a file, maps its columns onto the server's own registry, checks rows before writing, and posts in batches you can watch land.",
     "tags": [
       "product-updates",
       "insights",
@@ -872,7 +872,7 @@
     "slug": "fifteen-free-career-tools-and-a-salary-guide",
     "title": "Fifteen career tools that compute an answer — and a salary guide that names your city",
     "date": "2026-08-18",
-    "description": "Score a résumé, match it to a posting, tailor it, plan a route to a target role, prepare interview questions, check your market salary. Free, no account, and every number shows its working.",
+    "description": "Score a résumé, match it to a posting, tailor it, plan a route to a target role, prepare interview questions, check your market salary. Free, no account, and the numbers show their working.",
     "tags": [
       "career",
       "resume",
@@ -898,7 +898,7 @@
   },
   {
     "slug": "escape-your-diagramming-tool",
-    "title": "Escape Your Diagramming Tool — Visio, Lucidchart, Miro and Excalidraw, In",
+    "title": "Escape Your Diagramming Tool — Visio, Lucidchart, Miro and Excalidraw",
     "date": "2026-08-15",
     "description": "Practical migration routes out of the commercial diagramming tools, what each export format actually preserves, and how to turn a picture back into editable shapes.",
     "tags": [
@@ -1276,7 +1276,7 @@
     "slug": "local-first-ai-webgpu-in-the-browser",
     "title": "Local-First AI in the Browser, Done Properly",
     "date": "2026-07-24",
-    "description": "SitePoint's WebGPU guide lays out the blueprint for running LLMs entirely on-device. Here's how Builderforce implements every best practice — Chrome's Prompt API, real token streaming, Web Worker isolation, GPU-loss recovery, and a progressive-enhancement cascade — and goes beyond it with on-device WebGPU training.",
+    "description": "SitePoint's WebGPU guide lays out the blueprint for running LLMs on-device. Here's how Builderforce implements its best practices — Chrome's Prompt API, real token streaming, Web Worker isolation, GPU-loss recovery, and a progressive-enhancement cascade — and goes beyond it with on-device WebGPU training.",
     "tags": [
       "webgpu",
       "local-first",
@@ -1320,7 +1320,7 @@
     "slug": "memory-first-inference-skip-the-llm",
     "title": "Answer Before You Pay: Memory-First Inference That Skips the LLM",
     "date": "2026-07-12",
-    "description": "Before a paid model call, Builderforce.ai's Brain consults the project's own memory — an exact-repeat Q&A cache plus opt-in inference on the project's Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under a project, so a lesson taught once answers everywhere and the token bill falls as memory grows.",
+    "description": "Before a paid model call, Builderforce.ai's Brain consults the project's own memory — an exact-repeat Q&A cache plus opt-in inference on the project's Evermind — and skips the LLM call on a confident hit. Learning fans out to the Evermind instances under a project, so a lesson taught once can answer across them and the token bill falls as memory grows.",
     "tags": [
       "evermind",
       "cost",
@@ -1335,7 +1335,7 @@
     "slug": "role-gated-accountability-proof-of-participation",
     "title": "Proof of Participation: Role-Gated Delivery and the Accountability Report",
     "date": "2026-07-12",
-    "description": "Builderforce.ai resolves the roles a ticket requires to the humans and agents capable of each, gates sign-off behind default-deny permissions, and records an immutable Accountability Report of Who, When, Verdict, Comments, and Contribution per role — so a Product Manager is never dispatched to write code and quality is proven at the board.",
+    "description": "Builderforce.ai resolves the roles a ticket requires to the humans and agents capable of each, gates sign-off behind default-deny permissions, and records an append-only Accountability Report of Who, When, Verdict, Comments, and Contribution per role — so on gated paths a Product Manager is not dispatched to write code and sign-off is recorded at the board.",
     "tags": [
       "accountability",
       "workforce",
@@ -1411,7 +1411,7 @@
     "slug": "video-meetings-standups-and-shared-calendars",
     "title": "Video Meetings, Standups, and Shared Calendars on Your Agentic Board",
     "date": "2026-07-05",
-    "description": "Builderforce.ai adds live video and audio to your agentic workspace — WebRTC standups with cameras on the ceremony round-table, ad-hoc and direct calls, a bookable team calendar with availability windows and \"Find a time\", Google and Microsoft calendar sync, and one-click join from the web or VS Code. Media flows peer-to-peer and never touches the server.",
+    "description": "Builderforce.ai adds live video and audio to your agentic workspace — WebRTC standups with cameras on the ceremony round-table, ad-hoc and direct calls, a bookable team calendar with availability windows and \"Find a time\", Google and Microsoft calendar sync, and one-click join from the web or VS Code. Calls use peer-to-peer WebRTC media.",
     "tags": [
       "meetings",
       "video",
@@ -1626,7 +1626,7 @@
     "slug": "planning-spine-cost-bearing-delivery",
     "title": "The Planning Spine: One Dated, Cost-Bearing Hierarchy from Portfolio to Task",
     "date": "2026-06-27",
-    "description": "Most teams keep strategy in a slide deck, delivery in a board, and cost in a spreadsheet — and reconcile them by hand. Builderforce.ai's Planning Spine unifies portfolio, initiative, epic and task into one dated timeline where every level carries its own rolled-up cost, split CAPEX vs OPEX.",
+    "description": "Most teams keep strategy in a slide deck, delivery in a board, and cost in a spreadsheet — and reconcile them by hand. Builderforce.ai's Planning Spine unifies portfolio, initiative, epic and task into one dated timeline where each level carries its own rolled-up cost, split CAPEX vs OPEX.",
     "tags": [
       "planning",
       "pmo",
@@ -1686,7 +1686,7 @@
     "slug": "system-of-record-for-agentic-work",
     "title": "The System of Record for Agentic Work",
     "date": "2026-06-23",
-    "description": "In the agentic era, half your workforce is software — and for the first time, every unit of work is fully instrumented. Builderforce.ai turns that into one system of record where work is costed and attributed from idea to ship to learn.",
+    "description": "In the agentic era, half your workforce is software — and for the first time, work can be instrumented from end to end. Builderforce.ai turns that into one system of record where work is costed and attributed from idea to ship to learn.",
     "tags": [
       "enterprise",
       "system-of-record",
@@ -1730,7 +1730,7 @@
     "slug": "semantic-response-cache",
     "title": "Cut Your LLM Token Bill With a Cross-Surface Semantic Cache",
     "date": "2026-06-16",
-    "description": "The single biggest cost lever in an AI platform is never paying twice for the same answer. Builderforce.ai's two-tier semantic cache reuses a prior response when a new prompt means the same thing — across your browser, your agents, and the gateway.",
+    "description": "A major cost lever in an AI platform is not paying twice for the same answer. Builderforce.ai's two-tier semantic cache reuses a prior response when a new prompt means the same thing — across your browser, your agents, and the gateway.",
     "tags": [
       "semantic-cache",
       "cost-optimization",
@@ -1939,7 +1939,7 @@
     "slug": "hired-video-vs-linkedin-recruiter-2026-comparison",
     "title": "Builderforce vs LinkedIn Recruiter: A 2026 Cost and Capability Breakdown",
     "date": "2026-05-25",
-    "description": "LinkedIn Recruiter Corporate starts at ~$1,080/month per seat. Builderforce Pro is one flat monthly rate with unlimited seats. Here's what each gets you in 2026 — and where each one wins.",
+    "description": "LinkedIn Recruiter Corporate starts at ~$1,080/month per seat. Builderforce Pro is a flat monthly plan; the pricing page carries current figures. Here's what each gets you in 2026 — and where each one wins.",
     "tags": [
       "comparison",
       "recruiting",
@@ -1954,7 +1954,7 @@
     "slug": "hired-video-vs-ziprecruiter-pricing-ai-video-screening",
     "title": "Builderforce vs ZipRecruiter: Pricing, AI Matching, and Video Screening Compared",
     "date": "2026-05-25",
-    "description": "ZipRecruiter Standard starts at ~$299/mo per job slot. Builderforce Pro is one flat monthly rate with unlimited postings and unlimited seats. Here's the workflow-level comparison.",
+    "description": "ZipRecruiter Standard starts at ~$299/mo per job slot. Builderforce Pro is a flat monthly plan rather than a per-slot price; the pricing page carries current figures. Here's the workflow-level comparison.",
     "tags": [
       "comparison",
       "recruiting",
@@ -2510,7 +2510,7 @@
     "slug": "task-execution-and-observability",
     "title": "Task Execution and the Observability Portal",
     "date": "2026-03-11",
-    "description": "How Builderforce tracks every task from creation through execution to completion — the task model, execution lifecycle, workflow telemetry, and how to use the portal's timeline and dashboard to understand what your agents are doing.",
+    "description": "How Builderforce tracks tasks from creation through execution to completion — the task model, execution lifecycle, workflow telemetry, and how to use the portal's timeline and dashboard to understand what your agents are doing.",
     "tags": [
       "tasks",
       "execution",

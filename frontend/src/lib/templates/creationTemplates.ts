@@ -1,5 +1,5 @@
 import type { CanvasObjectData as CreationNodeData, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
-import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
+import { COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
 import { salesHubTemplate } from '@/lib/sales/salesHubCanvas';
 
 export interface CreationTemplate {
@@ -11,7 +11,14 @@ export interface CreationTemplate {
   name: string;
   description: string;
   category: 'Marketplace template' | 'Object pack';
-  objects: Array<{ kind: CreationObjectKind; title?: string; x: number; y: number; data?: Partial<CreationNodeData> }>;
+  /**
+   * `worked` marks a card whose content is MINTED at placement rather than stored:
+   * `'llmCourse'` is the worked "Build an LLM" course, built through the board's
+   * translator by `localizePack` so it is never English on a non-English board.
+   * Every other string in `title` / `data` / `connections[].label` is English
+   * SOURCE copy that `localizePack` resolves through `creationCanvas.pack.<id>.*`.
+   */
+  objects: Array<{ kind: CreationObjectKind; title?: string; x: number; y: number; data?: Partial<CreationNodeData>; worked?: 'llmCourse' }>;
   /**
    * The edges, and optionally the FIELD each one fills in.
    *
@@ -37,7 +44,7 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
     id: 'llm-builder-academy', name: 'LLM Builder Academy', category: 'Marketplace template',
     description: 'Learn the full LLM lifecycle through lessons, practice, assessments, and a portable SCORM package.',
     objects: [
-      { kind: 'course', title: 'Build an LLM', x: 0, y: 0, data: { course: buildLlmCourse(), exportStandards: COURSE_EXPORT_STANDARDS } },
+      { kind: 'course', title: 'Build an LLM', x: 0, y: 0, worked: 'llmCourse', data: { exportStandards: COURSE_EXPORT_STANDARDS } },
       { kind: 'dataset', title: 'Training corpus lab', x: 560, y: 0, data: { status: 'Practice workspace', subtitle: 'Inspect provenance, quality, deduplication, and splits.' } },
       { kind: 'code', title: 'Tokenizer & training notebook', x: 560, y: 330, data: { status: 'Practice workspace', language: 'python', code: '# Add tokenizer and training experiments here\n' } },
       { kind: 'evaluation', title: 'LLM release scorecard', x: 0, y: 520, data: { status: 'Knowledge checks', criteria: ['Capability', 'Safety', 'Robustness', 'Latency', 'Cost'] } },

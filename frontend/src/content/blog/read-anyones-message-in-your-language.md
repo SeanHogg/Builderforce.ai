@@ -1,7 +1,7 @@
 ---
 title: Read anyone's message in your own language — translated on your own device
 date: 2026-11-06
-description: A teammate writes in Spanish, you read in English, and the text never leaves your computer. Translation now runs on-device first, falls back to a cloud translator that is free within daily limits, and always keeps the original one click away.
+description: A teammate writes in Spanish, you read in English, and on-device translation keeps the text on your computer. Translation now runs on-device first, falls back to a cloud translator that is free within daily limits, and keeps the original one click away.
 tags: [translation, on-device-ai, collaboration, privacy, product]
 author: Sean Hogg
 ---

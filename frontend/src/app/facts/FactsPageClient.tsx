@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import PageContainer from '@/components/PageContainer';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { factsApi, type Fact, type FactInput } from '@/lib/builderforceApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -100,7 +101,7 @@ export default function FactsPageClient() {
   const hasFilters = useMemo(() => !!(q || subject || predicate), [q, subject, predicate]);
 
   return (
-    <div className="page-inner">
+    <PageContainer width="readable">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 'clamp(22px,3vw,30px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>{t('title')}</h1>
@@ -214,7 +215,7 @@ export default function FactsPageClient() {
           </div>
         </div>
       </SlideOutPanel>
-    </div>
+    </PageContainer>
   );
 }
 

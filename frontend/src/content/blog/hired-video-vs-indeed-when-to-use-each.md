@@ -28,7 +28,7 @@ The two are complementary more than competitive. Most growing teams should be on
 
 ## Where Builderforce Wins
 
-**Predictable pricing.** Indeed's sponsored model is pay-per-click with variable budgets — easy to overspend, hard to forecast. Builderforce Pro is a flat monthly rate ([see pricing](/pricing)), with unlimited postings.
+**Predictable pricing.** Indeed's sponsored model is pay-per-click with variable budgets — easy to overspend, hard to forecast. Builderforce Pro is a flat monthly rate ([see pricing](/pricing)), not pay-per-click.
 
 **Multi-format candidate pitches.** When 64% of recruiters report a flood of identical AI-generated PDFs (a real 2026 stat), the candidate who submits a 60-second video pitch or a comic resume jumps out of the pile. Indeed accepts text resumes. Builderforce accepts video, podcast, comic, animation, game, and PDF.
 
@@ -42,17 +42,17 @@ The two are complementary more than competitive. Most growing teams should be on
 
 A single sponsored Indeed post for a senior engineering role in a US metro typically lands at **$5–$20 per applicant click**, with reasonable monthly budgets of $400–$1,500 per role.
 
-Builderforce Pro is **one flat monthly rate**, with unlimited postings included — the current figure is on the [pricing page](/pricing).
+Builderforce Pro is **one flat monthly rate** — the current figure and each plan's limits are on the [pricing page](/pricing).
 
 The break-even is: if a single sponsored Indeed post would cost you more than one month of Builderforce Pro, the subscription covers itself before you make a single hire.
 
-This math is *not* about replacing Indeed. It's about not paying Indeed for the parts of the workflow Indeed isn't good at. Use Indeed for top-of-funnel volume on hard-to-fill roles. Use Builderforce for AI-driven workflow, multi-format candidate signal, and unlimited seats for your team.
+This math is *not* about replacing Indeed. It's about not paying Indeed for the parts of the workflow Indeed isn't good at. Use Indeed for top-of-funnel volume on hard-to-fill roles. Use Builderforce for AI-driven workflow, multi-format candidate signal, and flat, predictable pricing for your team.
 
 ## When to Pick Each
 
 **Pick Indeed when:** you're hiring high-volume hourly or general-labor roles; you need maximum applicant volume right now; the role is well understood and standardised enough that PDF resumes are sufficient screening signal; you have budget for sponsored posts.
 
-**Pick Builderforce when:** you're hiring roles where personality, communication, or creative judgment matter (sales, product, design, customer success, executive); you want AI to handle intake + sourcing + scoring + outreach + follow-up in one workflow; you want unlimited seats for your recruiting team; you need transparent fixed pricing.
+**Pick Builderforce when:** you're hiring roles where personality, communication, or creative judgment matter (sales, product, design, customer success, executive); you want AI to handle intake + sourcing + scoring + outreach + follow-up in one workflow; you want your recruiting team on one shared workflow; you need transparent fixed pricing.
 
 **Use both:** post on Indeed for volume, source on Builderforce for quality, do all your live screening + agent automation on Builderforce, evaluate candidate pitches across both surfaces.
 

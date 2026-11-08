@@ -923,6 +923,11 @@ jobs:
               "pnpm --dir ../packages/knowledge-graph-view run test"
               "pnpm --dir ../packages/knowledge-browser run test"
               "pnpm run check"
+          # The marketing release gate (docs/marketing/CLAIMS-PROCESS.md): the Claim-to-Proof
+          # register's evidence, freshness and catalog-key contract, and the blog locale
+          # contract. The tested-wording and vendor-fact rules are guards in `pnpm run check`.
+          - name: marketing claims
+            run: pnpm exec vitest run src/lib/content/capabilityProof.test.ts src/lib/blogLocale.test.ts src/i18n/messages.test.ts src/lib/templates/localizePack.test.ts
     steps:
       - uses: actions/checkout@v7
 

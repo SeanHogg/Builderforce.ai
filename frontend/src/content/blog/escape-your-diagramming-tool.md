@@ -1,5 +1,5 @@
 ---
-title: Escape Your Diagramming Tool — Visio, Lucidchart, Miro and Excalidraw, In
+title: Escape Your Diagramming Tool — Visio, Lucidchart, Miro and Excalidraw
 date: 2026-08-15
 description: Practical migration routes out of the commercial diagramming tools, what each export format actually preserves, and how to turn a picture back into editable shapes.
 tags: [diagrams, visio, lucidchart, miro, excalidraw, migration, creation-canvas]

@@ -8,7 +8,7 @@ import CompetitorMatrix, { type CompareCategory } from '@/components/marketing/C
 import MarketingFaq, { type MarketingFaqItem } from '@/components/marketing/MarketingFaq';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { COMPARE_ARENAS, COMPARE_PILLAR_ICONS } from '@/lib/content/compare';
+import { COMPARE_ARENAS, COMPARE_PILLAR_ICONS, COMPETITOR_SEO } from '@/lib/content/compare';
 import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
@@ -44,6 +44,8 @@ export default async function ComparePage() {
     blurb: t(`compare.arenas.${arena.key}.blurb`),
     categories: (t.raw(`compare.arenas.${arena.key}.categories`) as CompareCategory[] | undefined) ?? [],
     faq: (t.raw(`compare.arenas.${arena.key}.faq`) as MarketingFaqItem[] | undefined) ?? [],
+    // One "see the full comparison" link per vendor leaf in this arena.
+    leaves: arena.competitors.map((c) => COMPETITOR_SEO[c.key]).filter(Boolean),
   }));
 
   return (
@@ -84,6 +86,9 @@ export default async function ComparePage() {
         .cmp-cat-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-body); color: var(--text-primary); margin: 0 0 6px; }
         .cmp-cat-blurb { font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.6; margin: 0; }
 
+        .cmp-leaves { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+        .cmp-leaves a { display: inline-block; padding: 8px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); color: var(--text-primary); font-size: var(--font-size-small); text-decoration: none; }
+        .cmp-leaves a:hover { border-color: var(--border-accent); }
         .cmp-faq { padding-top: 16px; padding-bottom: 8px; }
         .cmp-faq-title {
           font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section);
@@ -154,6 +159,15 @@ export default async function ComparePage() {
                 </section>
                 {/* The matrix the criteria cards above are a summary OF. */}
                 <CompetitorMatrix arena={arena.key} />
+                <section className="cmp-section">
+                  <ul className="cmp-leaves">
+                    {arena.leaves.map((leaf) => (
+                      <li key={leaf.slug}>
+                        <Link href={`/compare/${leaf.slug}`}>{t('compare.leaf.vsLabel', { name: leaf.name })}</Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
                 <section className="cmp-section cmp-faq">
                   <h2 className="cmp-faq-title">{t('compare.faqHeading')}</h2>
                   <MarketingFaq items={arena.faq} />

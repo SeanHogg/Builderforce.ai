@@ -3,7 +3,7 @@ import { type Dispatch, type RefObject, type SetStateAction, useCallback } from 
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 import { expandTemplateWorkflows } from '../expandTemplateWorkflows';
 import { newNode } from '../canvasNodeHelpers';
-import { buildLlmCourse, isWorkedLlmCourse } from '@/lib/courseLms';
+import { localizePack } from '@/lib/templates/localizePack';
 import { creationObjectMutableFields } from '../creationObjectRegistry';
 import { trackActivity } from '@/lib/activity/tracker';
 import { canvasSurface } from '@/lib/canvasHost';
@@ -47,7 +47,11 @@ export function useCanvasTemplates({ commitRevision, canEdit, canvasText, flowRe
     // A pack that still authors a legacy `workflow` card is lowered to a frame of
     // `flowStep`s first — the same lowering opening a legacy card performs — so
     // placing a marketplace pack never mints the object the deprecation removed.
-    const template = expandTemplateWorkflows(pack, {
+    // Resolve the pack's copy (titles, seeded data, connection labels, the worked
+    // course) through the board's catalogs BEFORE anything is placed: what is placed
+    // is persisted, so an English copy written here would stay English.
+    const localized = localizePack(pack, { text: canvasText, has: (key) => t.has(key as never) }, locale);
+    const template = expandTemplateWorkflows(localized, {
       untitledStep: (position: number) => t('flowStep.untitledStep', { position }),
       framePurpose: t('flowStep.framePurpose'),
     });
@@ -55,11 +59,6 @@ export function useCanvasTemplates({ commitRevision, canEdit, canvasText, flowRe
     const created = template.objects.map((item) => {
       const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 });
       node.data = { ...node.data, ...(item.data ?? {}), ...(item.title ? { title: item.title } : {}) };
-      // The pack stores the worked LLM course as ENGLISH (it is module data, built
-      // with no board). Placing it re-mints it through the board's translator, so a
-      // zh board's course is written in Chinese — the course is persisted, and an
-      // English copy written here would stay English after every later edit.
-      if (node.data.kind === 'course' && isWorkedLlmCourse(node.data.course)) node.data = { ...node.data, course: buildLlmCourse(canvasText, locale) };
       return node;
     });
     const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));

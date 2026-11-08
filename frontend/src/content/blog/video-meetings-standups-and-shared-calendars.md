@@ -1,7 +1,7 @@
 ---
 title: "Video Meetings, Standups, and Shared Calendars on Your Agentic Board"
 date: 2026-07-05
-description: Builderforce.ai adds live video and audio to your agentic workspace — WebRTC standups with cameras on the ceremony round-table, ad-hoc and direct calls, a bookable team calendar with availability windows and "Find a time", Google and Microsoft calendar sync, and one-click join from the web or VS Code. Media flows peer-to-peer and never touches the server.
+description: Builderforce.ai adds live video and audio to your agentic workspace — WebRTC standups with cameras on the ceremony round-table, ad-hoc and direct calls, a bookable team calendar with availability windows and "Find a time", Google and Microsoft calendar sync, and one-click join from the web or VS Code. Calls use peer-to-peer WebRTC media.
 tags: [meetings, video, collaboration, ceremonies, calendar, webrtc, workforce]
 author: Sean Hogg
 ---

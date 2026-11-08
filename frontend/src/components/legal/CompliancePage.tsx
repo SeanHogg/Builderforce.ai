@@ -109,7 +109,7 @@ export async function CompliancePage({
               <span>{t('contactBody')}</span>
             </div>
             <a href="mailto:privacy@builderforce.ai">privacy@builderforce.ai</a>
-            <p>Fix Faster LLC dba BuilderForce.ai · 6513 Basswood Dr., Troy, MI 48098</p>
+            <p>Fix Faster LLC dba BuilderForce.ai ·6513 Basswood Dr., Troy, MI 48098</p>
           </footer>
         </article>
       </div>

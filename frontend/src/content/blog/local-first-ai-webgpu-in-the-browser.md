@@ -1,7 +1,7 @@
 ---
 title: Local-First AI in the Browser, Done Properly
 date: 2026-07-24
-description: SitePoint's WebGPU guide lays out the blueprint for running LLMs entirely on-device. Here's how Builderforce implements every best practice — Chrome's Prompt API, real token streaming, Web Worker isolation, GPU-loss recovery, and a progressive-enhancement cascade — and goes beyond it with on-device WebGPU training.
+description: SitePoint's WebGPU guide lays out the blueprint for running LLMs on-device. Here's how Builderforce implements its best practices — Chrome's Prompt API, real token streaming, Web Worker isolation, GPU-loss recovery, and a progressive-enhancement cascade — and goes beyond it with on-device WebGPU training.
 tags: [webgpu, local-first, privacy, deep-dive, evermind]
 author: Sean Hogg
 ---

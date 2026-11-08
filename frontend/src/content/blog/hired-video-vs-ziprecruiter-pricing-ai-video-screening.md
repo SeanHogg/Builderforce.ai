@@ -1,7 +1,7 @@
 ---
 title: Builderforce vs ZipRecruiter: Pricing, AI Matching, and Video Screening Compared
 date: 2026-05-25
-description: ZipRecruiter Standard starts at ~$299/mo per job slot. Builderforce Pro is one flat monthly rate with unlimited postings and unlimited seats. Here's the workflow-level comparison.
+description: ZipRecruiter Standard starts at ~$299/mo per job slot. Builderforce Pro is a flat monthly plan rather than a per-slot price; the pricing page carries current figures. Here's the workflow-level comparison.
 tags: [comparison, recruiting, hiring, for-recruiters, ai-matching, video-screening]
 author: Sean Hogg
 ---
@@ -12,7 +12,7 @@ author: Sean Hogg
 
 **ZipRecruiter (2026):** Standard ~$299–$399/mo per job slot. Premium ~$419–$519. Pro ~$719–$899. Custom-quoted by industry, location, and slot volume.
 
-**Builderforce Pro:** one flat monthly rate, with a discounted yearly option. Unlimited postings, unlimited seats. Current figures are on the [pricing page](/pricing).
+**Builderforce Pro:** one flat monthly rate, with a discounted yearly option. Current figures and plan limits are on the [pricing page](/pricing).
 
 The price gap is ~30× on the entry tier *per slot*. ZipRecruiter's slot-based pricing is the load-bearing assumption: the more roles you're hiring for, the more it scales.
 
@@ -31,7 +31,7 @@ The distinction: ZipRecruiter's AI is *passive* (it waits for matched candidates
 **Live Screening Sessions (Builderforce):** Same workflow. Recruiter declares window + slot length, posts candidates via `/sessions/:id/schedule`, candidate accept/decline via tokenised public link, back-to-back slots delivered.
 
 Key differences:
-- **Cost.** ZipIntro is included in ZipRecruiter Pro (~$719+/mo). Live Screening Sessions are included in Builderforce Pro at a small fraction of that.
+- **Cost.** ZipIntro is included in ZipRecruiter Pro (~$719+/mo). Live Screening Sessions are included in Builderforce Pro; the current Pro price is on the [pricing page](/pricing).
 - **Candidate pool.** ZipIntro auto-matches from ZipRecruiter's candidate database. Builderforce's flow currently expects you to POST candidates explicitly — typically from a prior AI Recruiter Agent run. Auto-match from the agent is on the roadmap (Gap Register #1208).
 - **Meeting infra.** ZipIntro hosts the video call. Builderforce uses your meeting URL (Zoom / Meet / Whereby). Lighter infra footprint, more tool choice. Native WebRTC is a roadmap item (Gap Register #1210).
 
@@ -47,7 +47,7 @@ Decision rule: if your role is generic and high-volume, ZipRecruiter's distribut
 
 **Pick ZipRecruiter when:** you're hiring 1–3 generic roles per quarter and the distribution is the value prop; you want managed syndication across 100+ boards without manual cross-posting; budget is not the binding constraint.
 
-**Pick Builderforce when:** you're hiring 5+ roles per quarter (the per-slot pricing on ZipRecruiter becomes punitive); you want AI-driven sourcing + scoring + outreach + follow-up in one workflow; you want unlimited postings and unlimited seats for your team; ZipIntro is appealing but $719/mo for it specifically is not.
+**Pick Builderforce when:** you're hiring 5+ roles per quarter (the per-slot pricing on ZipRecruiter becomes punitive); you want AI-driven sourcing + scoring + outreach + follow-up in one workflow; you want a flat monthly plan rather than per-slot pricing; ZipIntro is appealing but $719/mo for it specifically is not.
 
 **Use both:** post your hardest-to-fill role on ZipRecruiter Pro for the distribution, do all your other roles on Builderforce, run all your video screening on Builderforce Live Screening Sessions.
 

@@ -2,7 +2,7 @@
 
 **LinkedIn Recruiter（2026）：**Recruiter Lite 每席位约 $170/月。Recruiter Corporate 每席位约 $1,080+/月（同比上涨约 15%）。LinkedIn Hiring Assistant 是叠加在 Corporate 和 RPS+ 套餐之上的附加项，价格未公开，需要先和销售通话。
 
-**Builderforce Pro：**一个固定月费，席位不限，另有折扣年付选项——[定价页面](/pricing)列有当前价格。包含每月 AI token 额度、AI 招聘智能体 v2（AI Recruiter Agent v2）、实时筛选会话（Live Screening Sessions）、Chrome 扩展、无限职位发布、候选人评分、语音克隆以及多格式 Studio。
+**Builderforce Pro：**一个固定月费，另有折扣年付选项——[定价页面](/pricing)列有当前价格。包含每月 AI token 额度、AI 招聘智能体 v2（AI Recruiter Agent v2）、实时筛选会话（Live Screening Sessions）、Chrome 扩展、职位发布、候选人评分、语音克隆以及多格式 Studio。
 
 入门档的价格差距约为 108 倍。而能力差距远比这个比例所暗示的要小。
 
@@ -18,11 +18,11 @@
 
 ## Builderforce 的优势
 
-**价格。** 一份固定订阅，对比相近功能面下*每个席位*每月 $1,080。只要有一定规模的寻访量，第一周就能把差价赚回来。
+**价格。** 一份固定订阅，对比相近功能面下*每个席位*每月 $1,080。两者的计价模式不同：固定套餐对比按席位收费，差距取决于团队规模和寻访量。
 
-**席位不限。** LinkedIn 按席位收费。Builderforce Pro 对招聘方来说是一个固定价格，无论你拉进来多少队友。对一个 5 人招聘团队来说，光是 LinkedIn Recruiter Corporate 一年就要大约 $63,600；而 Builderforce 这边始终只是一份订阅。
+**固定套餐，而非按席位计价。** LinkedIn 按席位收费。Builderforce Pro 是固定月费套餐；各套餐的席位上限见[定价页面](/pricing)。对一个 5 人招聘团队来说，光是 LinkedIn Recruiter Corporate 一年就要大约 $63,600。
 
-**多格式候选人自荐。** Builderforce 上的候选人可以提交视频、漫画、播客、动画或游戏形式的自荐——Studio 的 AI 能在 60 秒内根据他们的简历生成这些内容。LinkedIn 上的候选人提交的是一份 PDF。随着 2026 年 LLM 生成的简历涌入每一个 ATS，多格式自荐正在成为唯一可靠的差异化信号。
+**多格式候选人自荐。** Builderforce 上的候选人可以提交视频、漫画、播客、动画或游戏形式的自荐——Studio 的 AI 能根据他们的简历生成这些内容。LinkedIn 上的候选人提交的是一份 PDF。随着 2026 年 LLM 生成的简历涌入每一个 ATS，多格式自荐正在成为一种有用的差异化信号。
 
 **实时筛选 + 智能体集成。** Builderforce 的 AI 招聘智能体 v2 可以直接交接到一场实时筛选会话（`/sessions/:id/schedule`）。LinkedIn 则需要招聘人员手动把入围候选人在 Hiring Assistant 和外部排期工具之间来回搬运。
 
@@ -32,8 +32,8 @@
 
 | 功能 | Builderforce Pro | LinkedIn Recruiter Corporate |
 |---|---|---|
-| 月费（每位招聘人员） | 固定价格，席位不限（[查看定价](/pricing)） | 约 $1,080+ |
-| 席位不限 | 是 | 否（按席位） |
+| 月费（每位招聘人员） | 固定月费（[查看定价](/pricing)） | 约 $1,080+ |
+| 计价方式 | 固定月费套餐 | 按席位 |
 | AI 语义需求录入（简报 → 筛选标准） | 智能体 v2 需求录入 | Hiring Assistant（附加项） |
 | AI 候选人评分 | 已包含 | 已包含 |
 | AI 触达草稿 | 已包含 | Hiring Assistant（附加项） |
@@ -54,15 +54,15 @@
 
 **选 LinkedIn Recruiter Corporate，如果：**你是一家 200 人以上、预算已经批下来的公司；你的招聘依赖二度人脉寻访；你第一天就需要 Greenhouse / Workday / Microsoft Teams 集成；有高管明确要求把 LinkedIn 作为官方记录平台。
 
-**选 Builderforce Pro，如果：**预算是实实在在的约束；你想要不限数量的招聘席位，又不想被按人头计费吓一跳；你的寻访更依赖 AI 辅助的需求录入和个性化触达，而不是熟人引荐；你希望候选人提交比 PDF 更丰富的自荐；你更看重透明的计量定价，而不是不透明的按席位收费。
+**选 Builderforce Pro，如果：**预算是实实在在的约束；你想要固定套餐价格，又不想被按人头计费吓一跳；你的寻访更依赖 AI 辅助的需求录入和个性化触达，而不是熟人引荐；你希望候选人提交比 PDF 更丰富的自荐；你更看重透明的计量定价，而不是不透明的按席位收费。
 
-**两者都用：**许多成长中的团队会保留一个 LinkedIn Recruiter 席位用于熟人引荐式寻访，团队其他人则在 Builderforce Pro 上处理其余一切。这笔账几乎在任何团队规模下都算得过来：一个 $1,080 的 LinkedIn 席位加上一份固定的 Builderforce 订阅，比 N+1 个 $1,080 的席位划算得多。
+**两者都用：**许多成长中的团队会保留一个 LinkedIn Recruiter 席位用于熟人引荐式寻访，其余一切则用 Builderforce Pro 处理。规划团队规模时，请在[定价页面](/pricing)查看你所用套餐的席位上限。
 
 ## 常见问题
 
 ### Builderforce 有像 LinkedIn 那样用于寻访的 Chrome 扩展吗？
 
-有。Builderforce Chrome 扩展可以从 LinkedIn、Indeed、Glassdoor 以及另外 10 多个招聘网站提取候选人资料，然后自动去重，放进你的人才库。它还能为求职者自动填写职位申请表。
+有。Builderforce Chrome 扩展可以从 LinkedIn、Indeed、Glassdoor 以及其他招聘网站提取候选人资料，然后自动去重，放进你的人才库。它还能为求职者自动填写职位申请表。
 
 ### Builderforce 能导入我的 LinkedIn Recruiter 数据吗？
 
@@ -70,7 +70,7 @@
 
 ### Pro 的价格真的是全包的吗？
 
-就所列的功能而言，是的。可选附加项——额外的邮箱连接和 AI token 充值包——都在[定价页面](/pricing)上与当前的 Pro 价格一起逐项列出。没有按席位收费，没有 Hiring Assistant 档位，也没有企业版加价。
+就所列的功能而言，是的。可选附加项——额外的邮箱连接和 AI token 充值包——都在[定价页面](/pricing)上与当前的 Pro 价格一起逐项列出。没有 Hiring Assistant 档位，也没有企业版加价；各套餐的席位上限见[定价页面](/pricing)。
 
 ---
 

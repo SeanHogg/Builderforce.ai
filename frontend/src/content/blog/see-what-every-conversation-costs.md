@@ -1,7 +1,7 @@
 ---
 title: See what every conversation costs, and what memory saved you
 date: 2026-10-17
-description: Every chat now shows what it cost, split between your Builderforce plan and your own provider keys at list price, and what memory kept off the bill: answers replayed from memory, the provider's prompt cache, and context kept lean. Recorded figures and estimates are always shown apart. The same panel now appears in the web app, the editor and Rovr.
+description: Chats now show what they cost, split between your Builderforce plan and your own provider keys at list price, and what memory kept off the bill: answers replayed from memory, the provider's prompt cache, and context kept lean. Recorded figures and estimates are shown apart. The same panel now appears in the web app, the editor and Rovr.
 tags: [cost, evermind, memory, agents, product]
 author: Sean Hogg
 ---

@@ -8,6 +8,8 @@
  * (`compare.competitors.<key>`). Vendor names are proper nouns and stay here.
  */
 
+import vendorFactSources from './compareVendorFactSources.json';
+
 export interface CompetitorCol {
   /** Stable column key — the key a comparison row's `values` map is written under. */
   key: string;
@@ -143,7 +145,79 @@ export const COMPETITOR_SEO: Record<string, CompetitorSeo> = {
   openhands: { slug: 'openhands', name: 'OpenHands' },
   aider: { slug: 'aider', name: 'Aider' },
   continueDev: { slug: 'continue-dev', name: 'Continue.dev' },
+  jira: { slug: 'jira', name: 'Jira' },
+  linear: { slug: 'linear', name: 'Linear' },
+  asana: { slug: 'asana', name: 'Asana' },
+  monday: { slug: 'monday-com', name: 'Monday.com' },
+  azureBoards: { slug: 'azure-boards', name: 'Azure Boards' },
+  figma: { slug: 'figma', name: 'Figma' },
+  canva: { slug: 'canva', name: 'Canva' },
+  miro: { slug: 'miro', name: 'Miro' },
+  notion: { slug: 'notion', name: 'Notion' },
+  zapier: { slug: 'zapier', name: 'Zapier' },
+  n8n: { slug: 'n8n', name: 'n8n' },
+  make: { slug: 'make', name: 'Make' },
+  copilotStudio: { slug: 'copilot-studio', name: 'Copilot Studio' },
+  langgraph: { slug: 'langgraph-crewai', name: 'LangGraph & CrewAI' },
+  openrouter: { slug: 'openrouter', name: 'OpenRouter' },
+  litellm: { slug: 'litellm', name: 'LiteLLM' },
+  portkey: { slug: 'portkey', name: 'Portkey' },
+  bedrock: { slug: 'amazon-bedrock', name: 'Amazon Bedrock' },
+  helicone: { slug: 'helicone', name: 'Helicone' },
+  upwork: { slug: 'upwork', name: 'Upwork' },
+  fiverr: { slug: 'fiverr', name: 'Fiverr' },
+  toptal: { slug: 'toptal', name: 'Toptal' },
+  agencies: { slug: 'dev-agencies', name: 'Dev agencies' },
 };
+
+/**
+ * Every vendor column in COMPARE_ARENAS has a leaf page. A column added without
+ * a COMPETITOR_SEO row (or a row with no column, or a duplicate slug) is
+ * reported here; `messages.test.ts` asserts the list is empty, so the registry
+ * and the matrix cannot drift apart. (Not thrown at module load: edge routes
+ * import this module.)
+ */
+export function compareLeafGaps(): string[] {
+  const columns = COMPARE_ARENAS.flatMap((arena) => arena.competitors.map((c) => c.key));
+  const slugs = Object.values(COMPETITOR_SEO).map((v) => v.slug);
+  return [
+    ...columns.filter((key) => !COMPETITOR_SEO[key]).map((key) => `column without leaf: ${key}`),
+    ...Object.keys(COMPETITOR_SEO).filter((key) => !columns.includes(key)).map((key) => `leaf without column: ${key}`),
+    ...slugs.filter((slug, i) => slugs.indexOf(slug) !== i).map((slug) => `duplicate slug: ${slug}`),
+  ];
+}
+
+/* ════════════════════ VENDOR-FACT SOURCES ════════════════════ */
+
+/**
+ * A sourced record for ONE catalog key under `compare.` whose copy states a
+ * vendor-specific fact (a price, percentage, user count or version number).
+ * Comparison copy is criteria-first; a vendor fact is the exception and needs a
+ * primary source, the date it was observed, who reviewed it, and a review
+ * deadline no more than 30 days after the observation.
+ *
+ * `scripts/check-compare-vendor-facts.mjs` fails any such sentence without a
+ * record here, and fails a record whose `reviewBy` has passed. The list is empty
+ * on purpose: today's comparison copy states no vendor fact.
+ */
+export interface CompareVendorFactSource {
+  /** Catalog key, e.g. `compare.competitors.devin.summary`. Applies to every locale. */
+  key: string;
+  /** Primary source URL (the vendor's own pricing/docs page). */
+  source: string;
+  /** ISO date (YYYY-MM-DD) the fact was observed at `source`. */
+  observed: string;
+  reviewer: string;
+  /** ISO date; must be at most 30 days after `observed`. */
+  reviewBy: string;
+}
+
+/**
+ * The records live in `compareVendorFactSources.json` so the CI guard reads
+ * them as data. Expiry deliberately fails CI on the `reviewBy` date (consistent
+ * with MARKETING_CLAIMS): a stale vendor fact must be re-observed or rewritten.
+ */
+export const COMPARE_VENDOR_FACT_SOURCES: readonly CompareVendorFactSource[] = vendorFactSources;
 
 /** Slug -> competitor column key, for `/compare/{slug}` route resolution. */
 export const COMPETITOR_SLUG_TO_KEY: Record<string, string> = Object.fromEntries(

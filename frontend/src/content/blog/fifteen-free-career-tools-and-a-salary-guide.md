@@ -1,7 +1,7 @@
 ---
 title: Fifteen career tools that compute an answer — and a salary guide that names your city
 date: 2026-08-18
-description: Score a résumé, match it to a posting, tailor it, plan a route to a target role, prepare interview questions, check your market salary. Free, no account, and every number shows its working.
+description: Score a résumé, match it to a posting, tailor it, plan a route to a target role, prepare interview questions, check your market salary. Free, no account, and the numbers show their working.
 tags: [career, resume, salary, job-search, tools]
 author: Sean Hogg
 ---

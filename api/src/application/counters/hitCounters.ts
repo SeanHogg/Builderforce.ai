@@ -27,6 +27,9 @@ interface HitCounterSpec {
   counterColumn: string;
   /** Column stamped with the latest hit time, when the surface shows "last used". */
   lastAtColumn?: string;
+  /** Optional constant predicate ANDed into the update (e.g. `"status = 'published'"`).
+   *  Trusted constant spliced raw, only ever from this spec, never from input. */
+  where?: string;
 }
 
 export const HIT_COUNTERS = {
@@ -35,6 +38,7 @@ export const HIT_COUNTERS = {
   'enrichment.hit': { table: 'enrichment_cache', keyColumn: 'id', keyType: 'integer', tenant: 'nullable', counterColumn: 'hit_count' },
   'landing.view': { table: 'landing_pages', keyColumn: 'id', keyType: 'integer', tenant: 'scoped', counterColumn: 'view_count' },
   'landing.convert': { table: 'landing_pages', keyColumn: 'id', keyType: 'integer', tenant: 'scoped', counterColumn: 'conversion_count' },
+  'seo.impression': { table: 'marketing_seo_pages', keyColumn: 'path', keyType: 'text', tenant: 'nullable', counterColumn: 'impression_count', where: "status = 'published'" },
 } as const satisfies Record<string, HitCounterSpec>;
 
 export type HitCounterKind = keyof typeof HIT_COUNTERS;
@@ -74,11 +78,13 @@ export async function applyHitDeltas(db: Db, kind: HitCounterKind, deltas: reado
     ? sql`, ${ident(spec.lastAtColumn)} = GREATEST(COALESCE(t.${ident(spec.lastAtColumn)}, 'epoch'::timestamp), (to_timestamp(d.at / 1000.0) AT TIME ZONE 'UTC'))`
     : sql``;
 
+  const extra = spec.where ? sql` AND ${sql.raw(`t.${spec.where}`)}` : sql``;
+
   await db.execute(sql`
     UPDATE ${ident(spec.table)} AS t
     SET ${ident(spec.counterColumn)} = t.${ident(spec.counterColumn)} + d.n${lastAt}
     FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS d(k text, tn integer, n integer, at bigint)
-    WHERE ${keyMatch}${tenantMatch}
+    WHERE ${keyMatch}${tenantMatch}${extra}
   `);
 }
 

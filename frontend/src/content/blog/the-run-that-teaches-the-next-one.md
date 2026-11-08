@@ -1,7 +1,7 @@
 ---
 title: The run that teaches the next one
 date: 2026-09-07
-description: An agent that finishes verified work has just executed a procedure that works — and it used to vanish into a transcript. Agents now propose what they learned as a skill, your team approves it, and every later run follows it.
+description: An agent that finishes verified work has just executed a procedure that works — and it used to vanish into a transcript. Agents now propose what they learned as a skill, your team approves it, and later runs follow it.
 tags: [agents, skills, governance, observability, mcp, product]
 author: Sean Hogg
 ---

@@ -5,7 +5,7 @@
  * the request) and ingests through it; a project collector lands events straight
  * in its project, a tenant-level collector routes each event via its mapping rules:
  *   POST /events                       native canonical batch — Bearer bfq_… (or ?key=)
- *   POST /product-report               BuilderForce.ai's own UI errors (anonymous)
+ *   POST /product-report               Builderforce.ai's own UI errors (anonymous)
  *   POST /client-report                agent-runtime / VSIX crashes — agent-host key or tenant JWT
  *   POST /otlp/v1/{logs,traces}        OTLP/HTTP (protobuf or JSON) — same key
  *   POST /webhooks/:collectorId/:provider  provider webhook — HMAC-verified per integration
@@ -126,7 +126,7 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   /**
-   * BuilderForce.ai's product reporter. Its destination is a product invariant,
+   * Builderforce.ai's product reporter. Its destination is a product invariant,
    * resolved here instead of accepted from the browser. This keeps the endpoint
    * usable before sign-in and prevents reports from being routed to customer
    * projects. An exact-name lookup is deliberate: fail closed if the canonical

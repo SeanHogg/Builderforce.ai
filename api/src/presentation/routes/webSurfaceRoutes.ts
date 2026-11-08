@@ -22,6 +22,8 @@
  *   GET    /api/web/website                           the navigation TREE            member
  *   POST   /api/web/website                           add a page                     MANAGER
  *   PATCH  /api/web/website/:id                       edit it                        MANAGER
+ *   POST   /api/web/website/:id/publish               draft -> live                  MANAGER
+ *   POST   /api/web/website/:id/unpublish             live -> draft                  MANAGER
  *   DELETE /api/web/website/:id                       delete, re-parenting children  MANAGER
  *
  *   GET    /api/web/seo                               patterns, not 400 rows         member
@@ -44,6 +46,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
+import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import { parseBody, parseOptionalBody, z, zJsonObject } from './requestBody';
 import {
   WebSurfaceError,
@@ -58,6 +61,7 @@ import {
   publicLandingPageCached,
   publicWebsitePageCached,
   publishLandingPage,
+  publishWebsitePage,
   recordLandingPageConversion,
   recordLandingPageView,
   recordSeoImpression,
@@ -66,6 +70,7 @@ import {
   seoPatternSummary,
   sitemapEntries,
   unpublishLandingPage,
+  unpublishWebsitePage,
   updateBlock,
   updateLandingPage,
   updateWebsitePage,
@@ -79,6 +84,9 @@ import {
 const SeoImpressionBody = z
   .object({ path: z.string().optional().catch(undefined) })
   .catch({});
+
+/** Per-IP ceiling on the anonymous beacon: a real visitor sends one per page view. */
+const SEO_IMPRESSION_RPM = 60;
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -277,6 +285,20 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     ));
   }));
 
+  router.post('/website/:id/publish', manager, (c) => handle(async () =>
+    Response.json(await publishWebsitePage(
+      db, c.env as Env, tenant(c),
+      await resolveActorFromContext(c.env as Env, db, c),
+      pageId(c.req.param('id')),
+    ))));
+
+  router.post('/website/:id/unpublish', manager, (c) => handle(async () =>
+    Response.json(await unpublishWebsitePage(
+      db, c.env as Env, tenant(c),
+      await resolveActorFromContext(c.env as Env, db, c),
+      pageId(c.req.param('id')),
+    ))));
+
   router.delete('/website/:id', manager, (c) => handle(async () =>
     Response.json(await deleteWebsitePage(
       db, c.env as Env, tenant(c),
@@ -372,9 +394,16 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   /** An SEO impression — the denominator the conversion counter never had. 204
    *  with no body, for the same reason the landing-page counters return none. */
   router.post('/:tenantId/seo/impression', (c) => handle(async () => {
+    // `parseOptionalBody` reads the raw text as JSON whatever the Content-Type, so a
+    // `text/plain` sendBeacon body (no CORS preflight) parses the same as application/json.
     const body = await parseOptionalBody(c, SeoImpressionBody);
-    if (body.path) {
-      await recordSeoImpression(db, ownerParam(c.req.param('tenantId')), body.path);
+    if (!body.path) return new Response(null, { status: 204 }); // nothing to count: spend no limiter call
+    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
+    const verdict = await checkSlidingWindow(
+      c.env as Env, `seo-impression:${ip}`, SEO_IMPRESSION_RPM,
+    ).catch(() => null); // fail open, like every other caller of the limiter
+    if (!verdict || verdict.allowed) {
+      await recordSeoImpression(c.env as Env, db, ownerParam(c.req.param('tenantId')), body.path);
     }
     return new Response(null, { status: 204 });
   }));

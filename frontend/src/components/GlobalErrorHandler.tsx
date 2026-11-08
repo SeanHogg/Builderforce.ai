@@ -249,7 +249,7 @@ function Toast({
         >
           {expanded ? <IconChevronUp /> : <IconChevronDown />}
         </button>
-        {/* Add user context to this error in BuilderForce.ai's product Quality feed —
+        {/* Add user context to this error in Builderforce.ai's product Quality feed —
             except during an outage, which would refuse the report as well. */}
         {!isServiceOutage(ev) && (
           <button
