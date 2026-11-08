@@ -13,9 +13,8 @@
 import type { ComputeTaskEvent } from '../../compute/client';
 import { LINK_SLICE, UPLOAD_SLICE } from '../../compute/loader';
 import type { TaskKind } from '../../compute/protocol';
-import { INLINE_WEIGHT, weightOf } from '../../compute/size';
+import { weightOf } from '../../compute/size';
 import { makeGraph } from '../../compute/testKit';
-import { DEFER_EDGES_ABOVE } from '../../scene/edgeBudget';
 import { makeOverlay, PRESETS } from '../../surface/overlays';
 import { buildPerfGraph } from '../syntheticGraph';
 import type { Metrics } from './baseline';
@@ -112,5 +111,3 @@ export async function profile(scale: number, host: ViewHost): Promise<Profile> {
         },
     };
 }
-
-export { DEFER_EDGES_ABOVE, INLINE_WEIGHT };

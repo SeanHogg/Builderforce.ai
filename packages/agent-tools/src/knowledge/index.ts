@@ -43,7 +43,7 @@ export {
 export { documentDoc, EXTRACTABLE_DOCUMENT_MEDIA_TYPES, extractDocumentText, withDocumentHashes, withDocumentText } from './documents/index.js';
 export { extractedLogFileName, manifestFileName, migratingRootFiles, analysisPendingFileName, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
-    createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, fileKey,
+    createReplicaQueue, memoryReplicaPersistence, queuedRootIdOf, relationKey, factKey, fileKey,
     type DirtySnapshot, type ReplicaAck, type ReplicaAnalysis, type ReplicaPersistence, type ReplicaQueue, type ReplicaQueueOptions,
 } from './replicaQueue.js';
 export { replicatedKnowledgeStore, type ReadThrough, type ReplicaTarget, type ReplicatedStoreArgs } from './replicatedStore.js';

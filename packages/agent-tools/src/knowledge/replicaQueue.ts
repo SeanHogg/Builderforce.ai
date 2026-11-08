@@ -252,7 +252,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             }
             additiveOff = false;
             await persistence.write(JSON.stringify({
-                version: 2, ...(project !== undefined ? { projectId: project } : {}), ...(ack ? { ack } : {}),
+                version: 2, ...(opts.rootId ? { rootId: opts.rootId } : {}), ...(project !== undefined ? { projectId: project } : {}), ...(ack ? { ack } : {}),
                 dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}), ...(isAdditive ? { additive: true } : {}),
             }));
             if (opts.analysis && analysisChanged) {
