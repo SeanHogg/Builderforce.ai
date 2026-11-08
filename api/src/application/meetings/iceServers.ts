@@ -19,19 +19,24 @@ export interface IceServer { urls: string | string[]; username?: string; credent
  * two secrets instead of standing up coturn. Cached (creds outlive the cache TTL),
  * best-effort — a failure just omits TURN and mesh falls back to STUN.
  */
-async function cloudflareTurn(env: Env): Promise<IceServer | null> {
+/** A call's realistic maximum: the credential lives this long, and no cache outlives it. */
+const TURN_CREDENTIAL_TTL_SECONDS = 4 * 60 * 60;
+
+async function cloudflareTurn(env: Env, subject?: string): Promise<IceServer | null> {
   const keyId = env.CLOUDFLARE_TURN_KEY_ID;
   const token = env.CLOUDFLARE_TURN_API_TOKEN;
   if (!keyId || !token) return null;
   try {
     return await getOrSetCached<IceServer>(
       env,
-      `turn:cf:${keyId}`,
+      // Per caller when one is named, so a TURN credential minted for one person is never
+      // handed to another; the shared key remains for the anonymous (guest) path.
+      `turn:cf:${keyId}${subject ? `:${subject}` : ''}`,
       async () => {
         const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ttl: 86_400 }),
+          body: JSON.stringify({ ttl: TURN_CREDENTIAL_TTL_SECONDS }),
         });
         if (!res.ok) throw new Error(`cloudflare turn ${res.status}`);
         const d = (await res.json()) as { iceServers?: { urls?: string | string[]; username?: string; credential?: string } };
@@ -39,7 +44,9 @@ async function cloudflareTurn(env: Env): Promise<IceServer | null> {
         if (!ice?.urls) throw new Error('cloudflare turn: no urls');
         return { urls: ice.urls, username: ice.username, credential: ice.credential };
       },
-      { kvTtlSeconds: 43_200, l1TtlMs: HOUR_MS },
+      // Cached for well under the credential's life, so a served credential always has
+      // most of its 4 hours left.
+      { kvTtlSeconds: 3_600, l1TtlMs: HOUR_MS / 4 },
     );
   } catch {
     return null;
@@ -48,7 +55,7 @@ async function cloudflareTurn(env: Env): Promise<IceServer | null> {
 
 /** ICE servers for mesh P2P — public STUN, plus a TURN relay when configured
  *  (static `TURN_URL`, and/or Cloudflare-minted short-lived credentials). */
-export async function iceServers(env: Env): Promise<IceServer[]> {
+export async function iceServers(env: Env, subject?: string): Promise<IceServer[]> {
   const servers: IceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   ];
@@ -59,7 +66,7 @@ export async function iceServers(env: Env): Promise<IceServer[]> {
       credential: env.TURN_CREDENTIAL,
     });
   }
-  const cf = await cloudflareTurn(env);
+  const cf = await cloudflareTurn(env, subject);
   if (cf) servers.push(cf);
   return servers;
 }

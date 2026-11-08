@@ -34,6 +34,7 @@ import { watchToolManifests } from "./prefetch/detectTools";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
+import { VoiceMarketplaceViewProvider } from "./voiceMarketplaceView";
 import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
@@ -131,6 +132,7 @@ let insights: InsightsController | undefined;
 
 /** The Evermind sidebar console; re-pushed init on project switch + auth change. */
 let evermindView: EvermindViewProvider | undefined;
+let voiceMarketplaceView: VoiceMarketplaceViewProvider | undefined;
 
 /** Security & compliance Diagnostics sidebar; re-fetched on auth/project change. */
 let diagnostics: DiagnosticsController | undefined;
@@ -397,6 +399,14 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("builderforce.refreshEvermind", () => evermindView?.triggerRefresh()),
+  );
+
+  // Voice marketplace sidebar — browse published voices and add one to your workspace
+  // (the SAME <VoiceMarketplace> component the web mounts at /marketplace/voices).
+  voiceMarketplaceView = new VoiceMarketplaceViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(VoiceMarketplaceViewProvider.viewType, voiceMarketplaceView),
+    vscode.commands.registerCommand("builderforce.refreshVoiceMarketplace", () => voiceMarketplaceView?.triggerRefresh()),
   );
 
   // The Visualization panel — the board and the run's changes, in the editor area,
@@ -1293,6 +1303,7 @@ export async function deactivate(): Promise<void> {
 function refreshAuthBoundSurfaces(): void {
   refreshWorkspaceSurfaces();
   evermindView?.refresh();
+  voiceMarketplaceView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void vscode.commands.executeCommand("builderforce.refreshProjects");

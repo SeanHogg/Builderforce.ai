@@ -38,13 +38,17 @@ export const highlightForRef = (ref: string, kind: string): TowerHighlight => ({
 export function highlightFor(findings: readonly Finding[]): TowerHighlight {
     const roles = new Map<string, TowerRole>();
     const kinds = new Set<string>();
+    // A rule is looked up once per kind, not once per finding (20,000 findings share a handful of kinds).
+    const reachesOf = new Map<string, boolean>();
     for (const f of findings) {
-        kinds.add(f.kind);
-        const reaches = ruleOf(f.kind).diagram === 'layerArrow';
-        f.nodes.forEach((ref, i) => {
+        let reaches = reachesOf.get(f.kind);
+        if (reaches === undefined) { kinds.add(f.kind); reaches = ruleOf(f.kind).diagram === 'layerArrow'; reachesOf.set(f.kind, reaches); }
+        const nodes = f.nodes;
+        for (let i = 0; i < nodes.length; i++) {
+            const ref = nodes[i]!;
             if (!reaches || i === 0) roles.set(ref, 'offender');
             else if (roles.get(ref) !== 'offender') roles.set(ref, 'partner');
-        });
+        }
     }
     return { kinds: [...kinds], roles };
 }

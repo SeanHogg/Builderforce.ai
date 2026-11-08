@@ -172,8 +172,24 @@ export function persistTenantSession(tenantToken: string, tenant: Tenant): void 
 /** Past date for cookie expiry so the browser removes the cookie. */
 const COOKIE_EXPIRE = 'Thu, 01 Jan 1970 00:00:00 GMT';
 
+const sessionClearHooks = new Set<() => void>();
+
+/**
+ * Register cleanup that must run whenever the session ends (sign-out or a 401).
+ * `clearSession` is the single exit, so per-user caches register here instead of
+ * every logout caller remembering them. Hooks run BEFORE the stored user is removed,
+ * so they can still read who is signing out.
+ */
+export function onSessionCleared(hook: () => void): () => void {
+  sessionClearHooks.add(hook);
+  return () => { sessionClearHooks.delete(hook); };
+}
+
 export function clearSession(): void {
   if (!isBrowser()) return;
+  for (const hook of sessionClearHooks) {
+    try { hook(); } catch { /* a failing cleanup must not block sign-out */ }
+  }
   localStorage.removeItem(WEB_TOKEN_KEY);
   localStorage.removeItem(TENANT_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);

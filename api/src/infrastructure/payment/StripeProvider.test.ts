@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StripeProvider } from './StripeProvider';
 import { buildPaymentProvider, PaymentNotConfiguredError } from './index';
+import { WebhookUpstreamError } from './PaymentProvider';
 import type { Env } from '../../env';
 
 const WEBHOOK_SECRET = 'whsec_test_secret';
@@ -687,5 +688,56 @@ describe('detachCards', () => {
   it('surfaces a real provider failure instead of silently reporting success', async () => {
     stubSequence([[500, { error: { message: 'Stripe is down' } }]]);
     await expect(makeProvider().detachCards({ externalCustomerId: 'cus_123' })).rejects.toThrow(/Stripe is down/);
+  });
+});
+
+describe('purchase.reversed mapping (refunds and disputes)', () => {
+  const VOICE_META = { purchaseKind: 'marketplace_voice', cloneId: '7', buyerTenantId: '9', buyerUserId: 'u1' };
+  const intentFetch = (meta: Record<string, string> | null, status = 200) =>
+    vi.stubGlobal('fetch', vi.fn(async () => (meta === null && status === 200
+      ? new Response('{}', { status: 404 })
+      : new Response(JSON.stringify({ metadata: meta }), { status }))));
+  const event = (type: string, object: Record<string, unknown>) => JSON.stringify({ type, data: { object } });
+  const parse = async (body: string) => makeProvider().parseWebhook(body, await sign(body));
+
+  it('maps a FULL refund to purchase.reversed with the signed metadata', async () => {
+    intentFetch(VOICE_META);
+    const e = await parse(event('charge.refunded', { refunded: true, payment_intent: 'pi_1', customer: 'cus_1' }));
+    expect(e).toMatchObject({ type: 'purchase.reversed', purchaseKind: 'marketplace_voice', tenantId: 9, metadata: { cloneId: '7' } });
+  });
+
+  it('ignores a PARTIAL refund', async () => {
+    intentFetch(VOICE_META);
+    expect(await parse(event('charge.refunded', { refunded: false, payment_intent: 'pi_1' }))).toBeNull();
+  });
+
+  it('does NOT reverse on charge.dispute.created or funds_withdrawn (only a lost close does)', async () => {
+    intentFetch(VOICE_META);
+    expect(await parse(event('charge.dispute.created', { payment_intent: 'pi_1' }))).toBeNull();
+    expect(await parse(event('charge.dispute.funds_withdrawn', { payment_intent: 'pi_1' }))).toBeNull();
+  });
+
+  it('a dispute closed as WON maps to null; closed as LOST maps to purchase.reversed', async () => {
+    intentFetch(VOICE_META);
+    expect(await parse(event('charge.dispute.closed', { status: 'won', payment_intent: 'pi_1' }))).toBeNull();
+    const lost = await parse(event('charge.dispute.closed', { status: 'lost', payment_intent: 'pi_1' }));
+    expect(lost).toMatchObject({ type: 'purchase.reversed', purchaseKind: 'marketplace_voice' });
+  });
+
+  it("carries a non-voice purchase's own kind, and ignores a charge that is not ours", async () => {
+    intentFetch({ purchaseKind: 'knowledge_listing', buyerTenantId: '4', tenantId: '4' });
+    expect(await parse(event('charge.refunded', { refunded: true, payment_intent: 'pi_2' })))
+      .toMatchObject({ type: 'purchase.reversed', purchaseKind: 'knowledge_listing', tenantId: 4 });
+    intentFetch({});
+    expect(await parse(event('charge.refunded', { refunded: true, payment_intent: 'pi_3' }))).toBeNull();
+    intentFetch(null); // 404: not an intent of ours
+    expect(await parse(event('charge.refunded', { refunded: true, payment_intent: 'pi_4' }))).toBeNull();
+  });
+
+  it('a failing payment-intent lookup throws WebhookUpstreamError (never a signature error)', async () => {
+    intentFetch({}, 500);
+    await expect(parse(event('charge.refunded', { refunded: true, payment_intent: 'pi_5' }))).rejects.toBeInstanceOf(WebhookUpstreamError);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network down'); }));
+    await expect(parse(event('charge.refunded', { refunded: true, payment_intent: 'pi_6' }))).rejects.toBeInstanceOf(WebhookUpstreamError);
   });
 });

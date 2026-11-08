@@ -11,14 +11,17 @@ import { and, eq } from 'drizzle-orm';
 import { recordRunReflection } from '../skills/skillReflection';
 import { type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
-import { recordPullRequestRow, markPullRequestMergedById } from '../repos/recordPullRequestRow';
+import { markPullRequestMergedById } from '../repos/recordPullRequestRow';
+import { recordTaskPullRequest } from '../repos/recordTaskPullRequest';
 import { publishAgentRunVerdict } from '../checks/publishTaskVerdict';
 import { postRepoPrComment } from '../repos/postPrComment';
-import { openClaimedPullRequest, openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
+import { openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
 import { RUN_CANCELLED_NOTICE } from '@builderforce/agent-run';
 import { contributeTextToProjectEverminds } from '../llm/projectEvermind';
 import { finalizeLearnWeight, runProducedOutput } from './outcomeScore';
 import { recordCloudToolEvent } from './cloudToolEvents';
+import { openOrAdoptRunPr } from './openOrAdoptRunPr';
+import { runPullRequestText } from './runPullRequestText';
 import { recordRunRollbackSnapshot, teardownRunBranch } from './runRollback';
 import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
@@ -27,6 +30,7 @@ import { revokeRunPrincipal } from '../agentIdentity/agentRunIdentity';
 import { inspectOutboundContent } from '../trust/trustService';
 import { type Db } from '../../infrastructure/database/connection';
 import { executions, tasks } from '../../infrastructure/database/schema';
+import { gateRunPullRequest, recordMergeHeld } from './cloudFinalizeSecurity';
 
 /**
  * Land a finished cloud run: open a PR (recording it for the in-product approval
@@ -81,16 +85,11 @@ export async function finalizeCloudRun(
   // inline run-end finalize can't open a duplicate PR alongside a concurrent human
   // Done-drag. Lost claim => another path is opening the PR; skip everything below
   // and treat it as "PR exists". A failed create has already released the claim.
-  const opened = repoCtx && writtenPaths.size > 0 && !cancelled
-    ? await openClaimedPullRequest(db, tenantId, taskRow.id, {
-      provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
-      token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
-      title: `Task #${taskRow.id}: ${taskRow.title}`,
-      body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n${ciVerified
-        ? '> ✅ **CI was green in-run** on the ticket-branch HEAD (combined commit status / check-runs). Re-check CI on this PR before merge — opening it or a later push can still go red.'
-        : '> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no local build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent\'s summary alone.'}`,
-    }).catch(() => ({ ok: false as const, claimLost: true as const }))
-    : null;
+  const prText = runPullRequestText({ taskId: taskRow.id, taskTitle: taskRow.title, agentLabel, writtenPaths, ciVerified });
+  // The run's own early draft is adopted here too (a lost claim, or a dead claim's unrecorded draft).
+  const { opened, ownDraft } = await openOrAdoptRunPr(db, {
+    tenantId, cloudAgentRef, executionId, taskId: taskRow.id, repoCtx, open: writtenPaths.size > 0 && !cancelled, text: prText,
+  });
   if (repoCtx && opened && !('claimLost' in opened)) {
     const pr = opened;
     prOpened = pr.ok;
@@ -98,29 +97,34 @@ export async function finalizeCloudRun(
 
     const autoMerge = cloudAutoMergeEnabled(env);
 
-    // Record the PR row so the in-product Pull Request tab / approval flow can act
-    // on it. Status reflects the policy: 'open' when awaiting human approval; when
-    // auto-merge is enabled, it lands as 'merged' (or stays 'open' pending green CI).
-    // Keep the row id so the immediate-merge branch can stamp its merge SHA (which
-    // correlates the post-merge build back to this task).
+    // Record the PR row so the in-product Pull Request tab / approval flow can act on it. It is
+    // ALWAYS recorded 'open': 'merged' is stamped only once a merge has actually happened. Keep the
+    // row id so the security step can link its scans to it and the immediate-merge branch can stamp
+    // its merge SHA (which correlates the post-merge build back to this task).
     let prRowId: string | null = null;
     if (pr.ok) {
       openedPrNumber = pr.number;
       openedPrUrl = pr.url;
-      const recordedStatus = autoMerge && !cloudAutoMergeRequiresGreen(env) ? 'merged' : 'open';
-      const prRow = await recordPullRequestRow(db, {
+      // Always recorded 'open': a PR is 'merged' only once a merge has actually happened
+      // (`markPullRequestMergedById` below), and the security gate may still hold it open.
+      // The early draft's row + stamp were written when it opened; otherwise the row AND the task's PR stamp are one write.
+      const prRow = ownDraft ? { id: ownDraft.rowId } : await recordTaskPullRequest(db, {
         tenantId, segmentId: repoCtx.segmentId, projectId: repoCtx.projectId, repoId: repoCtx.repoId,
         taskId: taskRow.id, provider: repoCtx.provider, number: pr.number, url: pr.url,
-        branchName: repoCtx.branch, baseBranch: repoCtx.base, status: recordedStatus,
+        branchName: repoCtx.branch, baseBranch: repoCtx.base, status: 'open',
       }).catch(() => null);
       prRowId = prRow?.id ?? null;
       openedPrRowId = prRowId;
     }
 
-    await db.update(tasks)
+    if (!pr.ok || !prRowId) await db.update(tasks) // no PR / no row for it: the branch (and any PR that did open) is still stamped
       .set({ gitBranch: repoCtx.branch, ...(pr.ok ? { githubPrUrl: pr.url, githubPrNumber: pr.number } : {}), updatedAt: new Date() })
       .where(eq(tasks.id, taskRow.id))
       .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudFinalize.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] task PR metadata update failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
+
+    // SECURITY STEP (PRD 08 §10): scan + review the PR and read the merge verdict BEFORE any merge below
+    // (see cloudFinalizeSecurity: fails closed, so `pr.ok === false` can never reach `mergeBranchToBase`).
+    const securityVerdict = await gateRunPullRequest(env, db, { tenantId, cloudAgentRef, executionId, agentLabel, repoCtx, pr, prRowId });
 
     if (!autoMerge) {
       // Approval-gated default: open the PR and stop. A human merges in-product.
@@ -137,18 +141,25 @@ export async function finalizeCloudRun(
       // Auto-merge enabled, gated on green CI: a successful CI webhook merges later.
       mergeNote = ` — pending CI (will merge to \`${repoCtx.base}\` on green)`;
       merged = true; // not a merge failure; the gate intentionally defers it
+    } else if (!securityVerdict.allow) {
+      // Auto-merge enabled, immediate - but an open BLOCKER security finding holds it. The PR stays
+      // open (recorded 'open' above) for a human to fix, triage, or explicitly approve in-product.
+      mergeNote = await recordMergeHeld(db, { tenantId, cloudAgentRef, executionId, repoCtx }, securityVerdict);
+      merged = false;
     } else {
       // Auto-merge enabled, immediate: ship to the deploy branch now.
       const m = await mergeBranchToBase({
         provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
         token: repoCtx.token, base: repoCtx.base, head: repoCtx.branch,
         message: `Task #${taskRow.id}: ${taskRow.title} (BuilderForce auto-merge by ${agentLabel})`,
+        // Merge exactly the commit the gate verified; a head that moved since is a non-merge (`head_moved`).
+        expectedHeadSha: securityVerdict.headSha,
       });
       merged = m.ok;
       // Stamp the merge SHA so the post-merge deploy-branch build correlates back
       // to this task (build validation + auto-fix loop).
       if (m.ok && prRowId) {
-        await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null })
+        await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null, env })
           .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudFinalize.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] merged PR persistence failed', details: { tenantId, executionId, prRowId, error } } }));
       }
       mergeNote = m.ok

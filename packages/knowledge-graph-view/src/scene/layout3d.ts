@@ -16,7 +16,7 @@
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp, importanceOf, round } from '../order';
-import { canonicalEdges } from './canonicalEdges';
+import { canonicalEdgesTask } from './canonicalEdges';
 import { layoutSprings } from './layoutSprings';
 import { createRelaxation, type Relaxation } from './layoutRelax';
 
@@ -77,14 +77,20 @@ function rng(seed: number): () => number {
 /** Partitions top-down: by explicit order, else by net outgoing cross-partition edges. */
 export function planeOrder(nodes: readonly KNode[], edges: readonly KEdge[], explicit?: readonly string[]): string[] {
     const present = [...new Set(nodes.map((n) => n.partition ?? NONE))];
-    const partOf = new Map(nodes.map((n) => [n.ref, n.partition ?? NONE] as const));
-    const score = new Map<string, number>(present.map((p) => [p, 0]));
+    // Partitions as small integers, so the edge loop adds to a typed array instead of rewriting a string-keyed map twice per edge.
+    const slot = new Map(present.map((p, i) => [p, i] as const));
+    const partOf = new Map<string, number>();
+    for (const n of nodes) partOf.set(n.ref, slot.get(n.partition ?? NONE)!);
+    const tally = new Float64Array(present.length);
     for (const e of edges) {
-        const a = partOf.get(e.from), b = partOf.get(e.to);
-        if (a === undefined || b === undefined || a === b) continue;
-        score.set(a, (score.get(a) ?? 0) + 1);
-        score.set(b, (score.get(b) ?? 0) - 1);
+        const a = partOf.get(e.from);
+        if (a === undefined) continue;
+        const b = partOf.get(e.to);
+        if (b === undefined || a === b) continue;
+        tally[a]! += 1;
+        tally[b]! -= 1;
     }
+    const score = new Map<string, number>(present.map((p, i) => [p, tally[i]!] as const));
     const rank = (p: string): number => {
         if (p === NONE) return Number.POSITIVE_INFINITY;
         const at = explicit?.indexOf(p) ?? -1;
@@ -118,9 +124,9 @@ export function layoutTask(
     const random = rng(hash32(rootId));
 
     // Areas: the node's area, else its partition plane as one area.
-    const areaKey = (n: KNode): string => `${n.partition ?? NONE}\u0000${n.area ?? n.partition ?? NONE}`;
+    const areaKeys = nodes.map((n) => `${n.partition ?? NONE}\u0000${n.area ?? n.partition ?? NONE}`);
     const areaWeight = new Map<string, number>();
-    for (const n of nodes) areaWeight.set(areaKey(n), (areaWeight.get(areaKey(n)) ?? 0) + importanceOf(n));
+    nodes.forEach((n, i) => areaWeight.set(areaKeys[i]!, (areaWeight.get(areaKeys[i]!) ?? 0) + importanceOf(n)));
     const byPlane = new Map<string, string[]>();
     for (const key of [...areaWeight.keys()].sort(cmp)) {
         const plane = key.slice(0, key.indexOf('\u0000'));
@@ -139,7 +145,7 @@ export function layoutTask(
     const index = new Map(nodes.map((n, i) => [n.ref, i] as const));
     const x = new Float64Array(nodes.length);
     const z = new Float64Array(nodes.length);
-    const home: Array<[number, number]> = nodes.map((n) => centre.get(areaKey(n)) ?? [0, 0]);
+    const home: Array<[number, number]> = nodes.map((_, i) => centre.get(areaKeys[i]!) ?? [0, 0]);
     nodes.forEach((_, i) => {
         const [cx, cz] = home[i]!;
         x[i] = cx + (random() - 0.5) * 2;
@@ -147,17 +153,19 @@ export function layoutTask(
     });
 
     const members = new Map<string, number[]>();
-    nodes.forEach((n, i) => (members.get(areaKey(n)) ?? members.set(areaKey(n), []).get(areaKey(n))!).push(i));
-    // The edge work is staged: sorting 150k edges is its own step, so no single step holds the thread for long.
-    let sorted: KEdge[] = [];
+    areaKeys.forEach((key, i) => (members.get(key) ?? members.set(key, []).get(key)!).push(i));
+    // The edge work is staged: sorting 150k edges (shared with the edge ranking, computed once) and picking the springs are their own steps.
+    let sorted: readonly KEdge[] = [];
     let relax: Relaxation | null = null;
-    const stages: Array<() => void> = [
-        // Nodes are indexed in ref order, so `index` is the rank the canonical edge order needs.
-        () => { sorted = canonicalEdges(edgesIn, index); },
+    // Nodes are indexed in ref order, so `index` is the rank the canonical edge order needs.
+    const canon = canonicalEdgesTask(edgesIn, index);
+    const stages: Array<() => boolean> = [
+        () => { if (!canon.step()) return false; sorted = canon.result(); return true; },
         () => {
             relax = createRelaxation({
                 x, z, home, groups: [...members.values()], springs: layoutSprings(sorted, index), iterations: opts.iterations ?? LAYOUT_ITERATIONS,
             });
+            return true;
         },
     ];
 
@@ -165,8 +173,10 @@ export function layoutTask(
     let finished = false;
     return {
         step() {
-            const stage = stages.shift();
-            if (stage) { stage(); return false; }
+            if (stages.length > 0) {
+                if (stages[0]!()) stages.shift();
+                return false;
+            }
             finished = relax!.step();
             return finished;
         },

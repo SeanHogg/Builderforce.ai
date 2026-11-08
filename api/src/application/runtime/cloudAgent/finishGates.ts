@@ -21,6 +21,7 @@ import { verifyWrittenFiles } from '../../repos/verifyWrittenFiles';
 import { createRepoReadMemo, type RepoFileReader } from '../../repos/repoReadMemo';
 import type { WrittenFileHashes } from './writtenFileHashes';
 import { pollBranchCi, ciFinishDecision } from '../../ci/pollCommitCiStatus';
+import { ciVerdictWithDraftPr, type DraftPrPorts } from '../../ci/draftPrForCi';
 import { scanWrittenForPlaceholders } from '../../repos/scanForPlaceholders';
 import { recordCodeCompletionClaim } from '../../provenance/finishClaimService';
 import { absorbChildWrites, liveChildrenFinishBlock } from '../cloudChildRuns';
@@ -41,6 +42,8 @@ export function cloudFinishPorts(a: {
   writtenHashes?: WrittenFileHashes;
   /** The run's LIVE written set (shared with the provider and the containment footprint): paths a child committed join it as soon as they are absorbed. */
   writtenPaths?: Set<string>;
+  /** Set for a run WITHOUT a sandbox: its branch CI is its only build, so a repo that builds only for a pull request gets the run's PR opened early as a draft (`draftPrForCi`). */
+  noSandboxPr?: { ports: DraftPrPorts };
 }): FinishGatePorts & { delegated: boolean } {
   const { db, evt, repoCtx } = a;
   const branch = repoCtx ? { ...repoCtx, ref: repoCtx.branch } : null;
@@ -53,7 +56,13 @@ export function cloudFinishPorts(a: {
     beginAttempt: () => { branchRead = branch ? createRepoReadMemo(branch) : undefined; },
     ...(branch && repoCtx ? {
       verify: (paths: readonly string[]) => verifyWrittenFiles(branch, new Set(paths), branchRead),
-      pollBranchCi: async (counters: { pendingBlocks: number; failureBlocks: number }) => ciFinishDecision(await pollBranchCi(repoCtx), counters),
+      pollBranchCi: async (counters: { pendingBlocks: number; failureBlocks: number }) => {
+        const verdict = await pollBranchCi(repoCtx);
+        const pr = a.noSandboxPr;
+        return ciFinishDecision(pr ? await ciVerdictWithDraftPr(verdict, {
+          ports: pr.ports,
+        }) : verdict, counters);
+      },
       scanPlaceholders: (paths: readonly string[]) => scanWrittenForPlaceholders(branch, new Set(paths)),
     } : {}),
     liveChildren: () => liveChildrenFinishBlock(db, evt.tenantId, evt.executionId),

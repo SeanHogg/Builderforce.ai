@@ -20,6 +20,8 @@ import { parseApprovalReplay } from '../runtime/executionApprovalGate';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { onReviewerVerdict } from '../kanban/onReviewerVerdict';
+import { coordinateTicket } from '../manager/coordinateTicket';
 import { resolveMemberDisplayName } from '../kanban/roleCapability';
 import { recordActivity, resolveHumanActor } from '../activity/activityLog';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -68,6 +70,7 @@ function parseApprovalRoleKey(metadata: string | null): string | null {
 async function bridgeRoleSignoff(
   db: Db, env: ApprovalEnv, tenantId: number, userId: string,
   existing: ApprovalRow, status: 'approved' | 'rejected', reviewNote: string | null | undefined,
+  runtimeService: RuntimeService,
 ): Promise<void> {
   const roleKey = parseApprovalRoleKey(existing.metadata);
   const bridgeTaskId = parseApprovalReplay(existing.metadata)?.taskId;
@@ -88,6 +91,14 @@ async function bridgeRoleSignoff(
     const participants = new TicketParticipantsService(db);
     await participants.syncStates(env, tenantId, bridgeTaskId).catch(report);
     await participants.invalidate(env, bridgeTaskId).catch(report);
+    if (status === 'rejected') {
+      // A rejection is a changes_requested verdict: a reviewer role's rejection reopens the producer(s).
+      const reopened = await onReviewerVerdict(env, db, {
+        tenantId, taskId: bridgeTaskId, roleKey, verdict: 'changes_requested', summary: reviewNote,
+        actor: { kind: 'human', ref: userId, name: memberName ?? userId },
+      });
+      if (reopened.length) await coordinateTicket(env, db, runtimeService, { tenantId, taskId: bridgeTaskId }).catch(report);
+    }
     await recordActivity(env, db, {
       tenantId, projectId: null,
       actor: await resolveHumanActor(env, db, tenantId, userId),
@@ -195,7 +206,7 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
   if (effect?.abort) return { ok: false, httpStatus: effect.abort.httpStatus, error: effect.abort.error };
 
   if (status === 'approved' || status === 'rejected') {
-    await bridgeRoleSignoff(db, env, tenantId, userId, existing, status, input.reviewNote);
+    await bridgeRoleSignoff(db, env, tenantId, userId, existing, status, input.reviewNote, input.runtimeService);
   }
 
   // Tell the agent host so its blocked gate resumes.

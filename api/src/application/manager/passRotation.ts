@@ -44,7 +44,7 @@
  * The decision itself is PURE ({@link decideRotation} / {@link carryOverRotation}); only
  * the two thin load/save wrappers touch IO.
  */
-import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { peekScratch, saveScratch } from '../runtime/kvScratch';
 import type { Env } from '../../env';
 
 /**
@@ -67,12 +67,14 @@ export const MAX_CONSECUTIVE_YIELDS = 2;
  * exists must be ignored rather than yield the pass to nothing.
  */
 export const ROTATABLE_STAGES: ReadonlySet<string> = new Set([
+  // `pr_conduct` is NOT here either: conduct is the `pr-conduct` registry sweep
+  // (`repos/prConductSweep.ts`), so the pass has no such stage to starve or yield to.
   // `pr_merge` is NOT here any more, and its absence is the point: the merge loop left
   // the pass entirely for its own registry sweep (`application/repos/prMergeSweep.ts`)
   // with its own budget, so there is no longer a PR merge stage for a pass to starve or
   // to yield to. A stale cursor still naming it is ignored by the allow-list filter in
   // `decideRotation`, which is exactly what an allow-list is for.
-  'value', 'assign', 'systemic', 'dispatch', 'audit', 'pr_conduct', 'triage',
+  'value', 'assign', 'systemic', 'dispatch', 'audit', 'triage',
 ]);
 
 /**
@@ -169,8 +171,7 @@ const ROTATION_TTL_SECONDS = 3_600;
 
 /** This pass's rotation. Never throws — a cache miss or failure means "run everything". */
 export async function loadPassRotation(env: Env, tenantId: number, projectId: number): Promise<PassRotation> {
-  const prior = await peekCached<RotationState>(env, rotationKey(tenantId, projectId)).catch(() => null);
-  return decideRotation(prior);
+  return decideRotation(await peekScratch<RotationState>(env, rotationKey(tenantId, projectId)));
 }
 
 /** Persist the cursor for the next pass. Best-effort: a lost write costs one unrotated pass. */
@@ -181,10 +182,5 @@ export async function savePassRotation(
   rotation: PassRotation,
   budgetShed: readonly string[],
 ): Promise<void> {
-  await setCached(
-    env,
-    rotationKey(tenantId, projectId),
-    carryOverRotation(rotation, budgetShed),
-    { kvTtlSeconds: ROTATION_TTL_SECONDS },
-  ).catch(() => undefined);
+  await saveScratch(env, rotationKey(tenantId, projectId), carryOverRotation(rotation, budgetShed), ROTATION_TTL_SECONDS);
 }

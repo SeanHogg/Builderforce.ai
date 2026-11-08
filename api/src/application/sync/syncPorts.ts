@@ -9,6 +9,7 @@
  * `__fixtures__/memorySyncStores.ts`.
  */
 
+import type { SyncWatermark } from '../../domain/sync/deltaWatermark';
 import type {
   EntityDestination,
   JournalEvent,
@@ -66,9 +67,15 @@ export interface SyncRecordRow {
 }
 
 /** One delta-log row; `record` is the immutable LocalRecord snapshot clients merge. */
-export interface SyncChangeRow {
-  seq: number;
+export interface SyncChangeRow extends SyncWatermark {
   record: LocalRecord;
+}
+
+/** One delta page and the database `xmin` of the SAME statement that read it. */
+export interface SyncChangePage {
+  rows: SyncChangeRow[];
+  /** `pg_snapshot_xmin` (decimal `xid8`): every row below it is final. */
+  xmin: string;
 }
 
 /** The journal row a terminal outcome writes (accepted or conflict). */
@@ -143,12 +150,19 @@ export interface SyncStoreSet {
 
 /** Read side of pull — deliberately NOT transactional (one cursor page is one read). */
 export interface SyncPullStore {
-  /** The tenant's highest change seq (0 when its log is empty). ONE aggregate, never a page walk. */
-  maxChangeSeq(tenantId: number): Promise<number>;
-  /** The lowest retained change seq for this destination; null when it has none. */
-  minChangeSeq(tenantId: number, destinationKey: string): Promise<number | null>;
-  /** Delta page: this destination's changes after `seq`, oldest first, at most `limit`. */
-  changesAfter(tenantId: number, destinationKey: string, seq: number, limit: number): Promise<SyncChangeRow[]>;
+  /**
+   * The database `xmin` (`pg_snapshot_xmin(pg_current_snapshot())`, decimal `xid8`): every
+   * transaction below it has finished. A snapshot's delta handover starts here.
+   */
+  databaseXmin(): Promise<string>;
+  /** The lowest retained `(txid, seq)` for this destination; null when it has none. */
+  minChangeWatermark(tenantId: number, destinationKey: string): Promise<SyncWatermark | null>;
+  /**
+   * Delta page: this destination's COMMITTED-AND-FINAL changes after `after` in `(txid, seq)`
+   * order, at most `limit` — only rows with `txid < xmin`, with that `xmin` returned from the
+   * same statement so the caller holds one consistent snapshot.
+   */
+  changesAfter(tenantId: number, destinationKey: string, after: SyncWatermark, limit: number): Promise<SyncChangePage>;
   /** Snapshot page: projection rows keyset-paginated by (entityType, clientEntityId). */
   snapshotAfter(
     tenantId: number,
@@ -249,6 +263,7 @@ export interface SyncNamedImporters {
   importSyncedChat: SyncMutationImporter;
   importSyncedMessage: SyncMutationImporter;
   importSyncedUsage: SyncMutationImporter;
+  importSyncedChatTicketLink: SyncMutationImporter;
   importMirrorRecord: SyncMutationImporter;
 }
 
@@ -289,11 +304,30 @@ export interface SyncUnitOfWork {
 }
 
 /**
+ * One push batch's transaction. `stores`/`importers` are bound to the BATCH
+ * transaction itself; each event runs through {@link savepoint}.
+ */
+export interface SyncBatchUnit extends SyncUnitOfWork {
+  /**
+   * Cross-context reference reads bound to THIS transaction: a row an earlier event of
+   * the batch wrote (a chat it created) is invisible to a committed read on another
+   * connection, and visible here.
+   */
+  references: SyncReferenceReader;
+  /**
+   * Run `work` in a SAVEPOINT. A throw rolls back to the savepoint (this event's writes
+   * only, and the transaction is usable again) and rethrows; a return releases it.
+   */
+  savepoint<R>(work: (unit: SyncUnitOfWork) => Promise<R>): Promise<R>;
+}
+
+/**
  * The full persistence port: committed reads (replay lookup, dependency check,
- * destination binding, pull), plus one atomic unit of work per applied event.
+ * destination binding, pull), plus ONE transaction per push batch.
  */
 export interface SyncStores
   extends SyncPullStore, Pick<SyncStoreSet, 'findEvent' | 'acceptedEventIds' | 'findMapping'> {
   references: SyncReferenceReader;
-  transact<R>(work: (unit: SyncUnitOfWork) => Promise<R>): Promise<R>;
+  /** One transaction around the whole batch; a throw out of `work` rolls the batch back. */
+  transact<R>(work: (batch: SyncBatchUnit) => Promise<R>): Promise<R>;
 }

@@ -3,6 +3,7 @@ import { ensureProjectTemplate } from './projectTemplate';
 import { invalidateProjectsList } from './projectsListCache';
 import { KanbanTemplateService } from '../kanban/kanbanTemplateService';
 import { DEFAULT_TEMPLATE_ID } from '../kanban/templateCatalog';
+import { TemplateLicenceRequiredError } from '../kanban/templateEntitlement';
 import { provisionDefaultProjectEvermind } from '../llm/projectEvermind';
 import type { Project } from '../../domain/project/Project';
 import type { Db } from '../../infrastructure/database/connection';
@@ -27,7 +28,7 @@ export async function provisionProject(
   db: Db,
   tenantId: number,
   project: Project,
-  opts: { kanbanTemplateId?: string | null } = {},
+  opts: { kanbanTemplateId?: string | null; buyerRef?: string | null } = {},
 ): Promise<void> {
   const plain = project.toPlain();
 
@@ -37,8 +38,14 @@ export async function provisionProject(
 
   // Board from a kanban template so its lanes carry role ownership + per-lane
   // requirements from day one (the onboarding "recommended roster" reads this).
-  await new KanbanTemplateService(db)
-    .applyToProject(env, tenantId, plain.id, opts.kanbanTemplateId?.trim() || DEFAULT_TEMPLATE_ID, plain.name)
+  const kanban = new KanbanTemplateService(db);
+  await kanban
+    .applyToProject(env, tenantId, plain.id, opts.kanbanTemplateId?.trim() || DEFAULT_TEMPLATE_ID, plain.name, opts.buyerRef ?? null)
+    // A priced template the creator has not bought must not provision a board for free;
+    // the project still gets the default board and the creator buys the template later.
+    .catch((error) => (error instanceof TemplateLicenceRequiredError
+      ? kanban.applyToProject(env, tenantId, plain.id, DEFAULT_TEMPLATE_ID, plain.name, opts.buyerRef ?? null)
+      : Promise.reject(error)))
     .catch((error) => {
       reportCaughtError(error, { source: 'application/project/provisionProject.ts', operation: 'applyKanbanTemplate' });
     });

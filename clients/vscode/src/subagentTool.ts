@@ -13,6 +13,7 @@
 
 import { schemaForCapabilities, spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
 import { resolveChildPersona, type SubagentToolDeps } from "./childPersona";
 
@@ -22,8 +23,8 @@ export function subagentToolDef(deps: SubagentToolDeps & Required<Pick<SubagentT
     name: schema.name,
     description: schema.description,
     parameters: schema.parameters as Record<string, unknown>,
-    // Starting a child changes nothing; its calls raise their OWN prompts, as its owner's do.
-    mutating: false,
+    // A child spawn is classified by the shared catalog (mutate): it asks like any other mutation.
+    mutating: toolMutating(schema.name),
     execute: async (args) => {
       const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
       const task = str(args.task);

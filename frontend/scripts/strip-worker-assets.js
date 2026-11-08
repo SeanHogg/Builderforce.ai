@@ -5,14 +5,15 @@
  *   1. Copy worker's __next-on-pages-dist__/assets/ to static (keeps the
  *      worker bundle under Cloudflare's 3 MiB Worker-script limit), then
  *      delete the assets dir from the worker.
- *   2. Strip large ORT WASM binaries from the static assets dir. The studio
- *      and the training pipeline both load ORT WASM from a CDN at runtime
- *      via `configureOnnxRuntime()`, so bundling these files only inflates
- *      the deploy (they're 20+ MiB each and would breach the 25 MiB
- *      per-asset cap).
+ *   2. Strip ORT WASM binaries that exceed Cloudflare's 25 MiB per-asset cap
+ *      (they would fail the deploy). ORT WASM at or under the cap is KEPT:
+ *      `public/ort/` (see copy-ort-runtime.mjs) is served to the web app and to
+ *      the VS Code webview host (`CanvasHost.wasmBaseUrl` =
+ *      https://builderforce.ai/ort/), which load it at runtime.
  */
 const fs = require('fs');
 const path = require('path');
+const { ORT_WASM_PATTERN, ortWasmDecision } = require('./cloudflareAssetCap.cjs');
 
 const workerDir = path.join(
   process.cwd(),
@@ -46,12 +47,8 @@ if (fs.existsSync(assetsSrc)) {
 }
 
 // ---------------------------------------------------------------------------
-// Pass 2: drop ORT WASM from static (loaded from CDN at runtime)
+// Pass 2: drop only the ORT WASM the platform would reject (> 25 MiB)
 // ---------------------------------------------------------------------------
-
-// Matches: ort-wasm-*.wasm, ort-wasm-*.wasm.bin, ort-training-*.wasm[.bin],
-// any next-on-pages-renamed variant with a content hash inside the name.
-const ORT_WASM_PATTERN = /^ort-(wasm|training).*\.wasm(\.bin)?$/i;
 
 let stripped = 0;
 let strippedBytes = 0;
@@ -67,6 +64,7 @@ function walkAndStrip(dir) {
     }
     if (ORT_WASM_PATTERN.test(entry.name)) {
       const size = fs.statSync(full).size;
+      if (ortWasmDecision(entry.name, size) === 'keep') continue;
       fs.unlinkSync(full);
       stripped += 1;
       strippedBytes += size;
@@ -77,5 +75,5 @@ function walkAndStrip(dir) {
 walkAndStrip(staticDir);
 console.log(
   `Stripped ${stripped} ORT WASM file${stripped === 1 ? '' : 's'} ` +
-    `(${(strippedBytes / 1024 / 1024).toFixed(1)} MiB total) from static assets — runtime loads from CDN.`
+    `(${(strippedBytes / 1024 / 1024).toFixed(1)} MiB total, each over the 25 MiB per-asset cap) from static assets.`
 );

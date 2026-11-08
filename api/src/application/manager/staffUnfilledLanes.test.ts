@@ -77,8 +77,9 @@ describe('lane auto-staffing is gated, and only the WRITE is gated', () => {
    *  refuses any lane agent whose capable set is empty. Writing only the lane row would
    *  produce a lane that still authorises nothing — the exact bug being fixed. */
   it('pins the ROLE before binding the lane, or the lane still authorises nothing', () => {
-    // Lane staffing writes to the canonical `agent_assignments` since migration 1085.
-    expect(source).toMatch(/staffUnfilledRole\([\s\S]*?\)[\s\S]*?insert\(laneAgentAssignments\)/);
+    // Lane staffing writes to the canonical `agent_assignments` since migration 1085,
+    // through the lane-staffing write seam (which also publishes the board change event).
+    expect(source).toMatch(/staffUnfilledRole\([\s\S]*?\)[\s\S]*?insertLaneAssignment\(/);
   });
 });
 

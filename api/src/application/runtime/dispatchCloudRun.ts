@@ -42,39 +42,12 @@ import { authorizeManagedTaskExecution } from '../kanban/managedExecutionGuard';
 import { markLifecycleNeutral, describeAuthority, MANAGED_OVERRIDE_EVENT } from './executionAuthority';
 import type { ExecutionReadMemo } from './executionReadMemo';
 import { ExecutionStatus } from '../../domain/shared/types';
-import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectRepositories, projects, tasks } from '../../infrastructure/database/schema';
-import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
-import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
-
-/**
- * The dispatcher's binding surface: the platform `Env` plus the On-Prem host
- * relay Durable Object. Declared here rather than imported from the route module
- * so the dependency arrow stays inward.
- */
-export type DispatchEnv = Env & {
-  AGENT_HOST_RELAY?: DurableObjectNamespace<AgentHostRelayDO>;
-};
-
-export type DispatchMessage = {
-  type: 'task.assign' | 'task.broadcast';
-  executionId: number;
-  taskId: number;
-  payload?: string;
-  /** Agent runtime engine resolved from the run-target cloud agent (default v1). */
-  engine?: string;
-  /** Human label of the executing cloud agent (change traceability). */
-  agentLabel?: string;
-  /** Repo bound to the task's project, for cloning into the ticket workspace. */
-  repo?: { repoId: string; defaultBranch: string | null };
-  task: {
-    title: string;
-    description?: string | null;
-  };
-  artifacts?: ResolvedArtifacts;
-};
+import { executions, projectRepositories, projects, tasks } from '../../infrastructure/database/schema';
+import { deliverToPinnedHosts, getDispatchTargets, type DispatchMessage } from './hostDelivery';
+import { admissionOutcome, admissionRefusalOf, admitCloudRun, preAdmitRun } from './dispatchAdmission';
+import { submittingUserId } from './dispatcherLabel';
 
 export type ExecutionTaskRow = {
   id: number;
@@ -93,19 +66,18 @@ export type ExecutionTaskRow = {
   projectId: number;
 };
 
-export async function dispatchToAgentHost(env: DispatchEnv, agentHostId: number, message: DispatchMessage): Promise<boolean> {
-  if (!env.AGENT_HOST_RELAY) return false;
-  const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId)));
-  const response = await stub.fetch('https://relay.internal/dispatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(message),
-  });
-  return response.ok;
-}
-
 /** Minimal structural shape of a domain Execution returned by RuntimeService. */
 export type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
+
+/**
+ * The payload the run was stored with. `RuntimeService.submit` is the ONE place governance gates are resolved and stamped
+ * onto it, so every consumer of a submitted run (the host frame, the cloud runner, the row rewrites) starts from this, never
+ * from the caller's original string, which has no gates.
+ */
+export function storedPayloadOf(execution: SubmittedExecution, fallback: string | undefined): string | undefined {
+  const stored = (execution.toPlain() as { payload?: string | null } | null)?.payload;
+  return typeof stored === 'string' && stored.length > 0 ? stored : fallback;
+}
 
 /**
  * Context-free dispatch: create AND start a cloud run for a task. Used by every
@@ -155,7 +127,7 @@ export type SubmittedExecution = { id: number; status: string; toPlain(): unknow
  * bare `null` has to invent a reason, and the one it invented (`no_agent`) sent a person
  * to staff a lane that was staffed. See {@link dispatchError}.
  */
-export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found' | 'dispatch_error';
+export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found' | 'dispatch_error' | 'concurrent_run_limit';
 
 /** The refusals a person directing a run may NOT override: billing entitlements, and the
  *  workspace's own execution switch — none of them is backpressure, so a human click
@@ -175,6 +147,13 @@ export interface CloudDispatchOutcome {
   executionId: number | null;
   /** Present exactly when `executionId` is null. */
   refusal?: CloudDispatchRefusal;
+  /**
+   * The refusal is TRANSIENT admission (a live run on the ticket, the tenant's concurrent
+   * cap) for an AUTONOMOUS caller: no failed run was left for the circuit breaker to
+   * count, and the ticket stays eligible for the next auto-run pass. A human-directed
+   * (`force`) dispatch gets the same refusal without this flag, to show the person.
+   */
+  deferred?: true;
 }
 
 /** A refusal outcome, with the shared sentence for `reason` and any specific detail appended. */
@@ -183,7 +162,9 @@ function refuse(reason: CloudDispatchRefusalReason, detail?: string | null): Clo
     ? 'No run: no ticket with that id exists in this workspace.'
     : reason === 'dispatch_error'
       ? 'No run: the dispatcher failed before a run could be created. The error above is the reason; it is not a configuration or entitlement problem.'
-      : AUTO_RUN_REASON_TEXT[reason];
+      : reason === 'concurrent_run_limit'
+        ? 'No run yet: the workspace is at its plan\'s concurrent cloud-run limit.' // built by `admissionOutcome`
+        : AUTO_RUN_REASON_TEXT[reason];
   return { executionId: null, refusal: { reason, message: detail?.trim() ? `${detail.trim()} ${base}` : base } };
 }
 
@@ -208,6 +189,11 @@ export async function dispatchCloudRunForTask(
     /** HUMAN-initiated dispatch: skip the failure breaker + re-run cooldown (never
      *  the cloud-run cap). Autonomous callers must leave this unset. */
     force?: boolean;
+    /** A ONE-SHOT dispatcher that no sweep re-evaluates (CI auto-fix, incident, security,
+     *  validation): a `deferred` admission is parked and retried by the `deferred-dispatch`
+     *  sweep instead of being dropped. Lane and role dispatchers leave this unset (`auto-exec`
+     *  re-sweeps them). */
+    parkIfDeferred?: boolean;
     /**
      * A request-scoped memo of the ticket's execution rows (DISP-R1). Supplying it
      * saves ONE query on a path that just read the same list — the lane trigger,
@@ -321,6 +307,21 @@ export async function dispatchCloudRunForTask(
   // `startDispatchedExecution` stays, and why `cloudGate` is only handed down when it
   // was actually resolved here.
   const hostPinned = (params.agentHostId ?? taskRow.assignedAgentHostId) != null;
+
+  // (1a) ADMISSION, pre-row (PRD 09 D6 / D8): one live run per ticket and the plan's
+  // concurrent cap, refused BEFORE a row exists so no failed run is left for the circuit
+  // breaker. An AUTONOMOUS caller gets `deferred` (see `admissionOutcome`). The cap look is
+  // skipped for a pinned host only as a shortcut: a pinned run that falls back to the cloud is
+  // admitted again, after its row exists, in `startDispatchedExecution`.
+  const actingUserId = submittingUserId(submittedBy);
+  const admissionCtx = {
+    tenantId: params.tenantId, taskId: params.taskId, cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+    lane: taskRow.status as string | null, submittedBy, force: params.force === true,
+    ...(params.parkIfDeferred ? { park: { payload: params.payload, agentHostId: params.agentHostId } } : {}),
+  };
+  const preAdmission = await preAdmitRun(env, db, { tenantId: params.tenantId, taskId: params.taskId, actingUserId, checkCap: !hostPinned });
+  if (preAdmission) return admissionOutcome(env, db, preAdmission, admissionCtx);
+
   const cloudGate = hostPinned ? undefined : await enforceCloudRunCap(db, params.tenantId, env);
   if (cloudGate && !cloudGate.allowed) {
     await recordAutoRunSkip(env, db, {
@@ -360,7 +361,8 @@ export async function dispatchCloudRunForTask(
         lane: taskRow.status,
         // The failure COUNT is part of the state: each additional failed run is a real
         // change (it is what walks the ticket toward the breaker), not a repeat.
-        reason: `${backoff.blockedBy}:${backoff.consecutiveFailures}`,
+        reason: backoff.blockedBy,
+        stateDiscriminator: backoff.consecutiveFailures,
         detail: {
           taskId: params.taskId, reason: backoff.blockedBy, submittedBy,
           consecutiveFailures: backoff.consecutiveFailures,
@@ -393,11 +395,15 @@ export async function dispatchCloudRunForTask(
   // A resolved `cloudGate` is handed down so the choke point below does not re-run the
   // cap query — one check per dispatch, two places that can act on it. Omitted for a
   // host-pinned dispatch, so a host that fails delivery still gets capped down there.
-  await startDispatchedExecution(
+  const started = await startDispatchedExecution(
     env, db, runtimeService, waitUntil, params.tenantId,
     execution as SubmittedExecution, effectiveTaskRow, payload,
-    cloudGate ? { cloudGate } : undefined,
+    { ...(cloudGate ? { cloudGate } : {}), actingUserId },
   );
+  // Lost the post-insert race (or a pinned host fell back to a full cloud): the row was
+  // settled and never started, so there is no run to report. Same outcome as the pre-row check.
+  const lostAdmission = admissionRefusalOf(started);
+  if (lostAdmission) return admissionOutcome(env, db, lostAdmission, admissionCtx);
   return { executionId: execution.id };
 }
 
@@ -414,8 +420,10 @@ export async function startDispatchedExecution(
   payload: string | undefined,
   /** A cloud-run cap verdict the caller already resolved, so the pre-submit gate in
    *  {@link dispatchCloudRunForTask} and this one never query it twice. */
-  opts?: { cloudGate?: CloudRunCapResult },
+  opts?: { cloudGate?: CloudRunCapResult; actingUserId?: string | null },
 ): Promise<unknown> {
+  // The gated payload `submit` stored (see `storedPayloadOf`); the `payload` argument is only its fallback.
+  const dispatched = storedPayloadOf(execution, payload);
   // On-Prem (hosted) execution happens ONLY when a host is explicitly pinned on the
   // task — a cloud agent is never broadcast to a client machine. Resolve a dispatch
   // target only for a pinned host (skips a needless all-online-hosts scan on the
@@ -437,7 +445,7 @@ export async function startDispatchedExecution(
   // would have assigned (the manager's own picker, then the role-capability oracle);
   // when nothing resolves it returns a TYPED reason, recorded below, so an anonymous
   // run says WHY it is anonymous instead of merely being anonymous.
-  const pinnedAgentRef = parseCloudAgentRef(payload) ?? taskRow.assignedAgentRef ?? undefined;
+  const pinnedAgentRef = parseCloudAgentRef(dispatched) ?? taskRow.assignedAgentRef ?? undefined;
   const defaultAgent = pinnedAgentRef
     ? null
     : await resolveDefaultCloudAgentRef(env, db, { tenantId, projectId: taskRow.projectId, taskId: taskRow.id });
@@ -448,7 +456,7 @@ export async function startDispatchedExecution(
   // resolve the repo below so resolveDefaultRepoForTask honors the pin; '' clears it
   // (Auto). Pin only a repo that actually belongs to this task's project — the
   // picker is project-scoped; this guards a stale/cross-project id.
-  const repoIdSel = parseRepoId(payload);
+  const repoIdSel = parseRepoId(dispatched);
   if (repoIdSel !== undefined) {
     const repoId = repoIdSel || null;
     const valid = repoId == null
@@ -489,6 +497,18 @@ export async function startDispatchedExecution(
     });
     return updated.toPlain();
   }
+
+  // ADMISSION (PRD 09 D6 / D8) - before any irreversible side effect (the ticket claim, the PRD
+  // draft). A run with no usable host is cloud-bound NOW and is ranked against its peers; a run
+  // headed for a pinned host is held to the per-task dedupe only, and is admitted again as a
+  // cloud run below if the host does not take it.
+  const hostAllowed = agentAllowsHostExecution(agent.runtimeSupport);
+  const hostBound = pinnedHostId != null && hostAllowed;
+  const refusedUpFront = await admitCloudRun(env, db, runtimeService, {
+    tenantId, taskId: taskRow.id, executionId: execution.id, cloudAgentRef: agent.ref,
+    actingUserId: opts?.actingUserId ?? null, cloudBound: !hostBound,
+  });
+  if (refusedUpFront) return refusedUpFront;
 
   // The EXECUTING agent vs the ticket's OWNER are distinct roles. The swimlane's
   // agent works whatever stage (lane) the ticket is in — it executes AS itself
@@ -555,7 +575,7 @@ export async function startDispatchedExecution(
     // also clear the coding-quality gate (≥90% of the frontier baseline on the coding
     // eval, for this exact version) — closed → no pin → today's model selection.
     : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId, { purpose: 'coding' });
-  const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
+  const effectivePayload = withDefaultModel(dispatched, agent.baseModel ?? projectEvermindPin);
 
   // PRD-first at the dispatch choke point. Host-delivered runs never reach
   // prepareCloudRun (the previous sole caller), so an On-Prem / pinned-host
@@ -609,7 +629,6 @@ export async function startDispatchedExecution(
   // engine runs). preferred_runtime (for runtime_support==='both') is resolved on
   // the swimlane path; here a host run still requires an explicit pin, so it cannot
   // route AWAY from a pinned host.
-  const hostAllowed = agentAllowsHostExecution(agent.runtimeSupport);
   if (pinnedHostId != null && !hostAllowed) {
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
@@ -618,9 +637,8 @@ export async function startDispatchedExecution(
       result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is cloud-only (runtime_support=cloud); the pinned On-Prem host was not used — running in the cloud.`,
     }).catch((error) => reportCaughtError(error, { source: "application/runtime/dispatchCloudRun.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] route telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
   }
-  const delivered = pinnedHostId != null && hostAllowed
-    ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as DispatchEnv, targetId, message).catch(() => false)))).some(Boolean)
-    : false;
+  const delivered = hostBound
+    && await deliverToPinnedHosts(env, db, waitUntil, { tenantId, executionId: execution.id, cloudAgentRef: agent.ref, targets: hostTargets, message });
 
   const notifyDone = async () => {
     const updated = await runtimeService.getExecution(execution.id);
@@ -634,18 +652,11 @@ export async function startDispatchedExecution(
   };
 
   if (!delivered) {
-    // Cloud-compute gate: a cloud run executes on OUR infra (unlike on-prem/VSIX),
-    // so it consumes the monthly "Cloud runs" allowance even when the tenant brings
-    // their own model (BYO tokens are $0 to us, but the orchestration isn't). This
-    // is the ONE choke point every cloud entry funnels through (Run-now, board,
-    // autofix), so gating here covers them all. Over the cap → fail fast with an
-    // upgrade hint rather than start a run we'd have to run for free. Superadmin /
-    // unlimited plans pass; a metering error fails OPEN (never blocks a real run).
-    //
-    // An AUTONOMOUS dispatch never reaches this branch: `dispatchCloudRunForTask`
-    // already refused before creating a run (and passes its verdict down via `opts`
-    // so the query is not repeated). What lands here is an HTTP submit, where the
-    // person who clicked deserves a visible failed run carrying the reason.
+    // Monthly cloud-run allowance: a cloud run executes on OUR infra even with a BYO model,
+    // so it consumes the allowance. This choke point covers every cloud entry. Over the cap
+    // fails fast with an upgrade hint; superadmin / unlimited pass; a metering error fails OPEN.
+    // An autonomous dispatch was already refused pre-row (its verdict arrives via `opts`); an
+    // HTTP submit lands here and gets a visible failed run carrying the reason.
     const cloudGate = opts?.cloudGate ?? await enforceCloudRunCap(db, tenantId, env);
     if (!cloudGate.allowed) {
       const msg = `Monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Upgrade at builderforce.ai/pricing to run more cloud agents — on-prem and VS Code runs stay unlimited.`;
@@ -658,6 +669,16 @@ export async function startDispatchedExecution(
       await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch((error) => reportCaughtError(error, { source: "application/runtime/dispatchCloudRun.ts", operation: "startDispatchedExecution", level: 'warning', context: { logMessage: '[runtime-dispatch] cloud-cap terminal transition rejected', details: { tenantId, executionId: execution.id, error } } }));
       await notifyDone();
       return runtimeService.getExecution(execution.id).then((e) => e.toPlain()).catch(() => ({ id: execution.id, status: ExecutionStatus.FAILED }));
+    }
+
+    // A pinned host that was offline or rejected the run falls back to the cloud: it is a
+    // cloud run now, so it is admitted (stamped, counted, ranked) like any other.
+    if (hostBound) {
+      const refusedAsCloud = await admitCloudRun(env, db, runtimeService, {
+        tenantId, taskId: taskRow.id, executionId: execution.id, cloudAgentRef: agent.ref,
+        actingUserId: opts?.actingUserId ?? null, cloudBound: true,
+      });
+      if (refusedAsCloud) return refusedAsCloud;
     }
 
     // Every cloud run is driven by the durable runner (CloudRunnerDO). The run carries
@@ -835,30 +856,4 @@ export async function startDispatchedExecution(
   });
 
   return execution.toPlain();
-}
-
-export async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?: number | null): Promise<number[]> {
-  if (assignedAgentHostId != null) {
-    const [row] = await db
-      .select({ id: agentHosts.id })
-      .from(agentHosts)
-      .where(
-        and(
-          eq(agentHosts.id, assignedAgentHostId),
-          eq(agentHosts.tenantId, tenantId),
-        ),
-      );
-    return row ? [row.id] : [];
-  }
-
-  const rows = await db
-    .select({ id: agentHosts.id })
-    .from(agentHosts)
-    .where(
-      and(
-        eq(agentHosts.tenantId, tenantId),
-        agentHostOnlineCondition(),
-      ),
-    );
-  return rows.map((row) => row.id);
 }

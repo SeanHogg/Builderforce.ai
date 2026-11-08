@@ -12,7 +12,7 @@ import { canvasSurface } from '@/lib/canvasHost';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { type BrainDockPreferences, writeBrainDockPreferences } from '../brainDockPreferences';
 import type { CreationFlowNode } from '../CreationNode';
-import { type CanvasStroke, canvasStrokes, drawingPatch, eraseStrokes } from '@/lib/canvasDrawing';
+import { beginStrokePath, canvasStrokes, STROKE_MIN_POINT_DISTANCE, drawingPatch, endStrokePath, eraseStrokes, eraserRadius, extendStrokePath, strokeFromPath } from '@/lib/canvasDrawing';
 import { newNode, topmostNodeAt } from '../canvasNodeHelpers';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { GuestLimitRefusal } from '@/lib/guestLimit';
@@ -209,7 +209,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     if (!flowRef.current) return;
     const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
     if (presenceLive) { cursorRef.current = point; sendPresence({ cursor: point }); }
-    if (drawingMode && drawingPointsRef.current.length) drawingPointsRef.current.push(point);
+    if (drawingMode) extendStrokePath(drawingPointsRef, point, STROKE_MIN_POINT_DISTANCE);
   }, [cursorRef, drawingMode, drawingPointsRef, flowRef, presenceLive, sendPresence]);
   const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     // A stroke may START ANYWHERE, including on top of a card — that is what
@@ -217,9 +217,20 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     // surface, and the cards under it are things to mark up rather than things
     // to drag. (Dragging and connecting are disabled for the same reason.)
     if (!drawingMode || !canEdit || !flowRef.current) return;
-    drawingPointsRef.current = [flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })];
+    beginStrokePath(drawingPointsRef, flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
     event.currentTarget.setPointerCapture(event.pointerId);
   }, [canEdit, drawingMode, drawingPointsRef, flowRef]);
+  /** Leaving the board hides this cursor from peers and abandons a stroke in progress. */
+  const onCanvasPointerLeave = useCallback(() => {
+    cursorRef.current = null;
+    endStrokePath(drawingPointsRef);
+    sendPresence({ cursor: null });
+  }, [cursorRef, drawingPointsRef, sendPresence]);
+  /** A cancelled gesture (system gesture, lost capture) discards the stroke; it never commits. */
+  const onCanvasPointerCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    endStrokePath(drawingPointsRef);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }, [drawingPointsRef]);
   /**
    * Commit the stroke.
    *
@@ -232,16 +243,16 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
   const onCanvasPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     // Narrowed on `drawing` itself: the pen is what the stroke is drawn with.
     if (!drawing) return;
-    const path = drawingPointsRef.current.splice(0);
+    const path = endStrokePath(drawingPointsRef);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const start = path[0];
     if (!start) return;
     const tool = drawing.tool;
-    // Freehand and shapes need a drag; text and the eraser act on a tap.
-    if (tool !== 'text' && tool !== 'eraser' && path.length < 2) return;
+    // The eraser acts on a tap; every other tool needs what `strokeFromPath` accepts.
+    if (tool !== 'eraser' && !strokeFromPath(drawing, path)) return;
 
     if (tool === 'eraser') {
-      const radius = Math.max(8, drawing.width * 3);
+      const radius = eraserRadius(drawing.width);
       let erased = 0;
       setNodes((current) => current.flatMap((node) => {
         if (node.data.kind !== 'drawing') return [node];
@@ -258,13 +269,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
       return;
     }
 
-    const stroke: CanvasStroke = {
-      tool,
-      points: tool === 'text' ? [start] : tool === 'pen' || tool === 'highlighter' ? path : [start, path[path.length - 1]!],
-      stroke: drawing.color,
-      strokeWidth: drawing.width,
-      ...(tool === 'text' ? { text: '' } : {}),
-    };
+    const stroke = strokeFromPath(drawing, path)!;
 
     // The object under the first point decides where the stroke goes.
     const target = topmostNodeAt(nodes, start);
@@ -305,5 +310,5 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     const snapshot = currentSnapshot(viewport);
     persistSnapshot(snapshot);
   }, [currentSnapshot, hydratedRef, persistSnapshot, persistence, presenceLive, sendPresence, viewportRef]);
-  return { openBrainDock, setConnectionStyle, onCanvasPointerDown, onCanvasPointerMove, onCanvasPointerUp, onCanvasNodesChange, onConnect, connectionProps, onNodeClick, onSelectionChange, clearSelection, onViewportChange, interactionProps };
+  return { openBrainDock, setConnectionStyle, onCanvasPointerDown, onCanvasPointerMove, onCanvasPointerUp, onCanvasPointerCancel, onCanvasPointerLeave, onCanvasNodesChange, onConnect, connectionProps, onNodeClick, onSelectionChange, clearSelection, onViewportChange, interactionProps };
 }

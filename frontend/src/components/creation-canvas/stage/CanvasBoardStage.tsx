@@ -14,6 +14,7 @@ export interface CanvasBoardStageProps {
   onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerUp: (event: PointerEvent<HTMLDivElement>) => void;
+  onPointerCancel: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerLeave: () => void;
   onDragEnter: (event: DragEvent) => void;
   onDragLeave: (event: DragEvent) => void;
@@ -22,7 +23,7 @@ export interface CanvasBoardStageProps {
 }
 
 /** The board's box: what is drawn over it, the board itself and every runtime that takes its centre. */
-export function CanvasBoardStage({ boardRef, brainSide, brainOpen, surface, drawingMode, onPointerDown, onPointerMove, onPointerUp, onPointerLeave, onDragEnter, onDragLeave, onDrop, children }: CanvasBoardStageProps) {
+export function CanvasBoardStage({ boardRef, brainSide, brainOpen, surface, drawingMode, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onPointerLeave, onDragEnter, onDragLeave, onDrop, children }: CanvasBoardStageProps) {
   return <div
         ref={boardRef}
         className={styles.flowWrap}
@@ -43,7 +44,7 @@ export function CanvasBoardStage({ boardRef, brainSide, brainOpen, surface, draw
         // rather than on any single id, so a new runtime suppresses the flat viewport,
         // the palette and the remote cursors without a new rule being written for it.
         data-view={surface}
-        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerLeave} onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onPointerLeave={onPointerLeave} onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
     {children}
   </div>;
 }

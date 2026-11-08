@@ -590,3 +590,29 @@ describe('SwimlaneCoordinator — execution loop', () => {
     expect(all.find((d) => d.id !== first.id)!.status).toBe('cancelled');
   });
 });
+
+describe('SwimlaneCoordinator.enterLaneForTask — lane gate re-check', () => {
+  it('refuses to start a stage in a lane that is human-gated on the FRESH read (the router cache may be stale)', async () => {
+    const store = new InMemoryStore();
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, gate: 'human' });
+    store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
+
+    const run = await new SwimlaneCoordinator(store).enterLaneForTask('b1', 42, TENANT, 'l0');
+
+    expect(run).toBeNull();
+    expect(store.runs.size).toBe(0);
+    expect(store.dispatches.size).toBe(0);
+  });
+
+  it('still starts a stage in an auto-gated lane', async () => {
+    const store = new InMemoryStore();
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0 });
+    store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
+
+    const run = await new SwimlaneCoordinator(store).enterLaneForTask('b1', 42, TENANT, 'l0');
+
+    expect(run?.lifecycle).toBe('stage_running');
+  });
+});

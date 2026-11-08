@@ -58,6 +58,24 @@ export interface KanbanTemplate {
   lanes: TemplateLane[];
 }
 
+/** What the API returns for a priced template the workspace holds no licence for: lane NAMES only. */
+export interface KanbanTemplatePreview {
+  preview: true;
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  category: string;
+  priceCents: number;
+  currency: string;
+  listingSlug: string;
+  lanes: Array<{ key: string; name: string; position: number }>;
+}
+
+export function isTemplatePreview(t: KanbanTemplate | KanbanTemplatePreview): t is KanbanTemplatePreview {
+  return (t as KanbanTemplatePreview).preview === true;
+}
+
 export interface TemplateSummary {
   id: string;
   slug: string;

@@ -17,6 +17,7 @@ import type { CreationNodeData } from './types';
 import { storeCanvasMedia } from '@/lib/canvasMediaStore';
 import { useCanvasMediaCapture } from '@/hooks/useCanvasMediaCapture';
 import { renderCanvasVideo } from '@/lib/canvasVideoRender';
+import { useAuthedMediaUrl } from '@/lib/useAuthedMediaUrl';
 import { youtubeApi, type YouTubeConnection, type YouTubeUpload } from '@/lib/youtubeApi';
 import { useYouTubeUpload } from '@/hooks/useYouTubeUpload';
 import styles from './CanvasVideoEditor.module.css';
@@ -32,6 +33,8 @@ function time(value: number): string {
 
 function PreviewMedia({ clip, source, playhead, playing }: { clip: CanvasVideoClip; source: CanvasVideoSource; playhead: number; playing: boolean }) {
   const media = useRef<HTMLMediaElement | null>(null);
+  // A tenant-authenticated upload is fetched with the bearer token; a media element cannot send it.
+  const authed = useAuthedMediaUrl(source.url);
   const desiredTime = clip.trimStartSeconds + Math.max(0, playhead - clip.startSeconds);
   useEffect(() => {
     const element = media.current;
@@ -39,14 +42,15 @@ function PreviewMedia({ clip, source, playhead, playing }: { clip: CanvasVideoCl
     element.volume = Math.max(0, Math.min(1, clip.volume));
     if (Math.abs(element.currentTime - desiredTime) > 0.35) element.currentTime = desiredTime;
     if (playing) void element.play().catch(() => undefined); else element.pause();
-  }, [desiredTime, playing]);
+  }, [desiredTime, playing, authed.url]);
   // Canvas media may be a data URL, a local blob, or an authenticated R2 URL;
   // Next Image cannot optimize those editor-owned sources.
   // eslint-disable-next-line @next/next/no-img-element
   // Sized to the preview's own 16:9 stage; the CSS fills that stage with `object-fit: contain`.
-  if (source.kind === 'image') return <img src={source.url} alt={clip.label} width={1280} height={720} />;
-  if (source.kind === 'audio') return <audio ref={(node) => { media.current = node; }} src={source.url} preload="auto" />;
-  return <video ref={(node) => { media.current = node; }} src={source.url} muted={clip.track === 'visual'} playsInline preload="auto" />;
+  if (!authed.url) return null;
+  if (source.kind === 'image') return <img src={authed.url} alt={clip.label} width={1280} height={720} />;
+  if (source.kind === 'audio') return <audio ref={(node) => { media.current = node; }} src={authed.url} preload="auto" />;
+  return <video ref={(node) => { media.current = node; }} src={authed.url} muted={clip.track === 'visual'} playsInline preload="auto" />;
 }
 
 export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {

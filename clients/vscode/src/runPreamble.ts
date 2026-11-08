@@ -8,7 +8,7 @@
  *   3. the host prompt itself.
  */
 
-import { renderPolicyDirectives, type PolicyGate } from "./policy";
+import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-tools";
 
 /** Rules beyond this are cut: a rules file is guidance, not a second codebase map. */
 const RULES_MAX = 16_000;

@@ -1,12 +1,14 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { filesManifestKey, srcRef, type Extracted } from "@seanhogg/builderforce-memory/knowledge";
 import { decodePack, manifestTree } from "@seanhogg/builderforce-memory/knowledge/pack";
 import { dirtyFileName, replicaFileName } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
-import {
-  extractedLogFileName, extractedLogOf, fileManifest, localKnowledgeStore, manifestFileName, snapshotFileName,
-  type KnowledgeFiles,
-} from "./knowledgeStores";
+import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
+import { nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store";
+import { snapshotFileName, type KnowledgeFiles } from "./knowledgeStores";
 import { disposeReplicas, queueFirstSyncOnce, replicaDrained, replicaQueueFor, replicaStatusOf, resumeAuthPaused, type UploadMarks } from "./knowledgeReplica";
 
 type Files = KnowledgeFiles & { data: Map<string, string>; renames: string[] };
@@ -51,104 +53,33 @@ function marks(): UploadMarks & { map: Map<string, number> } {
 
 const ROOT = "repo/docs";
 
-afterEach(async () => { await disposeReplicas(); });
+// The local store is the folder's SQLite store (G03): a fresh temp folder per test, closed afterwards. Skips where node:sqlite is absent.
+const opened: NodeKnowledgeStore[] = [];
+const folders: string[] = [];
+const nodeStore = (): NodeKnowledgeStore => {
+  const dir = mkdtempSync(join(tmpdir(), "bf-knowledge-stores-"));
+  folders.push(dir);
+  const k = nodeKnowledgeStore(dir);
+  opened.push(k);
+  return k;
+};
+
+afterEach(async () => {
+  await disposeReplicas();
+  for (const k of opened.splice(0)) k.close();
+  for (const d of folders.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 describe("knowledge store", () => {
-  it("keeps a folder in its local snapshot, linked or not", async () => {
-    const files = memoryFiles();
-    const local = localKnowledgeStore(files, ROOT);
-    await local.write({ scope: { rootId: ROOT, title: "docs", packs: ["docs"] }, facts: [], relations: [] });
-    expect(files.data.has(snapshotFileName(ROOT))).toBe(true);
-  });
-
   it("names files safely and uniquely per root", () => {
     expect(snapshotFileName("a/b:c")).toMatch(/^a_b_c-[0-9a-f]{10}\.json$/);
     expect(snapshotFileName("a/b")).not.toBe(snapshotFileName("a_b"));
   });
-
-  it("keeps the extract cache in an append-only log beside the snapshot, not in it, and reads it back", async () => {
-    const files = memoryFiles();
-    const store = localKnowledgeStore(files, ROOT);
-    const ref = srcRef(ROOT, "a.md");
-    await store.putExtracted!("h1", [{ sourceRef: ref, sourceHash: "h1", nodes: [], edges: [], keys: [] }]);
-    await store.write({ scope: { rootId: ROOT, title: "docs", packs: ["docs"] }, facts: [], relations: [] });
-    const log = files.data.get(extractedLogFileName(ROOT));
-    expect(extractedLogFileName(ROOT)).toBe(snapshotFileName(ROOT).replace(/\.json$/, ".extracted.jsonl"));
-    expect(log).toContain("h1");
-    expect(files.data.get(snapshotFileName(ROOT))).not.toContain("sourceHash");
-    expect(await localKnowledgeStore(files, ROOT).getExtracted!("h1")).toHaveLength(1);
-  });
-
-  it("appends through the files' own append when it has one, else by rewriting the concatenation", async () => {
-    const files = memoryFiles();
-    const appended: string[] = [];
-    await extractedLogOf({ ...files, append: async (n, t) => { appended.push(`${n}:${t}`); } }, ROOT).append("a\n");
-    expect(appended).toEqual([`${extractedLogFileName(ROOT)}:a\n`]);
-
-    const log = extractedLogOf(files, ROOT);
-    await log.append("a\n");
-    await log.append("b\n");
-    expect(await log.read()).toBe("a\nb\n");
-    expect(files.data.get(extractedLogFileName(ROOT))).toBe("a\nb\n");
-  });
-
-  it("the append fallback writes a temp file then renames it over the log, never rewriting in place", async () => {
-    const files = memoryFiles();
-    const log = extractedLogOf(files, ROOT);
-    await log.append("a\n");
-    await log.append("b\n");
-    const name = extractedLogFileName(ROOT);
-    expect(files.renames).toEqual([`${name}.tmp>${name}`, `${name}.tmp>${name}`]);
-    expect(files.data.get(name)).toBe("a\nb\n");
-    expect(files.data.has(`${name}.tmp`)).toBe(false);
-  });
-
-  it("offers `replace` (temp + rename) only when the files can rename", async () => {
-    const files = memoryFiles();
-    await extractedLogOf(files, ROOT).replace!("live\n");
-    expect(files.data.get(extractedLogFileName(ROOT))).toBe("live\n");
-    const { rename: _rename, ...noRename } = files;
-    expect(extractedLogOf(noRename, ROOT).replace).toBeUndefined();
-  });
-
-  it("compacts a mostly-dead log on load through temp + rename", async () => {
-    const files = memoryFiles();
-    const row = (v: string) => `${JSON.stringify({ h: "h1", e: [{ sourceRef: srcRef(ROOT, "a.md"), sourceHash: v, nodes: [], edges: [], keys: [] }] })}\n`;
-    files.data.set(extractedLogFileName(ROOT), `${row("v1")}${row("v2")}${row("v3")}torn{\n`);
-    const entries = await localKnowledgeStore(files, ROOT).extractedEntries();
-    expect(entries.h1![0]!.sourceHash).toBe("v3");
-    expect(files.data.get(extractedLogFileName(ROOT))).toBe(row("v3"));
-    expect(files.renames).toEqual([`${extractedLogFileName(ROOT)}.tmp>${extractedLogFileName(ROOT)}`]);
-  });
-
-  it("keeps an unparseable snapshot as <snapshot>.corrupt, then starts empty", async () => {
-    const files = memoryFiles();
-    files.data.set(snapshotFileName(ROOT), "{ truncated");
-    expect(await localKnowledgeStore(files, ROOT).scopes()).toEqual([]);
-    expect(files.data.get(`${snapshotFileName(ROOT)}.corrupt`)).toBe("{ truncated");
-  });
-
-  it("reads the whole extract cache through the store (what a pack uses), not from the snapshot file", async () => {
-    const files = memoryFiles();
-    const store = localKnowledgeStore(files, ROOT);
-    const ex: Extracted = { sourceRef: srcRef(ROOT, "a.md"), sourceHash: "h1", nodes: [], edges: [], keys: [] };
-    await store.putExtracted!("h1", [ex]);
-    await store.write({ scope: { rootId: ROOT, title: "docs", packs: ["docs"] }, facts: [], relations: [] });
-    expect(JSON.parse(files.data.get(snapshotFileName(ROOT))!)).not.toHaveProperty("extracted");
-    expect(await localKnowledgeStore(files, ROOT).extractedEntries()).toEqual({ h1: [ex] });
-  });
-
-  it("persists the review manifest whole", async () => {
-    const files = memoryFiles();
-    const m = fileManifest(files, "m.json");
-    await m.set("k", [{ id: "a.md", hash: "1" }]);
-    expect(await fileManifest(files, "m.json").get("k")).toEqual([{ id: "a.md", hash: "1" }]);
-  });
 });
 
-describe("linking owes the local snapshot to the replica pump as one pack", () => {
+describe.skipIf(!localSqliteAvailable())("linking owes the local snapshot to the replica pump as one pack", () => {
   async function reviewedLocally(files: Files) {
-    const store = localKnowledgeStore(files, ROOT);
+    const { store, manifest } = nodeStore();
     const ref = srcRef(ROOT, "lease.md");
     const ex: Extracted = { sourceRef: ref, sourceHash: "h1", nodes: [], edges: [], keys: [] };
     await store.putExtracted!("h1", [ex]);
@@ -158,12 +89,12 @@ describe("linking owes the local snapshot to the replica pump as one pack", () =
       facts: [{ key: "claim:1", content: "c", source: "knowledge-review", importance: 0.5, origin: "model", fileAnchors: [{ path: "lease.md", contentHash: "h1" }] }],
       relations: [{ from: "fact:claim:1", to: ref, kind: "about", weight: 1, origin: "model" }],
     });
-    await fileManifest(files, manifestFileName(ROOT)).set(filesManifestKey(ROOT), [{ id: "lease.md", hash: "h1" }]);
-    return store;
+    await manifest.set(filesManifestKey(ROOT), [{ id: "lease.md", hash: "h1" }]);
+    return { store, manifest };
   }
 
-  const sync = (files: KnowledgeFiles, local: ReturnType<typeof localKnowledgeStore>, client: KnowledgeClient, projectId: number, m: UploadMarks) =>
-    queueFirstSyncOnce({ rootId: ROOT, files, local, client, projectId, manifest: fileManifest(files, manifestFileName(ROOT)), marks: m });
+  const sync = (files: KnowledgeFiles, held: Pick<NodeKnowledgeStore, "store" | "manifest">, client: KnowledgeClient, projectId: number, m: UploadMarks) =>
+    queueFirstSyncOnce({ rootId: ROOT, files, local: held.store, client, projectId, manifest: held.manifest, marks: m });
 
   it("sends each source's CURRENT output, the rows and the scope in ONE pack, once per project; the mark is set when the set has drained", async () => {
     const files = memoryFiles();
@@ -267,6 +198,6 @@ describe("linking owes the local snapshot to the replica pump as one pack", () =
   it("owes nothing for a root never reviewed locally", async () => {
     const { client } = fakeClient();
     const files = memoryFiles();
-    expect(await sync(files, localKnowledgeStore(files, ROOT), client, 7, marks())).toBe(false);
+    expect(await sync(files, nodeStore(), client, 7, marks())).toBe(false);
   });
 });

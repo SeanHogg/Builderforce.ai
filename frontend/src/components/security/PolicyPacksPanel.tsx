@@ -24,6 +24,8 @@ import {
   type EffectivePolicyGate,
   type PolicyGate,
   type PolicyGateEffect,
+  type PolicyGateInput,
+  type PolicyGateSideEffect,
   type PolicyPack,
 } from '@/lib/builderforceApi';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -32,7 +34,8 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
-const EFFECTS: PolicyGateEffect[] = ['inject-directive', 'require-approval', 'block'];
+import PolicyGateEditor from './PolicyGateEditor';
+import { inputStyle, labelStyle, optionStyle, primaryButton } from './policyPanelStyles';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -42,43 +45,6 @@ const cardStyle: React.CSSProperties = {
   minWidth: 0,
 };
 
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--text-secondary)',
-  marginBottom: 6,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '8px 10px',
-  fontSize: 13,
-  borderRadius: 'var(--radius-md)',
-  background: 'var(--bg-elevated)',
-  color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)',
-};
-
-// Native <option> popups are drawn by the OS and do NOT inherit the surface's
-// theme tokens — they need their own opaque background/foreground or they render
-// as white-on-white in dark mode.
-const optionStyle: React.CSSProperties = {
-  background: 'var(--bg-elevated)',
-  color: 'var(--text-primary)',
-};
-
-const primaryButton: React.CSSProperties = {
-  padding: '8px 14px',
-  fontSize: 13,
-  fontWeight: 600,
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid transparent',
-  background: 'var(--accent)',
-  color: 'var(--text-on-accent)',
-  cursor: 'pointer',
-};
 
 const subtleButton: React.CSSProperties = {
   padding: '7px 12px',
@@ -117,17 +83,6 @@ interface PackDraft {
   agentRef: string;
 }
 
-interface GateDraft {
-  gateKey: string;
-  tool: string;
-  effect: PolicyGateEffect;
-  directive: string;
-  reason: string;
-}
-
-const emptyGateDraft = (): GateDraft => ({
-  gateKey: '', tool: '*', effect: 'block', directive: '', reason: '',
-});
 
 export default function PolicyPacksPanel() {
   const errorMessage = useErrorMessage();
@@ -145,7 +100,6 @@ export default function PolicyPacksPanel() {
   const [openPackId, setOpenPackId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [packDraft, setPackDraft] = useState<PackDraft | null>(null);
-  const [gateDraft, setGateDraft] = useState<GateDraft>(emptyGateDraft);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -168,14 +122,16 @@ export default function PolicyPacksPanel() {
     [projects],
   );
 
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>): Promise<boolean> => {
     setSaving(true);
     setError(null);
     try {
       await fn();
       load();
+      return true;
     } catch (e) {
       setError(faultMessage(e, t('genericError')));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -197,7 +153,6 @@ export default function PolicyPacksPanel() {
       projectId: pack.projectId,
       agentRef: pack.agentRef ?? '',
     });
-    setGateDraft(emptyGateDraft());
   };
 
   const closePanel = () => {
@@ -240,18 +195,9 @@ export default function PolicyPacksPanel() {
     await run(() => policyPacksApi.remove(pack.id));
   };
 
-  const addGate = async () => {
-    if (!openPackId || !gateDraft.gateKey.trim()) return;
-    await run(async () => {
-      await policyPacksApi.addGate(openPackId, {
-        gateKey: gateDraft.gateKey.trim(),
-        tool: gateDraft.tool.trim() || null,
-        effect: gateDraft.effect,
-        directive: gateDraft.directive.trim() || null,
-        reason: gateDraft.reason.trim() || null,
-      });
-      setGateDraft(emptyGateDraft());
-    });
+  const addGate = async (input: PolicyGateInput): Promise<boolean> => {
+    if (!openPackId) return false;
+    return run(() => policyPacksApi.addGate(openPackId, input));
   };
 
   const removeGate = async (gate: PolicyGate) => {
@@ -273,7 +219,10 @@ export default function PolicyPacksPanel() {
     return t('scopeTenant');
   };
 
-  const toolLabel = (tool: string | null) => (!tool || tool === '*' ? t('anyTool') : tool);
+  const toolLabel = (tool: string | null, sideEffect?: PolicyGateSideEffect | null) => {
+    const base = !tool || tool === '*' ? (sideEffect ? '' : t('anyTool')) : tool;
+    return sideEffect ? `${base ? base + ' · ' : ''}${t(`sideEffect.${sideEffect}`)}` : base;
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
@@ -320,7 +269,7 @@ export default function PolicyPacksPanel() {
                   }}
                 >
                   <span style={effectBadgeStyle(g.effect)}>{t(`effect.${g.effect}`)}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{toolLabel(g.tool ?? null)}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{toolLabel(g.tool ?? null, g.sideEffect)}</span>
                 </span>
               ))}
             </div>
@@ -393,7 +342,7 @@ export default function PolicyPacksPanel() {
                         fontSize: 12, color: 'var(--text-secondary)', minWidth: 0,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
-                        {toolLabel(g.tool)}
+                        {toolLabel(g.tool, g.sideEffect)}
                       </span>
                     </div>
                   ))
@@ -511,7 +460,7 @@ export default function PolicyPacksPanel() {
                               {g.gateKey}
                             </span>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: '1 1 auto', minWidth: 0 }}>
-                              {toolLabel(g.tool)}
+                              {toolLabel(g.tool, g.sideEffect)}
                             </span>
                             <RoleGate capability="policies.manage" silent>
                               <button
@@ -535,87 +484,7 @@ export default function PolicyPacksPanel() {
                   )}
                 </div>
 
-                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('addGateTitle')}</div>
-
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 150px', minWidth: 0 }}>
-                      <label style={labelStyle} htmlFor="policy-gate-key">{t('fieldGateKey')}</label>
-                      <input
-                        id="policy-gate-key"
-                        value={gateDraft.gateKey}
-                        onChange={(e) => setGateDraft({ ...gateDraft, gateKey: e.target.value })}
-                        placeholder={t('fieldGateKeyPlaceholder')}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div style={{ flex: '1 1 150px', minWidth: 0 }}>
-                      <label style={labelStyle} htmlFor="policy-gate-tool">{t('fieldTool')}</label>
-                      <input
-                        id="policy-gate-tool"
-                        value={gateDraft.tool}
-                        onChange={(e) => setGateDraft({ ...gateDraft, tool: e.target.value })}
-                        placeholder="*"
-                        style={inputStyle}
-                      />
-                    </div>
-                  </div>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('toolHelp')}</p>
-
-                  <div>
-                    <label style={labelStyle} htmlFor="policy-gate-effect">{t('fieldEffect')}</label>
-                    <select
-                      id="policy-gate-effect"
-                      value={gateDraft.effect}
-                      onChange={(e) => setGateDraft({ ...gateDraft, effect: e.target.value as PolicyGateEffect })}
-                      style={inputStyle}
-                    >
-                      {EFFECTS.map((eff) => (
-                        <option key={eff} value={eff} style={optionStyle}>{t(`effect.${eff}`)}</option>
-                      ))}
-                    </select>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                      {t(`effectHelp.${gateDraft.effect}`)}
-                    </p>
-                  </div>
-
-                  {gateDraft.effect === 'inject-directive' ? (
-                    <div>
-                      <label style={labelStyle} htmlFor="policy-gate-directive">{t('fieldDirective')}</label>
-                      <textarea
-                        id="policy-gate-directive"
-                        value={gateDraft.directive}
-                        onChange={(e) => setGateDraft({ ...gateDraft, directive: e.target.value })}
-                        rows={2}
-                        placeholder={t('fieldDirectivePlaceholder')}
-                        style={{ ...inputStyle, resize: 'vertical' }}
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      <label style={labelStyle} htmlFor="policy-gate-reason">{t('fieldReason')}</label>
-                      <textarea
-                        id="policy-gate-reason"
-                        value={gateDraft.reason}
-                        onChange={(e) => setGateDraft({ ...gateDraft, reason: e.target.value })}
-                        rows={2}
-                        placeholder={t('fieldReasonPlaceholder')}
-                        style={{ ...inputStyle, resize: 'vertical' }}
-                      />
-                    </div>
-                  )}
-
-                  <RoleGate capability="policies.manage">
-                    <button
-                      type="button"
-                      onClick={addGate}
-                      disabled={saving || !gateDraft.gateKey.trim()}
-                      style={{ ...primaryButton, opacity: gateDraft.gateKey.trim() ? 1 : 0.5 }}
-                    >
-                      {t('addGate')}
-                    </button>
-                  </RoleGate>
-                </div>
+                <PolicyGateEditor key={openPack.id} saving={saving} onAdd={addGate} />
 
                 <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
                   <RoleGate capability="policies.manage">

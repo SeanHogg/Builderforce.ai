@@ -1412,6 +1412,7 @@ export const deliveries = pgTable('deliveries', {
 }, (t) => [
   index('idx_deliveries_queue').on(t.status, t.scheduledAt),
   index('idx_deliveries_tenant').on(t.tenantId, t.channel, t.createdAt),
+  index('idx_deliveries_tenant_template_status_created').on(t.tenantId, t.template, t.status, t.createdAt),
   index('idx_deliveries_object').on(t.objectId),
 ]);
 

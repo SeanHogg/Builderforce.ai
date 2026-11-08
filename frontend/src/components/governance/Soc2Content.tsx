@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { governanceApi, type SocControl } from '@/lib/builderforceApi';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { Soc2AutomationPanel } from './Soc2AutomationPanel';
 
 /**
  * SOC 2 Control Tracker (doc 07 SEC-1). Lists the CC1–CC9 controls for the active
@@ -129,6 +130,7 @@ export function Soc2Content() {
           </div>
         );
       })}
+      <Soc2AutomationPanel />
     </div>
   );
 }

@@ -1,3 +1,27 @@
+## ✅ RESOLVED 2026-11-08: autonomous delivery closes its loops: one lane door, one landing path, reviews that reopen work, and boards that earn budget (Autonomous delivery)
+
+- **Backlog lanes no longer spend tokens.** `templateCatalog.ts` derives a lane's gate from its key, so `backlog` seeds `human` (`BACKLOG_LANE_GATE` in `defaultSwimlanes.ts`). Migration 1311 re-gates every live `backlog` lane that was `auto` and records `gate_source = 'seed'`, because the operator chose to re-gate them all.
+- **The census names the real refusal.** `never_started` tickets are classified from the latest `auto_run_skipped` row (`autoRunSkipReader.ts`, one batched `DISTINCT ON` read), not assumed `will_run`. Workspace-level reasons expire after 1 hour, and `lane_requirement_gate` after 6 hours, so a plan upgrade isn't escalated with a stale sentence. `trigger_error` is a modelled reason.
+- **One landing path for every status write.** `executionLandedEffects.ts` (extracted from `RuntimeService.update`) is used by `update()`, the orphan repair and the stale-run reaper. The reaper's guarded UPDATE lives in `ExecutionRepository` and is no longer on the `check-execution-landing` allowlist. Failed runs are settled in chunks of 100, 5 at a time, with one batched ticket read per chunk (`findByIdsAcrossTenants`, tenant-checked). Validator review runs post their `failed` milestone again.
+- **One door into a lane.** Every caller goes through `routeLaneEntry`, and `check-dispatch-budget` fails on any direct import, re-export or dynamic import of `maybeAutoRunOnLaneEntry`. The coordinator branch:
+  - re-reads the live lane;
+  - stays out of lifecycle-managed boards;
+  - re-checks the lane gate;
+  - applies the evaluator's admission gates (execution switch, token budget, failure breaker and cooldown, which also count stage failures with no execution row) in `laneCoordinatorAdmission.ts`;
+  - records refusals in the skip ledger.
+  
+  Only a human drag forces a stage. Lane routing is one cached read per project and tenant (`laneRouting.ts`). It is invalidated by every lane, staffing and board writer, including the new `boardWrites.ts` seam.
+- **Live board scoping.** Staffing changes publish to the board (`boardChangePublisher.ts`), so chips update without a reload. Ticket owners who aren't staffed on a lane show as owner chips (`GET /api/boards/:boardId/ticket-owners`, cached under the board-live version token). The legacy per-lane agents GET stays as a cached compatibility shim for shipped VSIX bundles.
+- **Priced kanban templates are licensed through the listing checkout.** Install, apply and fork return 402 until the tenant holds a licence. A foreign priced template's GET returns a preview of lane names and price, unlocked through `useKanbanTemplateCheckout`. The publisher of record is set once (migration 1313 backfills it), and checkout return URLs must be same-origin.
+- **A reviewer's `changes_requested` reopens the producer slot and starts one run** (`onReviewerVerdict.ts`, from the sign-off route and approval decisions). The stage choice is deterministic.
+- **Stakeholder notifications are routed.** `stakeholderVoice.ts` and `incidentVoice.ts` route these sites through the coordinator voice: chat milestones, approval gates and requests, escalations, incident notes, execution approval and pause.
+- **PR conduct is a registry sweep.** The `pr-conduct` cron (`prConductSweep.ts`, `prConductTicket.ts`) rotates through projects and tickets on a durable id cursor, and stamps a `conduct_seen` marker. That marker is a bookkeeping type, so the decision feeds hide it. Triage defers only to a ticket the sweep conducted recently. `ManagerService.ts` shrank by about 380 lines.
+- **A delta on a non-platform branch completes.** `deltaBranchMatch.ts` matches the merged PR's head branch on the merged repo only. It skips default and long-lived branches and refuses an ambiguous branch. `shipVerification` takes the repo's default branch.
+- **PRD 23 recovery is built and dry-run only.** §8 "Validator acceptance evidence is linked or bridged to its lifecycle slot" is met: `task_reviews` links to the lifecycle slot, execution and reviewed head SHA (migration 1312). A push invalidates stale acceptance, and the Validator review posts to the PR once. A Manager canary flag (off by default) holds the unattended merge. Backlog dispositions are computed nightly into `ticket_dispositions` and applied only through the superadmin `POST /api/admin/backlog-dispositions/apply` with `confirm: true`.
+- **Boards earn budget.** Closing a ticket credits its board through the account ledger (`accountLedger.ts`, `board-earn:<taskId>`, earned once), and `GET /api/boards/:boardId/budget` shows earned against run spend. `listBoardMilestonesSince` gives investor updates their delivery milestones, rolling nested epics up.
+- **Teammates have profiles.** `/people/[id]` shows role, personality and open work. The mention autocomplete shows each person's personality hint, and the hint cache clears when a personality is saved.
+- Release notes 2026.10.141/142 (migration 1314) and the post `boards-earn-budget-and-teammates-have-profiles` in five locales.
+
 ## ✅ RESOLVED 2026-11-08: public copy is held to its proof, the blog reads in five languages, and every vendor has a comparison page (Public surfaces, copy and SEO)
 
 - **Claims re-reviewed.** On 2026-11-07 the planner checked all six `MARKETING_CLAIMS` against their evidence:
@@ -26,6 +50,8 @@
 - **`.page-inner` retired.** Facts and RFP detail use `PageContainer width="readable"`, and both CSS rules are deleted.
 - **Existing translation bugs fixed.** `{idea}` was dropped in four `creationCanvas.noticeIdea*` keys (and German showed a different sentence), and the zh `{count}` arm was missing.
 
+- **A lost stored body heals for every project that used it.** When an unreadable body (lost R2 object) is re-supplied by one root's pack, every affected leaf of every root that named it, the applying root's other paths included, is invalidated in the same transaction and its generation advanced; the pack ack carries `reconcile`, a cheap generation-only read (`?view=generation`, no-store) lets a quiet linked root notice the change every 10 minutes (VS Code arms one timer per healthy root), refs split exactly by the known root (`#` paths and `cloud:<id>:` roots handled), and the legacy upload reaches the same heal through an injected hook. Regression tests cover each case.
+
 ## ✅ RESOLVED 2026-11-08: a run the editor lost on close waits in the History list until you resume or dismiss it (Local-first · VS Code)
 
 - **Interrupted runs are listed, not just logged.** The runs the previous editor session left running, queued or awaiting input are journaled `interrupted` at activation (`installRunRecovery.ts`). They now appear in the History panel as an "Interrupted runs" section, showing the chat's title and when the run stopped, in the editor's locale. The list is host state, read from the journal with `listInterruptedRuns`, so it survives a webview reload and an editor restart (`interruptedRunsView.ts`; message `run.interrupted`).
@@ -35,8 +61,6 @@
 - Strings go through `vscode.l10n.t` with real de/es/fr/zh-cn translations, and the rows use only `--vscode-*` / `--bf-*` tokens and wrap at narrow widths.
 
 - **The review no longer sticks at "Counting files…" on a large root.** On a 15,960-file root the plan awaited five unbounded setup steps (partitions, symbol index, judge start-up, git history, knowledge index) before walking, then hashed every file serially through the extension host. Now `reviewPortsFor.ts` builds the plan from source, manifest, packs and a judge-configured flag only (no server call); run-only ports start in the background with a 120 s bound each (a timeout is logged and dropped, a failure fails the review as before); the walk hashes 16 at a time with node:crypto, skips reading files over the size limit, and keeps a persisted hash cache, so a restart is not a cold walk; every plan logs per-step timings to the BuilderForce output channel.
-
-- **A lost stored body heals for every project that used it.** When an unreadable body (lost R2 object) is re-supplied by one root's pack, every affected leaf of every root that named it, the applying root's other paths included, is invalidated in the same transaction and its generation advanced; the pack ack carries `reconcile`, a cheap generation-only read (`?view=generation`, no-store) lets a quiet linked root notice the change every 10 minutes (VS Code arms one timer per healthy root), refs split exactly by the known root (`#` paths and `cloud:<id>:` roots handled), and the legacy upload reaches the same heal through an injected hook. Regression tests cover each case.
 
 ## ✅ RESOLVED 2026-11-08 — Uploads no longer stall, a review stops when asked, the Graph loads, and anti-patterns explain themselves (builderforce-memory 2026.10.51–54 · VS Code 2026.10.141)
 

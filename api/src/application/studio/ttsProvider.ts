@@ -13,6 +13,7 @@
  */
 
 import type { Env } from '../../env';
+import { wrapPcm16AsWav } from '@builderforce/voice-provenance';
 
 export interface CloneSynthesisInput {
   /** Reference sample bytes (the enrolled voice). */
@@ -79,6 +80,13 @@ export async function synthesizeClonedAudio(
       provider: input.provider,
       reference_audio_base64: arrayBufferToBase64(input.referenceAudio),
       reference_content_type: input.referenceContentType,
+      // Ask for uncompressed audio so every clip can be decoded and watermarked.
+      // Each vendor reads the spelling it knows (OpenAI `response_format`,
+      // ElevenLabs-style `pcm_<rate>`); a gateway in front maps these.
+      response_format: 'wav',
+      output_format: 'wav',
+      pcm_output_format: `pcm_${pcmSampleRate(env)}`,
+      sample_rate: pcmSampleRate(env),
     }),
     ...(input.signal ? { signal: input.signal } : {}),
   });
@@ -96,25 +104,60 @@ export async function synthesizeClonedAudio(
     const body = (await res.json()) as {
       audio_base64: string;
       content_type?: string;
+      sample_rate?: number;
       duration_ms?: number;
       word_timestamps?: Array<{ word: string; startMs: number; endMs: number }>;
     };
+    const normalized = asDecodableAudio(
+      base64ToArrayBuffer(body.audio_base64),
+      body.content_type ?? 'audio/wav',
+      body.sample_rate ?? null,
+      env,
+    );
     return {
-      audio: base64ToArrayBuffer(body.audio_base64),
-      contentType: body.content_type ?? 'audio/wav',
+      ...normalized,
       durationMs: body.duration_ms ?? 0,
       wordTimestamps: body.word_timestamps ?? [],
     };
   }
 
   // Raw audio bytes fallback (no timing metadata available).
-  const audio = await res.arrayBuffer();
+  const normalized = asDecodableAudio(
+    await res.arrayBuffer(),
+    contentType || 'audio/wav',
+    Number(res.headers.get('x-sample-rate')) || null,
+    env,
+  );
   return {
-    audio,
-    contentType: contentType || 'audio/wav',
+    ...normalized,
     durationMs: Number(res.headers.get('x-duration-ms') ?? 0),
     wordTimestamps: [],
   };
+}
+
+const DEFAULT_PCM_RATE = 24000;
+
+function pcmSampleRate(env: Env): number {
+  const n = Number(env.VOICE_CLONE_TTS_SAMPLE_RATE);
+  return Number.isInteger(n) && n >= 8000 && n <= 96000 ? n : DEFAULT_PCM_RATE;
+}
+
+/** Headerless PCM16 content types a vendor may answer with (`audio/L16;rate=24000`,
+ *  `audio/pcm`, `audio/x-pcm`, `application/octet-stream` is NOT assumed). */
+const RAW_PCM_TYPE = /^audio\/(l16|pcm|x-pcm)\b/i;
+
+/** Wrap raw PCM16 in a WAV header at the vendor's rate so the clip can be
+ *  decoded and watermarked; anything else passes through unchanged. */
+function asDecodableAudio(
+  audio: ArrayBuffer,
+  contentType: string,
+  sampleRate: number | null,
+  env: Env,
+): { audio: ArrayBuffer; contentType: string } {
+  if (!RAW_PCM_TYPE.test(contentType)) return { audio, contentType };
+  const fromType = Number(/rate=(\d+)/i.exec(contentType)?.[1]);
+  const rate = sampleRate || fromType || pcmSampleRate(env);
+  return { audio: wrapPcm16AsWav(new Uint8Array(audio), rate), contentType: 'audio/wav' };
 }
 
 function arrayBufferToBase64(buf: ArrayBuffer): string {

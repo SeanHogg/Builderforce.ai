@@ -20,7 +20,10 @@ export function idempotencyReplayCacheKey(tenantId: number, key: string): string
 export function cacheIdempotencyStore(env: CacheEnv, ttlSeconds: number): IdempotencyStore {
   return {
     get: (tenantId, key) => peekCached<StoredIdempotentResponse>(env, idempotencyReplayCacheKey(tenantId, key)),
-    put: (tenantId, key, response) =>
-      setCached(env, idempotencyReplayCacheKey(tenantId, key), response, { kvTtlSeconds: ttlSeconds }),
+    put: (tenantId, key, response, opts) =>
+      setCached(env, idempotencyReplayCacheKey(tenantId, key), response, {
+        kvTtlSeconds: opts?.ttlSeconds ?? ttlSeconds,
+        ...(opts?.ttlSeconds ? { l1TtlMs: opts.ttlSeconds * 1000 } : {}),
+      }),
   };
 }

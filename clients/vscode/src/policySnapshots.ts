@@ -27,9 +27,10 @@ import {
   type LocalFirstStore,
   type LocalRecord,
 } from "@builderforce/local-first";
-import type { PolicyGate } from "./policy";
+import type { PolicyGate } from "@builderforce/agent-tools";
 
-export const POLICY_SNAPSHOT_SCHEMA_VERSION = 1;
+/** 2: snapshots may hold compact `sideEffect` gates (read from a server that was told `gates=2`). */
+export const POLICY_SNAPSHOT_SCHEMA_VERSION = 2;
 
 /** How long a durable snapshot still governs runs without a successful re-read. */
 export const POLICY_SNAPSHOT_VALID_MS = 24 * 60 * 60_000;

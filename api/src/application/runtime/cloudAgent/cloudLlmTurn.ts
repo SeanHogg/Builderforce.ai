@@ -257,14 +257,14 @@ export async function recordCloudLlmTurn(
     // a duration the timeline drew it zero-width, i.e. invisible.
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'agent.thinking', category: 'thinking',
-      detail: { step: opts.step, model: resolvedModel, content: reasoning }, result: reasoning.slice(0, 280),
+      detail: { step: opts.step, model: resolvedModel, content: reasoning }, result: reasoning, resultCap: 280,
       durationMs,
     });
   }
   if (content) {
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'agent.message', category: 'message',
-      detail: { step: opts.step, content }, result: content.slice(0, 280),
+      detail: { step: opts.step, content }, result: content, resultCap: 280,
     });
     if (opts.notify) notifyExecutionSubscribers(rc.executionId, { type: 'message', executionId: rc.executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
   }

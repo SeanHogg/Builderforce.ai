@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import type { Db } from '../database/connection';
+import type { Db, Tx } from '../database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
 import { segments } from '../database/schema';
@@ -52,7 +52,7 @@ export interface SegmentClaims {
 }
 
 export async function resolveSegment(
-  db: Db,
+  db: Db | Tx,
   tenantId: number,
   claims: SegmentClaims = {},
   env?: Env,
@@ -68,7 +68,7 @@ export async function resolveSegment(
   return id;
 }
 
-async function resolveDefault(db: Db, tenantId: number): Promise<string> {
+async function resolveDefault(db: Db | Tx, tenantId: number): Promise<string> {
   const [row] = await db
     .select({ id: segments.id })
     .from(segments)
@@ -83,7 +83,7 @@ async function resolveDefault(db: Db, tenantId: number): Promise<string> {
 }
 
 async function resolveFederated(
-  db: Db,
+  db: Db | Tx,
   tenantId: number,
   accountId: string,
   companyId: string,
@@ -111,7 +111,7 @@ async function resolveFederated(
 }
 
 async function findFederated(
-  db: Db,
+  db: Db | Tx,
   tenantId: number,
   accountId: string,
   companyId: string,

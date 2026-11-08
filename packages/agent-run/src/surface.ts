@@ -19,7 +19,7 @@
  * Plain types only, no `node:*`, no DOM.
  */
 
-import type { ToolSchema } from "@builderforce/agent-tools";
+import type { DeclaredToolEffect, ToolSchema } from "@builderforce/agent-tools";
 import type { RunPart } from "./contract.js";
 import type { RunPolicyEvent, RunPolicyOutcome } from "@builderforce/run-policy";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
@@ -132,6 +132,12 @@ export interface PlatformTools {
   execute(name: string, args: Record<string, unknown>, env: { signal?: AbortSignal; progress: LadderProgress; callId?: string; step: number }): Promise<PlatformToolResult>;
   /** Does this call end analysis and begin the work? The first one hands the run to the coder. */
   handsOff?(name: string): boolean;
+  /**
+   * The surface's own word on a tool of its that the shared catalog does not classify (additive): `{ mutates: false }` for a
+   * tool it knows only reads. A governance class gate (`sideEffect`) judges the call by the catalog first, then by this, then as a
+   * mutation - so an undeclared unknown tool stays fail-closed.
+   */
+  declared?(name: string): DeclaredToolEffect | undefined;
   /**
    * The surface's results are already the TEXT the model reads (a budgeted string): a string result becomes the tool row as it is,
    * not JSON-quoted. Absent ⇒ every result is serialised as JSON, as the canvas's are.

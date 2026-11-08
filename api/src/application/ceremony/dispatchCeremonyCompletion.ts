@@ -8,7 +8,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * tasks the client happened to have fetched.
  *
  * Now it runs from `concludeCeremonySession`. Rather than submitting executions directly,
- * each candidate goes through the canonical `maybeAutoRunOnLaneEntry` gate — which already
+ * each candidate goes through the canonical `routeLaneEntry` gate — which already
  * applies the terminal/board/lane/gate resolution, the capability guardrail, the re-run
  * cooldown, the token gate and the live-run idempotency check. That last one subsumes the
  * client's hand-rolled `latestExecByTask` dedupe entirely.
@@ -25,7 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
@@ -59,7 +59,7 @@ export async function dispatchCeremonyCompletion(
   for (const t of candidates) {
     if (dispatched >= MAX_DISPATCH_PER_CEREMONY) break;
     try {
-      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+      const started = await routeLaneEntry(env, db, runtimeService, {
         tenantId: args.tenantId,
         projectId: args.projectId,
         taskId: t.id,

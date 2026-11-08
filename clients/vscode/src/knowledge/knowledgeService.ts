@@ -37,7 +37,8 @@ import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
 import { createDirectorySource, type HashCache } from "./vscodeDirectorySource";
-import { fileManifest, localKnowledgeStore, manifestFileName, type KnowledgeFiles } from "./knowledgeStores";
+import type { KnowledgeFiles } from "./knowledgeStores";
+import { openRootKnowledge, rootMigration } from "./folderKnowledge";
 import { configureReplicaLog, duringReview, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
 import type { TrackedJudgement } from "./knowledgeJudgement";
@@ -103,6 +104,8 @@ export interface OpenRoot {
   pump?: PumpSource;
   manifest: IngestManifest;
   files: KnowledgeFiles;
+  /** Resolves when the root's legacy files are imported into the folder's SQLite store (a review awaits it before it reads). */
+  migrated: Promise<void>;
 }
 
 /**
@@ -124,8 +127,10 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
   const files = rootKnowledgeFiles(root);
   const client = linkedKnowledgeClient(secrets);
   const { rootId } = root;
-  const local = rootStore(rootId, () => localKnowledgeStore(files, rootId), "local");
-  const manifest = rootManifest(rootId, () => fileManifest(files, manifestFileName(rootId)), root.folderPath);
+  // The folder's ONE SQLite store and manifest (G03): the manifest commits in the same transaction as the facts.
+  const folder = () => openRootKnowledge(root.folderPath, rootId, files, legacyRootIdOf(root), { info: (line) => logLine(`[knowledge] ${line}`), error: log });
+  const local = rootStore(rootId, () => folder().store, "local");
+  const manifest = rootManifest(rootId, () => folder().manifest, root.folderPath);
   const projectId = linkedProject()?.id;
   const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest, sizeOf: (p: string) => hashCache.get(`${root.rootPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${p}`)?.size } : undefined;
   return {
@@ -138,6 +143,7 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
     ...(pump ? { pump } : {}),
     manifest,
     files,
+    migrated: rootMigration(root.folderPath, rootId),
   };
 }
 
@@ -177,12 +183,14 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, o
   return {
     open,
     async plan(force) {
+      await open.migrated;
       const planned = await ports.plan({ force: !!force });
       recorder.planned(planned.plan);
       // The confirm chip states the file budget of the judge pass too (PRD 41 A10).
       return { ...planned, plan: { ...planned.plan, judgeFiles: judgeBudgetFiles() } };
     },
     async run(opts) {
+      await open.migrated;
       const p = await ports.full();
       if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
       // The shared runner feeds the knowledge index (reported as the `index` phase).

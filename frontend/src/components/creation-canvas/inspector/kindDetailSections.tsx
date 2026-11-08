@@ -10,6 +10,7 @@ import styles from '../styles/inspector.module.css';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from '@/domains/canvas/domain/authoredColors';
 import { DatasetPlotAction, DatasetProfileSummary } from './datasetInspectorParts';
 import { CanvasResumeEditor } from '../CanvasResumeEditor';
+import { AuthedImg } from '../creative/AuthedMedia';
 import { canvasWebPageUrl, normalizeWebPageUrl } from '@/lib/canvasWebPage';
 import { canvasViewport } from '@builderforce/creation-canvas-contract';
 import { useFormat } from '@/i18n/useFormat';
@@ -218,7 +219,7 @@ export function VideoInspectorSection({ data, onChange, onGenerateVideo }: KindS
     <label>{t('publishedEvermindModel')}<input value={typeof data.modelSlug === 'string' ? data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label>
     <label>{t('frames')}<input type="number" min="1" max="64" value={typeof data.maxFrames === 'number' ? data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label>
     <button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>
-    {typeof data.videoUrl === 'string' && <img src={data.videoUrl} alt={t('videoFirstFrame')} width={1280} height={720} style={{ width: '100%', height: 'auto', borderRadius: 'var(--radius-lg)' }} />}
+    {typeof data.videoUrl === 'string' && <AuthedImg src={data.videoUrl} alt={t('videoFirstFrame')} width={1280} height={720} style={{ width: '100%', height: 'auto', borderRadius: 'var(--radius-lg)' }} />}
   </>;
 }
 
@@ -300,6 +301,7 @@ export function TaskInspectorSection({
       <label>{t('storyPoints')}<input type="number" min={0} step={1} value={typeof data.storyPoints === 'number' ? data.storyPoints : ''} onChange={(event) => { const value = event.target.value === '' ? null : Number(event.target.value); void persistTaskPatch({ storyPoints: value }, { storyPoints: value ?? undefined }); }} /></label>
       <label>{t('startDate')}<input type="date" value={typeof data.startDate === 'string' ? data.startDate.slice(0, 10) : ''} onChange={(event) => { const value = event.target.value || null; void persistTaskPatch({ startDate: value }, { startDate: value ?? undefined }); }} /></label>
       <label>{t('dueDate')}<input type="date" value={typeof data.dueDate === 'string' ? data.dueDate.slice(0, 10) : ''} onChange={(event) => { const value = event.target.value || null; void persistTaskPatch({ dueDate: value }, { dueDate: value ?? undefined }); }} /></label>
+      <label className={styles.inspectorCheckRow}><input type="checkbox" checked={data.investorMilestone === true} onChange={(event) => void persistTaskPatch({ investorMilestone: event.target.checked }, { investorMilestone: event.target.checked })} /><span>{t('investorMilestone')}</span><small>{t('investorMilestoneHint')}</small></label>
       <label>{t('sprintId')}<input value={typeof data.sprintId === 'string' ? data.sprintId : ''} onChange={(event) => onChange({ sprintId: event.target.value || undefined })} onBlur={(event) => void persistTaskPatch({ sprintId: event.target.value || null }, { sprintId: event.target.value || undefined })} /></label>
     </div>
     <div className={styles.statusGuidance}><b>{t('howToMoveForward')}</b><p>{statusGuidance[normalizedTaskStatus] || t('taskGuidanceFallback')}</p></div>

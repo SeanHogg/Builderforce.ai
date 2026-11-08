@@ -31,9 +31,11 @@
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 
 /**
- * Branches whose content is, by definition, shipped. Deliberately just the two
- * conventional defaults: a repo whose base branch is named something else simply
- * does not auto-complete, which is the safe direction to be wrong in.
+ * Branches whose content is, by definition, shipped: the two conventional defaults,
+ * which stay the fallback. A repo whose default branch is named something else is
+ * recognised through `defaultBranch` / the run's own git output (see
+ * {@link defaultBranchFromTrace}); with neither, it simply does not auto-complete,
+ * which is the safe direction to be wrong in.
  */
 export const BASE_BRANCHES: ReadonlySet<string> = new Set(['main', 'master']);
 
@@ -163,6 +165,30 @@ function touchedStillDirty(touched: readonly string[], dirty: readonly string[])
   return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
 }
 
+/** Commands that print the remote's default branch. Gated so a file that merely CONTAINS
+ *  `HEAD branch: x` (read with `cat`) can never declare a base branch. */
+const DEFAULT_BRANCH_CMD = gitCommandPattern('remote|symbolic-ref|branch');
+
+/**
+ * The repo's default branch, read from the run's own git output: `git remote show origin`
+ * (`HEAD branch: dev`), `git symbolic-ref refs/remotes/origin/HEAD`
+ * (`refs/remotes/origin/dev`) or `git branch -r` (`origin/HEAD -> origin/dev`). Null when
+ * the run never asked — callers then rely on {@link BASE_BRANCHES} alone.
+ */
+export function defaultBranchFromTrace(steps: readonly BrainTraceEvent[]): string | null {
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const ev = steps[i];
+    if (!succeeded(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    const out = outputOf(ev);
+    const m =
+      /HEAD branch:\s*(\S+)/.exec(out) ??
+      /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ??
+      /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
+    if (m?.[1] && m[1] !== 'HEAD' && m[1] !== '(unknown)') return m[1];
+  }
+  return null;
+}
+
 /**
  * Did this run push its work to a base branch and verify it landed?
  *
@@ -180,9 +206,13 @@ function touchedStillDirty(touched: readonly string[], dirty: readonly string[])
  */
 export function shippedToBaseBranch(
   events: readonly BrainTraceEvent[],
-  opts?: { touchedFiles?: readonly string[] },
+  opts?: { touchedFiles?: readonly string[]; defaultBranch?: string | null },
 ): boolean {
   const steps = events.filter((e) => e.category === 'tool');
+  // The repo's REAL default branch: what the host knows, else what the run itself read off
+  // git. `main`/`master` always stay in the set, so this only ever ADDS a base.
+  const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
+  const isBase = (branch: string) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
 
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
@@ -199,7 +229,7 @@ export function shippedToBaseBranch(
     const output = outputOf(ev);
     const status = parseGitShortStatus(output);
     if (!status) continue;
-    if (!(status.branch && BASE_BRANCHES.has(status.branch) && status.upstream && status.ahead === 0)) continue;
+    if (!(status.branch && isBase(status.branch) && status.upstream && status.ahead === 0)) continue;
     if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
     return true;
   }

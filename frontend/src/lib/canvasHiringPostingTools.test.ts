@@ -165,6 +165,7 @@ const distribution = (over: Partial<PostingDistribution> = {}): PostingDistribut
   postingId: 'e2b1c0d4-0000-4000-8000-000000000001',
   connectorKey: 'lever-postings',
   board: 'Lever Postings',
+  publicLinkSupported: true,
   connectionId: 'conn-1',
   externalId: 'lever-9',
   url: 'https://jobs.lever.co/acme/lever-9',

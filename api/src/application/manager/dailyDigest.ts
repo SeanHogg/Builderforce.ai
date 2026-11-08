@@ -48,6 +48,7 @@ import type { Env } from '../../env';
 import {
   executions, managerActions, managerStallWatch, pullRequests, taskStatusTransitions, tasks,
 } from '../../infrastructure/database/schema';
+import { BOOKKEEPING_ACTION_TYPES } from './managerActionJournal';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ExecutionStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
@@ -497,6 +498,7 @@ export async function computeDailyDigest(
         eq(managerActions.projectId, projectId),
         gte(managerActions.createdAt, w.prevStart),
         lt(managerActions.createdAt, w.end),
+        notInArray(managerActions.actionType, [...BOOKKEEPING_ACTION_TYPES]),
       ))
       .groupBy(managerActions.actionType)
       .catch(() => []),

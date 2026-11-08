@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import type { PolicyGate } from "../policy";
+import { SIDE_EFFECT_GATES_WIRE_LEVEL, type PolicyGate } from "@builderforce/agent-tools";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { authed } from "./transport";
 
@@ -17,6 +17,8 @@ export async function fetchPolicyGates(
 ): Promise<PolicyGate[] | undefined> {
   const qs = new URLSearchParams();
   if (projectId != null) qs.set("project", String(projectId));
+  // Declares that this client reads compact `sideEffect` gates (an older one is sent them spelled out per tool).
+  qs.set("gates", String(SIDE_EFFECT_GATES_WIRE_LEVEL));
   const suffix = qs.size ? `?${qs.toString()}` : "";
   const r = await authed<{ gates?: PolicyGate[] }>(secrets, `/api/governance/policy-gates/effective${suffix}`);
   if (r === undefined) return undefined;

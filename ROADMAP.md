@@ -77,6 +77,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 ### Cloud and IDE agent runs `[agents]`
 
 - **PRD 38 residual items (docs sweep 2026-11-01).** Its Review Persistence section says `docs/knowledge/38-review-*.md`; the actual contract is the `--review-root` CLI flag plus `packages/agent-tools/src/knowledge/reviewRunner.ts` (which writes only `.review/`), and no caller passes a `knowledge/` root. Its Knowledge Client §3 table maps step kinds to statuses (triggered/awaiting_results/etc.) with no corresponding runtime code; either implement or strike. Its §4 asserts the knowledge graph has quote-level and learning-level nodes — only file-level nodes exist.
+- **Knowledge view freezes the screen on a real graph (in progress 2026-11-08).** On `agentic` (2000/3138 nodes, 104,972 drawn edges, 20,738 findings, 389 stations) every camera blocks the main thread for 1.5–4.5 s. The `src/perf` harness (`KG_PERF=1`) measured `insightsOf` 1.5 s, the `rankTask` sort as a single 1.07 s step, `pathOfStations` 1.3 s, `canonicalEdges` computed three times, and the surface model (`buildStations`/`buildLines`) run synchronously in `useSurface`. In flight: (A1) fix the pure algorithms; (A2) build ONE compute worker (results passed back as indices), migrate every heavy call site, and coalesce wheel zoom. Done when no main-thread task in the harness exceeds 50 ms. Then: one shared 3D stage for every camera, design first.
 - **No source of recorded runtime values for the knowledge view (PRD 38).** Several features are wired and tested but have nothing to show yet:
   - The Simulate drawer's recorded and editable values, which use the optional `recordedValues` source port.
   - Path-hop payload sizes ("PUT 1.4 MB"), which need a `payloadBytes` file badge.
@@ -128,17 +129,7 @@ Source: [offline-first review](./docs/design/vsix-offline-first-architecture-rev
 
 Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs failed. The manager's census tracks this.
 
-- **Backlog lanes in `templateCatalog.ts` seed `gate:'auto'`,** so parked work can spend tokens. `defaultSwimlanes.ts` seeds `human`; existing boards keep their gate. *Blocker: operator decision on re-gating live boards.*
-- **`never_started` cohort may be refused for an unmodelled reason.** Query `auto_run_skipped` for five cohort task ids.
-- **Status writers bypass the notifier:** `staleExecutionReaper` and self-heal write raw `update(executions)`, and a legacy lane path runs beside the coordinator.
-- **Board scoping:** agent chips are a load-time snapshot; `assignedAgentHostId` is separate from `agent_assignments`; priced kanban templates aren't charged at apply.
-- **A reviewer's `changes_requested` doesn't reopen the producer slot.** Design call: should a verdict alone spend a run?
-- **Stakeholder notifications ([PRD 37](./docs/specs/37-prd-coordinated-role-participation.md)):** `coordinatorVoice` has two callers; the rest are unrouted.
-- **Manager pass still conducts PRs** (`ManagerService.ts:1374`). Move it to a registry sweep.
-- **Delta→ticket:** a delta on a non-platform branch with no PR link never completes.
-- **Manager PR→ticket recovery ([PRD 23](./docs/specs/23-prd-manager-pr-ticket-recovery.md)).** Link `task_reviews` to lifecycle slots; add disposition fields; run the backlog pass; a Manager canary before auto-merge.
-- **Boards have no earned-budget ledger or investor milestone.** Build on `ledger_entries`; the milestone rolls up to Run's investor seam.
-- **Personality:** no person profile page; `MentionAutocomplete` doesn't use the provider.
+- **PRD 23 dispositions and canary are built but not live** ([PRD 23](./docs/specs/23-prd-manager-pr-ticket-recovery.md)). Turn on the Manager canary for a project and apply a reviewed disposition batch; done when the census shows the backlog shrinking. *Blocker: operator decision to go live (the operator chose build + dry-run for this pass).*
 
 ### Ceremonies and meetings `[delivery]`
 
@@ -315,6 +306,7 @@ Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderfor
 - **The editor can act in a tenant where the person has no connections.** One VS Code session ran in tenant #1 as `contributor`, while its Kimi, Anthropic, MiniMax, Moonshot and xAI accounts and chats #195/#198 belonged to another workspace. *Blocker: which tenant the key is bound to and why it was selected needs the live membership and key rows.*
 - **Direct calls for xAI, MiniMax, Moonshot and Anthropic accounts are not built.** The half-built attempt in a6937d561 was removed: only Kimi has a server credential source (`localCredential.ts`). Add a source per provider, then its runtime entry, to let these accounts run from the person's machine.
 - **Packaging does not check installed dependencies against declared ranges.** `clients/vscode/node_modules` held memory 2026.10.35 and engine 2026.10.28 under `^2026.10.37`. Make `ensure-linked-builds.mjs` fail on a mismatch.
+- **Shipped VSIX webview still calls `GET /api/boards/:boardId/swimlanes/:laneId/agents`.** The committed bundle `clients/vscode/media/webview/index.js` predates the board's move to `/lane-agents`. The route is kept as a cached compatibility shim in `boardRoutes.ts`; delete it once a rebuilt VSIX ships. *Blocker: VSIX rebuild and release is owned by the VS Code session.*
 - **The chat journal rewrites whole rows.** `local-first-v3.journal` reached 226 MB, with a 1.25 MB chat row and 1.3 MB message rows rewritten by routine commits. Opening it is not slow (2.6 s fold), but commits take up to 1.5 s. Store large row payloads apart so a commit stays small.
 
 - **Compaction holds the cross-window lock for the whole rewrite** (2.7 s measured on 20,847 records; `compact` in `durableLocalFirstStore.ts`). Other windows now wait instead of failing, but their writes stall that long. Stream the temp file from `memory.view()` without the lock, then lock, catch up, fsync and rename. *Blocker: operator cut this pass to data-loss fixes (weekly limit, 2026-11-01).*

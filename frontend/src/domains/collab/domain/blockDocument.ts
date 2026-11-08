@@ -29,8 +29,10 @@
  * markdown could disagree, and there is no correct answer when they do.
  */
 
+import { canvasStrokes, clampDrawingDimension, type CanvasStroke } from '@/lib/canvasDrawing';
+
 /** What a block IS. Stored. */
-export type BlockType = 'text' | 'image' | 'video' | 'file';
+export type BlockType = 'text' | 'image' | 'video' | 'file' | 'drawing';
 
 /** What a text block LOOKS like. Derived from its markdown, never stored. */
 export type TextBlockKind = 'heading' | 'paragraph' | 'list' | 'quote' | 'code' | 'rule';
@@ -44,6 +46,54 @@ export interface BlockAttrs {
   mime?: string;
   /** Size in bytes, when known. Shown on a file chip. */
   size?: number;
+  /** A drawing block's marks — the canvas's own stroke shape (`lib/canvasDrawing`), not a second format. */
+  strokes?: CanvasStroke[];
+  /** A drawing block's surface size, in stroke coordinates. */
+  width?: number;
+  height?: number;
+}
+
+export const DRAWING_BLOCK_WIDTH = 640;
+export const DRAWING_BLOCK_HEIGHT = 320;
+const DRAWING_FENCE = /^```bf-drawing\n([^\n]*)\n```$/;
+
+/**
+ * A drawing block's markdown: a fenced `bf-drawing` block holding one line of JSON.
+ * Strokes are re-sanitised through `canvasStrokes` and keys are written in a fixed
+ * order, so the same drawing always serialises to the same bytes. Any other reader
+ * sees an ordinary code fence — the correct degradation.
+ */
+export function drawingToMarkdown(attrs: BlockAttrs): string {
+  const payload = {
+    width: clampDrawingDimension(attrs.width, DRAWING_BLOCK_WIDTH),
+    height: clampDrawingDimension(attrs.height, DRAWING_BLOCK_HEIGHT),
+    // Ids are a runtime identity (see `withStrokeId`), not part of the document.
+    // A text stroke nobody typed into (a bare tap) is not content.
+    strokes: canvasStrokes({ strokes: attrs.strokes ?? [] }).filter((stroke) => stroke.tool !== 'text' || (stroke.text ?? '').trim() !== '').map(({ id: _id, ...stroke }) => stroke),
+  };
+  return `\`\`\`bf-drawing\n${JSON.stringify(payload)}\n\`\`\``;
+}
+
+/** The drawing attrs a `bf-drawing` fence holds, or null when it is not one we can read. */
+function drawingFromChunk(chunk: string): BlockAttrs | null {
+  const match = DRAWING_FENCE.exec(chunk.trim());
+  return match ? parseDrawingPayload(match[1] ?? '') : null;
+}
+
+/** The drawing attrs a `bf-drawing` fence's JSON line holds, or null when it is not readable. */
+export function parseDrawingPayload(json: string): BlockAttrs | null {
+  try {
+    const raw = JSON.parse(json) as { width?: unknown; height?: unknown; strokes?: unknown } | null;
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.strokes)) return null;
+    return {
+      width: clampDrawingDimension(raw.width, DRAWING_BLOCK_WIDTH),
+      height: clampDrawingDimension(raw.height, DRAWING_BLOCK_HEIGHT),
+      // Positional ids: deterministic, only used to address a stroke in a live store.
+      strokes: canvasStrokes({ strokes: raw.strokes }).map((stroke, index) => ({ ...stroke, id: `s${index}` })),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export interface DocumentBlock {
@@ -112,6 +162,7 @@ export function blockToMarkdown(block: DocumentBlock): string {
     // which is the correct degradation.
     case 'video':
     case 'file': return `[${label || url}](${url})`;
+    case 'drawing': return drawingToMarkdown(block.attrs);
     case 'text': return block.text;
   }
 }
@@ -142,6 +193,10 @@ export function emptyBlock(): DocumentBlock {
 /** Classify one already-split chunk. */
 function blockFromChunk(chunk: string): DocumentBlock {
   const single = chunk.trim();
+
+  // A garbled or unknown `bf-drawing` fence falls through to a text (code) block.
+  const drawing = drawingFromChunk(single);
+  if (drawing) return { id: createBlockId(), type: 'drawing', text: '', attrs: drawing };
 
   const image = IMAGE_LINE.exec(single);
   if (image) {

@@ -10,6 +10,7 @@ import {
 import {
   appendOutlet, isMultiOutletKind, outletForHandle, outletPredicate, patchOutlet, removeOutlet, stepOutlets,
 } from '@/domains/workflow/domain/stepOutlets';
+import { applyConfigPatch } from '@/domains/workflow/domain/stepCatalog';
 import { runVariablePath, upstreamRunVariables } from '@/domains/workflow/domain/runVariables';
 import { creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
@@ -69,7 +70,7 @@ export function FlowStepInspector({
   const runVariables = upstreamRunVariables(nodeId, nodes, edges);
   const runVariablesListId = useId();
 
-  const patchConfig = (patch: Record<string, unknown>) => onChange({ stepConfig: { ...config, ...patch } });
+  const patchConfig = (patch: Record<string, unknown>) => onChange({ stepConfig: applyConfigPatch(config, patch) });
   const nameOf = (id: string) => {
     const node = nodes.find((candidate) => candidate.id === id);
     return node ? creationObjectName(node.data) : id;

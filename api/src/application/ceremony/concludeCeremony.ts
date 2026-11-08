@@ -36,6 +36,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus } from '../../domain/shared/types';
 import { getEffectiveManagerPolicy } from '../manager/ManagerService';
+import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 import { recordActivity, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
 import {
@@ -139,6 +140,8 @@ async function applyReassignments(
       reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "applyReassignments", context: { logMessage: `[ceremony:conclude] reassignment failed task=${r.taskId}`, details: err } });
     }
   }
+  // Owners changed outside any REST route: tell the board so its owner chips refresh.
+  if (applied > 0) await publishProjectStaffingChanged(env, args.tenantId, args.projectId);
   return applied;
 }
 

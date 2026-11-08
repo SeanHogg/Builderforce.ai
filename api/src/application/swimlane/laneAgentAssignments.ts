@@ -20,6 +20,11 @@
 import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { agentAssignments } from '../../infrastructure/database/schema';
+import type { Db } from '../../infrastructure/database/connection';
+import type { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
+import { publishLaneStaffingChanged } from './boardChangePublisher';
+
+type RelayEnv = Parameters<typeof broadcastProjectChanged>[0];
 
 /** The `scope` value that marks an assignment as lane staffing. */
 export const LANE_AGENT_SCOPE = 'swimlane';
@@ -65,6 +70,35 @@ export function forLanes(swimlaneIds: readonly string[], ...extra: Array<SQL | u
  */
 export function laneJoinOn(swimlaneIdColumn: AnyPgColumn): SQL {
   return sql`${agentAssignments.scopeId}::uuid = ${swimlaneIdColumn} AND ${agentAssignments.scope} = ${LANE_AGENT_SCOPE}`;
+}
+
+type LaneAssignmentInput = Parameters<typeof laneAssignmentValues>[0];
+
+/**
+ * THE lane-staffing write seam. Every insert / delete of a `scope = 'swimlane'` row goes
+ * through these two, which publish the project's `{type:'changed'}` event after the write
+ * so the board's agent chips refetch — a caller cannot forget to.
+ */
+export async function insertLaneAssignment(db: Db, env: RelayEnv, input: LaneAssignmentInput) {
+  const [row] = await db.insert(agentAssignments).values(laneAssignmentValues(input)).returning();
+  await publishLaneStaffingChanged(env, db, input.tenantId, [input.swimlaneId]);
+  return row;
+}
+
+/** Delete lane-staffing rows matching `extra` on one lane; returns the removed ids. */
+export async function deleteLaneAssignments(
+  db: Db,
+  env: RelayEnv,
+  tenantId: number,
+  swimlaneId: string,
+  ...extra: Array<SQL | undefined>
+): Promise<string[]> {
+  const rows = await db
+    .delete(agentAssignments)
+    .where(forLane(swimlaneId, eq(agentAssignments.tenantId, tenantId), ...extra))
+    .returning({ id: agentAssignments.id });
+  if (rows.length > 0) await publishLaneStaffingChanged(env, db, tenantId, [swimlaneId]);
+  return rows.map((r) => r.id);
 }
 
 /** The values a lane-staffing INSERT must carry, so no writer forgets the scope. */

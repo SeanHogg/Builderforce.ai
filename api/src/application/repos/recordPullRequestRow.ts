@@ -12,7 +12,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { deploymentEvents, pullRequests } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import type { Db } from '../../infrastructure/database/connection';
+import type { Db, Tx } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { recordAutomatedEvidence } from '../governance/automatedSocEvidence';
 
 /**
  * The column projection every PR-lookup helper below returns. It was duplicated
@@ -32,7 +34,17 @@ const PR_REF_COLUMNS = {
   repoId: pullRequests.repoId,
   buildStatus: pullRequests.buildStatus,
   number: pullRequests.number,
+  status: pullRequests.status,
 } as const;
+
+/**
+ * Whether a green CI result may MERGE this PR and a red one may dispatch an AUTO-FIX run for it. A draft may not:
+ * the platform's early draft (`ci/draftPrForCi`) belongs to a run that is still live, and a human's draft is
+ * explicitly not ready. ONE predicate for both decisions in `ingestPreMergeEvent`.
+ */
+export function isMergeCandidate(pr: { status: string | null }): boolean {
+  return pr.status !== 'draft';
+}
 
 export interface RecordPullRequestInput {
   tenantId: number;
@@ -48,29 +60,58 @@ export interface RecordPullRequestInput {
   baseBranch?: string | null;
   /** draft | open | merged | closed. Defaults to 'open' (awaiting approval). */
   status?: string;
+  /** The execution that opened this as the platform's early draft (`ci/draftPrForCi`); the marker of a draft that is ours. */
+  platformDraftExecutionId?: number | null;
+}
+
+function rowValues(input: RecordPullRequestInput) {
+  const now = new Date();
+  return {
+    tenantId: input.tenantId,
+    segmentId: input.segmentId ?? null,
+    projectId: input.projectId,
+    repoId: input.repoId ?? null,
+    taskId: input.taskId ?? null,
+    specId: input.specId ?? null,
+    provider: input.provider,
+    number: input.number ?? null,
+    url: input.url ?? null,
+    branchName: input.branchName ?? null,
+    baseBranch: input.baseBranch ?? null,
+    status: input.status ?? 'open',
+    platformDraftExecutionId: input.platformDraftExecutionId ?? null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Insert a pull_requests row, or — when the provider's own identity `(tenant, repo, number)` already has one (the PR
+ * reconciler inserts a row for every PR it sees, possibly before we get to) — take that row over: the task, status,
+ * branch and marker are set from this write. Returns the row.
+ */
+export async function upsertPullRequestRow(db: Db | Tx, input: RecordPullRequestInput) {
+  const values = rowValues(input);
+  const [row] = await db
+    .insert(pullRequests)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [pullRequests.tenantId, pullRequests.repoId, pullRequests.number],
+      targetWhere: sql`${pullRequests.repoId} is not null and ${pullRequests.number} is not null`,
+      set: {
+        taskId: values.taskId, status: values.status, url: values.url, branchName: values.branchName,
+        baseBranch: values.baseBranch, platformDraftExecutionId: values.platformDraftExecutionId, updatedAt: values.updatedAt,
+      },
+    })
+    .returning();
+  return row;
 }
 
 /** Insert a pull_requests row and return it. */
-export async function recordPullRequestRow(db: Db, input: RecordPullRequestInput) {
-  const now = new Date();
+export async function recordPullRequestRow(db: Db | Tx, input: RecordPullRequestInput) {
   const [row] = await db
     .insert(pullRequests)
-    .values({
-      tenantId: input.tenantId,
-      segmentId: input.segmentId ?? null,
-      projectId: input.projectId,
-      repoId: input.repoId ?? null,
-      taskId: input.taskId ?? null,
-      specId: input.specId ?? null,
-      provider: input.provider,
-      number: input.number ?? null,
-      url: input.url ?? null,
-      branchName: input.branchName ?? null,
-      baseBranch: input.baseBranch ?? null,
-      status: input.status ?? 'open',
-      createdAt: now,
-      updatedAt: now,
-    })
+    .values(rowValues(input))
     .returning();
   return row;
 }
@@ -120,14 +161,40 @@ export async function markPullRequestMergedById(
   db: Db,
   id: string,
   tenantId: number,
-  opts: { mergeSha?: string | null; mergedBy?: string | null } = {},
+  opts: { mergeSha?: string | null; mergedBy?: string | null; env?: Env } = {},
 ) {
-  const [row] = await db
+  // The provider merge has ALREADY happened when this runs, so a failed write must not be swallowed
+  // into a PR the gate and the sweep still believe is open: retry once, then log a structured error
+  // and return null. The row is then reconciled to 'merged' by `reconcilePullRequestState` (the
+  // `pr-ticket-reconciler` sweep reads the provider's state and corrects a row that disagrees).
+  const write = () => db
     .update(pullRequests)
     .set(mergedSet(opts))
     .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
     .returning();
-  if (row) await recordMergeDeployment(db, { id: row.id, tenantId: row.tenantId, projectId: row.projectId, taskId: row.taskId ?? null });
+  let row: Awaited<ReturnType<typeof write>>[number] | undefined;
+  try {
+    [row] = await write();
+  } catch {
+    try {
+      [row] = await write();
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'application/repos/recordPullRequestRow.ts', operation: 'markPullRequestMergedById',
+        context: { logMessage: '[pull-request] provider merge succeeded but the row could not be marked merged', details: { tenantId, pullRequestId: id, mergeSha: opts.mergeSha ?? null } },
+      });
+      return null;
+    }
+  }
+  if (row) {
+    await recordMergeDeployment(db, { id: row.id, tenantId: row.tenantId, projectId: row.projectId, taskId: row.taskId ?? null });
+    // EVERY merge path converges here, so this is the one place a merge becomes SOC 2 change-management
+    // evidence (CC8.1). Idempotent and best-effort — it never fails the merge.
+    await recordAutomatedEvidence(opts.env, db, {
+      tenantId: row.tenantId, segmentId: row.segmentId ?? null, kind: 'merge', sourceId: row.id, url: row.url ?? null,
+      note: `PR #${row.number ?? '?'} merged${row.mergedBy ? ` by ${row.mergedBy}` : ''}${row.taskId != null ? ` (task #${row.taskId})` : ''}; merge sha ${row.mergeSha ?? 'n/a'}`,
+    });
+  }
   return row ?? null;
 }
 
@@ -153,7 +220,7 @@ export async function markPullRequestMergedByTask(
   db: Db,
   tenantId: number,
   taskId: number,
-  opts: { mergeSha?: string | null } = {},
+  opts: { mergeSha?: string | null; env?: Env } = {},
 ) {
   const [latest] = await db
     .select({ id: pullRequests.id })
@@ -167,12 +234,13 @@ export async function markPullRequestMergedByTask(
 
 /** The latest still-open (un-merged) PR row for a task — the one whose `builderforce/task-<id>`
  *  branch a PRE-merge CI build belongs to. Mirrors `findMergedPullRequestBySha` for the
- *  pre-merge phase so the build status + reason land on the right PR row. */
-export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId: number) {
+ *  pre-merge phase so the build status + reason land on the right PR row. With `branch` it is the row OF THAT
+ *  BRANCH, not just the newest row linked to the task (a newer row on another branch must not take its place). */
+export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId: number, branch?: string | null) {
   const [row] = await db
     .select(PR_REF_COLUMNS)
     .from(pullRequests)
-    .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
+    .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged'), ...(branch ? [eq(pullRequests.branchName, branch)] : [])))
     // Prefer a row with a real provider number, then newest (same precedence as the GET route).
     .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
     .limit(1);

@@ -157,11 +157,45 @@ describe('dirtyPathsOf', () => {
   });
 });
 
+describe('shippedToBaseBranch with a non-main default branch', () => {
+  const devStatus = () => status('## dev...origin/dev');
+
+  it('confirms a push to the host-supplied default branch', () => {
+    expect(shippedToBaseBranch([push(), devStatus()], { defaultBranch: 'dev' })).toBe(true);
+  });
+
+  it('stays closed for that branch when the default is unknown', () => {
+    expect(shippedToBaseBranch([push(), devStatus()])).toBe(false);
+  });
+
+  it('learns the default branch from the run\'s own `git remote show origin`', () => {
+    const show = step('run_command', { command: 'git remote show origin' }, { ok: true, output: '* remote origin\n  HEAD branch: dev\n' });
+    expect(shippedToBaseBranch([show, push(), devStatus()])).toBe(true);
+  });
+
+  it('learns it from `git branch -r` (origin/HEAD -> origin/dev)', () => {
+    const br = step('run_command', { command: 'git branch -r' }, { ok: true, output: '  origin/HEAD -> origin/dev\n  origin/feature/x\n' });
+    expect(shippedToBaseBranch([br, push(), devStatus()])).toBe(true);
+  });
+
+  it('ignores `HEAD branch:` text that did not come from a git command', () => {
+    const cat = step('run_command', { command: 'cat NOTES.md' }, { ok: true, output: 'HEAD branch: dev' });
+    expect(shippedToBaseBranch([cat, push(), devStatus()])).toBe(false);
+  });
+
+  it('a feature branch is still not a base even when a default is known', () => {
+    expect(shippedToBaseBranch([push(), status('## feature/x...origin/feature/x')], { defaultBranch: 'dev' })).toBe(false);
+  });
+
+  it('keeps main as a base alongside a custom default', () => {
+    expect(shippedToBaseBranch([push(), status('## main...origin/main')], { defaultBranch: 'dev' })).toBe(true);
+  });
+});
+
 describe('BASE_BRANCHES', () => {
   it('covers the two conventional defaults and nothing speculative', () => {
-    // A repo with a differently-named base simply does not auto-complete — a false
-    // negative, which is the safe direction: closing a ticket that did not ship is
-    // worse than leaving one open.
+    // The static fallback stays tight; a differently-named base is added at call time
+    // from the repo's real default branch, never by widening this set.
     expect([...BASE_BRANCHES].sort()).toEqual(['main', 'master']);
   });
 });

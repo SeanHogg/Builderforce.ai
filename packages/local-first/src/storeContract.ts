@@ -84,8 +84,15 @@ export interface LocalFirstTransaction {
   putReceipt(receipt: SyncReceipt): Promise<void>;
   putConflict(conflict: SyncConflict): Promise<void>;
   conflicts(): Promise<SyncConflict[]>;
-  setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void>;
+  /**
+   * Set (or, with `undefined`, clear) the pull cursor. `pulledAt` (ISO) is the instant that
+   * pull completed; it is stored beside the cursor (even when the cursor is undefined) and read
+   * back by `lastPullAt`. Clearing the cursor WITHOUT `pulledAt` (resnapshot / reset) clears it too.
+   */
+  setCursor(destination: EntityDestination, cursor: string | undefined, pulledAt?: string): Promise<void>;
   cursor(destination: EntityDestination): Promise<string | undefined>;
+  /** When the last pull for `destination` completed, or undefined when none has. */
+  lastPullAt(destination: EntityDestination): Promise<string | undefined>;
 }
 
 /**

@@ -24,6 +24,7 @@ import { pendingBinding, type PendingBinding } from "./pendingBinding";
 import { configureExtractPool, disposeExtractPool } from "./review/extractPoolHost";
 import { BuilderForceAuthProvider } from "../auth";
 import { disposeReplicas, resumeAuthPaused } from "./knowledgeReplica";
+import { closeFolderKnowledge } from "./folderKnowledge";
 import { replicateReviewedRoots } from "./knowledgeReplicate";
 
 /** The folder the command was invoked on (explorer), else the one the person picks. */
@@ -81,8 +82,8 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
     vscode.authentication.onDidChangeSessions((e) => {
       if (e.provider.id === BuilderForceAuthProvider.id) void resumeAuthPaused();
     }),
-    // Queues are made durable and pumps stop with the extension; the queues resume on the next open.
-    { dispose: () => { void disposeReplicas(); } },
+    // Queues are made durable and pumps stop with the extension (the queues resume on the next open); then the folders' SQLite connections close.
+    { dispose: () => { void disposeReplicas().finally(closeFolderKnowledge); } },
   );
   void pending.check();
 }

@@ -208,15 +208,11 @@
 /* ── The pen tray ──────────────────────────────────────────────────────────
    Visible only while a tool is held. Wraps on a phone rather than pushing the
    board sideways, and every target clears 34px so it is usable with a finger. */
-.drawingToolbar{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:9;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:min(92vw,760px);padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:0 12px 32px rgba(0,0,0,.22)}
-.drawingToolbar button{display:inline-flex;gap:5px;align-items:center;padding:6px 9px;min-height:34px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-elevated);color:var(--text-secondary);font-size:12px}
-.drawingToolbar button[aria-pressed="true"]{border-color:var(--coral-bright);color:var(--text-primary)}
-.drawingToolbar button span{font-size:13px;line-height:1}
-.drawingColor,.drawingWidth{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--text-secondary)}
-.drawingColor input{width:34px;height:30px;padding:0;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
-.drawingWidth input{width:90px}
+/* The pen tray itself lives in components/drawing/drawingPenTray.module.css (shared with the document
+   drawing block); only where the CANVAS parks it stays here. */
+.drawingToolbar{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:9;max-width:min(92vw,760px);border-radius:var(--radius-lg);box-shadow:0 12px 32px rgba(0,0,0,.22)}
 .drawingDone{margin-left:auto}
-@media(max-width:767px){.drawingToolbar{bottom:120px;gap:4px;padding:6px}.drawingToolbar button b{display:none}.drawingWidth input{width:64px}}
+@media(max-width:767px){.drawingToolbar{bottom:120px}}
 
 /* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
    here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by

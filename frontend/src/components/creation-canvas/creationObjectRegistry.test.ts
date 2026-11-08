@@ -208,6 +208,35 @@ describe('creation object registry', () => {
     expect(createDefaultCreationData('resume')).toMatchObject({ mediaKind: 'document', templateId: 'resume' });
   });
 
+  it('lets Brain and the editors author a CAD drawing and a 3D model through the object data', () => {
+    for (const kind of ['cad', 'model3d'] as const) {
+      expect(creationObjectDefinition(kind).actions, kind).toContain('edit');
+    }
+    const drawing = { widthMm: 100, heightMm: 50, shapes: [{ id: 'a', kind: 'line', layer: '0', x1: 0, y1: 0, x2: 10, y2: 10 }] };
+    expect(sanitizeCreationObjectPatch('cad', { cadState: drawing, notAField: 1 })).toEqual({ cadState: drawing });
+    const scene = { entities: [{ id: 'b', kind: 'box', widthMm: 10, depthMm: 10, heightMm: 10 }] };
+    expect(sanitizeCreationObjectPatch('model3d', { modelState: scene })).toEqual({ modelState: scene });
+    // Each state is written onto its own kind only.
+    expect(sanitizeCreationObjectPatch('model3d', { cadState: drawing })).toEqual({});
+  });
+
+  it('regression: a CAD patch over 500 shapes survives up to the 5000 cadState allows', () => {
+    const shapes = (count: number) => Array.from({ length: count }, (_, i) => ({ id: `s${i}`, kind: 'line', layer: '0', x1: 0, y1: 0, x2: i, y2: i }));
+    const cad = (count: number) => (sanitizeCreationObjectPatch('cad', { cadState: { widthMm: 100, heightMm: 50, shapes: shapes(count) } }).cadState as { shapes: unknown[] });
+    expect(cad(1200).shapes).toHaveLength(1200);
+    expect(cad(6000).shapes).toHaveLength(5000);
+    // Other arrays keep the default cap.
+    expect((sanitizeCreationObjectPatch('image', { imageEdit: { strokes: shapes(900) } }).imageEdit as { strokes: unknown[] }).strokes).toHaveLength(500);
+  });
+
+  it('regression: comic art is an uploaded https URL, so a Brain patch carries it whole', () => {
+    // Inline art (a 50k+ data URL) was cut at 40k characters and no longer decoded; art now
+    // lives in tenant storage and the object keeps only the URL.
+    const imageUrl = `https://cdn.example.com/uploads/${'a'.repeat(200)}.jpg`;
+    const patch = sanitizeCreationObjectPatch('comic', { comicPages: [{ id: 'p1', panels: [{ id: 'x', imageUrl }] }] });
+    expect((patch.comicPages as Array<{ panels: Array<{ imageUrl: string }> }>)[0]!.panels[0]!.imageUrl).toBe(imageUrl);
+  });
+
   it('keeps the Canvas video timeline authorable by Brain and direct editing', () => {
     const data = createDefaultCreationData('video');
     expect(data).toMatchObject({ title: 'Untitled video', videoTimeline: { version: 1, clips: [] }, videoSources: [] });
@@ -217,6 +246,36 @@ describe('creation object registry', () => {
     });
     expect(patch.videoTimeline).toMatchObject({ clips: [{ id: 'clip-1', label: 'Opening' }] });
     expect(patch.videoSources).toEqual([expect.objectContaining({ captureKind: 'ai' })]);
+  });
+
+  it('gives the image and podcast kinds an editing runtime Brain can drive', () => {
+    // `edit` is every kind's base action; what makes it real is the fields it may write.
+    expect(creationObjectMutableFields('image')).toEqual(expect.arrayContaining(['imageEdit', 'outputUrl']));
+    expect(creationObjectMutableFields('podcast')).toEqual(expect.arrayContaining(['podcastTimeline', 'podcastSources', 'podcastEpisode', 'podcastShow']));
+    for (const kind of ['image', 'podcast'] as const) expect(creationObjectDefinition(kind).actions).toEqual(expect.arrayContaining(['edit', 'export']));
+    const image = sanitizeCreationObjectPatch('image', { imageEdit: { version: 1, rotation: 90, strokes: [{ tool: 'line', points: [{ x: 1, y: 2 }, { x: 3, y: 4 }], stroke: 'white', strokeWidth: 3 }] }, apiKey: 'x' });
+    expect(image.imageEdit).toMatchObject({ rotation: 90, strokes: [{ tool: 'line' }] });
+    expect(image).not.toHaveProperty('apiKey');
+
+    expect(createDefaultCreationData('podcast')).toMatchObject({ podcastTimeline: { version: 1, clips: [] }, podcastSources: [] });
+    const podcast = sanitizeCreationObjectPatch('podcast', {
+      podcastTimeline: { version: 1, clips: [{ id: 'c', sourceId: 's', track: 'voiceover', startSeconds: 0, durationSeconds: 5, trimStartSeconds: 0, volume: 1, label: 'Intro', chapterTitle: 'Hello' }] },
+      podcastSources: [{ id: 's', kind: 'audio', url: 'https://cdn.example/a.mp3', fileName: 'a.mp3', mimeType: 'audio/mpeg', durationSeconds: 5 }],
+      podcastEpisode: { description: 'First', audioUrl: 'https://cdn.example/a.mp3' },
+      podcastShow: { title: 'Show', ownerEmail: 'a@b.co' },
+    });
+    expect(Object.keys(podcast).sort()).toEqual(['podcastEpisode', 'podcastShow', 'podcastSources', 'podcastTimeline']);
+  });
+
+  it('gives the animation and comic kinds an editing runtime, with the frame strip kept off the model-facing patch', () => {
+    for (const kind of ['animation', 'comic'] as const) expect(creationObjectDefinition(kind).actions).toEqual(expect.arrayContaining(['edit', 'export']));
+    // The strip is PNG data URLs, which a model-facing patch would truncate at 40k characters.
+    expect(creationObjectMutableFields('animation')).not.toContain('animation');
+    expect(sanitizeCreationObjectPatch('animation', { animation: { frames: [] }, prompt: 'a spinner' })).toEqual({ prompt: 'a spinner' });
+    expect(creationObjectMutableFields('comic')).toEqual(expect.arrayContaining(['comicPages', 'comicWidth', 'comicHeight']));
+    const comic = sanitizeCreationObjectPatch('comic', { comicPages: [{ id: 'p1', panels: [], branches: [{ id: 'b', label: 'Go', targetPageId: 'p1', flagsToSet: [] }] }], apiKey: 'x' });
+    expect(comic.comicPages).toEqual([expect.objectContaining({ id: 'p1' })]);
+    expect(comic).not.toHaveProperty('apiKey');
   });
 
   it('exposes canonical resume fields to Brain without making lineage directly mutable', () => {

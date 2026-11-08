@@ -458,7 +458,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/checkout', webAuthMiddleware, async (c) => {
     const body = await parseBody(c, CheckoutStartBody);
-    const returnUrl = body.returnUrl ?? `${new URL(c.req.url).origin}/marketplace`;
+    const returnUrl = body.returnUrl;
     try {
       const { checkoutUrl } = await startSkillCheckout(db, c.env as Env, {
         buyerUserId: c.get('userId') as string,

@@ -29,6 +29,7 @@ import {
   type ConnectorOrigin,
   type ResolvedConnector,
 } from './connectorRegistry';
+import { sourceAliasConflicts } from '../hiring/applicantSource';
 import { invalidateConnectedConnectors } from './connectorTools';
 import { executeConnectorAction, type ConnectorCallResult } from './connectorRuntime';
 
@@ -110,7 +111,11 @@ export async function connectionCountsByConnector(db: Db, tenantId: number): Pro
 
 function validateOrThrow(raw: unknown): ConnectorManifest {
   try {
-    return parseConnectorManifest(raw);
+    const manifest = parseConnectorManifest(raw);
+    // A hiring board's aliases may not collide with another board's key or alias.
+    const conflicts = manifest.sourceAliases ? sourceAliasConflicts(manifest) : [];
+    if (conflicts.length) throw new ConnectorManifestError(conflicts);
+    return manifest;
   } catch (e) {
     if (e instanceof ConnectorManifestError) {
       throw new ConnectorServiceError('The connector manifest is not valid', 400, e.errors);

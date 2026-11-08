@@ -15,7 +15,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * fan-out?" using KV alone — no Neon round-trip:
  *
  *   • A write that creates backstop-eligible work (a ticket entering a runnable
- *     lane on a request path — see maybeAutoRunOnLaneEntry) calls
+ *     lane on a request path — see routeLaneEntry) calls
  *     {@link signalPendingWork}. The next tick then runs the fan-out and
  *     dispatches within 5 minutes. Work the fan-out itself re-discovers is NOT
  *     new work and does not re-signal, or the gate would never close. The exception is a
@@ -80,7 +80,7 @@ const SCHEDULE_STALL_KEY = 'cron:schedule-stall';
 
 /**
  * Max time an idle platform can leave a missed signal unprocessed. The live path
- * (maybeAutoRunOnLaneEntry) already dispatches the common case instantly and the
+ * (routeLaneEntry) already dispatches the common case instantly and the
  * signal covers dropped kickoffs, so the floor only backstops a signal that was
  * both lost AND whose live dispatch was dropped — rare. 30 min keeps idle
  * wake-ups to ~48/day while bounding worst-case staleness.
@@ -407,7 +407,7 @@ function parseNextDue(raw: string | null): number | null {
  * NOT re-signal: a lane-trigger evaluation inside the scheduled invocation (the
  * auto-exec sweep, the manager pass) raises no signal, or one ticket that passes
  * evaluation and is then refused by the dispatcher would pin the gate open on
- * every tick (see maybeAutoRunOnLaneEntry). Best-effort.
+ * every tick (see routeLaneEntry). Best-effort.
  */
 export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): Promise<void> {
   const store = kv(env);

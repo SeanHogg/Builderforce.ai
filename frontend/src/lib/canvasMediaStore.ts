@@ -1,4 +1,7 @@
-import { brain } from '@/lib/builderforceApi';
+import { request } from '@/lib/builderforceApi';
+import { apiRequestStream } from '@/lib/apiClient';
+import { AUTH_API_URL } from '@/lib/auth';
+import { BRAIN_UPLOAD_PATH } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasVideoCaptureKind, CanvasVideoSource, CanvasVideoSourceKind } from '@builderforce/creation-canvas-contract';
 
 function dataUrl(file: File): Promise<string> {
@@ -36,6 +39,11 @@ function probe(url: string, kind: CanvasVideoSourceKind): Promise<{ durationSeco
   });
 }
 
+/** The tenant-authenticated read URL of a private upload; never the public `/api/assets/<key>`. */
+function privateUploadUrl(key: string): string {
+  return `${AUTH_API_URL}/api/brain/uploads/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 export interface UploadedCanvasFile { url: string; storageKey: string }
 
 /**
@@ -53,8 +61,13 @@ export interface UploadedCanvasFile { url: string; storageKey: string }
  */
 export async function uploadCanvasFile(file: File): Promise<UploadedCanvasFile | null> {
   try {
-    const uploaded = await brain.upload(file);
-    return { url: brain.uploadUrl(uploaded.key), storageKey: uploaded.key };
+    // `brain.upload` carries only the file; canvas media is PRIVATE to the tenant
+    // (stored under `<tenant>/private/media/`), so the form also names the visibility.
+    const form = new FormData();
+    form.append('file', file);
+    form.append('visibility', 'private');
+    const uploaded = await request<{ key: string }>(BRAIN_UPLOAD_PATH, { method: 'POST', body: form });
+    return { url: privateUploadUrl(uploaded.key), storageKey: uploaded.key };
   } catch {
     return null;
   }
@@ -82,3 +95,44 @@ export async function storeCanvasMedia(file: File, captureKind: CanvasVideoCaptu
   };
 }
 
+const UPLOADS_PREFIX = '/api/brain/uploads/';
+
+function apiBase(): string {
+  return AUTH_API_URL || (typeof location !== 'undefined' ? location.origin : 'http://localhost');
+}
+
+/**
+ * The request path for a tenant-authenticated upload URL, rebuilt from its parsed key; `null` when
+ * the URL is not one. A URL that names the uploads path but is not on the API origin, or that tries
+ * to escape it (`..`, `%2e`, backslash), THROWS rather than falling through — the bearer token must
+ * never ride a request the string only looks like an upload for.
+ */
+function authenticatedUploadPath(url: string): string | null {
+  if (!url.includes(UPLOADS_PREFIX)) return null;
+  if (/\.\.|%2e|\\/i.test(url)) throw new Error('media url rejected');
+  const parsed = new URL(url, apiBase());
+  if (parsed.origin !== new URL(apiBase()).origin || !parsed.pathname.startsWith(UPLOADS_PREFIX)) {
+    throw new Error('media url rejected');
+  }
+  const key = parsed.pathname.slice(UPLOADS_PREFIX.length);
+  if (!key) throw new Error('media url rejected');
+  return UPLOADS_PREFIX + key.split('/').map((segment) => encodeURIComponent(decodeURIComponent(segment))).join('/');
+}
+
+/**
+ * Fetch an uploaded file's bytes as a blob, the way the app is allowed to read it.
+ *
+ * `uploadCanvasFile` URLs (`/api/brain/uploads/<key>`) are tenant-authenticated: they need
+ * the bearer token, which an `<img>` or a bare `fetch` cannot send, so they go through the
+ * app's authenticated request helper. Any other URL (a public `/api/assets/<key>`, a signed
+ * `/api/brain-files/...`, someone else's https) is a plain credential-less CORS fetch.
+ * A blob is same-origin, so a canvas it is drawn on stays readable for export.
+ */
+export async function fetchCanvasMediaBlob(url: string): Promise<Blob> {
+  const uploadPath = authenticatedUploadPath(url);
+  const response = uploadPath
+    ? await apiRequestStream(uploadPath)
+    : await fetch(url, { mode: 'cors', credentials: 'omit' });
+  if (!response.ok) throw new Error(`media fetch failed: ${response.status}`);
+  return response.blob();
+}

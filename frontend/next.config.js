@@ -145,8 +145,11 @@ const nextConfig = {
       '@seanhogg/builderforce-studio': '../studio/dist/index.mjs',
       '@seanhogg/builderforce-studio-embedded': '../studio-embedded/dist/index.mjs',
       'mp4-muxer': './node_modules/mp4-muxer/build/mp4-muxer.mjs',
+      'webm-muxer': './node_modules/webm-muxer/build/webm-muxer.mjs',
       'onnxruntime-node': './src/lib/turbopackEmptyModule.ts',
       'onnxruntime-web': './node_modules/onnxruntime-web/dist/ort.bundle.min.mjs',
+      // @webdit/runtime (bundled into studio) imports this subpath; pin it to the frontend's one ORT version.
+      'onnxruntime-web/webgpu': './node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs',
       // Same DOM-build problem as the webpack alias below; dev runs turbopack, and
       // turbopack aliases are global rather than per-runtime. The default entry
       // works in every runtime, so the only cost is a slightly larger dev client
@@ -224,7 +227,7 @@ const nextConfig = {
       // bundle, matching the Turbopack alias above.
       // Client only: the server stubs every onnxruntime-web import below, and webpack
       // takes the FIRST matching alias, so this exact-match key must not exist there.
-      ...(isServer ? {} : { 'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs') }),
+      ...(isServer ? {} : { 'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'), 'onnxruntime-web/webgpu$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs') }),
       sharp$: false,
       // Server AND edge only: the browser build of this package touches the DOM
       // at module scope and cannot be evaluated in either. The client bundle is
@@ -270,23 +273,6 @@ const nextConfig = {
           ].map((specifier) => [specifier, false]))
         : {}),
     };
-    // @webdit/runtime's bundle.ts exports loadBundleFromDir — a Node-side
-    // loader used only by its own integration tests — alongside the
-    // browser-safe loadBundle/loadBundleFromBuffers this app actually calls.
-    // Its dynamic import("node:fs/promises")/("node:path") are never reached
-    // at runtime in the browser bundle (same reason onnxruntime-node/sharp are
-    // stubbed above), but webpack still needs to resolve every export of a
-    // module it pulls in — and a `node:`-scheme specifier is handled by a
-    // separate scheme-resolution path that `resolve.alias` cannot intercept,
-    // unlike the bare `fs`/`path` core-module fallback. IgnorePlugin replaces
-    // the matched request with an empty module before that path is reached.
-    // `contextRegExp` scopes this to bundle.ts's own import: `vfile` (pulled
-    // in by rehype-katex, unrelated to webdit) re-exports `node:path` too, and
-    // an unscoped match broke that re-export's default export.
-    config.plugins.push(new webpack.IgnorePlugin({
-      resourceRegExp: /^node:(fs\/promises|path)$/,
-      contextRegExp: /@webdit[\\/]+runtime/,
-    }));
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a
     // dynamic `require(expr)` and reads `import.meta` directly, and

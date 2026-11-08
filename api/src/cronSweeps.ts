@@ -66,6 +66,7 @@ import { runCostAlertSweep } from './application/alerts/costAlertSweep';
 import { runDifficultyTraining } from './application/llm/difficultyTraining';
 import { runRunAnomalyNotifySweep } from './application/insights/runAnomalyNotify';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
+import { runBacklogDispositionSweep } from './application/manager/backlogDispositionSweep';
 import { demoAccountsEnabled, reseedDemoTenants } from './application/demo/demoSeedService';
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
 import { runWebScanSweep } from './application/security/webSecurityScan';
@@ -92,15 +93,21 @@ import { sweepIdlePreviews } from './application/runtime/previewSessions';
 import { runGithubActionsReconcile } from './buildGithubActionsReconcile';
 import { runAgentWorkflowRefreshSweep } from './application/runtime/agentWorkflowRefresh';
 import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
+import { sweepOrphanedDraftPullRequests } from './application/repos/sweepOrphanedDraftPrs';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
 import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
+import { runDeferredDispatchSweep } from './application/runtime/deferredDispatch';
+import { dispatchCloudRunForTask } from './application/runtime/dispatchCloudRun';
 import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { flushHitCounters } from './application/counters/hitCounters';
 import { runExtensionBillingSweep } from './application/developer/extensionBilling';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runPrMergeSweep } from './application/repos/prMergeSweep';
+import { runGovernanceAuditor } from './application/governance/governanceAuditor';
+import { runSecurityVerdictCatchup } from './application/security/securityVerdictCatchup';
+import { runPrConductSweep } from './application/repos/prConductSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runRepoActivitySweep } from './application/contributors/runRepoActivitySweep';
@@ -124,6 +131,7 @@ import { describeNumberRent, runPhoneNumberRentSweep } from './application/phone
 import { describeAllowanceGrant, runPhoneAllowanceSweep } from './application/phone/grantPhoneAllowance';
 import { describeTrialReminders, runSpawnTrialReminderSweep } from './application/spawn/spawnTrial';
 import { describeSourcingSweep, runSourcingSweep } from './application/sourcing/runSourcingSweep';
+import { describeApplicantImportSweep, runApplicantImportSweep } from './application/hiring/importBoardApplicants';
 import { describeBatchTick, runLlmBatchTick } from './application/llm/batch/runLlmBatchTick';
 
 /** Both memory stores the embedding backfill covers. */
@@ -496,6 +504,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'backlog-disposition',
+    cadence: 'daily',
+    description: 'PRD 23 backlog pass, DRY-RUN only: refresh each workspace\'s keep/close/consolidate/quarantine proposals. Applying them is a superadmin action.',
+    run: async ({ db }) => {
+      const r = await runBacklogDispositionSweep(db);
+      return r.written > 0 ? `tenants=${r.tenants} considered=${r.considered} written=${r.written}` : null;
+    },
+  },
+  {
     key: 'demo-reseed',
     cadence: 'daily',
     description: 'Reseed the demo tenants so a visitor-mutated demo never stays dirty.',
@@ -760,6 +777,12 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'job-board-applicant-import',
+    cadence: 'daily',
+    description: 'Import the applicants each job board holds for open postings into the ATS — bounded, rotating, idempotent.',
+    run: async ({ env, db }) => describeApplicantImportSweep(await runApplicantImportSweep(db, env)),
+  },
+  {
     key: 'job-sourcing-sync',
     cadence: 'daily',
     // Every connected job feed, fetched and written into the tenant's catalogue.
@@ -977,6 +1000,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'orphaned-draft-prs',
+    cadence: 'frequent',
+    description: 'Settle the early draft PR of a run that never finished: mark it ready when its branch has commits, close it when it has none.',
+    run: async ({ env, db }) => {
+      const r = await sweepOrphanedDraftPullRequests(env, db);
+      return r.readied + r.closed > 0 ? `checked=${r.checked} readied=${r.readied} closed=${r.closed} skipped=${r.skipped}` : null;
+    },
+  },
+  {
     key: 'approval-expiry',
     cadence: 'frequent',
     description: 'Expire pending approvals past their deadline and escalate.',
@@ -1027,18 +1059,24 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'deferred-dispatch',
+    cadence: 'frequent',
+    description: 'Retry one-shot dispatches (CI auto-fix, incident, security, validation) that admission deferred: a live run on the ticket, or the plan\'s concurrent cloud-run limit.',
+    dispatches: true,
+    run: async ({ env, budget }) => {
+      const r = await runDeferredDispatchSweep(env, budget, dispatchCloudRunForTask);
+      return r.parked > 0 ? `parked=${r.parked} started=${r.started} stillDeferred=${r.stillDeferred}` : null;
+    },
+  },
+  {
     key: 'manager',
     cadence: 'frequent',
-    description: 'AI Manager pass: score + rank the backlog, assign unowned work, conduct PRs.',
+    description: 'AI Manager pass: score + rank the backlog, assign unowned work, triage stalls (PR conduct and merge are their own sweeps).',
     dispatches: true,
-    run: async ({ env, budget, controls }) => {
-      const r = await runManagerSweep(env, budget, {
-        // One switch owns PR management across both paths. Core manager work
-        // continues while the reconciler and the manager's PR stages are paused.
-        prManagementEnabled: cronSweepEnabled(controls ?? {}, 'pr-ticket-reconciler'),
-      });
+    run: async ({ env, budget }) => {
+      const r = await runManagerSweep(env, budget);
       return r.managed > 0
-        ? `projects=${r.projects} managed=${r.managed} notReached=${r.notReached} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`
+        ? `projects=${r.projects} managed=${r.managed} notReached=${r.notReached} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`
         : null;
     },
   },
@@ -1103,6 +1141,26 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runPrMergeSweep(env, budget);
       return r.worked > 0
         ? `projects=${r.projects} worked=${r.worked} merged=${r.merged} dispatched=${r.dispatched} queued=${r.queued} retired=${r.retired} notReached=${r.notReached}`
+        : null;
+    },
+  },
+  {
+    key: 'pr-conduct',
+    cadence: 'frequent',
+    description: "Conduct each opted-in project's review tickets: return unfinished work, ask for outstanding sign-offs, or complete and open the PR.",
+    // Returning a ticket restarts its agent and a sign-off ask starts a reviewer run —
+    // both billable — so this sweep draws from the shared per-tick tenant ceiling.
+    dispatches: true,
+    // The last PR work that lived inside the manager pass; split out beside 'pr-merge' for
+    // the same reason (its own budget, so review volume cannot starve the pass). See
+    // `application/repos/prConductSweep.ts`.
+    run: async ({ env, budget, controls }) => {
+      // The SAME switch that pauses 'pr-merge' and the reconciler: one control for
+      // "PR management is paused".
+      if (!cronSweepEnabled(controls ?? {}, 'pr-ticket-reconciler')) return null;
+      const r = await runPrConductSweep(env, budget);
+      return r.worked > 0
+        ? `projects=${r.projects} worked=${r.worked} considered=${r.considered} conducted=${r.conducted} dispatched=${r.dispatched} notReached=${r.notReached}`
         : null;
     },
   },
@@ -1221,6 +1279,27 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env, db }) => {
       const r = await runCostAlertSweep(env, db);
       return r.spikes > 0 || r.outliers > 0 ? `spikes=${r.spikes} outliers=${r.outliers}` : null;
+    },
+  },
+  {
+    key: 'governance-auditor',
+    cadence: 'daily',
+    description: 'Flag merged PRs lacking a completed security scan or review, and SOC 2 controls with no evidence in 90 days, for the SOC 2 page.',
+    run: async ({ env, db }) => {
+      const r = await runGovernanceAuditor(db, new Date(), (env as { UPLOADS?: R2Bucket }).UPLOADS);
+      const opened = r.opened.merged_pr_unscanned + r.opened.merged_pr_unreviewed + r.opened.control_no_evidence;
+      return opened > 0 || r.resolved > 0 || r.exportsPurged > 0
+        ? `opened=${opened} resolved=${r.resolved} exportsPurged=${r.exportsPurged}` : null;
+    },
+  },
+  {
+    key: 'security-verdict-catchup',
+    cadence: 'frequent',
+    description: 'Safety net for merge-on-green: scan open green PRs whose latest head has no complete security verdict, then merge those CI is green on.',
+    dispatches: false,
+    run: async ({ env, db }) => {
+      const r = await runSecurityVerdictCatchup(env, db);
+      return r.considered > 0 ? `considered=${r.considered} merged=${r.merged}${r.stoppedForBudget ? ' budget-stopped' : ''}` : null;
     },
   },
 ];

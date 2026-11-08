@@ -10,6 +10,7 @@ import { useComposerStarters } from './chat-input/useComposerStarters';
 import { useBrainComposerLabels } from './chat-input/useBrainComposerLabels';
 import { useComposerAccount } from './chat-input/useComposerAccount';
 import { useComposerOptions } from './chat-input/useComposerOptions';
+import { useMentionPersonalityDetail } from '@/lib/useMentionPersonalityDetail';
 import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 // The shell's own sheet — imported here so the composer renders right wherever it is
 // dropped, not only beside a Brain panel.
@@ -41,6 +42,7 @@ export function ChatInput(props: ChatInputProps) {
     starters, suggestions, account, className, focusToken, modeGate,
   } = props;
   const t = useTranslations('chatInput');
+  const mentionDetail = useMentionPersonalityDetail(!!mentionables && mentionables.length > 0);
   const tBrain = useTranslations('brain');
   const router = useRouter();
   // THE exam gate (`lib/academic/assessment.ts`): a closed-book assessment live on the
@@ -162,7 +164,7 @@ export function ChatInput(props: ChatInputProps) {
         onAddContext={onAddContext}
         webBrowsing={browsing}
         addMenuItems={menuItems}
-        mentions={mentionables && mentionables.length > 0 && onMention ? { participants: mentionables, onPick: onMention } : undefined}
+        mentions={mentionables && mentionables.length > 0 && onMention ? { participants: mentionables, onPick: onMention, detail: mentionDetail } : undefined}
         tickets={ticketables && ticketables.length > 0 && onTicketTag ? { tickets: ticketables, onPick: onTicketTag } : undefined}
         voice={showVoice}
         context={context}

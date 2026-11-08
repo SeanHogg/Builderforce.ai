@@ -34,7 +34,7 @@ vi.mock("vscode", async () => {
   };
 });
 
-import { workspaceKnowledgeFiles } from "./knowledgeFs";
+import { isKnowledgeCachePath, workspaceKnowledgeFiles } from "./knowledgeFs";
 
 let folder: string;
 const knowledgeDir = () => join(folder, ".builderforce", "knowledge");
@@ -77,5 +77,14 @@ describe("workspaceKnowledgeFiles", () => {
     await files.append!("x.jsonl", "a\n");
     await files.append!("x.jsonl", "b\n");
     expect(await files.read("x.jsonl")).toBe("a\nb\n");
+  });
+});
+
+describe("isKnowledgeCachePath", () => {
+  it("names the knowledge cache (either separator) and nothing else under .builderforce", () => {
+    expect(isKnowledgeCachePath("/w/.builderforce/cache/knowledge/index.sqlite-wal")).toBe(true);
+    expect(isKnowledgeCachePath("C:\\w\\.builderforce\\cache\\.gitignore")).toBe(true);
+    expect(isKnowledgeCachePath("/w/.builderforce/knowledge/runs/a.json")).toBe(false);
+    expect(isKnowledgeCachePath("/w/src/cache/x.ts")).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
 
 const mocks = vi.hoisted(() => ({
   folder: "",
@@ -78,7 +79,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await disposeReplicas(); });
 
-describe("regression: signed out with a persisted project selection", () => {
+describe.skipIf(!localSqliteAvailable())("regression: signed out with a persisted project selection", () => {
   it("is not linked, so there is no server client to throw NOT_SIGNED_IN", () => {
     mocks.inputs = { signedIn: false, synchronize: false, gatewayInference: false, connectedFeatures: false };
     expect(linkedKnowledgeClient({} as never)).toBeUndefined();

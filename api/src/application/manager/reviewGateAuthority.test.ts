@@ -117,15 +117,18 @@ describe('census: stops counting the human_gate cohort for a workspace with the 
 });
 
 describe('the conduct step asks the gate before it closes anything', () => {
-  const source = readFileSync(fileURLToPath(new URL('./ManagerService.ts', import.meta.url).href), 'utf8');
-  const conduct = source.slice(source.indexOf('async function coordinatePullRequests'));
+  // Conduct moved out of ManagerService into the pr-conduct sweep (repos/prConductTicket.ts).
+  const source = readFileSync(fileURLToPath(new URL('../repos/prConductTicket.ts', import.meta.url).href), 'utf8');
+  const manager = readFileSync(fileURLToPath(new URL('./ManagerService.ts', import.meta.url).href), 'utf8');
+  const conduct = source.slice(source.indexOf('export async function conductReviewTicket'));
 
   it('closes only through the gated wrapper, never the raw completion write', () => {
     expect(conduct).toMatch(/closeTicketAutomatically\(env, db, \{[\s\S]*?source: 'manager_review'/);
     expect(source).not.toMatch(/completeTaskOnMerge\(/);
+    expect(manager).not.toMatch(/completeTaskOnMerge\(/);
   });
 
   it('does nothing further with a ticket the gate held (or could not read)', () => {
-    expect(conduct).toMatch(/if \(!close\.closed\) continue;/);
+    expect(conduct).toMatch(/if \(!close\.closed\) return;/);
   });
 });

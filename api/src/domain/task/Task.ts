@@ -3,6 +3,9 @@ import { ValidationError } from '../shared/errors';
 
 export interface TaskProps {
   id: TaskId;
+  /** The owning workspace, as stored. Present only on a row read back from the store (absent on a freshly created task) - lets a
+   *  batch read that crossed tenants (findByIdsAcrossTenants) be checked against the caller's tenant. */
+  tenantId?: number;
   projectId: ProjectId;
   key: string;
   title: string;
@@ -68,6 +71,8 @@ export interface TaskProps {
   decompositionSource: string | null;
   persona: string | null;
   archived: boolean;
+  /** A fact about this work item: shipping it is news for the investor update and board pack. */
+  investorMilestone?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -97,7 +102,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'reviewCount' | 'lastReviewedAt' | 'lastReviewVerdict' | 'gapOriginTaskId' | 'decompositionSource'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'investorMilestone' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'reviewCount' | 'lastReviewedAt' | 'lastReviewVerdict' | 'gapOriginTaskId' | 'decompositionSource'
     > & {
       projectKey: string;
       /** Highest existing key sequence in the project; this task gets the next one. */
@@ -154,6 +159,7 @@ export class Task {
       decompositionSource: null,
       persona: props.persona ?? null,
       archived: false,
+      investorMilestone: false,
       createdAt: now,
       updatedAt: now,
     });
@@ -210,6 +216,7 @@ export class Task {
   get decompositionSource(): string | null { return this.props.decompositionSource; }
   get persona(): string | null { return this.props.persona; }
   get archived(): boolean { return this.props.archived; }
+  get investorMilestone(): boolean { return this.props.investorMilestone ?? false; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
 
@@ -239,7 +246,7 @@ export class Task {
         'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
         | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
         | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
-        | 'decompositionSource' | 'persona' | 'archived'
+        | 'decompositionSource' | 'persona' | 'archived' | 'investorMilestone'
       >
     >,
   ): Task {

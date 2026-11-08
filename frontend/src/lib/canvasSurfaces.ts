@@ -38,7 +38,7 @@
 
 import type { CanvasComposerIntentId } from './canvasComposerIntents';
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'knowledge' | 'scene3d' | 'app' | 'operate' | 'insights' | 'sessions' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'knowledge' | 'scene3d' | 'app' | 'operate' | 'insights' | 'sessions' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate' | 'model3d';
 
 /**
  * What a surface is ABOUT.
@@ -276,6 +276,11 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // month whose card the reader may since have deleted.
   { id: 'calendar', scope: 'object', order: 15, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
   { id: 'form', scope: 'object', order: 16, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  // A hand-built 3D MODEL. The axis a card cannot draw is the turn: an orbit camera around a
+  // part you can pick, move and size. It is not `scene3d` (the AI scene's generation panel,
+  // bound to a `scene` object) and not `world` (a place you walk): its object is a solid
+  // that exports as STL/STEP. Object-scoped and non-persistent, like every runtime here.
+  { id: 'model3d', scope: 'object', order: 17, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
 ];
 
 /**

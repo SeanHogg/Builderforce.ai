@@ -79,6 +79,34 @@ function shouldSignalCronGate(requested: boolean | undefined): boolean {
 }
 
 /**
+ * How a lane-entry caller shapes the dispatch. Carried by {@link routeLaneEntry} (the one door)
+ * down to the one-agent engine, so a caller that needs `force`, a pre-resolved token verdict or
+ * the sweep's `onBlocked` memo loses none of it by going through the router.
+ */
+export interface LaneEntryRunOptions {
+  /** Pre-resolved workspace token verdict (the sweep resolves one per tenant). */
+  tenantTokens?: TenantTokenVerdict;
+  /**
+   * A HUMAN asked for this tick. Passed to the lane requirement gate so an explicitly
+   * requested ROLE dispatch overrides the failure breaker / re-run cooldown, exactly as
+   * "Run now" does. It deliberately does NOT relax the lane's own auto-run decision
+   * below — that stays the evaluator's call.
+   */
+  force?: boolean;
+  /**
+   * False when the caller IS the backstop fan-out (the auto-exec sweep), so a
+   * ticket it re-evaluates never re-raises the cron work-gate signal. Defaults to
+   * signalling — except inside the scheduled invocation; see shouldSignalCronGate.
+   */
+  signalCronGate?: boolean;
+  /**
+   * Told WHY the ticket was refused, so the auto-exec sweep can skip re-asking until
+   * that reason's inputs change (autoExecBlockMemo). Not called on a run or an error.
+   */
+  onBlocked?: (verdict: { reason: string; cooldownRemainingMs?: number }) => void;
+}
+
+/**
  * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
  * enters a lane (created into it, or its status PATCHed into it by ANY client —
  * board drag, the status dropdown, the brain, a raw API call) and that lane has
@@ -110,11 +138,12 @@ function shouldSignalCronGate(requested: boolean | undefined): boolean {
  * dispatched. That was the reported "drag into a staffed lane never fires the
  * agent" bug: the run was submitted but its `orchestrate()` kickoff was dropped.
  *
- * Exported (and re-exported from taskRoutes) so the execution-completion path
- * (RuntimeService.onLaneEntry, wired at the composition root) reuses this exact
- * trigger when an AGENT advances a ticket into the next lane — without it,
- * agent-moved tickets wrote `tasks.status` directly and never started the next
- * lane's configured agent.
+ * This is the ONE-AGENT ENGINE behind {@link routeLaneEntry}, not a door: every caller —
+ * the board drag, an agent advancing its own ticket (RuntimeService.onLaneEntry), the
+ * sweeps, the manager and the coordinator — enters through {@link routeLaneEntry}, which
+ * decides between the manager, the SwimlaneCoordinator and this engine. It is exported
+ * for the router and the engine's own tests ONLY; `check:dispatch-budget` fails any other
+ * importer.
  */
 export async function maybeAutoRunOnLaneEntry(
   env: Env,
@@ -123,27 +152,7 @@ export async function maybeAutoRunOnLaneEntry(
   args: {
     tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string;
     originLaneKey?: string;
-    /** Pre-resolved workspace token verdict (the sweep resolves one per tenant). */
-    tenantTokens?: TenantTokenVerdict;
-    /**
-     * A HUMAN asked for this tick. Passed to the lane requirement gate so an explicitly
-     * requested ROLE dispatch overrides the failure breaker / re-run cooldown, exactly as
-     * "Run now" does. It deliberately does NOT relax the lane's own auto-run decision
-     * below — that stays the evaluator's call.
-     */
-    force?: boolean;
-    /**
-     * False when the caller IS the backstop fan-out (the auto-exec sweep), so a
-     * ticket it re-evaluates never re-raises the cron work-gate signal. Defaults to
-     * signalling — except inside the scheduled invocation; see shouldSignalCronGate.
-     */
-    signalCronGate?: boolean;
-    /**
-     * Told WHY the ticket was refused, so the auto-exec sweep can skip re-asking until
-     * that reason's inputs change (autoExecBlockMemo). Not called on a run or an error.
-     */
-    onBlocked?: (verdict: { reason: string; cooldownRemainingMs?: number }) => void;
-  },
+  } & LaneEntryRunOptions,
 ): Promise<boolean> {
   try {
     // ONE read-only evaluation answers "should this run, as which agent, and if
@@ -281,7 +290,8 @@ export async function maybeAutoRunOnLaneEntry(
         lane,
         // `already_running` names the LIVE RUN in its state so a ticket that moves from
         // one blocking run to the next is re-recorded rather than suppressed as "same".
-        reason:        evaln.liveExecution ? `${evaln.reason}:${evaln.liveExecution.id}` : evaln.reason,
+        reason:        evaln.reason,
+        ...(evaln.liveExecution ? { stateDiscriminator: evaln.liveExecution.id } : {}),
         // NAME THE LIVE RUN. `already_running` on its own reads as "busy", which is
         // wrong for the case that actually freezes tickets: a run PAUSED on an
         // `ask_human` question counts as live and holds the ticket for up to the
@@ -558,8 +568,11 @@ export async function routeLaneEntry(
     status: string;
     submittedBy: string;
     originLaneKey?: string;
-    /** What a lifecycle-managed board does. Omitted → the inline trigger, which is what
-     *  the internal `onTaskLandedInLane` writers have always done. */
+    /** What a lifecycle-managed board does. Omitted → the managed branch is SKIPPED and the
+     *  ticket goes to the coordinator / one-agent engine, which is what the internal
+     *  `onTaskLandedInLane` writers have always done AND what a caller already INSIDE the
+     *  manager state machine (coordinateTicket, ManagerService, triageStage) must do: it
+     *  cannot re-enter the manager, and nothing below this branch ever calls the manager. */
     onManagedBoard?: () => Promise<void>;
     /**
      * The ticket write behind this call. When it cannot change the outcome
@@ -568,7 +581,7 @@ export async function routeLaneEntry(
      * ticket write (staffing backfill) or that always land a ticket (creates).
      */
     change?: LaneEntryChange;
-  },
+  } & LaneEntryRunOptions,
 ): Promise<boolean> {
   if (args.change && !mutationCanTriggerLaneEntry(args.change.before, args.change.after)) return false;
   if (args.onManagedBoard) {
@@ -581,8 +594,18 @@ export async function routeLaneEntry(
     }
   }
 
-  const staged = await tryCoordinatorLaneEntry(env, db, {
+  // Callers that used to enter the engine directly never saw a throw, so the router keeps that contract.
+  // The coordinator gets the same dispatch options the engine honours (force, token verdict, onBlocked) and re-reads the
+  // ticket's lane itself, so a stale `args.status` snapshot cannot drag a ticket back.
+  const staged = await tryCoordinatorLaneEntry(env, db, runtimeService, {
     tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId, status: args.status,
+    submittedBy: args.submittedBy,
+    ...(args.force ? { force: true } : {}),
+    ...(args.tenantTokens ? { tenantTokens: args.tenantTokens } : {}),
+    ...(args.onBlocked ? { onBlocked: args.onBlocked } : {}),
+  }).catch((error) => {
+    reportCaughtError(error, { source: 'application/swimlane/laneEntryTrigger.ts', operation: 'routeLaneEntry:coordinator' });
+    return 'refused' as const;
   });
   if (staged !== 'not_applicable') return staged === 'started';
 
@@ -593,6 +616,10 @@ export async function routeLaneEntry(
     status: args.status,
     submittedBy: args.submittedBy,
     ...(args.originLaneKey ? { originLaneKey: args.originLaneKey } : {}),
+    ...(args.tenantTokens ? { tenantTokens: args.tenantTokens } : {}),
+    ...(args.force ? { force: true } : {}),
+    ...(args.signalCronGate === false ? { signalCronGate: false } : {}),
+    ...(args.onBlocked ? { onBlocked: args.onBlocked } : {}),
   });
 }
 

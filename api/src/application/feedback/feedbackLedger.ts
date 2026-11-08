@@ -29,7 +29,7 @@ import { feedbackSubmissions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveFeedbackSubmissionsMonthly } from '../../domain/tenant/PlanLimits';
-import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { enforceTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 import { dailyTenantCounts, sumTenantRowCount, type DailyCount } from '../shared/dailyTenantCounts';
 
 /**
@@ -66,7 +66,7 @@ export type FeedbackSubmissionsCapResult = MonthlyTenantCapResult;
  * which is the one class of data this pillar exists to not lose.
  */
 export async function enforceFeedbackSubmissionsCap(db: Db, tenantId: number, env?: Env): Promise<FeedbackSubmissionsCapResult> {
-  return enforceMonthlyTenantCap({
+  return enforceTenantCap({
     db,
     tenantId,
     env,

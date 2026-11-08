@@ -346,7 +346,6 @@ abandoned.
 - [ ] A reviewer cannot complete without an exact successful role/lane signoff.
 - [ ] A no-tool response cannot bypass the evidence gate.
 - [ ] Step-cap exhaustion without a verdict fails rather than accepts the run.
-- [ ] Validator acceptance evidence is linked or bridged to its lifecycle slot.
 - [ ] A PRD-only implementation run opens no PR.
 - [ ] Concurrent tickets never contend on root `PRD.md`.
 - [ ] Every ready-for-review reconciliation item creates an `in_review` transition and reviewer dispatch.
@@ -371,6 +370,11 @@ abandoned.
 ---
 
 ## 10 · Implementation state on 2026-08-10
+
+Update 2026-11-08: the slot link, push invalidation, disposition computation (dry-run) and the
+Manager canary flag are built; see DONE.md "autonomous delivery closes its loops". Still open:
+the acceptance criteria above, a live canary run (§7 steps 4–5), and applying a reviewed
+disposition batch (§7 step 8).
 
 The local workspace contains an uncommitted first slice:
 

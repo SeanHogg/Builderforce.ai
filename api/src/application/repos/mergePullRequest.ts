@@ -15,6 +15,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * degrade to "open the PR on the provider". Never throws.
  */
 import { resolveRepoApiTarget } from './repoApiTarget';
+import { resolvePrHeadSha } from './resolvePrHeadSha';
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
@@ -30,11 +31,17 @@ export interface MergePrInput {
   /** Optional commit title/message for the squash/merge commit. */
   commitTitle?: string;
   commitMessage?: string;
+  /**
+   * The head commit the caller VERIFIED (scanned, reviewed). The merge is refused with `head_moved` if
+   * the PR's head is anything else - GitHub (`sha`) and GitLab (`sha`) enforce it natively; Bitbucket
+   * has no such parameter, so the head is re-read immediately before the merge call.
+   */
+  expectedHeadSha?: string;
 }
 
 export type MergePrResult =
   | { ok: true; merged: boolean; sha: string | null }
-  | { ok: false; code: 'unsupported' | 'not_mergeable' | 'conflict' | 'provider_error'; reason: string };
+  | { ok: false; code: 'unsupported' | 'not_mergeable' | 'conflict' | 'head_moved' | 'provider_error'; reason: string };
 
 const VALID_METHODS: ReadonlySet<MergeMethod> = new Set(['squash', 'merge', 'rebase']);
 
@@ -77,6 +84,7 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
       method: 'PUT',
       body: {
         squash: method === 'squash',
+        ...(input.expectedHeadSha ? { sha: input.expectedHeadSha } : {}),
         ...(input.commitMessage ? { merge_commit_message: input.commitMessage } : {}),
       },
     };
@@ -100,6 +108,7 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
     method: 'PUT',
     body: {
       merge_method: method,
+      ...(input.expectedHeadSha ? { sha: input.expectedHeadSha } : {}),
       ...(input.commitTitle ? { commit_title: input.commitTitle } : {}),
       ...(input.commitMessage ? { commit_message: input.commitMessage } : {}),
     },
@@ -136,6 +145,15 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
     return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' };
   }
 
+  // Bitbucket (Cloud and Server) cannot be told which commit to merge: check the head right before.
+  if (input.expectedHeadSha && input.provider === 'bitbucket') {
+    const now = await resolvePrHeadSha(input);
+    if (!now.ok) return { ok: false, code: 'provider_error', reason: `could not verify the head commit before merging: ${now.reason}` };
+    if (now.sha !== input.expectedHeadSha.toLowerCase()) {
+      return { ok: false, code: 'head_moved', reason: `the pull request head moved from ${input.expectedHeadSha.slice(0, 12)} to ${now.sha.slice(0, 12)} after it was checked` };
+    }
+  }
+
   const res = await fetch(req.url, {
     method: req.method,
     headers: {
@@ -159,6 +177,12 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
   // mergeable; 409 (all) = head moved / conflict.
   const text = await res.text().catch(() => '');
   const providerMessage = extractProviderMessage(text);
+  // The provider refused because the head is not the commit we verified (GitHub: "Head branch was
+  // modified"; GitLab: "SHA does not match HEAD of source branch"). Not a conflict: the next sweep
+  // re-scans the new head.
+  if (input.expectedHeadSha && res.status === 409 && /head branch was modified|sha does not match|head.*(moved|changed)/i.test(providerMessage)) {
+    return { ok: false, code: 'head_moved', reason: `the pull request head moved after it was checked${providerMessage ? `: ${providerMessage}` : ''}` };
+  }
   if (
     res.status === 409
     || ([405, 406, 422].includes(res.status) && isMergeConflictMessage(providerMessage))

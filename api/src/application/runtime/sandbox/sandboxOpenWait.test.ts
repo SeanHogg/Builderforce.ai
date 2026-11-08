@@ -12,7 +12,8 @@ vi.mock('./runSandbox', async (orig) => ({ ...(await orig<Record<string, unknown
 vi.mock('./sandboxOpenSpec', () => ({ buildSandboxOpenSpec: h.spec }));
 vi.mock('../cloudToolEvents', () => ({ recordCloudToolEvent: h.record }));
 
-import { CAPACITY_WAIT_BASE_MS, CAPACITY_WAIT_CAP_MS, CAPACITY_WAIT_MAX_MS, nextCapacityWait, type SandboxOpenWait } from './sandboxOpenWait';
+import { CAPACITY_WAIT_BASE_MS, CAPACITY_WAIT_CAP_MS, CAPACITY_WAIT_JITTER, CAPACITY_WAIT_MAX_MS, nextCapacityWait, type SandboxOpenWait } from './sandboxOpenWait';
+import { CLOUD_LONG_LIVED_SILENCE_MS } from '../orphanReasons';
 import { RunSandboxHost } from './runSandboxHost';
 
 const run = { executionId: 9, tenantId: 1, projectId: 2, taskId: 3 };
@@ -20,7 +21,25 @@ const env = { AGENT_CONTAINER: { idFromName: (n: string) => n, get: () => ({ fet
 const FULL = { ok: false, error: 'sandbox open answered 503', capacity: true };
 const host = () => new RunSandboxHost(env, {} as never, { get: async () => undefined, put: async () => undefined });
 
-beforeEach(() => vi.clearAllMocks());
+// The middle of the jitter range (a factor of exactly 1), so the delays below are the plain backoff.
+beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Math, 'random').mockReturnValue(0.5); });
+
+describe('nextCapacityWait jitter and the reaper ceiling', () => {
+  it('regression: a wait at the cap, jitter included, stays inside the reaper silence ceiling', () => {
+    expect(CAPACITY_WAIT_CAP_MS).toBeLessThan(CLOUD_LONG_LIVED_SILENCE_MS);
+    expect(Math.round(CAPACITY_WAIT_CAP_MS * (1 + CAPACITY_WAIT_JITTER))).toBeLessThan(CLOUD_LONG_LIVED_SILENCE_MS);
+  });
+  it('spreads each delay by up to 20% either way', () => {
+    const at = (r: number) => (nextCapacityWait(undefined, 0, () => r) as { delayMs: number }).delayMs;
+    expect(at(0)).toBe(Math.round(CAPACITY_WAIT_BASE_MS * 0.8));
+    expect(at(0.5)).toBe(CAPACITY_WAIT_BASE_MS);
+    expect(at(0.999999)).toBeLessThanOrEqual(Math.round(CAPACITY_WAIT_BASE_MS * 1.2));
+  });
+  it('still never schedules past the deadline when the jitter would', () => {
+    const step = nextCapacityWait({ since: 0, attempts: 4 }, CAPACITY_WAIT_MAX_MS - 20_000, () => 0.999);
+    expect(step).toMatchObject({ exhausted: false, delayMs: 20_000 });
+  });
+});
 
 describe('nextCapacityWait', () => {
   it('starts at the base delay and doubles up to the cap', () => {

@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Env } from '../../env';
+
+const invalidateSwimlaneOrdinals = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('./laneOrdinals', () => ({ invalidateSwimlaneOrdinals }));
+
 import { findOrCreateBoard, buildDefaultLaneRows } from './findOrCreateBoard';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import { boards, projects, swimlanes } from '../../infrastructure/database/schema';
@@ -114,6 +119,21 @@ describe('findOrCreateBoard', () => {
 
     const stamp = updates.find((u) => u.table === projects);
     expect((stamp?.values as { primaryBoardId: string } | undefined)?.primaryBoardId).toBe(res.board.id);
+  });
+
+  it('drops the project's cached routing / ordinal maps for its tenant once a board is created and re-pinned', async () => {
+    invalidateSwimlaneOrdinals.mockClear();
+    const { db } = makeFakeDb([]);
+    const env = {} as Env;
+    await findOrCreateBoard(db, { tenantId: 1, projectId: 7, name: 'Board', env });
+    expect(invalidateSwimlaneOrdinals).toHaveBeenCalledWith(env, 7, 1);
+  });
+
+  it('leaves the cache alone when the caller has no env', async () => {
+    invalidateSwimlaneOrdinals.mockClear();
+    const { db } = makeFakeDb([]);
+    await findOrCreateBoard(db, { tenantId: 1, projectId: 7, name: 'Board' });
+    expect(invalidateSwimlaneOrdinals).not.toHaveBeenCalled();
   });
 
   it('does NOT seed lanes when seedDefaultLanes is false', async () => {

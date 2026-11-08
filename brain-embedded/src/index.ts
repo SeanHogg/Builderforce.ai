@@ -273,6 +273,7 @@ export type { OnDeviceStoreScope } from './onDeviceStore';
 export {
   BrainActionsProvider,
   useBrainActions,
+  isBrainActionMutating,
   useRegisterBrainActions,
 } from './BrainActionsContext';
 export type { BrainAction, BrainActionsContextValue } from './BrainActionsContext';

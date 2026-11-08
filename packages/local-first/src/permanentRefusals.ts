@@ -50,6 +50,20 @@ export const PERMANENT_REFUSALS: ReadonlySet<string> = new Set([
   'base_version_required',
 ]);
 
+/**
+ * A DELETE the server refuses only because its target is already gone: the outcome the device
+ * asked for already holds, so the delete is settled (acknowledged, no dead letter, no hold).
+ * Data, per entity type: `chat-ticket-link` + `link_not_found` is an unlink of a pair with no row.
+ */
+export const ALREADY_SATISFIED_DELETES: Readonly<Record<string, ReadonlySet<string>>> = {
+  'chat-ticket-link': new Set(['link_not_found']),
+};
+
+/** Whether `operation` on `entityType` rejected with `detail` is a delete that is already satisfied. */
+export function isAlreadySatisfiedDelete(entityType: string, operation: string, detail: string | undefined): boolean {
+  return operation === 'delete' && detail !== undefined && ALREADY_SATISFIED_DELETES[entityType]?.has(detail) === true;
+}
+
 /** Whether a receipt's `detail` names a refusal no resend can fix. */
 export function isPermanentRefusal(detail: string | undefined): boolean {
   return detail !== undefined && PERMANENT_REFUSALS.has(detail);

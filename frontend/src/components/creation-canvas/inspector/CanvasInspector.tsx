@@ -17,6 +17,7 @@ import styles from '../styles/inspector.module.css';
 import chromeStyles from '../styles/chrome.module.css';
 import { canvasPersonOrigin, isCanvasPersonKind } from '@/lib/canvasNodeAffordances';
 import { KindDetailsFields } from './KindDetailsFields';
+import { InvestorUpdateMilestonesPreview } from './InvestorUpdateMilestonesPreview';
 import { TimingFields } from '../TimingFields';
 import { DiagramConvertPanel } from '../DiagramConvertPanel';
 import { KindDetailsActions } from '../KindDetailsActions';
@@ -254,6 +255,7 @@ export function Inspector({ node }: { node: CreationFlowNode }) {
           Same component both ways, so the two cannot drift on what an interval means. */}
       <TimingFields data={node.data} editable={editable} onChange={onChange} />
       {KindCustomSection && <KindCustomSection {...kindSectionProps} />}
+      {kind === 'investorUpdate' && <InvestorUpdateMilestonesPreview />}
       {/* The panel decides for itself whether this object has anything to
           convert, and to which notations — so no kind list is maintained here. */}
       <DiagramConvertPanel node={node} nodes={nodes} onConvert={onConvertDiagram} />

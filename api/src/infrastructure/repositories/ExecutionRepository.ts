@@ -1,4 +1,5 @@
-import { and, desc, eq, getTableColumns, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { acrossTenants } from '../database/tenantScope';
 import { IExecutionRepository, type ExecutionReadOptions, type LandContext, type LandFields, type NonTerminalStatus, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
@@ -8,6 +9,19 @@ import {
 import { executions as executionsTable } from '../database/schema';
 import type { Db } from '../database/connection';
 import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
+import { redactSecrets } from '../security/redactSecrets';
+
+/** A run the reaper failed, as its fan-out reads it (snake_case: the shape the read-path repair also speaks). */
+export interface ReapedExecutionRow {
+  id: number;
+  tenant_id: number;
+  agent_host_id: number | null;
+  cloud_agent_ref: string | null;
+  payload: string | null;
+  error_message: string | null;
+  /** The ticket the run served - the narration / lifecycle fan-out key. */
+  task_id: number | null;
+}
 
 /** Newest terminal runs kept per ticket by {@link ExecutionRepository.findByTask}. Far above
  *  MAX_AUTONOMOUS_RUNS_PER_TASK and the breaker streak, so every gate that counts runs
@@ -17,13 +31,25 @@ export const TASK_EXECUTION_HISTORY_LIMIT = 500;
 /** Every column but the `result` blob: the liveness/breaker/backoff callers never read it. */
 const { result: _resultBlob, ...SLIM_COLUMNS } = getTableColumns(executionsTable);
 
+/** A free-text column that can echo a command line or a provider error: redacted where it is written, so a secret never reaches storage. */
+function scrub<T>(value: T | null | undefined): T | undefined {
+  return typeof value === 'string' ? (redactSecrets(value) as T) : (value ?? undefined);
+}
+
 export class ExecutionRepository implements IExecutionRepository {
   /**
    * `hooks.onTerminal` is told of every persisted write that leaves the execution in a terminal status - the single place a
    * terminal status lands, so the run's outcome row is recorded here and nowhere else (`cloudOutcomeRow`). Optional: a repository
    * built without it (a read path, a test) records nothing.
    */
-  constructor(private readonly db: Db, private readonly hooks: { onTerminal?: (saved: Execution, context: LandContext) => Promise<void> } = {}) {}
+  constructor(
+    private readonly db: Db,
+    private readonly hooks: {
+      onTerminal?: (saved: Execution, context: LandContext) => Promise<void>;
+      /** The rows a set-based {@link failWhere} just failed - their outcome rows are recorded here, in one batch. */
+      onReaped?: (rows: readonly ReapedExecutionRow[]) => Promise<void>;
+    } = {},
+  ) {}
 
   async findById(id: ExecutionId): Promise<Execution | null> {
     const [row] = await this.db
@@ -121,8 +147,8 @@ export class ExecutionRepository implements IExecutionRepository {
       .update(executionsTable)
       .set({
         status:       plain.status,
-        result:       plain.result ?? undefined,
-        errorMessage: plain.errorMessage ?? undefined,
+        result:       scrub(plain.result),
+        errorMessage: scrub(plain.errorMessage),
         // The productivity verdict (0385) must LAND: `produced` round-trips through the domain, so a column missing from this
         // set is a silent no-op. `?? undefined` is load-bearing - a null (not judged) never overwrites a verdict, `false` is persisted.
         produced:     plain.produced ?? undefined,
@@ -138,6 +164,31 @@ export class ExecutionRepository implements IExecutionRepository {
       throw new Error('Execution update returned no rows');
     }
     return toDomain(updated);
+  }
+
+  /**
+   * The cron reaper's SET-BASED terminal transition: fail every row matching `predicate` (which must itself pin the non-terminal
+   * status it expects, so a run that landed in between is left alone), at most `limit` rows when given. One statement; the rows it
+   * actually failed come back in the snake_case projection the reaper's fan-out reads, and `hooks.onReaped` records their outcome
+   * rows ONCE, right after the UPDATE, so a later batch failing never loses an earlier batch's rows.
+   */
+  async failWhere(predicate: SQL, errorMessage: string, limit?: number): Promise<ReapedExecutionRow[]> {
+    const bounded = limit === undefined ? undefined : inArray(executionsTable.id, this.db
+      .select({ id: executionsTable.id })
+      .from(executionsTable)
+      .where(acrossTenants(executionsTable, 'scheduled_sweep', predicate))
+      .limit(limit));
+    const failed: ReapedExecutionRow[] = await this.db
+      .update(executionsTable)
+      .set({ status: 'failed', errorMessage: redactSecrets(errorMessage), completedAt: sql`now()`, updatedAt: sql`now()` })
+      .where(acrossTenants(executionsTable, 'scheduled_sweep', predicate, bounded))
+      .returning({
+        id: executionsTable.id, tenant_id: executionsTable.tenantId, agent_host_id: executionsTable.agentHostId,
+        cloud_agent_ref: executionsTable.cloudAgentRef, payload: executionsTable.payload,
+        error_message: executionsTable.errorMessage, task_id: executionsTable.taskId,
+      });
+    await this.hooks.onReaped?.(failed);
+    return failed;
   }
 
   /**
@@ -159,8 +210,8 @@ export class ExecutionRepository implements IExecutionRepository {
       .update(executionsTable)
       .set({
         status,
-        result:       fields.result ?? undefined,
-        errorMessage: fields.errorMessage ?? undefined,
+        result:       scrub(fields.result),
+        errorMessage: scrub(fields.errorMessage),
         // `?? undefined` is load-bearing: a null (not judged) never overwrites a verdict `finalizeCloudRun` already wrote.
         produced:     fields.produced ?? undefined,
         completedAt:  fields.completedAt ?? now,

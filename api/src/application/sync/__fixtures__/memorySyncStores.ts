@@ -2,8 +2,14 @@
  * In-memory `SyncStores` for the sync use-case tests.
  *
  * Mirrors the real adapter's contract where it matters to the protocol:
- * - `transact` works on a draft and publishes it only if the unit of work
- *   returns — a throw (including an importer throw) rolls everything back;
+ * - `transact` is ONE transaction per push batch: it works on a draft and
+ *   publishes it only if the batch returns — a throw rolls everything back.
+ *   Each event runs in a `savepoint`: a throw restores the draft to its state at
+ *   entry (that event's writes only) and rethrows. `commits()`/`rollbacks()`
+ *   count savepoints (per-event units); `batchCommits()`/`batchRollbacks()`
+ *   count whole transactions;
+ * - every transaction takes a txid and `xmin` is the oldest one still open, so
+ *   pulls see only rows below it (`beginForeignTransaction` holds one open);
  * - the receipt journal is unique on (tenant, device, event): a second insert
  *   throws a 23505-shaped error naming `uq_sync_events_event`;
  * - `sync_changes.seq` is ONE global sequence across tenants and destinations
@@ -11,6 +17,7 @@
  *   the gaps production sees.
  */
 
+import { compareWatermark } from '../../../domain/sync/deltaWatermark';
 import type { LocalRecord } from '../../../domain/sync/syncProtocol';
 import type {
   StoredSyncEvent,
@@ -35,6 +42,8 @@ interface RecordRow extends SyncRecordRow {
 
 interface ChangeRow {
   seq: number;
+  /** Writing transaction (the model's `xid8`), decimal string. */
+  txid: string;
   tenantId: number;
   destinationKey: string;
   recordedAt: Date;
@@ -55,14 +64,34 @@ export interface MemorySyncStores extends SyncStores {
   advanceGlobalSeq(by: number): void;
   /** Drop change rows older than `cutoff` (the retention sweep). */
   sweepChanges(cutoff: Date): void;
-  /** Units of work that committed / rolled back. */
+  /** Per-event units of work (savepoints) that were released / rolled back. */
   commits(): number;
   rollbacks(): number;
+  /** Batch transactions that committed / rolled back. */
+  batchCommits(): number;
+  batchRollbacks(): number;
+  /**
+   * A transaction another connection holds open: its rows take their `seq` when written
+   * but are invisible until `commit()`, and its txid holds the database `xmin` back until
+   * it ends (the late-commit scenario).
+   */
+  beginForeignTransaction(): MemoryForeignTransaction;
+}
+
+export interface MemoryForeignTransaction {
+  txid: string;
+  write(tenantId: number, destinationKey: string, record: LocalRecord): number;
+  commit(): void;
 }
 
 export interface MemorySyncStoresOptions {
   importers: SyncNamedImporters;
   references?: Partial<SyncReferenceReader>;
+  /**
+   * What a read ON THE BATCH TRANSACTION sees (a row an earlier event wrote is invisible to the
+   * committed `references`). Defaults to the committed reader.
+   */
+  referencesInTx?: Partial<SyncReferenceReader>;
   /** Clock stamped on change rows (`recorded_at`). */
   now?: () => Date;
 }
@@ -85,7 +114,7 @@ function storedEvent(row: SyncEventRow): StoredSyncEvent {
   };
 }
 
-function storeSet(target: MemorySyncState, now: () => Date): SyncStoreSet {
+function storeSet(target: MemorySyncState, now: () => Date, txid: string): SyncStoreSet {
   return {
     async findEvent(tenantId, deviceId, eventId) {
       const row = target.events.find((e) => e.tenantId === tenantId && e.deviceId === deviceId && e.eventId === eventId);
@@ -158,6 +187,7 @@ function storeSet(target: MemorySyncState, now: () => Date): SyncStoreSet {
       target.seq += 1;
       target.changes.push({
         seq: target.seq,
+        txid,
         tenantId: row.tenantId,
         destinationKey: row.destinationKey,
         recordedAt: now(),
@@ -172,7 +202,13 @@ export function createMemorySyncStores(options: MemorySyncStoresOptions): Memory
   let state: MemorySyncState = { events: [], mappings: [], records: [], changes: [], seq: 0 };
   let commits = 0;
   let rollbacks = 0;
-  const committed = () => storeSet(state, now);
+  let batchCommits = 0;
+  let batchRollbacks = 0;
+  // The model of Postgres transaction ids: one per transaction, `xmin` = the oldest still open.
+  let nextTxid = 100;
+  const inflight = new Set<number>();
+  const xmin = (): string => String(inflight.size === 0 ? nextTxid : Math.min(...inflight));
+  const committed = () => storeSet(state, now, '0');
   const references: SyncReferenceReader = {
     projectInTenant: async () => false,
     taskInTenant: async () => false,
@@ -180,6 +216,7 @@ export function createMemorySyncStores(options: MemorySyncStoresOptions): Memory
     chatOwnedBy: async () => false,
     ...options.references,
   };
+  const referencesInTx: SyncReferenceReader = { ...references, ...options.referencesInTx };
 
   return {
     references,
@@ -187,30 +224,78 @@ export function createMemorySyncStores(options: MemorySyncStoresOptions): Memory
     acceptedEventIds: (...args) => committed().acceptedEventIds(...args),
     findMapping: (...args) => committed().findMapping(...args),
     async transact(work) {
+      const txid = nextTxid;
+      nextTxid += 1;
+      inflight.add(txid);
       const draft = structuredClone(state);
       try {
-        const result = await work({ stores: storeSet(draft, now), importers: options.importers });
+        const result = await work({
+          stores: storeSet(draft, now, String(txid)),
+          importers: options.importers,
+          references: referencesInTx,
+          // A SAVEPOINT: a throw restores the draft to its state at entry and rethrows. The
+          // sequence is NOT rolled back (Postgres sequences never are), so gaps stay realistic.
+          async savepoint(inner) {
+            const saved = structuredClone(draft);
+            try {
+              const out = await inner({ stores: storeSet(draft, now, String(txid)), importers: options.importers });
+              commits += 1;
+              return out;
+            } catch (error) {
+              const seq = draft.seq;
+              Object.assign(draft, saved, { seq });
+              rollbacks += 1;
+              throw error;
+            }
+          },
+        });
         state = draft;
-        commits += 1;
+        batchCommits += 1;
         return result;
       } catch (error) {
-        rollbacks += 1;
+        batchRollbacks += 1;
         throw error;
+      } finally {
+        inflight.delete(txid);
       }
     },
-    async maxChangeSeq(tenantId) {
-      return state.changes.filter((c) => c.tenantId === tenantId).reduce((max, c) => Math.max(max, c.seq), 0);
+    beginForeignTransaction() {
+      const txid = nextTxid;
+      nextTxid += 1;
+      inflight.add(txid);
+      const pending: ChangeRow[] = [];
+      return {
+        txid: String(txid),
+        write(tenantId, destinationKey, record) {
+          state.seq += 1;
+          pending.push({ seq: state.seq, txid: String(txid), tenantId, destinationKey, recordedAt: now(), record: structuredClone(record) });
+          return state.seq;
+        },
+        commit() {
+          state.changes.push(...pending);
+          inflight.delete(txid);
+        },
+      };
     },
-    async minChangeSeq(tenantId, destinationKey) {
-      const seqs = state.changes.filter((c) => c.tenantId === tenantId && c.destinationKey === destinationKey).map((c) => c.seq);
-      return seqs.length === 0 ? null : Math.min(...seqs);
+    async databaseXmin() {
+      return xmin();
     },
-    async changesAfter(tenantId, destinationKey, seq, limit) {
-      return state.changes
-        .filter((c) => c.tenantId === tenantId && c.destinationKey === destinationKey && c.seq > seq)
-        .sort((a, b) => a.seq - b.seq)
+    async minChangeWatermark(tenantId, destinationKey) {
+      const rows = state.changes
+        .filter((c) => c.tenantId === tenantId && c.destinationKey === destinationKey)
+        .map(({ txid, seq }) => ({ txid, seq }))
+        .sort(compareWatermark);
+      return rows[0] ?? null;
+    },
+    async changesAfter(tenantId, destinationKey, after, limit) {
+      const horizon = xmin();
+      const rows = state.changes
+        .filter((c) => c.tenantId === tenantId && c.destinationKey === destinationKey)
+        .filter((c) => compareWatermark(c, after) > 0 && BigInt(c.txid) < BigInt(horizon))
+        .sort(compareWatermark)
         .slice(0, limit)
-        .map((c) => ({ seq: c.seq, record: structuredClone(c.record) }));
+        .map((c) => ({ txid: c.txid, seq: c.seq, record: structuredClone(c.record) }));
+      return { rows, xmin: horizon };
     },
     async snapshotAfter(tenantId, destinationKey, after, limit) {
       return state.records
@@ -233,5 +318,7 @@ export function createMemorySyncStores(options: MemorySyncStoresOptions): Memory
     },
     commits: () => commits,
     rollbacks: () => rollbacks,
+    batchCommits: () => batchCommits,
+    batchRollbacks: () => batchRollbacks,
   };
 }

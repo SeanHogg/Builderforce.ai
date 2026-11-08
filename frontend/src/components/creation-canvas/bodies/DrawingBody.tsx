@@ -1,7 +1,8 @@
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
 import styles from '../styles/bodies.module.css';
-import { canvasStrokes, HIGHLIGHTER_OPACITY, HIGHLIGHTER_WIDTH_FACTOR, strokePathD, strokeRect } from '@/lib/canvasDrawing';
+import { canvasStrokes } from '@/lib/canvasDrawing';
+import { StrokeShapes } from '@/components/drawing/StrokeShapes';
 import type { CreationBodyProps } from './types';
 import { useCreationNodeActions } from './nodeActions';
 
@@ -25,21 +26,7 @@ export function DrawingBody({ data }: CreationBodyProps) {
   return <div className={styles.drawingBody} data-annotation={annotating || undefined}>
     {!annotating && <div className={styles.widgetContext}><span><small>{t('stroke')}</small><b>{t('strokeCount', { count: strokes.length })}</b></span></div>}
     <svg className={styles.drawingSurface} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={data.title} preserveAspectRatio="xMidYMid meet">
-      {strokes.length ? strokes.map((stroke, index) => {
-        const key = `${stroke.tool}-${index}`;
-        const common = {
-          stroke: stroke.stroke,
-          strokeWidth: stroke.tool === 'highlighter' ? stroke.strokeWidth * HIGHLIGHTER_WIDTH_FACTOR : stroke.strokeWidth,
-          strokeLinecap: 'round' as const,
-          strokeLinejoin: 'round' as const,
-          fill: 'none',
-          ...(stroke.tool === 'highlighter' ? { opacity: HIGHLIGHTER_OPACITY } : {}),
-        };
-        if (stroke.tool === 'text') return <text key={key} x={stroke.points[0]!.x} y={stroke.points[0]!.y} fill={stroke.stroke} fontSize={Math.max(12, stroke.strokeWidth * 5)}>{stroke.text || ''}</text>;
-        if (stroke.tool === 'rect') { const box = strokeRect(stroke); return <rect key={key} x={box.x} y={box.y} width={box.width} height={box.height} {...common} />; }
-        if (stroke.tool === 'ellipse') { const box = strokeRect(stroke); return <ellipse key={key} cx={box.x + box.width / 2} cy={box.y + box.height / 2} rx={box.width / 2} ry={box.height / 2} {...common} />; }
-        return <path key={key} d={strokePathD(stroke)} {...common} />;
-      }) : <text x="12" y="28" fill="currentColor">{t('drawHint')}</text>}
+      {strokes.length ? <StrokeShapes strokes={strokes} /> : <text className={styles.drawingHint} x="12" y="28">{t('drawHint')}</text>}
     </svg>
     {/* Text annotations are corrected here rather than by redrawing them. The
         row exists only when there is text AND the board is editable. */}

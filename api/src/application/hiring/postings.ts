@@ -51,6 +51,7 @@ import {
   type JobPostingDraft,
 } from '../marketplace/jobPostings';
 import { AtsError } from './atsError';
+import { BUILTIN_BOARD_SOURCES, foldSourceCounts, type BoardSourceCatalog } from './applicantSource';
 import { readPostingDistributions, type PostingDistributionView } from './postingDistributionStore';
 
 /** How many postings one projection read returns. A workspace with more requisitions
@@ -247,15 +248,27 @@ async function readPostingSources(
  * takes as `source`, and the posting's id travels to every board as `external_id` so
  * the board can name it back), and a distribution row is keyed on the same value. An EXACT match on a
  * controlled key, not a fuzzy one — a free-text source like "LinkedIn" is left as the
- * plain source it is rather than guessed onto `linkedin-jobs`, because a misattributed
- * applicant is a wrong answer to "which board is working".
+ * plain source it is rather than guessed onto `linkedin-jobs` — UNLESS the board's manifest
+ * declares that spelling in `sourceAliases`, in which case `resolveApplicantSource` folds
+ * it onto the key (case/whitespace/URL-host insensitive; an alias two boards claim matches
+ * neither), because a misattributed applicant is a wrong answer to "which board is working".
  *
  * Exported so the attribution is asserted directly.
  */
 export function attributeSources(
-  sources: ReadonlyArray<{ source: string; count: number }>,
+  rawSources: ReadonlyArray<{ source: string; count: number }>,
   distributions: readonly PostingDistributionView[],
+  catalog: BoardSourceCatalog = [],
 ): PostingSource[] {
+  // Distribution keys are always known boards, whatever the catalog holds — and a
+  // tenant-authored board brings the aliases its already-loaded manifest declared.
+  const known: BoardSourceCatalog = [
+    ...catalog,
+    ...distributions
+      .filter((row) => !catalog.some((b) => b.key === row.connectorKey))
+      .map((row) => ({ key: row.connectorKey, aliases: row.sourceAliases })),
+  ];
+  const sources = foldSourceCounts(rawSources, known);
   const boards = new Map(distributions.map((row) => [row.connectorKey, row.board]));
   const out: PostingSource[] = sources.map((entry) => {
     const board = boards.get(entry.source);
@@ -272,6 +285,7 @@ function project(
   row: PostingCountRow,
   sources: Array<{ source: string; count: number }>,
   distributions: PostingDistributionView[],
+  catalog: BoardSourceCatalog,
 ): CanvasPostingProjection {
   return {
     postingId: row.postingId,
@@ -288,7 +302,7 @@ function project(
     activeApplicantCount: Number(row.activeApplicantCount ?? 0),
     unreviewedCount: Number(row.unreviewedCount ?? 0),
     rejectedCount: Number(row.rejectedCount ?? 0),
-    sources: attributeSources(sources, distributions),
+    sources: attributeSources(sources, distributions, catalog),
     distributions,
     lastApplicationAt: iso(row.lastApplicationAt),
     createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
@@ -314,10 +328,11 @@ export async function listCanvasPostings(
     readPostingSources(db, tenantId),
     readPostingDistributions(db, tenantId),
   ]);
+  const catalog = BUILTIN_BOARD_SOURCES;
   const wanted = typeof opts.status === 'string' && opts.status.trim() ? opts.status.trim() : null;
   return rows
     .filter((row) => !wanted || row.status === wanted)
-    .map((row) => project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? []));
+    .map((row) => project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? [], catalog));
 }
 
 /** One posting by id, tenant-scoped. `null` for an id this workspace does not own —
@@ -333,8 +348,9 @@ export async function readCanvasPosting(
     readPostingSources(db, tenantId, postingId),
     readPostingDistributions(db, tenantId, postingId),
   ]);
+  const catalog = BUILTIN_BOARD_SOURCES;
   const row = rows[0];
-  return row ? project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? []) : null;
+  return row ? project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? [], catalog) : null;
 }
 
 export interface SyncCanvasPostingInput {

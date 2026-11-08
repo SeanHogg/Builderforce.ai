@@ -32,8 +32,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *   - A PULL REQUEST SHIPPED IT. A change left on a branch is merged later, by a PR the
  *     run never sees, so the merge webhook is the only thing that can know. It resolves
  *     the merged PR back to this ticket by an EXACT identity — the `task_id` recorded on
- *     the PR row, or a ticket branch this platform itself named — and completes it only
- *     when the ticket is a delta ticket still in `in_review`
+ *     the PR row, a ticket branch this platform itself named, or the working branch
+ *     recorded for the ticket (`tasks.git_branch` / `repo_branches` / `task_repo_bindings`,
+ *     so a delta left on ANY branch and merged by a PR that names no ticket still
+ *     completes) — and completes it only when the ticket is a delta ticket still in
+ *     `in_review`
  *     (`completeDeltaTicketsOnMerge`, called from `githubWebhookRoutes`).
  *
  * Deliberately never by matching the delta's `files[]` against the PR's: overlapping

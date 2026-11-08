@@ -79,7 +79,6 @@ export interface ManagerSweepResult {
   /** Previously-undated tickets placed on the timeline this tick (0364). */
   scheduled: number;
   assigned: number;
-  prsConducted: number;
   prsMerged: number;
   dispatched: number;
   /** Flagged tickets whose missing role/reviewer the manager actually staffed. */
@@ -266,7 +265,6 @@ export async function runManagerSweep(
    *  the autonomous executor both start billable runs in the SAME cron tick, so they
    *  must draw from one tenant budget rather than each granting a private 25. */
   budget: TickDispatchBudget = createTickDispatchBudget(),
-  options: { prManagementEnabled?: boolean } = {},
 ): Promise<ManagerSweepResult> {
   const db = buildDatabase(env);
   const runtimeService = buildRuntimeService(env, db);
@@ -275,7 +273,7 @@ export async function runManagerSweep(
 
   const result: ManagerSweepResult = {
     projects: managed.length, managed: 0, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
-    prsConducted: 0, prsMerged: 0, dispatched: 0, remediated: 0, remediationDeferred: 0,
+    prsMerged: 0, dispatched: 0, remediated: 0, remediationDeferred: 0,
     stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
     censusStalled: 0, systemicFindings: 0, systemicTicketsCreated: 0,
     tokenBlockedTenants: 0, notReached: 0,
@@ -329,7 +327,6 @@ export async function runManagerSweep(
         // the pass reserves against this before it starts work — see the note on the
         // removed replay loop below.
         dispatchBudget: budget,
-        prManagementEnabled: options.prManagementEnabled,
       });
       if (s.skipped) {
         await recordSweepDecision(db, p, 'skipped', 'project_unmanaged');
@@ -341,7 +338,6 @@ export async function runManagerSweep(
       result.ranked += s.ranked;
       result.scheduled += s.scheduled;
       result.assigned += s.assigned;
-      result.prsConducted += s.prsConducted;
       result.prsMerged += s.prsMerged;
       result.dispatched += s.dispatched;
       // NO REPLAY LOOP HERE. This used to read:

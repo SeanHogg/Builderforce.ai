@@ -229,8 +229,9 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     // Findings → the stations they touch, weighted by severity. A system-wide finding (it touches more than a
     // quarter of the stations) counts on none of them: it is listed once, at the top of the Act rail.
     const score = new Map<string, number>(), found = new Map<string, string[]>(), systemWide = new Set<string>();
+    const touched = new Set<string>(); // one Set reused for every finding (20,000 of them), cleared each time
     for (const f of graph.findings) {
-        const touched = new Set<string>();
+        touched.clear();
         for (const ref of f.nodes) { const s = lookupAny(ref); if (s) touched.add(s); }
         if (groups.length >= SYSTEM_WIDE_MIN_STATIONS && touched.size / groups.length > SYSTEM_WIDE_SHARE) { systemWide.add(f.id); continue; }
         for (const s of touched) {

@@ -1,6 +1,6 @@
 import * as react from 'react';
 import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, InterpolationBackend, Storyboard, ProbedDevice, GenerateResult, ShotValidation } from '@seanhogg/builderforce-studio';
-export { ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, CoherenceMode, DeviceTarget, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, InterpolationBackend, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, PlannedShot, ProbedDevice, QualityMode, ScenePlanOptions, ShotValidation, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, planScene, probeDevice } from '@seanhogg/builderforce-studio';
+export { ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, CoherenceMode, DeviceTarget, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, InterpolationBackend, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, PlannedShot, ProbedDevice, QualityMode, ScenePlanOptions, ShotValidation, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, planScene, probeDevice, setOrtWasmBase } from '@seanhogg/builderforce-studio';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
  *  alongside the MP4 blob. Enough information to re-generate the same video AND

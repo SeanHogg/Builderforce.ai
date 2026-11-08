@@ -6,7 +6,7 @@
  * name here, so importers are unchanged. No `vscode` import.
  */
 
-import type { RunKnowledgeLog } from "@builderforce/agent-tools";
+import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
 import type {
   ChatCompletionMessage,
   BrainRunPersistence,
@@ -17,7 +17,6 @@ import type {
   EvermindRunHooks,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
-import type { PolicyGate } from "./policy";
 import type { EditorRunSettings } from "./stageModels";
 import type { RunDirectives } from "./hooks/runHooks";
 import type { InstalledRunRecovery } from "./installRunRecovery";

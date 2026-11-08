@@ -87,6 +87,13 @@ export interface PlanLimits {
    */
   cloudRunsMonthly: number;
   /**
+   * Cloud-agent runs one tenant may have LIVE at once (pending / submitted / running);
+   * -1 = unlimited. A burst guard on human dispatch, independent of the monthly
+   * {@link cloudRunsMonthly} allowance: it stops a double-click, a script or a runaway
+   * client from fanning out dozens of simultaneous billable runs.
+   */
+  maxConcurrentCloudRuns: number;
+  /**
    * Monthly Stage Sandbox allowance (COUNT of dispatched disposable-container
    * runs), surfaced by the consumption meter as "Sandbox runs"; -1 = unlimited.
    * A run is dispatched at most once per Stage press per unique build (the
@@ -204,6 +211,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     feedbackSubmissionsMonthly: 200, // 200 requests/mo — a real pilot, not a firehose
     outboundFetchesMonthly: 500, // 500 Brain URL fetches/mo
     cloudRunsMonthly: 25, // 25 cloud-agent runs/mo — enough to try it, then upgrade
+    maxConcurrentCloudRuns: 2,
     stageSandboxRunsMonthly: 15, // 15 sandbox runs/mo
     imageCreditsDailyLimit: 10,
     videoSecondsDailyLimit: 15,
@@ -241,6 +249,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     feedbackSubmissionsMonthly: 20_000, // 20K requests/mo
     outboundFetchesMonthly: 50_000, // 50K Brain URL fetches/mo
     cloudRunsMonthly: 2_000, // 2K cloud-agent runs/mo
+    maxConcurrentCloudRuns: 5,
     stageSandboxRunsMonthly: 500, // 500 sandbox runs/mo
     imageCreditsDailyLimit: 1_000,
     videoSecondsDailyLimit: 120,
@@ -278,6 +287,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     feedbackSubmissionsMonthly: -1, // unlimited
     outboundFetchesMonthly: -1, // unlimited
     cloudRunsMonthly: -1, // unlimited
+    maxConcurrentCloudRuns: 20,
     stageSandboxRunsMonthly: -1, // unlimited
     imageCreditsDailyLimit: 5_000,
     videoSecondsDailyLimit: 600,
@@ -573,6 +583,19 @@ export function resolveCloudRunsMonthly(input: {
 }): number {
   if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
   return getLimits(input.effectivePlan).cloudRunsMonthly;
+}
+
+/**
+ * Resolve a tenant's effective concurrent cloud-run ceiling (count); -1 = unlimited.
+ * A `-1` token override lifts it; a superadmin is lifted by the shared tenant-cap policy
+ * (`application/shared/monthlyTenantCap`), not here.
+ */
+export function resolveConcurrentCloudRuns(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+}): number {
+  if (input.tokenDailyLimitOverride === -1) return -1;
+  return getLimits(input.effectivePlan).maxConcurrentCloudRuns;
 }
 
 /**

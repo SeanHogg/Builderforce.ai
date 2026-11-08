@@ -1,0 +1,86 @@
+/* The animation and comic editors drawn inside a card. They share one set of controls so
+   the two kinds read as the same product; every colour is a canvas token. The cards are
+   narrow, so the layout is a single column that holds down to 360px with no horizontal
+   page scroll, and every control keeps a 32px touch target. */
+
+.editor { display:grid; gap:8px; min-width:0; }
+
+.summary { display:flex; flex-wrap:wrap; gap:4px 10px; color:var(--canvas-ink-soft); font-size:var(--font-size-eyebrow); }
+
+/* ── Buttons and fields ─────────────────────────────────────────────────────── */
+.button,.iconButton {
+  min-height:32px; padding:0 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:var(--font-size-eyebrow); cursor:pointer; touch-action:manipulation;
+}
+.iconButton { min-width:32px; padding:0; font-size:var(--font-size-small); line-height:1; }
+.button:hover:not(:disabled),.iconButton:hover:not(:disabled) { background:var(--canvas-hover); }
+.button[data-active],.iconButton[data-active] { border-color:var(--canvas-accent); background:var(--canvas-hover); }
+.button:disabled,.iconButton:disabled { opacity:.5; cursor:not-allowed; }
+.button small { margin-left:6px; padding:1px 5px; border-radius:var(--radius-sm); background:var(--tone-warning-bg); color:var(--tone-warning-ink); font-size:var(--font-size-field-label); }
+.button:focus-visible,.iconButton:focus-visible,.thumb:focus-visible,.panel:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:1px; }
+
+.toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:6px 8px; }
+.group { display:flex; flex-wrap:wrap; gap:4px; }
+.row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+.row > input[type='text'] { flex:1 1 120px; min-width:0; }
+
+.field { display:grid; gap:2px; min-width:0; color:var(--canvas-muted); font-size:var(--font-size-field-label); }
+.field > span { letter-spacing:.04em; text-transform:uppercase; }
+.field input,.field select,.row select,.row input[type='text'],.inspector textarea {
+  min-height:32px; max-width:100%; padding:0 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; font-size:var(--font-size-small);
+}
+.field input[type='number'] { width:64px; }
+.field input[type='color'] { width:40px; padding:2px; }
+.field input[type='range'] { padding:0; accent-color:var(--canvas-accent); }
+.inspector textarea { width:100%; padding:6px; resize:vertical; }
+
+.status { align-self:center; color:var(--canvas-ink-soft); font-size:var(--font-size-eyebrow); }
+.hint { color:var(--canvas-ink-soft); font-size:var(--font-size-eyebrow); }
+
+/* ── Animation paint surface ─────────────────────────────────────────────────── */
+.paintStage { position:relative; width:min(100%, calc(60vh * var(--paint-aspect, 1))); margin-inline:auto; aspect-ratio:var(--paint-aspect, 1); overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.paintChecker { background:repeating-conic-gradient(var(--canvas-panel-muted) 0 25%, var(--canvas-line) 0 50%) 0 0 / 16px 16px; }
+.paintLayer { position:absolute; inset:0; width:100%; height:100%; }
+.paintTop { cursor:default; touch-action:pan-y pinch-zoom; }
+.paintTop[data-paintable] { cursor:crosshair; touch-action:none; }
+
+/* ── Rails (frames, pages) ───────────────────────────────────────────────────── */
+.rail { display:grid; gap:6px; min-width:0; }
+.railHead { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; font-size:var(--font-size-eyebrow); color:var(--canvas-ink); }
+.railActions { display:flex; gap:4px; }
+.thumbs,.pageTabs { display:flex; gap:6px; margin:0; padding:0 0 4px; list-style:none; overflow-x:auto; overscroll-behavior-x:contain; }
+.thumbs > li,.pageTabs > li { flex:0 0 auto; }
+.thumb { position:relative; display:grid; place-items:center; width:72px; padding:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-muted); font-size:var(--font-size-field-label); cursor:pointer; touch-action:manipulation; }
+.thumb[data-active] { border-color:var(--canvas-accent); box-shadow:0 0 0 1px var(--canvas-accent); }
+.thumb img { width:100%; height:100%; object-fit:contain; }
+.thumb i { position:absolute; left:3px; bottom:3px; padding:0 4px; border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-style:normal; }
+.thumb em { position:absolute; right:3px; bottom:3px; padding:0 4px; border-radius:var(--radius-sm); background:var(--canvas-accent); color:var(--canvas-panel); font-style:normal; }
+
+/* ── Comic page ──────────────────────────────────────────────────────────────── */
+.comicPage { position:relative; width:100%; max-width:420px; margin-inline:auto; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); container-type:inline-size; }
+.panel { position:absolute; display:block; padding:0; overflow:hidden; border:2px solid var(--canvas-ink); background:var(--canvas-panel-muted); cursor:default; }
+button.panel { cursor:pointer; touch-action:manipulation; }
+.panel[data-selected] { border-color:var(--canvas-accent); box-shadow:0 0 0 2px var(--canvas-accent); }
+.panel img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.imageMissing { position:absolute; inset:0; display:grid; place-items:center; padding:4px; color:var(--canvas-ink-soft); font-size:max(9px,2.6cqw); text-align:center; }
+.bubble {
+  position:absolute; max-width:60%; padding:.5em .8em; transform:translate(-50%,-50%); border:2px solid var(--canvas-ink);
+  background:var(--canvas-panel); color:var(--canvas-ink); font-size:max(9px,3.1cqw); font-weight:600; line-height:1.25; text-align:center; overflow-wrap:anywhere;
+}
+.bubble[data-kind='speech'] { border-radius:1.2em; }
+.bubble[data-kind='thought'] { border-radius:50%; }
+.bubble[data-kind='caption'] { border-radius:0; background:var(--tone-warning-bg); }
+
+/* ── Inspectors and reader ───────────────────────────────────────────────────── */
+.inspector { display:grid; gap:6px; min-width:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); font-size:var(--font-size-eyebrow); color:var(--canvas-ink); }
+.bubbleEditor { display:grid; gap:6px; padding:6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+
+.reader { display:grid; gap:8px; min-width:0; }
+.readerNav { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; color:var(--canvas-ink-soft); font-size:var(--font-size-eyebrow); }
+.choices { display:grid; gap:6px; }
+.choices .button { white-space:normal; text-align:left; padding-block:6px; }
+
+@media (pointer:coarse) {
+  .thumb { width:84px; }
+}

@@ -28,7 +28,11 @@ function fakeBucket(objects: Record<string, { body: string; type?: string }> = {
 describe('assetKey', () => {
   it('is tenant-and-user prefixed and keeps the extension', () => {
     const key = assetKey(7, 'u1', 'photo.PNG');
-    expect(key).toMatch(/^7\/u1\/\d+-[0-9a-f]{8}\.png$/);
+    expect(key).toMatch(/^7\/u1\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
+  });
+
+  it('is unguessable: two keys for the same file never collide', () => {
+    expect(assetKey(7, 'u1', 'a.png')).not.toBe(assetKey(7, 'u1', 'a.png'));
   });
 
   // A dot-free name (e.g. "noext") is not "no extension": split('.').pop() returns

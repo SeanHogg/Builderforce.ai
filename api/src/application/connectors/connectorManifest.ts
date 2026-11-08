@@ -31,6 +31,20 @@
 
 import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
 import type { ConnectorSoap } from './soapEnvelope';
+import {
+  validateLinkHosts,
+  validateSourceAliases,
+  type ConnectorApplicantMapping,
+  type ConnectorBoardJobMapping,
+  type ConnectorUrlResolution,
+} from './connectorApplicantManifest';
+import {
+  publicAuthFieldKeys,
+  validateApplicantMapping,
+  validateBoardJobMapping,
+  validateResponseMapping,
+  validateUrlResolution,
+} from './connectorMappingValidators';
 
 export type { ConnectorSoap };
 
@@ -218,6 +232,20 @@ export interface ConnectorAction {
    * manifest exists to replace. See {@link ConnectorResponseMapping}.
    */
   response?: ConnectorResponseMapping;
+  /** For a list action that delivers applicants: how to read one. See
+   *  {@link ConnectorApplicantMapping}. */
+  applicants?: ConnectorApplicantMapping;
+  /** For a list action that returns the board's jobs: how to read one. See
+   *  {@link ConnectorBoardJobMapping}. */
+  boardJobs?: ConnectorBoardJobMapping;
+  /** On a `resolve_url` action: how to find a posting's public link in the answer. */
+  resolve?: ConnectorUrlResolution;
+  /**
+   * The endpoint is PUBLIC: no credential is attached to the request. For a vendor's
+   * unauthenticated read API on a different host (Greenhouse's Job Board API) — sending
+   * the account's private key there would hand it to a host that never needs it.
+   */
+  public?: boolean;
 }
 
 /**
@@ -241,16 +269,47 @@ export interface ConnectorResponseMapping {
   externalId?: string[];
   url?: string[];
   error?: string[];
+  /**
+   * A public URL BUILT from the answer, for boards whose create response carries an id
+   * but no link. `{externalId}` is the id the `externalId` selectors found;
+   * `{connection.<field>}` is a non-secret field of the connection's stored credentials
+   * (Greenhouse's board token). It is tried only when no `url` selector yielded one, and
+   * a template with any placeholder it cannot fill yields NO url — never a broken one.
+   * Not a selector list, so it is outside {@link CONNECTOR_RESPONSE_FIELDS}.
+   */
+  urlTemplate?: string;
+  /**
+   * A regex the board's `externalId` must fully match for `urlTemplate` to fire. For a
+   * board whose create answer can carry an id that is NOT the one its public page uses
+   * (LinkedIn answers with a task URN; its job id is only available later): the link is
+   * then withheld rather than built from the wrong id. Anchoring is added by the matcher.
+   */
+  externalIdPattern?: string;
+  /**
+   * Selectors for a SECOND id the public page is addressed by, available as `{postId}`
+   * in `urlTemplate` (Greenhouse: the job-post id, distinct from the job id). No hit ⇒
+   * the template does not fire.
+   */
+  postId?: string[];
 }
 
-/** The fields a {@link ConnectorResponseMapping} may declare — the closed list. */
-export const CONNECTOR_RESPONSE_FIELDS = ['externalId', 'url', 'error'] as const;
+// The mapping constants live with their validators; re-exported so importers of the
+// manifest module keep one import site.
+export {
+  CONNECTOR_APPLICANT_FIELDS,
+  CONNECTOR_BOARD_JOB_FIELDS,
+  CONNECTOR_RESPONSE_FIELDS,
+  URL_TEMPLATE_PLACEHOLDER_RE,
+} from './connectorMappingValidators';
 
-/** A body path (`a.b.0.c`) or a `header:<name>` selector. Deliberately narrow: no
- *  wildcards, no filters — a selector is a location, never a query language. */
-const RESPONSE_SELECTOR_RE = /^(?:header:[A-Za-z0-9-]{1,64}|[A-Za-z0-9_$-]{1,64}(?:\.[A-Za-z0-9_$-]{1,64}){0,11})$/;
-/** Fallbacks per field. More than this is a manifest guessing, not declaring. */
-const MAX_RESPONSE_SELECTORS = 6;
+// The hiring-specific mapping types live in their own module; re-exported so importers of
+// the manifest module keep one import site.
+export type {
+  ConnectorApplicantMapping,
+  ConnectorBoardJobMapping,
+  ConnectorUrlResolution,
+} from './connectorApplicantManifest';
+export { RESERVED_APPLICANT_SOURCES } from './connectorApplicantManifest';
 
 export interface ConnectorManifest {
   /** Catalog key, `[a-z0-9-]`. Unique per tenant; built-in keys are reserved. */
@@ -274,6 +333,20 @@ export interface ConnectorManifest {
    */
   defaultHeaders?: Record<string, string>;
   actions: ConnectorAction[];
+  /**
+   * Other spellings an applicant's free-text `source` may carry for THIS board
+   * ("LinkedIn", "linkedin.com"). Read by `resolveApplicantSource`, which folds them onto
+   * {@link ConnectorManifest.key}. Hiring boards only; case, whitespace and URL host are
+   * normalised before comparing, so list the canonical lowercase form.
+   */
+  sourceAliases?: string[];
+  /**
+   * The registrable domains a link this board REPORTS (a `url` selector, `boardJobs.url`,
+   * a `resolve_url` answer) may point at. Absent, the registrable domain of `baseUrl` is
+   * used, and a manifest whose host is entirely per-tenant (`{{auth.x}}`) is not pinned.
+   * Links a manifest BUILDS from a `urlTemplate` are authored, so they are not pinned.
+   */
+  linkHosts?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +434,12 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function validateAction(raw: unknown, index: number, errors: string[]): ConnectorAction | null {
+function validateAction(
+  raw: unknown,
+  index: number,
+  publicFields: ReadonlySet<string>,
+  errors: string[],
+): ConnectorAction | null {
   const where = `actions[${index}]`;
   if (!isPlainObject(raw)) {
     errors.push(`${where}: must be an object`);
@@ -459,7 +537,10 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     errors.push(`${where}.resultPath: cannot be used with responseFormat "binary"`);
   }
 
-  const response = validateResponseMapping(raw.response, where, errors);
+  const response = validateResponseMapping(raw.response, publicFields, where, errors);
+  const applicants = validateApplicantMapping(raw.applicants, params, where, errors);
+  const boardJobs = validateBoardJobMapping(raw.boardJobs, where, errors);
+  const resolve = validateUrlResolution(raw.resolve, params, publicFields, where, errors);
 
   const soap = validateSoap(raw.soap, where, errors);
   // A SOAP operation is a POST of a document. Declaring it on a GET would produce a
@@ -485,41 +566,11 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     ...(soap ? { soap } : {}),
     ...(typeof raw.resultPath === 'string' ? { resultPath: raw.resultPath } : {}),
     ...(response ? { response } : {}),
+    ...(applicants ? { applicants } : {}),
+    ...(boardJobs ? { boardJobs } : {}),
+    ...(resolve ? { resolve } : {}),
+    ...(raw.public === true ? { public: true } : {}),
   };
-}
-
-/**
- * Validate a response mapping on an untrusted action.
- *
- * A single string is accepted and normalised to a one-entry list, because that is how
- * a hand-authored manifest will most often say it. A malformed declaration is an ERROR
- * rather than a silent drop: dropping it would turn "the board confirmed this id" into
- * "no id", which the distribute use case records as a failure the author cannot
- * explain.
- */
-function validateResponseMapping(raw: unknown, where: string, errors: string[]): ConnectorResponseMapping | null {
-  if (raw === undefined || raw === null) return null;
-  if (!isPlainObject(raw)) { errors.push(`${where}.response: must be an object`); return null; }
-  const out: ConnectorResponseMapping = {};
-  for (const [field, value] of Object.entries(raw)) {
-    if (!(CONNECTOR_RESPONSE_FIELDS as readonly string[]).includes(field)) {
-      errors.push(`${where}.response.${field}: unknown field — use one of ${CONNECTOR_RESPONSE_FIELDS.join(', ')}`);
-      continue;
-    }
-    const list = typeof value === 'string' ? [value] : Array.isArray(value) ? value : null;
-    if (!list || list.length === 0 || list.length > MAX_RESPONSE_SELECTORS) {
-      errors.push(`${where}.response.${field}: must be a selector or a list of 1–${MAX_RESPONSE_SELECTORS} selectors`);
-      continue;
-    }
-    const selectors = list.map(String);
-    const bad = selectors.filter((selector) => !RESPONSE_SELECTOR_RE.test(selector));
-    if (bad.length) {
-      errors.push(`${where}.response.${field}: "${bad[0]}" is not a dotted body path or a header:<name> selector`);
-      continue;
-    }
-    out[field as keyof ConnectorResponseMapping] = selectors;
-  }
-  return Object.keys(out).length ? out : null;
 }
 
 /**
@@ -632,6 +683,10 @@ export function parseConnectorManifest(raw: unknown): ConnectorManifest {
     });
   }
 
+  // `{connection.<field>}` in a URL template may name only these (declared secret:false).
+  const publicFields = publicAuthFieldKeys(fields);
+  const sourceAliases = validateSourceAliases(raw.sourceAliases, errors);
+
   const rawActions = Array.isArray(raw.actions) ? raw.actions : [];
   if (rawActions.length === 0) errors.push('actions: at least one action is required');
   if (rawActions.length > MAX_ACTIONS_PER_CONNECTOR) {
@@ -640,7 +695,7 @@ export function parseConnectorManifest(raw: unknown): ConnectorManifest {
   const actions: ConnectorAction[] = [];
   const seen = new Set<string>();
   for (const [i, a] of rawActions.slice(0, MAX_ACTIONS_PER_CONNECTOR).entries()) {
-    const action = validateAction(a, i, errors);
+    const action = validateAction(a, i, publicFields, errors);
     if (!action) continue;
     if (seen.has(action.key)) { errors.push(`actions[${i}].key: duplicate "${action.key}"`); continue; }
     seen.add(action.key);
@@ -680,7 +735,43 @@ export function parseConnectorManifest(raw: unknown): ConnectorManifest {
       ? { defaultHeaders: Object.fromEntries(Object.entries(raw.defaultHeaders).map(([k, v]) => [k, String(v)])) }
       : {}),
     actions,
+    ...(sourceAliases.length ? { sourceAliases } : {}),
   };
+}
+
+/**
+ * Source spellings that mean something on their own across the hiring pipeline. A board
+ * may never claim one as an alias: an applicant who really came from a referral would be
+ * credited to a job board. Compared after the same normalisation the resolver applies.
+ */
+export const RESERVED_APPLICANT_SOURCES: readonly string[] = [
+  'direct', 'referral', 'careers', 'careers-site', 'career site', 'careers site', 'website', 'marketplace',
+  'agent', 'email', 'social', 'organic', 'manual', 'import', 'imported', 'unknown', 'other', 'sourced', 'inbound', 'outbound',
+];
+
+/** Normalise an alias exactly as the resolver does: trimmed, lower-cased, spacing collapsed. */
+const aliasToken = (alias: string): string => alias.trim().toLowerCase().replace(/[\s_]+/g, ' ');
+
+/**
+ * Validate `sourceAliases`: at most 20 distinct, non-reserved, non-empty strings of at
+ * most 100 characters. (A collision with ANOTHER board's key or alias is checked where the
+ * catalog is known — see `sourceAliasConflicts` in `hiring/applicantSource.ts`.)
+ */
+function validateSourceAliases(raw: unknown, errors: string[]): string[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) { errors.push('sourceAliases: must be a list of strings'); return []; }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw.slice(0, 20)) {
+    const alias = String(entry).trim();
+    const token = aliasToken(alias);
+    if (!alias || alias.length > 100) { errors.push('sourceAliases: each alias must be 1–100 characters'); continue; }
+    if (RESERVED_APPLICANT_SOURCES.includes(token)) { errors.push(`sourceAliases: "${alias}" is a reserved source and cannot name a job board`); continue; }
+    if (seen.has(token)) continue;
+    seen.add(token);
+    out.push(alias);
+  }
+  return out;
 }
 
 /** Non-throwing variant for callers that render an error list (the builder form). */

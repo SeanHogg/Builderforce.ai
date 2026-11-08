@@ -175,8 +175,11 @@ jobs:
       # fetch-depth: 0 — a shallow clone has no merge-base with the base branch,
       # so \`git merge-base\`, \`git diff main\`, and syncing the latest base all
       # break. The container surface learned this the hard way; full history here.
+      # persist-credentials: false — the checkout token must not sit in .git/config where the
+      # model's shell could read it. Pushes go through the Worker, never through this clone.
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
           ref: \${{ inputs.ref }}
 

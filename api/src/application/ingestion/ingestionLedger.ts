@@ -15,7 +15,7 @@ import { ingestionUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveIngestionMonthlyBytes } from '../../domain/tenant/PlanLimits';
-import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { enforceTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 
 export interface RecordIngestionRow {
   tenantId: number;
@@ -111,7 +111,7 @@ export async function enforceIngestionCap(
   ingestionDb: Db = db,
   env?: Env,
 ): Promise<IngestionCapResult> {
-  return enforceMonthlyTenantCap({
+  return enforceTenantCap({
     db,
     tenantId,
     env,

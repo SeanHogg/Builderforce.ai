@@ -1,0 +1,29 @@
+.editor { display: grid; gap: var(--space-2); min-width: 0; color: var(--canvas-ink); container-type: inline-size; }
+.stage { position: relative; line-height: 0; border: 1px solid var(--canvas-line); border-radius: var(--radius-md); overflow: hidden; background: var(--canvas-hover); }
+.preview { display: block; width: 100%; height: auto; }
+/* The shared surface paints its own panel background inline; over a picture it must be clear. */
+.annotateLayer { position: absolute; inset: 0; }
+.annotateLayer > svg { background: transparent !important; border-radius: 0 !important; }
+.empty, .problem { margin: 0; font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.problem { color: var(--danger-text); }
+.row, .tray { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.toolButton { display: inline-flex; gap: var(--space-1); align-items: center; justify-content: center; min-height: 2.25rem; padding: 0 var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; font-size: var(--font-size-field-label); cursor: pointer; }
+.toolButton[aria-pressed='true'], .toolButton[aria-selected='true'] { border-color: var(--canvas-accent); outline: 1px solid var(--canvas-accent); }
+.toolButton:disabled { opacity: 0.5; cursor: not-allowed; }
+.fileInput { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+.toolButton:has(.fileInput) { position: relative; }
+.controls { display: grid; gap: var(--space-2); }
+.group { display: grid; gap: var(--space-1); margin: 0; padding: var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-md); }
+.group legend { padding-inline: var(--space-1); color: var(--canvas-muted); font-size: var(--font-size-field-label); }
+.slider { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) 3rem; align-items: center; gap: var(--space-2); font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.slider input { min-width: 0; min-height: 2rem; }
+.slider output { text-align: end; font-variant-numeric: tabular-nums; }
+.trayField { display: inline-flex; gap: var(--space-1); align-items: center; font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.trayField input[type='color'] { inline-size: 2.25rem; block-size: 2.25rem; padding: 0; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); }
+.trayField input[type='range'] { inline-size: 5.5rem; }
+.textEntry { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: var(--space-2); }
+.textEntry input { flex: 1 1 10rem; min-width: 0; min-height: 2.25rem; padding: 0 var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; }
+@container (max-width: 420px) {
+  .slider { grid-template-columns: 4.5rem minmax(0, 1fr) 2.5rem; }
+  .toolButton b { display: none; }
+}

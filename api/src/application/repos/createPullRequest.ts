@@ -22,11 +22,26 @@ export interface OpenPrInput {
   base: string;       // the branch to merge into (repo default)
   title: string;
   body: string;
+  /** Open as a draft: GitHub `draft`, GitLab a `Draft:` title — only where {@link markReadyForReview} can undo it. Bitbucket opens a normal PR. */
+  draft?: boolean;
 }
 
 export type OpenPrResult =
-  | { ok: true; number: number; url: string }
-  | { ok: false; code: 'unsupported' | 'provider_error'; reason: string };
+  /** `existing` is set (true) only when the provider REFUSED the create because a PR for this head was already open and
+   *  this is that PR: the call did not create it. `draft` then says whether that existing PR is a draft (where the provider tells). */
+  | { ok: true; number: number; url: string; existing?: true; draft?: boolean }
+  /** `draft_unsupported`: a draft was asked for and the repository cannot have one (GitHub, private repo on a free plan). */
+  | { ok: false; code: 'unsupported' | 'provider_error' | 'draft_unsupported'; reason: string };
+
+/** The ONE provider request header set for the PR calls (create, lookup, mark-ready). */
+export function prRequestHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/json',
+    'User-Agent': 'BuilderForce-PR/1.0',
+    'Content-Type': 'application/json',
+  };
+}
 
 /** Build the provider-specific create-PR request (URL + body). Pure + exported
  *  so each provider's documented create endpoint/body is unit-testable. */
@@ -35,7 +50,7 @@ export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: R
   if (flavor === 'gitlab') {
     return {
       url: api.pullRequests(),
-      body: { source_branch: input.head, target_branch: input.base, title: input.title, description: input.body },
+      body: { source_branch: input.head, target_branch: input.base, title: input.draft ? `Draft: ${input.title}` : input.title, description: input.body },
     };
   }
   if (flavor === 'bitbucket-server') {
@@ -65,7 +80,7 @@ export function buildCreatePrRequest(input: OpenPrInput): { url: string; body: R
   }
   return {
     url: api.pullRequests(),
-    body: { title: input.title, head: input.head, base: input.base, body: input.body },
+    body: { title: input.title, head: input.head, base: input.base, body: input.body, ...(input.draft ? { draft: true } : {}) },
   };
 }
 
@@ -108,12 +123,7 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
     return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' };
   }
 
-  const headers = {
-    Authorization: `Bearer ${input.token}`,
-    Accept: 'application/json',
-    'User-Agent': 'BuilderForce-PR/1.0',
-    'Content-Type': 'application/json',
-  };
+  const headers = prRequestHeaders(input.token);
 
   const res = await fetch(req.url, { method: 'POST', headers, body: JSON.stringify(req.body) }).catch(() => null);
   if (!res) return { ok: false, code: 'provider_error', reason: 'PR-create request failed (network)' };
@@ -130,10 +140,14 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
   // providers now do this (was GitHub-only). A null lookup → fall to the error.
   if (res.status === 422 || res.status === 409 || res.status === 400) {
     const existing = await findOpenPr(headers, input);
-    if (existing) return { ok: true, number: existing.number, url: existing.url };
+    if (existing) return { ok: true, number: existing.number, url: existing.url, existing: true, ...(existing.draft !== undefined ? { draft: existing.draft } : {}) };
   }
 
   const text = await res.text().catch(() => '');
+  // GitHub refuses a draft on a private repository of a free plan with a 422 that names drafts.
+  if (input.draft && res.status === 422 && /draft/i.test(text)) {
+    return { ok: false, code: 'draft_unsupported', reason: `github 422: ${text.slice(0, 300)}` };
+  }
   return { ok: false, code: 'provider_error', reason: `${input.provider} ${res.status}: ${text.slice(0, 300)}` };
 }
 
@@ -163,7 +177,7 @@ export function buildFindOpenPrUrl(input: OpenPrInput): string {
 async function findOpenPr(
   headers: Record<string, string>,
   input: OpenPrInput,
-): Promise<{ number: number; url: string } | null> {
+): Promise<{ number: number; url: string; draft?: boolean; body?: string } | null> {
   let url: string;
   try { url = buildFindOpenPrUrl(input); } catch { return null; }
   const res = await fetch(url, { headers }).catch(() => null);
@@ -172,5 +186,82 @@ async function findOpenPr(
   // GitHub → array of pulls; GitLab → array of MRs; Bitbucket → { values: [...] }.
   const list = Array.isArray(body) ? body : ((body as { values?: unknown[] } | null)?.values ?? []);
   const first = (list as unknown[])[0];
-  return first ? parseCreatePrSuccess(input.provider, first) : null;
+  const parsed = first ? parseCreatePrSuccess(input.provider, first) : null;
+  if (!parsed) return null;
+  const { draft, body: text, description } = first as { draft?: unknown; body?: unknown; description?: unknown };
+  const body = typeof text === 'string' ? text : typeof description === 'string' ? description : undefined;
+  return { ...parsed, ...(typeof draft === 'boolean' ? { draft } : {}), ...(body !== undefined ? { body } : {}) };
+}
+
+/** The open PR for a head branch, with whether it is a draft and its body (the sweep's proof that a PR is the platform's own). Null when none. */
+export async function lookupOpenPullRequest(input: OpenPrInput): Promise<{ number: number; url: string; draft?: boolean; body?: string } | null> {
+  return findOpenPr(prRequestHeaders(input.token), input);
+}
+
+/** The `Draft:` marker GitLab puts on a draft merge request's title. */
+const GITLAB_DRAFT_PREFIX = /^\s*(?:Draft:|\[Draft\]|\(Draft\))\s*/i;
+
+export type MarkReadyResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Take a PR the run opened as a draft out of draft, once its work is done. GitHub has no REST for this: the
+ * GraphQL `markPullRequestReadyForReview` takes the PR's node id. GitLab has no draft flag, so the `Draft:`
+ * title prefix is removed. Bitbucket needs nothing (it never opens a draft). A PR that is already ready is left
+ * alone. `text` also sets the PR's final title and body, so a PR opened early for a build reads like any other.
+ * Never throws.
+ */
+export async function markReadyForReview(input: Omit<OpenPrInput, 'head' | 'base' | 'title' | 'body' | 'draft'> & { number: number; text?: { title: string; body: string } }): Promise<MarkReadyResult> {
+  try {
+    if (input.provider === 'bitbucket') return await applyBitbucketText(input);
+    if (input.provider !== 'github' && input.provider !== 'gitlab') return { ok: false, reason: `ready-for-review not implemented for provider '${input.provider}'` };
+    const api = resolveRepoApiTarget(input);
+    const headers = prRequestHeaders(input.token);
+    const current = await fetch(api.pullRequest(input.number), { headers }).catch(() => null);
+    if (!current?.ok) return { ok: false, reason: `could not read PR #${input.number}${current ? ` (${current.status})` : ''}` };
+    const pr = (await current.json().catch(() => null)) as { node_id?: string; title?: string; draft?: boolean } | null;
+    if (api.flavor === 'gitlab') {
+      const title = pr?.title ?? '';
+      if (!GITLAB_DRAFT_PREFIX.test(title) && !input.text) return { ok: true };
+      const update = { title: input.text?.title ?? title.replace(GITLAB_DRAFT_PREFIX, ''), ...(input.text ? { description: input.text.body } : {}) };
+      const res = await fetch(api.pullRequest(input.number), { method: 'PUT', headers, body: JSON.stringify(update) }).catch(() => null);
+      return res?.ok ? { ok: true } : { ok: false, reason: `gitlab ${res?.status ?? 'network'}: could not take the merge request out of draft` };
+    }
+    // Already ready (a human got there first): nothing to undo, and the mutation would be refused.
+    if (pr?.draft !== false) {
+      if (!pr?.node_id) return { ok: false, reason: 'GitHub returned no node id for the PR' };
+      const res = await fetch(`${api.apiBase.replace(/\/v3\/?$/, '')}/graphql`, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          query: 'mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } } }',
+          variables: { id: pr.node_id },
+        }),
+      }).catch(() => null);
+      const body = (await res?.json().catch(() => null)) as { errors?: Array<{ message?: string }> } | null;
+      if (!res?.ok || body?.errors?.length) return { ok: false, reason: `github ${res?.status ?? 'network'}: ${body?.errors?.[0]?.message ?? 'mark ready failed'}`.slice(0, 300) };
+    }
+    if (input.text) {
+      const patched = await fetch(api.pullRequest(input.number), { method: 'PATCH', headers, body: JSON.stringify({ title: input.text.title, body: input.text.body }) }).catch(() => null);
+      if (!patched?.ok) return { ok: false, reason: `github ${patched?.status ?? 'network'}: could not update the PR title and body` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : 'mark ready failed' };
+  }
+}
+
+/** Bitbucket never opens a draft, so there is nothing to undo: only the final text is applied (Server needs the PR's current `version`). */
+async function applyBitbucketText(input: Parameters<typeof markReadyForReview>[0]): Promise<MarkReadyResult> {
+  if (!input.text) return { ok: true };
+  const api = resolveRepoApiTarget(input);
+  const headers = prRequestHeaders(input.token);
+  const update: Record<string, unknown> = { title: input.text.title, description: input.text.body };
+  if (api.flavor === 'bitbucket-server') {
+    const current = await fetch(api.pullRequest(input.number), { headers }).catch(() => null);
+    const pr = current?.ok ? (await current.json().catch(() => null)) as { version?: number; reviewers?: unknown } | null : null;
+    if (typeof pr?.version !== 'number') return { ok: false, reason: `could not read PR #${input.number} to update it` };
+    update.version = pr.version;
+    if (pr.reviewers) update.reviewers = pr.reviewers; // Server drops reviewers a PUT leaves out
+  }
+  const res = await fetch(api.pullRequest(input.number), { method: 'PUT', headers, body: JSON.stringify(update) }).catch(() => null);
+  return res?.ok ? { ok: true } : { ok: false, reason: `bitbucket ${res?.status ?? 'network'}: could not update the PR title and description` };
 }

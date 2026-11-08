@@ -15,6 +15,9 @@ export interface ITaskRepository {
   findAll(projectId?: ProjectId, opts?: TaskListOptions): Promise<Task[]>;
   findByProjectIds(ids: ProjectId[], opts?: TaskListOptions): Promise<Task[]>;
   findById(id: TaskId): Promise<Task | null>;
+  /** Many tasks in ONE query (order unspecified; unknown ids are simply absent). NOT tenant-scoped: ids are looked up as given, so a caller
+   *  holding a tenant must check each task's `tenantId` against it. */
+  findByIdsAcrossTenants(ids: TaskId[]): Promise<Task[]>;
   /** Direct child tasks of an Epic (parent_task_id = parentId), oldest first. */
   findChildren(parentId: TaskId): Promise<Task[]>;
   /**

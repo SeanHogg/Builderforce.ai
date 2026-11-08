@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { kanbanApi, type AssigneeProfileMap, type AssigneeProfileDto } from '@/lib/builderforceApi';
+import type { AssigneeProfileMap, AssigneeProfileDto } from '@/lib/builderforceApi';
+import { useOptionalAuth } from '@/lib/AuthContext';
+import { loadAssigneeProfileMap } from '@/lib/assigneeProfilesCache';
 
 /**
  * One shared fetch of the tenant's assignee → personality map, exposed as a lookup
@@ -18,13 +20,14 @@ const Ctx = createContext<AssigneeProfileMap | null>(null);
 
 export function AssigneeProfilesProvider({ children }: { children: ReactNode }) {
   const [profiles, setProfiles] = useState<AssigneeProfileMap>({});
+  const tenantKey = String(useOptionalAuth()?.tenant?.id ?? 'none');
   useEffect(() => {
     let cancelled = false;
     // Best-effort: a failure just means hovercards render their trigger with no
     // personality popover, never a thrown error in the board.
-    kanbanApi.assigneeProfiles().then((m) => { if (!cancelled) setProfiles(m); }).catch(() => {});
+    loadAssigneeProfileMap(tenantKey).then((m) => { if (!cancelled) setProfiles(m); }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [tenantKey]);
   return <Ctx.Provider value={profiles}>{children}</Ctx.Provider>;
 }
 

@@ -859,6 +859,24 @@ export const sendInvestorUpdate = (body: SendInvestorUpdateBody) =>
     { method: 'POST', body: JSON.stringify(body) },
   );
 
+/** A milestone the next investor update would list. Board entries carry the board and its earned points. */
+export type PendingInvestorMilestone =
+  | { source: 'work_item'; id: string; title: string; reachedAt: string; key: string; projectId: number }
+  | { source: 'board'; id: string; title: string; reachedAt: string; boardId: string; boardName: string; earnedPoints: number };
+
+export interface PendingInvestorMilestones {
+  /** ISO start of the window: the last sent update, or the default lookback. */
+  since: string;
+  until: string;
+  milestones: PendingInvestorMilestone[];
+  /** How many more shipped in the window than are listed. */
+  moreCount: number;
+}
+
+/** What shipped since the last update — shown to the founder BEFORE they send. */
+export const getPendingInvestorMilestones = () =>
+  apiRequest<PendingInvestorMilestones>('/api/investor-updates/milestones/pending');
+
 // ---------------------------------------------------------------------------
 // Document templates (FO-D5) — the founders' agreement and its siblings
 // ---------------------------------------------------------------------------

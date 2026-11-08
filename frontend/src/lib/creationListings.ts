@@ -173,10 +173,12 @@ export const creationListingApi = {
     ).then((r) => r.acquisition),
 
   /** Begin a paid purchase; resolves to the processor's hosted checkout URL. */
-  checkout: (slug: string, returnUrl: string) =>
+  checkout: (slug: string, returnUrl: string, returnPath?: string) =>
     apiRequest<{ checkoutUrl: string }>(`${AUTHED}/${slug}/checkout`, {
       method: 'POST',
-      body: JSON.stringify({ returnUrl }),
+      // `returnPath` (path + query) is what keeps the caller's page state across the
+      // processor round trip; without it only the path of `returnUrl` survives.
+      body: JSON.stringify({ returnUrl, ...(returnPath ? { returnPath } : {}) }),
       expectedErrors: [400],
     }).then((r) => r.checkoutUrl),
 

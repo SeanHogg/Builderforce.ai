@@ -180,7 +180,7 @@
 .standupRoster i { grid-row:1/3; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#f5a94c; color:var(--text-on-accent); font-style:normal; font-weight:700; }.standupRoster b { font-size:9px; }.standupRoster small { color:#8a7c69; font-size:7px; }
 .standupSummary { padding:8px; border-left:3px solid #f5a94c; border-radius:var(--radius-sm); background:#fff6e8; }.standupSummary b { color:#a85e08; font-size:8px; }.standupSummary p { margin:3px 0 0; font-size:9px; }
 .drawingSurface { display:block; width:100%; min-height:120px; overflow:visible; }
-.drawingSurface text { fill:var(--canvas-muted); font:11px var(--font-sans); }
+.drawingHint { fill:var(--canvas-muted); font:11px var(--font-sans); }
 
 /* ── ONE EXECUTABLE STEP ─────────────────────────────────────────────────────
    The card body for a `flowStep`. Everything is a `--canvas-*` token, which is

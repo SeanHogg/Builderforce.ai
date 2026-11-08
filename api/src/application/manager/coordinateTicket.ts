@@ -16,7 +16,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 import { boards, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { blocksCompletion } from '../kanban/participantStates';
 import { isParkedLane } from '../swimlane/nextLane';
@@ -128,7 +128,7 @@ export async function coordinateCompletedStage(
   // subject to the caller's dispatch budget. Withholding the advance would be worse than
   // spending the run — a satisfied stage that cannot move is a new kind of stall.
   const dispatched = (args.dispatch ?? true) && !next.isTerminal
-    ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+    ? await routeLaneEntry(env, db, runtimeService, {
       tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
       status: next.key, originLaneKey: args.fromStatus, submittedBy: 'system:coordinator',
     })
@@ -157,7 +157,7 @@ export async function coordinateTicket(
      * ── WHY THIS PARAMETER EXISTS ────────────────────────────────────────────────
      * Coordination was classified as a remedy that "costs no run" — the triage stage
      * hands it `mayStartRun: false` on that basis — while in fact every one of its three
-     * paths calls `maybeAutoRunOnLaneEntry` and starts one. It was the only branch of the
+     * paths calls `routeLaneEntry` and starts one. It was the only branch of the
      * eight that consulted neither flag, so it spent outside the cap on every pass:
      * measured live on project 11, `{"dispatched":7,"dispatchCap":3}` on a `free` plan.
      * The remedy was classified by what it was INTENDED to cost, and nothing checked what
@@ -217,7 +217,7 @@ export async function coordinateTicket(
         .where(and(eq(tasks.id, args.taskId), eq(tasks.status, task.status))).returning({ id: tasks.id });
       if (moved.length) {
         const dispatched = mayDispatch
-          ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          ? await routeLaneEntry(env, db, runtimeService, {
             tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId,
             status: earliest.stageKey, originLaneKey: task.status, submittedBy: 'system:coordinator',
             ...(args.force ? { force: true } : {}),
@@ -244,7 +244,7 @@ export async function coordinateTicket(
   // Drive the current lane: the gate resolves + dispatches the next required role
   // and records the hand-off; the normal auto-run covers a non-gated lane.
   const dispatched = mayDispatch
-    ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+    ? await routeLaneEntry(env, db, runtimeService, {
       tenantId: args.tenantId,
       projectId: task.projectId,
       taskId: args.taskId,

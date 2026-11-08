@@ -76,6 +76,23 @@ export async function pollPrCiStatus(env: Env, db: Db, tenantId: number, pr: Pol
 }
 
 /**
+ * The commit the provider's CI verdict is FOR, and whether it is green: `headSha` is the PR head the
+ * `checks` were read from. The security pin is only valid to merge on if it is THIS commit - green CI on
+ * an older head says nothing about a newer one. Null when it cannot be read (the caller then defers).
+ */
+export async function pollPrCiHead(
+  env: Env, db: Db, tenantId: number, pr: PollablePr,
+): Promise<{ headSha: string | null; green: boolean } | null> {
+  try {
+    const detail = await loadPrDetail(env, db, tenantId, pr);
+    if (!detail) return null;
+    return { headSha: detail.headSha, green: detail.checks === 'success' || (detail.checks == null && detail.checksTotal === 0) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Line-count snapshot for the merge-gate net-destructive heuristic. Best-effort:
  * missing credentials / provider totals return null (do not block the merge).
  */

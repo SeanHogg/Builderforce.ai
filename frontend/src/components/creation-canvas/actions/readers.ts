@@ -120,6 +120,7 @@ export function canvasReaderActions(ctx: CanvasActionContext): BrainAction[] {
     // an explicit request to leave the scope, so it now does.
     description: 'Read every object and relationship on the creation canvas — the WHOLE board, regardless of what the user has selected. Use this whenever you are about to say something is not on the canvas.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
+    mutates: false,
     run: () => {
       // LIVE, and including this turn's staged proposals. The memo captured `nodes` when
       // the turn began, so a second loop inside the same turn — the Brain synthesis that
@@ -154,6 +155,7 @@ export function canvasReaderActions(ctx: CanvasActionContext): BrainAction[] {
         name: { type: 'string', description: 'Title or file name the user referred to, e.g. "Sales-Discovery-Guide.htm".' },
       },
     },
+    mutates: false,
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; name?: string };
       // Live board plus this turn's staged additions — same reasoning as
@@ -193,6 +195,7 @@ export function canvasReaderActions(ctx: CanvasActionContext): BrainAction[] {
     name: 'canvas_read_project_prds',
     description: 'Read the complete canonical PRDs and version history for every ticket in a project. Always use this before synthesizing, consolidating, or explaining project requirements; canvas selection does not limit this project-wide read.',
     parameters: { type: 'object', additionalProperties: false, properties: { projectId: { type: 'number', description: 'Canonical project id. Omit when exactly one project is present on the canvas.' } } },
+    mutates: false,
     run: async (raw: unknown) => {
       if (persistence !== 'server') return { error: 'Canonical project PRDs require a saved session' };
       const requested = Number((raw as { projectId?: unknown })?.projectId);
@@ -216,6 +219,7 @@ export function canvasReaderActions(ctx: CanvasActionContext): BrainAction[] {
         pages: { type: 'number', description: 'How many consecutive pages to return, up to 6. Defaults to 3.' },
       },
     },
+    mutates: false,
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; page?: number; pages?: number };
       const candidates = stage.nodes().filter((node) => canvasDocument(node.data));

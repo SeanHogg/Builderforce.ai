@@ -13,7 +13,7 @@ import {
   buildSessionEntry,
   type SessionFileEntry,
 } from "./session-files.js";
-import { requireNodeSqlite } from "./sqlite.js";
+import { openLocalSqlite } from "@builderforce/agent-tools/node-local-sqlite.js";
 import type {
   MemoryEmbeddingProbeResult,
   MemoryProviderStatus,
@@ -797,10 +797,8 @@ export class QmdMemoryManager implements MemorySearchManager {
     if (this.db) {
       return this.db;
     }
-    const { DatabaseSync } = requireNodeSqlite();
-    this.db = new DatabaseSync(this.indexPath, { readOnly: true });
-    // Keep QMD recall responsive when the updater holds a write lock.
-    this.db.exec("PRAGMA busy_timeout = 1");
+    // Read-only, and a busy timeout of 1 ms keeps QMD recall responsive when the updater holds a write lock.
+    this.db = openLocalSqlite<SqliteDatabase>(this.indexPath, { readOnly: true, busyTimeoutMs: 1 }).db;
     return this.db;
   }
 

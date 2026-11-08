@@ -15,6 +15,7 @@ import type { RecommendedRoster, TemplateSummary, FlaggedTicket, RosterRole, Ass
 import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workforce/RoleAssigneePicker';
 import { Select } from '@/components/Select';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { useKanbanTemplateCheckout } from '@/lib/useKanbanTemplateCheckout';
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)',
   fontSize: 11, fontWeight: 600, background: bg, color: fg,
@@ -52,13 +53,19 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  // A priced template answers 402 → the ordinary listing checkout; once bought, apply it.
+  const handlePurchaseRequired = useKanbanTemplateCheckout('roster-card', {
+    onGranted: (id) => { void onPickTemplate(id); },
+    onFailed: setError,
+  });
+
   const onPickTemplate = async (templateId: string) => {
     if (!templateId || templateId === roster?.templateId) return;
     setBusy(true); setError(null);
     try {
       await kanbanApi.applyTemplate(projectId, templateId);
       await load();
-    } catch (e) { setError(errorMessage(e)); }
+    } catch (e) { setError((await handlePurchaseRequired(e, templateId)) ?? errorMessage(e)); }
     finally { setBusy(false); }
   };
 

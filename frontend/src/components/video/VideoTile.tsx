@@ -83,7 +83,8 @@ export function VideoTile({
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isSelf}
+        // Always muted: remote audio is played once by the session's RemoteAudioSink.
+        muted
         style={{
           position: 'absolute',
           inset: 0,

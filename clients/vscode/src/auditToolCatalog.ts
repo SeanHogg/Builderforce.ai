@@ -1,7 +1,8 @@
 import type * as vscode from 'vscode';
 import type { ToolDef } from './fileTools';
+import { toolMutating } from './toolMutating';
 import { authed } from './bfApi';
-import type { CodeAnalysisSnapshot } from '@builderforce/agent-tools';
+import { classifyTool, type CodeAnalysisSnapshot } from '@builderforce/agent-tools';
 import type { LocalFirstStore } from '@builderforce/local-first';
 import { saveLocalAuditFindings } from './localAuditStore';
 
@@ -30,9 +31,10 @@ export function registerAuditFindingsSink(runId: string, sink: AuditFindingsSink
 /** Audits can inspect source and request command approval, but cannot edit source or dispatch more work. */
 export function auditToolCatalog(secrets: vscode.SecretStorage, tools: readonly ToolDef[], projectId: number,
   audit: { auditId: string; runId: string }, local?: AuditFindingsSink): ToolDef[] {
-  const readable = tools.filter((t) => !t.mutating && !/spawn|delegate/i.test(t.name));
+  // `verify` (run_checks) is not a mutation: the shared classifier keeps it available to audits; spawn/delegate stay out.
+  const readable = tools.filter((t) => classifyTool(t.name, { mutates: t.mutating }) !== 'mutate' && !/spawn|delegate/i.test(t.name));
   let analysis: CodeAnalysisSnapshot | undefined;
-  const commands = tools.filter((t) => !t.remote && /^(run_command|run_tests|analyze_codebase)$/.test(t.name)).map((tool) => tool.name !== 'analyze_codebase' ? tool : {
+  const commands = tools.filter((t) => !t.remote && /^(run_command|run_checks|analyze_codebase)$/.test(t.name)).map((tool) => tool.name !== 'analyze_codebase' ? tool : {
     ...tool, execute: async (args: Record<string, unknown>, root: string) => {
       const text = await tool.execute(args, root);
       analysis = (JSON.parse(text) as { snapshot?: CodeAnalysisSnapshot }).snapshot;
@@ -46,7 +48,7 @@ export function auditToolCatalog(secrets: vscode.SecretStorage, tools: readonly 
       severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] }, recommendation: { type: 'string' },
     }, required: ['title', 'severity'] } } }, required: ['findings'] },
     // This write is the output explicitly authorized by starting the audit, scoped by the host.
-    mutating: false, remote: true,
+    mutating: toolMutating('save_audit_findings', { mutates: false }), remote: true,
     execute: async (args) => {
       const sink = local ?? localSinks.get(audit.runId);
       if (sink) {

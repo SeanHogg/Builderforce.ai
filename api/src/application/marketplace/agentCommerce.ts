@@ -60,6 +60,10 @@ import { ListingError } from './creationListings';
 import { resolveTakeRateBps } from './listingCommerce';
 import { verifyPaidCheckout, assertCovers } from '../finance/verifiedCheckout';
 import { USD_CENTS } from '../kernel/denominations';
+import { trustedReturnUrl } from '../shared/trustedReturnUrl';
+
+/** Where the buyer returns to when the caller names no return URL. */
+const DEFAULT_RETURN_PATH = '/workforce';
 
 
 /** What this flow calls itself in checkout metadata. */
@@ -144,7 +148,7 @@ export async function holdsAgentPurchase(
 export async function startAgentCheckout(
   db: Db,
   env: Env,
-  input: { tenantId: number; buyerUserId: string; buyerEmail?: string | null; agentId: string; returnUrl: string },
+  input: { tenantId: number; buyerUserId: string; buyerEmail?: string | null; agentId: string; returnUrl?: string | undefined },
 ): Promise<{ checkoutUrl: string }> {
   const agent = await loadPurchasableAgent(db, input.agentId);
   if (!agent) throw new ListingError('Agent not found', 404);
@@ -159,7 +163,7 @@ export async function startAgentCheckout(
     throw new ListingError('Payments are not configured on this deployment', 400);
   }
 
-  const base = new URL(input.returnUrl);
+  const base = trustedReturnUrl(env, input.returnUrl, DEFAULT_RETURN_PATH);
   const session = await buildPaymentProvider(env).createOneTimeCheckoutSession({
     amountCents: agent.priceCents,
     currency: 'USD',

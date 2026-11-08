@@ -44,38 +44,43 @@ function badgesOf(badges: Record<string, number | string> | undefined): KNode['b
     return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** The system, app and stray-copy tags an outline file carries as indexes into the outline's pools (PRD 41 A9), resolved onto its node. */
-function tagsOf(outline: GraphOutline, f: object): { system?: string; app?: string; copyOf?: string } {
+/** The system, app and stray-copy tags an outline file carries as indexes into the outline's pools (PRD 41 A9), resolved onto its node (in this order). */
+function addTags(node: Mutable<KNode>, outline: GraphOutline, f: object): void {
     const o = outline as GraphOutline & { systems?: string[]; apps?: string[] };
     const t = f as { system?: number; app?: number; copyOf?: number };
     const system = t.system !== undefined ? o.systems?.[t.system] : undefined;
     const app = t.app !== undefined ? o.apps?.[t.app] : undefined;
     const copyOf = t.copyOf !== undefined ? o.systems?.[t.copyOf] : undefined;
-    return { ...(system !== undefined ? { system } : {}), ...(app ? { app } : {}), ...(copyOf !== undefined ? { copyOf } : {}) };
+    if (system !== undefined) Object.assign(node, { system });
+    if (app) Object.assign(node, { app });
+    if (copyOf !== undefined) Object.assign(node, { copyOf });
 }
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 function decode(outline: GraphOutline): Decoded {
     const files: KNode[] = outline.files.map((f) => {
         const badges = badgesOf(f.badges);
         // The outline's 12-character hash is not a sourceHash (it never equals a real one), so it is not carried.
-        return {
+        // Built field by field (no spread per file or per link): 16k files and 150k links are decoded here.
+        const node: Mutable<KNode> = {
             ref: outlineRef(outline, f), kind: 'file', label: tailOf(f.path), pack: 'code', importance: f.importance, origin: 'extracted',
-            ...(f.area !== undefined && outline.areas[f.area] !== undefined ? { area: outline.areas[f.area]! } : {}),
-            ...(f.partition !== undefined && outline.partitions[f.partition] !== undefined ? { partition: outline.partitions[f.partition]! } : {}),
-            ...(badges ? { badges } : {}),
-            ...tagsOf(outline, f),
         };
+        if (f.area !== undefined && outline.areas[f.area] !== undefined) node.area = outline.areas[f.area]!;
+        if (f.partition !== undefined && outline.partitions[f.partition] !== undefined) node.partition = outline.partitions[f.partition]!;
+        if (badges) node.badges = badges;
+        addTags(node, outline, f);
+        return node;
     });
     const edges: KEdge[] = [];
     for (const [from, to, code, flags] of outline.links) {
         const a = files[from], b = files[to];
         if (!a || !b) continue;
         const verdict = OUTLINE_VERDICTS[code];
-        edges.push({
-            from: a.ref, to: b.ref, kind: 'references', weight: 1, origin: 'extracted',
-            ...(verdict && verdict !== 'none' ? { verdict } : {}),
-            ...((flags & OUTLINE_FLAG_CYCLE) !== 0 ? { cycle: true } : {}),
-        });
+        const edge: Mutable<KEdge> = { from: a.ref, to: b.ref, kind: 'references', weight: 1, origin: 'extracted' };
+        if (verdict && verdict !== 'none') edge.verdict = verdict;
+        if ((flags & OUTLINE_FLAG_CYCLE) !== 0) edge.cycle = true;
+        edges.push(edge);
     }
     return { files, edges };
 }

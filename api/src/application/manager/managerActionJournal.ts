@@ -221,6 +221,22 @@ function readMarker(detail: string, field: string): string | null {
   return new RegExp(`"${field}":"([^"]*)"`).exec(detail)?.[1] ?? null;
 }
 
+/** `manager_actions.action_type` (varchar 24) for "PR conduct examined this ticket" — see `repos/conductMarker.ts`. */
+export const CONDUCT_MARKER_ACTION = 'conduct_seen';
+
+/**
+ * BOOKKEEPING rows: written so code can read them back, never a manager DECISION. Every
+ * reader that lists or aggregates `manager_actions` for DISPLAY (the activity feed, the
+ * daily digest, the autonomy wiring audit) excludes these in its query — `notInArray`, not
+ * a post-filter, so a feed `limit` still returns that many real decisions.
+ *
+ * Retention: these rows carry no `detail` (see {@link retainsDetail}) and a ticket has ONE
+ * marker row that is updated in place, so they are bounded by tickets in review and age
+ * out with the table's registry retention (`maintenance/sweptTables.ts`, 30 days) once a
+ * ticket stops being conducted — well past the 30-minute window triage trusts.
+ */
+export const BOOKKEEPING_ACTION_TYPES: readonly string[] = [CONDUCT_MARKER_ACTION];
+
 /**
  * Action types whose `detail` is READ BACK by code, not just displayed.
  *

@@ -1,6 +1,8 @@
 import { createElement } from 'react';
 import type { TrackerSurfaceProps } from './TrackerSurface';
 import { VulnerabilityFindingsPanel } from './VulnerabilityFindingsPanel';
+import { RunScanPanel } from './RunScanPanel';
+import { DsrExecutePanel } from './DsrExecutePanel';
 
 /**
  * The field schema for every generic tracker surface (governance + product).
@@ -109,10 +111,20 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
     fields: [
       { key: 'requestType', label: 'Type', type: 'select', options: ['access', 'erasure', 'rectification', 'portability', 'objection', 'opt_out'], required: true },
       { key: 'subjectEmail', label: 'Subject email', required: true },
-      { key: 'status', label: 'Status', type: 'select', options: ['verifying_identity', 'pending', 'processing', 'completed', 'rejected'] },
+      { key: 'status', label: 'Status', type: 'select', options: ['verifying_identity', 'pending', 'processing', 'rejected'] },
       { key: 'jurisdiction', label: 'Jurisdiction' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
+    // Execute the request for this segment (export / suppress / erase) - PRD 08 §10.
+    rowAction: {
+      labelKey: 'governance.dsrExecute.openAction',
+      render: (row, close, reload) => createElement(DsrExecutePanel, {
+        requestId: row.id,
+        open: true,
+        onClose: close,
+        onDone: reload,
+      }),
+    },
   },
   suppression: {
     title: 'Suppression List',
@@ -143,16 +155,21 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
     title: 'Vulnerability Scans',
     apiBase: '/api/governance/vuln-scans',
     fields: [
-      { key: 'scanType', label: 'Scan type', type: 'select', options: ['SAST', 'SCA', 'SECRET', 'IAC', 'CONTAINER'], required: true },
+      { key: 'scanType', label: 'Scan type', type: 'select', options: ['SAST', 'SCA', 'SECRET', 'REVIEW', 'IAC', 'CONTAINER'], required: true },
       { key: 'repoRef', label: 'Repo' },
       { key: 'ref', label: 'Branch/commit' },
-      { key: 'status', label: 'Status', type: 'select', options: ['queued', 'running', 'completed', 'failed'] },
+      { key: 'status', label: 'Status', type: 'select', options: ['queued', 'running', 'completed', 'skipped', 'failed'] },
       { key: 'triggeredBy', label: 'Triggered by', inList: false },
       { key: 'startedAt', label: 'Started', type: 'date', inList: false },
       { key: 'finishedAt', label: 'Finished', type: 'date', inList: false },
       { key: 'summary', label: 'Summary (JSON)', type: 'textarea', inList: false },
       { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
     ],
+    // Scan a connected repo's branch now - the same use case that scans every agent PR.
+    headerAction: {
+      labelKey: 'governance.runScan.openAction',
+      render: (open, close, reload) => createElement(RunScanPanel, { open, onClose: close, onDone: reload }),
+    },
     // What the scan FOUND — the findings panel, opened per row.
     rowAction: {
       labelKey: 'governance.vulnFindings.openAction',

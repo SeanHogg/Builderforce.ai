@@ -23,6 +23,7 @@ vi.mock('../marketplace/jobPostings', () => ({
 import { upsertJobPosting } from '../marketplace/jobPostings';
 import { attributeSources, listCanvasPostings, readCanvasPosting, syncCanvasPosting } from './postings';
 import type { PostingDistributionView } from './postingDistributionStore';
+import { BUILTIN_BOARD_SOURCES } from './applicantSource';
 
 const upserted = vi.mocked(upsertJobPosting);
 const ENV = {} as Env;
@@ -172,7 +173,7 @@ describe('syncCanvasPosting', () => {
 
 describe('attributing applicants to the boards a posting went out on (FO-B4)', () => {
   const row = (connectorKey: string, board: string): PostingDistributionView => ({
-    postingId: 'posting-a', connectorKey, board, connectionId: null, externalId: 'x', url: null,
+    postingId: 'posting-a', connectorKey, board, publicLinkSupported: true, sourceAliases: [], connectionId: null, externalId: 'x', url: null,
     status: 'posted', postedAt: '2026-10-01T00:00:00.000Z', lastError: null, updatedAt: '2026-10-01T00:00:00.000Z',
     applicantCount: 0,
   });
@@ -189,6 +190,21 @@ describe('attributing applicants to the boards a posting went out on (FO-B4)', (
       // would read as "never posted there".
       { source: 'indeed-jobs', count: 0, board: 'Indeed' },
     ]);
+  });
+
+  it('folds a spelling the manifest DECLARES as an alias onto the board, summing with the key', () => {
+    const sources = attributeSources(
+      [{ source: 'LinkedIn', count: 5 }, { source: 'linkedin-jobs', count: 2 }, { source: 'https://www.linkedin.com/jobs/1', count: 1 }],
+      [row('linkedin-jobs', 'LinkedIn Jobs')],
+      BUILTIN_BOARD_SOURCES,
+    );
+    expect(sources).toEqual([{ source: 'linkedin-jobs', count: 8, board: 'LinkedIn Jobs' }]);
+  });
+
+  it('uses the aliases a TENANT-authored board declared, from its already-loaded manifest', () => {
+    const custom: PostingDistributionView = { ...row('acme-careers', 'Acme Careers'), sourceAliases: ['acme', 'careers.acme.test'] };
+    const sources = attributeSources([{ source: 'https://careers.acme.test/jobs/1', count: 2 }, { source: 'Acme', count: 1 }], [custom]);
+    expect(sources).toEqual([{ source: 'acme-careers', count: 3, board: 'Acme Careers' }]);
   });
 
   it('never guesses a free-text source onto a board', () => {

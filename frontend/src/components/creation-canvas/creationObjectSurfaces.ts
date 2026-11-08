@@ -35,6 +35,10 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // A place: camera, props, colliders. No card can preview a space you walk through,
   // any more than one previews a running build — same reason `game` opens in `play`.
   world: 'world',
+  // A solid you turn: the card can only show one view of a 3D model (a picture), so the
+  // orbit camera — and the part-by-part editing that needs a pickable scene — is a surface.
+  // `cad` is absent on purpose: a 2D drawing's whole axis (the sheet) fits the card.
+  model3d: 'model3d',
   // The room's design opens the ROOM — board-scoped, so it carries no target; the room
   // reads which design is in use off the board itself.
   room: 'room',

@@ -19,9 +19,11 @@
 
 import { sql } from 'drizzle-orm';
 import { fact, type DomainRollup } from '../metricRollup';
+import { sourceFoldSql } from '../../hiring/applicantSource';
 
 const WINDOW_MONTHS = 18;
 const since = sql`DATE_TRUNC('month', NOW()) - (${WINDOW_MONTHS} * INTERVAL '1 month')`;
+const folded = sourceFoldSql('a.source');
 
 export const HIRING_ROLLUP: DomainRollup = {
   domain: 'hiring',
@@ -54,13 +56,15 @@ export const HIRING_ROLLUP: DomainRollup = {
           tenant: sql`a.tenant_id`,
           bucketAt: sql`DATE_TRUNC('day', COALESCE(a.applied_at, a.created_at))`,
           value: sql`COUNT(*)`,
-          dimension: sql`JSONB_BUILD_OBJECT('source', COALESCE(a.source, 'unknown'))`,
-          dimensionKey: sql`'source:' || COALESCE(a.source, 'unknown')`,
+          // Folded onto the board key so legacy free-text spellings ("LinkedIn") share
+          // a bucket with `linkedin-jobs` — no backfill (see `applicantSource.ts`).
+          dimension: sql`JSONB_BUILD_OBJECT('source', COALESCE(${folded}, 'unknown'))`,
+          dimensionKey: sql`'source:' || COALESCE(${folded}, 'unknown')`,
           tail: sql`
               FROM job_applications a
              WHERE a.tenant_id IS NOT NULL
                AND COALESCE(a.applied_at, a.created_at) >= ${since}
-             GROUP BY a.tenant_id, a.source, DATE_TRUNC('day', COALESCE(a.applied_at, a.created_at))
+             GROUP BY a.tenant_id, ${folded}, DATE_TRUNC('day', COALESCE(a.applied_at, a.created_at))
           `,
         }),
       ],

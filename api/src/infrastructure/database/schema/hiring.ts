@@ -273,6 +273,9 @@ export const jobApplications = pgTable('job_applications', {
   /** party_roles.party_ref for the candidate role — a person, not a candidate row. */
   candidateRef: varchar('candidate_ref', { length: 64 }).notNull(),
   source:       varchar('source', { length: 48 }).notNull().default('direct'),
+  /** The job board's own id for this application/candidate (migration 1323). Set only on
+   *  rows imported from a board; with `source` it is the dedupe key (1324). */
+  externalId:   varchar('external_id', { length: 255 }),
   /** Free-form: a pipeline's stages define the funnel, exactly as a board's
    *  swimlanes define a task's status. */
   status:       varchar('status', { length: 48 }).notNull().default('applied'),
@@ -286,6 +289,7 @@ export const jobApplications = pgTable('job_applications', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_job_applications_candidate').on(t.tenantId, t.jobPostingId, t.candidateRef),
+  uniqueIndex('uq_job_applications_board_external').on(t.tenantId, t.jobPostingId, t.source, t.externalId).where(sql`${t.externalId} is not null`),
   index('idx_job_applications_status').on(t.tenantId, t.status, t.appliedAt),
 ]);
 
@@ -790,16 +794,23 @@ export const jobPostingDistributions = pgTable('job_posting_distributions', {
   connectionId: uuid('connection_id'),
   /** The BOARD's id for the posting. Null exactly when no publication was confirmed. */
   externalId:   varchar('external_id', { length: 255 }),
-  /** The public URL the board reported. Null when the board reports none — never derived. */
+  /** The public URL: the board's own when it reported one, else rendered from the manifest's
+   *  `response.urlTemplate` (id + non-secret connection fields). Null when neither yields a
+   *  complete address — a template with a missing field produces no URL, never a broken one. */
   url:          varchar('url', { length: 1000 }),
   /** 'posted' | 'failed'. */
   status:       varchar('status', { length: 16 }).notNull(),
   postedAt:     timestamp('posted_at'),
   lastError:    text('last_error'),
+  /** Where the applicant import last read the board up to (migration 1328): an ISO
+   *  instant or a numeric id, per the manifest's `applicants.cursorFrom`. Null = never. */
+  importCursor: varchar('import_cursor', { length: 64 }),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_job_posting_distributions_board').on(t.tenantId, t.jobPostingId, t.connectorKey),
+  // One board job belongs to one posting (1328) — the arbiter behind linkBoardJob's 409.
+  uniqueIndex('uq_job_posting_distributions_board_job').on(t.tenantId, t.connectorKey, t.externalId).where(sql`${t.status} = 'posted'`),
 ]);
 
 /** How long a cohort of hires took to reach productivity. A measured number with

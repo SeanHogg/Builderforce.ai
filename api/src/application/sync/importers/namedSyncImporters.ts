@@ -24,6 +24,7 @@ import { importSyncedChat } from './importSyncedChat';
 import { importSyncedMessage } from './importSyncedMessage';
 import { importSyncedProject } from './importSyncedProject';
 import { importSyncedTicket } from './importSyncedTicket';
+import { importSyncedChatTicketLink } from './importSyncedChatTicketLink';
 import { importSyncedUsage } from './importSyncedUsage';
 
 export function namedSyncImporters(tx: Tx, usage: SyncUsageLedger, steps: SyncStepStore): SyncNamedImporters {
@@ -33,6 +34,7 @@ export function namedSyncImporters(tx: Tx, usage: SyncUsageLedger, steps: SyncSt
     importSyncedChat: (event, ctx, stores) => importSyncedChat(event, ctx, stores, tx),
     importSyncedMessage: (event, ctx, stores) => importSyncedMessage(event, ctx, stores, tx, steps),
     importSyncedUsage: (event, ctx, stores) => importSyncedUsage(event, ctx, stores, usage),
+    importSyncedChatTicketLink: (event, ctx, stores) => importSyncedChatTicketLink(event, ctx, stores, tx),
     importMirrorRecord,
   };
 }

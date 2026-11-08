@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
+import { withDirtyTracking } from '@/domains/collab/presentation/withDirtyTracking';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import PageContainer from '@/components/PageContainer';
@@ -13,7 +14,8 @@ import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useBlockDocument, type BlockDocument } from '@/domains/collab/presentation/useBlockDocument';
 import { BlockEditor } from '@/components/knowledge/BlockEditor';
-import { parseMarkdownToBlocks } from '@/domains/collab/domain/blockDocument';
+import { parseMarkdownToBlocks, type DocumentBlock } from '@/domains/collab/domain/blockDocument';
+import { restoreAgainstSnapshot, restoreDrawings, toModelText } from '@/domains/collab/domain/drawingPlaceholders';
 import {
   knowledgeApi,
   type KnowledgeDocDetail,
@@ -89,15 +91,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   // dirty: it already reached the server through whoever typed it, and every
   // connected client autosaving on every remote keystroke would be a PATCH storm
   // proportional to participants × keystrokes.
-  const editorDoc: BlockDocument = {
-    ...blockDoc,
-    setText: (id, text) => { dirtyRef.current = true; blockDoc.setText(id, text); },
-    setAttrs: (id, attrs) => { dirtyRef.current = true; blockDoc.setAttrs(id, attrs); },
-    insertAfter: (afterId, block) => { dirtyRef.current = true; return blockDoc.insertAfter(afterId, block); },
-    remove: (id) => { dirtyRef.current = true; blockDoc.remove(id); },
-    move: (id, delta) => { dirtyRef.current = true; blockDoc.move(id, delta); },
-    replaceAll: (next) => { dirtyRef.current = true; blockDoc.replaceAll(next); },
-  };
+  const editorDoc: BlockDocument = withDirtyTracking(blockDoc, () => { dirtyRef.current = true; });
 
   const reload = useCallback(() => {
     knowledgeApi
@@ -244,14 +238,15 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         <AiAssist
           docType={docType}
           title={title}
-          existingContent={blockDoc.markdown}
+          existingContent={toModelText(editorDoc.blocks)}
           t={t}
           onApply={(text, replace) => {
             if (replace) {
-              editorDoc.replaceAll(parseMarkdownToBlocks(text));
+              // Drawings went to the model as placeholders; put them back (and keep any it dropped).
+              editorDoc.replaceAll(restoreDrawings(parseMarkdownToBlocks(text), editorDoc.blocks));
             } else {
               let afterId = editorDoc.blocks[editorDoc.blocks.length - 1]?.id ?? null;
-              for (const block of parseMarkdownToBlocks(text)) afterId = editorDoc.insertAfter(afterId, block);
+              for (const block of restoreDrawings(parseMarkdownToBlocks(text), [], false)) afterId = editorDoc.insertAfter(afterId, block);
             }
             setMode('edit');
           }}
@@ -263,8 +258,10 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         <AnalyzePanel
           docId={docId}
           t={t}
-          onApplyFlow={(flow) => {
-            editorDoc.replaceAll(parseMarkdownToBlocks(flow));
+          getBlocks={() => editorDoc.blocks}
+          onApplyFlow={(flow, snapshot) => {
+            // The model saw each drawing as `[[bf-drawing:N]]`, numbered from `snapshot` (what was sent).
+            editorDoc.replaceAll(restoreAgainstSnapshot(parseMarkdownToBlocks(flow), snapshot, editorDoc.blocks));
             setMode('edit');
           }}
         />
@@ -769,24 +766,30 @@ function severityColor(severity: string): React.CSSProperties {
 function AnalyzePanel({
   docId,
   t,
+  getBlocks,
   onApplyFlow,
 }: {
   docId: string;
   t: ReturnType<typeof useTranslations>;
-  onApplyFlow: (flow: string) => void;
+  getBlocks: () => readonly DocumentBlock[];
+  onApplyFlow: (flow: string, snapshot: readonly DocumentBlock[]) => void;
 }) {
   const errorMessage = useErrorMessage();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The blocks the model was shown: its placeholder numbers refer to THIS snapshot, not to later edits.
+  const snapshotRef = useRef<readonly DocumentBlock[]>([]);
 
   async function run() {
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      setResult(await knowledgeApi.analyze(docId));
+      const snapshot = getBlocks();
+      setResult(await knowledgeApi.analyze(docId, toModelText(snapshot)));
+      snapshotRef.current = snapshot;
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -871,7 +874,7 @@ function AnalyzePanel({
                   </div>
                   <button
                     type="button"
-                    onClick={() => { onApplyFlow(result.improvedFlow); setResult(null); }}
+                    onClick={() => { onApplyFlow(result.improvedFlow, snapshotRef.current); setResult(null); }}
                     style={{ ...btnPrimary, marginTop: 8 }}
                   >
                     {t('analyzeApplyFlow')}

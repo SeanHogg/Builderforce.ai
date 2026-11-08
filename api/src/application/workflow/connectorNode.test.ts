@@ -7,7 +7,11 @@
  * silently sent as an empty call.
  */
 import { describe, it, expect } from 'vitest';
+import { fakeDb } from '../../../test/fakeDb';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import {
+  executeConnectorNode,
   parseConnectorInput,
   renderConnectorInput,
   renderConnectorTemplate,
@@ -62,6 +66,35 @@ describe('renderConnectorInput', () => {
       retries: 3,
       flags: ['+15551234567', true],
     });
+  });
+});
+
+describe('executeConnectorNode — a pinned connectionId', () => {
+  const TENANT = 7;
+  const run = (db: ReturnType<typeof fakeDb>, connectionId: string) =>
+    executeConnectorNode(
+      { db: db as unknown as Db, env: { JWT_SECRET: 's' } as unknown as Env, tenantId: TENANT },
+      { connector: 'twilio', action: 'send_sms', connectionId, input: { To: '+1', From: '+2', Body: 'hi' } },
+      '',
+    );
+
+  /** Every bound value in a Drizzle where-clause. */
+  function boundValues(node: unknown, out: unknown[] = [], seen = new Set<unknown>()): unknown[] {
+    if (node === null || typeof node !== 'object' || seen.has(node)) return out;
+    seen.add(node);
+    const n = node as { queryChunks?: unknown[]; value?: unknown; encoder?: unknown };
+    if (n.encoder !== undefined && 'value' in n) out.push(n.value);
+    for (const chunk of n.queryChunks ?? []) boundValues(chunk, out, seen);
+    return out;
+  }
+
+  it('rejects a connection that belongs to another tenant — the lookup is tenant-scoped, so no row comes back', async () => {
+    const db = fakeDb([[]]); // the tenant predicate excludes the foreign row
+    const result = await run(db, 'conn-of-tenant-9');
+    expect(result).toEqual({ ok: false, error: 'Connection not found' });
+    const values = boundValues(db.calls[0]!.where);
+    expect(values).toContain(TENANT);
+    expect(values).toContain('conn-of-tenant-9');
   });
 });
 

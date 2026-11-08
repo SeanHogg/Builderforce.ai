@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { resolveExternalTarget } from "./externalUrl";
 import { getWebBaseUrl } from "./gateway";
 
 /**
@@ -60,7 +61,11 @@ export function navigateFromCanvas(path: string, openSession: (sessionId: string
     void vscode.commands.executeCommand("builderforce.signIn");
     return;
   }
-  void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
+  // A route on the BuilderForce web app, or a hosted-checkout page: nothing else is
+  // handed to the OS browser (see `resolveExternalTarget`).
+  const target = resolveExternalTarget(path, getWebBaseUrl());
+  if (!target) return;
+  void vscode.env.openExternal(vscode.Uri.parse(target));
 }
 
 export async function captureFromEditor(action: string | undefined): Promise<CanvasCapture | null> {

@@ -100,7 +100,9 @@ function canvasMessages(): Plugin {
       const namespaces = [...new Set([...collectCanvasNamespaces(entry, frontendSrc),
         ...collectCanvasNamespaces(path.join(frontendSrc, 'components/tools/CodeAuditVisualizer.tsx'), frontendSrc),
         // The Visualization panel's Knowledge view reads `knowledgeGraph.*` through this adapter.
-        ...collectCanvasNamespaces(path.join(frontendSrc, 'lib/knowledge/labels.ts'), frontendSrc)])];
+        ...collectCanvasNamespaces(path.join(frontendSrc, 'lib/knowledge/labels.ts'), frontendSrc),
+        // The Voice marketplace view (`voice.marketplace.*`) — the SAME component the web mounts.
+        ...collectCanvasNamespaces(path.join(frontendSrc, 'components/voice/VoiceMarketplace.tsx'), frontendSrc)])];
       const bundle: Record<string, Record<string, unknown>> = {};
       for (const locale of LOCALES) {
         const file = path.join(FRONTEND_SRC, `i18n/messages/${locale}.json`);
@@ -125,8 +127,9 @@ function canvasMessages(): Plugin {
  * `onnxruntime-web` locates its runtime with `new URL('….wasm', import.meta.url)`,
  * which Vite turns into an emitted asset — ~21 MB, for on-device voice cloning,
  * in every VSIX download and every update. The canvas instead points the runtime
- * at the BuilderForce origin (`CanvasHost.wasmBaseUrl` → `configureOnnxRuntime`
- * in `voiceEngine.ts`), which is set before the runtime initialises, so the
+ * at the BuilderForce origin (`CanvasHost.wasmBaseUrl` → `setOrtWasmBase` via
+ * `loadStudio()` in `studioLoader.ts`, applied by studio's `onnx-runtime-config`),
+ * which is set before the runtime initialises, so the
  * emitted copy is never requested. Dropping it at `generateBundle` is what makes
  * that saving real.
  *

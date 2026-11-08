@@ -22,6 +22,7 @@ export function canvasExecutiveActions(ctx: CanvasActionContext): BrainAction[] 
         limit: { type: 'number', minimum: 1, maximum: 100 },
       },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = raw as { useCaseId?: unknown; days?: unknown; limit?: unknown };
       // Resolved tolerantly, and against the contract THIS TURN is running when
@@ -121,6 +122,7 @@ export function canvasExecutiveActions(ctx: CanvasActionContext): BrainAction[] 
       },
       required: ['domain'],
     },
+    mutates: false,
     run: async (raw: unknown) => {
       if (persistence !== 'server') return { error: 'Executive domain data requires a saved, authenticated Creation Canvas session.' };
       const args = raw as { domain?: unknown; entity?: unknown; days?: unknown; limit?: unknown };

@@ -224,6 +224,13 @@ export interface StallInput {
   reviewGateDelegated?: boolean;
 }
 
+/** What a workspace-level refusal means, for the stall detail. One sentence each. */
+const WORKSPACE_REFUSAL_TEXT: Record<'cloud_run_limit' | 'tenant_token_limit' | 'execution_disabled', string> = {
+  cloud_run_limit: 'this workspace has used its monthly cloud-run allowance, so no run can start until the plan is upgraded or the allowance resets.',
+  tenant_token_limit: 'this workspace has used its token allowance, so autonomy is paused for every ticket it owns until the allowance resets or the plan is upgraded.',
+  execution_disabled: 'agent execution is switched off for this workspace, so nothing runs until a manager re-enables it in Settings.',
+};
+
 const NOT_STALLED = (cause: StallCause, detail: string): StallDiagnosis =>
   ({ stalled: false, cause, remedy: 'none', detail, escalated: false });
 
@@ -388,6 +395,43 @@ function classifyStall(input: StallInput): StallDiagnosis {
       return stalled(
         'capability_gap', 'escalate_human',
         `Stuck ${age}: every available agent lacks the capabilities this lane requires — a human must staff a capable agent.`,
+      );
+    // ── Refusals the dispatcher RECORDED (the census reads them from the ledger; the
+    // deep stage gets them from the live evaluator). Each used to fall through to the
+    // `never_started`/`unknown` labels below, which told the manager to re-dispatch a
+    // ticket that had been refused for a real reason it could not clear by dispatching.
+    case 'cloud_run_limit':
+    case 'tenant_token_limit':
+    case 'execution_disabled':
+      // A WORKSPACE condition, not a fact about this ticket — and not one the manager can
+      // lift (an allowance, a budget, a switch a manager set on purpose). `blocked` is the
+      // closest existing cause ("waiting on something outside the ticket"); the remedy is a
+      // person, because `dispatch` would only be refused again.
+      return stalled(
+        'blocked', 'escalate_human',
+        `Stuck ${age}: ${WORKSPACE_REFUSAL_TEXT[input.autoRunReason]}`,
+      );
+    case 'lane_requirement_gate':
+      // The gate asked a reviewer/producer and is waiting on them: the owed role is the
+      // blocker. With the owed roles known, the stage-sign-off branch below names them;
+      // without them, `coordinate` is the action that re-runs the gate's resolution.
+      if (input.stageSignoff && input.stageSignoff.roleNames.length > 0) break;
+      return stalled(
+        'awaiting_signoff', 'coordinate',
+        `Stuck ${age}: this lane's requirement gate is waiting on a required role to act — coordinating the ticket to resolve who owes it.`,
+      );
+    // `same_lane_reentry` is deliberately NOT a case: it falls through to the review-side
+    // and stage-sign-off diagnoses below (an owed role is the usual reason a served lane
+    // does not advance) and ends at `unknown → coordinate`, which is already the right
+    // remedy — re-coordinate to find the unmet step rather than dispatch into the same
+    // lane again. It never reaches the `never_started` labels because it implies a prior run.
+    case 'trigger_error':
+      // The dispatch attempt THREW. `dispatch` is the right retry (a transient fault clears
+      // on the next attempt) and the register's attempt ceiling hands a persistent one to a
+      // person, so the loop is bounded.
+      return stalled(
+        'unknown', 'dispatch',
+        `Stuck ${age}: the last dispatch attempt failed with an error before a run could start (see the ticket timeline for the error) — retrying the dispatch.`,
       );
     case 'run_cap_exhausted':
       return stalled(

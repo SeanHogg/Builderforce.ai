@@ -35,6 +35,7 @@ import {
 import { loadPlanVerdictsForTasks } from '../../application/planning/planVerdictStore';
 import { pmoVersionKey } from './pmoRoutes';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
+import { ADMISSION_REFUSALS, CONCURRENT_RUN_RETRY_AFTER_SECONDS } from '../../application/runtime/dispatchAdmission';
 import { dispatchCloudRunForTask, ENTITLEMENT_REFUSALS, type CloudDispatchOutcome, type CloudDispatchRefusalReason } from '../../application/runtime/dispatchCloudRun';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
@@ -93,7 +94,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // the brain / a raw API call) fires the SAME server-side trigger, kept alive past
   // the response via the request's `executionCtx`. Both the create and PATCH paths
   // funnel through here so neither can drift; the agent-advance path (a fourth
-  // status-writer) reuses the same `maybeAutoRunOnLaneEntry` from the runtime layer.
+  // status-writer) reuses the same `routeLaneEntry` door from the runtime layer.
   // `change` is the write behind an UPDATE; routeLaneEntry skips the whole evaluation
   // when it cannot change the outcome (mutationCanTriggerLaneEntry). Creates omit it.
   const fireLaneAutoRun = (
@@ -103,7 +104,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   ): void => {
     c.executionCtx.waitUntil((async () => {
       const tenantId = c.get('tenantId');
-      const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto';
+      const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+      const submittedBy = userId ?? 'system:lane-auto';
       // WHICH ENGINE runs the lane is `routeLaneEntry`'s decision, not this route's:
       //  • a lifecycle-managed board hands the ticket to the coordinated multi-role state
       //    machine (rewind to the earliest unmet required stage, run the right producer,
@@ -114,6 +116,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       //  • everything else keeps the direct lane trigger.
       await routeLaneEntry(c.env as Env, db, runtimeService, {
         tenantId, projectId: info.projectId, taskId: info.taskId, status: info.status, submittedBy,
+        // A request made by a PERSON (a board drag, the status dropdown) is an explicit choice: it may enter or re-enter a
+        // staged lane the system sweeps would leave alone. The workspace switch and token budget still apply.
+        ...(requestActor(c).actorUserId ? { force: true } : {}),
         onManagedBoard: async () => { await coordinateTicket(c.env as Env, db, runtimeService, { tenantId, taskId: info.taskId }); },
         ...(change ? { change } : {}),
       });
@@ -559,12 +564,13 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // entitlement refusals a payment actually clears.
     const refused = (outcome: CloudDispatchOutcome, overrode?: CloudDispatchRefusalReason) => {
       const reason = outcome.refusal?.reason ?? ('no_agent' satisfies AutoRunReason);
+      if (reason === 'concurrent_run_limit') c.header('Retry-After', String(CONCURRENT_RUN_RETRY_AFTER_SECONDS));
       return c.json({
         error: outcome.refusal?.message
           ?? 'The run could not be started and the dispatcher gave no reason — see the ticket\'s Lifecycle panel for the recorded verdict.',
         reason,
         ...(overrode ? { overrode } : {}),
-      }, ENTITLEMENT_REFUSALS.has(reason) ? 402 : 409);
+      }, ENTITLEMENT_REFUSALS.has(reason) ? 402 : reason === 'concurrent_run_limit' ? 429 : 409);
     };
 
     if (!evaln.candidate) {
@@ -652,7 +658,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       // failed outright. The person directing the run overrides that exactly as they
       // override an evaluator refusal above: same authority, same audit row, same
       // lifecycle-neutral run. Only an entitlement refusal stands.
-      if (!ENTITLEMENT_REFUSALS.has(reason)) {
+      if (!ENTITLEMENT_REFUSALS.has(reason) && !ADMISSION_REFUSALS.has(reason)) {
         const overridden = await dispatchOnHumanAuthority(
           `Run now: the role-attributed dispatch was refused (${reason}${outcome.refusal ? `: ${outcome.refusal.message}` : ''}); the person directing the run overrides.`,
         );

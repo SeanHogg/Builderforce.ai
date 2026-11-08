@@ -29,7 +29,6 @@ import {
 import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar/calendarService';
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
 import { loadExternalBusy, mergeBusy } from '../../application/calendar/calendarFreeBusy';
-import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
 import { findActiveCeremonyForMeeting } from '../../application/ceremony/ceremonyMeeting';
 import { recordCeremonyPresence } from '../../application/ceremony/concludeCeremony';
 import { BrainService } from '../../application/brain/BrainService';
@@ -40,6 +39,8 @@ import {
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 
 import { iceServers } from '../../application/meetings/iceServers';
+import { canJoinMediaRoom } from '../../application/meetings/mediaRoomAccess';
+import { canAccessMeeting, type MeetingCaller } from '../../application/meetings/meetingAccess';
 import { boundedIntParam } from './queryParams';
 import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 import { admitBodyClientResult } from './clientResultHttp';
@@ -98,14 +99,38 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
   r.use('*', authMiddleware);
 
+  /** The request's caller, as the context-free access checks take it. */
+  const callerOf = (c: Context<HonoEnv>): MeetingCaller => ({
+    tenantId: scope(c).tenantId,
+    userId: (c.get('userId') as string) ?? '',
+    role: c.get('role') as string | undefined,
+  });
+
   // ── Media signaling relay + ICE config ─────────────────────────────────────
   // WebRTC offers/answers/ICE candidates fan out over the shared ceremony relay
   // DO (keyed distinctly per media room). No domain data flows through it.
-  r.get('/rooms/:key/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `media:${c.req.param('key')}`));
+  // The key is authorised against its domain (see `mediaRoomAccess`) BEFORE the upgrade;
+  // an unauthorised or unknown key is the same 404, so keys cannot be probed.
+  r.get('/rooms/:key/ws', async (c) => {
+    const key = c.req.param('key');
+    if (!(await canJoinMediaRoom(db, c.env as Env, callerOf(c), key))) return c.json({ error: 'Not found' }, 404);
+    // The seat is the SERVER-verified user, never what the join frame claims (the DO
+    // prefers this over the client). A legacy `ceremony-<projectId>` key is an enumerable
+    // integer with no tenant in it, so its relay room is tenant-qualified.
+    const roomName = /^ceremony-\d+$/.test(key) ? `media:t${scope(c).tenantId}:${key}` : `media:${key}`;
+    return relayToRoom(c, c.env?.CEREMONY_ROOM, roomName, {
+      ref: `u:${(c.get('userId') as string | undefined) ?? 'anon'}`,
+      kind: 'human',
+    });
+  });
 
+  // TURN credentials are minted per caller and only for a room the caller may join:
+  // `?room=<key>` runs the same check as the signaling upgrade.
   r.get('/ice', async (c) => {
+    const room = c.req.query('room') ?? '';
+    if (!(await canJoinMediaRoom(db, c.env as Env, callerOf(c), room))) return c.json({ error: 'Not found' }, 404);
     const directOnly = c.req.query('mode') === 'direct-only';
-    const servers = await iceServers(c.env as Env);
+    const servers = await iceServers(c.env as Env, callerOf(c).userId);
     return c.json(applyMediaPrivacyMode(servers, directOnly));
   });
 
@@ -126,29 +151,6 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const canMutate = isManager(c) || m.createdBy === (c.get('userId') ?? '');
     if (!canMutate) return { error: 'Only the organizer or a manager can change this meeting' as const, code: 403 as const };
     return { meeting: m };
-  }
-
-  /**
-   * Authorization to VIEW/JOIN a meeting. Cross-tenant is already blocked (rows are
-   * fetched by tenantId). Within the tenant a caller may access a meeting when they
-   * are: a manager, the organizer, a listed attendee, or — for a project meeting —
-   * a member of that project's team. A tenant-wide meeting (no project) is open to
-   * any authenticated tenant member holding the link.
-   */
-  async function canAccess(
-    c: Context<HonoEnv>,
-    meeting: typeof meetings.$inferSelect,
-    attendees: Array<typeof meetingAttendees.$inferSelect>,
-  ): Promise<boolean> {
-    const userId = (c.get('userId') as string) ?? '';
-    if (isManager(c)) return true;
-    if (meeting.createdBy === userId) return true;
-    if (attendees.some((a) => a.memberRef === userId)) return true;
-    if (meeting.projectId != null) {
-      const members = await loadProjectTeamMembers(db, meeting.projectId, scope(c).tenantId);
-      return members.some((m) => m.memberRef === userId);
-    }
-    return true; // tenant-wide meeting: any tenant member with the link
   }
 
   // ── List ─────────────────────────────────────────────────────────────────────
@@ -293,7 +295,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     // Only an authorized member (organizer / attendee / manager / project member)
     // may join — the "meeting link" alone is not enough.
     const existingAttendees = await db.select().from(meetingAttendees).where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, id)));
-    if (!(await canAccess(c, m, existingAttendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
+    if (!(await canAccessMeeting(db, callerOf(c), m, existingAttendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
 
     const now = new Date();
     // First join flips a scheduled meeting live.
@@ -358,7 +360,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const [m] = await db.select().from(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
     if (!m) return { error: 'Not found' as const, code: 404 as const };
     const attendees = await db.select().from(meetingAttendees).where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, id)));
-    if (!(await canAccess(c, m, attendees))) return { error: 'Not authorized for this meeting' as const, code: 403 as const };
+    if (!(await canAccessMeeting(db, callerOf(c), m, attendees))) return { error: 'Not authorized for this meeting' as const, code: 403 as const };
     return { meeting: m, attendees };
   }
 
@@ -591,7 +593,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const detail = await hydrate(tenantId, c.req.param('id'));
     if (!detail) return c.json({ error: 'Not found' }, 404);
-    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
+    if (!(await canAccessMeeting(db, callerOf(c), detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
     return c.json(detail);
   });
 

@@ -25,6 +25,8 @@ import {
 } from './prReconciliationClassifier';
 import { githubCooldownFor, githubRetryAfterSeconds } from './githubCredentialCooldown';
 import { ReconciliationError } from './reconciliationError';
+import { invalidateStaleAcceptance } from '../kanban/validatorSlotBridge';
+import { isManagerCanary, logCanaryWouldAct } from '../manager/managerCanary';
 import { ReconciliationRunLedger, type ReconciliationPersistence } from './prReconciliationRunLedger';
 import { findBuiltinAgentId } from '../agent/builtinAgentRef';
 
@@ -502,9 +504,22 @@ export async function runPrTicketReconciliation(
     // is allowed to take unattended: closing HIGH-confidence close candidates.
     // The resolved numbers are recorded on the run so diagnostics always show the
     // exact allowlist the run used. HTTP callers cannot enable this flag.
-    const policyApproved = args.autoApplyCloseCandidates
+    let policyApproved = args.autoApplyCloseCandidates
       ? policyApprovedCloseNumbers(decisions)
       : [];
+    // PRD 23 canary: the unattended close is disabled; journal what it would have closed.
+    if (policyApproved.length > 0 && await isManagerCanary(db, { tenantId: args.tenantId, projectId: repo.projectId })) {
+      const held = new Set(policyApproved);
+      for (const item of decisions.filter((d) => held.has(d.pr.number))) {
+        const canonical = canonicalByNumber.get(item.pr.number);
+        if (!canonical) continue;
+        await logCanaryWouldAct(db, 'close', {
+          tenantId: args.tenantId, projectId: repo.projectId, prId: canonical.id,
+          prNumber: item.pr.number, taskId: item.taskId,
+        }, { reasonCodes: item.decision.reasonCodes });
+      }
+      policyApproved = [];
+    }
     const resolvedApproved = [...new Set([...approved, ...policyApproved])].sort((a, b) => a - b);
     // The run row is written once, in `finish`, carrying `resolvedApproved` — the exact
     // allowlist this run acted on. A policy-approved close is an action, so such a run
@@ -549,6 +564,13 @@ export async function runPrTicketReconciliation(
     let repairTicketsReopened = 0;
     let reviewTicketsQueued = 0;
     if (mode === 'apply') {
+      // PRD 23 §5.2: acceptance recorded against an older PR head is void. The webhook does
+      // this on `synchronize`; reading the heads here heals a missed delivery.
+      const prHeads = decisions
+        .filter(({ taskId, pr }) => taskId != null && pr.headOid)
+        .map(({ taskId, pr }) => ({ taskId: taskId as number, headSha: pr.headOid as string }));
+      if (prHeads.length) await invalidateStaleAcceptance(env, db, args.tenantId, prHeads);
+
       // A journal string is not a queue. Put green PRs into the lane consumed by
       // ManagerService.coordinatePullRequests so its reviewer/sign-off workflow
       // can actually see and assign them on the next sweep.

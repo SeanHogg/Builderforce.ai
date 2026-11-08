@@ -103,7 +103,11 @@ export function deriveRecordSyncStatus(input: SyncStatusInput): SyncStatus {
   if (newest?.deadLetter) return 'dead-letter';
   if (pending.some((event) => !receipts.some((receipt) => receipt.eventId === event.eventId))) return 'syncing';
   if (receipts.some((receipt) => isSettling(receipt) && noNewerPending(receipt, pending))) return 'synced';
-  if (receipts.length === 0 && pending.length === 0) return 'local';
+  // A record the server itself reported (ingested, never authored here) is already synced:
+  // it has no events and no receipts because nothing local ever needed sending.
+  if (receipts.length === 0 && pending.length === 0) {
+    return input.record.provenance?.evidence === 'server-observed' ? 'synced' : 'local';
+  }
   if (pending.length > 0) return 'syncing';
   if (receipts.some((receipt) => receipt.status === 'rejected')) return 'dead-letter';
   return 'syncing';

@@ -4,6 +4,7 @@ import { apiSocketUrl } from './apiSocket';
 import { createReconnector, openSocket, type Reconnector } from './polling/reconnectPolicy';
 import { meetingsApi } from './builderforceApi';
 import { acquireUserMedia, stopStream } from './mediaCapture';
+import { newNegotiation, offerTo, onAnswer, onCandidate, onOffer, type PeerNegotiation } from './peerNegotiation';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * useMediaRoom — mesh-P2P WebRTC for a live meeting / ceremony.
@@ -52,6 +53,8 @@ export interface MediaPathEvidence {
 
 interface PeerState {
   pc: RTCPeerConnection;
+  /** Perfect-negotiation flags for this pair (see `peerNegotiation`). */
+  negotiation: PeerNegotiation;
   name: string;
   ref: string;
   stream: MediaStream;
@@ -73,7 +76,7 @@ export interface MediaRoomTransport {
   /** Signaling WebSocket URL for this room. */
   signalingUrl: (roomKey: string, token: string) => string;
   /** ICE servers for this surface, honouring the privacy mode. */
-  ice: (mode: 'direct-only' | 'relay-fallback') => Promise<{ iceServers?: unknown[] }>;
+  ice: (mode: 'direct-only' | 'relay-fallback', roomKey: string) => Promise<{ iceServers?: unknown[] }>;
 }
 
 /** The tenant meetings relay — what Standup, Planning and ad-hoc calls use. */
@@ -81,7 +84,7 @@ const meetingsTransport: MediaRoomTransport = {
   getToken: getStoredTenantToken,
   signalingUrl: (roomKey, token) =>
     apiSocketUrl(`/api/meetings/rooms/${encodeURIComponent(roomKey)}/ws`, { token }),
-  ice: (mode) => meetingsApi.ice(mode),
+  ice: (mode, roomKey) => meetingsApi.ice(mode, roomKey),
 };
 
 /**
@@ -239,7 +242,9 @@ export function useMediaRoom(
     if (existing) return existing;
     const pc = new RTCPeerConnection({ iceServers: iceRef.current });
     const stream = new MediaStream();
-    const state: PeerState = { pc, name: peer.name || 'Guest', ref: peer.ref, stream, camOn: true, micOn: true, sharing: false };
+    // The relay stamps the authenticated seat as `u:<userId>`; every consumer of a tile's
+    // ref (roster merge, captions, speaking ring) keys on the bare user id.
+    const state: PeerState = { pc, negotiation: newNegotiation(myIdRef.current, peer.id), name: peer.name || 'Guest', ref: (peer.ref ?? '').replace(/^u:/, ''), stream, camOn: true, micOn: true, sharing: false };
     peersRef.current.set(peer.id, state);
 
     // Publish my local tracks to this peer. Someone joining WHILE I am sharing
@@ -288,12 +293,8 @@ export function useMediaRoom(
   }, [syncTiles]);
 
   const makeOffer = useCallback(async (peer: RoomPeer) => {
-    const { pc } = ensurePeer(peer);
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      send({ type: 'rtc-offer', to: peer.id, sdp: pc.localDescription });
-    } catch { /* renegotiation will retry on next presence event */ }
+    const { pc, negotiation } = ensurePeer(peer);
+    await offerTo(pc, negotiation, peer.id, send);
   }, [ensurePeer, send]);
 
   // Deterministic offerer: greater id initiates.
@@ -307,6 +308,9 @@ export function useMediaRoom(
 
     // Caption / agent-voice frames are broadcast server-side (agents have no socket)
     // so they carry no `from` — handle them before the peer-frame guard below.
+    // A relayed CLIENT frame carries `from`; server broadcasts never do. Only the latter
+    // may speak for a ref.
+    if ((type === 'caption' || type === 'agent-say') && from) return;
     if (type === 'caption') { markCaption(String(msg.ref ?? ''), String(msg.text ?? ''), false); return; }
     if (type === 'agent-say') { markCaption(String(msg.ref ?? ''), String(msg.text ?? ''), true); return; }
 
@@ -339,18 +343,13 @@ export function useMediaRoom(
 
     if (type === 'rtc-offer') {
       const state = ensurePeer({ id: from, name: String(msg.name ?? ''), kind: 'human', ref: String(msg.ref ?? '') });
-      try {
-        await state.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit));
-        const answer = await state.pc.createAnswer();
-        await state.pc.setLocalDescription(answer);
-        send({ type: 'rtc-answer', to: from, sdp: state.pc.localDescription });
-      } catch { /* ignore malformed */ }
+      await onOffer(state.pc, state.negotiation, from, msg.sdp as RTCSessionDescriptionInit, send);
     } else if (type === 'rtc-answer') {
       const p = peersRef.current.get(from);
-      if (p) { try { await p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp as RTCSessionDescriptionInit)); } catch { /* ignore */ } }
+      if (p) await onAnswer(p.pc, msg.sdp as RTCSessionDescriptionInit);
     } else if (type === 'rtc-ice') {
       const p = peersRef.current.get(from);
-      if (p && msg.candidate) { try { await p.pc.addIceCandidate(new RTCIceCandidate(msg.candidate as RTCIceCandidateInit)); } catch { /* ignore */ } }
+      if (p && msg.candidate) await onCandidate(p.pc, p.negotiation, msg.candidate as RTCIceCandidateInit);
     } else if (type === 'm-state') {
       const p = peersRef.current.get(from);
       if (p) { p.camOn = !!msg.camOn; p.micOn = !!msg.micOn; syncTiles(); }
@@ -386,7 +385,7 @@ export function useMediaRoom(
       }
       // 2) ICE config (best-effort; STUN default already set).
       try {
-        const cfg = await transport.ice(privacyMode);
+        const cfg = await transport.ice(privacyMode, roomKey);
         if (!cancelled && cfg.iceServers?.length) iceRef.current = cfg.iceServers as RTCIceServer[];
       } catch { /* keep default STUN */ }
 
@@ -470,10 +469,28 @@ export function useMediaRoom(
     const stream = localRef.current;
     if (!stream) return;
     const next = !camOn;
+    // Joined audio-only: there is no video track to enable. Turning the camera ON means
+    // ACQUIRING one, adding it to every peer connection and renegotiating — and camOn is
+    // claimed only once a track exists, so the tile never shows a camera that isn't there.
+    if (next && stream.getVideoTracks().length === 0) {
+      void acquireUserMedia({ video: true, audio: false }).then((video) => {
+        const track = video.getVideoTracks()[0];
+        if (!track || localRef.current !== stream) { stopStream(video); return; }
+        stream.addTrack(track);
+        for (const [id, peer] of peersRef.current) {
+          peer.pc.addTrack(track, stream);
+          void makeOffer({ id, name: peer.name, kind: 'human', ref: peer.ref });
+        }
+        setLocalStream(new MediaStream(stream.getTracks()));
+        setCamOn(true);
+        send({ type: 'm-state', camOn: true, micOn });
+      }).catch((e) => setMediaError(errorMessageRef.current(e)));
+      return;
+    }
     stream.getVideoTracks().forEach((t) => { t.enabled = next; });
     setCamOn(next);
     send({ type: 'm-state', camOn: next, micOn });
-  }, [camOn, micOn, send]);
+  }, [camOn, micOn, send, makeOffer]);
 
   const toggleMic = useCallback(() => {
     const stream = localRef.current;

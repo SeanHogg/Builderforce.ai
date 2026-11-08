@@ -58,3 +58,24 @@ describe("a block gate on a closed catalog", () => {
     }
   });
 });
+
+describe("a mutate-class block gate on a closed catalog", () => {
+  const gates: PolicyGate[] = [{ id: "ro", sideEffect: "mutate", effect: "block", reason: "read-only run" }];
+
+  it("withholds a host tool nobody declared (fail closed) and keeps one the surface declared read-only", async () => {
+    const r = run(gates, {
+      schemas: () => schemas(["page_lookup", "page_edit"]),
+      declared: (name: string) => (name === "page_lookup" ? { mutates: false } : undefined),
+    });
+    await runAgent({ task: TEST_TASK, policy: r.policy, ports: r.ports });
+
+    expect(names(r.requests[0])).toEqual(["page_lookup"]);
+  });
+
+  it("withholds both when the surface declares nothing", async () => {
+    const r = run(gates, { schemas: () => schemas(["page_lookup", "page_edit"]) });
+    await runAgent({ task: TEST_TASK, policy: r.policy, ports: r.ports });
+
+    expect(names(r.requests[0])).toEqual([]);
+  });
+});

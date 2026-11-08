@@ -30,6 +30,9 @@ import { candidateResumes, jobApplications } from '../../infrastructure/database
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { enterPipeline, moveCandidate, type PipelineEntryRef } from './pipeline';
 import { AtsError } from './atsError';
+import { resolveApplicantSource, type BoardSourceCatalog } from './applicantSource';
+import { readPostingBoardCatalog } from './postingDistributionStore';
+import { isUniqueViolation } from './postingDistributionSupport';
 import { ENTRY_STAGE, REJECTED_STAGE, pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
 import type { Env } from '../../env';
 import { excluded } from '../../infrastructure/database/upsert';
@@ -129,6 +132,16 @@ export interface RecordApplicationInput {
   /** The `candidate_resumes` row this was submitted with, when there is one. */
   resumeRef?: string | null;
   ownerRef?: string | null;
+  /** The job board's own id for this application — set only by a board import. */
+  externalId?: string | null;
+  /** The application's real date when the board knows it; defaults to now. */
+  appliedAt?: Date | null;
+  /**
+   * The boards `source` is folded against. A caller recording many applications to one
+   * posting (the board import) loads this ONCE and passes it; absent, it is read here
+   * from the posting's own distributions.
+   */
+  boards?: BoardSourceCatalog;
 }
 
 export interface RecordApplicationResult {
@@ -159,27 +172,60 @@ export async function recordApplication(
   const candidateRef = input.candidateRef.trim();
   if (!candidateRef) throw new AtsError('An application needs a candidate.', 400);
 
-  const source = (input.source ?? 'direct').trim().slice(0, 48) || 'direct';
-  const [row] = await db
-    .insert(jobApplications)
-    .values({
-      tenantId: input.tenantId,
-      jobPostingId,
-      candidateRef,
-      source,
-      status: ENTRY_STAGE,
-      coverLetter: input.coverLetter?.slice(0, 20_000) ?? null,
-      resumeRef: input.resumeRef ?? null,
-    })
-    .onConflictDoUpdate({
-      target: [jobApplications.tenantId, jobApplications.jobPostingId, jobApplications.candidateRef],
-      set: {
-        coverLetter: sql`coalesce(${excluded(jobApplications.coverLetter)}, ${jobApplications.coverLetter})`,
-        resumeRef: sql`coalesce(${excluded(jobApplications.resumeRef)}, ${jobApplications.resumeRef})`,
-        updatedAt: sql`now()`,
-      },
-    })
-    .returning({ id: jobApplications.id, appliedAt: jobApplications.appliedAt });
+  // The stored source IS the board key when the caller's spelling names a board, so the
+  // per-board count stays an indexed exact match. See `applicantSource.ts`.
+  // The posting's own boards carry their manifests' aliases (tenant-authored included).
+  const boards = input.boards ?? await readPostingBoardCatalog(db, input.tenantId, jobPostingId, env);
+  const source = resolveApplicantSource((input.source ?? 'direct').trim() || 'direct', boards).slice(0, 48);
+  const values = {
+    tenantId: input.tenantId,
+    jobPostingId,
+    candidateRef,
+    source,
+    externalId: input.externalId?.trim().slice(0, 255) || null,
+    ...(input.appliedAt ? { appliedAt: input.appliedAt } : {}),
+    status: ENTRY_STAGE,
+    coverLetter: input.coverLetter?.slice(0, 20_000) ?? null,
+    resumeRef: input.resumeRef ?? null,
+  };
+  const refresh = {
+    coverLetter: sql`coalesce(${excluded(jobApplications.coverLetter)}, ${jobApplications.coverLetter})`,
+    resumeRef: sql`coalesce(${excluded(jobApplications.resumeRef)}, ${jobApplications.resumeRef})`,
+    externalId: sql`coalesce(${jobApplications.externalId}, ${excluded(jobApplications.externalId)})`,
+    updatedAt: sql`now()`,
+  };
+  const returning = { id: jobApplications.id, appliedAt: jobApplications.appliedAt };
+
+  let row: { id: number; appliedAt: Date } | undefined;
+  if (values.externalId) {
+    // A board import carries the board's id: the arbiter is the (posting, source, board
+    // id) partial index of 1324, so a re-delivered application is refreshed in place.
+    // The SAME PERSON applying again under another board id collides on the candidate
+    // index instead (23505) — handled below as the refresh it is.
+    try {
+      [row] = await db
+        .insert(jobApplications)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [jobApplications.tenantId, jobApplications.jobPostingId, jobApplications.source, jobApplications.externalId],
+          targetWhere: sql`${jobApplications.externalId} is not null`,
+          set: refresh,
+        })
+        .returning(returning);
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+    }
+  }
+  if (!row) {
+    [row] = await db
+      .insert(jobApplications)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [jobApplications.tenantId, jobApplications.jobPostingId, jobApplications.candidateRef],
+        set: refresh,
+      })
+      .returning(returning);
+  }
   if (!row) throw new AtsError('The application could not be recorded.', 500);
 
   // An upsert cannot tell you which arm ran, and the answer matters to the caller (the

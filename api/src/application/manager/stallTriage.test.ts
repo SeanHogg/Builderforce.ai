@@ -40,8 +40,7 @@ describe('diagnoseStall — what is NOT stalled', () => {
     expect(d.cause).toBe('cooling_down');
   });
 
-  it('does not flag a ticket that changed status recently', () => {
-    expect(diagnoseStall(base({ idleMs: STALL_AFTER_MS - 1 })).stalled).toBe(false);
+  it('does not flag a ticket that changed status recently', () => {    expect(diagnoseStall(base({ idleMs: STALL_AFTER_MS - 1 })).stalled).toBe(false);
   });
 
   it('leaves a ticket the dispatcher is about to start alone', () => {
@@ -461,5 +460,44 @@ describe('poolRateLimited — the manager holds instead of spending a run it kno
   it('leaves a ticket that is not stalled at all untouched', () => {
     const d = diagnose({ isTerminal: true, poolRateLimited: true });
     expect(d.cause).toBe('moving');
+  });
+});
+
+describe('diagnoseStall — refusals the dispatcher recorded are modelled, not never_started', () => {
+  it('maps a thrown trigger (trigger_error) to a retry of the dispatch, not a generic never_started', () => {
+    const d = diagnose({ autoRunReason: 'trigger_error', everRan: false });
+    expect(d.stalled).toBe(true);
+    expect(d.remedy).toBe('dispatch');
+    expect(d.detail).toMatch(/failed with an error/);
+    expect(d.detail).not.toMatch(/despite being runnable/);
+  });
+
+  it.each(['cloud_run_limit', 'tenant_token_limit', 'execution_disabled'] as const)(
+    'escalates %s to a person — dispatching would only be refused again',
+    (autoRunReason) => {
+      const d = diagnose({ autoRunReason, everRan: false });
+      expect(d.stalled).toBe(true);
+      expect(d.cause).toBe('blocked');
+      expect(d.remedy).toBe('escalate_human');
+    },
+  );
+
+  it('names an outstanding requirement gate as awaiting sign-off', () => {
+    const d = diagnose({ autoRunReason: 'lane_requirement_gate', everRan: false });
+    expect(d.cause).toBe('awaiting_signoff');
+    expect(d.remedy).toBe('coordinate');
+    // With the owed roles known, the stage sign-off branch names them instead.
+    const named = diagnose({
+      autoRunReason: 'lane_requirement_gate', everRan: true,
+      stageSignoff: { roleNames: ['architect'], dispatchable: true },
+    });
+    expect(named.cause).toBe('awaiting_signoff');
+    expect(named.remedy).toBe('drive_signoff');
+  });
+
+  it('re-coordinates a same-lane re-entry (a ticket that has run) instead of re-dispatching into the same lane', () => {
+    const d = diagnose({ autoRunReason: 'same_lane_reentry', everRan: true });
+    expect(d.stalled).toBe(true);
+    expect(d.remedy).toBe('coordinate');
   });
 });

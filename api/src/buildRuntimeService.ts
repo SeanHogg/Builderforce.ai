@@ -5,7 +5,7 @@ import { reportCaughtError } from './application/observability/caughtErrorReport
  * RuntimeService.update is the ONE canonical execution-status transition: it moves
  * the `executions` row AND fans out every side-effect a status change owns — the
  * task-lane sync, ticket metrics ({@link syncExecutionTaskLifecycle}), the
- * autonomous next-lane trigger ({@link maybeAutoRunOnLaneEntry}), the audit event,
+ * autonomous next-lane trigger ({@link routeLaneEntry}), the audit event,
  * and the terminal-failure telemetry sink. Wiring it in one place means every
  * entry point that drives executions — the Worker request handler ({@link index})
  * and the durable cloud runner ({@link CloudRunnerDO}) — shares the IDENTICAL
@@ -25,7 +25,7 @@ import { signalCloudRunnerConcluded } from './application/runtime/cloudRunnerStu
 import { buildExecutionRepository } from './buildExecutionRepository';
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
-import { maybeAutoRunOnLaneEntry } from './application/swimlane/laneEntryTrigger';
+import { routeLaneEntry } from './application/swimlane/laneEntryTrigger';
 import { resolveNextTaskStatus, resolveRunningTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
 import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
@@ -66,11 +66,13 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // Autonomous chaining: when an agent advances its ticket into the next lane,
     // start that lane's configured agent via the SAME trigger a human board-drag
     // uses — so a multi-stage board (BA → Dev → QA …) flows without a human nudging
-    // each handoff. maybeAutoRunOnLaneEntry awaits the executor kickoff internally
-    // (the new agent's heavy loop then runs in its own DO/container), so awaiting it
-    // here outlives setup without depending on a request `executionCtx`.
+    // each handoff. routeLaneEntry (the one door: coordinator for a staged lane, else the
+    // one-agent trigger) awaits the executor kickoff internally (the new agent's heavy loop
+    // then runs in its own DO/container), so awaiting it here outlives setup without
+    // depending on a request `executionCtx`. No `onManagedBoard`: a managed board's runs
+    // advance through onManagedRunStatus, never through this chaining.
     onLaneEntry: async (info) => {
-      await maybeAutoRunOnLaneEntry(env, db, runtimeService, { ...info, submittedBy: 'system:lane-auto' });
+      await routeLaneEntry(env, db, runtimeService, { ...info, submittedBy: 'system:lane-auto' });
     },
     // Config-driven completion advance: move the ticket into the board's next
     // swimlane by position (not a hardcoded in_review), so a custom lane sequence

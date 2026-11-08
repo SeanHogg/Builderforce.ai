@@ -2,19 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createReaperFakeDb, newReaperFakeDbScript, type ReaperFakeDbScript } from './__fixtures__/staleExecutionReaperDb';
 
 /**
- * Cron-reaper → chat narration. The stale-execution reaper fails runs with bulk
- * UPDATEs, bypassing RuntimeService.update and therefore every chat-awareness hook —
- * so a run that died silently (hung host, evicted cloud isolate, dropped queue,
- * abandoned ask_human) previously NEVER reached the humans driving the linked Brain
- * chats: the conversation showed "started working on…" and then nothing, forever.
- *
- * These tests prove every reaped failure now fans out through
- * ChatTicketService.postRunMilestone (phase `failed`, per-execution idempotent) with
- * the ticket kind resolved from ONE batched `tasks` read.
+ * Cron-reaper -> canonical status fan-out. The stale-execution reaper fails runs with set-based
+ * UPDATEs, bypassing RuntimeService.update. A run that died silently (hung host, evicted cloud
+ * isolate, dropped queue, abandoned ask_human) must still owe the SAME side effects update() fires
+ * for a FAILED run - task-lane sync + ticket metrics, the managed callback, attribution, the audit
+ * event and the narration into the linked Brain chats - so each reaped row is handed to the shared
+ * fan-out (`RuntimeService.settleLandedFailures` -> executionLandedEffects). What the fan-out DOES
+ * with a row is proven in executionLandedEffects.test.ts; this file proves the reaper hands over
+ * every reaped row, from every sweep, in the shape the fan-out reads.
  */
 
 const h = vi.hoisted(() => ({
-  milestones: [] as Array<{ tenantId: number; input: Record<string, unknown> }>,
   reapedRunningRows: [] as Array<Record<string, unknown>>,
   reapedQueuedRows: [] as Array<Record<string, unknown>>,
   reapedPausedRows: [] as Array<Record<string, unknown>>,
@@ -27,7 +25,7 @@ function newScript(): ReaperFakeDbScript {
     // The idle probe flags exactly the sweeps that have rows, as the real EXISTS arms do.
     probe: () => ({
       host_running: h.reapedRunningRows.length > 0,
-      cloud_running: false, // stale cloud candidates — none in these tests
+      cloud_running: false, // stale cloud candidates - none in these tests
       queued: h.reapedQueuedRows.length > 0,
       paused: h.reapedPausedRows.length > 0,
       park_age: false,
@@ -53,96 +51,86 @@ vi.mock('../maintenance/parkAgeTimeout', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../maintenance/parkAgeTimeout')>()),
   runParkAgeTimeoutSweep: async () => ({ stale: 0, unparked: 0 }),
 }));
-vi.mock('../brain/ChatTicketService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../brain/ChatTicketService')>();
-  return {
-    ...actual,
-    ChatTicketService: class {
-      async postRunMilestone(tenantId: number, input: Record<string, unknown>) {
-        h.milestones.push({ tenantId, input });
-      }
-    },
-  };
-});
 
 import { reapStaleExecutions } from './staleExecutionReaper';
 import { PAUSED_ORPHAN_REASON } from './orphanReasons';
 
 const env = { NEON_DATABASE_URL: 'postgres://fake' } as unknown as Parameters<typeof reapStaleExecutions>[0];
 const NOW = Date.parse('2026-07-24T12:00:00.000Z');
+const settle = vi.fn(async () => undefined);
+const reap = () => reapStaleExecutions(env, NOW, createReaperFakeDb(script) as never, settle);
 
 beforeEach(() => {
-  h.milestones.length = 0;
   h.reapedRunningRows.length = 0;
   h.reapedQueuedRows.length = 0;
   h.reapedPausedRows.length = 0;
+  settle.mockClear();
   script = newScript();
 });
 
-describe('reapStaleExecutions — chat narration of silent deaths', () => {
-  it('narrates a reaped hung run as a `failed` milestone into the linked chats', async () => {
+describe('reapStaleExecutions - hand-off to the canonical failed-run fan-out', () => {
+  it('hands a reaped hung run to the fan-out with its ticket, agent attribution and reason', async () => {
     h.reapedRunningRows.push({
       id: 301, tenant_id: 4, agent_host_id: 9, payload: '{"cloudAgentRef":"agent-x"}',
-      error_message: 'Execution timed out — the agent did not report completion.', task_id: 55,
+      error_message: 'Execution timed out - the agent did not report completion.', task_id: 55, cloud_agent_ref: null,
     });
-    script.taskKinds.push({ id: 55, task_type: 'epic' });
 
-    await reapStaleExecutions(env, NOW);
+    await reap();
 
-    expect(h.milestones).toHaveLength(1);
-    expect(h.milestones[0]!.tenantId).toBe(4);
-    expect(h.milestones[0]!.input).toMatchObject({
-      kind: 'epic', ref: '55', phase: 'failed', executionId: 301,
-      agentRef: 'agent-x',
-      errorMessage: 'Execution timed out — the agent did not report completion.',
-    });
+    expect(settle).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledWith([{
+      id: 301, tenantId: 4, taskId: 55, payload: '{"cloudAgentRef":"agent-x"}',
+      cloudAgentRef: 'agent-x', agentHostId: 9,
+      errorMessage: 'Execution timed out - the agent did not report completion.',
+    }]);
   });
 
-  it('narrates an abandoned ask_human pause with its actionable release reason', async () => {
+  it('hands an abandoned ask_human pause over with its actionable release reason', async () => {
     h.reapedPausedRows.push({
       id: 77, tenant_id: 1, agent_host_id: null, payload: null,
-      error_message: PAUSED_ORPHAN_REASON, task_id: 12,
+      error_message: PAUSED_ORPHAN_REASON, task_id: 12, cloud_agent_ref: null,
     });
-    script.taskKinds.push({ id: 12, task_type: 'task' });
 
-    await reapStaleExecutions(env, NOW);
+    await reap();
 
-    expect(h.milestones).toHaveLength(1);
-    expect(h.milestones[0]!.input).toMatchObject({
-      kind: 'task', ref: '12', phase: 'failed', executionId: 77, errorMessage: PAUSED_ORPHAN_REASON,
-    });
+    expect(settle).toHaveBeenCalledWith([expect.objectContaining({ id: 77, taskId: 12, errorMessage: PAUSED_ORPHAN_REASON })]);
   });
 
-  it('narrates dropped-queue runs (never picked up) too', async () => {
-    h.reapedQueuedRows.push({
-      id: 88, tenant_id: 2, agent_host_id: null, payload: null,
-      error_message: 'Execution was never picked up by an agent within the dispatch window.', task_id: 30,
-    });
-    script.taskKinds.push({ id: 30, task_type: 'gap' });
+  it('hands dropped-queue runs (never picked up) over too, in ONE call across every sweep', async () => {
+    h.reapedRunningRows.push({ id: 1, tenant_id: 1, agent_host_id: 9, payload: null, error_message: 'x', task_id: 10, cloud_agent_ref: null });
+    h.reapedQueuedRows.push({ id: 88, tenant_id: 2, agent_host_id: null, payload: null, error_message: 'q', task_id: 30, cloud_agent_ref: 'agent-q' });
+    h.reapedPausedRows.push({ id: 3, tenant_id: 1, agent_host_id: null, payload: null, error_message: 'x', task_id: 12, cloud_agent_ref: null });
 
-    await reapStaleExecutions(env, NOW);
+    await reap();
 
-    expect(h.milestones).toHaveLength(1);
-    expect(h.milestones[0]!.input).toMatchObject({ kind: 'gap', ref: '30', phase: 'failed', executionId: 88 });
+    expect(settle).toHaveBeenCalledTimes(1);
+    const runs = settle.mock.calls[0]![0] as unknown as Array<{ id: number; cloudAgentRef: string | null }>;
+    expect(runs.map((r) => r.id).sort((a, b) => a - b)).toEqual([1, 3, 88]);
+    expect(runs.find((r) => r.id === 88)!.cloudAgentRef).toBe('agent-q');
   });
 
-  it('resolves ticket kinds with ONE batched tasks read across many reaped rows (no N+1)', async () => {
-    h.reapedRunningRows.push(
-      { id: 1, tenant_id: 1, agent_host_id: 9, payload: null, error_message: 'x', task_id: 10 },
-      { id: 2, tenant_id: 1, agent_host_id: 9, payload: null, error_message: 'x', task_id: 11 },
-    );
-    h.reapedPausedRows.push({ id: 3, tenant_id: 1, agent_host_id: null, payload: null, error_message: 'x', task_id: 12 });
-    script.taskKinds.push({ id: 10, task_type: 'task' }, { id: 11, task_type: 'epic' }, { id: 12, task_type: 'task' });
+  it('skips a run that served no ticket (nothing to sync or narrate)', async () => {
+    h.reapedRunningRows.push({ id: 5, tenant_id: 1, agent_host_id: 9, payload: null, error_message: 'x', task_id: null, cloud_agent_ref: null });
 
-    await reapStaleExecutions(env, NOW);
+    await reap();
 
-    expect(script.taskKindReads).toBe(1);
-    expect(h.milestones).toHaveLength(3);
+    expect(settle).toHaveBeenCalledWith([]);
   });
 
-  it('posts nothing (and skips the tasks read) when the sweep reaped nothing', async () => {
-    await reapStaleExecutions(env, NOW);
-    expect(h.milestones).toHaveLength(0);
-    expect(script.taskKindReads).toBe(0);
+  it('survives a failing fan-out: the sweep still returns its counts', async () => {
+    h.reapedRunningRows.push({ id: 6, tenant_id: 1, agent_host_id: 9, payload: null, error_message: 'x', task_id: 10, cloud_agent_ref: null });
+    settle.mockRejectedValueOnce(new Error('boom'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const res = await reap();
+
+    expect(res.failedRunning).toBe(1);
+    errorSpy.mockRestore();
+  });
+
+  it('hands over an empty list (and touches no other statement) when the sweep reaped nothing', async () => {
+    const res = await reap();
+    expect(res.failedRunning + res.failedQueued + res.failedPaused).toBe(0);
+    expect(settle).not.toHaveBeenCalled();
   });
 });

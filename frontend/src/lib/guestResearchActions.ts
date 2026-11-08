@@ -73,6 +73,7 @@ export const GUEST_RESEARCH_ACTIONS: BrainAction[] = [
       type: 'object', required: ['query'], additionalProperties: false,
       properties: { query: { type: 'string', description: 'What to search for, phrased as a search engine query.' } },
     },
+    mutates: false,
     run: (raw: unknown) => research('search', { query: String((raw as { query?: unknown })?.query ?? '') }),
   },
   {
@@ -82,6 +83,7 @@ export const GUEST_RESEARCH_ACTIONS: BrainAction[] = [
       type: 'object', required: ['url'], additionalProperties: false,
       properties: { url: { type: 'string', description: 'Absolute http(s) URL to read.' } },
     },
+    mutates: false,
     run: (raw: unknown) => research('fetch', { url: String((raw as { url?: unknown })?.url ?? '') }),
   },
   {
@@ -96,6 +98,7 @@ export const GUEST_RESEARCH_ACTIONS: BrainAction[] = [
         outline: { type: 'boolean', description: 'Also return a simplified boundary polygon. Use for a single enclosing region, not for every point.' },
       },
     },
+    mutates: false,
     run: (raw: unknown) => {
       const args = raw as { queries?: unknown; context?: unknown; countryCodes?: unknown; outline?: unknown };
       const queries = Array.isArray(args.queries)

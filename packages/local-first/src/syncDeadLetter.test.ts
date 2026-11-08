@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlatformPolicy } from './policy.js';
 import type { JournalEvent, SyncReceipt } from './records.js';
-import { countPending, createMemoryLocalFirstStore, selectPending, type LocalFirstStore } from './store.js';
+import { countPending, createMemoryLocalFirstStore, newLocalRecord, selectPending, type LocalFirstStore } from './store.js';
 import { wireDependencies } from './sync.js';
 import { loadMappedEntities } from './dependencyGraph.js';
 import { createSyncCoordinator, type SyncPushBatch } from './sync.js';
@@ -66,6 +66,25 @@ describe('sync dead-letters permanent refusals', () => {
     const kept = await store.read((tx) => tx.pending(BOUND));
     expect(kept).toHaveLength(1);
     expect(kept[0]?.deadLetter).toMatchObject({ reason: 'ticket_title_invalid' });
+    await coordinator.synchronize(BOUND);
+    expect(pushed).toHaveLength(1);
+  });
+
+  it('an unlink rejected with link_not_found is settled: no dead letter, no hold, and the local tombstone stays', async () => {
+    const store = createMemoryLocalFirstStore();
+    const live = newLocalRecord({ id: 'link-1', entityType: 'chat-ticket-link', payload: { chatClientId: 'c', ticketClientId: 't', linkType: 'linked' }, deviceId: 'd', destination: BOUND });
+    await store.transact(async (tx) => {
+      await tx.put({ ...live, deletedAt: AT });
+      await tx.append({
+        idempotencyKey: 'link-1', clientEntityId: 'link-1', entityType: 'chat-ticket-link', operation: 'delete',
+        schemaVersion: 1, occurredAt: AT, dependsOn: [], destination: BOUND, payload: null,
+      });
+    });
+    const { coordinator, pushed } = coordinatorFor(store, (batch) => batch.events.map((e) => receiptOf(e.eventId, 'rejected', 'link_not_found')));
+    await coordinator.synchronize(BOUND);
+    expect(await store.read((tx) => countPending(tx, BOUND))).toBe(0);
+    expect(await store.read((tx) => tx.pending(BOUND))).toEqual([]);
+    expect((await store.read((tx) => tx.get('chat-ticket-link', 'link-1')))?.deletedAt).toBe(AT);
     await coordinator.synchronize(BOUND);
     expect(pushed).toHaveLength(1);
   });

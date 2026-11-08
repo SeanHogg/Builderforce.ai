@@ -23,6 +23,7 @@ import {
   type Approval,
   type Execution,
   type SwimlaneAgent,
+  type BoardTicketOwner,
   type BoardDispatch, type MemberKind,
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
@@ -43,11 +44,13 @@ import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
 import { MemberProfileEditor } from './workforce/MemberProfileEditor';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
+import { TicketOwnerChips } from './board/TicketOwnerChips';
 import { hasActiveExecution } from './board/taskDeleteGuard';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
 import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
 import { useBoardConfig } from './board/useBoardConfig';
+import { BoardBudgetControl } from './board/BoardBudgetControl';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
@@ -90,6 +93,8 @@ interface BoardColumn {
   status: string;
   label: string;
   agents: SwimlaneAgent[];
+  /** Hosts owning open tickets here without being staffed on the lane. */
+  owners?: BoardTicketOwner[];
 }
 
 export interface TaskMgmtContentProps {
@@ -564,7 +569,7 @@ export function TaskMgmtContent({
 
   // Swimlanes + their configured agents for the selected board, shown discretely
   // in each column header. Only fetched for the board view of a single project.
-  const { board, lanes, agentsByLane, cloudRunAllowance, reload: reloadBoardConfig } = useBoardConfig(
+  const { board, lanes, agentsByLane, ownersByLane, cloudRunAllowance, reloadRosters: reloadBoardRosters } = useBoardConfig(
     effectiveProjectId,
     effectiveProjectId != null && view === 'board' && !compact,
   );
@@ -618,10 +623,10 @@ export function TaskMgmtContent({
     // …AND the board's CONFIG. `useBoardConfig` loaded once, so staffing a lane from the
     // config panel left the board's own column chips showing the pre-edit agent set until
     // a full page reload — the run STATUS on those chips was live (polled + pushed) while
-    // the agents they described were a load-time snapshot. Cheap: the same push already
-    // triggers a task refetch.
-    void reloadBoardConfig();
-  }, [load, refreshRuns, reloadBoardConfig]);
+    // the agents they described were a load-time snapshot. Only the live rosters are
+    // refetched (lane agents + ticket owners) — never the boards list / allowance.
+    void reloadBoardRosters();
+  }, [load, refreshRuns, reloadBoardRosters]);
   useRealtimeRoom(
     effectiveProjectId != null ? `/api/projects/${effectiveProjectId}/stream` : null,
     onRealtimeChange,
@@ -654,7 +659,7 @@ export function TaskMgmtContent({
     const covered = new Set<string>();
     for (const l of lanes) {
       if (covered.has(l.key)) continue;
-      cols.push({ id: l.id, status: l.key, label: l.name, agents: agentsByLane[l.id] ?? [] });
+      cols.push({ id: l.id, status: l.key, label: l.name, agents: agentsByLane[l.id] ?? [], owners: ownersByLane?.[l.id] ?? [] });
       covered.add(l.key);
     }
     // Surface any status still held by tasks but with no lane (e.g. after a lane
@@ -666,7 +671,7 @@ export function TaskMgmtContent({
       }
     }
     return cols.length > 0 ? cols : defaults();
-  }, [lanes, agentsByLane, tasks, statusLabel]);
+  }, [lanes, agentsByLane, ownersByLane, tasks, statusLabel]);
 
   // Order tickets within a lane by the AI Manager's computed backlog rank (rank 1 =
   // highest value × urgency), nulls last, so every lane shows the most-important work
@@ -1317,6 +1322,7 @@ export function TaskMgmtContent({
                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
                   </button>
+                  {board && <BoardBudgetControl boardId={board.id} buttonStyle={iconBtn} />}
                 </>
               );
             })()}
@@ -1583,7 +1589,7 @@ export function TaskMgmtContent({
                       <span>{tasksForStatus.length}</span>
                     </span>
                   </div>
-                  {column.agents.length > 0 && (
+                  {(column.agents.length > 0 || (column.owners?.length ?? 0) > 0) && (
                     <div
                       style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
                       title={tTask('swimlaneAgentsTitle')}
@@ -1601,6 +1607,7 @@ export function TaskMgmtContent({
                           />
                         );
                       })}
+                      <TicketOwnerChips owners={column.owners ?? []} />
                     </div>
                   )}
                 </div>

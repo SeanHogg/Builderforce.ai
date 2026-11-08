@@ -57,6 +57,7 @@ import {
 } from '../../application/knowledge/knowledgeNotifier';
 import { STANDARD_LIBRARY, standardItem, computeCoverage } from '../../application/knowledge/standardLibrary';
 import { canEditAccess, documentAccessFor, type DocAccess } from '../../application/knowledge/documentAccess';
+import { knowledgeText } from '../../application/knowledge/documentText';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
@@ -991,7 +992,13 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       `Respond with ONLY a JSON object (no markdown fence, no prose) of the shape: ` +
       `{"summary": string, "findings": [{"category": "inefficiency"|"gap"|"risk"|"clarity", "severity": "low"|"medium"|"high", "issue": string, "recommendation": string}], "improvedFlow": string}. ` +
       `"improvedFlow" is a concise GitHub-flavored Markdown rewrite of the procedure as a clearer, more efficient numbered flow. Keep findings specific and actionable.`;
-    const userMsg = `Title: ${doc.title}\n\n--- Document ---\n${doc.content}`;
+    // The editor sends its live document as model text (drawings already `[[bf-drawing:N]]`), so the
+    // placeholder numbers the model echoes back are the ones the client restores against. Editor-only
+    // route and the same trust as /ai-draft's client `existingContent`; capped, and still passed
+    // through knowledgeText so a raw drawing fence can never reach the model as coordinates.
+    const sent = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+    const clientText = typeof sent?.text === 'string' && sent.text.trim() ? sent.text.slice(0, ANALYSIS_CLIENT_TEXT_MAX) : null;
+    const userMsg = `Title: ${doc.title}\n\n--- Document ---\n${knowledgeText(clientText ?? doc.content)}`;
 
     const traceId = newTraceId();
     const analysisRequest = { system, user: userMsg, temperature: 0.4, maxTokens: ANALYSIS_MAX_TOKENS, useCase: 'knowledge_analysis', traceId };
@@ -1241,6 +1248,8 @@ const ANALYSIS_CATEGORIES: AnalysisCategory[] = ['inefficiency', 'gap', 'risk', 
 const ANALYSIS_SEVERITIES = ['low', 'medium', 'high'] as const;
 /** The reply carries a full Markdown rewrite of the procedure, so it is not a short one. */
 const ANALYSIS_MAX_TOKENS = 4096;
+/** The most client-supplied document text an analysis will take (characters). */
+const ANALYSIS_CLIENT_TEXT_MAX = 200_000;
 
 /**
  * Parse the model's analysis response into a validated shape. Tolerates a

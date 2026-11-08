@@ -4,6 +4,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ClickableCard } from '@/components/ClickableCard';
 import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
+import { canManageIntegrations } from '@/components/integrations/canManageIntegrations';
 import { ConnectorBuilder } from '@/components/connectors/ConnectorBuilder';
 import { Icon } from '@/components/ui/Icon';
 import {
@@ -74,7 +75,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
   const t = useTranslations('connectors');
   const confirm = useConfirm();
   const role = getStoredTenant()?.role;
-  const canManage = role === 'owner' || role === 'manager';
+  const canManage = canManageIntegrations(role);
 
   const [catalog, setCatalog] = useState<ConnectorSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -426,7 +427,7 @@ export function ConnectorConnectionManager({ connectorKey, onChanged }: {
 }) {
   const t = useTranslations('connectors');
   const role = getStoredTenant()?.role;
-  const canManage = role === 'owner' || role === 'manager';
+  const canManage = canManageIntegrations(role);
   const [detail, setDetail] = useState<ConnectorDetail | null>(null);
   const [failed, setFailed] = useState(false);
 

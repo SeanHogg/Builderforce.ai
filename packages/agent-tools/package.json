@@ -19,7 +19,9 @@
     "./node-desktop": "./src/node-desktop.ts",
     "./node-tree-sitter": "./src/node-tree-sitter.ts",
     "./node-research": "./src/node-research.ts",
-    "./node-prefetch": "./src/node-prefetch.ts"
+    "./node-prefetch": "./src/node-prefetch.ts",
+    "./node-local-sqlite": "./src/node-local-sqlite.ts",
+    "./node-knowledge-store": "./src/node-knowledge-store.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -27,8 +29,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.55",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.55",
+    "@seanhogg/builderforce-memory": "^2026.10.56",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.56",
     "tree-sitter-wasms": "^0.1.11",
     "web-tree-sitter": "^0.22.6"
   },

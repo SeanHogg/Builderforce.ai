@@ -17,12 +17,11 @@
  * every event at less than it cost, a loss that scales exactly with usage.
  */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { ledgerEntries } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Denomination } from './denominations';
+import { accountLedger } from './accountLedger';
+import type { LedgerAccount } from './ledgerAccount';
 
 export interface PrepaidMovement {
   tenantId: number;
@@ -62,76 +61,24 @@ export interface PrepaidBalance {
   statement(db: Db, tenantId: number, limit?: number): Promise<PrepaidStatementRow[]>;
 }
 
-/** The balance of `denomination`, cached under `cachePrefix`. */
+/** The balance of `denomination`, cached under `cachePrefix`. The account is the
+ *  tenant's own — {@link accountLedger} is the machine, this fixes whose account. */
 export function prepaidBalance(denomination: Denomination, cachePrefix: string): PrepaidBalance {
-  const balanceKey = (tenantId: number) => `${cachePrefix}:balance:t:${tenantId}`;
-  const account = (tenantId: number) => and(
-    eq(ledgerEntries.tenantId, tenantId),
-    eq(ledgerEntries.accountKind, 'tenant'),
-    eq(ledgerEntries.accountRef, String(tenantId)),
-    eq(ledgerEntries.denomination, denomination),
-  );
-
-  async function move(db: Db, env: Env, input: PrepaidMovement, sign: 1 | -1): Promise<boolean> {
-    const amount = Math.ceil(input.amount);
-    if (amount <= 0) return false;
-    const inserted = await db.insert(ledgerEntries).values({
-      tenantId: input.tenantId,
-      accountKind: 'tenant',
-      accountRef: String(input.tenantId),
-      denomination,
-      amount: String(sign * amount),
-      entryKind: sign > 0 ? 'grant' : 'spend',
-      reference: input.reference,
-      memo: input.memo,
-      metadata: input.metadata ?? null,
-    }).onConflictDoNothing().returning({ id: ledgerEntries.id });
-
-    if (inserted.length === 0) return false;
-    await invalidateCached(env, balanceKey(input.tenantId));
-    return true;
-  }
-
-  const balance: PrepaidBalance['balance'] = (db, env, tenantId) =>
-    getOrSetCached(env, balanceKey(tenantId), async () => {
-      const [row] = await db
-        .select({ total: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)` })
-        .from(ledgerEntries)
-        .where(account(tenantId));
-      return Math.round(Number(row?.total ?? 0));
-    }, { kvTtlSeconds: 30 });
+  const tenantAccount = (tenantId: number): LedgerAccount => ({ kind: 'tenant', ref: String(tenantId) });
+  // The cache key predates accountLedger; keep it byte-stable.
+  const ledger = accountLedger(denomination, cachePrefix, (tenantId) => `${cachePrefix}:balance:t:${tenantId}`);
+  const balance: PrepaidBalance['balance'] = (db, env, tenantId) => ledger.balance(db, env, tenantId, tenantAccount(tenantId));
 
   return {
     balance,
-    credit: (db, env, input) => move(db, env, input, 1),
-    debit: (db, env, input) => move(db, env, input, -1),
+    credit: (db, env, input) => ledger.credit(db, env, tenantAccount(input.tenantId), input),
+    debit: (db, env, input) => ledger.debit(db, env, tenantAccount(input.tenantId), input),
     async reserve(db, env, tenantId, amount) {
       const current = await balance(db, env, tenantId);
       const required = Math.ceil(amount);
       if (current < required) return { ok: false, reason: 'insufficient_credit', balance: current, required };
       return { ok: true, balance: current };
     },
-    async statement(db, tenantId, limit = 50) {
-      const rows = await db
-        .select({
-          id: ledgerEntries.id,
-          amount: ledgerEntries.amount,
-          entryKind: ledgerEntries.entryKind,
-          memo: ledgerEntries.memo,
-          occurredAt: ledgerEntries.occurredAt,
-        })
-        .from(ledgerEntries)
-        .where(account(tenantId))
-        .orderBy(desc(ledgerEntries.occurredAt), desc(ledgerEntries.id))
-        .limit(Math.min(Math.max(limit, 1), 200));
-
-      return rows.map((row) => ({
-        id: Number(row.id),
-        amount: Math.round(Number(row.amount)),
-        kind: row.entryKind,
-        memo: row.memo,
-        occurredAt: (row.occurredAt instanceof Date ? row.occurredAt : new Date(row.occurredAt)).toISOString(),
-      }));
-    },
+    statement: (db, tenantId, limit) => ledger.statement(db, tenantId, tenantAccount(tenantId), limit),
   };
 }

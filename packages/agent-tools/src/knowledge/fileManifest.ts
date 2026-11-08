@@ -1,12 +1,12 @@
 /**
- * knowledge/fileManifest.ts — a root's review `IngestManifest` (and its local snapshot's
- * name) as files in the workspace's `.builderforce/knowledge/`, for every host that
- * reviews on a disk (VS Code, on-prem). File names follow the ONE root-file rule
- * (`rootFileStem`, shared with the knowledge index's `.idx` files). Pure over
- * {@link KnowledgeFiles}.
+ * knowledge/fileManifest.ts — the file names under the workspace's `.builderforce/knowledge/`
+ * (the ONE root-file rule, `rootFileStem`, shared with the knowledge index's `.idx` files), the
+ * {@link KnowledgeFiles} port, and the legacy root-id move. A root's review manifest and local graph
+ * are rows in the SQLite store (`node-knowledge-store`); the `<stem>.json`, `<stem>.manifest.json`
+ * and `<stem>.extracted.jsonl` names remain only so that store can import and rename them. Pure
+ * over {@link KnowledgeFiles}.
  */
 
-import type { ChunkFingerprint, IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import { rootFileStem } from './index/persistence.js';
 
 /** Named text files in one folder (`.builderforce/knowledge/`). */
@@ -37,42 +37,6 @@ export const analysisPendingFileName = (rootId: string): string => `${rootFileSt
 /** A review run's record (PRD 41 A8), in the `runs/` folder; the root's ordered list of them is `runsIndexFileName`. */
 export const runFileName = (runId: string): string => `runs/${runId}.json`;
 export const runsIndexFileName = (rootId: string): string => `runs/${rootFileStem(rootId)}.index.json`;
-
-type ManifestRecord = Record<string, ChunkFingerprint[]>;
-
-/** The root's review manifest, persisted whole on every change (it is small), writes serialized. */
-export function fileManifest(files: KnowledgeFiles, name: string): IngestManifest {
-    let record: ManifestRecord | undefined;
-    let queue: Promise<unknown> = Promise.resolve();
-    const load = async (): Promise<ManifestRecord> => {
-        if (!record) {
-            try {
-                const parsed = JSON.parse((await files.read(name)) ?? '{}') as unknown;
-                record = parsed && typeof parsed === 'object' ? (parsed as ManifestRecord) : {};
-            } catch {
-                record = {}; // A corrupt manifest plans every file as changed: slower, never wrong.
-            }
-        }
-        return record;
-    };
-    const mutate = (fn: (r: ManifestRecord) => void): Promise<void> => {
-        const run = queue.then(async () => {
-            const r = await load();
-            fn(r);
-            await files.write(name, JSON.stringify(r));
-        });
-        queue = run.catch(() => undefined);
-        return run;
-    };
-    return {
-        async get(sourceId) {
-            await queue;
-            return (await load())[sourceId];
-        },
-        set: (sourceId, fingerprints) => mutate((r) => { r[sourceId] = fingerprints; }),
-        delete: (sourceId) => mutate((r) => { delete r[sourceId]; }),
-    };
-}
 
 /** Fields that hold a person's or the model's words, never a root id. */
 const PROSE_FIELDS: ReadonlySet<string> = new Set(['title', 'label', 'content', 'quote', 'text', 'name', 'claim']);

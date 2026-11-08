@@ -459,7 +459,13 @@ On disk, the store becomes:
   snapshot.json                  # the PRD 38 KnowledgeSnapshot, now a projection rebuilt from the above
 ```
 
+- **Deviation (2026-11-08, G03 as built).** There is no `objects/` directory and no `snapshot.json`.
+  The extract bodies live in an `extracted(hash PRIMARY KEY, json)` table in `index.sqlite`, loaded
+  lazily per hash, so nothing needs a durable file writer, a sweep or a reference table. The
+  `KnowledgeSnapshot` projection is memory's `canonicalDump(store)`, read on demand (it is not
+  kept on disk). The file is one per workspace folder, not one per root: rows carry their root id.
 - Object writes use the existing `writeDurably` (`packages/local-first/src/durableWrite.ts:38`).
+  (Superseded by the deviation above: there are no object files.)
 - **Migration.** The `.builderforce/knowledge/<stem>.*` layout is shared with the knowledge
   index and the on-prem host (`knowledgeStores.ts:24-25`). WS2 migrates all three readers:
   - On first open, the old snapshot is imported into the new store and renamed `*.migrated`.

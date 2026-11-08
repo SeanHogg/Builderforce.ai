@@ -14,16 +14,14 @@ import { DraftMap } from './draftMap.js';
 import { CommittedState, PendingKeyIndex, mappingKey, recordKey } from './storeState.js';
 import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type ScanPendingVisit, type ScanVisit } from './storeContract.js';
 import { clone } from './clone.js';
+import { hashPayload } from './payloadHash.js';
 
-function hashPayload(payload: unknown): string {
-  const text = JSON.stringify(payload) ?? 'null';
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
-}
+/**
+ * The last-pull instant is stored beside the cursor, in the same map, under a key no
+ * destination key can equal (a destination key never contains `@`, which `encodeURIComponent`
+ * escapes), so it rides the existing delta / snapshot / journal paths unchanged.
+ */
+const lastPullKey = (destKey: string): string => `lastPullAt@${destKey}`;
 
 export class Transaction implements LocalFirstTransaction {
   private readonly records: DraftMap<LocalRecord>;
@@ -204,15 +202,23 @@ export class Transaction implements LocalFirstTransaction {
     return clone([...this.conflictRows.values()]);
   }
 
-  async setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void> {
+  async setCursor(destination: EntityDestination, cursor: string | undefined, pulledAt?: string): Promise<void> {
     this.assertMutable();
     const key = destinationKey(destination);
     if (cursor === undefined) this.cursors.delete(key);
     else this.cursors.set(key, cursor);
+    // `pulledAt` given: that pull completed, whatever cursor it left. Both absent is the
+    // resnapshot / reset path: the pull state is cleared together.
+    if (pulledAt !== undefined) this.cursors.set(lastPullKey(key), pulledAt);
+    else if (cursor === undefined) this.cursors.delete(lastPullKey(key));
   }
 
   async cursor(destination: EntityDestination): Promise<string | undefined> {
     return this.cursors.get(destinationKey(destination));
+  }
+
+  async lastPullAt(destination: EntityDestination): Promise<string | undefined> {
+    return this.cursors.get(lastPullKey(destinationKey(destination)));
   }
 
   /** Everything this transaction changed, as one delta. Empty when it wrote nothing. */

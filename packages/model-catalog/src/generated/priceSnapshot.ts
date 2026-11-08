@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-08T03:38:46.371Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-08T09:31:41.261Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -17,7 +17,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 3e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.662e-7, 0.0000101398],
+  "~moonshotai/kimi-latest": [1.824e-7, 0.0000093388],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -94,7 +94,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v4-flash-0731": [4.34e-8, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [4.8e-8, 1.44e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [4.4e-7, 0.00000132],
-  "deepseek/deepseek-v4-pro": [9e-7, 0.0000015],
+  "deepseek/deepseek-v4-pro": [3.32688e-7, 6.65376e-7],
   "deepseek/deepseek-v4-pro-0813": [1.11e-7, 0.00000444],
   "deepseek/deepseek-v4.1-flash": [5.1e-8, 5.67e-7],
   "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
@@ -148,9 +148,6 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 1.1e-7],
   "ibm-granite/granite-4.2-8b": [6e-8, 2.5e-7],
-  "inception/mercury-2": [2.5e-7, 7.5e-7],
-  "inception/mercury-2.5": [4e-8, 1.5e-7],
-  "inception/mercury-3": [1e-7, 3.5e-7],
   "inclusionai/ling-3.0-flash": [2.1e-8, 6.3e-8],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 1.8e-7],
   "inclusionai/ling-3.0-tiny": [1.5e-8, 4.5e-8],
@@ -218,7 +215,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "moonshotai/kimi-k2.6": [6.5e-7, 0.00000341],
   "moonshotai/kimi-k2.7-code": [6e-7, 0.0000035],
   "moonshotai/kimi-k3": [1.92e-7, 0.000016],
-  "moonshotai/kimi-k3:batch": [0.000001084, 0.000006],
+  "moonshotai/kimi-k3:batch": [9.97e-7, 0.000006],
   "moonshotai/kimi-k3.1-pro": [0.000002, 0.00001],
   "morph/morph-v3-fast": [8e-7, 0.0000012],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -326,7 +323,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [2.7e-8, 1e-7],
+  "openai/gpt-oss-120b": [2.6e-8, 9.7e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],

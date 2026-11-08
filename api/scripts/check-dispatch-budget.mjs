@@ -44,6 +44,7 @@ import ts from 'typescript';
 
 /** Functions that can start a billable agent run. */
 const DISPATCHERS = new Set([
+  'routeLaneEntry', // the one door into a lane; `maybeAutoRunOnLaneEntry` behind it is router-only (see SINGLE_DOOR below)
   'maybeAutoRunOnLaneEntry',
   'dispatchCloudRunForTask',
   'driveOutstandingSignoffs',
@@ -88,6 +89,16 @@ const ALLOWLIST = new Map([
   ],
 ]);
 
+/**
+ * SINGLE DOOR: `routeLaneEntry` decides which engine runs a lane (the manager for a managed
+ * board, the SwimlaneCoordinator for a staged lane, else the one-agent trigger). The one-agent
+ * trigger `maybeAutoRunOnLaneEntry` is exported for the router and its own tests only; a
+ * production module importing it is a second door that bypasses the coordinator.
+ */
+const SINGLE_DOOR_IMPORT = 'maybeAutoRunOnLaneEntry';
+const SINGLE_DOOR_MODULE = 'laneEntryTrigger';
+const SINGLE_DOOR_OWNER = path.join('src', 'application', 'swimlane', 'laneEntryTrigger.ts');
+
 const sourceRoot = path.resolve('src');
 const files = [];
 function walk(dir) {
@@ -107,10 +118,39 @@ const inScope = (file) => {
 const violations = [];
 for (const filePath of files) {
   const rel = path.relative(process.cwd(), filePath);
+  const source = fs.readFileSync(filePath, 'utf8');
+  if (rel !== SINGLE_DOOR_OWNER && (source.includes(SINGLE_DOOR_IMPORT) || source.includes(SINGLE_DOOR_MODULE))) {
+    const probe = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const flag = (node, how) => {
+      const { line } = probe.getLineAndCharacterOfPosition(node.getStart(probe));
+      violations.push(
+        `${rel}:${line + 1} ${how} ${SINGLE_DOOR_IMPORT}: enter a lane through routeLaneEntry (laneEntryTrigger.ts), `
+        + 'which picks the manager / coordinator / one-agent engine. Omit onManagedBoard from inside the manager.',
+      );
+    };
+    const namesDoor = (specifiers) => specifiers.some((e) => (e.propertyName ?? e.name).text === SINGLE_DOOR_IMPORT);
+    const isDoorModule = (spec) => spec && ts.isStringLiteralLike(spec) && /(^|\/)laneEntryTrigger(\.[a-z]+)?$/.test(spec.text);
+    const scan = (node) => {
+      // import { maybeAutoRunOnLaneEntry } from '…'
+      if (ts.isImportDeclaration(node)) {
+        const named = node.importClause?.namedBindings;
+        if (named && ts.isNamedImports(named) && namesDoor(named.elements)) flag(node, 'imports');
+      }
+      // export { maybeAutoRunOnLaneEntry } from '…'  (a re-export is a second door in one hop)
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier && node.exportClause && ts.isNamedExports(node.exportClause)
+        && namesDoor(node.exportClause.elements)) flag(node, 're-exports');
+      // import('…/laneEntryTrigger') - a dynamic import hands back the whole module, so the door comes with it.
+      if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && isDoorModule(node.arguments[0])) {
+        flag(node, 'dynamically imports the module that exports');
+      }
+      ts.forEachChild(node, scan);
+    };
+    scan(probe);
+  }
   if (!inScope(filePath) || ALLOWLIST.has(rel)) continue;
 
   const sourceFile = ts.createSourceFile(
-    filePath, fs.readFileSync(filePath, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+    filePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
   );
 
   const text = sourceFile.getFullText();

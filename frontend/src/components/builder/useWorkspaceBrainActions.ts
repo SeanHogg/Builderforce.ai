@@ -85,6 +85,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
         },
         required: ['path', 'content'],
       },
+      mutates: true,
       run: async ({ path, content }: { path: string; content: unknown }) => {
         if (!path) return { error: 'A file path is required.' };
         // Models often emit a structured body (e.g. package.json) as an object —
@@ -101,6 +102,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
         properties: { code: { type: 'string', description: 'New full contents for the open file' } },
         required: ['code'],
       },
+      mutates: true,
       run: async ({ code }: { code: unknown }) => {
         const res = liveRef.current.targets.applyCodeToActiveFile(coerceFileContent(code));
         return res.ok ? { applied: liveRef.current.targets.activeFile } : { error: res.reason };
@@ -114,6 +116,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
         properties: { text: { type: 'string', description: 'The lines to narrate in the selected voice' } },
         required: ['text'],
       },
+      mutates: true,
       run: async ({ text }: { text: string }) => {
         if (liveRef.current.modality !== 'voice') return { error: 'The project is not in Voice modality.' };
         liveRef.current.targets.setVoiceText(text ?? '');
@@ -128,6 +131,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
         properties: { prd: { type: 'string', description: 'The full PRD in markdown' } },
         required: ['prd'],
       },
+      mutates: true,
       run: async ({ prd }: { prd: string }) => {
         if (!prd?.trim()) return { error: 'PRD content is empty.' };
         const { projectId: specsProjectId } = liveRef.current;
@@ -163,6 +167,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
         },
         required: ['tasks'],
       },
+      mutates: true,
       run: async ({ tasks }: { tasks: Array<{ title: string; description?: string }> }) => {
         const list = Array.isArray(tasks) ? tasks.filter(t => t?.title?.trim()) : [];
         if (list.length === 0) return { error: 'No tasks provided.' };

@@ -10,8 +10,10 @@ import {
   VoiceCloneConsentRequired,
   VoiceCloneForbidden,
   VoiceCloneNotFound,
+  VoiceCloneSynthesisConflict,
 } from './voiceCloneService';
 import {
+  voiceClipProvenance,
   studioVoiceCloneLicenses,
   studioVoiceClones,
   studioVoiceovers,
@@ -80,6 +82,8 @@ function cloneRow(over: Partial<typeof studioVoiceClones.$inferSelect> = {}) {
 
 const ENV_WITH_PROVIDER: Env = {
   VOICE_CLONE_TTS_URL: 'https://tts.example/synthesize',
+  // Provenance signing key (falls back from VOICE_PROVENANCE_SECRET).
+  JWT_SECRET: 'test-secret',
   UPLOADS: {
     get: async () => ({ arrayBuffer: async () => new ArrayBuffer(8), httpMetadata: { contentType: 'audio/wav' } }),
     put: async () => undefined,
@@ -218,5 +222,39 @@ describe('synthesizeForClone gates', () => {
     expect(ledger).toBeTruthy();
     // 2000ms → ceil(2s) * default 5 mc/s = 10 millicents
     expect((ledger!.values as { costUsdMillicents: number }).costUsdMillicents).toBe(10);
+  });
+});
+
+describe('synthesizeForClone — race loser', () => {
+  const synth = () => vi.fn(async () =>
+    new Response(
+      JSON.stringify({ audio_base64: btoa('AUDIO'), content_type: 'audio/wav', duration_ms: 2000, word_timestamps: [] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+  const loserDb = (provenance: unknown[]) => {
+    let overSelects = 0;
+    return fakeDb({
+      selectByTable: new Map<unknown, unknown[] | (() => unknown[])>([
+        [studioVoiceClones, [cloneRow()]],
+        // 1st read: the L3 miss; 2nd read: the winner's row.
+        [studioVoiceovers, () => (overSelects++ === 0 ? [] : [{ id: 55, audioKey: 'w.wav', durationMs: 900, wordTimestamps: [] }])],
+        [voiceClipProvenance, provenance],
+      ]),
+      returningByTable: new Map<unknown, unknown[]>([[studioVoiceovers, []]]), // insert lost the race
+    });
+  };
+
+  it('regression: a loser never returns a winner whose clip was withdrawn (no signed provenance)', async () => {
+    vi.stubGlobal('fetch', synth());
+    await expect(
+      synthesizeForClone(loserDb([]), ENV_WITH_PROVIDER, { cloneId: 7, tenantId: 1, userId: 'u1', text: 'race one' }),
+    ).rejects.toBeInstanceOf(VoiceCloneSynthesisConflict);
+  });
+
+  it('returns the winner when its provenance is signed', async () => {
+    vi.stubGlobal('fetch', synth());
+    const row = { manifest: { clipId: 'c' }, signature: 's', tenantId: 1, cloneId: 7, voiceoverId: 55, watermarked: true };
+    const res = await synthesizeForClone(loserDb([row]), ENV_WITH_PROVIDER, { cloneId: 7, tenantId: 1, userId: 'u1', text: 'race two' });
+    expect(res).toMatchObject({ voiceoverId: 55, cached: true });
   });
 });

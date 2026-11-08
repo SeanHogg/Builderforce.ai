@@ -39,6 +39,23 @@ describe('classifyBulkAutoRunReason', () => {
       .toBe('terminal_lane');
   });
 
+  it('prefers the dispatcher\'s RECORDED refusal over will_run, and the diagnosis stops saying never_started', () => {
+    const runnable = { lane: { gate: 'auto', isTerminal: false, staffed: true } };
+    expect(classifyBulkAutoRunReason(facts({ ...runnable, recordedRefusal: 'capability_mismatch' })))
+      .toBe('capability_mismatch');
+    // The pre-fix label: a runnable-looking never-ran ticket was "never_started".
+    expect(censusDiagnose(facts({ ...runnable }), SIGNOFF_OFF).cause).toBe('never_started');
+    const d = censusDiagnose(facts({ ...runnable, recordedRefusal: 'cloud_run_limit' }), SIGNOFF_OFF);
+    expect(d.cause).not.toBe('never_started');
+    expect(d.stalled).toBe(true);
+  });
+
+  it('never lets a recorded refusal override a verdict the ladder DERIVES', () => {
+    expect(classifyBulkAutoRunReason(facts({
+      lane: { gate: 'human', isTerminal: false, staffed: true }, recordedRefusal: 'capability_mismatch',
+    }))).toBe('human_gate');
+  });
+
   it('reports no_agent when neither the lane nor an owner can run it', () => {
     expect(classifyBulkAutoRunReason(facts())).toBe('no_agent');
   });

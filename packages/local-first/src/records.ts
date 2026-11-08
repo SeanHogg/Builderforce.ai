@@ -16,6 +16,8 @@ export type LocalEntityType =
   | 'attachment-manifest'
   | 'policy-snapshot'
   | 'remediation'
+  /** A chat-to-ticket link (many-to-many with a `linkType`); unlink is a tombstone. Syncs. */
+  | 'chat-ticket-link'
   /** One model call's token usage on this device (PRD 36 run usage ledger). */
   | 'usage'
   /** How one run ended on this device (succeeded / failed / stopped / budget-contained),
@@ -140,6 +142,19 @@ export interface ProjectValue {
   name: string;
   key?: string;
   status?: string;
+}
+
+/** How a chat relates to a ticket: it created it, or was linked to it later. */
+export type ChatTicketLinkType = 'linked' | 'created';
+
+export interface ChatTicketLinkValue {
+  chatClientId: ClientEntityId;
+  ticketClientId: ClientEntityId;
+  /** The server ids, when the device holds a server mapping for the chat / ticket (a server-origin
+   *  one it only ingested): the importer resolves these first, then the client ids. */
+  chatServerId?: string;
+  ticketServerId?: string;
+  linkType: ChatTicketLinkType;
 }
 
 /** The planning tiers a device can create (the server's `task_type`); absent ⇒ `task`. */

@@ -7,8 +7,7 @@
  *   • `db.execute` — the one-statement idle probe (../staleExecutionProbe.ts); reports
  *     `script.probe()` so a test chooses which sweeps run.
  *   • `db.select(...).from(...)[.innerJoin(...)].where(...)[.orderBy(...)][.limit(...)]`
- *     — the bounded cloud-candidate pull (projects `open_pr_count`), the batched
- *     ticket-kind read (projects `task_type`), and failStaleBatch's
+ *     — the bounded cloud-candidate pull (projects `open_pr_count`) and failStaleBatch's
  *     `id IN (SELECT … LIMIT 100)` subquery (anything else → no rows).
  *   • `db.update(...).set(...).where(...)[.returning(...)]` — routed through
  *     `script.onUpdate(set, params)`, where `params` are the WHERE's bound parameters in
@@ -39,11 +38,7 @@ export interface ReaperFakeDbScript {
   probe: () => ProbeRow;
   /** Rows the stale cloud-candidate SELECT returns. */
   candidates: Row[];
-  /** Rows the batched `tasks` ticket-kind read returns. */
-  taskKinds: Row[];
-  /** How many ticket-kind reads ran (the no-N+1 assertion). */
-  taskKindReads: number;
-  /** Statement kinds issued, in order: execute | candidates | tasks | select | update | delete | insert. */
+  /** Statement kinds issued, in order: execute | candidates | select | update | delete | insert. */
   calls: string[];
   /** Rows an UPDATE returns. Default: none. */
   onUpdate: (set: Row, params: unknown[]) => Row[];
@@ -55,8 +50,6 @@ export function newReaperFakeDbScript(overrides: Partial<ReaperFakeDbScript> = {
   const script: ReaperFakeDbScript = {
     probe: () => ({ host_running: false, cloud_running: script.candidates.length > 0, queued: false, paused: false, park_age: false }),
     candidates: [],
-    taskKinds: [],
-    taskKindReads: 0,
     calls: [],
     onUpdate: () => [],
     onDelete: () => {},
@@ -96,16 +89,9 @@ export function createReaperFakeDb(script: ReaperFakeDbScript) {
       return Promise.resolve({ rows: [script.probe()] });
     },
     select: (fields: Record<string, unknown> = {}) => {
-      const kind = 'open_pr_count' in fields ? 'candidates' : 'task_type' in fields ? 'tasks' : 'select';
+      const kind = 'open_pr_count' in fields ? 'candidates' : 'select';
       script.calls.push(kind);
-      const where = () => {
-        if (kind === 'candidates') return selectResult(script.candidates);
-        if (kind === 'tasks') {
-          script.taskKindReads += 1;
-          return selectResult(script.taskKinds);
-        }
-        return selectResult([]);
-      };
+      const where = () => (kind === 'candidates' ? selectResult(script.candidates) : selectResult([]));
       return { from: () => ({ where, innerJoin: () => ({ where }) }) };
     },
     // Late-steer scan — no reaped run holds a pending steer in these tests.

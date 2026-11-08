@@ -141,6 +141,53 @@ describe('executeMcpNode', () => {
     expect((result as { error: string }).error).toContain('403');
   });
 
+  describe('a step pinned to a credentialId', () => {
+    /** Every bound value in a Drizzle where-clause, found by walking its chunk tree. */
+    function boundValues(node: unknown, out: unknown[] = [], seen = new Set<unknown>()): unknown[] {
+      if (node === null || typeof node !== 'object' || seen.has(node)) return out;
+      seen.add(node);
+      const n = node as { queryChunks?: unknown[]; value?: unknown; encoder?: unknown };
+      if (n.encoder !== undefined && 'value' in n) out.push(n.value);
+      for (const chunk of n.queryChunks ?? []) boundValues(chunk, out, seen);
+      return out;
+    }
+
+    it('scopes the lookup to the run\'s tenant AND the pinned id', async () => {
+      const db = fakeDb([[await credentialRow('Main', { apiKey: 'hs-key' })]]);
+      const fetchImpl = fakeFetch([{ match: 'api.hubapi.com', json: { id: '1' } }]);
+      const result = await executeMcpNode(
+        ctx(db),
+        { provider: 'hubspot', operation: 'upsert-contact', credentialId: 'cred-Main', params: { email: 'a@b.co' } },
+        '',
+        fetchImpl,
+      );
+      expect(result).toMatchObject({ ok: true });
+      const values = boundValues(db.calls[0]!.where);
+      expect(values).toContain(TENANT);
+      expect(values).toContain('cred-Main');
+    });
+
+    it('rejects an id that is missing or belongs to another tenant (no row comes back)', async () => {
+      // The tenant predicate is in the query, so a foreign or unknown id matches nothing.
+      const db = fakeDb([[]]);
+      const fetchImpl = fakeFetch([]);
+      const result = await executeMcpNode(ctx(db), { provider: 'hubspot', credentialId: 'cred-elsewhere' }, '', fetchImpl);
+      expect(result).toMatchObject({ ok: false });
+      expect((result as { error: string }).error).toContain('No enabled');
+      expect(fetchImpl.calls).toHaveLength(0);
+    });
+
+    it('refuses a blob sealed for another tenant even if a row were returned', async () => {
+      const foreign = await encryptCredentials({ apiKey: 'other-tenant-key' }, SECRET, TENANT + 1);
+      const db = fakeDb([[{ id: 'cred-x', name: 'Theirs', credentialsEnc: foreign.enc, iv: foreign.iv }]]);
+      const fetchImpl = fakeFetch([]);
+      const result = await executeMcpNode(ctx(db), { provider: 'hubspot', credentialId: 'cred-x' }, '', fetchImpl);
+      expect(result).toMatchObject({ ok: false });
+      expect((result as { error: string }).error).toContain('decrypted');
+      expect(fetchImpl.calls).toHaveLength(0);
+    });
+  });
+
   it('reports an undecryptable credential instead of sending garbage upstream', async () => {
     const db = fakeDb([[{ id: 'c1', name: 'Broken', credentialsEnc: 'v2:not-base64', iv: 'zz' }]]);
     const fetchImpl = fakeFetch([]);

@@ -41,6 +41,23 @@ function statusOf(job) {
   };
 }
 
+/**
+ * Variables the MODEL'S shell must never inherit. The sandbox process itself needs some of them (the GitHub Actions
+ * runner authenticates back to Builderforce with BUILDERFORCE_TOKEN), but a command the model runs must not be able to
+ * read them or mint more: with the OIDC request token and URL it could mint its own audience-scoped identity tokens.
+ * Credentials stay in the Worker; the shell gets none. Both shells (foreground in sandboxCore, background here) use it.
+ */
+const SHELL_ENV_DENY = [
+  /^BUILDERFORCE_/,
+  /^ACTIONS_(ID_TOKEN_|RUNTIME_|CACHE_|RESULTS_)/,
+  /^(GITHUB_TOKEN|GH_TOKEN|NODE_AUTH_TOKEN)$/,
+];
+
+/** The environment a model-run shell gets: `env` minus {@link SHELL_ENV_DENY}. */
+export function shellEnv(env = process.env) {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !SHELL_ENV_DENY.some((re) => re.test(name))));
+}
+
 /** SIGKILL the job's whole process group (it was spawned detached, so it leads one): a
  *  `bash -lc` child killed alone would leave its grandchildren running. */
 export function killTree(child) {
@@ -86,7 +103,7 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
     evictFinished();
     if (table.size >= MAX_JOBS) return { ok: false, error: `too many running background jobs (${MAX_JOBS}); stop one with command_stop first` };
     const id = `${idPrefix}job-${++seq}`;
-    const child = spawn('bash', ['-lc', command], { cwd, env: process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('bash', ['-lc', command], { cwd, env: shellEnv(), detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let settle;
     const job = { id, child, status: 'running', output: '', truncated: false, done: new Promise((r) => { settle = r; }) };
     const cap = (chunk) => {

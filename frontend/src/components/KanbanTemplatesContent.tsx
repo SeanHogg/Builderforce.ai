@@ -18,11 +18,14 @@ import { Select } from '@/components/Select';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { usePermission } from '@/lib/rbac';
 import { ROLE_DISCIPLINES, useRoles, type UseRoles } from '@/lib/useRoles';
+import { isTemplatePreview } from '@/lib/kanban';
 import type {
-  Discipline, JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
+  Discipline, JobRole, KanbanTemplate, KanbanTemplatePreview, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
 } from '@/lib/kanban';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { useKanbanTemplateCheckout } from '@/lib/useKanbanTemplateCheckout';
+import { KanbanTemplatePreviewPanel } from './KanbanTemplatePreviewPanel';
 type Tab = 'mine' | 'marketplace' | 'roles';
 
 const card: React.CSSProperties = {
@@ -51,6 +54,7 @@ export function KanbanTemplatesContent() {
   const [mine, setMine] = useState<TemplateSummary[]>([]);
   const [market, setMarket] = useState<TemplateSummary[]>([]);
   const [editing, setEditing] = useState<KanbanTemplate | null>(null);
+  const [previewing, setPreviewing] = useState<KanbanTemplatePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Roles list + create/delete come from the ONE shared roles-CRUD hook so this
   // and the Workforce → Roles tab can never drift apart.
@@ -77,7 +81,10 @@ export function KanbanTemplatesContent() {
 
   const openEditor = async (id: string) => {
     setError(null);
-    try { setEditing(await kanbanApi.getTemplate(id)); }
+    try {
+      const tpl = await kanbanApi.getTemplate(id);
+      if (isTemplatePreview(tpl)) setPreviewing(tpl); else setEditing(tpl);
+    }
     catch (e) { setError(errorMessage(e)); }
   };
 
@@ -87,8 +94,9 @@ export function KanbanTemplatesContent() {
       const src = await kanbanApi.getTemplate(id);
       const created = await kanbanApi.createTemplate({ name: `${src.name} (copy)`, forkFrom: id });
       await reload();
-      setEditing(await kanbanApi.getTemplate(created.id));
-    } catch (e) { setError(errorMessage(e)); }
+      const copy = await kanbanApi.getTemplate(created.id);
+      if (!isTemplatePreview(copy)) setEditing(copy);
+    } catch (e) { setError((await handlePurchaseRequired(e, id)) ?? errorMessage(e)); }
   };
 
   const remove = async (id: string) => {
@@ -97,10 +105,16 @@ export function KanbanTemplatesContent() {
     catch (e) { setError(errorMessage(e)); }
   };
 
+  // A priced template answers 402 → the ordinary listing checkout; once bought, install it.
+  const handlePurchaseRequired = useKanbanTemplateCheckout('templates-page', {
+    onGranted: (id) => { void install(id); },
+    onFailed: setError,
+  });
+
   const install = async (id: string) => {
     setError(null);
     try { await kanbanApi.installTemplate(id); await reload(); setTab('mine'); }
-    catch (e) { setError(errorMessage(e)); }
+    catch (e) { setError((await handlePurchaseRequired(e, id)) ?? errorMessage(e)); }
   };
 
   return (
@@ -121,7 +135,13 @@ export function KanbanTemplatesContent() {
 
       {error && <div style={{ fontSize: 12, color: 'var(--danger-text)' }}>{error}</div>}
 
-      {editing ? (
+      {previewing ? (
+        <KanbanTemplatePreviewPanel
+          template={previewing}
+          onUnlock={(id) => { setPreviewing(null); void install(id); }}
+          onClose={() => setPreviewing(null)}
+        />
+      ) : editing ? (
         <TemplateEditor
           template={editing}
           roles={roles}

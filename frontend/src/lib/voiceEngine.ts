@@ -15,9 +15,14 @@
 import { getApiBaseUrl, apiRequestStream } from './apiClient';
 import { getStoredTenantToken } from './auth';
 import type { PcmAudio } from './captureAudio';
-import { canvasWasmBaseUrl } from './canvasHost';
+import { loadStudio } from './studioLoader';
+import { encodeWavPcm16 } from '@builderforce/voice-provenance';
+import {
+  fetchServerClipProvenance,
+  registerOnDeviceClip,
+  type WithProvenance,
+} from './voiceClipProvenance';
 
-type StudioModule = typeof import('@seanhogg/builderforce-studio');
 type VoiceModule = typeof import('@seanhogg/builderforce-voice');
 type SpeakerEmbedding = import('@seanhogg/builderforce-voice').StudioSpeakerEmbedding;
 type NarrationResult = import('@seanhogg/builderforce-voice').NarrationResult;
@@ -28,26 +33,12 @@ interface OnDeviceEngine {
   enroll(pcm: PcmAudio): SpeakerEmbedding;
   /** The studio engine instance, passed to VoiceClient as the client backend. */
   clientEngine: unknown;
-  encodeWav(audio: { samples: Float32Array; sampleRate: number }): ArrayBuffer;
 }
+
+/** The `model` recorded in an on-device clip's manifest. */
+const ON_DEVICE_MODEL = 'ssm-webgpu';
 
 let studioPromise: Promise<OnDeviceEngine | null> | null = null;
-
-/**
- * Point the ONNX runtime at a host-served copy of its `.wasm`, when the host
- * serves one. A no-op on the web, where the bundler already emitted the runtime
- * beside the app and the default relative resolution is correct.
- *
- * Loading `onnxruntime-web` here is deliberate: it is the same module instance
- * the studio import below resolves to, and it must be configured BEFORE the
- * first session initialises, because `wasmPaths` is read at init.
- */
-async function configureOnnxRuntime(): Promise<void> {
-  const base = canvasWasmBaseUrl();
-  if (!base) return;
-  const ort = await import('onnxruntime-web');
-  ort.env.wasm.wasmPaths = base.endsWith('/') ? base : `${base}/`;
-}
 
 /** Lazily construct the on-device engine. Returns null on SSR, a missing studio
  *  package, or any load failure (caller falls back to the server path). */
@@ -61,14 +52,14 @@ export async function getOnDeviceEngine(): Promise<OnDeviceEngine | null> {
         // the app's own static assets) but not in an editor webview, where
         // shipping it would put 21 MB of runtime into every VSIX download for a
         // feature most sessions never open. A host that serves the runtime
-        // itself says so through the port, and it is fetched on first use.
-        await configureOnnxRuntime();
-        const studio: StudioModule = await import('@seanhogg/builderforce-studio');
+        // itself says so through the port, and it is fetched on first use. Studio's
+        // `onnx-runtime-config` is the ONE configurer: the host hands it the base
+        // (host copy, else same-origin `/ort/`) before the engine's first session.
+        const studio = await loadStudio();
         const engine = new studio.VoiceCloneEngine();
         return {
           enroll: (pcm: PcmAudio) => engine.enroll(pcm) as SpeakerEmbedding,
           clientEngine: engine,
-          encodeWav: studio.encodeWav,
         };
       } catch {
         return null;
@@ -94,7 +85,7 @@ export async function narrate(
   cloneId: number,
   text: string,
   speaker?: SpeakerEmbedding | null,
-): Promise<NarrationResult> {
+): Promise<NarrationResult & WithProvenance> {
   const voice = await loadVoice();
   const onDevice = speaker ? await getOnDeviceEngine() : null;
   const client = new voice.VoiceClient({
@@ -102,17 +93,38 @@ export async function narrate(
     baseUrl: getApiBaseUrl(),
     ...(onDevice ? { clientEngine: onDevice.clientEngine as never } : {}),
   });
-  return client.narrate(String(cloneId), { text }, speaker ? { speaker } : {});
+  const result = await client.narrate(String(cloneId), { text }, speaker ? { speaker } : {});
+  return withProvenance(cloneId, result);
+}
+
+/**
+ * Every clip leaves here with provenance. An on-device clip is watermarked in its
+ * PCM (before it can be played or saved) and registered for a server signature; a
+ * server clip was marked and signed by the api, so its manifest is just fetched.
+ * A named-voice fallback is not a clone of anyone and carries none.
+ */
+async function withProvenance(cloneId: number, result: NarrationResult): Promise<NarrationResult & WithProvenance> {
+  if (!result.cloned) return result;
+  if (result.pcm && result.sampleRate) {
+    // The studio engine already watermarked this PCM; register it for a signature.
+    const provenance = await registerOnDeviceClip(cloneId, result.pcm, result.sampleRate, ON_DEVICE_MODEL);
+    return provenance ? { ...result, provenance } : result;
+  }
+  if (result.audioUrl) {
+    const provenance = await fetchServerClipProvenance(result.audioUrl);
+    return provenance ? { ...result, provenance } : result;
+  }
+  return result;
 }
 
 /** Turn a NarrationResult into a playable object URL. On-device results carry raw
  *  PCM (→ WAV here); server results carry an auth-protected URL (→ authed fetch
- *  → blob). One helper so the panel never branches on the engine. Caller revokes. */
+ *  → blob). One helper so the panel never branches on the engine. Caller revokes.
+ *  The WAV is written by the provenance package's encoder so the file's PCM bytes
+ *  are exactly the bytes whose hash was registered. */
 export async function narrationResultToObjectUrl(result: NarrationResult): Promise<string> {
   if (result.pcm && result.sampleRate) {
-    const engine = await getOnDeviceEngine();
-    if (!engine) throw new Error('On-device engine unavailable to encode PCM.');
-    const wav = engine.encodeWav({ samples: result.pcm, sampleRate: result.sampleRate });
+    const wav = encodeWavPcm16([result.pcm], result.sampleRate);
     return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
   }
   if (result.audioUrl) {
@@ -121,32 +133,4 @@ export async function narrationResultToObjectUrl(result: NarrationResult): Promi
     return URL.createObjectURL(await res.blob());
   }
   throw new Error('Narration result has no audio.');
-}
-
-// ── Local embedding store ───────────────────────────────────────────────────
-// On-device enrolment yields an embedding that the server intentionally never
-// echoes back (no-leak contract). Cache it per clone id in localStorage so the
-// free on-device synthesis path keeps working across reloads on this device.
-
-const EMB_PREFIX = 'bf_voice_emb_';
-
-export function saveEmbedding(cloneId: number, embedding: SpeakerEmbedding): void {
-  try {
-    localStorage.setItem(`${EMB_PREFIX}${cloneId}`, JSON.stringify(embedding));
-  } catch { /* storage full / disabled — on-device just won't persist */ }
-}
-
-export function loadEmbedding(cloneId: number): SpeakerEmbedding | null {
-  try {
-    const raw = localStorage.getItem(`${EMB_PREFIX}${cloneId}`);
-    return raw ? (JSON.parse(raw) as SpeakerEmbedding) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function deleteEmbedding(cloneId: number): void {
-  try {
-    localStorage.removeItem(`${EMB_PREFIX}${cloneId}`);
-  } catch { /* ignore */ }
 }

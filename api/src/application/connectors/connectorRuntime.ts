@@ -241,7 +241,9 @@ export function buildConnectorRequest(args: {
   }
 
   // ── Auth ────────────────────────────────────────────────────────────────
-  const { kind, in: authIn, name: authName, prefix } = manifest.auth;
+  // A `public` action carries NO credential (see ConnectorAction.public).
+  const { in: authIn, name: authName, prefix } = manifest.auth;
+  const kind = action.public ? 'none' : manifest.auth.kind;
   if (kind === 'bearer' || kind === 'oauth2') {
     const token = auth.token ?? auth.accessToken ?? '';
     if (token) headers.Authorization = `${prefix ?? 'Bearer '}${token}`;
@@ -411,7 +413,9 @@ export async function executeConnectorAction(args: {
   input?: Record<string, unknown>;
   /** Explicit connection; omitted callers get {@link defaultConnectionFor}. */
   connectionId?: string | null;
-  actorKind?: 'agent' | 'user' | 'test';
+  /** Who made the call, for the audit log: a model (`agent`), a signed-in person (`user`),
+   *  the builder's test button (`test`), or a scheduled sweep acting for no one (`system`). */
+  actorKind?: 'agent' | 'user' | 'test' | 'system';
   /** Test runs from the builder may call a DRAFT connector; agents may not. */
   allowDraft?: boolean;
   fetchImpl?: typeof fetch;

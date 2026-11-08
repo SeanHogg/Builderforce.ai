@@ -59,13 +59,17 @@ export async function dispatchIncidentTriage(
   );
   const deferred: Promise<unknown>[] = [];
   try {
-    const { executionId, refusal } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+    const { executionId, refusal, deferred: admissionDeferred } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: params.boardTaskId,
       tenantId: params.tenantId,
       payload,
       submittedBy: composeDispatcherLabel('incident', incidentRef),
+      // One-shot: nothing re-sweeps an incident, so a deferred admission is parked and retried.
+      parkIfDeferred: true,
     });
     await Promise.allSettled(deferred);
+    // Deferred = parked for the `deferred-dispatch` sweep, which starts it when a slot frees.
+    if (admissionDeferred) return true;
     // A refusal is not a triage. Reporting `true` for one told the incident feed an
     // agent had picked the incident up when the dispatcher had declined it.
     if (executionId == null) {

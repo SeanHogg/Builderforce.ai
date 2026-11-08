@@ -18,12 +18,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * Best-effort: never throws (a webhook must always 200 to stop provider retries).
  */
-import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { signalMergeQueueOnCiResult } from './ciMergeQueueSignal';
 import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_REFUSED_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { insertToolAudit } from '../audit/toolAuditWrite';
+import { redactThenCap } from '../../infrastructure/security/redactSecrets';
 
 /** Narrow port over `dispatchCloudRunForTask` so the application layer stays free of route imports. */
 export type DispatchRunFn = (params: {
@@ -31,7 +31,9 @@ export type DispatchRunFn = (params: {
   tenantId: number;
   payload: string;
   submittedBy: string;
-}) => Promise<{ executionId: number | null; refusal?: { reason: string; message: string } }>;
+  /** One-shot dispatch: a deferred admission is parked and retried by the `deferred-dispatch` sweep. */
+  parkIfDeferred?: boolean;
+}) => Promise<{ executionId: number | null; refusal?: { reason: string; message: string }; deferred?: true }>;
 
 export interface CiOutcomeDeps {
   db: Db;
@@ -75,9 +77,10 @@ export async function handleCiEventOutcome(
     const intent = res.autoFix;
     deps.waitUntil((async () => {
       try {
-        const { executionId, refusal } = await deps.dispatchRun({
+        const { executionId, refusal, deferred } = await deps.dispatchRun({
           taskId: intent.taskId, tenantId: intent.tenantId,
           payload: intent.payload, submittedBy: 'system:autofix',
+          parkIfDeferred: true, // the webhook will not fire again: park a deferred auto-fix for retry
         });
         if (executionId == null) {
           // A refused auto-fix used to vanish: the webhook had already answered
@@ -86,18 +89,18 @@ export async function handleCiEventOutcome(
           // null nobody recorded. The reason now lands on the same audit stream, under
           // its OWN name -- `AUTOFIX_REFUSED_EVENT`, never the dispatch name the
           // loop-guard counts, so a refusal cannot spend the build's fix budget.
-          await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+          await insertToolAudit(db, {
             tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
             executionId: null, sessionKey: `task:${intent.taskId}`,
             toolName: AUTOFIX_REFUSED_EVENT, category: 'ci',
             args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null, reason: refusal?.reason ?? null }),
-            result: `auto-fix run REFUSED: ${refusal?.message ?? 'the dispatcher declined without a reason'}`.slice(0, 300),
+            result: redactThenCap(`auto-fix run ${deferred ? 'DEFERRED (parked, retried automatically)' : 'REFUSED'}: ${refusal?.message ?? 'the dispatcher declined without a reason'}`, 300),
             ts: new Date(),
           }).catch((error) => {
             reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
           });
         } else {
-          await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+          await insertToolAudit(db, {
             tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
             executionId, sessionKey: `exec:${executionId}`,
             toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
@@ -125,13 +128,13 @@ export async function handleCiEventOutcome(
   if (res.buildStatus === 'failure' && res.taskId != null && res.tenantId != null
       && res.reason && res.reason !== 'auto-fix attempts exhausted'
       && res.reason !== AUTOFIX_DEDUPED_REASON) {
-    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+    await insertToolAudit(db, {
       tenantId: res.tenantId, agentHostId: null, cloudAgentRef: null,
       executionId: res.executionId ?? null,
       sessionKey: res.executionId ? `exec:${res.executionId}` : `task:${res.taskId}`,
       toolName: AUTOFIX_SKIPPED_EVENT, category: 'ci',
       args: JSON.stringify({ source, branch: evt.branch, sha: evt.sha, eventType: evt.eventType, reason: res.reason }),
-      result: `build failed but no auto-fix dispatched — ${res.reason}`.slice(0, 300),
+      result: redactThenCap(`build failed but no auto-fix dispatched — ${res.reason}`, 300),
       ts: new Date(),
     }).catch((error) => { /* telemetry best-effort */ 
       reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });

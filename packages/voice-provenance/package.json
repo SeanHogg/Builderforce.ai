@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/voice-provenance",
+  "version": "2026.11.1",
+  "private": true,
+  "type": "module",
+  "description": "Provenance for synthesized voice clips, declared once: the signed manifest contract and its canonical serialisation, the inaudible spread-spectrum audio watermark (embed + detect) and the PCM16/WAV helpers both synthesis paths share, so the api (server synthesis, signing, verify), the on-device engine's host and the web client all agree on exactly what is signed and what is embedded. Dependency-free and source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

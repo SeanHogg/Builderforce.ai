@@ -6,6 +6,10 @@
  *                                    go to next
  *   POST /:postingId/distributions — publish it to the chosen boards and answer with
  *                                    each board's verdict and the posting's whole list
+ *   GET  /:postingId/distributions/:connectorKey/board-jobs — jobs a board lists (capped)
+ *   POST /:postingId/distributions/link — link the posting to one of them
+ *   POST /:postingId/distributions/import — import the applicants each confirmed board
+ *                                    holds (idempotent; bounded per run)
  *
  * Its own module rather than more of `atsRoutes.ts`, which is the working surface's
  * index of a dozen resources: distribution is one resource with one use case
@@ -30,6 +34,8 @@ import {
   MAX_BOARDS_PER_DISTRIBUTION,
   readPostingDistribution,
 } from '../../application/hiring/distributePosting';
+import { importBoardApplicants } from '../../application/hiring/importBoardApplicants';
+import { linkBoardJob, listBoardJobs, listLinkableBoards } from '../../application/hiring/linkBoardJob';
 import { parseBody, z, zNonEmptyString } from './requestBody';
 
 /** A card-held listing fact: absent, cleared (`null`), or text. */
@@ -46,12 +52,22 @@ const DistributeBody = z.object({
   }).optional(),
 });
 
+const LinkBody = z.object({
+  connectorKey: zNonEmptyString,
+  externalId: zNonEmptyString,
+});
+
 export function createPostingDistributionRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
 
-  r.get('/:postingId/distributions', requireRole(TenantRole.DEVELOPER), async (c) => c.json(
-    await readPostingDistribution(db, c.env as Env, requireTenantId(c), c.req.param('postingId')),
-  ));
+  r.get('/:postingId/distributions', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = requireTenantId(c);
+    const [read, linkBoards] = await Promise.all([
+      readPostingDistribution(db, c.env as Env, tenantId, c.req.param('postingId')),
+      listLinkableBoards(db, c.env as Env, tenantId),
+    ]);
+    return c.json({ ...read, linkBoards });
+  });
 
   r.post('/:postingId/distributions', requireRole(TenantRole.MANAGER), async (c) => {
     const input = await parseBody(c, DistributeBody);
@@ -62,6 +78,28 @@ export function createPostingDistributionRoutes(db: Db): Hono<HonoEnv> {
       ...(input.listing ? { listing: input.listing } : {}),
     }));
   });
+
+  // Link this posting to a job that already exists on a connected board (e.g. Workable,
+  // whose public API cannot create jobs). The picker's list, then the confirmed link.
+  r.get('/:postingId/distributions/:connectorKey/board-jobs', requireRole(TenantRole.MANAGER), async (c) => c.json(
+    await listBoardJobs(db, c.env as Env, requireTenantId(c), c.req.param('postingId'), c.req.param('connectorKey')),
+  ));
+
+  r.post('/:postingId/distributions/link', requireRole(TenantRole.MANAGER), async (c) => {
+    const input = await parseBody(c, LinkBody);
+    return c.json(await linkBoardJob(db, c.env as Env, {
+      tenantId: requireTenantId(c),
+      postingId: c.req.param('postingId'),
+      connectorKey: input.connectorKey,
+      externalId: input.externalId,
+    }));
+  });
+
+  // Pull the applicants each confirmed board holds for this posting into the ATS.
+  // MANAGER like publishing: it writes candidate records (PII) into the workspace.
+  r.post('/:postingId/distributions/import', requireRole(TenantRole.MANAGER), async (c) => c.json(
+    await importBoardApplicants(db, c.env as Env, requireTenantId(c), c.req.param('postingId')),
+  ));
 
   return r;
 }

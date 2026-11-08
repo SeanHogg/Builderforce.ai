@@ -23,7 +23,7 @@ import { buildDatabase, type Db } from '../../../infrastructure/database/connect
 import { llmSpecialistEvalCases } from '../../../infrastructure/database/schema';
 import { acrossTenants } from '../../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../../infrastructure/cache/readThroughCache';
-import { redactSecrets } from '../../../infrastructure/security/redactSecrets';
+import { redactDeep } from '../../../infrastructure/security/redactSecrets';
 import { sha256Hex } from '../../../domain/shared/hash';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { specialistJob, type SpecialistJobId } from './registry';
@@ -65,7 +65,7 @@ export async function captureSpecialistSample(
     if (sample.tenantId == null || costLeverRollout(env, 'e2_specialists') <= 0) return;
     const job = specialistJob(sample.jobId);
     if ((deps.random ?? Math.random)() >= job.evalSet.captureRate) return;
-    const body = redactSecrets(JSON.stringify(replayable(sample.request)));
+    const body = JSON.stringify(redactDeep(replayable(sample.request)));
     if (body.length > MAX_CAPTURED_REQUEST_CHARS) return;
     const db = deps.db ?? buildDatabase(env);
     const held = await getOrSetCached(env, caseCountKey(job.id), () => countCases(db, job.id), { kvTtlSeconds: 3_600, l1TtlMs: 600_000 });

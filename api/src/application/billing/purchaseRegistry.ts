@@ -25,6 +25,7 @@ import type { Env } from '../../env';
 import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { completeCommsTopUp, COMMS_TOPUP_KIND } from '../phone/commsTopUp';
 import { AGENT_PURCHASE_KIND, completeAgentCheckout } from '../marketplace/agentCommerce';
+import { VOICE_PURCHASE_KIND, completeVoiceCheckout, reverseVoicePurchase } from '../studio/voiceCommerce';
 import { SKILL_PURCHASE_KIND, completeSkillCheckout } from '../marketplace/skillCommerce';
 import {
   MARKETPLACE_LISTING_KIND,
@@ -72,6 +73,13 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
     await completeAgentCheckout(db, env, { tenantId, buyerUserId, checkoutSessionId });
     return true;
   },
+  // A marketplace voice: bought by a user for a workspace; grants a voice license.
+  [VOICE_PURCHASE_KIND]: async (db, env, { checkoutSessionId, metadata }) => {
+    const tenantId = Number(metadata.buyerTenantId);
+    const buyerUserId = metadata.buyerUserId;
+    if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerUserId) return null;
+    return (await completeVoiceCheckout(db, env, { tenantId, buyerUserId, checkoutSessionId })).applied;
+  },
   // USER-scoped: a skill/persona is bought by a person from the marketing
   // marketplace, where no workspace need exist. The settler reads buyerUserId
   // from signed metadata rather than requiring a tenant id.
@@ -116,6 +124,25 @@ const ORDER_REFUNDERS: Readonly<Record<string, OrderRefunder>> = {
   [REPLAY_PACK_ORDER_PREFIX]: (db, env, input) => refundReplayPackOrder(db, env, input),
 };
 
+/**
+ * Purchase kind → the flow that takes back what a purchase granted when the money
+ * went back to the buyer (a full refund or a dispute, as `purchase.reversed`).
+ * The processor's refund/dispute events carry no order number, only the purchase's
+ * signed metadata, so these key on `purchaseKind` rather than on an order prefix.
+ * Reversers are idempotent, so a redelivered event is a no-op. Resolves to whether
+ * this call reversed anything, or null when the metadata names nothing to reverse.
+ */
+type PurchaseReverser = (db: Db, env: Env, input: { metadata: Record<string, string> }) => Promise<boolean | null>;
+
+const PURCHASE_REVERSERS: Readonly<Record<string, PurchaseReverser>> = {
+  [VOICE_PURCHASE_KIND]: async (db, env, { metadata }) => {
+    const tenantId = Number(metadata.buyerTenantId);
+    const cloneId = Number(metadata.cloneId);
+    if (!Number.isInteger(tenantId) || tenantId <= 0 || !Number.isInteger(cloneId) || cloneId <= 0) return null;
+    return (await reverseVoicePurchase(db, env, { tenantId, cloneId })).reversed;
+  },
+};
+
 const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
   business_phone: async (db, _env, event) => {
     await recordBusinessPhoneEvent(db, event);
@@ -141,6 +168,11 @@ const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
 /** The settler for a pay-once kind, or null when it settles only on its redirect. */
 export function oneOffSettlerFor(kind: string | undefined): OneOffSettler | null {
   return (kind && ONE_OFF_SETTLERS[kind]) || null;
+}
+
+/** The reverser for a pay-once kind whose money went back, or null when the kind has none. */
+export function purchaseReverserFor(kind: string | undefined): PurchaseReverser | null {
+  return (kind && PURCHASE_REVERSERS[kind]) || null;
 }
 
 /** The recorder for a recurring add-on kind, or null when nothing listens for it. */

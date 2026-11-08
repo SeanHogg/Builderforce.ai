@@ -343,8 +343,9 @@ export const knowledgeApi = {
   unassignTraining: (assignmentId: string) =>
     apiRequest<void>(`${BASE}/training/${assignmentId}`, { method: 'DELETE' }),
 
-  analyze: (id: string) =>
-    apiRequest<AnalysisResult>(`${BASE}/documents/${id}/analyze`, { method: 'POST' }),
+  /** `text` is the editor's live document as model text (`toModelText`); without it the server reads the saved content. */
+  analyze: (id: string, text?: string) =>
+    apiRequest<AnalysisResult>(`${BASE}/documents/${id}/analyze`, { method: 'POST', ...(text === undefined ? {} : jsonBody({ text })) }),
 
   /**
    * Stream an AI-drafted document. Calls `onDelta` with the running accumulated

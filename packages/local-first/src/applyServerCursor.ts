@@ -191,7 +191,7 @@ function storageKey(entityType: string, id: string): string {
   return `${entityType}:${id}`;
 }
 
-function materialize<T>(
+export function materialize<T>(
   row: LocalRecord<T> | ServerCursorChange<T>,
   existing: LocalRecord<T> | undefined,
 ): LocalRecord<T> | null {

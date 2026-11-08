@@ -28,7 +28,7 @@ export async function buildScheduledReport(
   now: Date,
   /** What the schedule is ABOUT, for the types that need a subject (mig 0461). The
    *  five computed types ignore it; a `board_pack` cannot be built without it. */
-  subject?: { subjectKind: string | null; subjectRef: string | null },
+  subject?: { subjectKind: string | null; subjectRef: string | null; scheduleId?: string },
 ): Promise<{ subject: string; report: Record<string, unknown> } | null> {
   switch (reportType) {
     case 'standup':
@@ -46,7 +46,7 @@ export async function buildScheduledReport(
       // has been deleted or emptied, which the dispatcher treats as "nothing to send"
       // while still advancing the watermark — so a board someone removed stops mailing
       // the investors rather than mailing them a blank page every month.
-      return buildBoardPackReport(db, tenantId, subject?.subjectKind ?? null, subject?.subjectRef ?? null, now);
+      return buildBoardPackReport(db, tenantId, subject?.subjectKind ?? null, subject?.subjectRef ?? null, now, subject?.scheduleId);
     default:
       return null;
   }

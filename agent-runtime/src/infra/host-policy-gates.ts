@@ -32,7 +32,7 @@
  *     not stop a channel reply, so this never throws and the wait is bounded;
  *   - a malformed answer is a failure (it never replaces a good set with an empty one).
  */
-import { coercePolicyGates, type PolicyGate } from "@builderforce/agent-tools";
+import { coercePolicyGates, SIDE_EFFECT_GATES_WIRE_LEVEL, type PolicyGate } from "@builderforce/agent-tools";
 import { logWarn } from "../logger.js";
 import { hostLink } from "./approval-gate.js";
 
@@ -43,7 +43,7 @@ export const POLICY_GATES_RETRY_MS = 15_000;
 /** The longest a run waits for the answer before proceeding on what it holds. */
 export const POLICY_GATES_FETCH_TIMEOUT_MS = 4_000;
 
-const POLICY_GATES_PATH = "/api/agent/governance/policy-gates";
+const POLICY_GATES_PATH = `/api/agent/governance/policy-gates?gates=${SIDE_EFFECT_GATES_WIRE_LEVEL}`;
 
 interface Held {
   /** Which link these gates belong to: a re-linked host must not inherit another tenant's policy. */

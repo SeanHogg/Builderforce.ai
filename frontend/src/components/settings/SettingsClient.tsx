@@ -34,6 +34,7 @@ import SettingsLogs from '@/components/settings/SettingsLogs';
 import AgentExecutionControl from '@/components/settings/AgentExecutionControl';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
+import { clearAssigneeProfileMap } from '@/lib/assigneeProfilesCache';
 import NavigationFeaturesSettings from '@/components/settings/NavigationFeaturesSettings';
 import { faultText } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -159,6 +160,8 @@ export default function SettingsClient() {
       // Invalidate the session-cached chat personality block so the new tone is
       // picked up on the next Brain message instead of only after a reload.
       clearPersonalityBlockCache();
+      // …and the cached assignee → personality map behind mention hints and hovercards.
+      clearAssigneeProfileMap();
       setPersonalityNotice(t('personalitySaved'));
     } catch (e) {
       setPersonalityNotice(faultText(e, t('personalitySaveFailed')));

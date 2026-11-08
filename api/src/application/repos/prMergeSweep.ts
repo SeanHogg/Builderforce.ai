@@ -59,16 +59,19 @@ import { resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from './mergeRecordedPr';
 import { mergeQueueOptInOn } from './mergeQueueOptIn';
 import { pollPrCiStatus, pollPrLineStats, isNetDestructiveDiff } from './pollPrCiStatus';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { runBoundedPool } from '../runtime/boundedPool';
 import {
   createTickDispatchBudget, tenantDispatchReserver,
   type DispatchReserver, type TickDispatchBudget,
 } from '../runtime/tickDispatchBudget';
+import { holdMergeForCanary } from '../manager/managerCanary';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 import type { Env } from '../../env';
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
+import { sweepSecurityGate } from './sweepSecurityGate';
+import { taskHasLiveRun } from '../runtime/liveExecutionStatus';
 
 /**
  * Wall-clock ONE project's merge queue may spend.
@@ -442,7 +445,7 @@ async function runPrMergeQueueBody(
         updatedAt: new Date(),
       }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, task.id)));
       recoveryStarted = (await runs.spend(
-        () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        () => routeLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
           submittedBy: composeDispatcherLabel('manager', 'conflict-resolution', policy.managerRef ?? 'system'),
         }),
@@ -633,6 +636,23 @@ async function runPrMergeQueueBody(
         continue;
       }
 
+      // A task with a run still going is not done: its branch is still being written (and the run may hold the draft).
+      if (pr.taskId != null && await taskHasLiveRun(db, tenantId, pr.taskId)) continue;
+
+      // SECURITY GATE (PRD 08 §10) - the same gate every merge path uses (`sweepSecurityGate`).
+      const security = await sweepSecurityGate(db, env, budget, tenantId, pr, policy.prMergePolicy === 'on_green');
+      if (!security.allow) {
+        if (!alreadyReportedBlocked.has(pr.id)) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} was not merged - ${security.summary}`,
+            detail: { gate: 'security_findings', reasons: security.reasons },
+          });
+          alreadyReportedBlocked.add(pr.id);
+        }
+        continue;
+      }
+
       // Net-destructive diffs (deletions >> additions) need a human even when
       // CI is green and the change is docs-only — same MERGE_BLOCKED continue.
       const lineStats = await pollPrLineStats(env, db, tenantId, pr);
@@ -652,9 +672,17 @@ async function runPrMergeQueueBody(
         continue;
       }
 
+      // PRD 23 canary: log what would have merged, merge nothing (manager/managerCanary.ts).
+      if (await holdMergeForCanary(db, policy.canary, { tenantId, projectId, prId: pr.id, prNumber: pr.number, taskId: pr.taskId, runTaskId })) continue;
+
       const result = await mergeRecordedPullRequest(db, env, {
         tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,
+        // The commit the gate verified: the provider refuses the merge if the head has moved since.
+        expectedHeadSha: security.headSha,
       });
+      // The head moved between the check and the merge: not a failure and not a conflict. Nothing is
+      // journalled against the ceilings; the next pass finds no scans for the new head and re-scans it.
+      if (!result.ok && result.code === 'head_moved') continue;
       if (!result.ok) {
         // GitHub can discover a content conflict only at the final merge call and
         // reports it as HTTP 405. Treat it exactly like an update-branch conflict:

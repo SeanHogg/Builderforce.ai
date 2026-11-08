@@ -1,0 +1,28 @@
+.editor { display: grid; gap: var(--space-2); min-width: 0; color: var(--canvas-ink); container-type: inline-size; }
+.transport, .row, .segmentHead, .segmentActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.transport { padding: var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-md); background: var(--canvas-hover); }
+.time { font-variant-numeric: tabular-nums; font-size: var(--font-size-field-label); color: var(--canvas-muted); white-space: nowrap; }
+.count { margin-inline-start: auto; font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.button { display: inline-flex; align-items: center; justify-content: center; position: relative; min-height: 2.25rem; min-width: 2.25rem; padding: 0 var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; font-size: var(--font-size-field-label); cursor: pointer; }
+.button[aria-selected='true'] { border-color: var(--canvas-accent); outline: 1px solid var(--canvas-accent); }
+.button:disabled { opacity: 0.5; cursor: not-allowed; }
+.fileInput { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+.segments { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.segment { display: grid; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-md); background: var(--canvas-panel); }
+.segment[data-playing] { border-color: var(--canvas-accent); }
+.segmentHead .field { flex: 1 1 8rem; }
+.segmentFields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.field { min-width: 0; min-height: 2.25rem; box-sizing: border-box; width: 100%; padding: 0 var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-sm); background: var(--canvas-panel); color: var(--canvas-ink); font: inherit; }
+textarea.field { padding: var(--space-2); resize: vertical; }
+.labelled { display: grid; gap: 2px; min-width: 0; font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.chapterList { margin: 0; padding-inline-start: var(--space-4); font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.meta { display: grid; gap: var(--space-2); }
+.group { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-2); border: 1px solid var(--canvas-line); border-radius: var(--radius-md); }
+.group legend { padding-inline: var(--space-1); color: var(--canvas-muted); font-size: var(--font-size-field-label); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.check { display: inline-flex; gap: var(--space-2); align-items: center; min-height: 2.25rem; font-size: var(--font-size-field-label); }
+.hint, .empty { margin: 0; font-size: var(--font-size-field-label); color: var(--canvas-muted); }
+.problem { margin: 0; padding-inline-start: 0; list-style-position: inside; font-size: var(--font-size-field-label); color: var(--danger-text); }
+@container (max-width: 420px) {
+  .segmentFields, .pair { grid-template-columns: minmax(0, 1fr); }
+}

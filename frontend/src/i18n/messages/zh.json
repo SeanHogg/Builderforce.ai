@@ -4126,6 +4126,8 @@
     "delta": "+{count}"
   },
   "personProfile": {
+    "seoTitle": "团队成员",
+    "seoDescription": "工作区中的团队成员：角色、性格以及其手头的工作。",
     "loading": "正在加载资料",
     "work": "工作",
     "open": "未完成工单",
@@ -4735,7 +4737,7 @@
         "surface": "{count, plural, =0 {绘图，空} other {绘图，# 笔画}}",
         "empty": "暂无绘图。",
         "emptyHint": "用鼠标、笔或手指在此绘制。",
-        "limit": "此绘图已达到 {max} 笔画的上限。请擦除或清除部分笔画后再添加。",
+        "limit": "此绘图已满：最多 {max} 笔画，且总细节量有上限。请擦除或清除部分笔画后再添加。",
         "clear": "清除绘图",
         "clearConfirm": "要删除此绘图中的所有笔画吗？正在编辑的其他人也会失去它们。",
         "textLabel": "绘图文字",
@@ -4968,6 +4970,7 @@
         "exportAs": "导出 {format}",
         "exporting": "正在渲染…",
         "exportFailed": "导出失败，请重试。",
+        "exportTooLarge": "此动画过大，无法导出（宽度 × 高度 × 帧数超出上限）。请减少帧数或缩小画布。",
         "summary": "{count, plural, other {# 帧}} · {fps} fps · {seconds} 秒",
         "dimensions": "{width} × {height} 像素",
         "maxFramesReached": "已达到帧数上限（{max} 帧）。请删除一帧后再添加。",
@@ -15734,6 +15737,10 @@
     "prdFallback": "PRD {id}"
   },
   "kanbanTemplateCheckout": {
+    "previewLockedNotice": "这是付费模板。解锁后可查看其要求和人员配置。",
+    "previewLanes": "泳道",
+    "previewUnlock": "以 {price} 解锁",
+    "previewBack": "返回",
     "redirecting": "“{name}”是付费模板，正在跳转到结账页面……",
     "checkoutFailed": "无法为此模板发起结账，请重试。",
     "completeFailed": "暂时无法确认付款。如果已扣款，模板将很快解锁，届时请重试。"
@@ -38547,7 +38554,10 @@
         "checking": "正在检查音频…",
         "watermarkDetected": "此音频带有 Builderforce 水印，对应片段 {clipId}。",
         "audioMatches": "音频与已签名的记录一致。",
-        "selfReported": "此记录由创作者的设备自行报告。",
+        "selfReported": "由该声音的被授权方登记；平台未见过此音频。",
+        "watermarkMismatch": "带有片段 {clipId} 的水印，但此音频不是已签名的音频。",
+        "watermarkUnchecked": "带有片段 {clipId} 的水印，但此格式无法检查音频指纹。",
+        "voiceDeleted": "已删除的声音",
         "metaTitle": "验证语音片段",
         "metaDescription": "检查语音片段是否带有 Builderforce 水印，以及所依据的同意声明。",
         "noWatermark": "未发现水印。此音频可能并非由 Builderforce 生成，或已被编辑或重新编码。",
@@ -38581,6 +38591,7 @@
       "checkoutCancelled": "已取消结账，你没有被扣款。",
       "checkoutFailed": "我们无法确认该笔付款。如果你已被扣款，请稍后刷新。",
       "checkoutDone": "购买完成，该声音现已加入你的声音。",
+      "licenseRevoked": "由于退款或争议，你对该声音的授权已被撤销。请联系支持团队恢复。",
       "checkoutOpened": "结账页面已在浏览器中打开。付款后请在此刷新。",
       "acquireFailed": "无法添加此声音，请重试。",
       "refresh": "刷新"

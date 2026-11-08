@@ -23,7 +23,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanvasSceneSpec, CanvasVideoSource } from '@builderforce/creation-canvas-contract';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
+import { loadStudio } from '@/lib/studioLoader';
 import { storeCanvasMedia } from '@/lib/canvasMediaStore';
+import { recordedClipExtension } from '@/lib/useStreamRecorder';
 // Type-only: never pulls the engine module into whatever bundle this hook lands in.
 // The runtime side is a lazy `import()` inside `generate()`, below.
 import type {
@@ -145,7 +147,7 @@ export function useSceneGeneration(
       // engine + weight-cache machinery out of every canvas session that never opens a
       // `scene` object, matching the code-split discipline `webdit-engine.ts` uses for
       // its own runtime import (Layer 1).
-      const { VideoEngine } = await import('@seanhogg/builderforce-studio');
+      const { VideoEngine } = await loadStudio();
 
       if (engineRef.current && engineModelRef.current !== modelId) disposeEngine();
       let engine = engineRef.current;
@@ -182,7 +184,10 @@ export function useSceneGeneration(
       // Persist the clip the same way every other canvas object's media is stored —
       // never a second storage convention for this one kind.
       const label = spec.prompt.trim().slice(0, 40) || 'scene';
-      const file = new File([result.blob], `${label}.mp4`, { type: result.blob.type || 'video/mp4' });
+      // The engine falls back to WebM where there is no AVC encoder (Firefox), so
+      // name + type the file from the blob's actual container, not a fixed ".mp4".
+      const mimeType = result.blob.type || 'video/mp4';
+      const file = new File([result.blob], `${label}.${recordedClipExtension(mimeType)}`, { type: mimeType });
       const output = await storeCanvasMedia(file, 'ai');
       commit({ output, mambaState: result.mambaState });
     } catch (err) {

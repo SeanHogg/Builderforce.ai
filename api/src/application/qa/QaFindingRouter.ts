@@ -15,7 +15,7 @@
  *     enters (explicit policy lane, else the first staffed non-human lane).
  *
  * The actual auto-run dispatch stays in the route layer (it owns `env` +
- * `runtimeService` + the canonical `maybeAutoRunOnLaneEntry` trigger) — this
+ * `runtimeService` + the canonical `routeLaneEntry` door) — this
  * service does the data work and hands back the task so the route can move it into
  * the fix lane and fire the SAME trigger a board drag uses. No new dispatch path.
  */

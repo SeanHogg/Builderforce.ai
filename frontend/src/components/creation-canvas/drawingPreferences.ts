@@ -1,4 +1,4 @@
-import { DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, DRAWING_TOOLS, type CanvasDrawingTool } from '@/lib/canvasDrawing';
+import { isSafeStrokeColor, DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, DRAWING_TOOLS, type CanvasDrawingTool } from '@/lib/canvasDrawing';
 
 /**
  * Which pen you picked up, remembered.
@@ -33,7 +33,7 @@ export function readDrawingPreferences(): DrawingPreferences {
     const parsed = JSON.parse(stored) as Partial<DrawingPreferences>;
     return {
       tool: DRAWING_TOOLS.includes(parsed.tool as CanvasDrawingTool) ? parsed.tool as CanvasDrawingTool : DEFAULT_DRAWING_PREFERENCES.tool,
-      color: typeof parsed.color === 'string' && parsed.color.length < 64 ? parsed.color : DEFAULT_DRAWING_PREFERENCES.color,
+      color: isSafeStrokeColor(parsed.color) ? parsed.color : DEFAULT_DRAWING_PREFERENCES.color,
       width: typeof parsed.width === 'number' && parsed.width >= 1 && parsed.width <= 24 ? parsed.width : DEFAULT_DRAWING_PREFERENCES.width,
     };
   } catch {

@@ -8,6 +8,7 @@ import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { MAX_SEARCH_MATCHES, workspacePathArg, resolveCanvasBuild, applySearchReplace, searchFileLines, summarizeWorkspace } from '@/lib/canvasBuildContext';
 import type { CanvasBuildToolsContext, BuildWorkspaceHelpers } from '@/lib/canvasBuildContext';
+import { contentBytes, timeWrite } from '@/lib/browserRuntime/writeTiming';
 
 /** List, search, write and edit: the actions that work on the files of a Builder object's workspace. */
 export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: BuildWorkspaceHelpers) {
@@ -20,6 +21,7 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       type: 'object', additionalProperties: false,
       properties: { objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' } },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = raw as { objectId?: unknown };
       const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
@@ -51,6 +53,7 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
         objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
       },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = raw as { query?: unknown; caseSensitive?: unknown; objectId?: unknown };
       const query = typeof args.query === 'string' ? args.query : '';
@@ -101,7 +104,7 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       const valid = validateFileContentForPath(path, content);
       if (!valid.ok) return { error: valid.reason };
       try {
-        await resolved.build.store.write(path, content);
+        await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(content), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => resolved.build.store.write(path, content));
         return { ok: true, applied: true, path, bytes: content.length, ...await committed(resolved.build, path, content) };
       } catch (error) {
         return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
@@ -146,7 +149,7 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       const valid = validateFileContentForPath(path, edit.next);
       if (!valid.ok) return { error: valid.reason };
       try {
-        await resolved.build.store.write(path, edit.next);
+        await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(edit.next), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => resolved.build.store.write(path, edit.next));
         return { ok: true, applied: true, path, replacements: edit.replacements, ...await committed(resolved.build, path, edit.next) };
       } catch (error) {
         return { error: toolErrorMessage(error, `"${path}" could not be written.`) };

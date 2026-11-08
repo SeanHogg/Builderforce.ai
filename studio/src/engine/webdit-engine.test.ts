@@ -19,7 +19,7 @@ import type { MambaStateSnapshot } from '../types';
  * mini-backend bundle here remains the only way to exercise the webdit
  * generation path end-to-end in this test suite.
  *
- * The browser APIs `generateWebDitClip` → `muxFramesToMp4` depend on
+ * The browser APIs `generateWebDitClip` → `muxFramesToVideo` depend on
  * (ImageData / createImageBitmap / VideoFrame / VideoEncoder /
  * EncodedVideoChunk) don't exist in vitest's default node environment, so
  * this file stubs minimal, structurally-correct fakes for them — mirroring

@@ -23,15 +23,20 @@ import {
 } from '@/lib/voiceClones';
 import { decodeToPcm, type PcmAudio } from '@/lib/captureAudio';
 import {
-  deleteEmbedding,
   getOnDeviceEngine,
-  loadEmbedding,
   narrate,
   narrationResultToObjectUrl,
-  saveEmbedding,
   type NarrationResult,
   type SpeakerEmbedding,
 } from '@/lib/voiceEngine';
+import type { WithProvenance } from '@/lib/voiceClipProvenance';
+import {
+  deleteEmbedding,
+  hasCachedEmbedding,
+  loadEmbedding,
+  migrateLegacyEmbeddings,
+  saveEmbedding,
+} from '@/lib/voiceEmbeddingStore';
 import { fetchIdeProjectByStorage } from '@/lib/ideProjectsApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CreateCloneInput {
@@ -57,13 +62,13 @@ export interface VoiceStudio {
   busy: boolean;
   /** Honest "synthesis unavailable" reason, never a silent swap. */
   unavailable: string | null;
-  result: NarrationResult | null;
+  result: (NarrationResult & WithProvenance) | null;
   audioUrl: string | null;
   /** Generate speech for the selected clone — wired to the green Run button. */
   synth: () => Promise<void>;
   createClone: (input: CreateCloneInput) => Promise<void>;
   deleteClone: (id: number) => Promise<void>;
-  /** Whether a local speaker embedding (the free synthesis identity) is held. */
+  /** Whether this device holds the owner's speaker embedding (the free synthesis identity). */
   hasEmbedding: (id: number) => boolean;
 }
 
@@ -79,8 +84,9 @@ export function useVoiceStudio(
   const [text, setText] = useState('The AI wrote this, and it speaks in my voice.');
   const [busy, setBusy] = useState(false);
   const [unavailable, setUnavailable] = useState<string | null>(null);
-  const [result, setResult] = useState<NarrationResult | null>(null);
+  const [result, setResult] = useState<(NarrationResult & WithProvenance) | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [embeddedIds, setEmbeddedIds] = useState<ReadonlySet<number>>(new Set());
   const errorMessage = useErrorMessage();
 
   // Resolve the IDE project backing this storage project so clones scope to this
@@ -104,6 +110,10 @@ export function useVoiceStudio(
     try {
       const list = await listVoiceClones(ideProjectId);
       setClones(list);
+      void migrateLegacyEmbeddings().then(async () => {
+        const held = await Promise.all(list.map(async (c) => ((await hasCachedEmbedding(c.id)) ? c.id : 0)));
+        setEmbeddedIds(new Set(held.filter(Boolean)));
+      });
       // Keep the selection valid: default to the first clone after a (re)load.
       setSelectedCloneId((cur) => (list.some((c) => c.id === cur) ? cur : (list[0]?.id ?? 0)));
     } catch (e) {
@@ -130,7 +140,7 @@ export function useVoiceStudio(
     setAudioUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     try {
       // Prefer the on-device path when we hold a local embedding for this voice.
-      const speaker = loadEmbedding(selectedCloneId);
+      const speaker = await loadEmbedding(selectedCloneId);
       const res = await narrate(selectedCloneId, text, speaker);
       setResult(res);
       setAudioUrl(await narrationResultToObjectUrl(res));
@@ -154,20 +164,24 @@ export function useVoiceStudio(
       consentAttested: input.consentAttested,
       reference: input.reference,
       embedding: embedding?.data ?? null,
+      embeddingSampleRate: embedding?.sampleRate ?? null,
       ideProjectId: ideProjectId ?? null,
     });
-    if (embedding) saveEmbedding(created.id, embedding);
+    if (embedding) {
+      await saveEmbedding(created.id, embedding);
+      setEmbeddedIds((prev) => new Set(prev).add(created.id));
+    }
     await reload();
     setSelectedCloneId(created.id);
   }, [onDevice, ideProjectId, reload]);
 
   const deleteClone = useCallback(async (id: number) => {
     await deleteVoiceClone(id);
-    deleteEmbedding(id);
+    await deleteEmbedding(id);
     await reload();
   }, [reload]);
 
-  const hasEmbedding = useCallback((id: number) => Boolean(loadEmbedding(id)), []);
+  const hasEmbedding = useCallback((id: number) => embeddedIds.has(id), [embeddedIds]);
 
   return {
     enabled,

@@ -1,4 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import type { Env } from '../../env';
+import { bumpBoardLiveRoster } from '../cache/boardLiveCache';
 /**
  * broadcastRoom — push a frame to everyone watching a realtime room so clients
  * re-fetch (no polling). Shared by the poker/retro surfaces and the ceremony
@@ -143,6 +145,8 @@ export async function broadcastProjectChanged(
 ): Promise<void> {
   if (tenantId == null || projectId == null) return;
   await Promise.all([
+    // The board's cached live reads (ticket owners, lane agents) die with the change.
+    bumpBoardLiveRoster(env as Env | undefined, tenantId, projectId),
     broadcastRoom(env?.SESSION_ROOM, projectRoomName(tenantId, projectId)),
     broadcastRoom(env?.CEREMONY_ROOM, ceremonyRoomName(tenantId, projectId)),
   ]);

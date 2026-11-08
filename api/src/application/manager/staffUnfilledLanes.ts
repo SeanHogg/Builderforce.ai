@@ -37,7 +37,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { forLane, laneAgentAssignments, laneAssignmentValues } from '../swimlane/laneAgentAssignments';
+import { forLane, insertLaneAssignment, laneAgentAssignments } from '../swimlane/laneAgentAssignments';
 import {
   decideManagedLaneAuthority, loadBoardLaneAuthorities,
   type LaneAuthorityInputs, type ManagedTaskScope,
@@ -486,7 +486,7 @@ async function staffLaneProducer(
     ))
     .limit(1);
   if (!existing) {
-    await db.insert(laneAgentAssignments).values(laneAssignmentValues({
+    await insertLaneAssignment(db, env, {
       tenantId: args.tenantId,
       swimlaneId: args.swimlaneId,
       agentKind: 'workforce',
@@ -496,7 +496,7 @@ async function staffLaneProducer(
       // one, so naming it here is what makes the lane's producer deterministic rather than
       // whatever the catalog happens to enumerate first.
       role: LANE_PRODUCER_ROLE_KEY,
-    }));
+    });
   }
   return {
     action: staffed.action,

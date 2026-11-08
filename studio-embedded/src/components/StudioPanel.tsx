@@ -18,6 +18,7 @@ import {
   VideoEngine,
   planScene,
   storyboardFrameCount,
+  videoExtensionForMime,
   type CoherenceMode,
   type DiffusionModelId,
   type GenerateResult,
@@ -626,7 +627,7 @@ export function StudioPanel({
     if (!result) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(result.blob);
-    a.download = `builderforce-video-${Date.now()}.mp4`;
+    a.download = `builderforce-video-${Date.now()}.${videoExtensionForMime(result.blob.type)}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }, [result]);

@@ -34,6 +34,7 @@ import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import { isReviewLane } from '../task/taskLifecycle';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
+import { findLiveExecution } from '../runtime/liveExecutionStatus';
 import type { ExecutionReadMemo } from '../runtime/executionReadMemo';
 import { agentExecutionEnabledCached } from '../runtime/agentExecutionGate';
 import { isSubagentRun } from '../runtime/cloudChildRuns';
@@ -70,7 +71,8 @@ export type AutoRunReason =
   | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
   | 'pending_approval'    // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
   | 'execution_disabled'  // a manager switched agent execution OFF for the WORKSPACE (or the deployment is stopped) — nothing runs, Run-now included, until it is re-enabled
-  | 'lane_requirement_gate'; // the lane's REQUIREMENT gate suppressed the normal agent — a required reviewer/producer round-trip is owed first
+  | 'lane_requirement_gate' // the lane's REQUIREMENT gate suppressed the normal agent — a required reviewer/producer round-trip is owed first
+  | 'trigger_error';       // the lane-entry trigger THREW while dispatching (recorded as `auto_run_error`) — never returned by the evaluator, only read back from the ledger
 
 /**
  * One English sentence per {@link AutoRunReason} — what a NON-UI caller should be
@@ -103,6 +105,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
   execution_disabled: 'No cloud run: agent execution is switched off for this workspace, so no cloud or autonomous run starts — Run now included — until a manager re-enables it in Settings. Local sub-agents in an editor session are not affected.',
   lane_requirement_gate: 'No run by the lane\'s normal agent: this lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer/producer instead and suppressed the normal agent until the review clears.',
+  trigger_error: 'No run: the dispatch attempt itself failed with an error (recorded as auto_run_error on the ticket\'s timeline), so nothing was started. The error text is on the timeline; a transient fault clears on the next dispatch, a persistent one needs a person.',
 };
 
 /**
@@ -638,13 +641,6 @@ export function classifyResolvedAutoRun(input: {
   return { reason: 'will_run', canRunNow: true };
 }
 
-const ACTIVE_STATUSES = new Set<string>([
-  ExecutionStatus.PENDING,
-  ExecutionStatus.SUBMITTED,
-  ExecutionStatus.RUNNING,
-  ExecutionStatus.PAUSED,
-]);
-
 /**
  * Resolve the lane the ticket sits in, the agents that could work it (lane
  * staffing + the ticket owner as a fallback), the autonomy decision, and any live
@@ -992,8 +988,7 @@ async function finishEvaluation(input: {
   const plainExecs = input.execMemo
     ? await input.execMemo.listByTask(args.taskId)
     : (await runtimeService.listByTask(args.taskId, { slim: true })).map((e) => e.toPlain());
-  const liveRow = plainExecs.find((e) => ACTIVE_STATUSES.has(e.status));
-  const liveExecution = liveRow ? { id: liveRow.id, status: liveRow.status } : null;
+  const liveExecution = findLiveExecution(plainExecs);
 
   // Breaker streak + re-run cooldown, from THIS one newest-first list (no second
   // query per ticket — the sweep evaluates hundreds) and through the SAME
@@ -1110,7 +1105,7 @@ async function finishEvaluation(input: {
  * contract: a usage-scan blip must never freeze a tenant's board. Null therefore
  * never means "blocked" — only `hasTokens: false` does.
  */
-async function resolveTenantTokenGate(
+export async function resolveTenantTokenGate(
   db: Db,
   tenantId: number,
   supplied: TenantTokenVerdict | undefined,

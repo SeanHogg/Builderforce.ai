@@ -708,6 +708,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       : await projectService.createProjectWithGeneratedKey(createDto);
     await provisionProject(c.env as Env, db, tenantId, project, {
       kanbanTemplateId: body.kanbanTemplateId,
+      buyerRef: (c.get('userId') as string | undefined) ?? null,
     });
     await bindIdeWorkspace(db, tenantId, project);
     return c.json(project.toPlain(), 201);

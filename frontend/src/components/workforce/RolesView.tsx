@@ -13,6 +13,7 @@ import { Select } from '@/components/Select';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { usePermission } from '@/lib/rbac';
 import { ROLE_DISCIPLINES, useRoles } from '@/lib/useRoles';
+import { isTemplatePreview } from '@/lib/kanban';
 import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -70,6 +71,8 @@ export function RolesView() {
       .then((tpl) => {
         if (cancelled) return;
         const keys = new Set<string>();
+        // A locked priced template exposes lane names only: no standard role set to resolve.
+        if (isTemplatePreview(tpl)) { setStandardKeys(keys); return; }
         for (const lane of tpl.lanes) {
           for (const req of lane.requirements) {
             if (req.kind === 'role' || req.kind === 'review') keys.add(req.ref);

@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_TOOL_FAILURE_STREAK, resetBrainRunStore, type EvermindRunHooks } from "@seanhogg/builderforce-brain-embedded";
 import { fakeGateway, type GatewayScript } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
-import type { PolicyGate } from "./policy";
+import type { PolicyGate } from "@builderforce/agent-tools";
 import { parseHooksFile } from "./hooks/hookConfig";
 import { createRunHooks, type RunDirectives } from "./hooks/runHooks";
 import {

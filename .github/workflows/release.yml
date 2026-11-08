@@ -81,6 +81,10 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
+      - name: Check publishable dependencies
+        working-directory: ${{ matrix.dir }}
+        run: node "$GITHUB_WORKSPACE/scripts/check-publishable-deps.mjs" .
+
       - name: Type-check and test
         working-directory: ${{ matrix.dir }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh" "npm run type-check" "npm test"

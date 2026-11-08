@@ -21,10 +21,9 @@ import type {
   ServedRead,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { LocalRuntimeProbe } from "@builderforce/local-inference";
-import type { RunKnowledgeLog } from "@builderforce/agent-tools";
+import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import type { NativeRunLabels } from "./nativeBrainRun";
-import type { PolicyGate } from "./policy";
 import type { RunDirectives } from "./hooks/runHooks";
 import type { RunSink, WebviewRunStart } from "./brainRunHostProtocol";
 import type { ChildControls, ChildOwner } from "./childRunSpawner";

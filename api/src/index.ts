@@ -154,6 +154,7 @@ import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoute
 import { createLlmRatingRoutes }   from './presentation/routes/llmRatingRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
+import { createBacklogDispositionRoutes } from './presentation/routes/backlogDispositionRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
@@ -201,6 +202,7 @@ import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes'
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
+import { createVoiceProvenanceRoutes } from './presentation/routes/voiceProvenanceRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createIntegrationCatalogRoutes } from './presentation/routes/integrationCatalogRoutes';
 import { createDataSourceRoutes }  from './presentation/routes/dataSourceRoutes';
@@ -281,6 +283,8 @@ import { createProjectMediaRoutes } from './presentation/routes/projectMediaRout
 import { createRunContextRoutes }    from './presentation/routes/runContextRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
+import { createBoardBudgetRoutes }     from './presentation/routes/boardBudgetRoutes';
+import { createPeopleRoutes }          from './presentation/routes/peopleRoutes';
 import { createKanbanRoutes }          from './presentation/routes/kanbanRoutes';
 import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
 import { createMigrationRoutes } from './presentation/routes/migrationRoutes';
@@ -1135,6 +1139,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/qa',              createQaRoutes(db, taskService, runtimeService));
   app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db, taskService));
   app.route('/api/studio/voice-clones', createStudioVoiceCloneRoutes(db));
+  // Public: anyone holding a clip can ask whether (and under what consent) we made it.
+  app.route('/api/voice/provenance',    createVoiceProvenanceRoutes(db));
 
   // Phase 6 — Dev Analytics & Team Intelligence
   // Public integration catalog — the projection the marketing page renders.
@@ -1251,6 +1257,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Cloud Agent Boards
   app.route('/api/boards',            createBoardRoutes(db));
+  app.route('/api/boards',            createBoardBudgetRoutes(db));
+  app.route('/api/people',            createPeopleRoutes(db));
   app.route('/api/board-connections', createBoardConnectionRoutes(db));
   app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
   // Platform migration / import wizard (Jira/Monday/Rally/GitLab/Bitbucket → BF).
@@ -1292,6 +1300,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/projects',         createReplayProjectRoutes(db));
   app.route('/api/capabilities',     createCapabilityRoutes(db));
   app.route('/api/admin/replay-ops', createReplayOpsGrantRoutes(db)); // superadmin credit grant (D17)
+  app.route('/api/admin/backlog-dispositions', createBacklogDispositionRoutes(db)); // PRD 23: dry-run report + explicit apply (superadmin)
   // Insights data plane (PRD 33 S1): the PUBLIC ingest (any origin, cors.ts), the
   // workspace reads (`?site=` must be the caller's), and the operator aggregates.
   app.route('/api/replay-ingest',    createReplayIngestRoutes(db));

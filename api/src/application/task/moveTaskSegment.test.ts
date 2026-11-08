@@ -39,7 +39,7 @@ function makeTask(): Task {
     storyPoints: null, businessValue: null, businessValueRationale: null, businessValueSource: null,
     managerRank: null, reviewCount: 0, lastReviewedAt: null, lastReviewVerdict: null, gapOriginTaskId: null,
     githubIssueNumber: null, githubIssueUrl: null, githubPrUrl: null, githubPrNumber: null,
-    startDate: null, decompositionSource: null, dueDate: null, persona: null, archived: false,
+    startDate: null, decompositionSource: null, dueDate: null, persona: null, archived: false, investorMilestone: false,
     createdAt: new Date(), updatedAt: new Date(),
   });
 }
@@ -50,6 +50,7 @@ class RecordingTaskRepo implements ITaskRepository {
   async findAll(): Promise<Task[]> { return [this.task]; }
   async findByProjectIds(): Promise<Task[]> { return [this.task]; }
   async findById(id: TaskId): Promise<Task | null> { return (id as number) === 7 ? this.task : null; }
+  async findByIdsAcrossTenants(ids: TaskId[]): Promise<Task[]> { return ids.some((id) => (id as number) === 7) ? [this.task] : []; }
   async findChildren(): Promise<Task[]> { return []; }
   async maxKeySeqByProject(): Promise<number> { return 3; }
   async rekeyProject(): Promise<number> { return 0; }

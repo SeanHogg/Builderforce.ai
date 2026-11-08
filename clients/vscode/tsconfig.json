@@ -31,6 +31,7 @@
       "@builderforce/run-guards": ["../../packages/run-guards/src/index.ts"],
       "@builderforce/run-policy": ["../../packages/run-policy/src/index.ts"],
       "@builderforce/spend-contract": ["../../packages/spend-contract/src/index.ts"],
+      "@builderforce/voice-provenance": ["../../packages/voice-provenance/src/index.ts"],
       "@builderforce/tool-output-policy": ["../../packages/tool-output-policy/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/json-schema": ["../../packages/json-schema/src/index.ts"],

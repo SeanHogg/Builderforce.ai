@@ -33,5 +33,9 @@ export function escapeHtml(value: string): string {
  * pin that spelling in their contract tests, so it is the one variance kept.
  */
 export function escapeXml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => (char === "'" ? '&apos;' : (HTML_ESCAPES[char] ?? char)));
+  // XML 1.0 forbids these control characters even as character references, so they are
+  // dropped: a feed or envelope holding one is rejected whole by a strict parser.
+  return value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[&<>"']/g, (char) => (char === "'" ? '&apos;' : (HTML_ESCAPES[char] ?? char)));
 }

@@ -12,9 +12,10 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
-import { executions, taskFileChanges, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { executions, taskFileChanges, usageSnapshots } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { OUTCOME_ROW_TOOL } from '../runtime/cloudOutcomeRow';
+import { insertToolAudit } from '../audit/toolAuditWrite';
 
 /** Most events one batch may carry (mirrors the route schema). */
 export const HOST_TELEMETRY_BATCH_MAX = 200;
@@ -123,7 +124,7 @@ export async function admitToolAuditRows(db: Db, host: HostIdentity, rows: Retur
 /** Insert in ONE statement; returns the rows written. */
 export async function insertToolAuditRows(db: Db, rows: ReturnType<typeof toolAuditRows>): Promise<number> {
   if (rows.length === 0) return 0;
-  await runTelemetryDatabase(db).insert(toolAuditEvents).values(rows);
+  await insertToolAudit(db, rows);
   return rows.length;
 }
 

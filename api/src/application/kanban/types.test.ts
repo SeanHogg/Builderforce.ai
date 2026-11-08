@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { templateRosterRoles } from './types';
 import { BUILTIN_TEMPLATES, getBuiltinTemplate } from './templateCatalog';
+import { BACKLOG_LANE_GATE } from '../swimlane/defaultSwimlanes';
 
 describe('templateRosterRoles', () => {
   it('unions the distinct roles a template references, flagging required ones', () => {
@@ -39,5 +40,16 @@ describe('BUILTIN_TEMPLATES', () => {
       expect(new Set(keys).size).toBe(keys.length);
       expect(t.lanes.some((l) => l.isTerminal)).toBe(true);
     }
+  });
+
+  it('every built-in seeds its backlog lane human-gated (operator decision 2026-11-07)', () => {
+    for (const t of BUILTIN_TEMPLATES) {
+      const backlog = t.lanes.find((l) => l.key === 'backlog');
+      if (!backlog) continue;
+      expect(backlog.gate, t.id).toBe(BACKLOG_LANE_GATE);
+      expect(backlog.gate, t.id).toBe('human');
+    }
+    // The assertion must not pass vacuously: at least the flagship has a backlog lane.
+    expect(getBuiltinTemplate('standard-swe')!.lanes.some((l) => l.key === 'backlog')).toBe(true);
   });
 });

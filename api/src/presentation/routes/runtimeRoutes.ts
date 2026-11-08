@@ -2,7 +2,10 @@ import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
+import { idempotentReplay } from '../middleware/idempotentReplay';
+import { admissionRefusalToResponse, executionAdmissionGate, steerRateAdmission, steerTextAdmission } from './executionAdmissionGate';
+import { admissionRefusalOf } from '../../application/runtime/dispatchAdmission';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { dispatchGithubActionsRun, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
@@ -13,7 +16,7 @@ import { liveExecution } from '../../application/rehearsal/executionMode';
 import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, stripClientPolicyGates, withDefaultModel,
 } from '../../application/runtime/cloudDispatch';
 import { verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { loadSandboxRunContext } from '../../application/runtime/cloudAgent/runContext';
@@ -47,9 +50,10 @@ import {
 } from '../../application/runtime/cloudAgentEngine';
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from '../../application/runtime/defaultCloudAgent';
 import {
-  dispatchCloudRunForTask, startDispatchedExecution, getDispatchTargets, dispatchToAgentHost,
-  type DispatchMessage, type ExecutionTaskRow, type SubmittedExecution,
+  dispatchCloudRunForTask, startDispatchedExecution, storedPayloadOf,
+  type ExecutionTaskRow, type SubmittedExecution,
 } from '../../application/runtime/dispatchCloudRun';
+import { getDispatchTargets, dispatchToAgentHost, type DispatchMessage } from '../../application/runtime/hostDelivery';
 import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
 import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
 import { assessRerunBackoff, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
@@ -113,7 +117,7 @@ import { limitParam, positiveIntParam } from './queryParams';
  *     high/urgent tickets and routes them to /api/approvals for MANAGER sign-off.
  *     Machine tokens minted for on-prem agent hosts carry DEVELOPER (see
  *     authRoutes agent-host key exchange), so host callbacks keep working.
- * System/cron callers (autonomousExecutionSweep → maybeAutoRunOnLaneEntry, the CI
+ * System/cron callers (autonomousExecutionSweep → routeLaneEntry, the CI
  * auto-fix loop, incident/validation dispatch) never traverse these routes — they
  * call the exported `dispatchCloudRunForTask` directly and so are unaffected by
  * the gates. `/internal/container-op` is mounted ABOVE authMiddleware on purpose
@@ -124,6 +128,10 @@ type RuntimeHonoEnv = HonoEnv & {
     AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
+
+/** `Idempotency-Key` replay for the submit routes (PRD 09 D6): the same tenant + key within
+ *  24h answers with the ORIGINAL response instead of starting a second billable run. */
+const replayOnIdempotencyKey = idempotentReplay({ bindBody: true }) as unknown as MiddlewareHandler<RuntimeHonoEnv>;
 
 // The approval-gate primitives now live in the application layer so system callers
 // (autonomous lane trigger / cron sweep) can apply the SAME gate without a request
@@ -205,7 +213,8 @@ const SubmitRunBody = z.object({
   agentRegistrationId: z.string().optional(),
   agentHostId: zPositiveInt.nullable().optional(),
   sessionId: z.string().optional(),
-  payload: z.string().optional(),
+  // Gates are resolved server-side at submit; a client cannot supply them.
+  payload: z.string().optional().transform(stripClientPolicyGates),
 });
 const ExecutionControlBody = z.object({ enabled: z.boolean() });
 const ResumeBody = z.object({ answer: z.string().optional() });
@@ -217,7 +226,7 @@ const ExecutionStateBody = z.object({
   /** `reportExecutionState` accepts a numeric string from older hosts. */
   codeChanges: z.union([z.number(), z.string()]).optional(),
 });
-const BroadcastBody = z.object({ payload: z.string().optional() });
+const BroadcastBody = z.object({ payload: z.string().optional().transform(stripClientPolicyGates) });
 
 /**
  * Shared post-submit dispatch path for `/executions` and `/tasks/submit`.
@@ -236,14 +245,14 @@ async function dispatchAndQueue(
   execution: SubmittedExecution,
   taskRow: ExecutionTaskRow,
   payload: string | undefined,
-): Promise<unknown> {
-  return startDispatchedExecution(
-    c.env as Env, db, runtimeService,
-    (p) => c.executionCtx.waitUntil(p),
-    c.get('tenantId'), execution, taskRow, payload,
+): Promise<Response> {
+  const result = await startDispatchedExecution(
+    c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
+    c.get('tenantId'), execution, taskRow, payload, { actingUserId: c.get('userId') },
   );
+  const refusal = admissionRefusalOf(result); // the choke point's typed refusal -> 409 / 429
+  return refusal ? admissionRefusalToResponse(c, refusal) : c.json(result, 201);
 }
-
 
 /**
  * Load an execution ONLY if it belongs to the caller's tenant — the ownership guard for
@@ -395,7 +404,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // STARTS a billable run (legacy BuilderForce Link submit path).
-  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER), async (c) => {
+  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey, async (c) => {
     const body = await parseBody(c, SubmitRunBody);
 
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
@@ -427,6 +436,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const authorization = await authorizeManagedTaskExecution(db, c.get('tenantId'), body.taskId, body.payload);
     if (!authorization.allowed) return c.json({ error: authorization.reason }, 409);
 
+    const admissionBlock = await executionAdmissionGate(c, db, {
+      taskId: taskRow.id,
+      pinnedHost: (agentHostIdFromHeader ?? body.agentHostId ?? taskRow.assignedAgentHostId) != null,
+    });
+    if (admissionBlock) return admissionBlock;
+
     // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
     // board Run agree and the superadmin bypass is applied once). Fails open on a
     // scan error; superadmin / unlimited tenants pass through.
@@ -465,8 +480,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
-    const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
-    return c.json(result, 201);
+    return dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
   });
 
   router.get('/tasks/:id/state', async (c) => {
@@ -485,7 +499,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Submit a task for execution — the primary "start a billable run" entry point.
-  router.post('/executions', requireRole(TenantRole.DEVELOPER), async (c) => {
+  router.post('/executions', requireRole(TenantRole.DEVELOPER), replayOnIdempotencyKey, async (c) => {
     const body = await parseBody(c, SubmitRunBody);
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
@@ -513,6 +527,13 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Task not found' }, 404);
     }
 
+    // Live-run dedupe + concurrent cap + budget floor (PRD 09 D6/D8/B3) — one shared gate.
+    const admissionBlock = await executionAdmissionGate(c, db, {
+      taskId: taskRow.id,
+      pinnedHost: (agentHostIdFromHeader ?? body.agentHostId ?? taskRow.assignedAgentHostId) != null,
+    });
+    if (admissionBlock) return admissionBlock;
+
     // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
     // board Run agree and the superadmin bypass is applied once). Fails open on a
     // scan error; superadmin / unlimited tenants pass through.
@@ -551,8 +572,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
-    const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
-    return c.json(result, 201);
+    return dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
   });
 
   // List executions for the caller's tenant
@@ -1083,6 +1103,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const body = await parseBody(c, MessageBody);
     const text = body.text?.trim();
     if (!text) return c.json({ error: 'text is required' }, 400);
+    const tooLong = steerTextAdmission(c, text);
+    if (tooLong) return tooLong;
 
     const execution = await runtimeService.getExecution(id).catch(() => null);
     if (!execution) return c.json({ error: 'Execution not found' }, 404);
@@ -1091,6 +1113,10 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (plain.tenantId != null && plain.tenantId !== tenantId) {
       return c.json({ error: 'Execution not found' }, 404);
     }
+    // Charged to the execution only AFTER ownership is proven, so a probe of someone
+    // else's id cannot burn that run's steering budget.
+    const steerThrottled = await steerRateAdmission(c, id);
+    if (steerThrottled) return steerThrottled;
 
     // Task essentials for PRD write-back and (on a terminal run) the re-run dispatch.
     const [taskRow] = plain.taskId != null
@@ -1172,7 +1198,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (followUp.kind === 'awaiting_approval') {
       return c.json({ status: 'awaiting_approval', approvalId: followUp.approvalId, taskId: taskRow.id, reason: followUp.reason }, 202);
     }
-    // A billing entitlement a person cannot click past — 402, as Run now answers it.
+    // Admission (a live run / the concurrent cap) -> 409 / 429; a billing entitlement a person cannot click past -> 402, as Run now answers it.
+    if (followUp.kind === 'refused' && followUp.admission) return admissionRefusalToResponse(c, followUp.admission);
     if (followUp.kind === 'refused') return c.json({ error: followUp.message, reason: followUp.reason }, 402);
     return c.json({ ok: true, rerun: { executionId: followUp.executionId, dispatch: followUp.dispatch } });
   });
@@ -1461,7 +1488,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       type: 'task.broadcast',
       executionId: execution.id,
       taskId: taskRow.id,
-      payload: body.payload,
+      payload: storedPayloadOf(execution, body.payload),
       task: {
         title: taskRow.title,
         description: taskRow.description,

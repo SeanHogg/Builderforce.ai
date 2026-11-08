@@ -6,6 +6,7 @@
 
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from './lenses';
+import { weakMemo } from './memo';
 import { cmp } from './order';
 
 /** Nodes at a phone's width (PRD 38 §4.6: "the view opens focused, top 60"). */
@@ -25,14 +26,14 @@ export const byImportance = (a: KNode, b: KNode): number =>
 interface FocusCache {
     nodes: readonly KNode[];
     bases: Map<number, { visible: VisibleGraph; refs: ReadonlySet<string> }>;
-    index: { byRef: Map<string, KNode>; incident: Map<string, KEdge[]> } | null;
+    byRef: Map<string, KNode> | null;
 }
 const focusCaches = new WeakMap<readonly KEdge[], FocusCache>();
 
 function cacheOf(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): FocusCache {
     const held = focusCaches.get(graph.edges);
     if (held && held.nodes === graph.nodes) return held;
-    const fresh: FocusCache = { nodes: graph.nodes, bases: new Map(), index: null };
+    const fresh: FocusCache = { nodes: graph.nodes, bases: new Map(), byRef: null };
     focusCaches.set(graph.edges, fresh);
     return fresh;
 }
@@ -58,18 +59,23 @@ export function focusGraph(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>, max: 
     const missing = [...new Set(keep)].filter((r) => !base.refs.has(r));
     if (missing.length === 0) return base.visible;
 
-    if (!cache.index) {
-        const incident = new Map<string, KEdge[]>();
-        const link = (ref: string, e: KEdge): void => { const l = incident.get(ref); if (l) l.push(e); else incident.set(ref, [e]); };
-        for (const e of graph.edges) { link(e.from, e); if (e.to !== e.from) link(e.to, e); }
-        cache.index = { byRef: new Map(graph.nodes.map((n) => [n.ref as string, n] as const)), incident };
-    }
-    const { byRef, incident } = cache.index;
-    const extra = missing.flatMap((r) => byRef.get(r) ?? []);
+    cache.byRef ??= new Map(graph.nodes.map((n) => [n.ref as string, n] as const));
+    const extra = missing.flatMap((r) => cache.byRef!.get(r) ?? []);
     const refs = new Set<string>([...base.refs, ...extra.map((n) => n.ref)]);
-    const added = new Set<KEdge>();
-    for (const n of extra) for (const e of incident.get(n.ref) ?? []) if (refs.has(e.from) && refs.has(e.to)) added.add(e);
-    return { nodes: [...base.visible.nodes, ...extra], edges: [...base.visible.edges, ...added] };
+    // The edges touching the added nodes, found in ONE pass over the graph's edges (a Set lookup per end) and kept in graph order per node;
+    // no per-graph incident index is built for a selection that is usually a single node.
+    const added = new Set(extra.map((n) => n.ref as string));
+    const touching = new Map<string, KEdge[]>();
+    const link = (ref: string, e: KEdge): void => { const l = touching.get(ref); if (l) l.push(e); else touching.set(ref, [e]); };
+    for (const e of graph.edges) {
+        const f = added.has(e.from), t = added.has(e.to);
+        if (!f && !t) continue;
+        if (f) link(e.from, e);
+        if (t && e.to !== e.from) link(e.to, e);
+    }
+    const edges = new Set<KEdge>();
+    for (const n of extra) for (const e of touching.get(n.ref) ?? []) if (refs.has(e.from) && refs.has(e.to)) edges.add(e);
+    return { nodes: [...base.visible.nodes, ...extra], edges: [...base.visible.edges, ...edges] };
 }
 
 /** A lens's reading: its edges only; nodes keep their place (dimmed by `nodeStyle`). */
@@ -133,23 +139,47 @@ export function localSearch(graph: Pick<KnowledgeGraph, 'nodes'>, q: string, k =
 
 /** The partition matrix: cross-partition edge counts, and the worst verdict per cell. */
 export interface PartitionCell { count: number; verdict?: 'allowed' | 'same' | 'skips' | 'upward' }
-export function partitionMatrix(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): { partitions: string[]; cells: Map<string, PartitionCell> } {
-    const part = new Map(graph.nodes.map((n) => [n.ref, n.partition] as const));
-    const cells = new Map<string, PartitionCell>();
-    const seen = new Set<string>();
-    const rank = { allowed: 0, same: 0, skips: 1, upward: 2 } as const;
-    for (const e of graph.edges) {
-        const a = part.get(e.from), b = part.get(e.to);
-        if (a === undefined || b === undefined || e.verdict === undefined) continue;
-        seen.add(a); seen.add(b);
-        const key = `${a}\u0000${b}`;
-        const cell = cells.get(key) ?? { count: 0 };
-        cell.count += 1;
-        if (!cell.verdict || rank[e.verdict] > rank[cell.verdict]) cell.verdict = e.verdict;
-        cells.set(key, cell);
+const VERDICT_RANK = { allowed: 0, same: 0, skips: 1, upward: 2 } as const;
+
+function computePartitionMatrix(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): { partitions: string[]; cells: Map<string, PartitionCell> } {
+    // Partitions as small integers: a cell is found by `a * count + b` in a typed table, with no key string built per edge.
+    const slots = new Map<string, number>();
+    const names: string[] = [];
+    const part = new Map<string, number>();
+    for (const n of graph.nodes) {
+        if (n.partition === undefined) { part.set(n.ref, -1); continue; }
+        let slot = slots.get(n.partition);
+        if (slot === undefined) { slot = names.length; slots.set(n.partition, slot); names.push(n.partition); }
+        part.set(n.ref, slot);
     }
-    return { partitions: [...seen].sort(), cells };
+    const width = names.length;
+    const table = new Int32Array(width * width).fill(-1);
+    const touched: number[] = [];
+    const cellsAt: PartitionCell[] = [];
+    const seen = new Uint8Array(width);
+    for (const e of graph.edges) {
+        const verdict = e.verdict;
+        if (verdict === undefined) continue;
+        const a = part.get(e.from);
+        if (a === undefined || a < 0) continue;
+        const b = part.get(e.to);
+        if (b === undefined || b < 0) continue;
+        seen[a] = 1; seen[b] = 1;
+        const at = a * width + b;
+        let cell = cellsAt[table[at]!];
+        if (!cell) { cell = { count: 0 }; table[at] = cellsAt.length; cellsAt.push(cell); touched.push(at); }
+        cell.count += 1;
+        if (!cell.verdict || VERDICT_RANK[verdict] > VERDICT_RANK[cell.verdict]) cell.verdict = verdict;
+    }
+    const cells = new Map<string, PartitionCell>();
+    touched.forEach((at, i) => cells.set(`${names[Math.floor(at / width)]}\u0000${names[at % width]}`, cellsAt[i]!));
+    return { partitions: names.filter((_, i) => seen[i]).sort(), cells };
 }
+
+const matrixMemo = weakMemo(computePartitionMatrix, (g) => g.edges, (g) => g.nodes);
+
+/** The partition matrix of a graph, computed ONCE per graph (Insights and the matrix component share it): read-only. */
+export const partitionMatrix = (graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): { partitions: string[]; cells: Map<string, PartitionCell> } => matrixMemo(graph);
 
 export const matrixKey = (from: string, to: string): string => `${from}\u0000${to}`;
 

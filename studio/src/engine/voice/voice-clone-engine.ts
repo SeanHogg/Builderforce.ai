@@ -20,6 +20,7 @@ import { NeuralCodec } from './neural-codec';
 import { encodeSpeaker } from './speaker-encoder';
 import { SSMAcousticModel } from './ssm-acoustic-model';
 import { tokenizeText } from './text-tokenizer';
+import { markSynthesizedPcm } from './watermark';
 import type {
   AcousticModelOptions,
   CloneSynthesisResult,
@@ -83,8 +84,13 @@ export class VoiceCloneEngine {
     peakNormalize(samples, 0.95);
     const durationMs = Math.round((samples.length / this.sampleRate) * 1000);
 
+    // Every synthesized clip leaves the engine watermarked, so every studio host
+    // (web, editor, hired.video) produces marked audio without doing anything.
+    const { pcm, watermarkId } = markSynthesizedPcm(samples, this.sampleRate);
+
     return {
-      pcm: samples,
+      pcm,
+      watermarkId,
       sampleRate: this.sampleRate,
       durationMs,
       wordTimestamps,

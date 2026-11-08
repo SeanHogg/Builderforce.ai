@@ -319,6 +319,14 @@ export interface Env {
   /** $/second-of-audio synthesis cost basis for ledger billing, in millicents
    *  per second. Defaults to 5 (≈ $0.05/min). `wrangler secret put VOICE_CLONE_COST_MC_PER_SEC`. */
   VOICE_CLONE_COST_MC_PER_SEC?: string;
+  /** HMAC key that signs every voice clip's provenance manifest. When unset the
+   *  key is HKDF-SHA256-derived from JWT_SECRET (label "bf-voice-provenance/v1"),
+   *  never the raw JWT key; set it to rotate independently.
+   *  `wrangler secret put VOICE_PROVENANCE_SECRET`. */
+  VOICE_PROVENANCE_SECRET?: string;
+  /** Sample rate requested from the TTS vendor for PCM16 output and assumed for
+   *  headerless PCM. Defaults to 24000. `wrangler secret put VOICE_CLONE_TTS_SAMPLE_RATE`. */
+  VOICE_CLONE_TTS_SAMPLE_RATE?: string;
   /** D2 difficulty router thresholds (`difficultyGate.ts` `difficultyPolicyFromEnv`):
    *  skip the weak attempt when P(weak fails) is above `DIFFICULTY_SKIP_ABOVE` (default
    *  0.75), still trying a `DIFFICULTY_EXPLORE` share of those skips (default 0.1). Both

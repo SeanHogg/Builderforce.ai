@@ -84,6 +84,8 @@ export async function dispatchValidatorReview(
       tenantId: params.tenantId,
       payload,
       submittedBy: params.submittedBy ?? `validator:${validatorRef}`,
+      // One-shot: no sweep re-evaluates a review, so a deferred admission is parked and retried.
+      parkIfDeferred: true,
     });
     await Promise.allSettled(deferred);
     return execId;

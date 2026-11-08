@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-studio-embedded",
-  "version": "2026.10.1",
+  "version": "2026.11.1",
   "description": "Full embeddable AI Video Studio for React — <StudioPanel> drop-in that runs LCM / SD-Turbo diffusion on WebGPU/WebNN, conditioned on a Mamba SSM state for temporal coherence, and muxes MP4 via WebCodecs. React layer on top of the headless @seanhogg/builderforce-studio engine.",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -49,20 +49,16 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run build"
+    "check:publishable-deps": "node ../scripts/check-publishable-deps.mjs .",
+    "prepublishOnly": "npm run build && npm run check:publishable-deps"
   },
   "engines": {
     "node": ">=18"
   },
   "peerDependencies": {
-    "@seanhogg/builderforce-studio": ">=0.2.0",
+    "@seanhogg/builderforce-studio": ">=2026.11.1",
     "react": ">=18",
     "react-dom": ">=18"
-  },
-  "dependencies": {
-    "@webdit/runtime": "file:../webdit/runtime",
-    "@webdit/shared": "file:../webdit/shared",
-    "@webdit/torch": "file:../webdit/torch"
   },
   "devDependencies": {
     "@seanhogg/builderforce-studio": "link:../studio",

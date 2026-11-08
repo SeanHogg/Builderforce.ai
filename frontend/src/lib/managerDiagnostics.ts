@@ -163,20 +163,18 @@ const passNum = (v: unknown): number | undefined => (typeof v === 'number' && Nu
 /**
  * Project a recorded pass onto {@link PassCounters}. PURE.
  *
- * `prs` folds `prsConducted + prsMerged`: that is the single number the surface reports,
- * and the two are meaningless apart at this altitude — conducting a PR that is then
- * merged is one piece of PR work, not two.
+ * `prs` is `prsMerged`: PR conduct left the pass for its own sweep, so the pass records only
+ * what it can account for — what landed since the previous pass (read off the merge journal).
  */
 export function passCountersFrom(pass: ManagerPassRecord | null | undefined): PassCounters | null {
   if (!pass) return null;
   const s = pass.summary ?? {};
-  const conducted = passNum(s.prsConducted);
   const merged = passNum(s.prsMerged);
   const out: PassCounters = {
     ...(passNum(s.scored) != null ? { scored: passNum(s.scored) } : {}),
     ...(passNum(s.ranked) != null ? { ranked: passNum(s.ranked) } : {}),
     ...(passNum(s.assigned) != null ? { assigned: passNum(s.assigned) } : {}),
-    ...(conducted != null || merged != null ? { prs: (conducted ?? 0) + (merged ?? 0) } : {}),
+    ...(merged != null ? { prs: merged } : {}),
     ...(passNum(s.dispatched) != null ? { dispatched: passNum(s.dispatched) } : {}),
     ...(passNum(s.audited) != null ? { audited: passNum(s.audited) } : {}),
     ...(passNum(s.flagged) != null ? { flagged: passNum(s.flagged) } : {}),

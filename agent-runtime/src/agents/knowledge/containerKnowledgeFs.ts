@@ -4,7 +4,7 @@
  * `node:fs`, and the `.builderforce/knowledge/` files a root's review manifest lives in.
  */
 
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import chokidar from "chokidar";
 import { isBuilderforceState, isSkippedPath, type KnowledgeFiles, type KnowledgeFs } from "@builderforce/agent-tools/knowledge/index.js";
@@ -94,5 +94,7 @@ export function containerKnowledgeFiles(workspaceRoot: string): KnowledgeFiles {
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, name), text, "utf8");
     },
+    // A legacy file is renamed aside (`*.migrated`) once its rows are in the SQLite store.
+    rename: (from, to) => rename(join(dir, from), join(dir, to)),
   };
 }

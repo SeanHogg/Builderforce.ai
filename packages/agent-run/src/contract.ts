@@ -24,6 +24,7 @@
 
 import type {
   CapabilityProvider,
+  DeclaredToolEffect,
   ToolDefinition,
   PolicyGate,
   ToolSchema,
@@ -250,6 +251,11 @@ export interface ToolExtension {
   terminalTurn?(turn: { content: string }, calls: ReadonlyArray<{ name: string; args: Record<string, unknown>; malformed: boolean }>): string | undefined;
   /** Shape the result of a tool the REGISTRY ran (the surface saves a snapshot the model reads a summary of). Absent ⇒ as-is. */
   shape?(name: string, data: unknown): Promise<unknown> | unknown;
+  /**
+   * The surface's own word on a tool of this extension that the shared catalog does not classify (additive): `{ mutates: false }` for a
+   * read. A governance class gate judges the call by the catalog, then by this, then as a mutation (fail closed).
+   */
+  declared?(name: string): DeclaredToolEffect | undefined;
 }
 
 /**

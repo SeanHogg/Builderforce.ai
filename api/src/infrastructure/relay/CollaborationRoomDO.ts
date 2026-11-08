@@ -4,8 +4,15 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
+import { createThrottledReporter, type ThrottledReporter } from '../../application/observability/throttledReporter';
 import { relayIdentityFromHeaders } from '../../domain/shared/relayIdentity';
-import { fullBucket, takeToken, type BucketRate, type TokenBucket } from './tokenBucket';
+import {
+  carriesDocumentData, encodeAwareness, encodeSyncStep1, encodeUpdate, MESSAGE_AWARENESS, MESSAGE_SYNC, toBytes,
+} from './collabFrames';
+import { CLOSE_RATE_LIMITED, COLLAB_FRAME_RATE, FrameBudgets } from './collabFrameBudget';
+import { isEphemeralJsonFrame, relayableJson, type JsonFrame } from './collabJsonRelay';
+import { CLOSE_TOO_LARGE, MAX_STATE_BYTES, StateAdmission } from './collabRoomAdmission';
+import { RoomPersister } from './collabRoomPersister';
 
 /**
  * CollaborationRoomDO — a hibernation-WebSocket Durable Object for real-time co-editing
@@ -66,35 +73,18 @@ import { fullBucket, takeToken, type BucketRate, type TokenBucket } from './toke
  * packages, so the bytes asserted here are the bytes a `y-websocket` client expects.
  */
 
-/** y-websocket message types. Two, and they are the whole protocol. */
-const MESSAGE_SYNC = 0;
-const MESSAGE_AWARENESS = 1;
+/* Frames: `collabFrames.ts`. Storage layout: `collabRoomStorage.ts`. Debounced load/save: `collabRoomPersister.ts`.
+ * The state-size ceiling: `collabRoomAdmission.ts`. */
+export { encodeAwareness, encodeSyncStep1, encodeUpdate };
+export { CLOSE_TOO_LARGE, MAX_STATE_BYTES };
 
-/** Storage key for the persisted document state. Versioned so a future encoding change
- *  can be told apart from a document that simply has not been written yet. */
-const DOC_KEY = 'ydoc:v1';
+/** A persist/oversize failure is reported at most this often per room; it repeats on every save otherwise. */
+const ERROR_REPORT_INTERVAL_MS = 5 * 60_000;
 
-/**
- * How long to coalesce writes before persisting.
- *
- * Every keystroke is an update, and persisting each one would put a storage write on the
- * critical path of typing. Persisting NEVER would mean a room that evicts loses whatever
- * arrived since the last natural pause. A short debounce is the whole trade: at most this
- * many milliseconds of typing is at risk, and only if the object is evicted inside the
- * window, and only if every participant also disconnected — a connected peer still holds
- * the state and re-syncs it.
- */
+/** How long to coalesce writes before persisting (the trade is explained on `RoomPersister`). */
 const PERSIST_DEBOUNCE_MS = 2_000;
 
-/**
- * Per-socket frame budget. Every frame fans out to the whole room, so one flooding
- * client is an N× amplifier without it. Deep enough for a y-websocket handshake burst
- * and fast typing with a moving cursor.
- */
-export const COLLAB_FRAME_RATE: BucketRate = { framesPerSecond: 60, burst: 240 };
-
-/** Close code for a socket that exceeded its budget on a frame that may not be dropped. */
-export const CLOSE_RATE_LIMITED = 1008;
+export { CLOSE_RATE_LIMITED, COLLAB_FRAME_RATE };
 
 interface SessionInfo {
   /** `users.id`, asserted by the authed route. Never read from the query string. */
@@ -120,20 +110,19 @@ export class CollaborationRoomDO implements DurableObject {
   private state: DurableObjectState;
   private doc: Y.Doc;
   private awareness: awarenessProtocol.Awareness;
-  private persistTimer: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * Frame budgets, in memory on purpose: unlike a session, a budget that resets on
-   * hibernation is correct — the object only hibernates after going idle, and an idle
-   * bucket would have refilled to full anyway.
-   */
-  private readonly budgets = new WeakMap<WebSocket, TokenBucket>();
+  private readonly persister: RoomPersister;
+  private readonly admission = new StateAdmission();
+  private readonly reportThrottled: ThrottledReporter;
+  private readonly budgets = new FrameBudgets();
   /** Bound once here so no call site can forget the runtime override. */
   private readonly reportError: DurableErrorReporter;
 
   constructor(state: DurableObjectState, env?: unknown) {
     this.state = state;
     this.reportError = createDurableErrorReporter('infrastructure/relay/CollaborationRoomDO.ts', env, state);
+    this.reportThrottled = createThrottledReporter(this.reportError, ERROR_REPORT_INTERVAL_MS);
     this.doc = new Y.Doc();
+    this.persister = new RoomPersister(this.doc, state.storage, this.admission, this.reportThrottled, PERSIST_DEBOUNCE_MS);
     this.awareness = new awarenessProtocol.Awareness(this.doc);
     // The local awareness client is the SERVER, which has no cursor and must never appear
     // in anybody's peer list. Removing its own state keeps the room's roster equal to the
@@ -144,11 +133,10 @@ export class CollaborationRoomDO implements DurableObject {
     // document: a client whose SyncStep1 arrived first would otherwise be told the room is
     // blank and would helpfully overwrite it.
     void this.state.blockConcurrencyWhile?.(async () => {
-      const stored = await this.state.storage?.get<ArrayBuffer | Uint8Array>(DOC_KEY);
-      if (stored) Y.applyUpdate(this.doc, toBytes(stored));
+      await this.persister.load();
     });
 
-    this.doc.on('update', () => this.schedulePersist());
+    this.doc.on('update', () => this.persister.schedule());
 
     /**
      * ONE awareness fan-out, here rather than at each call site.
@@ -224,7 +212,7 @@ export class CollaborationRoomDO implements DurableObject {
 
       if (typeof message !== 'string') {
         const bytes = toBytes(message);
-        if (!this.withinBudget(ws)) {
+        if (!this.budgets.take(ws)) {
           this.refuse(ws, bytes[0] === MESSAGE_AWARENESS);
           return;
         }
@@ -232,54 +220,17 @@ export class CollaborationRoomDO implements DurableObject {
         return;
       }
 
-      const data = JSON.parse(message) as { type: string; [key: string]: unknown };
-      if (!this.withinBudget(ws)) {
-        this.refuse(ws, data.type === 'presence');
+      const data = JSON.parse(message) as JsonFrame;
+      if (!this.budgets.take(ws)) {
+        this.refuse(ws, isEphemeralJsonFrame(data));
         return;
       }
 
-      switch (data.type) {
-        case 'yjs-update':
-          // The legacy JSON envelope. Relayed rather than applied: it carries no agreed
-          // encoding for the update payload, so the room cannot merge it into its own doc
-          // without guessing. Clients on the binary protocol — every Yjs client — get the
-          // authoritative path above.
-          this.broadcast(ws, message);
-          break;
-        case 'presence':
-          this.broadcast(ws, JSON.stringify({
-            ...data,
-            type: 'presence',
-            userId: session.userId,
-            name: session.name,
-            color: session.color,
-          }));
-          break;
-        case 'terminal-input':
-          this.broadcast(ws, JSON.stringify({
-            type: 'terminal-input',
-            userId: session.userId,
-            data: data.data,
-          }));
-          break;
-        case 'terminal-output':
-          this.broadcast(ws, JSON.stringify({ type: 'terminal-output', data: data.data }));
-          break;
-      }
+      const relayed = relayableJson(data, message, session);
+      if (relayed !== null) this.broadcast(ws, relayed);
     } catch (error) {
       this.reportError(error, { operation: 'webSocketMessage' });
     }
-  }
-
-  /** Spend one frame from this socket's budget. */
-  private withinBudget(ws: WebSocket): boolean {
-    const now = Date.now();
-    let bucket = this.budgets.get(ws);
-    if (!bucket) {
-      bucket = fullBucket(COLLAB_FRAME_RATE, now);
-      this.budgets.set(ws, bucket);
-    }
-    return takeToken(bucket, COLLAB_FRAME_RATE, now);
   }
 
   /**
@@ -288,10 +239,10 @@ export class CollaborationRoomDO implements DurableObject {
    * was delivered, so the room would silently fork. The socket is closed instead, and the
    * client reconnects and re-syncs.
    */
-  private refuse(ws: WebSocket, ephemeral: boolean): void {
+  private refuse(ws: WebSocket, ephemeral: boolean, code = CLOSE_RATE_LIMITED, reason = 'rate limited'): void {
     if (ephemeral) return;
     try {
-      ws.close(CLOSE_RATE_LIMITED, 'rate limited');
+      ws.close(code, reason);
     } catch (error) {
       this.reportError(error, { operation: 'refuse' });
     }
@@ -322,6 +273,17 @@ export class CollaborationRoomDO implements DurableObject {
     const messageType = decoding.readVarUint(decoder);
 
     if (messageType === MESSAGE_SYNC) {
+      // Refused BEFORE it is applied (see `StateAdmission`), and closed like a flood, so the
+      // sender re-syncs from the room rather than believing the update was kept.
+      if (carriesDocumentData(bytes) && !this.admission.admit(bytes.byteLength)) {
+        this.reportThrottled('oversize', new Error('collaboration update refused: room state would exceed the hard cap'), {
+          operation: 'handleBinary',
+          level: 'warning',
+          context: { logMessage: '[CollaborationRoomDO] refused an update past the state cap', details: this.admission.details(bytes.byteLength) },
+        });
+        this.refuse(ws, false, CLOSE_TOO_LARGE, 'room state too large');
+        return;
+      }
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, MESSAGE_SYNC);
       const before = Y.encodeStateVector(this.doc);
@@ -385,28 +347,6 @@ export class CollaborationRoomDO implements DurableObject {
   }
 
   // -------------------------------------------------------------------------
-  // Persistence
-  // -------------------------------------------------------------------------
-
-  private schedulePersist(): void {
-    if (this.persistTimer) return;
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = null;
-      void this.persist();
-    }, PERSIST_DEBOUNCE_MS);
-  }
-
-  private async persist(): Promise<void> {
-    try {
-      await this.state.storage?.put(DOC_KEY, Y.encodeStateAsUpdate(this.doc));
-    } catch (error) {
-      // A failed write must not take the room down: the document is still correct in
-      // memory and in every connected client, and the next update reschedules.
-      this.reportError(error, { operation: 'persist' });
-    }
-  }
-
-  // -------------------------------------------------------------------------
   // Roster
   // -------------------------------------------------------------------------
 
@@ -448,38 +388,4 @@ export class CollaborationRoomDO implements DurableObject {
  *  unit test stubs, and an origin that fails the check is simply treated as serverside. */
 function isWebSocket(value: unknown): value is WebSocket {
   return !!value && typeof value === 'object' && typeof (value as { send?: unknown }).send === 'function';
-}
-
-// ---------------------------------------------------------------------------
-// Frame encoders — module scope, so the tests can build the same bytes a client would
-// ---------------------------------------------------------------------------
-
-/** The message that ASKS for what the receiver is missing. Sent to every new connection. */
-export function encodeSyncStep1(doc: Y.Doc): Uint8Array {
-  const encoder = encoding.createEncoder();
-  encoding.writeVarUint(encoder, MESSAGE_SYNC);
-  syncProtocol.writeSyncStep1(encoder, doc);
-  return encoding.toUint8Array(encoder);
-}
-
-/** A document update, wrapped in the sync envelope. */
-export function encodeUpdate(update: Uint8Array): Uint8Array {
-  const encoder = encoding.createEncoder();
-  encoding.writeVarUint(encoder, MESSAGE_SYNC);
-  syncProtocol.writeUpdate(encoder, update);
-  return encoding.toUint8Array(encoder);
-}
-
-/** The current awareness state of the named clients. */
-export function encodeAwareness(awareness: awarenessProtocol.Awareness, clients: number[]): Uint8Array {
-  const encoder = encoding.createEncoder();
-  encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
-  encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, clients));
-  return encoding.toUint8Array(encoder);
-}
-
-/** Workers hand binary frames over as `ArrayBuffer`; `y-protocols` wants a `Uint8Array`.
- *  One conversion, so no call site has to remember which it is holding. */
-function toBytes(value: ArrayBuffer | Uint8Array): Uint8Array {
-  return value instanceof Uint8Array ? value : new Uint8Array(value);
 }

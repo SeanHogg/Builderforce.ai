@@ -58,6 +58,16 @@ export default defineConfig({
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-git-history.ts"),
       },
       {
+        // The ONE local SQLite loader/opener and the process warning filter (G03), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-local-sqlite.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-local-sqlite.ts"),
+      },
+      {
+        // The Node knowledge store (G03): the on-prem manifest and the legacy import, same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-knowledge-store.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-knowledge-store.ts"),
+      },
+      {
         // PreFetch tool detection's Node probe, same NodeNext `.js` form.
         find: "@builderforce/agent-tools/node-prefetch.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-prefetch.ts"),

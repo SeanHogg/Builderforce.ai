@@ -6,41 +6,32 @@
  *   destination binding, pull pages) run on the request handle. Reads of other
  *   contexts (project/task ownership, membership) are the injected
  *   `SyncReferenceReader`, built from those contexts' own gates.
- * - `transact` opens ONE interactive transaction (`inTransaction`) per applied
- *   event and hands the unit of work both the sync stores AND the named
- *   importers bound to that same transaction, so the importer's domain row,
- *   the mapping, projection, change row and receipt commit or roll back together.
+ * - `transact` opens ONE interactive transaction (`inTransaction`) per push BATCH.
+ *   Each event runs in a SAVEPOINT of it (`tx.transaction`), handed both the sync
+ *   stores AND the named importers bound to that savepoint, so the importer's
+ *   domain row, the mapping, projection, change row and receipt of ONE event
+ *   commit or roll back together while the batch goes on.
  *
- * Every statement is tenant-scoped. The pull queries are the ones the retired
- * `syncPullQuery.ts` carried, now behind the port; `maxChangeSeq` is a single
- * aggregate (no page walk), and `minChangeSeq` / `changesAfter` are served by
- * `idx_sync_changes_destination (tenant_id, destination_key, seq)`.
+ * Every statement is tenant-scoped. The pull reads live in `SyncPullRepository`.
  */
 
-import { and, asc, eq, gt, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type {
   StoredSyncEvent,
-  SyncChangeRow,
   SyncEntityMappingRow,
   SyncNamedImporters,
-  SyncRecordRow,
   SyncReferenceReader,
   SyncStores,
   SyncStoreSet,
 } from '../../application/sync/syncPorts';
-import type { LocalEntityType, LocalRecord, SyncReceiptStatus } from '../../domain/sync/syncProtocol';
+import type { LocalEntityType, SyncReceiptStatus } from '../../domain/sync/syncProtocol';
 import { inTransaction, type Db, type Tx } from '../database/connection';
 import { syncChanges, syncEntityMappings, syncEvents, syncRecords } from '../database/schema/sync';
 import { scopedToTenant } from '../database/tenantScope';
+import { createSyncPullStore } from './SyncPullRepository';
 
 /** Binds the named importers to a transaction (`application/sync/importers/namedSyncImporters`). */
 export type SyncImportersFor = (tx: Tx) => SyncNamedImporters;
-
-const toSeq = (value: unknown): number | null => {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isSafeInteger(n) ? n : null;
-};
 
 /** The sync stores bound to one transaction. Writes exist only here. */
 function storeSetFor(tx: Tx): SyncStoreSet {
@@ -205,87 +196,35 @@ async function findMapping(
   return row ?? null;
 }
 
-const RECORD_COLUMNS = {
-  entityType: syncRecords.entityType,
-  clientEntityId: syncRecords.clientEntityId,
-  serverId: syncRecords.serverId,
-  schemaVersion: syncRecords.schemaVersion,
-  version: syncRecords.version,
-  destinationKey: syncRecords.destinationKey,
-  occurredAt: syncRecords.occurredAt,
-  updatedAt: syncRecords.updatedAt,
-  deletedAt: syncRecords.deletedAt,
-  payload: syncRecords.payload,
-  provenance: syncRecords.provenance,
-};
-
 /**
  * Build the one sync persistence adapter for a request handle. The importers
  * and the cross-context reference reader are injected by the composition
  * (`application/sync/syncStoresFor`), so this adapter imports no use case.
+ * `referencesInTx` binds the reference reader to a push transaction, so a row an
+ * earlier event of the batch wrote is visible to a later one; without it the
+ * committed reader is used.
  */
 export function createSyncRepository(
   db: Db,
   importersFor: SyncImportersFor,
   references: SyncReferenceReader,
+  referencesInTx?: (tx: Tx) => SyncReferenceReader,
 ): SyncStores {
   return {
+    ...createSyncPullStore(db),
     references,
     findEvent: (tenantId, deviceId, eventId) => findEvent(db, tenantId, deviceId, eventId),
     acceptedEventIds: (tenantId, eventIds) => acceptedEventIds(db, tenantId, eventIds),
     findMapping: (tenantId, entityType, clientEntityId) => findMapping(db, tenantId, entityType, clientEntityId),
 
-    transact: (work) => inTransaction(db, (tx) => work({ stores: storeSetFor(tx), importers: importersFor(tx) })),
-
-    async maxChangeSeq(tenantId) {
-      const [row] = await db
-        .select({ seq: sql<string | number | null>`max(${syncChanges.seq})` })
-        .from(syncChanges)
-        .where(scopedToTenant(syncChanges, tenantId));
-      return toSeq(row?.seq) ?? 0;
-    },
-
-    async minChangeSeq(tenantId, destinationKey) {
-      const [row] = await db
-        .select({ seq: sql<string | number | null>`min(${syncChanges.seq})` })
-        .from(syncChanges)
-        .where(scopedToTenant(syncChanges, tenantId, eq(syncChanges.destinationKey, destinationKey)));
-      return toSeq(row?.seq);
-    },
-
-    async changesAfter(tenantId, destinationKey, seq, limit): Promise<SyncChangeRow[]> {
-      const rows = await db
-        .select({ seq: syncChanges.seq, record: syncChanges.record })
-        .from(syncChanges)
-        .where(scopedToTenant(
-          syncChanges,
-          tenantId,
-          eq(syncChanges.destinationKey, destinationKey),
-          gt(syncChanges.seq, seq),
-        ))
-        .orderBy(asc(syncChanges.seq))
-        .limit(limit);
-      return rows.map((row) => ({ seq: Number(row.seq), record: row.record as unknown as LocalRecord }));
-    },
-
-    async snapshotAfter(tenantId, destinationKey, after, limit): Promise<SyncRecordRow[]> {
-      const afterKeyset = after
-        ? or(
-          gt(syncRecords.entityType, after.entityType),
-          and(eq(syncRecords.entityType, after.entityType), gt(syncRecords.clientEntityId, after.clientEntityId)),
-        )
-        : undefined;
-      const rows = await db
-        .select(RECORD_COLUMNS)
-        .from(syncRecords)
-        .where(scopedToTenant(syncRecords, tenantId, eq(syncRecords.destinationKey, destinationKey), afterKeyset))
-        .orderBy(asc(syncRecords.entityType), asc(syncRecords.clientEntityId))
-        .limit(limit);
-      return rows.map((row) => ({
-        ...row,
-        entityType: row.entityType as LocalEntityType,
-        provenance: (row.provenance ?? {}) as Record<string, unknown>,
-      }));
-    },
+    // ONE transaction per push batch; each event is a SAVEPOINT (`tx.transaction` on the
+    // transaction handle), so a failing event rolls back its own writes and the batch goes on.
+    transact: (work) => inTransaction(db, (tx) => work({
+      stores: storeSetFor(tx),
+      importers: importersFor(tx),
+      references: referencesInTx ? referencesInTx(tx) : references,
+      savepoint: (inner) => tx.transaction((sp) => inner({ stores: storeSetFor(sp), importers: importersFor(sp) })),
+    })),
   };
 }
+

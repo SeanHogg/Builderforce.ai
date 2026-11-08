@@ -156,7 +156,7 @@ describe("buildEmbeddedRunPayloads", () => {
         errorMessage: undefined,
         content: [],
       }),
-      lastToolError: { toolName: "browser", error: "tab not found" },
+      lastToolError: { toolName: "web_search", error: "tab not found" },
     });
 
     expect(payloads).toHaveLength(1);
@@ -202,7 +202,7 @@ describe("buildEmbeddedRunPayloads", () => {
           },
         ],
       }),
-      lastToolError: { toolName: "browser", error: "connection timeout" },
+      lastToolError: { toolName: "web_search", error: "connection timeout" },
     });
 
     expect(payloads).toHaveLength(1);
@@ -212,7 +212,7 @@ describe("buildEmbeddedRunPayloads", () => {
 
   it("suppresses recoverable tool errors containing 'required' for non-mutating tools", () => {
     const payloads = buildPayloads({
-      lastToolError: { toolName: "browser", error: "url required" },
+      lastToolError: { toolName: "web_search", error: "url required" },
     });
 
     // Recoverable errors should not be sent to the user
@@ -221,7 +221,7 @@ describe("buildEmbeddedRunPayloads", () => {
 
   it("suppresses recoverable tool errors containing 'missing' for non-mutating tools", () => {
     const payloads = buildPayloads({
-      lastToolError: { toolName: "browser", error: "url missing" },
+      lastToolError: { toolName: "web_search", error: "url missing" },
     });
 
     expect(payloads).toHaveLength(0);
@@ -229,7 +229,7 @@ describe("buildEmbeddedRunPayloads", () => {
 
   it("suppresses recoverable tool errors containing 'invalid' for non-mutating tools", () => {
     const payloads = buildPayloads({
-      lastToolError: { toolName: "browser", error: "invalid parameter: url" },
+      lastToolError: { toolName: "web_search", error: "invalid parameter: url" },
     });
 
     expect(payloads).toHaveLength(0);
@@ -237,7 +237,7 @@ describe("buildEmbeddedRunPayloads", () => {
 
   it("suppresses non-mutating non-recoverable tool errors when messages.suppressToolErrors is enabled", () => {
     const payloads = buildPayloads({
-      lastToolError: { toolName: "browser", error: "connection timeout" },
+      lastToolError: { toolName: "web_search", error: "connection timeout" },
       config: { messages: { suppressToolErrors: true } },
     });
 
@@ -325,6 +325,17 @@ describe("buildEmbeddedRunPayloads", () => {
 
     expect(payloads).toHaveLength(1);
     expect(payloads[0]?.text).toBe(warningText);
+  });
+
+  it("surfaces a browser tool error even with a reply and suppressToolErrors (a tool in neither catalog is mutating by name)", () => {
+    const payloads = buildPayloads({
+      assistantTexts: ["Opened the page."],
+      lastAssistant: { stopReason: "end_turn" } as unknown as AssistantMessage,
+      lastToolError: { toolName: "browser", error: "connection timeout" },
+      config: { messages: { suppressToolErrors: true } },
+    });
+
+    expect(payloads.some((p) => p.isError && p.text?.includes("connection timeout"))).toBe(true);
   });
 
   it("shows non-recoverable tool errors to the user", () => {

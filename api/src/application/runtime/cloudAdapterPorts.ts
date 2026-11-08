@@ -23,6 +23,7 @@ import { recordTypedExecutionClaim } from '../provenance/finishClaimService';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { applyPendingSteering } from './cloudLoopControl';
 import { pauseExecutionForQuestion } from './executionPause';
+import { redactDeep, redactThenCap } from '../../infrastructure/security/redactSecrets';
 
 /** Whose run these ports serve. */
 export interface CloudRunRefs {
@@ -49,7 +50,7 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
       return {
         toolName: event.tool, category: 'tool', ...(event.callId ? { toolCallId: event.callId } : {}),
         detail: event.tool === 'write_file' ? { path: args.path, summary: args.summary } : args,
-        result: JSON.stringify(event.result ?? null).slice(0, 300),
+        result: JSON.stringify(redactDeep(event.result ?? null)), resultCap: 300,
         ...(meta?.durationMs !== undefined ? { durationMs: meta.durationMs } : {}),
       };
     }
@@ -64,9 +65,9 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
         return { toolName: 'model.failover', category: 'llm', detail: { step: event.step, from: d.from ?? null, to: d.to, attempt: d.attempt, of: d.of, shape: d.shape }, result: String(d.notice ?? event.note ?? 'moved to another model') };
       }
       if (event.action === 'settle') {
-        return { toolName: 'loop.stall_settled', category: 'llm', detail: { step: event.step, model: d.model ?? null, tried: d.tried, shape: d.shape }, result: String(event.note ?? 'the run ended on the answer the stall ladder settled on').slice(0, 600) };
+        return { toolName: 'loop.stall_settled', category: 'llm', detail: { step: event.step, model: d.model ?? null, tried: d.tried, shape: d.shape }, result: String(event.note ?? 'the run ended on the answer the stall ladder settled on'), resultCap: 600 };
       }
-      return { toolName: 'loop.stall_unrecovered', category: 'error', detail: { step: event.step, model: d.model ?? null, tried: d.tried, shape: d.shape }, result: String(event.note ?? 'the run stopped').slice(0, 600) };
+      return { toolName: 'loop.stall_unrecovered', category: 'error', detail: { step: event.step, model: d.model ?? null, tried: d.tried, shape: d.shape }, result: String(event.note ?? 'the run stopped'), resultCap: 600 };
     }
     case 'context.tools':
       return {
@@ -81,7 +82,7 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
     case 'loop.repetition':
       return {
         toolName: 'llm.repetition_loop', category: 'llm', detail: { step: event.step, model: served(), copies: event.copies },
-        result: `the model repeated one block ${event.copies} times — kept the first copy: "${event.block.trim().slice(0, 120)}"`,
+        result: `the model repeated one block ${event.copies} times — kept the first copy: "${redactThenCap(event.block.trim(), 120)}"`,
       };
     case 'context.compacted':
       return {

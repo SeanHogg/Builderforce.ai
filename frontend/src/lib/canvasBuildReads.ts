@@ -53,6 +53,7 @@ export function canvasReadBuildFileAction<B extends { store: { read(path: string
         objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
       },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = raw as { path?: unknown; paths?: unknown; objectId?: unknown; offset?: unknown };
       const requested = [...new Set([

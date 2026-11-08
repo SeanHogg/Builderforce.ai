@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
 
 const mocks = vi.hoisted(() => ({
@@ -117,7 +118,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await disposeReplicas(); });
 
-describe("a linked root whose server answers 429 to every request", () => {
+describe.skipIf(!localSqliteAvailable())("a linked root whose server answers 429 to every request", () => {
   it("finishes the review and draws the same model as the unlinked run", async () => {
     const unlinked = await reviewAndDraw(false);
     await disposeReplicas();

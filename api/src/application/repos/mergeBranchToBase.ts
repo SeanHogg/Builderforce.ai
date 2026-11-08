@@ -9,6 +9,7 @@
  * gracefully. Never throws.
  */
 import { buildGitApiBaseUrl } from './gitProxy';
+import { resolveRepoCommitSha } from './readRepoContents';
 
 /**
  * When auto-merge is enabled, wait for green CI rather than merging unverified
@@ -71,15 +72,30 @@ export interface MergeBranchInput {
   /** The branch to merge FROM (the ticket branch). */
   head: string;
   message?: string;
+  /**
+   * The head commit the security gate verified. If the branch has moved the merge is refused
+   * (`head_moved`); otherwise THAT commit - not the branch name - is what gets merged, so a push that
+   * lands between the check and the call cannot ride in unscanned.
+   */
+  expectedHeadSha?: string;
 }
 
 export type MergeBranchResult =
   | { ok: true; merged: boolean; sha: string | null; reason?: string }
-  | { ok: false; code: 'unsupported' | 'conflict' | 'provider_error'; reason: string };
+  | { ok: false; code: 'unsupported' | 'conflict' | 'head_moved' | 'provider_error'; reason: string };
 
 export async function mergeBranchToBase(input: MergeBranchInput): Promise<MergeBranchResult> {
   if (input.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `merge not implemented for provider '${input.provider}'` };
+  }
+  if (input.expectedHeadSha) {
+    const now = await resolveRepoCommitSha({
+      provider: input.provider, host: input.host, owner: input.owner, repo: input.repo, token: input.token, ref: input.head,
+    });
+    if (!now.ok) return { ok: false, code: 'provider_error', reason: `could not verify the head commit before merging: ${now.reason}` };
+    if (now.sha !== input.expectedHeadSha.toLowerCase()) {
+      return { ok: false, code: 'head_moved', reason: `the branch head moved from ${input.expectedHeadSha.slice(0, 12)} to ${now.sha.slice(0, 12)} after it was checked` };
+    }
   }
   const apiBase = buildGitApiBaseUrl(input.provider, input.host);
   const repoBase = `${apiBase}/repos/${input.owner}/${input.repo}`;
@@ -95,7 +111,8 @@ export async function mergeBranchToBase(input: MergeBranchInput): Promise<MergeB
     headers,
     body: JSON.stringify({
       base: input.base,
-      head: input.head,
+      // GitHub accepts a branch name OR a commit SHA here: merge exactly what was verified.
+      head: input.expectedHeadSha ?? input.head,
       commit_message: input.message ?? `Merge ${input.head} into ${input.base} (BuilderForce auto-merge)`,
     }),
   }).catch(() => null);

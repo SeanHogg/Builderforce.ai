@@ -404,18 +404,43 @@ function versionMatchedCdn() {
   return version ? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/` : "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
 }
 var configured = false;
+var hostWasmBase = null;
+var lastOptionWasmCdn = null;
+function setOrtWasmBase(url) {
+  hostWasmBase = url ? url.endsWith("/") ? url : `${url}/` : null;
+  if (configured) applyWasmPaths(lastOptionWasmCdn ?? hostWasmBase ?? versionMatchedCdn());
+}
+var webgpuEnv = null;
+var appliedWasmPaths = null;
+var appliedNumThreads = null;
+function applyToWebGpuOrt() {
+  if (!webgpuEnv) return;
+  if (appliedWasmPaths) webgpuEnv.wasm.wasmPaths = appliedWasmPaths;
+  if (appliedNumThreads !== null) webgpuEnv.wasm.numThreads = appliedNumThreads;
+}
+async function configureWebGpuOrt() {
+  const mod = await import("onnxruntime-web/webgpu");
+  webgpuEnv = mod.env?.wasm ? mod.env : null;
+  applyToWebGpuOrt();
+}
+function applyWasmPaths(wasmPaths) {
+  if (hfEnv.backends?.onnx?.wasm) hfEnv.backends.onnx.wasm.wasmPaths = wasmPaths;
+  ort.env.wasm.wasmPaths = wasmPaths;
+  appliedWasmPaths = wasmPaths;
+  applyToWebGpuOrt();
+}
 function configureOnnxRuntime(opts = {}) {
   if (configured) return;
   configured = true;
-  const wasmCdn = opts.wasmCdn ?? versionMatchedCdn();
+  lastOptionWasmCdn = opts.wasmCdn ?? null;
+  const wasmPaths = opts.wasmCdn ?? hostWasmBase ?? versionMatchedCdn();
   const numThreads = opts.numThreads ?? 1;
   hfEnv.allowLocalModels = false;
-  if (hfEnv.backends?.onnx?.wasm) {
-    hfEnv.backends.onnx.wasm.numThreads = numThreads;
-    hfEnv.backends.onnx.wasm.wasmPaths = wasmCdn;
-  }
-  ort.env.wasm.wasmPaths = wasmCdn;
+  if (hfEnv.backends?.onnx?.wasm) hfEnv.backends.onnx.wasm.numThreads = numThreads;
+  applyWasmPaths(wasmPaths);
   ort.env.wasm.numThreads = numThreads;
+  appliedNumThreads = numThreads;
+  applyToWebGpuOrt();
 }
 
 // src/engine/ort-session.ts
@@ -1028,6 +1053,110 @@ function buildInterpolatedSequence(keyframes) {
   return slots;
 }
 
+// src/engine/kernels/selective-scan.wgsl.ts
+var SELECTIVE_SCAN_WORKGROUP_SIZE = 64;
+var SELECTIVE_SCAN_STEP_WGSL = (
+  /* wgsl */
+  `
+struct Params {
+  channels : u32,
+  order    : u32,
+  decay    : f32,
+  gain     : f32,
+};
+
+@group(0) @binding(0) var<uniform>             params : Params;
+@group(0) @binding(1) var<storage, read>       state  : array<f32>;
+@group(0) @binding(2) var<storage, read>       pooled : array<f32>;
+@group(0) @binding(3) var<storage, read_write> next   : array<f32>;
+
+@compute @workgroup_size(${SELECTIVE_SCAN_WORKGROUP_SIZE})
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+  let idx = gid.x;
+  let total = params.channels * params.order;
+  if (idx >= total) { return; }
+  let c = idx / params.order;
+  next[idx] = params.decay * state[idx] + params.gain * pooled[c];
+}
+`
+);
+
+// src/engine/selective-scan.ts
+var DEFAULT_SCAN_DECAY = 0.92;
+var DEFAULT_SCAN_GAIN = 0.1;
+function selectiveScanStepCpu(a) {
+  const next = new Float32Array(a.channels * a.order);
+  for (let c = 0; c < a.channels; c++) {
+    for (let k = 0; k < a.order; k++) {
+      const idx = c * a.order + k;
+      next[idx] = a.decay * (a.state[idx] ?? 0) + a.gain * a.pooled[c];
+    }
+  }
+  return next;
+}
+async function selectiveScanStepGpu(device, a) {
+  const total = a.channels * a.order;
+  const bytes = Math.max(4, total * 4);
+  const params = new ArrayBuffer(16);
+  const pv = new DataView(params);
+  pv.setUint32(0, a.channels, true);
+  pv.setUint32(4, a.order, true);
+  pv.setFloat32(8, a.decay, true);
+  pv.setFloat32(12, a.gain, true);
+  const state = new Float32Array(Math.max(1, total));
+  for (let i = 0; i < total; i++) state[i] = a.state[i] ?? 0;
+  const pooled = new Float32Array(Math.max(1, a.channels));
+  pooled.set(a.pooled.subarray(0, a.channels));
+  const buffers = [];
+  const make = (size, usage, data) => {
+    const buf = device.createBuffer({ size, usage });
+    if (data) device.queue.writeBuffer(buf, 0, data);
+    buffers.push(buf);
+    return buf;
+  };
+  try {
+    const paramBuf = make(16, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, params);
+    const stateBuf = make(bytes, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, state);
+    const pooledBuf = make(Math.max(4, a.channels * 4), GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, pooled);
+    const nextBuf = make(bytes, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC);
+    const readBuf = make(bytes, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+    const pipeline = device.createComputePipeline({
+      layout: "auto",
+      compute: { module: device.createShaderModule({ code: SELECTIVE_SCAN_STEP_WGSL }), entryPoint: "main" }
+    });
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [paramBuf, stateBuf, pooledBuf, nextBuf].map((buffer, binding) => ({
+        binding,
+        resource: { buffer }
+      }))
+    });
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.max(1, Math.ceil(total / SELECTIVE_SCAN_WORKGROUP_SIZE)));
+    pass.end();
+    enc.copyBufferToBuffer(nextBuf, 0, readBuf, 0, bytes);
+    device.queue.submit([enc.finish()]);
+    await readBuf.mapAsync(GPUMapMode.READ);
+    const out = new Float32Array(readBuf.getMappedRange().slice(0, total * 4));
+    readBuf.unmap();
+    return out;
+  } finally {
+    for (const b of buffers) b.destroy();
+  }
+}
+async function selectiveScanStep(a, device) {
+  if (device && a.channels * a.order > 0) {
+    try {
+      return await selectiveScanStepGpu(device, a);
+    } catch {
+    }
+  }
+  return selectiveScanStepCpu(a);
+}
+
 // src/engine/mamba-coherence.ts
 function projectState(state, targetDim) {
   const out = new Float32Array(targetDim);
@@ -1156,9 +1285,8 @@ function applyToLatent(args) {
   }
   return out;
 }
-function advanceState(state, input) {
-  const next = new Float32Array(state.data.length);
-  const decay = 0.92;
+async function advanceState(state, input, opts = {}) {
+  const decay = opts.decay ?? DEFAULT_SCAN_DECAY;
   const pooled = new Float32Array(state.channels);
   const stride = Math.max(1, Math.floor(input.length / state.channels));
   for (let c = 0; c < state.channels; c++) {
@@ -1170,12 +1298,17 @@ function advanceState(state, input) {
     }
     pooled[c] = count > 0 ? sum / count : 0;
   }
-  for (let c = 0; c < state.channels; c++) {
-    for (let k = 0; k < state.order; k++) {
-      const idx = c * state.order + k;
-      next[idx] = decay * (state.data[idx] ?? 0) + 0.1 * pooled[c];
-    }
-  }
+  const next = await selectiveScanStep(
+    {
+      state: state.data,
+      pooled,
+      channels: state.channels,
+      order: state.order,
+      decay,
+      gain: DEFAULT_SCAN_GAIN
+    },
+    opts.device
+  );
   return {
     data: Array.from(next),
     dim: state.dim,
@@ -1725,19 +1858,21 @@ async function expandPrompt(opts) {
 }
 
 // src/engine/webcodecs-muxer.ts
-import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from "mp4-muxer";
 var AVC_CODEC_CANDIDATES = [
   "avc1.42001f",
   "avc1.42E01E",
   "avc1.4D401F",
   "avc1.640028"
 ];
-async function selectVideoCodec(opts, probe) {
-  const probeImpl = probe ?? (typeof VideoEncoder !== "undefined" && typeof VideoEncoder.isConfigSupported === "function" ? VideoEncoder : void 0);
-  if (!probeImpl) return AVC_CODEC_CANDIDATES[0];
-  for (const codec of AVC_CODEC_CANDIDATES) {
+function resolveProbe(probe) {
+  if (probe) return probe;
+  return typeof VideoEncoder !== "undefined" && typeof VideoEncoder.isConfigSupported === "function" ? VideoEncoder : void 0;
+}
+async function firstSupportedCodec(candidates, opts, probe) {
+  for (const codec of candidates) {
     try {
-      const res = await probeImpl.isConfigSupported({
+      const res = await probe.isConfigSupported({
         codec,
         width: opts.width,
         height: opts.height,
@@ -1750,26 +1885,86 @@ async function selectVideoCodec(opts, probe) {
   }
   return null;
 }
-async function muxFramesToMp4(frames, opts) {
+var VP9_CODEC_CANDIDATES = ["vp09.00.10.08", "vp09.00.31.08"];
+var VP8_CODEC_CANDIDATES = ["vp8"];
+var ENCODING_TABLE = [
+  {
+    container: "mp4",
+    mimeType: "video/mp4",
+    extension: "mp4",
+    codecs: AVC_CODEC_CANDIDATES,
+    async createMuxer(_codec, opts) {
+      const muxer = new Mp4Muxer({
+        target: new Mp4Target(),
+        video: { codec: "avc", width: opts.width, height: opts.height, frameRate: opts.fps },
+        fastStart: "in-memory"
+      });
+      return {
+        addVideoChunk: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        finalize: () => {
+          muxer.finalize();
+          return muxer.target.buffer;
+        }
+      };
+    }
+  },
+  {
+    container: "webm",
+    mimeType: "video/webm",
+    extension: "webm",
+    codecs: VP9_CODEC_CANDIDATES,
+    createMuxer: (_codec, opts) => createWebmMuxer("V_VP9", opts)
+  },
+  {
+    container: "webm",
+    mimeType: "video/webm",
+    extension: "webm",
+    codecs: VP8_CODEC_CANDIDATES,
+    createMuxer: (_codec, opts) => createWebmMuxer("V_VP8", opts)
+  }
+];
+async function createWebmMuxer(codec, opts) {
+  const { Muxer, ArrayBufferTarget } = await import("webm-muxer");
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: { codec, width: opts.width, height: opts.height, frameRate: opts.fps }
+  });
+  return {
+    addVideoChunk: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    finalize: () => {
+      muxer.finalize();
+      return muxer.target.buffer;
+    }
+  };
+}
+async function selectVideoEncoding(opts, probe, table = ENCODING_TABLE) {
+  const probeImpl = resolveProbe(probe);
+  if (!probeImpl) return { row: table[0], codec: table[0].codecs[0] };
+  for (const row of table) {
+    const codec = await firstSupportedCodec(row.codecs, opts, probeImpl);
+    if (codec !== null) return { row, codec };
+  }
+  return null;
+}
+var UnsupportedVideoEncodingError = class extends Error {
+  constructor() {
+    super(
+      "This browser has no supported video encode configuration (tried H.264/MP4, VP9/WebM and VP8/WebM). Use a current Chrome, Edge, Safari or Firefox to export video."
+    );
+    this.name = "UnsupportedVideoEncodingError";
+  }
+};
+function videoExtensionForMime(mimeType) {
+  return ENCODING_TABLE.find((r) => r.mimeType === mimeType.split(";")[0].trim())?.extension ?? "mp4";
+}
+async function muxFramesToVideo(frames, opts) {
   if (typeof VideoEncoder === "undefined") {
     throw new Error("WebCodecs VideoEncoder is not available in this browser");
   }
-  const codec = await selectVideoCodec(opts);
-  if (codec === null) {
-    throw new Error(
-      "This browser has no supported MP4 (H.264/AVC) encode configuration. MP4 export currently requires a WebCodecs AVC encoder (Chrome 113+, Edge). Use a Chromium-based browser to export video."
-    );
-  }
-  const muxer = new Muxer({
-    target: new ArrayBufferTarget(),
-    video: {
-      codec: "avc",
-      width: opts.width,
-      height: opts.height,
-      frameRate: opts.fps
-    },
-    fastStart: "in-memory"
-  });
+  const selected = await selectVideoEncoding(opts);
+  if (selected === null) throw new UnsupportedVideoEncodingError();
+  const { row, codec } = selected;
+  const muxer = await row.createMuxer(codec, opts);
   const encoder = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
     error: (err) => {
@@ -1800,9 +1995,12 @@ async function muxFramesToMp4(frames, opts) {
   }
   await encoder.flush();
   encoder.close();
-  muxer.finalize();
-  const { buffer } = muxer.target;
-  return new Blob([buffer], { type: "video/mp4" });
+  const buffer = muxer.finalize();
+  return {
+    blob: new Blob([buffer], { type: row.mimeType }),
+    mimeType: row.mimeType,
+    extension: row.extension
+  };
 }
 async function frameToImageBitmap(frame, width, height) {
   const imageData = new ImageData(
@@ -1842,6 +2040,7 @@ async function loadWebDitBundle(descriptor, opts) {
   const weightSources = opts.weightSources ?? WEBDIT_WEIGHT_SOURCES;
   const onProgress = opts.onProgress;
   configureOnnxRuntime();
+  await configureWebGpuOrt();
   const fetchBundleFile = (relPath) => getOrFetchWeight({
     cacheKey: `webdit/${descriptor.architecture}/${relPath}`,
     // getOrFetchWeight's FetchOptions always require an hfRepo/hfPath pair
@@ -1870,7 +2069,7 @@ async function loadWebDitBundle(descriptor, opts) {
     files[rel] = await fetchBundleFile(rel);
   }
   reportProgress(`Building WebDiT bundle (${manifest.backend} backend)\u2026`, onProgress);
-  const { loadBundleFromBuffers } = await import("@webdit/runtime");
+  const { loadBundleFromBuffers } = await import("./webdit-runtime-WXCXDBYI.mjs");
   const bundle = await loadBundleFromBuffers(manifest, files);
   reportProgress(`WebDiT bundle ready \u2014 ${descriptor.id} (${manifest.architecture}).`, onProgress);
   return bundle;
@@ -1898,7 +2097,7 @@ function collectBundleFilePaths(manifest) {
   return paths;
 }
 async function runWebDitDenoise(bundle, args) {
-  const { runDenoiseLoop } = await import("@webdit/runtime");
+  const { runDenoiseLoop } = await import("./webdit-runtime-WXCXDBYI.mjs");
   const onProgress = args.onProgress;
   const frameOffset = args.frameOffset ?? 0;
   reportProgress("Running WebDiT denoise loop\u2026", onProgress);
@@ -1931,7 +2130,7 @@ async function generateWebDitClip(bundle, args) {
   const start = performance.now();
   const { frames, muxFrames, width, height } = await runWebDitDenoise(bundle, args);
   reportProgress(`Encoding ${frames.length} frames to MP4\u2026`, args.onProgress);
-  const blob = await muxFramesToMp4(muxFrames, {
+  const { blob } = await muxFramesToVideo(muxFrames, {
     width,
     height,
     fps: args.fps,
@@ -2159,7 +2358,7 @@ var VideoEngine = class _VideoEngine {
     const finalFrames = refined?.frames ?? clip.frames;
     const finalMuxFrames = refined?.muxFrames ?? clip.muxFrames;
     reportProgress(`Encoding ${finalFrames.length} frames to MP4\u2026`, onProgress);
-    const blob = await muxFramesToMp4(finalMuxFrames, {
+    const { blob } = await muxFramesToVideo(finalMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -2281,7 +2480,7 @@ var VideoEngine = class _VideoEngine {
       allLatents = refined.latents;
     }
     reportProgress(`Encoding ${finalFrames.length} frames to MP4\u2026`, onProgress);
-    const blob = await muxFramesToMp4(finalMuxFrames, {
+    const { blob } = await muxFramesToVideo(finalMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -2349,7 +2548,7 @@ var VideoEngine = class _VideoEngine {
       args.onShot?.(s, shot, null);
     }
     reportProgress(`Encoding ${allFrames.length} frames to MP4\u2026`, onProgress);
-    const blob = await muxFramesToMp4(allMuxFrames, {
+    const { blob } = await muxFramesToVideo(allMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -2551,7 +2750,9 @@ var VideoEngine = class _VideoEngine {
       const bitmap = await createImageBitmap(
         new ImageData(rgba, width, height)
       );
-      this.mambaState = advanceState(this.mambaState, pixels);
+      this.mambaState = await advanceState(this.mambaState, pixels, {
+        device: this.probed.gpuDevice
+      });
       keyframes.push({ outputIndex: frameIdx, latent: finalLatent });
       keyframeOutputs.push({ rgba, bitmap, pixels });
       onFrame?.(frameOffset + frameIdx, bitmap, this.mambaState);
@@ -3407,6 +3608,145 @@ function alignWords(text, numFrames, hopLength, sampleRate) {
   return result;
 }
 
+// ../packages/voice-provenance/src/watermark.ts
+var ID_BITS = 64;
+var CRC_BITS = 32;
+var TOTAL_BITS = ID_BITS + CRC_BITS;
+var MIN_SLOT_SAMPLES = 160;
+var MIN_RMS = 1e-3;
+var TAPS = 97;
+var BAND_LOW_HZ = 4e3;
+var BAND_HIGH_HZ = 8e3;
+var BAND_HIGH_MAX_FRACTION = 0.46;
+var MIN_BAND_HZ = 1500;
+var TARGET_REL = 0.2;
+var KEY = 1597463007;
+var WATERMARK_ID_HEX_LENGTH = ID_BITS / 4;
+var ID_PATTERN = /^[0-9a-f]{16}$/;
+var WatermarkUnsupportedError = class extends Error {
+  constructor(reason) {
+    super(`Audio cannot carry a watermark: ${reason}`);
+    this.name = "WatermarkUnsupportedError";
+  }
+};
+function newWatermarkId() {
+  const b = new Uint8Array(8);
+  crypto.getRandomValues(b);
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+function crc32(bytes) {
+  let crc = 4294967295;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let k = 0; k < 8; k++) crc = crc >>> 1 ^ 3988292384 & -(crc & 1);
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+function idBytes(id) {
+  const out = [];
+  for (let i = 0; i < id.length; i += 2) out.push(parseInt(id.slice(i, i + 2), 16));
+  return out;
+}
+function bitsFor(id) {
+  const bytes = idBytes(id);
+  const bits = [];
+  for (const b of bytes) for (let k = 7; k >= 0; k--) bits.push(b >> k & 1);
+  const crc = crc32(bytes);
+  for (let k = CRC_BITS - 1; k >= 0; k--) bits.push(crc >>> k & 1);
+  return bits;
+}
+function prng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function bandHighHz(sampleRate) {
+  return Math.min(BAND_HIGH_HZ, sampleRate * BAND_HIGH_MAX_FRACTION);
+}
+function plan(length, sampleRate) {
+  const hi = bandHighHz(sampleRate);
+  if (!(sampleRate > 0) || hi - BAND_LOW_HZ < MIN_BAND_HZ) return null;
+  const slotLen = Math.floor(length / TOTAL_BITS);
+  if (slotLen < MIN_SLOT_SAMPLES) return null;
+  return { slotLen, fir: bandpass(sampleRate, BAND_LOW_HZ, hi) };
+}
+function sinc(x) {
+  return x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
+}
+function bandpass(sampleRate, lowHz, highHz) {
+  const h = new Float64Array(TAPS);
+  const mid = (TAPS - 1) / 2;
+  const fl = 2 * lowHz / sampleRate;
+  const fh = 2 * highHz / sampleRate;
+  for (let n = 0; n < TAPS; n++) {
+    const k = n - mid;
+    const window = 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (TAPS - 1));
+    h[n] = (fh * sinc(fh * k) - fl * sinc(fl * k)) * window;
+  }
+  return h;
+}
+function direction(slot, slotLen, fir, variant) {
+  const rand = prng((Math.imul(slot + 1, 2654435761) ^ KEY ^ Math.imul(variant, 2246822507)) >>> 0);
+  const chips = new Float64Array(slotLen + TAPS - 1);
+  for (let i = 0; i < chips.length; i++) chips[i] = rand() < 0.5 ? -1 : 1;
+  const w = new Float64Array(slotLen);
+  let energy = 0;
+  for (let i = 0; i < slotLen; i++) {
+    let acc = 0;
+    for (let j = 0; j < TAPS; j++) acc += fir[j] * chips[i + TAPS - 1 - j];
+    w[i] = acc;
+    energy += acc * acc;
+  }
+  const norm = Math.sqrt(energy) || 1;
+  for (let i = 0; i < slotLen; i++) w[i] = w[i] / norm;
+  return w;
+}
+function rmsOf(pcm) {
+  let e = 0;
+  for (let i = 0; i < pcm.length; i++) e += pcm[i] * pcm[i];
+  return Math.sqrt(e / Math.max(1, pcm.length));
+}
+function embedWatermark(pcm, sampleRate, id) {
+  if (!ID_PATTERN.test(id)) throw new WatermarkUnsupportedError("id must be 16 lowercase hex characters");
+  const p = plan(pcm.length, sampleRate);
+  if (!p) throw new WatermarkUnsupportedError("clip is too short or its sample rate is too low");
+  const rms = rmsOf(pcm);
+  if (rms < MIN_RMS) throw new WatermarkUnsupportedError("clip is too quiet");
+  const target = TARGET_REL * rms;
+  const bits = bitsFor(id);
+  const out = Float32Array.from(pcm);
+  for (let s = 0; s < TOTAL_BITS; s++) {
+    const w = direction(s, p.slotLen, p.fir, 0);
+    const base = s * p.slotLen;
+    let c = 0;
+    for (let i = 0; i < p.slotLen; i++) c += out[base + i] * w[i];
+    const sign = bits[s] ? 1 : -1;
+    if (sign * c >= target) continue;
+    const add = sign * target - c;
+    for (let i = 0; i < p.slotLen; i++) {
+      out[base + i] = Math.max(-1, Math.min(1, out[base + i] + add * w[i]));
+    }
+  }
+  return out;
+}
+
+// src/engine/voice/watermark.ts
+function markSynthesizedPcm(samples, sampleRate) {
+  const watermarkId = newWatermarkId();
+  try {
+    return { pcm: embedWatermark(samples, sampleRate, watermarkId), watermarkId };
+  } catch {
+    return { pcm: samples, watermarkId: null };
+  }
+}
+
 // src/engine/voice/voice-clone-engine.ts
 var VoiceCloneEngine = class {
   codec;
@@ -3444,8 +3784,10 @@ var VoiceCloneEngine = class {
     const { samples } = this.codec.decode(codec);
     peakNormalize(samples, 0.95);
     const durationMs = Math.round(samples.length / this.sampleRate * 1e3);
+    const { pcm, watermarkId } = markSynthesizedPcm(samples, this.sampleRate);
     return {
-      pcm: samples,
+      pcm,
+      watermarkId,
       sampleRate: this.sampleRate,
       durationMs,
       wordTimestamps,
@@ -3560,6 +3902,7 @@ export {
   SSMAcousticModel,
   SSMVoiceProvider,
   TEXT_VOCAB_SIZE,
+  UnsupportedVideoEncodingError,
   VideoEngine,
   VoiceCloneEngine,
   buildInterpolatedSequence,
@@ -3582,11 +3925,13 @@ export {
   planScene,
   probeDevice,
   resolveVoiceProvider,
+  setOrtWasmBase,
   shotPlannerPass,
   slerp,
   storyboardFrameCount,
   tokenizeText,
   validateFrame,
-  verifySpeaker
+  verifySpeaker,
+  videoExtensionForMime
 };
 //# sourceMappingURL=index.mjs.map

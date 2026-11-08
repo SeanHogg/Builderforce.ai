@@ -85,6 +85,8 @@ export interface ManagerPolicyOverride {
   managerMayCloseReviewedTickets?: boolean | null;
   /** PROJECT-ONLY (1177) — there is no workspace tier for it; see the effective field. */
   coordinationRequiresManager?: boolean | null;
+  /** PROJECT-ONLY (1312) — PRD 23 canary mode; see the effective field. */
+  canary?: boolean | null;
 }
 
 /** The persisted config shape (a `project_manager_configs` row projection). */
@@ -118,6 +120,8 @@ export interface ManagerConfigRow {
    *  DEFAULT false in the DB, like `requireSignoffToComplete`. Optional here so a row
    *  projected before the migration lands still type-checks (folded to `false`). */
   coordinationRequiresManager?: boolean;
+  /** Canary mode (1312) — NOT NULL DEFAULT false. Optional here for pre-migration projections. */
+  canary?: boolean;
 }
 
 /**
@@ -312,6 +316,14 @@ export interface EffectiveManagerPolicy {
    * so a project turning it on tightens its own board and can grant nothing.
    */
   coordinationRequiresManager: boolean;
+  /**
+   * CANARY MODE (1312, PRD 23 §5.6/§7). While on, this project's automatic PR merge and
+   * automatic ticket/PR closure are DISABLED; the sweeps log what they would have merged
+   * or closed (`application/manager/managerCanary.ts`) so one lifecycle can be proved
+   * (dispatch -> signoff -> acceptance) without merging. PROJECT-ONLY and default off:
+   * an operator-enabled rollout mode, not a workspace posture.
+   */
+  canary: boolean;
 }
 
 /**
@@ -366,6 +378,8 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   // owner "403 manager role required" whenever the caller resolved below that. A project
   // that wants the gate turns it on.
   coordinationRequiresManager: false,
+  // OFF by default (1312): canary is something an operator enables for a rollout.
+  canary: false,
 };
 
 /**
@@ -567,6 +581,8 @@ export function resolveTieredManagerPolicy(tiers: {
     // read `undefined` forever and invite someone to "fix" that with a second copy of the
     // setting on the workspace row.
     coordinationRequiresManager: project?.coordinationRequiresManager ?? d.coordinationRequiresManager,
+    // PROJECT-ONLY (1312), same reasoning: no workspace column exists for it.
+    canary: project?.canary ?? d.canary,
     // Longest wait wins: a project may be more patient than the workspace, never less.
     agentReassignIdleHours: tightestBound(
       d.agentReassignIdleHours, Math.max,

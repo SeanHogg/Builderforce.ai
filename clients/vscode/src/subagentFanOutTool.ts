@@ -19,6 +19,7 @@ import {
   spawnAgentsTool,
 } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
 import { resolveChildPersona, type SubagentToolDeps } from "./childPersona";
 
@@ -30,8 +31,8 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<Sub
     name: schema.name,
     description: schema.description,
     parameters: schema.parameters as Record<string, unknown>,
-    // As with `spawn_agent`: every call a child makes raises its own prompt.
-    mutating: false,
+    // Classified by the shared catalog (mutate), as `spawn_agent` is.
+    mutating: toolMutating(schema.name),
     execute: async (args) => {
       const parsed = parseWorkstreams(args.workstreams);
       if (typeof parsed === "string") return JSON.stringify({ ok: false, error: parsed });

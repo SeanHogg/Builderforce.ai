@@ -61,6 +61,26 @@ export async function repend(db: Db, tenantId: number, executionId: number, mess
 }
 
 /**
+ * Undo a claim whose follow-up was DEFERRED by admission (a live run on the ticket, the
+ * concurrent cap) - the steer goes back to pending so the next terminal chokepoint / stale-run
+ * sweep claims it again. Only a claim that recorded no outcome and started no run is released.
+ */
+export async function releaseLateClaim(db: Db, tenantId: number, executionId: number, messageIds: readonly number[]): Promise<void> {
+  if (messageIds.length === 0) return;
+  await db.update(executionMessages)
+    .set({ lateClaimedAt: null, consumedAt: null })
+    .where(scopedToTenant(
+      executionMessages, tenantId,
+      eq(executionMessages.executionId, executionId),
+      eq(executionMessages.role, 'user'),
+      inArray(executionMessages.id, [...messageIds]),
+      isNotNull(executionMessages.lateClaimedAt),
+      isNull(executionMessages.lateOutcome),
+      isNull(executionMessages.followUpExecutionId),
+    ));
+}
+
+/**
  * THE idempotency point. Atomically claim late steers for a follow-up: with ids, those
  * rows (a runtime's report); without, every still-pending user steer of the run (the
  * terminal chokepoint). One UPDATE … WHERE late_claimed_at IS NULL … RETURNING, so two

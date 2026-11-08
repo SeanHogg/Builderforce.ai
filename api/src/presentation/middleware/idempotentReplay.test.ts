@@ -100,6 +100,49 @@ describe('idempotentReplay', () => {
   });
 });
 
+describe('idempotentReplay reservation and body binding', () => {
+  function gatedApp() {
+    const store = memoryStore();
+    let runs = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const a = new Hono<HonoEnv>();
+    a.use('*', async (c, next) => { c.set('tenantId', 1); await next(); });
+    a.post('/submit', idempotentReplay({ store: () => store, bindBody: true }), async (c) => {
+      runs += 1;
+      await gate;
+      return c.json({ run: runs }, 201);
+    });
+    return { app: a, runs: () => runs, release };
+  }
+  const send = (a: Hono<HonoEnv>, body: unknown) =>
+    a.request('/submit', { method: 'POST', headers: { 'Idempotency-Key': 'k-1', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('regression: a second request with a key still in flight gets 409, not a second execution', async () => {
+    const t = gatedApp();
+    const first = send(t.app, { taskId: 1 });
+    await new Promise((r) => setTimeout(r, 10));
+    const second = await send(t.app, { taskId: 1 });
+    expect(second.status).toBe(409);
+    expect((await second.json() as { code: string }).code).toBe('idempotency_request_in_flight');
+    t.release();
+    expect((await first).status).toBe(201);
+    expect(t.runs()).toBe(1);
+  });
+
+  it('regression: the same key with a different body is 422, and the same body replays', async () => {
+    const t = gatedApp();
+    t.release();
+    expect((await send(t.app, { taskId: 1 })).status).toBe(201);
+    const other = await send(t.app, { taskId: 2 });
+    expect(other.status).toBe(422);
+    const same = await send(t.app, { taskId: 1 });
+    expect(same.status).toBe(201);
+    expect(same.headers.get('x-builderforce-idempotent-replay')).toBe('true');
+    expect(t.runs()).toBe(1);
+  });
+});
+
 describe('parseIdempotencyKey', () => {
   it('accepts visible ASCII up to 128 chars and rejects the rest', () => {
     expect(parseIdempotencyKey(undefined)).toBeNull();

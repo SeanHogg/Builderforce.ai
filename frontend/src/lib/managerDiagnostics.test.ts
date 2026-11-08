@@ -142,7 +142,7 @@ const stalls: StallRegister = {
 const passes: ManagerPassRecord[] = [
   {
     runTaskId: 701, ok: true, changed: true, shedStages: [],
-    summary: { scored: 0, ranked: 300, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 40 },
+    summary: { scored: 0, ranked: 300, assigned: 0, prsMerged: 0, dispatched: 0, audited: 40 },
     at: iso(14 * DAY - 4 * MIN),
   },
 ];
@@ -437,13 +437,13 @@ describe('passCountersFrom', () => {
     runTaskId: 1031, ok: true, changed: true, shedStages, summary, at: '2026-08-19T10:00:00Z',
   });
 
-  it('projects the counters the server RECORDED, with prsConducted+prsMerged folded', () => {
+  it('projects the counters the server RECORDED, with prsMerged as prs', () => {
     // Read from `manager_runs.summary` (migration 1082), not from the run card's prose.
     // The prose parse this replaced was a UI string used as a wire format: it degraded
     // silently on any rewording, and no query could answer "how many passes scored
     // anything this month?".
     expect(passCountersFrom(pass({
-      scored: 3, ranked: 300, assigned: 2, prsConducted: 1, prsMerged: 0,
+      scored: 3, ranked: 300, assigned: 2, prsMerged: 1,
       dispatched: 0, audited: 40, flagged: 7,
     })))
       .toEqual({ scored: 3, ranked: 300, assigned: 2, prs: 1, dispatched: 0, audited: 40, flagged: 7 });
@@ -462,7 +462,7 @@ describe('passCountersFrom', () => {
 
   it('reads the stages a TRUNCATED pass deferred from shedStages', () => {
     // The pass budget's whole point: a bounded pass that says so beats a silent one.
-    const parsed = passCountersFrom(pass({ prsConducted: 20, prsMerged: 0 }, ['pr_merge', 'triage']));
+    const parsed = passCountersFrom(pass({ prsMerged: 20 }, ['pr_merge', 'triage']));
     expect(parsed?.deferred).toEqual(['pr_merge', 'triage']);
     expect(parsed?.prs).toBe(20);
   });
@@ -481,7 +481,7 @@ describe('passCountersFrom', () => {
 describe('the truncated-pass contract with the server', () => {
   const pass = (shedStages: string[]) => ({
     runTaskId: 1031, ok: true, changed: true, shedStages,
-    summary: { scored: 3, ranked: 300, assigned: 1, prsConducted: 0, prsMerged: 0, dispatched: 2, audited: 40, flagged: 5 },
+    summary: { scored: 3, ranked: 300, assigned: 1, prsMerged: 0, dispatched: 2, audited: 40, flagged: 5 },
     at: '2026-08-19T10:00:00Z',
   });
 

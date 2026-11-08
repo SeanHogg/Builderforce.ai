@@ -46,11 +46,13 @@ import { projects, tasks, agentHosts } from '../../infrastructure/database/schem
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
 import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
 import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
+import { invalidateAcceptanceOnPush } from '../../application/validation/invalidateAcceptanceOnPush';
 import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 import { ALERT_EVENTS, ingestAlertWebhook } from '../../application/security/githubAlerts';
 import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
+import { publishProjectStaffingChanged } from '../../application/swimlane/boardChangePublisher';
 import {
   completeDeltaTicketsOnMerge,
   type DeltaMergeOutcome,
@@ -118,11 +120,13 @@ export function mergedPullRequestRef(p: Record<string, unknown>): MergedPullRequ
   if (!pr || g(pr, 'merged') !== true) return null;
   const { full } = repoNames(p);
   if (!full) return null;
+  const defaultBranch = gs(g(p, 'repository'), 'default_branch');
   return {
     repoFullName: full,
     number: gn(p, 'number') ?? gn(pr, 'number'),
     branchName: gs(g(pr, 'head'), 'ref'),
     provider: 'github',
+    ...(defaultBranch ? { defaultBranch } : {}),
   };
 }
 
@@ -387,6 +391,21 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
         }
       }
 
+      // PRD 23 §5.2: a push to a PR's branch moves its head, which invalidates any
+      // Validator acceptance recorded against the old one (the slot reopens via the ledger).
+      if (event === 'pull_request' && gs(p, 'action') === 'synchronize') {
+        const pr = g(p, 'pull_request');
+        const headSha = gs(g(pr, 'head'), 'sha');
+        const prNumber = gn(p, 'number') ?? gn(pr, 'number');
+        if (headSha && prNumber != null) {
+          c.executionCtx.waitUntil(
+            invalidateAcceptanceOnPush(c.env as Env, db, { repoFullName: full, prNumber, headSha }).catch((error) => {
+              reportCaughtError(error, { source: 'presentation/routes/githubWebhookRoutes.ts', operation: 'invalidateAcceptanceOnPush' });
+            }),
+          );
+        }
+      }
+
       // A PR entering or leaving the merge queue is work for `pr-merge`: signal the
       // shared cron gate so it cannot wait for the 30-minute floor. Only those actions —
       // labels, edits and pushes would otherwise wake every frequent sweep for nothing
@@ -538,6 +557,8 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
         assignedAgentHostId,
       })
       .returning({ id: tasks.id, key: tasks.key });
+
+    if (assignedAgentHostId) await publishProjectStaffingChanged(c.env as Env, project.tenantId, project.id);
 
     return c.json({
       received: true,

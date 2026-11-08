@@ -6,9 +6,10 @@
  * ids and numbers, plus the node labels that are data.
  */
 
-import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
 import { labelFor, nodeIndex, partitionMatrix } from '../graphModel';
+import { hotspotsOf, type Hotspot } from './hotspots';
 import type { LensId } from '../types';
 
 export const HOTSPOTS = 10;
@@ -53,32 +54,49 @@ function tally(items: Iterable<{ id: string; ref: string }>): Bar[] {
 export function insightsOf(graph: KnowledgeGraph): Insights {
     const index = nodeIndex(graph);
     const nodes = graph.nodes;
-    const isFile = (kind: string): boolean => kind === 'file';
-    const count = (kinds: readonly string[]): number => graph.findings.filter((f) => kinds.includes(f.kind)).length;
-    const sumBadge = (key: string): number => nodes.reduce((n, x) => n + (Number(x.badges?.[key]) || 0), 0);
-    const sumParam = (kinds: readonly string[]): number =>
-        graph.findings.filter((f) => kinds.includes(f.kind)).reduce((n, f) => n + (Number(f.params.count) || 1), 0);
-    const severity = (s: 'error' | 'warn' | 'info'): number => graph.findings.filter((f) => f.severity === s).length;
+
+    // ONE pass over the findings: the headline counts and the per-kind tally together.
+    let errors = 0, warnings = 0, notes = 0, cycles = 0, violations = 0, cloneGroups = 0, brokenLinks = 0;
+    const byKind = new Map<string, { count: number; nodes: Set<string> }>();
+    for (const f of graph.findings) {
+        if (f.severity === 'error') errors++; else if (f.severity === 'warn') warnings++; else if (f.severity === 'info') notes++;
+        if (f.kind === 'cycle') cycles++;
+        else if (f.kind === 'partition-violation' || f.kind === 'violation') violations++;
+        else if (f.kind === 'clone-group') cloneGroups++;
+        else if (f.kind === 'broken-link') brokenLinks += Number(f.params.count) || 1;
+        let row = byKind.get(f.kind);
+        if (!row) { row = { count: 0, nodes: new Set() }; byKind.set(f.kind, row); }
+        row.count++;
+        for (const ref of f.nodes) row.nodes.add(ref);
+    }
+
+    // ONE pass over the nodes: the counts, the kinds, and the files.
+    let sections = 0, symbols = 0, duplicates = 0, unusedFiles = 0, unusedExports = 0, stale = 0;
+    const files: KNode[] = [];
+    const nodeKinds = new Map<string, string[]>();
+    for (const n of nodes) {
+        const isFile = n.kind === 'file';
+        if (isFile) files.push(n);
+        else if (n.kind === 'section') sections++;
+        else if (n.kind === 'symbol' || n.kind === 'entity') symbols++;
+        if (n.badges) {
+            if (n.badges.cloneGroup !== undefined) duplicates++;
+            if (isFile && n.badges.unused !== undefined) unusedFiles++;
+            unusedExports += Number(n.badges.unusedExports) || 0;
+        }
+        if (n.stale) stale++;
+        (nodeKinds.get(n.kind) ?? nodeKinds.set(n.kind, []).get(n.kind)!).push(n.ref);
+    }
 
     const values: Record<MetricId, number> = {
-        files: nodes.filter((n) => isFile(n.kind)).length,
-        sections: nodes.filter((n) => n.kind === 'section').length,
-        symbols: nodes.filter((n) => n.kind === 'symbol' || n.kind === 'entity').length,
+        files: files.length, sections, symbols,
         edges: graph.edges.length,
         findings: graph.findings.length,
-        errors: severity('error'), warnings: severity('warn'), notes: severity('info'),
-        cycles: count(['cycle']),
-        violations: count(['partition-violation', 'violation']),
-        cloneGroups: count(['clone-group']),
-        duplicates: nodes.filter((n) => n.badges?.cloneGroup !== undefined).length,
-        unusedFiles: nodes.filter((n) => isFile(n.kind) && n.badges?.unused !== undefined).length,
-        unusedExports: sumBadge('unusedExports'),
-        brokenLinks: sumParam(['broken-link']),
-        stale: nodes.filter((n) => n.stale).length,
+        errors, warnings, notes,
+        cycles, violations, cloneGroups, duplicates, unusedFiles, unusedExports, brokenLinks, stale,
     };
     const metrics = (Object.keys(values) as MetricId[]).map((id) => ({ id, value: values[id], ...(METRIC_LENS[id] ? { lens: METRIC_LENS[id] } : {}) }));
 
-    const files = nodes.filter((n) => isFile(n.kind));
     const partitioned = files.some((n) => n.partition !== undefined);
     const composition = {
         by: partitioned ? 'partition' as const : 'area' as const,
@@ -87,16 +105,8 @@ export function insightsOf(graph: KnowledgeGraph): Insights {
     };
 
     // Distinct neighbours per node: two edge kinds between the same pair count once, so the bar's value is exactly the number of refs it opens.
-    const incoming = new Map<string, Set<string>>(), outgoing = new Map<string, Set<string>>();
-    const add = (m: Map<string, Set<string>>, key: string, other: string): void => { (m.get(key) ?? m.set(key, new Set()).get(key)!).add(other); };
-    for (const e of graph.edges) {
-        if (!DEPENDS.has(e.kind) || e.from === e.to) continue;
-        add(incoming, e.to, e.from);
-        add(outgoing, e.from, e.to);
-    }
-    const hotspots = (m: Map<string, Set<string>>): Bar[] =>
-        [...m.entries()].map(([id, others]) => ({ id, text: labelFor(index, id), value: others.size, refs: [...others].sort(cmp) }))
-            .sort(byValue).slice(0, HOTSPOTS);
+    const hot = hotspotsOf(graph.edges, DEPENDS, HOTSPOTS);
+    const hotspots = (list: readonly Hotspot[]): Bar[] => list.map((h) => ({ id: h.id, text: labelFor(index, h.id), value: h.value, refs: h.refs }));
 
     const { cells } = partitionMatrix(graph);
     const coupling = [...cells.entries()]
@@ -107,13 +117,11 @@ export function insightsOf(graph: KnowledgeGraph): Insights {
 
     return {
         metrics,
-        kinds: tally(nodes.map((n) => ({ id: n.kind, ref: n.ref }))),
+        kinds: [...nodeKinds.entries()].map(([id, refs]) => ({ id, value: refs.length, refs })).sort(byValue),
         composition,
-        fanIn: hotspots(incoming),
-        fanOut: hotspots(outgoing),
+        fanIn: hotspots(hot.fanIn),
+        fanOut: hotspots(hot.fanOut),
         coupling,
-        findingKinds: tally(graph.findings.map((f) => ({ id: f.kind, ref: f.id }))).map((b) => ({
-            ...b, refs: [...new Set(graph.findings.filter((f) => f.kind === b.id).flatMap((f) => f.nodes))].sort(),
-        })),
+        findingKinds: [...byKind.entries()].map(([id, row]) => ({ id, value: row.count, refs: [...row.nodes].sort() })).sort(byValue),
     };
 }

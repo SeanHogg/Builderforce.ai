@@ -17,7 +17,7 @@ describe('persistGeneratedImages', () => {
       entries: [{ url: 'data:image/jpeg;base64,QUJD', revised_prompt: 'r' }],
     });
     expect(put).toHaveBeenCalledTimes(1);
-    expect(entry!.url).toMatch(/^https:\/\/api\.example\.com\/api\/assets\/7\/u1\/\d+-[0-9a-f]{8}\.jpg$/);
+    expect(entry!.url).toMatch(/^https:\/\/api\.example\.com\/api\/assets\/7\/u1\/[0-9a-f-]{36}\.jpg$/);
     expect(entry!.revised_prompt).toBe('r');
   });
 

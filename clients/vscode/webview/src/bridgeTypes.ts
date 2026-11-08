@@ -88,7 +88,7 @@ export interface InitData {
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, a list-shaped project page (Backlog / PRDs), the Evermind console, or the
    *  split-view Visualization board — same bundle, same transport, one code path. */
-  view?: 'workspace' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'visualization' | 'audit-result';
+  view?: 'workspace' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'voiceMarketplace' | 'visualization' | 'audit-result';
   /**
    * Which SURFACE the workspace opens at — the difference between "open my chat" and
    * "open my canvas", which used to be the difference between two panels.
@@ -148,6 +148,8 @@ export interface InitData {
   /** The installed extension's version, so a copied diagnostics report pins the exact
    *  client build it came from (a stale VSIX is a routine cause of "already fixed" bugs). */
   extensionVersion?: string;
+  /** The public web origin, for views that hand a link to the external browser (voice checkout). */
+  webOrigin?: string;
   /** Short SOURCE HASH of the installed artifact. A version names a release, not a
    *  build: two VSIXes can carry the same version and different code, so this is the
    *  field a "did you get the fix?" question is actually answerable from. `"dev"` when

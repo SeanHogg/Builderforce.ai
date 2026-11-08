@@ -17,8 +17,12 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": "src",
+    // The source-only package is resolved by `paths`, not the `link:` symlink, and
+    // lives outside `src` — so no `rootDir`/`outDir` (either holds every compiled
+    // file to one root, TS6059). tsup supplies its own outDir.
+    "paths": {
+      "@builderforce/voice-provenance": ["../packages/voice-provenance/src/index.ts"]
+    },
     "types": ["@types/node", "@webgpu/types"]
   },
   "include": ["src/**/*"],

@@ -21,20 +21,52 @@
  * thing (a key-allocation retry does not care which index complained).
  */
 
+const MAX_CAUSE_DEPTH = 5;
+
+/**
+ * The driver error behind a database failure: the first error in the `.cause` chain (up to 5
+ * levels, the error itself first) that carries a SQLSTATE `code`, or undefined.
+ *
+ * drizzle-orm 0.45 wraps every driver error in a `DrizzleQueryError` whose message is only
+ * "Failed query: …" and whose driver error (code, constraint, detail) is on `.cause`; a predicate
+ * that reads the top level misses a real 40P01 or 23505. ONE walker, used by every SQLSTATE check.
+ */
+export function pgErrorOf(error: unknown): { code: string; message?: string; constraint?: string } | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current !== null && typeof current === 'object'; depth += 1) {
+    const { code, cause } = current as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string' && code !== '') return current as { code: string; message?: string; constraint?: string };
+    current = cause;
+  }
+  return undefined;
+}
+
+/** The messages of the error and its cause chain, joined: the detail may sit at any level. */
+export function chainText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current !== null && current !== undefined; depth += 1) {
+    if (typeof current === 'object') {
+      const { message, cause } = current as { message?: unknown; cause?: unknown };
+      if (typeof message === 'string') parts.push(message);
+      current = cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  return parts.join(' ');
+}
+
 /** Is this error a Postgres unique-constraint violation (optionally, on `constraint`)? */
 export function isUniqueViolation(error: unknown, constraint?: string): boolean {
   if (error === null || error === undefined) return false;
-  const code = typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
-  const message = typeof error === 'object' ? (error as { message?: unknown }).message : undefined;
-  // Both the driver's own message and the stringified error: a wrapped error can
+  // The driver's own code AND the message text of the whole chain: a wrapped error can
   // carry the detail in either, and missing it means silently rethrowing a
   // conflict the caller knew how to handle.
-  const text = [
-    typeof message === 'string' ? message : '',
-    error instanceof Error ? error.message : String(error),
-  ].join(' ');
-
-  const conflict = code === '23505' || /duplicate key|unique constraint|23505/i.test(text);
+  const text = [chainText(error), error instanceof Error ? error.message : String(error)].join(' ');
+  const pg = pgErrorOf(error);
+  const conflict = pg?.code === '23505' || /duplicate key|unique constraint|23505/i.test(text);
   if (!conflict) return false;
-  return constraint ? text.includes(constraint) : true;
+  return constraint ? text.includes(constraint) || pg?.constraint === constraint : true;
 }

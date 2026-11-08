@@ -29,6 +29,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { recordCloudToolEvent } from './cloudAgentEngine';
+import type { AutoRunReason } from '../swimlane/evaluateAutoRun';
 
 /**
  * How long a suppression marker survives. A ticket sitting on one unchanged reason
@@ -50,8 +51,14 @@ export interface AutoRunSkipArgs {
   taskId: number;
   /** Whose timeline the skip lands on (candidate agent, staffed agent, or the dispatcher). */
   cloudAgentRef: string;
-  /** MUST be a real `AutoRunReason` — the lifecycle ledger resolves the stall from it. */
-  reason: string;
+  /** A real `AutoRunReason` — the lifecycle ledger and the stall census resolve the stall from it. */
+  reason: AutoRunReason;
+  /**
+   * Extra identity that makes a repeat of the same reason a NEW state (the live run's id
+   * on `already_running`, the failure count on a breaker/cooldown skip). Part of the
+   * suppression marker only — it is never written as the reason.
+   */
+  stateDiscriminator?: string | number;
   /** The lane the ticket sat on, when known. */
   lane?: string | null;
   detail: Record<string, unknown>;
@@ -92,7 +99,7 @@ export async function claimAutoRunSkipState(env: Env, tenantId: number, taskId: 
 }
 
 /** THE WRITE, on its own — no gating. Best-effort; never throws. */
-export async function emitAutoRunSkip(db: Db, args: Omit<AutoRunSkipArgs, 'reason' | 'lane'>): Promise<void> {
+export async function emitAutoRunSkip(db: Db, args: Omit<AutoRunSkipArgs, 'reason' | 'lane' | 'stateDiscriminator'>): Promise<void> {
   await recordCloudToolEvent(db, {
     tenantId: args.tenantId,
     cloudAgentRef: args.cloudAgentRef,
@@ -116,7 +123,8 @@ export async function emitAutoRunSkip(db: Db, args: Omit<AutoRunSkipArgs, 'reaso
  * which is every caller but one.
  */
 export async function recordAutoRunSkip(env: Env, db: Db, args: AutoRunSkipArgs): Promise<boolean> {
-  if (!(await claimAutoRunSkipState(env, args.tenantId, args.taskId, skipState(args.lane, args.reason)))) return false;
+  const state = skipState(args.lane, args.stateDiscriminator == null ? args.reason : `${args.reason}:${args.stateDiscriminator}`);
+  if (!(await claimAutoRunSkipState(env, args.tenantId, args.taskId, state))) return false;
   await emitAutoRunSkip(db, args);
   return true;
 }
@@ -150,8 +158,7 @@ const TENANT_SCOPE_MARKER_ID = 0;
  */
 export async function recordTenantAutoRunSkip(env: Env, db: Db, args: {
   tenantId: number;
-  /** MUST be a real `AutoRunReason` — the lifecycle ledger resolves stalls from it. */
-  reason: string;
+  reason: AutoRunReason;
   detail: Record<string, unknown>;
   result: string;
 }): Promise<boolean> {

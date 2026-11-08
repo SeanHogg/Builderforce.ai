@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import type { CanvasStroke } from '@/lib/canvasDrawing';
 import type { DocumentBlock } from '../domain/blockDocument';
 import { parseMarkdownToBlocks, blocksToMarkdown, emptyBlock } from '../domain/blockDocument';
 import { shouldSeed } from '../domain/seedTiebreak';
@@ -38,6 +39,11 @@ export interface BlockDocument {
   peers: readonly BlockPeer[];
   setText: (id: string, text: string) => void;
   setAttrs: (id: string, attrs: DocumentBlock['attrs']) => void;
+  /** Drawing-block stroke ops — individual operations, so concurrent drawing merges. */
+  appendStrokes: (id: string, strokes: readonly CanvasStroke[]) => void;
+  removeStrokes: (id: string, strokeIds: readonly string[]) => void;
+  updateStroke: (id: string, strokeId: string, patch: Partial<CanvasStroke>) => void;
+  clearStrokes: (id: string) => void;
   insertAfter: (afterId: string | null, block: DocumentBlock) => string;
   remove: (id: string) => void;
   move: (id: string, delta: number) => void;
@@ -224,6 +230,10 @@ export function useBlockDocument(
     peers,
     setText: (id, text) => activeStore()?.setText(id, text),
     setAttrs: (id, attrs) => activeStore()?.setAttrs(id, attrs),
+    appendStrokes: (id, strokes) => activeStore()?.appendStrokes(id, strokes),
+    removeStrokes: (id, strokeIds) => activeStore()?.removeStrokes(id, strokeIds),
+    updateStroke: (id, strokeId, patch) => activeStore()?.updateStroke(id, strokeId, patch),
+    clearStrokes: (id) => activeStore()?.clearStrokes(id),
     insertAfter: (afterId, block) => activeStore()?.insertAfter(afterId, block) ?? block.id,
     remove: (id) => activeStore()?.remove(id),
     move: (id, delta) => activeStore()?.move(id, delta),

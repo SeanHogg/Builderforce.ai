@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { redactDeep } from '../../infrastructure/security/redactSecrets';
 /**
  * Per-execution live event hub — the ONE fan-out point for a single execution's
  * stream (status changes, assistant/user messages, file changes, tool events).
@@ -92,11 +93,16 @@ export function setExecutionEventSinks(...sinks: ExecutionEventSink[]): void {
 }
 
 /** Emit one execution event to every registered sink. Best-effort and synchronous:
- *  a live-stream failure must never fail the run that produced the event. */
+ *  a live-stream failure must never fail the run that produced the event.
+ *
+ *  THE publish primitive, so it is where the stream is scrubbed: every projection (a steer's text, the
+ *  model's question, a PRD, `execution.toPlain()`'s `errorMessage` / `result`) is redacted ONCE here and
+ *  no call site has to remember. A secret never leaves the process unredacted, to storage or to the stream. */
 export function notifyExecutionSubscribers(executionId: number, event: ExecutionSubscriberEvent): void {
+  const safe = redactDeep(event);
   for (const sink of executionEventSinks) {
     try {
-      sink(event);
+      sink(safe);
     } catch (error) {
       reportCaughtError(error, { source: "application/runtime/executionEvents.ts", operation: "notifyExecutionSubscribers", context: { logMessage: '[execution-events] sink failed', details: { executionId, eventType: event.type, error } } });
     }

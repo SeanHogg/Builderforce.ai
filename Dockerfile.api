@@ -52,6 +52,7 @@ COPY packages/run-context /repo/packages/run-context
 COPY packages/canvas-widget-protocol /repo/packages/canvas-widget-protocol
 COPY packages/ide-templates /repo/packages/ide-templates
 COPY packages/ide-file-contract /repo/packages/ide-file-contract
+COPY packages/secret-redaction /repo/packages/secret-redaction
 WORKDIR /repo/api
 COPY api/ ./
 ENV NODE_ENV=development

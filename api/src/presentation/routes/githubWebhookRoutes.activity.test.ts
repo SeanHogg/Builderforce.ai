@@ -100,6 +100,10 @@ describe('mergedPullRequestRef', () => {
     });
   });
 
+  it('carries the repository default branch when the payload states one', () => {
+    expect(mergedPullRequestRef({ ...merged, repository: { full_name: 'acme/api', default_branch: 'dev' } })?.defaultBranch).toBe('dev');
+  });
+
   it('is null for a pull request that was CLOSED without merging', () => {
     // The distinction the whole feature turns on: nothing shipped, so nothing completes.
     expect(mergedPullRequestRef({ ...merged, pull_request: { merged: false, head: { ref: 'ticket/1' } } })).toBeNull();

@@ -14,6 +14,7 @@ import type { Env } from '../../env';
 import { tasks } from '../../infrastructure/database/schema';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { producerRoleForActionType } from '../kanban/roleCapability';
+import { publishProjectStaffingChangedById } from '../swimlane/boardChangePublisher';
 
 export interface AssignOwnerResult {
   assigned: boolean;
@@ -71,6 +72,7 @@ export async function assignTicketOwner(
     if (!label) return NOT_ASSIGNED;
 
     await db.update(tasks).set(set).where(eq(tasks.id, args.taskId));
+    await publishProjectStaffingChangedById(env, db, args.projectId);
     return { assigned: true, label, memberKind: pick.memberKind, memberRef: pick.memberRef };
   } catch {
     return NOT_ASSIGNED;

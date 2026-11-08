@@ -20,7 +20,11 @@ import type { Env, HonoEnv } from '../../env';
 import {
   createCacheIdempotencyStore,
   decideReplay,
+  hashRequestBody,
   IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_PENDING_TTL_SECONDS,
+  pendingReservation,
+  releasedReservation,
   IDEMPOTENT_REPLAY_HEADER,
   isStorableStatus,
   parseIdempotencyKey,
@@ -40,7 +44,19 @@ export interface IdempotentReplayOptions {
   tenantOf?(c: Context<HonoEnv>): number | null | Promise<number | null>;
   /** Override the store (tests). */
   store?(c: Context<HonoEnv>): IdempotencyStore;
+  /** Bind the key to the request BODY as well as the route: reusing a key with a different
+   *  body answers 422. For writes whose body decides what runs (`/executions`, `/tasks/submit`). */
+  bindBody?: boolean;
 }
+
+/** Keys whose first request is executing in THIS isolate - taken synchronously, so two
+ *  requests racing into one isolate cannot both pass. The store reservation covers the rest. */
+const IN_FLIGHT = new Set<string>();
+
+const inFlightResponse = (c: Context<HonoEnv>, key: string): Response => c.json({
+  error: `A request with ${IDEMPOTENCY_KEY_HEADER} '${key}' is still being processed. Retry shortly to receive its result.`,
+  code: 'idempotency_request_in_flight',
+}, 409);
 
 const tenantFromAuth = (c: Context<HonoEnv>): number | null => {
   const tenantId: unknown = c.get('tenantId');
@@ -57,45 +73,71 @@ export function idempotentReplay(opts: IdempotentReplayOptions = {}): Middleware
     const tenantId = await (opts.tenantOf ?? tenantFromAuth)(c);
     if (tenantId === null) return next();
 
+    // Take the same-isolate slot BEFORE any await (see IN_FLIGHT).
+    const slot = `${tenantId}:${key}`;
+    if (IN_FLIGHT.has(slot)) return inFlightResponse(c, key);
+    IN_FLIGHT.add(slot);
+    let reservedFingerprint: string | null = null;
     const store = opts.store ? opts.store(c) : createCacheIdempotencyStore(c.env as Env);
-    const fingerprint = requestFingerprint(c.req.method, c.req.path);
-
-    let stored: StoredIdempotentResponse | null = null;
     try {
-      stored = await store.get(tenantId, key);
-    } catch (error) {
-      // A store outage degrades to "execute": the endpoint's own dedupe is the backstop.
-      reportCaughtError(error, { source: SOURCE, operation: 'idempotentReplay.get' });
-    }
-    const decision = decideReplay(stored, fingerprint);
-    if (decision.kind === 'replay') {
-      const headers = new Headers({ [IDEMPOTENT_REPLAY_HEADER]: 'true' });
-      if (decision.response.contentType) headers.set('content-type', decision.response.contentType);
-      return new Response(decision.response.body, { status: decision.response.status, headers });
-    }
-    if (decision.kind === 'conflict') {
-      return c.json({
-        error: `${IDEMPOTENCY_KEY_HEADER} '${key}' was already used for a different request`,
-        code: 'idempotency_key_reused',
-      }, 422);
-    }
+      const bodyHash = opts.bindBody ? await hashRequestBody(await c.req.raw.clone().text()) : undefined;
+      const fingerprint = requestFingerprint(c.req.method, c.req.path, bodyHash);
 
-    await next();
+      let stored: StoredIdempotentResponse | null = null;
+      try {
+        stored = await store.get(tenantId, key);
+      } catch (error) {
+        // A store outage degrades to "execute": the endpoint's own dedupe is the backstop.
+        reportCaughtError(error, { source: SOURCE, operation: 'idempotentReplay.get' });
+      }
+      const decision = decideReplay(stored, fingerprint);
+      if (decision.kind === 'in_flight') return inFlightResponse(c, key);
+      if (decision.kind === 'replay') {
+        const headers = new Headers({ [IDEMPOTENT_REPLAY_HEADER]: 'true' });
+        if (decision.response.contentType) headers.set('content-type', decision.response.contentType);
+        return new Response(decision.response.body, { status: decision.response.status, headers });
+      }
+      if (decision.kind === 'conflict') {
+        return c.json({
+          error: `${IDEMPOTENCY_KEY_HEADER} '${key}' was already used for a different request`,
+          code: 'idempotency_key_reused',
+        }, 422);
+      }
 
-    const status = c.res.status;
-    if (!isStorableStatus(status)) return;
-    const res = c.res.clone();
-    const write = res.text()
-      .then((body) => store.put(tenantId, key, {
-        fingerprint,
-        status,
-        body,
-        contentType: res.headers.get('content-type'),
-      }))
-      .catch((error: unknown) => {
-        reportCaughtError(error, { source: SOURCE, operation: 'idempotentReplay.put' });
-      });
-    // Recorded past the response where the runtime allows it; awaited otherwise.
-    if (!deferPastResponse(write)) await write;
+      // Reserve the key in the shared store so a second request on ANOTHER isolate sees
+      // "in flight" instead of executing again. Short TTL: an evicted isolate frees it.
+      try {
+        await store.put(tenantId, key, pendingReservation(fingerprint), { ttlSeconds: IDEMPOTENCY_PENDING_TTL_SECONDS });
+        reservedFingerprint = fingerprint;
+      } catch (error) {
+        reportCaughtError(error, { source: SOURCE, operation: 'idempotentReplay.reserve' });
+      }
+
+      await next();
+
+      const status = c.res.status;
+      if (!isStorableStatus(status)) return;
+      const res = c.res.clone();
+      const write = res.text()
+        .then((body) => store.put(tenantId, key, {
+          fingerprint,
+          status,
+          body,
+          contentType: res.headers.get('content-type'),
+        }))
+        .catch((error: unknown) => {
+          reportCaughtError(error, { source: SOURCE, operation: 'idempotentReplay.put' });
+        });
+      // Recorded past the response where the runtime allows it; awaited otherwise.
+      if (!deferPastResponse(write)) await write;
+      reservedFingerprint = null; // replaced by the stored response
+    } finally {
+      IN_FLIGHT.delete(slot);
+      // A request that did not succeed releases its reservation so a corrected retry runs.
+      if (reservedFingerprint !== null) {
+        await store.put(tenantId, key, releasedReservation(reservedFingerprint), { ttlSeconds: IDEMPOTENCY_PENDING_TTL_SECONDS })
+          .catch((error: unknown) => reportCaughtError(error, { source: SOURCE, operation: 'idempotentReplay.release' }));
+      }
+    }
   };
 }

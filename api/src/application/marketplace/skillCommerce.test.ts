@@ -28,7 +28,7 @@ vi.mock('../../infrastructure/payment', () => ({
   }),
 }));
 
-const env = { STRIPE_SECRET_KEY: 'sk_test' } as never;
+const env = { STRIPE_SECRET_KEY: 'sk_test', CORS_ORIGINS: 'https://app.example' } as never;
 const buyer = { buyerUserId: 'u-buyer', buyerEmail: 'buyer@example.com' };
 
 function skill(over: Record<string, unknown> = {}) {

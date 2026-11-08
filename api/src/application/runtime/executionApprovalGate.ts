@@ -13,7 +13,6 @@
  * so a system caller can use it without fabricating a request context.
  */
 import { and, eq } from 'drizzle-orm';
-import { coordinatorVoice, resolveTicketCoordinator } from '../kanban/ticketCoordinator';
 import { approvalSubjectRef, resolveApprovalGate } from '../approval/approvalGate';
 import { boards } from '../../infrastructure/database/schema';
 import { parseActAsRole } from './cloudDispatch';
@@ -149,14 +148,11 @@ export async function evaluateExecutionApprovalGate(
     pendingReason: 'Task execution is waiting for manager approval.',
     openedReason: 'Task priority requires manager approval before execution.',
     draft: async () => {
-      // SINGLE VOICE PER TICKET (PRD §5.5). A human approval at a gated lane is exterior
-      // communication the ticket's Coordinator owns, so the approval queue names the
-      // Coordinator on behalf of whatever asked (the lane trigger, a cron sweep, a user).
-      // Provenance is preserved inside the composed label — see `ticketCoordinator.ts`.
-      const coordinator = await resolveTicketCoordinator(db, tenantId, task.id).catch(() => null);
+      // `requestedBy` is the ACTING label; `resolveApprovalGate` voices it as the ticket's
+      // Coordinator (PRD §5.5) for every `taskId`-scoped gate — see `stakeholderVoice.ts`.
       return {
         agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-        requestedBy: coordinatorVoice(coordinator, requestedBy),
+        requestedBy,
         description: `Approve execution of task #${task.id}: ${task.title}`,
         metadata: {
           priority: task.priority,

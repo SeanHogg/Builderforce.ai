@@ -22,13 +22,18 @@ export type SandboxWaitStep =
   | { exhausted: false; wait: SandboxOpenWait; delayMs: number }
   | { exhausted: true; waitedMs: number };
 
-/** The next step after a capacity refusal at `now`, given the wait so far (none on the first). */
-export function nextCapacityWait(prev: SandboxOpenWait | undefined, now: number): SandboxWaitStep {
+/** Each delay is spread by up to this fraction either way, so runs refused at the same moment do not all retry at the same moment. */
+export const CAPACITY_WAIT_JITTER = 0.2;
+
+/** The next step after a capacity refusal at `now`, given the wait so far (none on the first). `random` is [0, 1). */
+export function nextCapacityWait(prev: SandboxOpenWait | undefined, now: number, random: () => number = Math.random): SandboxWaitStep {
   const since = prev?.since ?? now;
   const waitedMs = Math.max(0, now - since);
   if (waitedMs >= CAPACITY_WAIT_MAX_MS) return { exhausted: true, waitedMs };
   const attempts = (prev?.attempts ?? 0) + 1;
-  // Capped, and never past the deadline: the last retry lands AT it, so the wait ends when it says it does.
-  const delayMs = Math.min(CAPACITY_WAIT_BASE_MS * 2 ** (attempts - 1), CAPACITY_WAIT_CAP_MS, CAPACITY_WAIT_MAX_MS - waitedMs);
+  const backoff = Math.min(CAPACITY_WAIT_BASE_MS * 2 ** (attempts - 1), CAPACITY_WAIT_CAP_MS);
+  const jittered = Math.round(backoff * (1 - CAPACITY_WAIT_JITTER + 2 * CAPACITY_WAIT_JITTER * random()));
+  // Never past the deadline: the last retry lands AT it, so the wait ends when it says it does.
+  const delayMs = Math.min(jittered, CAPACITY_WAIT_MAX_MS - waitedMs);
   return { exhausted: false, wait: { since, attempts }, delayMs };
 }

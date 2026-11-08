@@ -15,6 +15,7 @@ import { bm25Search, type Bm25Doc } from '@seanhogg/builderforce-memory/retrieva
 import { and, eq, inArray, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { knowledgeDocuments } from '../../infrastructure/database/schema';
+import { knowledgeText } from './documentText';
 
 export interface SopRecallHit {
   id: string;
@@ -78,7 +79,7 @@ export async function recallSops(
   const byId = new Map(rows.map((r) => [r.id, r]));
   const docs: Bm25Doc[] = rows.map((r) => ({
     id: r.id,
-    text: `${r.title}\n${r.summary ?? ''}\n${r.content ?? ''}`,
+    text: `${r.title}\n${r.summary ?? ''}\n${knowledgeText(r.content ?? '')}`,
   }));
   const hits = bm25Search(query, docs).slice(0, topK);
 
@@ -89,6 +90,6 @@ export async function recallSops(
       id: r.id,
       title: r.title,
       docType: r.docType,
-      excerpt: excerpt(r.content ?? r.summary ?? ''),
+      excerpt: excerpt(knowledgeText(r.content ?? r.summary ?? '')),
     }));
 }

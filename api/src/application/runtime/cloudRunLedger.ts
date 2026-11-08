@@ -20,7 +20,7 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
-import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { enforceTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 import { dailyTenantCounts, sumDailyCounts, type DailyCount } from '../shared/dailyTenantCounts';
 import { usageDatabaseOf } from '../llm/usageLedger';
 
@@ -68,7 +68,7 @@ export type CloudRunCapResult = MonthlyTenantCapResult;
  * query error — a metering hiccup must not block a legitimate run.
  */
 export async function enforceCloudRunCap(db: Db, tenantId: number, env?: Env): Promise<CloudRunCapResult> {
-  return enforceMonthlyTenantCap({
+  return enforceTenantCap({
     db,
     tenantId,
     env,

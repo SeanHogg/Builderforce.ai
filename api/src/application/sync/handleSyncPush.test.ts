@@ -109,6 +109,7 @@ function importers(log: ImporterLog, behaviour: (entityType: string) => Behaviou
     importSyncedChat: run('chat'),
     importSyncedMessage: run('message'),
     importSyncedUsage: run('usage'),
+    importSyncedChatTicketLink: run('chat-ticket-link'),
     importMirrorRecord: run('mirror'),
   };
 }

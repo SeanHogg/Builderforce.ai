@@ -4126,6 +4126,8 @@
     "delta": "+{count}"
   },
   "personProfile": {
+    "seoTitle": "Compañero de equipo",
+    "seoDescription": "Un compañero de tu espacio de trabajo: rol, personalidad y el trabajo que tiene asignado.",
     "loading": "Cargando el perfil",
     "work": "Trabajo",
     "open": "Tickets abiertos",
@@ -4735,7 +4737,7 @@
         "surface": "{count, plural, =0 {Dibujo, vacío} one {Dibujo, 1 trazo} other {Dibujo, # trazos}}",
         "empty": "Aún no hay dibujo.",
         "emptyHint": "Dibuja aquí con el ratón, un lápiz o el dedo.",
-        "limit": "Este dibujo ha alcanzado su límite de {max} trazos. Borra algunos para añadir más.",
+        "limit": "Este dibujo está lleno: admite como máximo {max} trazos y un límite de detalle total. Borra algunos para añadir más.",
         "clear": "Borrar dibujo",
         "clearConfirm": "¿Quitar todos los trazos de este dibujo? Las demás personas que lo editan también los perderán.",
         "textLabel": "Texto del dibujo",
@@ -4968,6 +4970,7 @@
         "exportAs": "Exportar {format}",
         "exporting": "Procesando…",
         "exportFailed": "La exportación falló. Inténtalo de nuevo.",
+        "exportTooLarge": "Esta animación es demasiado grande para exportarla (ancho × alto × fotogramas supera el límite). Reduce el número de fotogramas o el tamaño del lienzo.",
         "summary": "{count, plural, one {# fotograma} other {# fotogramas}} · {fps} fps · {seconds} s",
         "dimensions": "{width} × {height} px",
         "maxFramesReached": "Se alcanzó el límite de fotogramas ({max}). Elimina uno para añadir otro.",
@@ -15734,6 +15737,10 @@
     "prdFallback": "PRD {id}"
   },
   "kanbanTemplateCheckout": {
+    "previewLockedNotice": "Esta es una plantilla de pago. Desbloquéala para ver sus requisitos y dotación.",
+    "previewLanes": "Carriles",
+    "previewUnlock": "Desbloquear por {price}",
+    "previewBack": "Volver",
     "redirecting": "«{name}» es una plantilla de pago. Te llevamos al pago...",
     "checkoutFailed": "No se pudo iniciar el pago de esta plantilla. Inténtalo de nuevo.",
     "completeFailed": "Aún no se pudo confirmar el pago. Si se te cobró, la plantilla se desbloqueará en breve; después inténtalo de nuevo."
@@ -38547,7 +38554,10 @@
         "checking": "Comprobando el clip…",
         "watermarkDetected": "Este clip lleva una marca de agua de Builderforce para el clip {clipId}.",
         "audioMatches": "El audio coincide con el registro firmado.",
-        "selfReported": "Este registro fue informado por el propio dispositivo del creador.",
+        "selfReported": "Registrado por el licenciatario de la voz; la plataforma no vio este audio.",
+        "watermarkMismatch": "Lleva la marca del clip {clipId}, pero este audio no es el audio firmado.",
+        "watermarkUnchecked": "Lleva la marca del clip {clipId}, pero no se pudo comprobar ninguna huella de audio para este formato.",
+        "voiceDeleted": "Voz eliminada",
         "metaTitle": "Verificar un clip de voz",
         "metaDescription": "Comprueba si un clip de voz lleva una marca de agua de Builderforce y con qué consentimiento se creó.",
         "noWatermark": "No se encontró ninguna marca de agua. Puede que este clip no se creara en Builderforce, o que se haya editado o recodificado.",
@@ -38581,6 +38591,7 @@
       "checkoutCancelled": "Se canceló el pago. No se te ha cobrado.",
       "checkoutFailed": "No pudimos confirmar ese pago. Si se te cobró, actualiza en un momento.",
       "checkoutDone": "Compra completada. La voz ya está en tus voces.",
+      "licenseRevoked": "Tu licencia de esta voz se revocó tras un reembolso o una disputa. Contacta con soporte para restablecerla.",
       "checkoutOpened": "El pago se abrió en tu navegador. Actualiza aquí cuando hayas pagado.",
       "acquireFailed": "No se pudo añadir esta voz. Inténtalo de nuevo.",
       "refresh": "Actualizar"

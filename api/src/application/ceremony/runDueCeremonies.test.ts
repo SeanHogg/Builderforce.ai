@@ -80,7 +80,7 @@ vi.mock('../metrics/workforceMetrics', () => ({
   ],
 }));
 
-vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: async () => true }));
+vi.mock('../swimlane/laneEntryTrigger', () => ({ routeLaneEntry: async () => true }));
 vi.mock('../../buildRuntimeService', () => ({ buildRuntimeService: () => ({}) }));
 
 import {

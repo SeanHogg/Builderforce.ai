@@ -1,35 +1,13 @@
-const MUTATING_TOOL_NAMES = new Set([
-  "write",
-  "edit",
-  "apply_patch",
-  "exec",
-  "bash",
-  "process",
-  "message",
-  "sessions_send",
-  "cron",
-  "gateway",
-  "canvas",
-  "nodes",
-  "session_status",
-]);
+import { classifyTool, isMutatingTool, normalizeAction, toolSideEffect } from "@builderforce/agent-tools";
 
-const READ_ONLY_ACTIONS = new Set([
-  "get",
-  "list",
-  "read",
-  "status",
-  "show",
-  "fetch",
-  "search",
-  "query",
-  "view",
-  "poll",
-  "log",
-  "inspect",
-  "check",
-  "probe",
-]);
+/**
+ * Mutation heuristics for the ON-PREM catalog (write/edit/exec/message/...), used for
+ * action fingerprints. Names the shared catalog classifies
+ * (`@builderforce/agent-tools` `TOOL_SIDE_EFFECT`) are answered by it; everything else
+ * FAILS CLOSED (mutating) unless it is one of the explicit read-only names or a
+ * read-only `action` below.
+ */
+
 
 const PROCESS_MUTATING_ACTIONS = new Set(["write", "send_keys", "submit", "paste", "kill"]);
 
@@ -60,16 +38,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
 
-function normalizeActionName(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-  return normalized || undefined;
-}
+const normalizeActionName = normalizeAction;
 
 function normalizeFingerprintValue(value: unknown): string | undefined {
   if (typeof value === "string") {
@@ -84,21 +53,22 @@ function normalizeFingerprintValue(value: unknown): string | undefined {
 
 export function isLikelyMutatingToolName(toolName: string): boolean {
   const normalized = toolName.trim().toLowerCase();
-  if (!normalized) {
-    return false;
+  const shared = toolSideEffect(normalized);
+  if (shared) {
+    return shared === "mutate";
   }
-  return (
-    MUTATING_TOOL_NAMES.has(normalized) ||
-    normalized.endsWith("_actions") ||
-    normalized.startsWith("message_") ||
-    normalized.includes("send")
-  );
+  // Name only (no args): anything not explicitly read-only is treated as mutating.
+  return isMutatingTool(normalized);
 }
 
 export function isMutatingToolCall(toolName: string, args: unknown): boolean {
   const normalized = toolName.trim().toLowerCase();
   const record = asRecord(args);
   const action = normalizeActionName(record?.action);
+  const shared = toolSideEffect(normalized);
+  if (shared) {
+    return shared === "mutate";
+  }
 
   switch (normalized) {
     case "write":
@@ -120,18 +90,19 @@ export function isMutatingToolCall(toolName: string, args: unknown): boolean {
       return typeof record?.model === "string" && record.model.trim().length > 0;
     default: {
       if (normalized === "cron" || normalized === "gateway" || normalized === "canvas") {
-        return action == null || !READ_ONLY_ACTIONS.has(action);
+        return classifyTool(normalized, undefined, record) !== "read";
       }
       if (normalized === "nodes") {
         return action == null || action !== "list";
       }
       if (normalized.endsWith("_actions")) {
-        return action == null || !READ_ONLY_ACTIONS.has(action);
+        return classifyTool(normalized, undefined, record) !== "read";
       }
       if (normalized.startsWith("message_") || normalized.includes("send")) {
         return true;
       }
-      return false;
+      // Unknown to the shared catalog: the ONE classifier decides (host read-only names, a read-only `action`), else fail closed.
+      return classifyTool(normalized, undefined, record) !== "read";
     }
   }
 }

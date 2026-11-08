@@ -2,9 +2,11 @@ import { useCallback, useRef, useState, type CSSProperties } from 'react';
 import type { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import type { DocumentBlock } from '@/domains/collab/domain/blockDocument';
-import { textBlockKind } from '@/domains/collab/domain/blockDocument';
+import { DRAWING_BLOCK_HEIGHT, DRAWING_BLOCK_WIDTH, textBlockKind } from '@/domains/collab/domain/blockDocument';
 import type { BlockDocument, BlockPeer } from '@/domains/collab/presentation/useBlockDocument';
 import { uploadAsset, assetUrl } from '@/lib/assetsApi';
+import { BLOCK_RENDERERS, type BlockRendererProps } from './blocks/blockRenderers';
+import { gutterButtonStyle } from './blocks/blockStyles';
 
 /**
  * A CO-EDITED DOCUMENT, RENDERED PER BLOCK.
@@ -33,21 +35,6 @@ const rowStyle: CSSProperties = {
   gap: 8,
   alignItems: 'flex-start',
   padding: '4px 0',
-};
-
-const gutterButtonStyle: CSSProperties = {
-  width: 22,
-  height: 22,
-  borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border)',
-  background: 'var(--surface-2)',
-  color: 'var(--text-muted)',
-  cursor: 'pointer',
-  fontSize: 'var(--font-size-eyebrow)',
-  lineHeight: 1,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
 };
 
 /** Peers currently in one block — the block-level cursor. */
@@ -150,62 +137,10 @@ function TextBlockInput({
   );
 }
 
-function MediaBlockCard({
-  block,
-  onFocus,
-  onReplace,
-  t,
-}: {
-  block: DocumentBlock;
-  onFocus: () => void;
-  onReplace: (file: File) => void;
-  t: ReturnType<typeof useTranslations>;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const url = block.attrs.url;
-
-  return (
-    <div
-      onClick={onFocus}
-      style={{
-        flex: 1,
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)',
-        background: 'var(--surface-2)',
-        padding: 10,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-      }}
-    >
-      {block.type === 'image' && url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- an uploaded asset, not a Next-optimizable local one
-        // An upload's size is unknown until it loads, so it gets the block's own fixed box
-        // (the old max bounds) and `contain` letterboxes it — no reflow when it arrives.
-        <img src={url} alt={block.attrs.label ?? ''} width={260} height={160} style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }} />
-      ) : block.type === 'video' && url ? (
-        <video src={url} controls style={{ maxHeight: 200, maxWidth: 320, borderRadius: 'var(--radius-sm)' }} />
-      ) : (
-        <span style={{ fontSize: 'var(--font-size-section)' }}><Icon source="📄" size="1em" /></span>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {block.attrs.label || url || t('blockEmptyMedia')}
-        </div>
-        {!url && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('blockUploadPrompt')}</div>}
-      </div>
-      <button type="button" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }} style={gutterButtonStyle} title={t('blockReplace')}>
-        <Icon source="⤒" size="0.9em" />
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={block.type === 'image' ? 'image/*' : block.type === 'video' ? 'video/*' : undefined}
-        style={{ display: 'none' }}
-        onChange={(e) => { const file = e.target.files?.[0]; if (file) onReplace(file); e.target.value = ''; }}
-      />
-    </div>
-  );
+/** Dispatches a non-text block to its renderer through the registry. */
+function BlockRenderer(props: BlockRendererProps) {
+  const Renderer = BLOCK_RENDERERS[props.block.type as Exclude<DocumentBlock['type'], 'text'>];
+  return <Renderer {...props} />;
 }
 
 export function BlockEditor({ doc, t, readOnly }: BlockEditorProps) {
@@ -275,10 +210,17 @@ export function BlockEditor({ doc, t, readOnly }: BlockEditorProps) {
                   onChange={(text) => doc.setText(block.id, text)}
                 />
               ) : (
-                <MediaBlockCard
+                <BlockRenderer
                   block={block}
                   t={t}
+                  readOnly={readOnly}
                   onFocus={() => doc.setFocusedBlock(block.id)}
+                  strokeOps={{
+                    append: (strokes) => doc.appendStrokes(block.id, strokes),
+                    remove: (strokeIds) => doc.removeStrokes(block.id, strokeIds),
+                    update: (strokeId, patch) => doc.updateStroke(block.id, strokeId, patch),
+                    clear: () => doc.clearStrokes(block.id),
+                  }}
                   onReplace={(file) => void upload(file, null, block.id)}
                 />
               )}
@@ -305,6 +247,7 @@ export function BlockEditor({ doc, t, readOnly }: BlockEditorProps) {
           t={t}
           onAddText={() => doc.setFocusedBlock(doc.insertAfter(doc.blocks[doc.blocks.length - 1]?.id ?? null, { id: `t-${Date.now()}`, type: 'text', text: '', attrs: {} }))}
           onAddMedia={(file) => void upload(file, doc.blocks[doc.blocks.length - 1]?.id ?? null)}
+          onAddDrawing={() => doc.setFocusedBlock(doc.insertAfter(doc.blocks[doc.blocks.length - 1]?.id ?? null, { id: `d-${Date.now()}`, type: 'drawing', text: '', attrs: { strokes: [], width: DRAWING_BLOCK_WIDTH, height: DRAWING_BLOCK_HEIGHT } }))}
         />
       )}
     </div>
@@ -315,19 +258,24 @@ function BlockToolbar({
   t,
   onAddText,
   onAddMedia,
+  onAddDrawing,
 }: {
   t: ReturnType<typeof useTranslations>;
   onAddText: () => void;
   onAddMedia: (file: File) => void;
+  onAddDrawing: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
       <button type="button" onClick={onAddText} style={{ ...gutterButtonStyle, width: 'auto', padding: '4px 10px' }}>
         + {t('blockAddText')}
       </button>
       <button type="button" onClick={() => inputRef.current?.click()} style={{ ...gutterButtonStyle, width: 'auto', padding: '4px 10px' }}>
         + {t('blockAddMedia')}
+      </button>
+      <button type="button" onClick={onAddDrawing} style={{ ...gutterButtonStyle, width: 'auto', padding: '4px 10px' }}>
+        + {t('blocks.drawing.add')}
       </button>
       <input
         ref={inputRef}

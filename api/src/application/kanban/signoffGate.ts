@@ -27,6 +27,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { TicketParticipantsService, type ManifestParticipant } from './ticketParticipants';
 import { isParticipantSatisfied, isAttestationExhausted } from './participantStates';
+import { runBoundedPool } from '../runtime/boundedPool';
 
 /** Why the gate is open or shut — surfaced to telemetry, the ledger and the UI. */
 export type SignoffGateReason =
@@ -322,4 +323,32 @@ export async function resolveRequiredSignoffGate(
 ): Promise<SignoffGateResult> {
   if (!args.requireSignoff) return SIGNOFF_NOT_REQUIRED;
   return resolveSignoffGate(env, db, args);
+}
+
+/** Manifest reads in flight at once for {@link resolveRequiredSignoffGates}. */
+const SIGNOFF_BATCH_CONCURRENCY = 8;
+
+/**
+ * THE BATCH READ — one call per project for a whole cohort of tickets.
+ *
+ * The PR-conduct sweep used to call {@link resolveRequiredSignoffGate} from inside its
+ * per-ticket loop, so the policy check and the manifest read were interleaved with provider
+ * round-trips. Resolving the cohort once, up front, makes the policy check a SINGLE decision
+ * per project (sign-off off ⇒ zero reads for the whole cohort) and bounds the manifest reads
+ * (each is already version-token cached per ticket) instead of serialising them.
+ */
+export async function resolveRequiredSignoffGates(
+  env: Env,
+  db: Db,
+  args: { tenantId: number; taskIds: readonly number[]; requireSignoff: boolean },
+): Promise<Map<number, SignoffGateResult>> {
+  const out = new Map<number, SignoffGateResult>();
+  if (!args.requireSignoff) {
+    for (const id of args.taskIds) out.set(id, SIGNOFF_NOT_REQUIRED);
+    return out;
+  }
+  await runBoundedPool(args.taskIds, { limit: SIGNOFF_BATCH_CONCURRENCY }, async (taskId) => {
+    out.set(taskId, await resolveSignoffGate(env, db, { tenantId: args.tenantId, taskId }));
+  });
+  return out;
 }

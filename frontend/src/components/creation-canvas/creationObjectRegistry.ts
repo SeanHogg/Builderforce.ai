@@ -57,7 +57,7 @@ import { defaultCanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 // from this module, and one canonical declaration with one import path is the point.
 export type { CreationObjectGroup } from './types';
 import type { CreationObjectGroup } from './types';
-import { BASE_MUTABLE_FIELDS } from './creationObjectMutableFields';
+import { BASE_MUTABLE_FIELDS, DEFAULT_MUTATION_ARRAY_CAP, MUTATION_ARRAY_CAPS } from './creationObjectMutableFields';
 
 export interface CreationObjectDefinition {
   kind: CreationObjectKind;
@@ -243,7 +243,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'video', label: 'Video', icon: '▶', group: 'Build', createData: () => ({ kind: 'video', title: 'Untitled video', status: 'Draft', mediaKind: 'video', capabilityId: 'creative.video', videoTimeline: emptyCanvasVideoTimeline(), videoSources: [] }) },
   { kind: 'image', label: 'Image', icon: '▣', group: 'Build', createData: () => ({ kind: 'image', title: 'Image studio', status: 'Draft', mediaKind: 'image', capabilityId: 'creative.image', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'animation', label: 'Animation', icon: '◉', group: 'Build', createData: () => ({ kind: 'animation', title: 'Animation studio', status: 'Draft', mediaKind: 'animation', capabilityId: 'creative.animation', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
-  { kind: 'podcast', label: 'Podcast', icon: '◖', group: 'Build', createData: () => ({ kind: 'podcast', title: 'Podcast studio', status: 'Draft', mediaKind: 'podcast', capabilityId: 'creative.podcast', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
+  { kind: 'podcast', label: 'Podcast', icon: '◖', group: 'Build', createData: () => ({ kind: 'podcast', title: 'Podcast studio', status: 'Draft', mediaKind: 'podcast', capabilityId: 'creative.podcast', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose', podcastTimeline: emptyCanvasVideoTimeline(), podcastSources: [] }) },
   { kind: 'comic', label: 'Comic', icon: '▦', group: 'Build', createData: () => ({ kind: 'comic', title: 'Comic studio', status: 'Draft', mediaKind: 'comic', capabilityId: 'creative.comic', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'game', label: 'Game', icon: '◆', group: 'Build', createData: () => ({ kind: 'game', title: 'Game studio', status: 'Draft', mediaKind: 'game', capabilityId: 'creative.game', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'cad', label: 'CAD', icon: '⌗', group: 'Build', createData: () => ({ kind: 'cad', title: 'CAD studio', status: 'Draft', mediaKind: 'cad', capabilityId: 'creative.cad', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
@@ -362,8 +362,8 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'capture', 'edit', 'preview', 'export'], mcp: ['authenticate', 'execute'],
   scene: ['generate', 'preview'],
-  image: ['generate', 'preview', 'export', 'convert-to-diagram'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
-  comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'export'],
+  image: ['generate', 'preview', 'export', 'convert-to-diagram'], animation: ['generate', 'preview', 'edit', 'export'], podcast: ['generate', 'preview', 'export'],
+  comic: ['generate', 'preview', 'edit', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'edit', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'edit', 'export'],
   // `tailor` takes a `job` and produces a VARIANT — a second `resume` carrying
   // `tailoredFor`, rather than an edit in place. Two applications need two documents,
   // and a tailor that overwrote would leave the person unable to answer the question
@@ -471,15 +471,15 @@ export function isSensitiveMutationKey(key: string): boolean {
  */
 const MAX_MUTATION_DEPTH = 8;
 
-function sanitizeMutationValue(value: unknown, depth = 0): unknown {
+function sanitizeMutationValue(value: unknown, depth = 0, path = ''): unknown {
   if (value == null || typeof value === 'boolean') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'string') return value.slice(0, 40_000);
   if (depth >= MAX_MUTATION_DEPTH) return undefined;
-  if (Array.isArray(value)) return value.slice(0, 500).map((item) => sanitizeMutationValue(item, depth + 1)).filter((item) => item !== undefined);
+  if (Array.isArray(value)) return value.slice(0, MUTATION_ARRAY_CAPS[path] ?? DEFAULT_MUTATION_ARRAY_CAP).map((item) => sanitizeMutationValue(item, depth + 1, path)).filter((item) => item !== undefined);
   if (typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).flatMap(([key, item]) => {
     if (SENSITIVE_MUTATION_KEY.test(key)) return [];
-    const safe = sanitizeMutationValue(item, depth + 1);
+    const safe = sanitizeMutationValue(item, depth + 1, path ? `${path}.${key}` : key);
     return safe === undefined ? [] : [[key, safe]];
   }));
   return undefined;
@@ -533,7 +533,7 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
   const allowed = new Set(creationObjectMutableFields(kind));
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => {
     if (!allowed.has(key) || SENSITIVE_MUTATION_KEY.test(key)) return [];
-    const safe = sanitizeMutationValue(item);
+    const safe = sanitizeMutationValue(item, 0, key);
     return safe === undefined ? [] : [[key, safe]];
   })) as Partial<CreationNodeData>;
 }
@@ -565,7 +565,7 @@ export function canvasEvidencePatch(
   const derived = new Set(specDerivedFields(kind));
   const measured = Object.fromEntries(Object.entries(evidence).flatMap(([key, item]) => {
     if (!derived.has(key) || SENSITIVE_MUTATION_KEY.test(key)) return [];
-    const safe = sanitizeMutationValue(item);
+    const safe = sanitizeMutationValue(item, 0, key);
     return safe === undefined ? [] : [[key, safe]];
   }));
   return { ...sanitizeCreationObjectPatch(kind, authored), ...measured } as Partial<CreationNodeData>;

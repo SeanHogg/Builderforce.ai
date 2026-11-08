@@ -1,7 +1,6 @@
-import { A as ActiveDevice, V as VideoEngineOptions, G as GenerateOptions, a as GenerateResult, S as StoryboardGenerateOptions, b as StoryboardGenerateResult, M as MambaStateSnapshot, D as DiffusionModelId, c as ModelDescriptor, C as CameraMove, P as PlannedShot, d as CharacterBible, e as ScenePlanOptions, f as Storyboard, g as ValidateFrameOptions, F as FrameValidation } from './device-router-Ct4N7PTF.js';
-export { h as CoherenceMode, i as DeviceTarget, j as FrameIssueKind, k as FrameValidationIssue, I as InterpolationBackend, L as LcmModelDescriptor, l as LcmModelId, O as OnnxFile, m as OrtInputSpec, n as OrtTensorDtype, o as ProbedDevice, Q as QualityMode, p as ShotValidation, W as WebDitModelDescriptor, q as WebDitModelId, r as WeightSource, s as hasWebGPUSupport, t as probeDevice } from './device-router-Ct4N7PTF.js';
+import { A as ActiveDevice, V as VideoEngineOptions, G as GenerateOptions, a as GenerateResult, S as StoryboardGenerateOptions, b as StoryboardGenerateResult, M as MambaStateSnapshot, D as DiffusionModelId, c as ModelDescriptor, C as CameraMove, P as PlannedShot, d as CharacterBible, e as ScenePlanOptions, f as Storyboard, g as ValidateFrameOptions, F as FrameValidation } from './device-router-B99djikV.js';
+export { h as CoherenceMode, i as DeviceTarget, j as FrameIssueKind, k as FrameValidationIssue, I as InterpolationBackend, L as LcmModelDescriptor, l as LcmModelId, O as OnnxFile, m as OrtInputSpec, n as OrtTensorDtype, o as ProbedDevice, Q as QualityMode, p as ShotValidation, W as WebDitModelDescriptor, q as WebDitModelId, r as WeightSource, s as hasWebGPUSupport, t as probeDevice } from './device-router-B99djikV.js';
 import { BuilderforceClient } from '@seanhogg/builderforce-sdk';
-import '@webdit/shared';
 
 /**
  * VideoEngine — public orchestrator for end-to-end client-side video generation.
@@ -16,7 +15,7 @@ import '@webdit/shared';
  *        c. denoise() runs the shared LCM/SD-Turbo primitive
  *        d. pixelsToRgba() converts to displayable RGBA
  *        e. advanceState() updates the Mamba state from this frame's output
- *   4. muxFramesToMp4()         → WebCodecs encodes the frames to MP4
+ *   4. muxFramesToVideo()       → WebCodecs encodes the frames to MP4 (WebM fallback)
  *
  * `VideoEngine.create()` is the only construction path — it probes the device,
  * downloads weights, initialises ONNX sessions, and returns null when the
@@ -198,6 +197,14 @@ interface OnnxRuntimeConfigOptions {
     numThreads?: number;
 }
 /**
+ * The host app's own copy of the ORT WASM (e.g. same-origin `/ort/`). Wins over the
+ * jsDelivr default, which exists only for third-party npm consumers that set no
+ * base — and which a strict CSP (`script-src` without the CDN) blocks. Safe to call
+ * before or after {@link configureOnnxRuntime}: if the runtime is already configured
+ * the new base is applied at once. An explicit `wasmCdn` option still wins.
+ */
+declare function setOrtWasmBase(url: string | null): void;
+/**
  * Idempotent. Safe to call from multiple modules — only the first call applies;
  * subsequent calls noop. Both bundled ORT instances share the resulting config.
  */
@@ -327,6 +334,22 @@ declare function normaliseShotBudget(shots: PlannedShot[], total: number, fallba
  * Inject `client` in tests; production constructs its own.
  */
 declare function validateFrame(opts: ValidateFrameOptions, client?: BuilderforceClient): Promise<FrameValidation>;
+
+/** Output container. */
+type VideoContainer = 'mp4' | 'webm';
+/** Thrown when the browser can encode neither AVC/MP4 nor VP9/VP8 WebM. */
+declare class UnsupportedVideoEncodingError extends Error {
+    constructor();
+}
+interface MuxedVideo {
+    blob: Blob;
+    /** `video/mp4` or `video/webm` — also set as `blob.type`. */
+    mimeType: string;
+    /** File extension without the dot: `mp4` or `webm`. */
+    extension: string;
+}
+/** File extension for a video mime type produced by this muxer (defaults to mp4). */
+declare function videoExtensionForMime(mimeType: string): string;
 
 /**
  * FrameInterpolator — keyframe → in-between generation in VAE latent space.
@@ -606,8 +629,11 @@ interface SynthesizeOptions {
     signal?: AbortSignal;
 }
 interface CloneSynthesisResult {
-    /** Synthesized mono PCM in [-1, 1]. */
+    /** Synthesized mono PCM in [-1, 1], carrying an inaudible watermark. */
     pcm: Float32Array;
+    /** The 64-bit id embedded in `pcm` (16 hex chars), or null when the clip was
+     *  too short or quiet to carry one. */
+    watermarkId: string | null;
     sampleRate: number;
     durationMs: number;
     /** Per-word spans, aligned to the synthesized audio. */
@@ -890,4 +916,4 @@ declare function encodeWav(audio: PcmAudio): ArrayBuffer;
 /** Same as {@link encodeWav} but wrapped as a `Blob` (browser/worker only). */
 declare function encodeWavBlob(audio: PcmAudio): Blob;
 
-export { type AcousticGenerateResult, type AcousticModelOptions, ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, type CloneSynthesisResult, type CodecTokens, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, type InterpolatedSlot, type Keyframe, MODEL_REGISTRY, MambaStateSnapshot, type MelConfig, type MelSpectrogram, ModelDescriptor, type MotionField, type MotionOptions, NeuralCodec, type NeuralCodecOptions, type OnnxRuntimeConfigOptions, type PcmAudio, PlannedShot, type ResolveProviderResult, SSMAcousticModel, SSMVoiceProvider, ScenePlanOptions, type SpeakerEmbedding, type SpeakerEncoderOptions, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, type SynthesizeOptions, TEXT_VOCAB_SIZE, type TokenizedText, ValidateFrameOptions, VideoEngine, VideoEngineOptions, VoiceCloneEngine, type VoiceCloneEngineOptions, type VoiceProvider, type VoiceProviderId, type WordTimestamp, buildInterpolatedSequence, cameraMoveToMotion, composeShotPrompt, configureOnnxRuntime, cosineSimilarity, directorPass, encodeSpeaker, encodeWav, encodeWavBlob, estimateBlockMotion, interpolateFrames, luma, melSpectrogram, melToWaveform, normaliseShotBudget, planKeyframeIndices, planScene, resolveVoiceProvider, shotPlannerPass, slerp, storyboardFrameCount, tokenizeText, validateFrame, verifySpeaker };
+export { type AcousticGenerateResult, type AcousticModelOptions, ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, type CloneSynthesisResult, type CodecTokens, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, type InterpolatedSlot, type Keyframe, MODEL_REGISTRY, MambaStateSnapshot, type MelConfig, type MelSpectrogram, ModelDescriptor, type MotionField, type MotionOptions, type MuxedVideo, NeuralCodec, type NeuralCodecOptions, type OnnxRuntimeConfigOptions, type PcmAudio, PlannedShot, type ResolveProviderResult, SSMAcousticModel, SSMVoiceProvider, ScenePlanOptions, type SpeakerEmbedding, type SpeakerEncoderOptions, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, type SynthesizeOptions, TEXT_VOCAB_SIZE, type TokenizedText, UnsupportedVideoEncodingError, ValidateFrameOptions, type VideoContainer, VideoEngine, VideoEngineOptions, VoiceCloneEngine, type VoiceCloneEngineOptions, type VoiceProvider, type VoiceProviderId, type WordTimestamp, buildInterpolatedSequence, cameraMoveToMotion, composeShotPrompt, configureOnnxRuntime, cosineSimilarity, directorPass, encodeSpeaker, encodeWav, encodeWavBlob, estimateBlockMotion, interpolateFrames, luma, melSpectrogram, melToWaveform, normaliseShotBudget, planKeyframeIndices, planScene, resolveVoiceProvider, setOrtWasmBase, shotPlannerPass, slerp, storyboardFrameCount, tokenizeText, validateFrame, verifySpeaker, videoExtensionForMime };

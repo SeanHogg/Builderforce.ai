@@ -2,6 +2,7 @@ import { useTranslations } from 'next-intl';
 import type { CanvasSceneShot } from '@builderforce/creation-canvas-contract';
 import { CLOUD_SHOT_SECONDS } from '@/lib/sceneStoryboard';
 import styles from './Scene.module.css';
+import { AuthedVideo } from '../creative/AuthedMedia';
 
 /**
  * A cloud scene's shots — each with its prompt, length, render state and clip.
@@ -27,7 +28,7 @@ export function SceneShotList({ shots, busy, onEdit, onRemove }: {
           </div>
           <div className={styles.shotBody}>
             {shot.output ? (
-              <video className={styles.shotClip} src={shot.output.url} controls muted playsInline preload="metadata" />
+              <AuthedVideo className={styles.shotClip} src={shot.output.url} controls muted playsInline preload="metadata" />
             ) : (
               <div className={styles.shotClipPlaceholder} aria-hidden="true">{shot.status === 'rendering' ? '…' : '▶'}</div>
             )}

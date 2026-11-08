@@ -109,4 +109,25 @@ describe('caughtErrorReporter', () => {
       expect.anything(),
     );
   });
+
+  it('never lets the raw error, its stack or its cause reach the log or the sink unredacted', async () => {
+    const logged: unknown[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { logged.push(args); });
+    const sink = vi.fn(async () => undefined);
+    configureCaughtErrorReporter(sink);
+    const ghp = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8';
+    const error = Object.assign(new Error(`clone failed with GITHUB_TOKEN=${ghp}`, { cause: new Error(`inner ${ghp}`) }), { code: 'E_CLONE' });
+
+    await reportUnhandledError(error, { source: 'test', operation: 'raw-error' }, { env: {} });
+    reportCaughtError(error, { source: 'test', operation: 'raw-error' });
+
+    const record = sink.mock.calls[0]![0] as { error: Error & { code?: string }; message: string; stack: string | null };
+    expect(record.error).not.toBe(error);
+    expect(record.error.code).toBe('E_CLONE');
+    expect(record.error.name).toBe('Error');
+    const everything = JSON.stringify([logged, record.message, record.stack, record.error.message, record.error.stack, String(record.error.cause instanceof Error ? record.error.cause.message : record.error.cause)]);
+    expect(everything).not.toContain(ghp);
+    // The original is untouched for the caller that rethrows it.
+    expect(error.message).toContain(ghp);
+  });
 });

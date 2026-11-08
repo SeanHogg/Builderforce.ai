@@ -31,6 +31,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -316,6 +317,9 @@ export const tasks = pgTable('tasks', {
   // PRD/spec link moved to the task_specs junction (0098): a task references 1..N
   // project PRDs (one optional primary) — see `taskSpecs` below.
   archived:          boolean('archived').notNull().default(false),
+  /** Migration 1325: shipping this work item is investor-facing news. Read by the
+   *  investor update and the board pack through `listShippedMilestones`. */
+  investorMilestone: boolean('investor_milestone').notNull().default(false),
   /** Gig Marketplace (0293): this work item is published (or publishable) as a
    *  hireable gig, and the back-ref to the published posting. Canonical link is
    *  jobPostings.sourceTicketId; jobPostingId is a denormalized convenience kept in
@@ -430,8 +434,37 @@ export const taskReviews = pgTable('task_reviews', {
   verdict:     varchar('verdict', { length: 16 }).notNull(),   // 'complete' | 'gaps'
   summary:     text('summary'),
   gapsCount:   integer('gaps_count').notNull().default(0),
+  /** PRD 23 §5.2 (1312) — the execution that produced this review. */
+  executionId: integer('execution_id').references(() => executions.id, { onDelete: 'set null' }),
+  /** The Validator ticket_participants slot this verdict was bridged to (null = unlinked). */
+  participantId: uuid('participant_id').references((): AnyPgColumn => ticketParticipants.id, { onDelete: 'set null' }),
+  /** The PR head commit reviewed; a newer head invalidates the acceptance evidence. */
+  reviewedHeadSha: varchar('reviewed_head_sha', { length: 64 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
+
+/**
+ * PRD 23 §2/§6 — the recovery disposition of a non-Done ticket. 1:1 with the ticket and a
+ * distinct fact from it. `appliedAt` null = dry-run proposal; stamped only when an operator
+ * triggers apply (manager/backlogDispositionPass.ts). Migration 1312.
+ */
+export const ticketDispositions = pgTable('ticket_dispositions', {
+  taskId:            integer('task_id').primaryKey().references(() => tasks.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  disposition:       varchar('disposition', { length: 16 }).notNull(),   // keep | close | consolidate | quarantine
+  roadmapCapability: text('roadmap_capability'),
+  prdAlignment:      varchar('prd_alignment', { length: 32 }),
+  deliveryState:     varchar('delivery_state', { length: 32 }),
+  evidence:          jsonb('evidence').notNull().default({}),
+  duplicateOf:       integer('duplicate_of').references(() => tasks.id, { onDelete: 'set null' }),
+  supersededBy:      integer('superseded_by').references(() => tasks.id, { onDelete: 'set null' }),
+  decidedBy:         varchar('decided_by', { length: 64 }).notNull(),
+  decidedAt:         timestamp('decided_at').notNull().defaultNow(),
+  appliedAt:         timestamp('applied_at'),
+}, (t) => [
+  index('idx_ticket_dispositions_tenant').on(t.tenantId, t.disposition),
+  check('chk_ticket_dispositions_disposition', sql`${t.disposition} IN ('keep', 'close', 'consolidate', 'quarantine')`),
+]);
 
 
 /**
@@ -534,6 +567,9 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    *  column always states the project's answer outright. See
    *  application/kanban/coordinationGate.ts + managerPolicy.ts. */
   coordinationRequiresManager: boolean('coordination_requires_manager').notNull().default(false),
+  /** PRD 23 canary mode (1312): auto-merge and auto-close are disabled while true; the
+   *  sweeps log what they would have done. Project-only, default off. */
+  canary: boolean('canary').notNull().default(false),
   lastRunAt:         timestamp('last_run_at'),
   /**
    * WHAT THE LAST SCHEDULED SWEEP DECIDED about this project (migration 1083):
@@ -2452,7 +2488,10 @@ export const securityIncidents = pgTable('security_incidents', {
   sourceRef:       text('source_ref'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  /** One auto-opened incident per finding fingerprint (mig 1321): `source_ref = finding:<fingerprint>`. */
+  uniqueIndex('uq_security_incidents_finding_ref').on(t.tenantId, t.segmentId, t.sourceRef).where(sql`source_ref LIKE 'finding:%'`),
+]);
 
 
 // ---------------------------------------------------------------------------
@@ -2544,9 +2583,39 @@ export const vulnerabilityScans = pgTable('vulnerability_scans', {
   finishedAt:  timestamp('finished_at'),
   summary:     text('summary'),
   notes:       text('notes'),
+  /** The recorded pull request this scan covered (mig 1320); NULL = a repo-level scan. The
+   *  security merge gate asks "does THIS PR have an open blocking finding?" through this. */
+  pullRequestId: uuid('pull_request_id').references(() => pullRequests.id, { onDelete: 'set null' }),
+  /** The agent run (executions.id) that opened that PR. A plain id by value — no FK. */
+  executionId:   integer('execution_id'),
+  /** The PR head commit this scan covered (mig 1320); the gate honours a scan only for the PR's current head. */
+  headSha:       varchar('head_sha', { length: 64 }),
+  /** The scan did not see everything (file / size / package cap): never complete for the gate. */
+  truncated:     boolean('truncated').notNull().default(false),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  /** One scan per (PR, head commit, type): the arbiter for race-safe creation (mig 1320). */
+  uniqueIndex('uq_vulnerability_scans_pr_sha_type').on(t.pullRequestId, t.headSha, t.scanType).where(sql`pull_request_id IS NOT NULL`),
+]);
+
+
+/**
+ * A manager's reasoned acceptance of the security risk of ONE pull request at ONE head commit (mig 1322).
+ * The merge gate honours it for that `head_sha` only; a later push needs a new decision.
+ */
+export const prSecurityOverrides = pgTable('pr_security_overrides', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  pullRequestId: uuid('pull_request_id').notNull().references(() => pullRequests.id, { onDelete: 'cascade' }),
+  headSha:       varchar('head_sha', { length: 64 }).notNull(),
+  reason:        text('reason').notNull(),
+  acceptedBy:    varchar('accepted_by', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_pr_security_overrides_pr_sha').on(t.pullRequestId, t.headSha),
+]);
 
 
 export const vulnerabilityFindings = pgTable('vulnerability_findings', {
@@ -2575,6 +2644,8 @@ export const vulnerabilityFindings = pgTable('vulnerability_findings', {
   /** Board ticket this finding was routed to, mirroring `qa_findings.task_id`.
    *  Cross-domain reference by value — no FK. */
   taskId:            integer('task_id'),
+  /** 'SCAN' (a scanner rule matched) | 'SECURITY' (the security-review agent's assessment) — mig 1320. */
+  category:          varchar('category', { length: 16 }).notNull().default('SCAN'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
@@ -2959,6 +3030,9 @@ export const pullRequests = pgTable('pull_requests', {
   mergeSha:          varchar('merge_sha', { length: 64 }),    // merge commit SHA — correlates post-merge CI (0107)
   buildStatus:       varchar('build_status', { length: 16 }), // null|pending|success|failure — pre-merge (PR branch) or post-merge build (0107)
   buildError:        text('build_error'),                     // failing jobs/steps summary when build_status='failure' (0196)
+  /** Execution that opened this PR as the platform's early draft (`ci/draftPrForCi`); cleared once the draft is
+   *  taken out of draft or closed. Only a row carrying it is the platform's to adopt, ready or close (1331). */
+  platformDraftExecutionId: integer('platform_draft_execution_id'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({

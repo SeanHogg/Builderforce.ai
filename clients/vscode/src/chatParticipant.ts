@@ -1,4 +1,4 @@
-import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
+import { RunKnowledgeRecorder, type PolicyGate } from "@builderforce/agent-tools";
 import { recordEditorRunEnd } from "./editorRunEnd";
 import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
@@ -22,7 +22,6 @@ import { PolicyGatesUnavailableError, resolveRunPolicyGates } from "./policyGate
 import { editorRunDirectives } from "./hooks/editorDirectives";
 import { buildSystemMessages } from "./prompt";
 import type { ToolDef } from "./fileTools";
-import type { PolicyGate } from "./policy";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { withWorkspaceStaleness } from "./memoryStaleness";
 import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";

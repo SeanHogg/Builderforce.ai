@@ -42,18 +42,26 @@ export const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 
 /** A first response, as stored for replays. */
 export interface StoredIdempotentResponse {
-  /** `METHOD path` the key was first used with — the same key on another route is a client bug. */
+  /** `METHOD path` (plus a body hash on routes that bind the key to the body) the key was first
+   *  used with — the same key on another route, or with another body, is a client bug. */
   fingerprint: string;
   status: number;
   body: string;
   contentType: string | null;
+  /** A RESERVATION, not a response: the first request with this key is still executing. */
+  pending?: true;
+  /** A released reservation (its request did not succeed): the key is free again. */
+  released?: true;
 }
 
+/** How long a reservation outlives its request if the request never finishes (isolate evicted). */
+export const IDEMPOTENCY_PENDING_TTL_SECONDS = 60;
+
 /** Where first responses are kept, per tenant. Implementations must expire entries
- *  after {@link IDEMPOTENCY_TTL_SECONDS}. */
+ *  after {@link IDEMPOTENCY_TTL_SECONDS} (a reservation after its own shorter `ttlSeconds`). */
 export interface IdempotencyStore {
   get(tenantId: number, key: string): Promise<StoredIdempotentResponse | null>;
-  put(tenantId: number, key: string, response: StoredIdempotentResponse): Promise<void>;
+  put(tenantId: number, key: string, response: StoredIdempotentResponse, opts?: { ttlSeconds?: number }): Promise<void>;
 }
 
 const KEY_GRAMMAR = /^[\x21-\x7e]+$/;
@@ -72,9 +80,15 @@ export function parseIdempotencyKey(raw: string | undefined | null): string | nu
   return key;
 }
 
-/** The route identity a key is bound to. */
-export function requestFingerprint(method: string, path: string): string {
-  return `${method.toUpperCase()} ${path}`;
+/** The route identity a key is bound to; with `bodyHash`, the request body too. */
+export function requestFingerprint(method: string, path: string, bodyHash?: string): string {
+  return `${method.toUpperCase()} ${path}${bodyHash ? ` #${bodyHash}` : ''}`;
+}
+
+/** SHA-256 (hex) of a request body, for binding a key to what was asked. */
+export async function hashRequestBody(body: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Only a success is stored: a refused request may be corrected and sent again. */
@@ -85,13 +99,27 @@ export function isStorableStatus(status: number): boolean {
 export type ReplayDecision =
   | { kind: 'execute' }
   | { kind: 'replay'; response: StoredIdempotentResponse }
-  | { kind: 'conflict' };
+  /** The key was used for a different request (route or body): 422. */
+  | { kind: 'conflict' }
+  /** The first request with this key is still executing: 409, never a second execution. */
+  | { kind: 'in_flight' };
 
 /** What to do with a request, given what is stored under its key. */
 export function decideReplay(stored: StoredIdempotentResponse | null, fingerprint: string): ReplayDecision {
-  if (!stored) return { kind: 'execute' };
+  if (!stored || stored.released) return { kind: 'execute' };
   if (stored.fingerprint !== fingerprint) return { kind: 'conflict' };
+  if (stored.pending) return { kind: 'in_flight' };
   return { kind: 'replay', response: stored };
+}
+
+/** The reservation written at the start of a request, before it executes. */
+export function pendingReservation(fingerprint: string): StoredIdempotentResponse {
+  return { fingerprint, status: 0, body: '', contentType: null, pending: true };
+}
+
+/** Frees a reservation whose request did not succeed, so a corrected retry executes. */
+export function releasedReservation(fingerprint: string): StoredIdempotentResponse {
+  return { fingerprint, status: 0, body: '', contentType: null, released: true };
 }
 
 /** The platform {@link IdempotencyStore}: the canonical read-through cache, expiring

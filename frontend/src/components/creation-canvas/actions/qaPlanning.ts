@@ -129,6 +129,7 @@ export function canvasQaPlanningActions(ctx: CanvasActionContext): BrainAction[]
     name: 'canvas_test_coverage',
     description: 'Report what on this canvas is proven by a test and what is not. Reads the "verifies" connections between test cases/plans and the work they cover, and names the requirements, tasks and builds with no test at all, plus any test case that verifies nothing. Use this to answer "what is untested", "what breaks if this fails", or before a release. Connect a case to what it proves with canvas_connect_objects using kind "verifies".',
     parameters: { type: 'object', additionalProperties: false, properties: {} },
+    mutates: false,
     run: () => {
       const all = stage.nodes();
       const report = coverageReport(

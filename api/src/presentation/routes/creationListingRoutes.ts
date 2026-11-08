@@ -23,6 +23,7 @@
 
 import { Hono } from 'hono';
 import { resolveAppBaseUrl, type HonoEnv } from '../../env';
+import { sameOriginReturnUrl } from '../../application/marketplace/checkoutReturn';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import {
@@ -93,6 +94,8 @@ const RevertBody = z.object({
 const CheckoutBody = z.object({
   buyerEmail: z.string().nullable().optional(),
   returnUrl: zOptionalString,
+  /** Relative path + query to come back to (validated same-origin in the application layer). */
+  returnPath: zOptionalString,
   quantity: z.number().int().min(1).max(99).optional(),
 });
 
@@ -294,7 +297,8 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
       buyerRef: c.get('userId') as string,
       buyerEmail: body.buyerEmail ?? null,
       slug: c.req.param('slug'),
-      returnUrl: body.returnUrl ?? resolveAppBaseUrl(c.env),
+      returnUrl: sameOriginReturnUrl(body.returnUrl, resolveAppBaseUrl(c.env)),
+      returnPath: body.returnPath ?? null,
       quantity: body.quantity,
     });
     return c.json(result);

@@ -8,7 +8,7 @@ import { chatTicketLinks, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { accessibleChat, type ChatTicketDeps } from './chatTicketAccess';
-import { bumpChatTicketLinkCaches, upsertChatTicketLink } from './chatTicketLinkWrite';
+import { bumpChatTicketLinkCaches, deleteChatTicketLink, upsertChatTicketLink } from './chatTicketLinkWrite';
 import { chatTicketPage, type ChatTicketPage, type ListChatTicketsOptions } from './chatTicketListing';
 import { isTicketKind, missingTicket, ticketKey, type ChatTicketLink, type LinkType, type TicketKind } from './chatTicketTypes';
 import { onTicketAgentAssigned } from './ticketAgentHandoff';
@@ -95,9 +95,7 @@ export async function unlinkTicket(
   const { db, env } = deps;
   const chat = await accessibleChat(db, chatId, tenantId, userId);
   if (!chat) return { error: 'Chat not found' };
-  const rows = await db.delete(chatTicketLinks)
-    .where(and(eq(chatTicketLinks.tenantId, tenantId), eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref)))
-    .returning({ id: chatTicketLinks.id });
-  if (rows.length > 0) await bumpChatTicketLinkCaches(tenantId, chatId, env);
-  return { removed: rows.length > 0 };
+  const removed = await deleteChatTicketLink(db, tenantId, chatId, kind, ref);
+  if (removed) await bumpChatTicketLinkCaches(tenantId, chatId, env);
+  return { removed };
 }

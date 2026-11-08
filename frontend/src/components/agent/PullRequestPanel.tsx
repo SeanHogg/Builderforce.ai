@@ -13,6 +13,9 @@ import {
 import { getMergeBlockReason } from './pullRequestMergeState';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { ApiRequestError } from '@/lib/apiClient';
+import { GateReasonList } from '@/components/governance/GateReasonList';
+import type { GateReason } from '@/lib/governanceDevsecopsApi';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**
  * In-product Pull Request review for a task's run. Shows the recorded PR + its
@@ -60,6 +63,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
   phase: 'pre-merge' | 'post-merge';
   showValidating: boolean;
 }) {
+  const tGate = useTranslations('pullRequestSecurityGate');
   const validating = status === 'pending' || (showValidating && status == null);
   if (!status && !validating) return null;
   return (
@@ -68,7 +72,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
         <span style={{ color: 'var(--text-muted)' }}>{phase === 'pre-merge' ? 'PR build:' : 'Build:'}</span>
         {status === 'success' && <Badge label="passing" color={statusColor(CHECK_TONE, 'success')} />}
         {status === 'failure' && <Badge label="failing" color={statusColor(CHECK_TONE, 'failure')} />}
-        {validating && <span style={{ color: 'var(--text-muted)' }}><Icon source="⏳" size="1em" /> validating…</span>}
+        {validating && <span style={{ color: 'var(--text-muted)' }}><Icon source="⏳" size="1em" /> {tGate('validating')}</span>}
         {status === 'failure' && (
           <span style={{ color: 'var(--warning)' }}>
             {phase === 'pre-merge'
@@ -138,6 +142,8 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
   const [method, setMethod] = useState<MergeMethod>('squash');
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gateReasons, setGateReasons] = useState<GateReason[] | null>(null);
+  const tGate = useTranslations('pullRequestSecurityGate');
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -172,18 +178,28 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
     if (!data?.pullRequest) return;
     setMerging(true);
     setError(null);
+    setGateReasons(null);
     try {
       await reposApi.mergePullRequest(data.pullRequest.id, method);
       load();
       onMerged?.();
     } catch (e) {
-      setError(errorMessage(e));
+      // The security gate holds this PR: show WHY (the server's reasons), not a generic failure.
+      if (e instanceof ApiRequestError && e.code === 'security_gate') {
+        // Structured reasons (`{ code, scanType?, ... }`): worded by GateReasonList in this viewer's language.
+        const reasons = (e.details as { reasons?: unknown } | undefined)?.reasons;
+        setGateReasons(Array.isArray(reasons)
+          ? reasons.filter((r): r is GateReason => typeof r === 'object' && r !== null && typeof (r as GateReason).code === 'string')
+          : []);
+      } else {
+        setError(errorMessage(e));
+      }
     } finally {
       setMerging(false);
     }
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>Loading pull request…</div>;
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>{tGate('loading')}</div>;
   if (!data?.pullRequest) return null;
 
   const pr = data.pullRequest;
@@ -274,6 +290,14 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       )}
 
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
+      {gateReasons && (
+        <div role="alert" style={{ fontSize: 12, marginTop: 8, padding: '8px 12px', border: '1px solid var(--danger-border)', borderRadius: 'var(--radius-sm)', background: 'var(--danger-bg)', color: 'var(--danger-text)' }}>
+          <div style={{ fontWeight: 600 }}>{tGate('title')}</div>
+          <div>{tGate('intro')}</div>
+          <GateReasonList reasons={gateReasons} />
+          <div>{tGate('override')}</div>
+        </div>
+      )}
 
       {/* The other repos this ticket spans (empty for a single-repo ticket). */}
       <RepoPullRequestSet repos={data.pullRequests ?? []} />

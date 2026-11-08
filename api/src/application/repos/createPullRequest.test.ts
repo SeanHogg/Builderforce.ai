@@ -76,7 +76,36 @@ describe('createPullRequest', () => {
       return jsonResponse([{ iid: 5, web_url: 'https://gitlab.com/acme/app/-/merge_requests/5' }]);
     }));
     const r = await createPullRequest({ ...base, provider: 'gitlab' });
-    expect(r).toEqual({ ok: true, number: 5, url: 'https://gitlab.com/acme/app/-/merge_requests/5' });
+    expect(r).toEqual({ ok: true, number: 5, url: 'https://gitlab.com/acme/app/-/merge_requests/5', existing: true });
+  });
+});
+
+describe('createPullRequest - drafts and PRs that already exist', () => {
+  it('regression: Minor 2 - a PR resolved from a 422 is marked `existing` (not created by this call) and says whether it is a draft', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (
+      (init?.method ?? 'GET') === 'POST'
+        ? jsonResponse({ message: 'A pull request already exists' }, 422)
+        : jsonResponse([{ number: 9, html_url: 'https://github.com/acme/app/pull/9', draft: true }])
+    )));
+    expect(await createPullRequest({ ...base, draft: true })).toEqual({ ok: true, number: 9, url: 'https://github.com/acme/app/pull/9', existing: true, draft: true });
+  });
+  it('a freshly created PR is not marked existing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ number: 3, html_url: 'https://github.com/acme/app/pull/3' }, 201)));
+    expect(await createPullRequest({ ...base, draft: true })).toEqual({ ok: true, number: 3, url: 'https://github.com/acme/app/pull/3' });
+  });
+  it('regression: Minor 3 - a 422 that refuses drafts is `draft_unsupported`, not a generic provider error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (
+      (init?.method ?? 'GET') === 'POST'
+        ? jsonResponse({ message: 'Validation Failed', errors: [{ message: 'Draft pull requests are not supported in this repository.' }] }, 422)
+        : jsonResponse([])
+    )));
+    expect(await createPullRequest({ ...base, draft: true })).toMatchObject({ ok: false, code: 'draft_unsupported' });
+  });
+  it('a 422 on a non-draft create stays a provider error even if the text mentions drafts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (
+      (init?.method ?? 'GET') === 'POST' ? jsonResponse({ message: 'draft' }, 422) : jsonResponse([])
+    )));
+    expect(await createPullRequest({ ...base })).toMatchObject({ ok: false, code: 'provider_error' });
   });
 });
 

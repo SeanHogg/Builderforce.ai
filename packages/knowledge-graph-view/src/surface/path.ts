@@ -31,6 +31,38 @@ export function pathOfLine(line: Line | null, byId: ReadonlyMap<string, Station>
     return { stops, hops: line.hops.map((h) => ({ kind: 'references', count: h.count, ...(h.verdict ? { verdict: h.verdict } : {}), ...(h.cycle ? { cycle: true } : {}) })) };
 }
 
+type HopCounts = ReadonlyMap<number, number>;
+
+/** What a station-pair hop count is keyed by: the two station numbers, smaller first (a hop counts both directions). */
+const pairKey = (a: number, b: number): number => (a < b ? a * STATION_SPAN + b : b * STATION_SPAN + a);
+const STATION_SPAN = 2 ** 26;
+
+const hopCountsMemo = new WeakMap<readonly Pick<KEdge, 'from' | 'to' | 'kind'>[], { stationOf: StationModel['stationOf']; counts: HopCounts; slots: ReadonlyMap<string, number> }>();
+
+/**
+ * The `references` between every pair of stations, counted ONCE per edges array (and station map): a pinpoint then reads
+ * each hop in O(1) instead of scanning every outline edge per hop.
+ */
+function hopCountsOf(model: Pick<StationModel, 'stationOf'>, edges: readonly Pick<KEdge, 'from' | 'to' | 'kind'>[]): { counts: HopCounts; slots: ReadonlyMap<string, number> } {
+    const held = hopCountsMemo.get(edges);
+    if (held && held.stationOf === model.stationOf) return held;
+    const slots = new Map<string, number>();
+    const slotOf = (id: string): number => { let n = slots.get(id); if (n === undefined) { n = slots.size; slots.set(id, n); } return n; };
+    const counts = new Map<number, number>();
+    for (const e of edges) {
+        if (e.kind !== 'references') continue;
+        const from = stationOfRef(model, e.from);
+        if (from === undefined) continue;
+        const to = stationOfRef(model, e.to);
+        if (to === undefined || from === to) continue;
+        const key = pairKey(slotOf(from), slotOf(to));
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const built = { stationOf: model.stationOf, counts, slots };
+    hopCountsMemo.set(edges, built);
+    return built;
+}
+
 /**
  * A path through the stations of `refs`, in the order given (a pinpoint's matches arrive in
  * trace order): each station once, and between two neighbours the file-level references that
@@ -41,20 +73,22 @@ export function pathOfStations(
     model: Pick<StationModel, 'byId' | 'stationOf'>,
     edges: readonly Pick<KEdge, 'from' | 'to' | 'kind'>[],
 ): PathModel {
+    const picked = new Set<string>();
     const ids: string[] = [];
     for (const ref of refs) {
         const id = stationOfRef(model, ref);
-        if (id && !ids.includes(id)) ids.push(id);
+        if (id && !picked.has(id)) { picked.add(id); ids.push(id); }
     }
     const stops = ids.flatMap((id) => {
         const s = model.byId.get(id);
         return s ? [{ id, name: s.name, ...(s.layer ? { layer: s.layer } : {}) }] : [];
     });
-    const between = (a: string, b: string) => edges.filter((e) => {
-        if (e.kind !== 'references') return false;
-        const from = stationOfRef(model, e.from), to = stationOfRef(model, e.to);
-        return (from === a && to === b) || (from === b && to === a);
-    }).length;
+    if (stops.length < 2) return { stops, hops: [] };
+    const { counts, slots } = hopCountsOf(model, edges);
+    const between = (a: string, b: string): number => {
+        const x = slots.get(a), y = slots.get(b);
+        return x === undefined || y === undefined ? 0 : counts.get(pairKey(x, y)) ?? 0;
+    };
     return { stops, hops: stops.slice(1).map((s, i) => ({ kind: 'references', count: between(stops[i]!.id, s.id) })) };
 }
 

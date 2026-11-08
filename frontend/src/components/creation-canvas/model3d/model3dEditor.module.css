@@ -1,0 +1,32 @@
+/* The 3D model editor: the card body and the full-size surface. Buttons, fields and
+   status text come from `creativeEditors.module.css`; this holds what is the model's own.
+   Every colour is a canvas token. 360px-safe: the surface stacks the viewport above the
+   panel below 720px and nothing has a fixed width. */
+
+/* ── Card ────────────────────────────────────────────────────────────────────── */
+.preview { display:block; width:100%; max-height:200px; object-fit:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); }
+.previewEmpty { display:grid; place-items:center; min-height:96px; padding:12px; border:1px dashed var(--canvas-line); border-radius:var(--radius-sm); color:var(--canvas-ink-soft); font-size:var(--font-size-eyebrow); text-align:center; }
+
+/* ── Parts ───────────────────────────────────────────────────────────────────── */
+.parts { display:grid; gap:8px; min-width:0; }
+.partList { display:grid; gap:2px; margin:0; padding:0; list-style:none; max-height:180px; overflow-y:auto; overscroll-behavior:contain; }
+.partRow { display:flex; align-items:center; gap:4px; min-width:0; border:1px solid transparent; border-radius:var(--radius-sm); }
+.partRow[data-selected] { border-color:var(--canvas-accent); background:var(--canvas-hover); }
+.partCheck { flex:0 0 auto; width:20px; height:20px; margin:6px; accent-color:var(--canvas-accent); }
+.partName { flex:1 1 auto; min-width:0; min-height:32px; padding:0 6px; overflow:hidden; border:0; background:transparent; color:var(--canvas-ink); font:inherit; font-size:var(--font-size-small); text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.partName:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:1px; }
+.fields { display:grid; gap:8px; min-width:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); }
+.swatch { flex:0 0 20px; width:20px; height:20px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); }
+
+/* ── Viewport and surface ────────────────────────────────────────────────────── */
+.viewport { position:relative; flex:1 1 auto; min-width:0; min-height:260px; background:var(--canvas-board-background); touch-action:none; }
+.viewport canvas { display:block; touch-action:none; }
+.stage { display:flex; flex:1 1 auto; min-height:0; overflow:hidden; background:var(--canvas-board-background); }
+.stage:fullscreen { background:var(--canvas-board-background); }
+.panel { display:grid; align-content:start; gap:10px; flex:0 0 320px; min-width:0; padding:10px; overflow-y:auto; overscroll-behavior:contain; border-left:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); }
+.panelHint { margin:0; color:var(--canvas-ink-soft); font-size:var(--font-size-eyebrow); }
+@media (max-width:720px) {
+  .stage { flex-direction:column; }
+  .viewport { flex:1 1 55%; min-height:240px; }
+  .panel { flex:1 1 45%; border-left:0; border-top:1px solid var(--canvas-line); }
+}

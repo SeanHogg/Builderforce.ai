@@ -31,6 +31,10 @@ class ArchiveAwareTaskRepo implements ITaskRepository {
   async findById(id: TaskId): Promise<Task | null> {
     return this.tasks.find(t => (t.toPlain().id as number) === (id as number)) ?? null;
   }
+  async findByIdsAcrossTenants(ids: TaskId[]): Promise<Task[]> {
+    const wanted = new Set(ids.map((id) => id as number));
+    return this.tasks.filter(t => wanted.has(t.toPlain().id as number));
+  }
   async findChildren(): Promise<Task[]> { return []; }
   async maxKeySeqByProject(): Promise<number> { return 0; }
   async rekeyProject(): Promise<number> { return 0; }
@@ -122,6 +126,7 @@ function makeTask(id: number, archived: boolean): Task {
     dueDate: null,
     persona: null,
     archived,
+    investorMilestone: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   });

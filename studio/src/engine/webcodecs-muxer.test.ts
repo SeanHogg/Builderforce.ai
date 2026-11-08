@@ -3,6 +3,11 @@ import {
   selectVideoCodec,
   AVC_CODEC_CANDIDATES,
   pixelsToRgba,
+  selectVideoEncoding,
+  muxFramesToVideo,
+  videoExtensionForMime,
+  UnsupportedVideoEncodingError,
+  VP9_CODEC_CANDIDATES,
   type VideoEncoderConfigProbe,
 } from './webcodecs-muxer';
 
@@ -63,6 +68,61 @@ describe('selectVideoCodec', () => {
     expect(probe.isConfigSupported).toHaveBeenCalledWith(
       expect.objectContaining({ width: 768, height: 320, framerate: 30, bitrate: 5_000_000 }),
     );
+  });
+});
+
+describe('selectVideoEncoding (container fallback)', () => {
+  it('prefers MP4/AVC when AVC is supported', async () => {
+    const probe = probeAllowing(new Set([...AVC_CODEC_CANDIDATES, ...VP9_CODEC_CANDIDATES]));
+    const sel = await selectVideoEncoding(OPTS, probe);
+    expect(sel?.row.container).toBe('mp4');
+    expect(sel?.row.mimeType).toBe('video/mp4');
+    expect(sel?.codec).toBe(AVC_CODEC_CANDIDATES[0]);
+  });
+
+  it('falls back to WebM/VP9 when no AVC config is supported', async () => {
+    const probe = probeAllowing(new Set(VP9_CODEC_CANDIDATES));
+    const sel = await selectVideoEncoding(OPTS, probe);
+    expect(sel?.row.container).toBe('webm');
+    expect(sel?.row.mimeType).toBe('video/webm');
+    expect(sel?.row.extension).toBe('webm');
+    expect(sel?.codec).toBe(VP9_CODEC_CANDIDATES[0]);
+  });
+
+  it('falls back to WebM/VP8 when only VP8 is supported', async () => {
+    const sel = await selectVideoEncoding(OPTS, probeAllowing(new Set(['vp8'])));
+    expect(sel?.codec).toBe('vp8');
+    expect(sel?.row.container).toBe('webm');
+  });
+
+  it('returns null when nothing is supported', async () => {
+    expect(await selectVideoEncoding(OPTS, probeAllowing(new Set()))).toBeNull();
+  });
+
+  it('exposes a typed error for the unsupported case', () => {
+    const err = new UnsupportedVideoEncodingError();
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe('UnsupportedVideoEncodingError');
+  });
+});
+
+describe('muxFramesToVideo (nothing supported)', () => {
+  it('rejects with UnsupportedVideoEncodingError', async () => {
+    vi.stubGlobal('VideoEncoder', { isConfigSupported: async () => ({ supported: false }) });
+    try {
+      await expect(muxFramesToVideo([], OPTS)).rejects.toBeInstanceOf(UnsupportedVideoEncodingError);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('videoExtensionForMime', () => {
+  it('maps containers to extensions', () => {
+    expect(videoExtensionForMime('video/webm')).toBe('webm');
+    expect(videoExtensionForMime('video/webm;codecs=vp9')).toBe('webm');
+    expect(videoExtensionForMime('video/mp4')).toBe('mp4');
+    expect(videoExtensionForMime('')).toBe('mp4');
   });
 });
 

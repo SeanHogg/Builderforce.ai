@@ -14,7 +14,7 @@ import { outboundFetchLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveOutboundFetchesMonthly } from '../../domain/tenant/PlanLimits';
-import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { enforceTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 import { dailyTenantCounts, sumTenantRowCount, type DailyCount } from '../shared/dailyTenantCounts';
 
 /** The rows that count as one billable outbound fetch. */
@@ -50,7 +50,7 @@ export type OutboundFetchCapResult = MonthlyTenantCapResult;
  * metering hiccup must not block a legitimate fetch.
  */
 export async function enforceOutboundFetchCap(db: Db, tenantId: number, env?: Env): Promise<OutboundFetchCapResult> {
-  return enforceMonthlyTenantCap({
+  return enforceTenantCap({
     db,
     tenantId,
     env,

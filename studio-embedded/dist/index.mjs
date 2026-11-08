@@ -3,7 +3,8 @@ import { useCallback as useCallback2, useEffect as useEffect3, useRef as useRef3
 import {
   VideoEngine,
   planScene,
-  storyboardFrameCount as storyboardFrameCount2
+  storyboardFrameCount as storyboardFrameCount2,
+  videoExtensionForMime
 } from "@seanhogg/builderforce-studio";
 
 // src/components/ModelPicker.tsx
@@ -1388,7 +1389,7 @@ function StudioPanel({
     if (!result) return;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(result.blob);
-    a.download = `builderforce-video-${Date.now()}.mp4`;
+    a.download = `builderforce-video-${Date.now()}.${videoExtensionForMime(result.blob.type)}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
   }, [result]);
@@ -1915,6 +1916,7 @@ import {
   probeDevice as probeDevice2,
   hasWebGPUSupport,
   configureOnnxRuntime,
+  setOrtWasmBase,
   MODEL_REGISTRY as MODEL_REGISTRY3,
   planScene as planScene2,
   CAMERA_MOVES as CAMERA_MOVES2
@@ -1937,6 +1939,7 @@ export {
   planScene2 as planScene,
   probeDevice2 as probeDevice,
   resolveQualityTier,
+  setOrtWasmBase,
   useEngineStatus
 };
 //# sourceMappingURL=index.mjs.map

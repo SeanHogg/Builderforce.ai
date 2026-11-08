@@ -13,12 +13,11 @@
  *     cancelled, PLUS the between-iteration {@link CooperativeCancel.check} that
  *     stops the loop before it issues the next paid call (GAP-S6).
  *
- * Why a primitive rather than inline code: the cloud loop
- * (`runCloudToolLoop`) and the container's server-side `llm` op each drive their
- * own iteration, and each had its own copy of the steering drain — one of which
- * deduped injected turns and one of which did not, and neither of which checked
- * cancellation the same way. Both now call THESE functions, so "what a cloud run
- * does between two turns" has one implementation and one set of tests.
+ * Why a primitive rather than inline code: the cloud loop (`runCloudToolLoop`, ticked by
+ * CloudRunnerDO) is the ONLY loop; the container is a sandbox that executes tools and merely
+ * reports events back through `/internal/container-op`, so it has no iteration (and no `llm`
+ * op) of its own. "What a cloud run does between two turns" therefore has ONE implementation
+ * (THESE functions) and one set of tests.
  *
  * Everything here is best-effort on telemetry (it can never break a run) but is
  * exact about the two contracts that matter: a steer is delivered exactly once,
@@ -79,7 +78,7 @@ export async function applyPendingSteering(
       toolName: 'steer.applied',
       category: 'message',
       detail: args.step != null ? { step: args.step, text: steer } : { text: steer },
-      result: steer.slice(0, 280),
+      result: steer, resultCap: 280,
     });
     notifyExecutionSubscribers(args.executionId, {
       type: 'message',

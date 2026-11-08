@@ -11,7 +11,7 @@
  *        c. denoise() runs the shared LCM/SD-Turbo primitive
  *        d. pixelsToRgba() converts to displayable RGBA
  *        e. advanceState() updates the Mamba state from this frame's output
- *   4. muxFramesToMp4()         → WebCodecs encodes the frames to MP4
+ *   4. muxFramesToVideo()       → WebCodecs encodes the frames to MP4 (WebM fallback)
  *
  * `VideoEngine.create()` is the only construction path — it probes the device,
  * downloads weights, initialises ONNX sessions, and returns null when the
@@ -62,7 +62,7 @@ import { estimateBlockMotion, interpolateFrames, type MotionField } from './moti
 import { cameraMoveToMotion, composeShotPrompt } from './scene-planner';
 import { validateFrame } from './frame-validator';
 import { expandPrompt } from './llm-bridge';
-import { muxFramesToMp4, pixelsToRgba, type MuxFrame } from './webcodecs-muxer';
+import { muxFramesToVideo, pixelsToRgba, type MuxFrame } from './webcodecs-muxer';
 import { generateWebDitClip, loadWebDitBundle, runWebDitDenoise } from './webdit-engine';
 
 const DEFAULT_WIDTH = 512;
@@ -346,7 +346,7 @@ export class VideoEngine {
     const finalMuxFrames = refined?.muxFrames ?? clip.muxFrames;
 
     reportProgress(`Encoding ${finalFrames.length} frames to MP4…`, onProgress);
-    const blob = await muxFramesToMp4(finalMuxFrames, {
+    const { blob } = await muxFramesToVideo(finalMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -487,7 +487,7 @@ export class VideoEngine {
     }
 
     reportProgress(`Encoding ${finalFrames.length} frames to MP4…`, onProgress);
-    const blob = await muxFramesToMp4(finalMuxFrames, {
+    const { blob } = await muxFramesToVideo(finalMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -569,7 +569,7 @@ export class VideoEngine {
     }
 
     reportProgress(`Encoding ${allFrames.length} frames to MP4…`, onProgress);
-    const blob = await muxFramesToMp4(allMuxFrames, {
+    const { blob } = await muxFramesToVideo(allMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -857,7 +857,9 @@ export class VideoEngine {
       const bitmap = await createImageBitmap(
         new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, width, height),
       );
-      this.mambaState = advanceState(this.mambaState, pixels);
+      this.mambaState = await advanceState(this.mambaState, pixels, {
+        device: this.probed.gpuDevice,
+      });
       keyframes.push({ outputIndex: frameIdx, latent: finalLatent });
       keyframeOutputs.push({ rgba, bitmap, pixels });
       // Emit each keyframe as it finishes so the consumer's preview / progress

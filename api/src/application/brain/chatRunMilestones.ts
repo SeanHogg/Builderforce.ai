@@ -3,6 +3,7 @@
  * its lifecycle (started ▸ paused ▸ resumed ▸ completed / failed / cancelled) into
  * every Brain chat its ticket is linked to.
  */
+import { resolveStakeholderVoice } from '../kanban/stakeholderVoice';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { resolveAgentDisplayName } from './agentDisplayNames';
 import { joinAgentToChat } from './chatAgents';
@@ -74,8 +75,16 @@ export async function postRunMilestone(deps: ChatTicketDeps, tenantId: number, i
     const chats = (await listChatsForTicket(deps.db, tenantId, kind, ref))
       .filter((c) => !c.isArchived && c.mergedIntoChatId == null);
     if (chats.length === 0) return;
-    const name = input.agentName
+    const actingName = input.agentName
       ?? (input.agentRef ? await resolveAgentDisplayName(deps.db, tenantId, input.agentRef) : 'The agent');
+    // SINGLE VOICE PER TICKET (PRD 37 §5.5): the chat hears the ticket's Coordinator
+    // speak "on behalf of" the agent that ran. epic/gap/task refs are tasks.id; the other
+    // tiers are not tickets with a Coordinator, so they keep the acting agent's name.
+    const name = await resolveStakeholderVoice(deps.db, {
+      tenantId,
+      taskId: kind === 'epic' || kind === 'gap' || kind === 'task' ? Number(ref) : null,
+      actingLabel: actingName,
+    });
     const key = `${executionId}:${phase}${input.eventNonce ? `:${input.eventNonce}` : ''}`;
     const text = runMilestoneText(name, kind, ref, input);
     // Everything a client needs to RE-COMPOSE this line in its own language: who, which

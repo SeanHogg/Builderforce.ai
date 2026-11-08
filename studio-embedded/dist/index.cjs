@@ -37,6 +37,7 @@ __export(src_exports, {
   planScene: () => import_builderforce_studio6.planScene,
   probeDevice: () => import_builderforce_studio6.probeDevice,
   resolveQualityTier: () => resolveQualityTier,
+  setOrtWasmBase: () => import_builderforce_studio6.setOrtWasmBase,
   useEngineStatus: () => useEngineStatus
 });
 module.exports = __toCommonJS(src_exports);
@@ -1424,7 +1425,7 @@ function StudioPanel({
     if (!result) return;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(result.blob);
-    a.download = `builderforce-video-${Date.now()}.mp4`;
+    a.download = `builderforce-video-${Date.now()}.${(0, import_builderforce_studio5.videoExtensionForMime)(result.blob.type)}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
   }, [result]);
@@ -1966,6 +1967,7 @@ var import_builderforce_studio6 = require("@seanhogg/builderforce-studio");
   planScene,
   probeDevice,
   resolveQualityTier,
+  setOrtWasmBase,
   useEngineStatus
 });
 //# sourceMappingURL=index.cjs.map

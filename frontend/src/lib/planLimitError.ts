@@ -68,17 +68,25 @@ export interface PurchaseRequiredPayload {
   error: string;
   checkoutRequired?: boolean;
   priceCents?: number;
+  /** Set when the thing refused IS a marketplace listing (a priced kanban template):
+   *  the slug `POST /api/creation-listings/:slug/checkout` starts a checkout for. */
+  listingSlug?: string;
+  listingName?: string;
 }
 
 export class PurchaseRequiredError extends Error {
   readonly priceCents: number;
   readonly checkoutRequired: true;
+  readonly listingSlug: string | undefined;
+  readonly listingName: string | undefined;
 
   constructor(payload: PurchaseRequiredPayload) {
     super(payload.error || 'Purchase required');
     this.name = 'PurchaseRequiredError';
     this.priceCents = payload.priceCents ?? 0;
     this.checkoutRequired = true;
+    this.listingSlug = payload.listingSlug;
+    this.listingName = payload.listingName;
   }
 }
 

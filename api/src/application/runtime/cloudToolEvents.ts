@@ -8,9 +8,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * engine.
  */
 import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { insertToolAudit } from '../audit/toolAuditWrite';
 import type { Db } from '../../infrastructure/database/connection';
 import { notifyExecutionSubscribers } from './executionEvents';
+import { redactThenCap } from '../../infrastructure/security/redactSecrets';
 
 /**
  * Record one cloud-agent tool-audit event so cloud runs are observable on the
@@ -42,6 +43,9 @@ export async function recordCloudToolEvent(
     toolCallId?: string;
     detail?: unknown;
     result?: string;
+    /** Cap the stored/streamed `result` to this many chars. It is redacted FIRST, then cut, so a token
+     *  straddling the cap is not left as a fragment: callers pass the full text and never pre-slice. */
+    resultCap?: number;
     durationMs?: number;
     /** A server-side event about a SELF-HOSTED run (e.g. a late steer's follow-up):
      *  stamped with the host so the host-scoped Logs/Timeline shows it beside the
@@ -50,8 +54,11 @@ export async function recordCloudToolEvent(
   },
 ): Promise<void> {
   const ts = new Date();
+  // Tool output and arguments can carry secrets (an `env` dump, a bearer header). `insertToolAudit` redacts the
+  // row structurally; `result` is also redacted here BEFORE the cap, and is what the live stream carries.
+  const result = args.result != null ? redactThenCap(args.result, args.resultCap ?? Number.MAX_SAFE_INTEGER) : null;
   try {
-    const [row] = await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+    const [row] = await insertToolAudit(db, {
       tenantId:     args.tenantId,
       agentHostId:  args.agentHostId ?? null,
       cloudAgentRef: args.cloudAgentRef ?? null,
@@ -61,7 +68,7 @@ export async function recordCloudToolEvent(
       toolName:     args.toolName,
       category:     args.category,
       args:         args.detail != null ? JSON.stringify(args.detail) : null,
-      result:       args.result ?? null,
+      result,
       durationMs:   args.durationMs ?? null,
       ts,
     }).returning({ id: toolAuditEvents.id });
@@ -74,7 +81,7 @@ export async function recordCloudToolEvent(
         cloudAgentRef: args.cloudAgentRef ?? null,
         toolName: args.toolName,
         category: args.category,
-        ...(args.result != null ? { result: args.result } : {}),
+        ...(result != null ? { result } : {}),
         ...(args.durationMs != null ? { durationMs: args.durationMs } : {}),
         ts: ts.toISOString(),
       });

@@ -40,7 +40,7 @@ import type { ExecutionTaskRow } from './dispatchCloudRun';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { resolveCloudAgent } from './cloudAgent/agent';
 import {
-  claimLateSteers, lateSteerOutcomeOf, recordLateSteerOutcome, repend, resolveReportedSteerIds,
+  claimLateSteers, lateSteerOutcomeOf, recordLateSteerOutcome, releaseLateClaim, repend, resolveReportedSteerIds,
   type ClaimedSteer, type ReportedSteer,
 } from './lateSteerStore';
 import type { LateSteerOutcomeKind } from './executionSteering';
@@ -78,6 +78,9 @@ export interface LateSteerPorts {
   loadTask(tenantId: number, taskId: number): Promise<ExecutionTaskRow | null>;
   repend(tenantId: number, executionId: number, messageIds: readonly number[]): Promise<void>;
   claim(tenantId: number, executionId: number, messageIds?: readonly number[]): Promise<ClaimedSteer[]>;
+  /** Undo a claim whose follow-up admission DEFERRED, returning the steers to pending. Absent = the
+   *  deferral falls back to the visible drop. */
+  release?(tenantId: number, executionId: number, messageIds: readonly number[]): Promise<void>;
   priorOutcome(tenantId: number, executionId: number, messageIds: readonly number[]): Promise<{ outcome: LateSteerOutcomeKind | null; followUpExecutionId: number | null } | null>;
   recordOutcome(tenantId: number, messageIds: readonly number[], outcome: { outcome: LateSteerOutcomeKind; followUpExecutionId?: number | null; detail?: string | null }): Promise<void>;
   agentLabel(tenantId: number, agentRef: string | undefined): Promise<string>;
@@ -183,6 +186,13 @@ export async function dispatchLateSteerFollowUp(
         `This message arrived after the run's last turn; its follow-up run is waiting for manager approval (${outcome.reason}).`);
       return { kind: 'awaiting_approval', approvalId: outcome.approvalId };
     case 'refused':
+      // ADMISSION (a live run on the ticket, the concurrent cap) clears on its own, unlike a
+      // billing entitlement: the steer goes back in the pending queue and the next terminal
+      // chokepoint / stale-run sweep claims it again, instead of being dropped.
+      if (outcome.admission && ports.release) {
+        await ports.release(settled.tenantId, settled.id, claimedIds);
+        return { kind: 'deferred' };
+      }
       await drop('refused', outcome.reason, `This message arrived after the run's last turn, but no follow-up run was started: ${outcome.message}`, { refusal: outcome.message });
       return { kind: 'refused', reason: outcome.reason, message: outcome.message };
   }
@@ -259,6 +269,7 @@ export function lateSteerPorts(deps: LateSteerDeps): LateSteerPorts {
     },
     repend: (tenantId, executionId, ids) => repend(db, tenantId, executionId, ids),
     claim: (tenantId, executionId, ids) => claimLateSteers(db, tenantId, executionId, ids),
+    release: (tenantId, executionId, ids) => releaseLateClaim(db, tenantId, executionId, ids),
     priorOutcome: (tenantId, executionId, ids) => lateSteerOutcomeOf(db, tenantId, executionId, ids),
     recordOutcome: (tenantId, ids, outcome) => recordLateSteerOutcome(db, tenantId, ids, outcome),
     agentLabel: async (tenantId, agentRef) => (await resolveCloudAgent(env, tenantId, agentRef)).label ?? 'BuilderForce Agent',

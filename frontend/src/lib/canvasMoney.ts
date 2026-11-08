@@ -429,6 +429,22 @@ export function formatCents(
   }
 }
 
+/** 1 cent = 1000 millicents (the voice marketplace's stored unit). */
+export const MILLICENTS_PER_CENT = 1000;
+
+/**
+ * Millicents → display string, rounding UP to a whole cent. The server charges
+ * `ceil(millicents / 1000)` cents, so a price shown with any other rounding can
+ * disagree with the amount actually charged.
+ */
+export function formatMillicents(
+  millicents: number | null | undefined,
+  options?: Parameters<typeof formatCents>[1],
+): string {
+  if (millicents == null || !Number.isFinite(millicents)) return formatCents(null, options);
+  return formatCents(Math.ceil(millicents / MILLICENTS_PER_CENT), options);
+}
+
 /** Format straight from whatever is stored, which is what card bodies actually hold. */
 export function formatMoneyField(input: unknown, options?: Parameters<typeof formatMoney>[1]): string {
   return formatMoney(parseMoney(input), options);

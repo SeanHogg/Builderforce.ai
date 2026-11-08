@@ -38,6 +38,7 @@ import { integrationProviderEnum, integrationSyncStatusEnum, objects, voiceClone
 import { segments, tenants, users } from './identity';
 import { ideProjects, importStagedProjects, initiatives, projects } from './delivery';
 import { importRuns } from './agents';
+import type { VoiceProvenanceManifest } from '@builderforce/voice-provenance';
 
 
 /**
@@ -183,8 +184,14 @@ export const studioVoiceClones = pgTable('studio_voice_clones', {
   provider:      varchar('provider', { length: 64 }).notNull().default('ssm-webgpu'),
   /** R2 key of the reference sample the clone was enrolled from. */
   referenceKey:  varchar('reference_key', { length: 512 }),
-  /** Cached speaker embedding (L2-normalised number[]) so synthesis skips re-analysis. */
+  /** LEGACY plaintext speaker embedding. No longer written (1326 expand): new embeddings
+   *  go to `embeddingEnc`; any plaintext row is sealed + nulled on its first owner
+   *  fetch. Dropped in a later push (contract). */
   embedding:     jsonb('embedding').$type<number[]>(),
+  /** The owner's speaker embedding (biometric), sealed per-tenant with AES-256-GCM
+   *  (`v2:` base64 from credentialCrypto). Only the owner-only endpoint opens it. */
+  embeddingEnc:  text('embedding_enc'),
+  embeddingIv:   varchar('embedding_iv', { length: 32 }),
   visibility:    voiceCloneVisibilityEnum('visibility').notNull().default('private'),
   status:        voiceCloneStatusEnum('status').notNull().default('ready'),
   /** Marketplace price in millicents (1/100000 USD). 0 = free. */
@@ -235,6 +242,40 @@ export const studioVoiceovers = pgTable('studio_voiceovers', {
 }, (t) => ({
   uniqueCacheKey: uniqueIndex('uq_studio_voiceovers_cache_key').on(t.cacheKey),
   byClone: index('idx_studio_voiceovers_clone').on(t.cloneId),
+}));
+
+
+/**
+ * Signed provenance for a synthesized voice clip — one row per clip, whichever
+ * engine made it. The manifest is stored verbatim (it is what the signature
+ * covers); the hash and watermark id are lifted into columns because they are the
+ * two ways a stranger finds the row. Deleting the clone deletes its provenance
+ * (right to delete); a licensee's clip rows are tenant-scoped by `tenantId`.
+ */
+export const voiceClipProvenance = pgTable('voice_clip_provenance', {
+  /** The clip's identity — `manifest.clipId`. */
+  id:           uuid('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Null once the voice is deleted: the signed record outlives it (`voiceName` keeps the snapshot). */
+  cloneId:      integer('clone_id').references(() => studioVoiceClones.id, { onDelete: 'set null' }),
+  /** The voice's name when the clip was made. */
+  voiceName:    varchar('voice_name', { length: 200 }),
+  /** Server-synthesized clips link their stored voiceover; on-device clips have none. */
+  voiceoverId:  integer('voiceover_id').references(() => studioVoiceovers.id, { onDelete: 'set null' }),
+  /** 'clone-server' | 'clone-client'. */
+  engine:       varchar('engine', { length: 32 }).notNull(),
+  audioSha256:  varchar('audio_sha256', { length: 64 }).notNull(),
+  watermarkId:  varchar('watermark_id', { length: 16 }).notNull(),
+  /** False when the audio could not be marked (a codec the server cannot decode). */
+  watermarked:  boolean('watermarked').notNull().default(true),
+  manifest:     jsonb('manifest').$type<VoiceProvenanceManifest>().notNull(),
+  signature:    varchar('signature', { length: 128 }).notNull(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uniqueWatermark: uniqueIndex('uq_voice_clip_provenance_watermark').on(t.watermarkId),
+  uniqueVoiceover: uniqueIndex('uq_voice_clip_provenance_voiceover').on(t.voiceoverId),
+  byAudioHash: index('idx_voice_clip_provenance_audio').on(t.audioSha256),
+  byClone: index('idx_voice_clip_provenance_clone').on(t.cloneId),
 }));
 
 

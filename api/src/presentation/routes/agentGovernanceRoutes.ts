@@ -18,6 +18,7 @@
  * a `tenantId`/`project`/`agent` in the query is ignored, never trusted.
  */
 import { Hono } from 'hono';
+import { gatesForWireLevel } from '@builderforce/agent-tools';
 import { agentHostDoor, type FrontDoor } from '../middleware/frontDoor';
 import { resolvePolicyGates } from '../../application/governance/policyPackService';
 import type { Db } from '../../infrastructure/database/connection';
@@ -30,7 +31,8 @@ export function createAgentGovernanceRoutes(db: Db, door: FrontDoor = agentHostD
   router.get('/policy-gates', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const gates = await resolvePolicyGates(c.env, db, { tenantId });
-    return c.json({ gates });
+    // Only a client that declared `?gates=2` reads compact `sideEffect` gates; an older one gets them spelled out per tool.
+    return c.json({ gates: gatesForWireLevel(gates, c.req.query('gates')) });
   });
 
   return router;

@@ -1,3 +1,4 @@
+import { admitStrokes, patchedStroke, type CanvasStroke } from '@/lib/canvasDrawing';
 import { emptyBlock, type BlockAttrs, type DocumentBlock } from './blockDocument';
 
 /**
@@ -27,6 +28,15 @@ export interface BlockStore {
   setText(id: string, text: string): void;
   /** Replace a media block's attributes. */
   setAttrs(id: string, attrs: BlockAttrs): void;
+  /**
+   * Drawing-block stroke ops. They are individual operations (add these, remove
+   * those) rather than a rewrite of the list, so on the CRDT store two peers drawing
+   * at once both keep their strokes. A stroke without an id is given one.
+   */
+  appendStrokes(id: string, strokes: readonly CanvasStroke[]): void;
+  removeStrokes(id: string, strokeIds: readonly string[]): void;
+  updateStroke(id: string, strokeId: string, patch: Partial<CanvasStroke>): void;
+  clearStrokes(id: string): void;
   /** Insert after `afterId`, or at the top when it is null. Returns the new id. */
   insertAfter(afterId: string | null, block: DocumentBlock): string;
   /** Remove a block. A document is never left with none — the last one is emptied
@@ -101,7 +111,21 @@ export function createLocalBlockStore(initial: readonly DocumentBlock[]): BlockS
       replace(id, (block) => (block.text === text ? block : { ...block, text }));
     },
     setAttrs(id, attrs) {
-      replace(id, (block) => ({ ...block, attrs: { ...block.attrs, ...attrs } }));
+      // `strokes` is ignored here, as on the CRDT store: strokes change only through the stroke ops.
+      const { strokes: _ignored, ...plain } = attrs;
+      replace(id, (block) => ({ ...block, attrs: { ...block.attrs, ...plain } }));
+    },
+    appendStrokes(id, strokes) {
+      replace(id, (block) => ({ ...block, attrs: { ...block.attrs, strokes: [...(block.attrs.strokes ?? []), ...admitStrokes(block.attrs.strokes ?? [], strokes)] } }));
+    },
+    removeStrokes(id, strokeIds) {
+      replace(id, (block) => ({ ...block, attrs: { ...block.attrs, strokes: (block.attrs.strokes ?? []).filter((stroke) => !stroke.id || !strokeIds.includes(stroke.id)) } }));
+    },
+    updateStroke(id, strokeId, patch) {
+      replace(id, (block) => ({ ...block, attrs: { ...block.attrs, strokes: (block.attrs.strokes ?? []).map((stroke) => (stroke.id === strokeId ? (patchedStroke(stroke, patch, block.attrs.strokes) ?? stroke) : stroke)) } }));
+    },
+    clearStrokes(id) {
+      replace(id, (block) => ({ ...block, attrs: { ...block.attrs, strokes: [] } }));
     },
     insertAfter(afterId, block) {
       const index = afterId === null ? -1 : indexOfBlock(blocks, afterId);

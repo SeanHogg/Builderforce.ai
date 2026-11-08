@@ -49,6 +49,10 @@ import { ListingError } from './creationListings';
 import { resolveTakeRateBps } from './listingCommerce';
 import { verifyPaidCheckout, assertCovers } from '../finance/verifiedCheckout';
 import { recordSaleSplit } from '../finance/saleLedger';
+import { trustedReturnUrl } from '../shared/trustedReturnUrl';
+
+/** Where the buyer returns to when the caller names no return URL. */
+const DEFAULT_RETURN_PATH = '/marketplace';
 
 
 /** What this flow calls itself in checkout metadata. Skills and personas share it. */
@@ -180,7 +184,7 @@ export async function startSkillCheckout(
     buyerEmail?: string | null;
     artifactType: SkillArtifactType;
     artifactSlug: string;
-    returnUrl: string;
+    returnUrl?: string | undefined;
   },
 ): Promise<{ checkoutUrl: string }> {
   const artifact = await loadPurchasableArtifact(db, input.artifactType, input.artifactSlug);
@@ -198,7 +202,7 @@ export async function startSkillCheckout(
     throw new ListingError('Payments are not configured on this deployment', 400);
   }
 
-  const base = new URL(input.returnUrl);
+  const base = trustedReturnUrl(env, input.returnUrl, DEFAULT_RETURN_PATH);
   const session = await buildPaymentProvider(env).createOneTimeCheckoutSession({
     amountCents: artifact.priceCents,
     currency: 'USD',

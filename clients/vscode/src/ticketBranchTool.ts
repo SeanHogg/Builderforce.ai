@@ -15,6 +15,7 @@ import { notARepoResult, safeRepoArg } from "@builderforce/agent-tools";
 import { listTasksForReview } from "./bfApi";
 import { listCheckouts } from "./workspaceCheckouts";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 import { GitRepo, mapLimit, type BranchComparison, type BranchRef } from "./gitBranchFacts";
 import {
   branchForTicket,
@@ -61,7 +62,7 @@ export function ticketBranchReviewToolDef(secrets: vscode.SecretStorage, project
         fetch: { type: "boolean", description: "Fetch origin first so the review reflects what has landed (default true)." },
       },
     },
-    mutating: false,
+    mutating: toolMutating(TICKET_BRANCH_REVIEW_TOOL, { mutates: false }),
     execute: async (args, root, run) => {
       const explicitRepo = safeRepo(args.repo);
       if (args.repo != null && !explicitRepo) return JSON.stringify({ ok: false, error: "`repo` must be a subdirectory inside the workspace." });

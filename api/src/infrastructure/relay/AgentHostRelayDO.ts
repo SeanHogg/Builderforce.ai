@@ -31,6 +31,8 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  */
 
 import { buildExecutionMessageFrame, buildExecutionCancelFrame } from './executionMessage';
+import { validateDispatchFrame } from './dispatchFrame';
+import { lowerFrameGates } from '@builderforce/agent-tools';
 import { PeerRelay } from './peerRelay';
 import { createHostPersistQueue, type HostPersistQueue, type PersistedChatMessage } from './hostPersistQueue';
 
@@ -87,6 +89,8 @@ export class AgentHostRelayDO implements DurableObject {
   // --- Chat persistence state (in-memory, lives as long as DO is alive) ---
   private agentHostId: number | null = null;
   private agentHostApiKey: string | null = null;
+  /** The `gates` wire level the connected host declared on its upstream link; absent for an older host. */
+  private hostGatesLevel: string | null = null;
   private currentSessionKey = "default";
   private msgSeq = 0;
   /** Circular buffer of last 100 messages for history replay on reconnect */
@@ -123,7 +127,12 @@ export class AgentHostRelayDO implements DurableObject {
         } catch {
           return this.json({ ok: false, error: "invalid_json" }, 400);
         }
-        if (!this.sendUpstream(payload)) {
+        const checked = validateDispatchFrame(payload);
+        if (!checked.ok) {
+          return this.json({ ok: false, error: checked.error }, 400);
+        }
+        // Class (`sideEffect`) gates inside the frame are spelled out per tool for a host that has not declared it reads them.
+        if (!this.sendUpstream(lowerFrameGates(payload, this.hostGatesLevel))) {
           return this.json({ ok: false, delivered: false, error: "agent_host_offline" }, 409);
         }
         return this.json({ ok: true, delivered: true }, 200);
@@ -217,6 +226,7 @@ export class AgentHostRelayDO implements DurableObject {
     const headerKey = request?.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
     const key = headerKey ?? url.searchParams.get("key");
     if (key) this.agentHostApiKey = key;
+    this.hostGatesLevel = url.searchParams.get("gates");
   }
 
   private attachUpstream(ws: WebSocket) {

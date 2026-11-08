@@ -185,7 +185,7 @@ describe('a truncated pass still closes, and names what it deferred', () => {
   }
 
   const summary = (truncated: string[]): ManagerRunSummary => ({
-    scored: 3, ranked: 300, assigned: 1, prsConducted: 0, prsMerged: 0, dispatched: 2,
+    scored: 3, ranked: 300, assigned: 1, prsMerged: 0, dispatched: 2,
     audited: 40, flagged: 5, remediated: 0, remediationDeferred: 0, stalled: 0, unstuck: 0,
     escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0, censusStalled: 0,
     censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0, scheduled: 0,

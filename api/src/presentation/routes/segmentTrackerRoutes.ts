@@ -15,6 +15,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import { emitWebhookEvent, type WebhookEvent } from '../../application/seams/webhookService';
 import { getOrSetCached, invalidateCached, bumpCacheVersion, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import { parseBody, zJsonObject } from './requestBody';
+import type { MutationAction } from '../../application/governance/mutationAudit';
+import { auditGovernanceMutation } from './governanceAudit';
 
 /** The (tenantId, segmentId) scope every tracker query filters by. */
 export function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
@@ -59,6 +61,39 @@ export interface TrackerOpts {
    * the same key; applied on insert only, never on update.
    */
   serverFieldsOnCreate?: (c: Context<HonoEnv>) => Record<string, unknown>;
+  /**
+   * Record every create / update / delete in the ONE governance mutation-audit envelope
+   * (`application/governance/mutationAudit.ts`) under this entity name. Opt-in: the factory also
+   * backs product-management trackers that have their own activity story.
+   */
+  auditEntity?: string;
+  /**
+   * Refuse a mutation of a row the tracker's users must not change by hand (e.g. a scan the platform
+   * recorded for an agent PR). Receives the existing row and, for an update, the whitelisted patch;
+   * returns the refusal reason (answered 403) or null to allow. Evaluated before the write.
+   */
+  /**
+   * Shape every row the tracker RETURNS (list, create, update): drop or rewrite a column that must not
+   * reach a client. The stored row is untouched. Used where a column holds something server-internal
+   * (a data subject request's private export key).
+   */
+  project?: (row: Record<string, unknown>) => Record<string, unknown>;
+  guardMutation?: (op: 'create' | 'update' | 'delete', row: Record<string, unknown>, patch: Record<string, unknown> | null) => string | null;
+}
+
+/** Write the audit envelope for one tracker mutation when the tracker opted in. Never throws. */
+async function auditTrackerMutation(
+  c: Context<HonoEnv>,
+  db: Db,
+  opts: TrackerOpts,
+  action: MutationAction,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+): Promise<void> {
+  if (!opts.auditEntity) return;
+  const row = after ?? before;
+  const id = row && (typeof row.id === 'string' || typeof row.id === 'number') ? row.id : null;
+  await auditGovernanceMutation(c, db, opts.auditEntity, id, action, before, after);
 }
 
 /** Parse a positive integer `?project=` query param, else undefined (portfolio). */
@@ -149,9 +184,10 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
       if (projectId !== undefined) conds.push(eq(table.projectId, projectId));
       return db.select().from(table).where(and(...conds));
     };
-    if (!opts.cacheNs) return c.json(await load());
+    const out = (rows: unknown) => (opts.project ? (rows as Array<Record<string, unknown>>).map(opts.project) : rows);
+    if (!opts.cacheNs) return c.json(out(await load()));
     const key = trackerCacheKey(opts.cacheNs, tenantId, segmentId, projectId);
-    return c.json(await getOrSetCached(c.env as Env, key, load));
+    return c.json(out(await getOrSetCached(c.env as Env, key, load)));
   });
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
@@ -166,12 +202,15 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
       }
     }
     const written = pick(body, writeFields);
+    const createRefusal = opts.guardMutation?.('create', {}, written);
+    if (createRefusal) return c.json({ error: createRefusal }, 403);
     const rows = (await db.insert(table)
       .values({ ...written, tenantId, segmentId, ...opts.serverFieldsOnCreate?.(c) })
       .returning()) as Array<Record<string, unknown>>;
     maybeEmit(c, db, opts, written, rows[0]);
     await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0]?.projectId);
-    return c.json(rows[0], 201);
+    await auditTrackerMutation(c, db, opts, 'create', null, rows[0] ?? null);
+    return c.json(rows[0] && opts.project ? opts.project(rows[0]) : rows[0], 201);
   });
 
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
@@ -180,23 +219,40 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
     const patch = pick(await parseBody(c, zJsonObject), writeFields);
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
     patch.updatedAt = new Date();
+    // The before-image only when the tracker is audited — one extra keyed read, not paid by the rest.
+    const before = opts.auditEntity || opts.guardMutation
+      ? ((await db.select().from(table)
+        .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
+        .limit(1)) as Array<Record<string, unknown>>)[0] ?? null
+      : null;
+    const refusal = before && opts.guardMutation?.('update', before, patch);
+    if (refusal) return c.json({ error: refusal }, 403);
     const rows = (await db.update(table).set(patch)
       .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
       .returning()) as Array<Record<string, unknown>>;
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
     maybeEmit(c, db, opts, patch, rows[0]);
     await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0]?.projectId);
-    return c.json(rows[0]);
+    await auditTrackerMutation(c, db, opts, 'update', before, rows[0] ?? null);
+    return c.json(opts.project ? opts.project(rows[0]) : rows[0]);
   });
 
   router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
+    if (opts.guardMutation) {
+      const [existing] = (await db.select().from(table)
+        .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
+        .limit(1)) as Array<Record<string, unknown>>;
+      const refusal = existing && opts.guardMutation('delete', existing, null);
+      if (refusal) return c.json({ error: refusal }, 403);
+    }
     const rows = (await db.delete(table)
       .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
       .returning()) as Array<{ id: string; projectId?: unknown }>;
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
     await invalidateTracker(c.env as Env, opts, tenantId, segmentId, rows[0].projectId);
+    await auditTrackerMutation(c, db, opts, 'delete', rows[0] as unknown as Record<string, unknown>, null);
     return c.json({ deleted: rows[0].id });
   });
 

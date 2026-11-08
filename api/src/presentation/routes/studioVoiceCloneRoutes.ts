@@ -12,7 +12,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -37,15 +37,53 @@ import {
   VoiceCloneForbidden,
   VoiceCloneNotFound,
   VoiceCloneReferenceMissing,
+  VoiceCloneSynthesisConflict,
 } from '../../application/studio/voiceCloneService';
+import {
+  acquireFreeVoiceLicense,
+  VoiceCloneLicensePaymentRequired,
+} from '../../application/studio/voiceLicenseService';
+import {
+  getOwnerEmbedding,
+  parseEmbedding,
+  parseSampleRate,
+  sealEmbedding,
+  storeOwnerEmbeddingIfMissing,
+} from '../../application/studio/voiceEmbeddingVault';
+import {
+  VoiceProvenanceConflict,
+  VoiceProvenanceInvalid,
+  VoiceProvenanceUnavailable,
+  issueVoiceProvenance,
+  CLIENT_REPORTED_ENGINE,
+} from '../../application/studio/voiceProvenanceService';
+import { voiceRateLimited, VOICE_REGISTER_RPM } from './voiceRateLimit';
+import {
+  createVoiceProvenancePorts,
+  findProvenanceForVoiceover,
+} from '../../application/studio/voiceProvenancePorts';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
-import { parseOptionalBody, z } from './requestBody';
+import { parseBody, parseOptionalBody, z, zNonEmptyString } from './requestBody';
+import { listUsableClones } from '../../application/studio/voiceCloneList';
+import { completeVoiceCheckout, startVoiceCheckout } from '../../application/studio/voiceCommerce';
+import { ListingError } from '../../application/marketplace/creationListings';
+
+const VoiceCheckoutStartBody = z.object({ returnUrl: z.string().optional(), buyerEmail: z.string().optional() });
+const VoiceCheckoutCompleteBody = z.object({ checkoutSessionId: zNonEmptyString });
 
 /** `POST /:id/synthesize` — the handler answers "text is required" (422). */
 const SynthesizeBody = z.object({
   text: z.string().nullish(),
   speed: z.number().optional(),
   language: z.string().optional(),
+});
+
+/** `POST /:id/provenance` — an on-device clip registers its hash + watermark id. */
+const RegisterClipBody = z.object({
+  watermarkId: z.string(),
+  audioSha256: z.string(),
+  engine: z.string().min(1).max(32),
+  model: z.string().min(1).max(64),
 });
 
 const CONSENT_TEXT_VERSION = 'v1';
@@ -58,8 +96,11 @@ interface UploadedFile {
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 
-/** A clone row trimmed to what clients need (never leak R2 keys / embeddings). */
-function toPublicClone(row: typeof studioVoiceClones.$inferSelect) {
+/** A clone row trimmed to what clients need. No-leak contract: R2 keys and the
+ *  speaker embedding are NEVER in a list/marketplace/create payload, for anyone.
+ *  The embedding is returned ONLY by the owner-only `GET /:id/embedding`, to the
+ *  owner's own authenticated session (never to buyers/licensees/other users). */
+export function toPublicClone(row: typeof studioVoiceClones.$inferSelect, viewer?: { tenantId: number }) {
   return {
     id: row.id,
     name: row.name,
@@ -70,7 +111,8 @@ function toPublicClone(row: typeof studioVoiceClones.$inferSelect) {
     priceMillicents: row.priceMillicents,
     consentAttested: Boolean(row.consentAttestedAt),
     hasReference: Boolean(row.referenceKey),
-    ideProjectId: row.ideProjectId ?? null,
+    // The owner's own IDE project: a licensee or marketplace browser never learns it.
+    ideProjectId: viewer?.tenantId === row.tenantId ? row.ideProjectId ?? null : null,
     createdAt: row.createdAt,
   };
 }
@@ -119,7 +161,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     if (typeof embeddingRaw === 'string' && embeddingRaw) {
       try {
         const parsed = JSON.parse(embeddingRaw);
-        if (Array.isArray(parsed)) embedding = parsed.map(Number);
+        embedding = parseEmbedding(parsed);
       } catch (error) { /* ignore malformed embedding — reference path still works */ 
         reportCaughtError(error, { source: "presentation/routes/studioVoiceCloneRoutes.ts", operation: "createStudioVoiceCloneRoutes" });
       }
@@ -147,7 +189,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    const [created] = await db
+    const [inserted] = await db
       .insert(studioVoiceClones)
       .values({
         tenantId,
@@ -157,18 +199,30 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
         description: String(form.get('description') ?? '') || null,
         provider: String(form.get('provider') ?? 'ssm-webgpu'),
         referenceKey,
-        embedding,
         visibility,
         status: 'ready',
         consentAttestedAt: new Date(),
         consentTextVersion: CONSENT_TEXT_VERSION,
       })
       .returning();
-    if (!created) throw new InternalError('Failed to create voice clone');
+    if (!inserted) throw new InternalError('Failed to create voice clone');
+
+    // The embedding is the owner's biometric: sealed per-tenant AND bound to this
+    // clone's id (so it cannot be swapped onto another row), which only exists now.
+    let created = inserted;
+    if (embedding) {
+      const sealed = await sealEmbedding(env, tenantId, inserted.id, embedding, parseSampleRate(form.get('embeddingSampleRate')));
+      const [withEmbedding] = await db
+        .update(studioVoiceClones)
+        .set({ embeddingEnc: sealed.enc, embeddingIv: sealed.iv })
+        .where(and(eq(studioVoiceClones.id, inserted.id), eq(studioVoiceClones.tenantId, tenantId)))
+        .returning();
+      if (withEmbedding) created = withEmbedding;
+    }
 
     await bumpCacheVersion(env, `voiceclones:${tenantId}`);
     if (visibility === 'marketplace') await bumpCacheVersion(env, 'voiceclones:marketplace');
-    return c.json(toPublicClone(created), 201);
+    return c.json(toPublicClone(created, { tenantId }), 201);
   });
 
   // ── List clones the caller owns or has licensed (cached) ────────────────
@@ -181,27 +235,8 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
       env,
       `voiceclones:${tenantId}:v:${version}`,
       async () => {
-        const owned = await db
-          .select()
-          .from(studioVoiceClones)
-          .where(eq(studioVoiceClones.tenantId, tenantId))
-          .orderBy(desc(studioVoiceClones.createdAt));
-
-        const licenseRows = await db
-          .select({ cloneId: studioVoiceCloneLicenses.cloneId })
-          .from(studioVoiceCloneLicenses)
-          .where(
-            and(
-              eq(studioVoiceCloneLicenses.tenantId, tenantId),
-              eq(studioVoiceCloneLicenses.status, 'active'),
-            ),
-          );
-        const licensedIds = licenseRows.map((r) => r.cloneId);
-        const licensed = licensedIds.length
-          ? await db.select().from(studioVoiceClones).where(scopedToTenant(studioVoiceClones, tenantId, inArray(studioVoiceClones.id, licensedIds)))
-          : [];
-
-        return [...owned, ...licensed].map(toPublicClone);
+        // Owned + licensed (cross-tenant, by license) — see listUsableClones.
+        return (await listUsableClones(db, tenantId)).map((row) => toPublicClone(row, { tenantId }));
       },
       { kvTtlSeconds: 300 },
     );
@@ -228,11 +263,93 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
           .from(studioVoiceClones)
           .where(eq(studioVoiceClones.visibility, 'marketplace'))
           .orderBy(desc(studioVoiceClones.createdAt)).limit(LIST_ROW_CAP);
-        return rows.filter((r) => r.status === 'published').map(toPublicClone);
+        return rows.filter((r) => r.status === 'published').map((row) => toPublicClone(row));
       },
       { kvTtlSeconds: 300 },
     );
     return c.json({ clones });
+  });
+
+  // ── Acquire a marketplace voice ──────────────────────────────────────────
+  // FREE → licensed at once. PRICED → the platform's one hosted checkout
+  // (`startVoiceCheckout`); the license is granted by `/checkout/complete` or the
+  // webhook (purchaseRegistry), each after re-reading the session from the processor.
+  router.post('/marketplace/:id/license', async (c) => {
+    const cloneId = Number(c.req.param('id'));
+    if (!Number.isInteger(cloneId)) return c.json({ error: 'invalid clone id' }, 400);
+    const tenantId = c.get('tenantId');
+    const userId = c.get('userId') ?? null;
+    try {
+      const out = await acquireFreeVoiceLicense(db, { cloneId, tenantId, userId });
+      // A revoked license stays revoked: 409, and nothing changed so the cache is left alone.
+      if ('applied' in out) return c.json({ reason: out.reason }, 409);
+      // The caller's cached list merges in licensed clones — refresh it.
+      await bumpCacheVersion(c.env as Env, `voiceclones:${tenantId}`);
+      return c.json(out, 201);
+    } catch (err) {
+      if (err instanceof VoiceCloneLicensePaymentRequired) {
+        if (!userId) return c.json({ error: 'Sign in to buy this voice' }, 401);
+        const body = await parseOptionalBody(c, VoiceCheckoutStartBody);
+        const { checkoutUrl } = await startVoiceCheckout(db, c.env as Env, {
+          tenantId,
+          buyerUserId: userId,
+          buyerEmail: body.buyerEmail ?? null,
+          cloneId,
+          ...(body.returnUrl ? { returnUrl: body.returnUrl } : {}),
+        });
+        return c.json({ checkoutUrl }, 200);
+      }
+      if (err instanceof ListingError) throw err;
+      return mapSynthError(c, err);
+    }
+  });
+
+  // The processor's redirect lands here; the session is re-read FROM the processor.
+  router.post('/marketplace/:id/checkout/complete', async (c) => {
+    const tenantId = c.get('tenantId');
+    const body = await parseBody(c, VoiceCheckoutCompleteBody);
+    const purchase = await completeVoiceCheckout(db, c.env as Env, {
+      tenantId,
+      buyerUserId: c.get('userId') as string,
+      checkoutSessionId: body.checkoutSessionId,
+    });
+    // A revoked license (refunded / disputed) is never reported as purchased.
+    if (!purchase.applied) return c.json({ purchased: false, reason: purchase.reason }, 409);
+    return c.json({ purchased: true, purchase });
+  });
+
+  // ── Owner-only speaker embedding (sealed at rest) ───────────────────────
+  router.get('/:id/embedding', async (c) => {
+    const cloneId = Number(c.req.param('id'));
+    if (!Number.isInteger(cloneId)) return c.json({ error: 'invalid clone id' }, 400);
+    try {
+      const own = await getOwnerEmbedding(db, c.env as Env, {
+        cloneId, tenantId: c.get('tenantId'), userId: c.get('userId') ?? null,
+      });
+      if (!own) return c.json({ error: 'No embedding' }, 404);
+      c.header('Cache-Control', 'private, no-store');
+      return c.json(own);
+    } catch (err) {
+      return mapSynthError(c, err);
+    }
+  });
+
+  // One-time device migration: upload a locally-held embedding if the server lacks one.
+  router.put('/:id/embedding', async (c) => {
+    const cloneId = Number(c.req.param('id'));
+    if (!Number.isInteger(cloneId)) return c.json({ error: 'invalid clone id' }, 400);
+    const body = (await c.req.json().catch(() => null)) as { embedding?: unknown; sampleRate?: unknown } | null;
+    const embedding = parseEmbedding(body?.embedding);
+    if (!embedding) return c.json({ error: 'embedding must be a non-empty array of at most 4096 finite numbers' }, 422);
+    try {
+      const stored = await storeOwnerEmbeddingIfMissing(db, c.env as Env, {
+        cloneId, tenantId: c.get('tenantId'), userId: c.get('userId') ?? null, embedding,
+        sampleRate: parseSampleRate(body?.sampleRate),
+      });
+      return c.json({ stored });
+    } catch (err) {
+      return mapSynthError(c, err);
+    }
   });
 
   // ── Synthesize: the metered, cached spine ───────────────────────────────
@@ -265,6 +382,54 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     } catch (err) {
       return mapSynthError(c, err);
     }
+  });
+
+  // ── Register a clip made on the caller's device (hash + watermark id) ────
+  // The server never sees the audio: it signs what the client reports, after the
+  // same access + consent gates as server synthesis.
+  router.post('/:id/provenance', async (c) => {
+    const cloneId = Number(c.req.param('id'));
+    if (!Number.isInteger(cloneId)) return c.json({ error: 'invalid clone id' }, 400);
+    const limited = await voiceRateLimited(c, `voice-register:${c.get('tenantId')}:${c.get('userId')}`, VOICE_REGISTER_RPM);
+    if (limited) return limited;
+    const body = await parseBody(c, RegisterClipBody);
+    try {
+      const record = await issueVoiceProvenance(createVoiceProvenancePorts(db, c.env as Env), {
+        tenantId: c.get('tenantId'),
+        userId: c.get('userId'),
+        cloneId,
+        // The server never saw this audio: whatever engine the client names, the
+        // manifest says the registration is client-reported (surfaced as selfReported).
+        engine: CLIENT_REPORTED_ENGINE,
+        model: body.model,
+        audioSha256: body.audioSha256,
+        watermarkId: body.watermarkId,
+      });
+      return c.json({ manifest: record.manifest, signature: record.signature, watermarked: record.watermarked }, 201);
+    } catch (err) {
+      return mapSynthError(c, err);
+    }
+  });
+
+  // ── A stored voiceover's signed provenance (access-checked) ──────────────
+  router.get('/:id/voiceovers/:voiceoverId/provenance', async (c) => {
+    const tenantId = c.get('tenantId');
+    const cloneId = Number(c.req.param('id'));
+    const voiceoverId = Number(c.req.param('voiceoverId'));
+    if (!Number.isInteger(cloneId) || !Number.isInteger(voiceoverId)) return c.json({ error: 'Not found' }, 404);
+
+    const [clone] = await db
+      .select({ id: studioVoiceClones.id, tenantId: studioVoiceClones.tenantId })
+      .from(studioVoiceClones)
+      .where(eq(studioVoiceClones.id, cloneId))
+      .limit(1);
+    if (!clone) return c.json({ error: 'Not found' }, 404);
+    if (!(await canUseClone(db, clone, tenantId))) return c.json({ error: 'Forbidden' }, 403);
+
+    // Scoped to the CALLER's tenant: a licensee never reads another tenant's voiceover provenance.
+    const record = await findProvenanceForVoiceover(db, tenantId, voiceoverId);
+    if (!record || record.cloneId !== cloneId) return c.json({ error: 'Not found' }, 404);
+    return c.json({ manifest: record.manifest, signature: record.signature, watermarked: record.watermarked });
   });
 
   // ── Stream a synthesized voiceover's audio from R2 (access-checked) ──────
@@ -359,6 +524,12 @@ function mapSynthError(c: Context<HonoEnv>, err: unknown) {
   if (err instanceof VoiceCloneForbidden) return c.json({ error: err.message }, 403);
   if (err instanceof VoiceCloneConsentRequired) return c.json({ error: err.message }, 422);
   if (err instanceof VoiceCloneReferenceMissing) return c.json({ error: err.message }, 422);
+  if (err instanceof VoiceCloneSynthesisConflict) return c.json({ error: err.message }, 409);
+  if (err instanceof VoiceProvenanceInvalid) return c.json({ error: err.message }, 422);
+  if (err instanceof VoiceProvenanceConflict) return c.json({ error: err.message }, 409);
+  if (err instanceof VoiceProvenanceUnavailable) {
+    return c.json({ error: err.message, code: err.code }, 503);
+  }
   if (err instanceof TtsProviderUnavailable) {
     return c.json({ error: err.message, code: 'provider_unavailable' }, 503);
   }

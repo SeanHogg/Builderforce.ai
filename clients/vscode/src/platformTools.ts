@@ -2,6 +2,7 @@ import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "./gatewayAuth";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 import { ttlCache } from "./ttlCache";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
 
@@ -142,7 +143,7 @@ export async function listPlatformTools(
     parameters: e.parameters ?? { type: "object", properties: {} },
     // Fail safe: only a tool that explicitly advertises mutates=false skips the
     // write-confirm gate; anything else (incl. external tools that omit it) asks.
-    mutating: e.mutates !== false,
+    mutating: toolMutating(e.name, { mutates: e.mutates }),
     remote: true,
     execute: (args) => {
       const translated = chatIdForServer(identity, args);

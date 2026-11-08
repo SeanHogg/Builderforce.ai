@@ -23,6 +23,11 @@ vi.mock('../../infrastructure/cache/versionToken', () => ({
   bumpVersion: (...a: Parameters<typeof bumpVersion>) => bumpVersion(...a),
 }));
 
+const publishProjectStaffingChanged = vi.fn(async (_env: unknown, _tenantId: number, _projectId: unknown) => undefined);
+vi.mock('../swimlane/boardChangePublisher', () => ({
+  publishProjectStaffingChanged: (...a: Parameters<typeof publishProjectStaffingChanged>) => publishProjectStaffingChanged(...a),
+}));
+
 const { AgentAssignmentService } = await import('./AgentAssignmentService');
 const { agentAssignments, artifactAssignments, cronJobs } = await import('../../infrastructure/database/schema');
 
@@ -126,6 +131,24 @@ describe('AgentAssignmentService', () => {
     });
     expect(out.agentHandle).toBe(99);
     expect(bumpVersion).toHaveBeenCalledWith('agent-assignments:3', 'bumpAgentAssignmentsVersion', env);
+  });
+
+  it("publishes the project's change event when a project assignment is written", async () => {
+    publishProjectStaffingChanged.mockClear();
+    const { db } = fakeDb([[]], [[row({ id: 'a-3' })]]);
+    await new AgentAssignmentService(db, env).assign(3, {
+      agentKind: 'workforce', agentRef: 'agent-1', scope: 'project', scopeId: '12',
+    });
+    expect(publishProjectStaffingChanged).toHaveBeenCalledWith(env, 3, 12);
+  });
+
+  it('publishes nothing for a workspace identity (no project)', async () => {
+    publishProjectStaffingChanged.mockClear();
+    const { db } = fakeDb([[]], [[row({ scope: 'workspace', scopeId: null, projectId: null })]]);
+    await new AgentAssignmentService(db, env).assign(3, {
+      agentKind: 'workforce', agentRef: 'agent-1', scope: 'workspace',
+    });
+    expect(publishProjectStaffingChanged).not.toHaveBeenCalled();
   });
 
   it("leaves an existing assignment untouched with onExisting 'keep'", async () => {

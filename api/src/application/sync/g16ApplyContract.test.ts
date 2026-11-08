@@ -69,6 +69,7 @@ function harness() {
       importSyncedChat: importer,
       importSyncedMessage: importer,
       importSyncedUsage: importer,
+      importSyncedChatTicketLink: importer,
       importMirrorRecord: importer,
     },
   });

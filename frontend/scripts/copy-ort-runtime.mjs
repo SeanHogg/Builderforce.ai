@@ -26,9 +26,10 @@ const OUT = path.join(ROOT, 'public', 'ort');
 
 /**
  * Cloudflare rejects a static asset over 25 MiB, and the deploy failure surfaces
- * far from this file. Fail here instead, where the fix is obvious.
+ * far from this file. Fail here instead, where the fix is obvious. The cap is
+ * shared with strip-worker-assets.js, which prunes anything over it.
  */
-const MAX_ASSET_BYTES = 25 * 1024 * 1024;
+const { MAX_ASSET_BYTES } = require('./cloudflareAssetCap.cjs');
 
 /**
  * Locate onnxruntime-web's `dist`.

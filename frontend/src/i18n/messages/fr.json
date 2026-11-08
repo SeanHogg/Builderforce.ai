@@ -4126,6 +4126,8 @@
     "delta": "+{count}"
   },
   "personProfile": {
+    "seoTitle": "Coéquipier",
+    "seoDescription": "Un coéquipier de votre espace de travail : rôle, personnalité et travail en cours.",
     "loading": "Chargement du profil",
     "work": "Travail",
     "open": "Tickets ouverts",
@@ -4735,7 +4737,7 @@
         "surface": "{count, plural, =0 {Dessin, vide} one {Dessin, 1 trait} other {Dessin, # traits}}",
         "empty": "Aucun dessin pour l'instant.",
         "emptyHint": "Dessinez ici à la souris, au stylet ou au doigt.",
-        "limit": "Ce dessin a atteint sa limite de {max} traits. Effacez-en pour en ajouter d'autres.",
+        "limit": "Ce dessin est plein : {max} traits au maximum, et une limite sur le niveau de détail total. Effacez-en pour en ajouter d'autres.",
         "clear": "Effacer le dessin",
         "clearConfirm": "Supprimer tous les traits de ce dessin ? Les autres personnes qui le modifient les perdront aussi.",
         "textLabel": "Texte du dessin",
@@ -4968,6 +4970,7 @@
         "exportAs": "Exporter en {format}",
         "exporting": "Rendu en cours…",
         "exportFailed": "L'exportation a échoué. Réessayez.",
+        "exportTooLarge": "Cette animation est trop volumineuse pour être exportée (largeur × hauteur × images dépasse la limite). Réduisez le nombre d'images ou la taille du canevas.",
         "summary": "{count, plural, one {# image} other {# images}} · {fps} i/s · {seconds} s",
         "dimensions": "{width} × {height} px",
         "maxFramesReached": "Limite d'images atteinte ({max} images). Supprimez-en une pour en ajouter une autre.",
@@ -15734,6 +15737,10 @@
     "prdFallback": "PRD {id}"
   },
   "kanbanTemplateCheckout": {
+    "previewLockedNotice": "Ce modèle est payant. Déverrouillez-le pour voir ses exigences et son staffing.",
+    "previewLanes": "Couloirs",
+    "previewUnlock": "Déverrouiller pour {price}",
+    "previewBack": "Retour",
     "redirecting": "« {name} » est un modèle payant. Redirection vers le paiement...",
     "checkoutFailed": "Impossible de démarrer le paiement pour ce modèle. Réessayez.",
     "completeFailed": "Le paiement n'a pas encore pu être confirmé. Si vous avez été débité, le modèle sera débloqué sous peu ; réessayez ensuite."
@@ -38547,7 +38554,10 @@
         "checking": "Vérification de l’extrait…",
         "watermarkDetected": "Cet extrait porte un filigrane Builderforce pour l’extrait {clipId}.",
         "audioMatches": "L’audio correspond à l’enregistrement signé.",
-        "selfReported": "Cet enregistrement a été déclaré par l’appareil du créateur lui-même.",
+        "selfReported": "Enregistré par le titulaire de la licence de la voix ; la plateforme n’a pas vu cet audio.",
+        "watermarkMismatch": "Porte le filigrane de l’extrait {clipId}, mais cet audio n’est pas l’audio signé.",
+        "watermarkUnchecked": "Porte le filigrane de l’extrait {clipId}, mais aucune empreinte audio n’a pu être vérifiée pour ce format.",
+        "voiceDeleted": "Voix supprimée",
         "metaTitle": "Vérifier un extrait vocal",
         "metaDescription": "Vérifiez si un extrait vocal porte un filigrane Builderforce et avec quel consentement il a été créé.",
         "noWatermark": "Aucun filigrane trouvé. Cet extrait n’a peut-être pas été créé sur Builderforce, ou il a été modifié ou réencodé.",
@@ -38581,6 +38591,7 @@
       "checkoutCancelled": "Le paiement a été annulé. Vous n'avez pas été débité.",
       "checkoutFailed": "Nous n'avons pas pu confirmer ce paiement. Si vous avez été débité, actualisez dans un instant.",
       "checkoutDone": "Achat terminé. La voix est maintenant dans vos voix.",
+      "licenseRevoked": "Votre licence pour cette voix a été révoquée après un remboursement ou un litige. Contactez le support pour la rétablir.",
       "checkoutOpened": "Le paiement s'est ouvert dans votre navigateur. Actualisez ici une fois payé.",
       "acquireFailed": "Impossible d'ajouter cette voix. Réessayez.",
       "refresh": "Actualiser"

@@ -1,4 +1,5 @@
 import { currentRequestScope, deferPastResponse, type RequestScope } from '../shared/requestScope';
+import { redactDeep, redactSecrets } from '../../infrastructure/security/redactSecrets';
 
 export interface CaughtErrorDetails {
   source: string;
@@ -23,10 +24,7 @@ export type CaughtErrorSink = (
 ) => Promise<void>;
 
 let configuredSink: CaughtErrorSink | null = null;
-const SENSITIVE_CONTEXT_KEY = /(authorization|cookie|credential|password|secret|token|api[-_]?key)/i;
-const MAX_CONTEXT_DEPTH = 5;
-const MAX_CONTEXT_ENTRIES = 50;
-const MAX_CONTEXT_STRING = 4_000;
+const CONTEXT_LIMITS = { maxDepth: 5, maxEntries: 50, maxString: 4_000 };
 
 function normalizeError(error: unknown): { message: string; stack: string | null } {
   if (error instanceof Error) {
@@ -35,44 +33,23 @@ function normalizeError(error: unknown): { message: string; stack: string | null
   return { message: String(error), stack: null };
 }
 
-function sanitizeContextValue(
-  value: unknown,
-  key: string,
-  depth: number,
-  seen: WeakSet<object>,
-): unknown {
-  if (SENSITIVE_CONTEXT_KEY.test(key)) return '[REDACTED]';
-  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    return value.length <= MAX_CONTEXT_STRING
-      ? value
-      : `${value.slice(0, MAX_CONTEXT_STRING)}…[truncated]`;
-  }
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'function' || typeof value === 'symbol') return String(value);
-  if (value instanceof Error) {
-    return { name: value.name, message: value.message, stack: value.stack ?? null };
-  }
-  if (depth >= MAX_CONTEXT_DEPTH) return '[MAX_DEPTH]';
-  if (typeof value !== 'object') return String(value);
-  if (seen.has(value)) return '[CIRCULAR]';
-  seen.add(value);
-  if (Array.isArray(value)) {
-    return value
-      .slice(0, MAX_CONTEXT_ENTRIES)
-      .map((entry) => sanitizeContextValue(entry, key, depth + 1, seen));
-  }
-
-  const sanitized: Record<string, unknown> = {};
-  for (const [entryKey, entryValue] of Object.entries(value).slice(0, MAX_CONTEXT_ENTRIES)) {
-    sanitized[entryKey] = sanitizeContextValue(entryValue, entryKey, depth + 1, seen);
-  }
-  return sanitized;
-}
-
+/** The context, redacted (secret-named keys and secret-shaped values) and bounded: ONE walk, ONE key rule (`redactDeep`). */
 function sanitizeContext(context: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!context) return {};
-  return sanitizeContextValue(context, 'context', 0, new WeakSet()) as Record<string, unknown>;
+  return redactDeep(context, CONTEXT_LIMITS);
+}
+
+/**
+ * The error as it may leave this module: a clone with the same name and own properties (`code`, `status`) whose
+ * message, stack and cause are redacted. The raw error never reaches a log line or an exception sink.
+ */
+function redactedError(error: unknown): unknown {
+  if (!(error instanceof Error)) return redactDeep(error, CONTEXT_LIMITS);
+  const clone = new Error(redactSecrets(error.message), error.cause !== undefined ? { cause: redactDeep(error.cause, CONTEXT_LIMITS) } : undefined);
+  Object.assign(clone, redactDeep({ ...error }, CONTEXT_LIMITS));
+  clone.name = error.name;
+  clone.stack = error.stack ? redactSecrets(error.stack) : undefined;
+  return clone;
 }
 
 function recordFor(
@@ -86,9 +63,9 @@ function recordFor(
   // is the diagnosis.
   const cause = error instanceof Error && error.cause !== undefined ? error.cause : undefined;
   return {
-    error,
-    message: normalized.message,
-    stack: normalized.stack,
+    error: redactedError(error),
+    message: redactSecrets(normalized.message),
+    stack: normalized.stack ? redactSecrets(normalized.stack) : null,
     source: details.source,
     operation: details.operation,
     context: sanitizeContext(cause === undefined ? details.context : { ...details.context, cause }),
@@ -138,7 +115,7 @@ export function reportCaughtError(
     operation: record.operation,
     message: record.message,
     context: record.context,
-    error,
+    error: record.error,
   });
 
   const runtime = runtimeOverride ?? currentRequestScope();
@@ -170,7 +147,7 @@ export async function reportUnhandledError(
     operation: record.operation,
     message: record.message,
     context: record.context,
-    error,
+    error: record.error,
   });
   await deliver(record, runtime);
 }

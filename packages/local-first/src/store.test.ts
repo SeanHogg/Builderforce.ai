@@ -70,3 +70,24 @@ describe('append — the store mints the wire event id', () => {
     expect(finding.dependsOn).toEqual(['audit-run:create:r1', 'execution:start:later', run.eventId]);
   });
 });
+
+describe('lastPullAt', () => {
+  const ACCOUNT = { kind: 'bound' as const, platformInstance: 'https://builderforce.ai', tenantId: '7' };
+
+  it('is stored beside the cursor, also when the cursor is undefined', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => { await tx.setCursor(ACCOUNT, 'c1', AT); });
+    expect(await store.read((tx) => tx.lastPullAt(ACCOUNT))).toBe(AT);
+    expect(await store.read((tx) => tx.cursor(ACCOUNT))).toBe('c1');
+    await store.transact(async (tx) => { await tx.setCursor(ACCOUNT, undefined, '2026-11-09T00:00:00.000Z'); });
+    expect(await store.read((tx) => tx.cursor(ACCOUNT))).toBeUndefined();
+    expect(await store.read((tx) => tx.lastPullAt(ACCOUNT))).toBe('2026-11-09T00:00:00.000Z');
+  });
+
+  it('is cleared with the cursor on the resnapshot path (no pulledAt)', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => { await tx.setCursor(ACCOUNT, 'c1', AT); });
+    await store.transact(async (tx) => { await tx.setCursor(ACCOUNT, undefined); });
+    expect(await store.read((tx) => tx.lastPullAt(ACCOUNT))).toBeUndefined();
+  });
+});

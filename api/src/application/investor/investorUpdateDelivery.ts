@@ -35,6 +35,12 @@ import {
   type TransportBinding,
 } from '../marketing/campaignTransports';
 import { StatusError } from '../../domain/shared/errors';
+import {
+  lastInvestorUpdateWindowEnd,
+  listShippedMilestones,
+  resolveMilestoneWindowStart,
+  type InvestorMilestone,
+} from './investorMilestones';
 
 export class InvestorUpdateError extends StatusError<number> {
   constructor(message: string, status: number) {
@@ -89,7 +95,7 @@ const section = (heading: string, rows: readonly string[]): string =>
  * renderer that silently drops the empty section would make omitting them
  * invisible. When there are none it says so.
  */
-export function renderInvestorUpdate(content: InvestorUpdateContent): { subject: string; html: string } {
+export function renderInvestorUpdate(content: InvestorUpdateContent, milestones: readonly InvestorMilestone[] = [], moreCount = 0): { subject: string; html: string } {
   const period = content.period?.trim();
   const subject = period ? `${content.title} — ${period}` : content.title;
 
@@ -118,6 +124,10 @@ export function renderInvestorUpdate(content: InvestorUpdateContent): { subject:
       ? `<h3 style="margin:24px 0 8px;font:600 15px/1.4 system-ui,sans-serif">Metrics</h3><table style="border-collapse:collapse;font:400 14px/1.5 system-ui,sans-serif"><thead><tr style="text-align:left;color:#666"><th style="padding:0 12px 6px 0">Metric</th><th style="padding:0 12px 6px 0">Now</th><th style="padding:0 12px 6px 0">Previous</th><th style="padding:0 0 6px">Change</th></tr></thead><tbody>${metricRows.join('')}</tbody></table>`
       : '',
     section('Highlights', bullets(content.highlights)),
+    section('Milestones shipped', [
+      ...milestones.map((m) => escapeHtml(m.source === 'board' ? `${m.title} (${m.boardName})` : m.title)),
+      ...(moreCount > 0 && milestones.length > 0 ? [`<em>${escapeHtml(`and ${moreCount} more`)}</em>`] : []),
+    ]),
     // Stated rather than omitted — see the note above.
     lows.length
       ? section('Lowlights', lows)
@@ -154,6 +164,9 @@ export async function sendInvestorUpdate(
     objectId?: string | null;
   },
 ): Promise<SendInvestorUpdateResult> {
+  // The milestone window ends HERE, once. It is stored on every row of this batch, and the
+  // next update starts where this one ended, so consecutive windows tile.
+  const windowEnd = new Date();
   const recipients = input.recipients
     .map((r) => ({ ...r, email: r.email.trim().toLowerCase() }))
     .filter((r) => r.email.includes('@'));
@@ -168,7 +181,10 @@ export async function sendInvestorUpdate(
   const resolved = await resolveCampaignSender(db, env, tenantId, input.binding);
   if (!resolved.ok) throw new InvestorUpdateError(resolved.error, 400);
 
-  const { subject, html } = renderInvestorUpdate(input.content);
+  // Milestones shipped since the previous update's window ended — the same read the board pack uses.
+  const since = resolveMilestoneWindowStart(await lastInvestorUpdateWindowEnd(db, tenantId), windowEnd);
+  const shipped = await listShippedMilestones(db, { tenantId, since, until: windowEnd });
+  const { subject, html } = renderInvestorUpdate(input.content, shipped.milestones, shipped.moreCount);
   const failed: SendInvestorUpdateResult['failed'] = [];
   let sent = 0;
 
@@ -176,12 +192,12 @@ export async function sendInvestorUpdate(
     try {
       await resolved.sender.send({ to: recipient.email, subject, html });
       sent += 1;
-      await recordDelivery(db, tenantId, input.objectId ?? null, recipient.email, subject, 'sent', null);
+      await recordDelivery(db, tenantId, input.objectId ?? null, recipient.email, subject, 'sent', null, windowEnd);
     } catch (error) {
       const retryable = error instanceof TransportError ? error.retryable : true;
       const message = error instanceof Error ? error.message : 'Send failed';
       failed.push({ email: recipient.email, error: message, retryable });
-      await recordDelivery(db, tenantId, input.objectId ?? null, recipient.email, subject, 'failed', { error: message, retryable });
+      await recordDelivery(db, tenantId, input.objectId ?? null, recipient.email, subject, 'failed', { error: message, retryable }, windowEnd);
       // See the note: a hopeless failure stops the run rather than repeating
       // itself once per remaining investor.
       if (!retryable) break;
@@ -207,6 +223,7 @@ async function recordDelivery(
   subject: string,
   status: 'sent' | 'failed',
   failure: { error: string; retryable: boolean } | null,
+  windowEnd: Date,
 ): Promise<void> {
   await db.insert(deliveries).values({
     tenantId,
@@ -215,6 +232,8 @@ async function recordDelivery(
     recipient,
     template: 'investor_update',
     subject,
+    // Where this update's milestone window ended; the next update starts here.
+    payload: { milestonesUntil: windowEnd.toISOString() },
     status,
     attempts: 1,
     retryable: failure ? failure.retryable : false,

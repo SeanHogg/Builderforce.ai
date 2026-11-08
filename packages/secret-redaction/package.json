@@ -1,0 +1,11 @@
+{
+  "name": "@builderforce/secret-redaction",
+  "version": "2026.11.1",
+  "private": true,
+  "type": "module",
+  "description": "THE secret redactor: one pattern set, one masking rule, one structural walk (redactDeep). A secret never leaves the process unredacted, whether to storage, to a live stream or to a log. Pure, dependency-free and I/O-free: the Worker (api) and Node (agent-runtime) run the same code.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

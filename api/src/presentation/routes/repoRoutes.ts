@@ -42,6 +42,7 @@ import { importRepoContents } from '../../application/repos/importRepoContents';
 import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
+import { gateHumanMerge } from '../../application/repos/humanMergeGate';
 import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { listTaskRepoBindings, listTaskRepoPullRequests, setTaskRepoBindings } from '../../application/repos/taskRepoSet';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
@@ -655,8 +656,20 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // Shared with the AI Manager's autonomous PR coordination so the human "Approve
     // & Merge" and the manager merge never drift (resolve credential → provider
     // merge → mark merged → bust cache).
+    // SECURITY GATE (PRD 08 §10) - for EVERYONE: a person's "Approve & Merge" is held by the same gate as
+    // an agent's merge. A PR the scanners cannot clear can be merged only after a MANAGER has recorded the
+    // SHA-bound accept-risk override (POST /api/governance/vuln-scans/pr/:prId/accept-risk), which the gate
+    // then honours for this commit only. The answer is a 409 with the gate's reasons so the UI can show them.
+    // A missing scan is scheduled, not run inline: retry once it completes.
+    const gate = await gateHumanMerge(db, c.env as Env, tenantId, id);
+    if (!gate.ok) {
+      return statusResponse(c, gate.body, gate.status, { source: 'presentation/routes/repoRoutes.ts', operation: 'mergePullRequest.securityGate' });
+    }
+
     const result = await mergeRecordedPullRequest(db, c.env as Env, {
       tenantId, prId: id, method: body.method ?? undefined, mergedBy: userId ?? null,
+      // The provider refuses the merge if the head moved since the gate looked (`head_moved`, 409).
+      expectedHeadSha: gate.headSha,
     });
     if (!result.ok) {
       return statusResponse(c, { error: result.error, code: result.code }, result.httpStatus, { source: 'presentation/routes/repoRoutes.ts', operation: 'mergePullRequest' });

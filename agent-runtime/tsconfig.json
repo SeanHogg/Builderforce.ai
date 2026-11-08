@@ -65,6 +65,7 @@
       "@builderforce/run-guards": ["../packages/run-guards/src/index.ts"],
       "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],
       "@builderforce/tool-output-policy": ["../packages/tool-output-policy/src/index.ts"],
+      "@builderforce/secret-redaction": ["../packages/secret-redaction/src/index.ts"],
       "@builderforce/write-outbox/core": ["../packages/write-outbox/src/core.ts"],
       "@builderforce/tui": ["../packages/tui/src/index.ts"],
       "@builderforce/tui/*": ["../packages/tui/src/*"]

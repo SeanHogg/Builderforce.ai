@@ -11,6 +11,12 @@
  * POST  /api/governance/soc2/seed              – seed the CC1–CC9 baseline once (manager+)
  * PATCH /api/governance/soc2/controls/:id      – update a control's status (manager+)
  * POST  /api/governance/soc2/controls/:id/evidence – attach evidence (manager+)
+ * GET   /api/governance/soc2/evidence          – recent evidence incl. automated (member)
+ * GET   /api/governance/soc2/gaps              – governance-auditor open gaps (member)
+ * POST  /api/governance/dsr/:id/execute        – execute a data subject request for the segment (manager+)
+ *
+ * Every mutation here (and every generic tracker write) is recorded in the ONE governance
+ * mutation-audit envelope — see application/governance/mutationAudit.ts.
  *
  * It also hosts the POLICY-PACK store (migration 0348) — the authoring surface
  * behind the runtime's `PolicyGate` enforcement. Reads are member-level (anyone
@@ -31,11 +37,12 @@
 
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
+import { gatesForWireLevel } from '@builderforce/agent-tools';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { mountTrackers, scope, type TrackerOpts } from './segmentTrackerRoutes';
 import {
-  socControls, socEvidence,
+  socControls,
   securityVendors, securityIncidents, piiDataAssets, securityDpas,
   securityTrainings, complianceEvents, dataSubjectRequests, dataSuppressionList,
   accessReviews, vulnerabilityScans,
@@ -45,8 +52,21 @@ import {
   listPolicyPacks, resolvePolicyGates, updatePolicyGate, updatePolicyPack,
 } from '../../application/governance/policyPackService';
 import { soc2EvidenceExportSource } from '../../application/governance/soc2EvidenceExport';
+import { ensureSoc2Baseline } from '../../application/governance/soc2Baseline';
+import { listOpenGaps, listRecentEvidence } from '../../application/governance/soc2Overview';
+import {
+  dsrExportKey, executeDataSubjectRequest, guardDsrTrackerWrite, markDsrDelivered, planDataSubjectRequest,
+  projectDsrRow, toPublicDsrResult, verifyDsrIdentity, type PersistExport,
+} from '../../application/governance/dsrExecution';
+import {
+  attachManualEvidence, CONTROL_STATUSES, isControlStatus, patchSocControl, type ControlStatus,
+} from '../../application/governance/soc2Controls';
+import { guardScanMutation } from '../../application/security/scanMutationGuard';
+import { readPrivateObject, storePrivateObject } from '../../application/assets/tenantAssetStore';
+import { resolveActorFromContext } from '../../application/activity/activityLog';
+import { auditGovernanceMutation } from './governanceAudit';
 import { exportSourceHandler } from './exportSourceRoute';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { createStakeholderAlignmentRoutes } from './stakeholderAlignmentRoutes';
 import { createVulnerabilityFindingRoutes } from './vulnerabilityFindingRoutes';
@@ -87,61 +107,25 @@ const PolicyPackBody = z.object({
 const PolicyGateBody = z.object({
   gateKey: z.string().optional(),
   tool: z.string().nullish(),
+  sideEffect: z.enum(['read', 'verify', 'mutate']).nullish(),
   effect: z.string().optional(),
   directive: z.string().nullish(),
   reason: z.string().nullish(),
   position: z.number().optional(),
 });
 
-const CONTROL_STATUSES = ['not_started', 'in_progress', 'ready', 'out_of_scope'] as const;
-type ControlStatus = (typeof CONTROL_STATUSES)[number];
-const isControlStatus = (v: unknown): v is ControlStatus =>
-  typeof v === 'string' && (CONTROL_STATUSES as readonly string[]).includes(v);
-
-/** SOC 2 Common Criteria baseline (seeded on first use). */
-const SOC2_BASELINE: Array<{ controlRef: string; category: string; name: string; requirement: string }> = [
-  { controlRef: 'CC1.1', category: 'CC1', name: 'Integrity & ethical values', requirement: 'The entity demonstrates a commitment to integrity and ethical values.' },
-  { controlRef: 'CC1.2', category: 'CC1', name: 'Board independence & oversight', requirement: 'The board exercises oversight independent of management.' },
-  { controlRef: 'CC1.3', category: 'CC1', name: 'Structures & reporting lines', requirement: 'Management establishes structures, reporting lines, authorities and responsibilities.' },
-  { controlRef: 'CC1.4', category: 'CC1', name: 'Commitment to competence', requirement: 'The entity attracts, develops and retains competent individuals.' },
-  { controlRef: 'CC2.1', category: 'CC2', name: 'Quality information', requirement: 'The entity obtains and uses relevant, quality information.' },
-  { controlRef: 'CC2.2', category: 'CC2', name: 'Internal communication', requirement: 'The entity internally communicates information needed for controls.' },
-  { controlRef: 'CC2.3', category: 'CC2', name: 'External communication', requirement: 'The entity communicates with external parties about controls.' },
-  { controlRef: 'CC3.1', category: 'CC3', name: 'Objectives & risk', requirement: 'The entity specifies objectives to enable identification of risks.' },
-  { controlRef: 'CC3.2', category: 'CC3', name: 'Risk identification', requirement: 'The entity identifies and analyzes risks to its objectives.' },
-  { controlRef: 'CC3.3', category: 'CC3', name: 'Fraud risk', requirement: 'The entity considers the potential for fraud in assessing risks.' },
-  { controlRef: 'CC3.4', category: 'CC3', name: 'Change risk', requirement: 'The entity identifies and assesses changes that could impact controls.' },
-  { controlRef: 'CC4.1', category: 'CC4', name: 'Control monitoring', requirement: 'The entity selects, develops and performs evaluations of controls.' },
-  { controlRef: 'CC4.2', category: 'CC4', name: 'Deficiency communication', requirement: 'The entity evaluates and communicates control deficiencies.' },
-  { controlRef: 'CC5.1', category: 'CC5', name: 'Control activities', requirement: 'The entity selects and develops control activities that mitigate risk.' },
-  { controlRef: 'CC5.2', category: 'CC5', name: 'Technology controls', requirement: 'The entity selects and develops general control activities over technology.' },
-  { controlRef: 'CC5.3', category: 'CC5', name: 'Policies & procedures', requirement: 'The entity deploys control activities through policies and procedures.' },
-  { controlRef: 'CC6.1', category: 'CC6', name: 'Logical access', requirement: 'The entity implements logical access security over protected information assets.' },
-  { controlRef: 'CC6.2', category: 'CC6', name: 'Access provisioning', requirement: 'Access is registered, authorized and de-provisioned in a timely manner.' },
-  { controlRef: 'CC6.3', category: 'CC6', name: 'Access removal', requirement: 'The entity removes access to protected assets when no longer required.' },
-  { controlRef: 'CC6.6', category: 'CC6', name: 'External threats', requirement: 'The entity implements controls to protect against external threats.' },
-  { controlRef: 'CC6.7', category: 'CC6', name: 'Data transmission', requirement: 'The entity restricts the transmission/movement of information.' },
-  { controlRef: 'CC7.1', category: 'CC7', name: 'Vulnerability detection', requirement: 'The entity uses detection/monitoring to identify vulnerabilities.' },
-  { controlRef: 'CC7.2', category: 'CC7', name: 'Security monitoring', requirement: 'The entity monitors system components for anomalies.' },
-  { controlRef: 'CC7.3', category: 'CC7', name: 'Incident evaluation', requirement: 'The entity evaluates security events to determine a response.' },
-  { controlRef: 'CC7.4', category: 'CC7', name: 'Incident response', requirement: 'The entity responds to identified security incidents.' },
-  { controlRef: 'CC8.1', category: 'CC8', name: 'Change management', requirement: 'The entity authorizes, designs, tests and approves changes.' },
-  { controlRef: 'CC9.1', category: 'CC9', name: 'Risk mitigation', requirement: 'The entity identifies and develops risk mitigation activities.' },
-  { controlRef: 'CC9.2', category: 'CC9', name: 'Vendor risk', requirement: 'The entity assesses and manages risks from vendors and partners.' },
-];
-
 /** Field whitelists per governance tracker — the one place each tracker's editable shape lives. */
 const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
   { path: '/vendors', table: securityVendors, opts: { fields: ['name', 'purpose', 'region', 'dataClasses', 'isSubprocessor', 'dpaStatus', 'dpaUrl', 'renewalDate', 'contactEmail', 'website', 'notes'], required: ['name'] } },
-  { path: '/incidents', table: securityIncidents, opts: { fields: ['title', 'severity', 'status', 'detectionSource', 'impact', 'rootCause', 'postmortemUrl', 'reportedBy', 'assignedTo', 'resolvedAt', 'sourceRef'], required: ['title'] } },
+  { path: '/incidents', table: securityIncidents, opts: { fields: ['title', 'severity', 'status', 'detectionSource', 'impact', 'rootCause', 'postmortemUrl', 'reportedBy', 'assignedTo', 'resolvedAt'], required: ['title'] } }, // `sourceRef` is NOT writable: it is the dedupe key of platform-opened incidents
   { path: '/data-inventory', table: piiDataAssets, opts: { fields: ['name', 'classification', 'dataCategories', 'storageLocation', 'retentionDays', 'legalBasis', 'ownerTeam', 'lastReviewedAt', 'notes'], required: ['name'] } },
   { path: '/dpa', table: securityDpas, opts: { fields: ['counterpartyName', 'counterpartyType', 'status', 'signedAt', 'effectiveDate', 'renewalDate', 'dpaUrl', 'sccVersion', 'notes'], required: ['counterpartyName'] } },
   { path: '/training', table: securityTrainings, opts: { fields: ['userId', 'userName', 'userEmail', 'trainingType', 'trainingName', 'completedAt', 'dueDate', 'status', 'certificateUrl', 'notes'], required: ['userName', 'trainingType', 'trainingName'] } },
   { path: '/compliance-calendar', table: complianceEvents, opts: { fields: ['title', 'framework', 'eventType', 'dueDate', 'status', 'assignedTo', 'isRecurring', 'recurringEvery', 'notes', 'completedAt'], required: ['title', 'framework', 'dueDate'] } },
-  { path: '/dsr', table: dataSubjectRequests, opts: { fields: ['requestType', 'subjectEmail', 'jurisdiction', 'notes', 'status', 'rejectionReason'], required: ['requestType', 'subjectEmail'] } },
+  { path: '/dsr', table: dataSubjectRequests, opts: { fields: ['requestType', 'subjectEmail', 'jurisdiction', 'notes', 'status', 'rejectionReason'], guardMutation: guardDsrTrackerWrite, project: projectDsrRow, required: ['requestType', 'subjectEmail'] } },
   { path: '/suppression', table: dataSuppressionList, opts: { fields: ['identifierType', 'identifierValue', 'reason', 'notes'], required: ['identifierType', 'identifierValue', 'reason'] } },
   { path: '/access-reviews', table: accessReviews, opts: { fields: ['period', 'scope', 'scopeRef', 'status', 'reviewerId', 'dueDate', 'completedAt', 'findings', 'notes'], required: ['period'] } },
-  { path: '/vuln-scans', table: vulnerabilityScans, opts: { fields: ['repoRef', 'ref', 'scanType', 'status', 'triggeredBy', 'startedAt', 'finishedAt', 'summary', 'notes'], required: ['scanType'] } },
+  { path: '/vuln-scans', table: vulnerabilityScans, opts: { fields: ['repoRef', 'ref', 'scanType', 'status', 'triggeredBy', 'startedAt', 'finishedAt', 'summary', 'notes'], required: ['scanType'], guardMutation: guardScanMutation } },
 ];
 
 export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
@@ -161,18 +145,10 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   // Seed the CC1–CC9 baseline once per segment.
   router.post('/soc2/seed', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const existing = await db
-      .select({ id: socControls.id })
-      .from(socControls)
-      .where(and(eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)))
-      .limit(1);
-    if (existing.length > 0) {
-      return c.json({ seeded: 0, message: 'Baseline already present' });
-    }
-    await db.insert(socControls).values(
-      SOC2_BASELINE.map((ctl) => ({ ...ctl, tenantId, segmentId })),
-    );
-    return c.json({ seeded: SOC2_BASELINE.length }, 201);
+    const seeded = await ensureSoc2Baseline(db, tenantId, segmentId);
+    if (seeded === 0) return c.json({ seeded: 0, message: 'Baseline already present' });
+    await auditGovernanceMutation(c, db, 'soc2-baseline', null, 'create', null, { seeded });
+    return c.json({ seeded }, 201);
   });
 
   // Update a control's status.
@@ -183,24 +159,87 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
     if (body.status !== undefined && !isControlStatus(body.status)) {
       return c.json({ error: `status must be one of ${CONTROL_STATUSES.join(', ')}` }, 400);
     }
-    const patch: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.status !== undefined) patch.status = body.status;
-    if (body.ownerId !== undefined) patch.ownerId = body.ownerId;
-    if (body.notes !== undefined) patch.notes = body.notes;
-
-    const [updated] = await db
-      .update(socControls)
-      .set(patch)
-      .where(and(eq(socControls.id, id), eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)))
-      .returning();
-    if (!updated) return c.json({ error: 'control not found' }, 404);
-    return c.json(updated);
+    const changed = await patchSocControl(db, { tenantId, segmentId }, id, {
+      status: body.status as ControlStatus | undefined, ownerId: body.ownerId, notes: body.notes,
+    });
+    if (!changed) return c.json({ error: 'control not found' }, 404);
+    await auditGovernanceMutation(c, db, 'soc2-control', changed.updated.id, 'update', changed.before, changed.updated);
+    return c.json(changed.updated);
   });
 
   // The segment's SOC 2 controls WITH their evidence (SEC-1 evidence export) —
   // a registered export source: JSON package by default, csv|xlsx grid on
   // request (also at /api/exports/sources/governance.soc2-evidence).
   router.get('/soc2/export', exportSourceHandler(soc2EvidenceExportSource, db));
+
+  // The segment's recent evidence — automated rows (evidence_type 'automated') carry their
+  // provenance in `sourceRef` / `note`. Read-only, member-level like the control list.
+  router.get('/soc2/evidence', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    return c.json(await listRecentEvidence(db, { tenantId, segmentId }));
+  });
+
+  // The governance-auditor's OPEN gaps (merged PRs without a scan/review, controls without evidence).
+  router.get('/soc2/gaps', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    return c.json(await listOpenGaps(db, { tenantId, segmentId }));
+  });
+
+  // What executing a data subject request would do (the API owns the answer; the client never
+  // re-derives it from the request type). Static paths below win over the tracker's `/:id`.
+  router.get('/dsr/:id/plan', async (c) => {
+    const plan = await planDataSubjectRequest(db, scope(c), c.req.param('id'));
+    return plan ? c.json(plan) : c.json({ error: 'request not found' }, 404);
+  });
+
+  // Execute a data subject request for THIS segment (PRD 08 §10): export / suppress / erase through
+  // the Segment-scoped subject-store adapters. An export is persisted to file storage and offered at
+  // GET /dsr/:id/export; it is never auto-completed (see POST /dsr/:id/deliver).
+  router.post('/dsr/:id/execute', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    const bucket = (c.env as { UPLOADS?: R2Bucket }).UPLOADS;
+    // A PRIVATE key (`<tenant>/private/dsr/...`): `/api/assets/*`, the tenant upload reader and signing all refuse it.
+    const persistExport: PersistExport = (fileName, json) =>
+      storePrivateObject(bucket, tenantId, 'dsr', fileName, json, 'application/json');
+    const out = await executeDataSubjectRequest(c.env as Env, db, { tenantId, segmentId }, c.req.param('id'), actor, { persistExport });
+    if (!out.ok) return c.json({ error: out.error }, out.status);
+    // The storage key stays server-side: the client gets the download URL, nothing else.
+    return c.json({ ok: true, result: toPublicDsrResult(out.result, c.req.param('id')) });
+  });
+
+  // A manager records that the subject's identity was verified - the only way `verifiedAt` is set.
+  router.post('/dsr/:id/verify-identity', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    const out = await verifyDsrIdentity(c.env as Env, db, { tenantId, segmentId }, c.req.param('id'), actor);
+    if (!out.ok) return c.json({ error: out.error }, out.status);
+    return c.json(out);
+  });
+
+  // Download the persisted export - MANAGER only (it is the subject's personal data), tenant-checked, and
+  // only for a request of THIS segment. The object lives under a private key prefix `/api/assets` refuses.
+  router.get('/dsr/:id/export', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const key = await dsrExportKey(db, { tenantId, segmentId }, c.req.param('id'));
+    if (!key) return c.json({ error: 'no export has been prepared for this request' }, 404);
+    const res = await readPrivateObject((c.env as { UPLOADS?: R2Bucket }).UPLOADS, key, tenantId);
+    if (res === 'unconfigured') return c.json({ error: 'File storage not configured' }, 503);
+    if (res === 'not-found') return c.json({ error: 'Not found' }, 404);
+    const headers = new Headers(res.headers);
+    headers.set('Content-Disposition', `attachment; filename="dsr-${c.req.param('id')}.json"`);
+    headers.set('Cache-Control', 'private, no-store'); // personal data: never cache
+    return new Response(res.body, { headers });
+  });
+
+  // A manager confirms the subject received what was prepared: the only way an export completes.
+  router.post('/dsr/:id/deliver', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    const out = await markDsrDelivered(c.env as Env, db, { tenantId, segmentId }, c.req.param('id'), actor, (c.env as { UPLOADS?: R2Bucket }).UPLOADS);
+    if (!out.ok) return c.json({ error: out.error }, out.status);
+    return c.json({ ok: true, result: toPublicDsrResult(out.result, c.req.param('id')) });
+  });
 
   // Attach evidence to a control.
   router.post('/soc2/controls/:id/evidence', requireRole(TenantRole.MANAGER), async (c) => {
@@ -210,27 +249,16 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
     if (!body.title?.trim() || !body.evidenceType?.trim()) {
       return c.json({ error: 'title and evidenceType are required' }, 400);
     }
-    // Ensure the control belongs to this segment before attaching.
-    const [ctl] = await db
-      .select({ id: socControls.id })
-      .from(socControls)
-      .where(and(eq(socControls.id, controlId), eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)))
-      .limit(1);
-    if (!ctl) return c.json({ error: 'control not found' }, 404);
-
-    const [evidence] = await db
-      .insert(socEvidence)
-      .values({
-        tenantId,
-        segmentId,
-        controlId,
-        title: body.title.trim(),
-        evidenceType: body.evidenceType.trim(),
-        url: body.url ?? null,
-        note: body.note ?? null,
-      })
-      .returning();
-    return c.json(evidence, 201);
+    const attached = await attachManualEvidence(db, { tenantId, segmentId }, controlId, {
+      title: body.title, evidenceType: body.evidenceType, url: body.url, note: body.note,
+    });
+    if (!attached.ok) {
+      return attached.reason === 'reserved_type'
+        ? c.json({ error: `evidenceType '${body.evidenceType.trim()}' is reserved for evidence the platform records itself` }, 403)
+        : c.json({ error: 'control not found' }, 404);
+    }
+    await auditGovernanceMutation(c, db, 'soc2-evidence', attached.evidence.id, 'evidence', null, attached.evidence);
+    return c.json(attached.evidence, 201);
   });
 
   // -------------------------------------------------------------------------
@@ -253,7 +281,8 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
     const gates = await resolvePolicyGates(c.env, db, {
       tenantId, projectId, agentRef: c.req.query('agent') ?? null,
     });
-    return c.json({ gates });
+    // A client that declared `?gates=2` reads compact `sideEffect` gates; an older one gets them spelled out per tool.
+    return c.json({ gates: gatesForWireLevel(gates, c.req.query('gates')) });
   });
 
   router.post('/policy-packs', requireRole(TenantRole.MANAGER), async (c) => {
@@ -302,7 +331,7 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   // tracker so they win over its `/:id`.
   router.route('/vuln-scans', createVulnerabilityFindingRoutes(db));
   // Every other tracker is the same segment-scoped CRUD — one factory, mounted N times.
-  mountTrackers(router, db, TRACKERS);
+  mountTrackers(router, db, TRACKERS.map((t) => ({ ...t, opts: { ...t.opts, auditEntity: t.path.slice(1) } })));
   router.route('/stakeholder-alignment', createStakeholderAlignmentRoutes(db));
 
   return router;

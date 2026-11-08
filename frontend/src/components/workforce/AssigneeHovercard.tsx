@@ -1,5 +1,6 @@
 import { AnchoredPopover, Icon } from '@/components/ui';
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import { useAssigneeProfile } from './AssigneeProfilesContext';
@@ -100,6 +101,15 @@ export default function AssigneeHovercard({
           {t('subtitle', { name: profile.name })}
         </div>
         <PersonalitySummary profile={profile.psychometric} />
+        {selectValue?.startsWith('u:') && (
+          <Link
+            href={`/people/${encodeURIComponent(selectValue.slice(2))}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'inline-block', marginTop: 8, fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none' }}
+          >
+            {t('viewProfile')}
+          </Link>
+        )}
       </AnchoredPopover>
     </>
   );

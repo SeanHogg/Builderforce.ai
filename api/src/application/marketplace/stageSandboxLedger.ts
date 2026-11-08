@@ -16,7 +16,7 @@ import { stageSandboxRuns } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveStageSandboxRunsMonthly } from '../../domain/tenant/PlanLimits';
-import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { enforceTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 import { dailyTenantCounts, sumDailyCounts, type DailyCount } from '../shared/dailyTenantCounts';
 
 /** `capped` rows never reached a container and cost nothing — excluded so a
@@ -51,7 +51,7 @@ export type StageSandboxCapResult = MonthlyTenantCapResult;
  * this framework — a metering hiccup must not block a legitimate Stage press.
  */
 export async function enforceStageSandboxCap(db: Db, tenantId: number, env?: Env): Promise<StageSandboxCapResult> {
-  return enforceMonthlyTenantCap({
+  return enforceTenantCap({
     db,
     tenantId,
     env,

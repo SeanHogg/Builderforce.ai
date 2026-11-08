@@ -22,6 +22,7 @@ import { roomSpotKey } from '@/lib/canvas/roomSpots';
 import { useRoomSpot } from '@/lib/canvas/useRoomSpot';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
+import { CanvasRoomMedia } from './room/CanvasRoomMedia';
 import { RoomDesignerRail } from './room/RoomDesignerRail';
 import { RoomFallback } from './room/RoomFallback';
 import { RoomLevelStage } from './room/RoomLevelStage';
@@ -370,6 +371,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
         ? <RoomDesignerRail room={room} designer={designer} palette={palette} onPublishRoom={onPublishRoom} />
         : <RoomRoster seats={seats} palette={palette} stations={stations} onOpenStation={setStationKey} />)}
       <RoomStationPanel instance={openStation} onClose={closeStation} />
+      <CanvasRoomMedia />
     </section>
   );
 }

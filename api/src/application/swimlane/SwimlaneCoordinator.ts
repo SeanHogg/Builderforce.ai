@@ -193,6 +193,9 @@ export class SwimlaneCoordinator {
   ): Promise<TicketRunLite | null> {
     const lane = await this.laneByKey(boardId, tenantId, laneKey);
     if (!lane) return null;
+    // Re-checked against THIS fresh lane read, not the router's cached one: a lane that was re-gated to 'human' since the
+    // routing facts were cached must never auto-start a stage (a person approves it or uses Run now).
+    if (lane.gate === 'human') return null;
 
     const existing = (await this.store.findActiveTicketRunByTask?.(boardId, taskId, tenantId)) ?? null;
     if (!existing) return this.createRunAtLane(boardId, taskId, tenantId, lane);

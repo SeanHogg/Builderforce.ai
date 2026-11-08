@@ -12,12 +12,13 @@
  * into a tensor of the target shape. The mode-specific logic is *only* where
  * the projection result is applied. No duplicated state→tensor pipelines.
  *
- * State advancement uses the builderforce-memory-engine peerDep — we never
- * reimplement the SSM scan kernel here.
+ * State advancement runs through `selective-scan.ts` (WGSL kernel on WebGPU,
+ * CPU reference otherwise).
  */
 
 import type { CoherenceMode, MambaStateSnapshot } from '../types';
 import { slerp } from './frame-interpolator';
+import { DEFAULT_SCAN_DECAY, DEFAULT_SCAN_GAIN, selectiveScanStep } from './selective-scan';
 
 export interface CoherenceContext {
   mode: CoherenceMode;
@@ -357,17 +358,17 @@ export function applyToLatent(args: ApplyToLatentArgs): Float32Array {
  * pooled summary of the just-generated frame's latent. The host can swap the
  * input strategy without touching the projection logic above.
  *
- * NOTE: this initial implementation runs the recurrence on the CPU as a
- * Float32 loop for clarity. The builderforce-memory-engine peerDep will replace
- * this body with the WGSL selective-scan kernel once the scan call shape stabilises
- * (tracked in the Consolidated Gap Register).
+ * The recurrence h' = decay * h + gain * pooled runs through
+ * `selectiveScanStep`: a WGSL compute kernel when `opts.device` (a WebGPU
+ * device) is supplied, the identical CPU loop otherwise or on any GPU failure.
+ * `decay` defaults to 0.92 (the historical value).
  */
-export function advanceState(
+export async function advanceState(
   state: MambaStateSnapshot,
-  input: Float32Array
-): MambaStateSnapshot {
-  const next = new Float32Array(state.data.length);
-  const decay = 0.92;
+  input: Float32Array,
+  opts: { device?: GPUDevice | null; decay?: number } = {},
+): Promise<MambaStateSnapshot> {
+  const decay = opts.decay ?? DEFAULT_SCAN_DECAY;
 
   // Pool the input down to `channels` values via averaging.
   const pooled = new Float32Array(state.channels);
@@ -383,12 +384,17 @@ export function advanceState(
   }
 
   // h_{t+1} = decay * h_t + B * pooled_input
-  for (let c = 0; c < state.channels; c++) {
-    for (let k = 0; k < state.order; k++) {
-      const idx = c * state.order + k;
-      next[idx] = decay * (state.data[idx] ?? 0) + 0.1 * pooled[c];
-    }
-  }
+  const next = await selectiveScanStep(
+    {
+      state: state.data,
+      pooled,
+      channels: state.channels,
+      order: state.order,
+      decay,
+      gain: DEFAULT_SCAN_GAIN,
+    },
+    opts.device,
+  );
 
   return {
     data: Array.from(next),

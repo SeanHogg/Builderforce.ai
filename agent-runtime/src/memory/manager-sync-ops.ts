@@ -38,7 +38,7 @@ import {
   sessionPathForFile,
 } from "./session-files.js";
 import { loadSqliteVecExtension } from "./sqlite-vec.js";
-import { requireNodeSqlite } from "./sqlite.js";
+import { openLocalSqlite } from "@builderforce/agent-tools/node-local-sqlite.js";
 import type { MemorySource, MemorySyncProgressUpdate } from "./types.js";
 
 type MemoryIndexMeta = {
@@ -249,8 +249,11 @@ export abstract class MemoryManagerSyncOps {
   private openDatabaseAtPath(dbPath: string): DatabaseSync {
     const dir = path.dirname(dbPath);
     ensureDir(dir);
-    const { DatabaseSync } = requireNodeSqlite();
-    return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });
+    // The memory index keeps its previous behaviour exactly: no quick_check, no WAL request, no busy timeout (SQLite's default 0).
+    return openLocalSqlite<DatabaseSync>(dbPath, {
+      allowExtension: this.settings.store.vector.enabled,
+      busyTimeoutMs: 0,
+    }).db;
   }
 
   private seedEmbeddingCache(sourceDb: DatabaseSync): void {

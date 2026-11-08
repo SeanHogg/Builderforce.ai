@@ -29,7 +29,7 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { swimlaneRequirements, swimlanes } from '../../infrastructure/database/schema';
-import { forLanes, laneAgentAssignments, laneAssignmentValues } from './laneAgentAssignments';
+import { forLanes, insertLaneAssignment, laneAgentAssignments } from './laneAgentAssignments';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -125,7 +125,7 @@ export async function seedLaneStaffingFromWorkforce(
         continue;
       }
 
-      await db.insert(laneAgentAssignments).values(laneAssignmentValues({
+      await insertLaneAssignment(db, env, {
         tenantId: args.tenantId,
         segmentId: lane.segmentId ?? null,
         swimlaneId: lane.id,
@@ -134,7 +134,7 @@ export async function seedLaneStaffingFromWorkforce(
         name: agent.name,
         role: roleKey,
         now,
-      }));
+      });
       result.staffed += 1;
     }
 

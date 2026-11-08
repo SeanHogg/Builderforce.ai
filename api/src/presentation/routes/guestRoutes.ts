@@ -370,6 +370,8 @@ export function createGuestRoutes(
         name: advertisedName(tool),
         description: impl?.description ?? '',
         parameters: impl?.parameters ?? { type: 'object', properties: {} },
+        // The server's own per-tool flag; absent ⇒ the client classifies by name (fail closed).
+        ...(typeof impl?.mutates === 'boolean' ? { mutates: impl.mutates } : {}),
       };
     }),
   }));

@@ -81,6 +81,7 @@ export function canvasDataSourceActions(ctx: CanvasActionContext): BrainAction[]
         name: { type: 'string', description: 'Name for the corpus. Defaults to the dataset title.' },
       },
     },
+    mutates: true,
     run: async (raw: unknown) => {
       const args = raw as { datasetId?: string; instructionColumn?: string; outputColumn?: string; inputColumn?: string; projectId?: number; name?: string };
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
@@ -151,6 +152,7 @@ export function canvasDataSourceActions(ctx: CanvasActionContext): BrainAction[]
     name: 'canvas_list_data_sources',
     description: 'List the live databases and warehouses this workspace has connected — Postgres/Neon, ClickHouse, BigQuery and others — and what each can do here. Call this before canvas_add_data_source or canvas_query_data_source when the user has not named one.',
     parameters: { type: 'object', additionalProperties: false, properties: {} },
+    mutates: false,
     run: async () => {
       const { sources } = await dataSourceApi.list().catch(() => ({ sources: [] as DataSourceSummary[] }));
       if (!sources.length) {

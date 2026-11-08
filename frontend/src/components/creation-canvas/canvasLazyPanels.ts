@@ -37,6 +37,13 @@ export const CanvasSceneGeneratorPanel = dynamic(
   { ssr: false },
 );
 
+// The `model3d` surface — a hand-built 3D model at full size. Real WebGL, so it is split
+// for the same reason the world is: a board that never opens a model must not pay for three.js.
+export const CanvasModel3dSurface = dynamic(
+  () => import('./CanvasModel3dSurface').then((module) => module.CanvasModel3dSurface),
+  { ssr: false },
+);
+
 export const VoiceConfigPanel = dynamic(
   () => import('@/components/builder/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
   { ssr: false },

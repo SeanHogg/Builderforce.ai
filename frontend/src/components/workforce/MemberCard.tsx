@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { TenantMember, PendingInvitation } from '@/lib/auth/members';
 import { Select } from '@/components/Select';
@@ -132,6 +133,12 @@ export function MemberCard({
           <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>
             {t('activeSessions', { count: member.activeSessions })}
           </div>
+          <Link
+            href={`/people/${encodeURIComponent(member.id)}`}
+            style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none' }}
+          >
+            {t('viewProfile')}
+          </Link>
         </div>
       }
       footer={

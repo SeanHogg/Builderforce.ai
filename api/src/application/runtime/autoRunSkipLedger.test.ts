@@ -3,6 +3,7 @@ import {
   autoRunSkipState, claimAutoRunSkipState, clearAutoRunSkip, recordAutoRunSkip,
   SKIP_REAFFIRM_TTL_SECONDS,
 } from './autoRunSkipLedger';
+import type { AutoRunReason } from '../swimlane/evaluateAutoRun';
 
 vi.mock('./cloudAgentEngine', () => ({
   recordCloudToolEvent: vi.fn(async () => undefined),
@@ -35,7 +36,7 @@ function fakeKv() {
 }
 
 const db = {} as never;
-const skip = (reason: string, lane = 'ready') => ({
+const skip = (reason: AutoRunReason, lane = 'ready') => ({
   tenantId: 1, taskId: 42, cloudAgentRef: 'agent-1', lane, reason,
   detail: { taskId: 42, reason }, result: `Auto-run skipped (${reason}).`,
 });

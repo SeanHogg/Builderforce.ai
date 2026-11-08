@@ -25,7 +25,7 @@ const MIN_COOLDOWN_SECONDS = 60;
 const MAX_COOLDOWN_SECONDS = 6 * 60 * 60;
 
 /** Statuses that mean "this credential is refused or throttled right now". */
-const THROTTLE_STATUSES: ReadonlySet<number> = new Set([403, 429]);
+const THROTTLE_STATUSES: ReadonlySet<number> = new Set([401, 403, 429]);
 
 const clampCooldown = (s: number): number => clamp(Math.ceil(s), MIN_COOLDOWN_SECONDS, MAX_COOLDOWN_SECONDS);
 

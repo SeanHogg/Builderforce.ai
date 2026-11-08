@@ -47,7 +47,7 @@ import { UPDATE_TASK_STATE_SCHEMA, UPDATE_TASK_STATE_TOOL, applyTaskStateUpdate 
 
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
 import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
-import { gateCall, isToolWithheld } from "./gates.js";
+import { declaredBy, gateCall, isToolWithheld } from "./gates.js";
 
 /** The tool that records a reviewer's verdict — required of a run whose policy owes a sign-off. */
 const SIGNOFF_TOOL = "builtin_kanban_signoff";
@@ -56,7 +56,8 @@ const SIGNOFF_TOOL = "builtin_kanban_signoff";
 function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): ToolSchema[] {
     const { policy, task } = ctx;
     // A tool an unscoped `block` gate withholds is never advertised (governance, every surface).
-    const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
+    // Offered schemas carry no mutates flag; the surface may declare one per name (`platform.declared`), else a tool outside the catalog stays fail-closed (mutate).
+    const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
 
     // The addressed-reply scope advertises only the chat-scoped tools plus whatever the
     // surface already gated to them; the autonomous scopes advertise the one catalog.
@@ -81,7 +82,7 @@ function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): Tool
     // a gate-blocked tool is never advertised, pinned or not. (A closed surface that binds no `approvalGates`, such as the
     // Brain's canvas, has nothing to withhold; the channel runner binds the tenant's.)
     const own = selectPlatformCatalog(ctx, pinned);
-    if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
+    if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
 
     // The ONE catalog strategy: role core set + tool_search + find_symbol, with the
     // pinned, required and prompt-named tools kept. The lexical selector then trims an

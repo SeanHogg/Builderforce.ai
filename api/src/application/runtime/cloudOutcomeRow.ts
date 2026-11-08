@@ -20,8 +20,8 @@ import type { RunTally } from '@builderforce/agent-run';
 import { cloudRunId } from '../../domain/execution/cloudRunId';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { insertToolAudit } from '../audit/toolAuditWrite';
 
 /** The status the execution landed with — what the board and the timeline show. */
 export type LandedStatus = 'finished' | 'failed' | 'cancelled';
@@ -72,10 +72,7 @@ async function insertOutcomeRows(db: Db, executions: ReadonlyArray<TerminalExecu
     sessionKey: `exec:${Number(e.id)}`, category: 'run', ts,
   });
   try {
-    const timeline = runTelemetryDatabase(db);
-    const recorded = await timeline
-      .insert(toolAuditEvents)
-      .values(landedRows.map(({ e, landed }) => {
+    const recorded = await insertToolAudit(db, landedRows.map(({ e, landed }) => {
         const id = Number(e.id);
         return {
           ...base(e), toolName: OUTCOME_ROW_TOOL,
@@ -88,7 +85,7 @@ async function insertOutcomeRows(db: Db, executions: ReadonlyArray<TerminalExecu
     const won = new Set(recorded.map((r) => r.executionId));
     const finished = landedRows.filter(({ e }) => won.has(Number(e.id)));
     if (finished.length > 0) {
-      await timeline.insert(toolAuditEvents).values(finished.map(({ e, landed }) => ({
+      await insertToolAudit(db, finished.map(({ e, landed }) => ({
         ...base(e), toolName: 'run.finished', args: JSON.stringify({ kind: 'run.finished', outcome: landed }), result: 'run.finished',
       })));
     }

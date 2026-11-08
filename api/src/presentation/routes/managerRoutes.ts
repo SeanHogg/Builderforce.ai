@@ -58,6 +58,7 @@ import { loadProjectInTenant } from '../../application/project/projectOwnership'
 import { limitParam } from './queryParams';
 import { parseBody, z } from './requestBody';
 import { composeDispatcherLabel } from '../../application/runtime/dispatcherLabel';
+import { publishProjectStaffingChanged } from '../../application/swimlane/boardChangePublisher';
 
 // ── Request bodies ───────────────────────────────────────────────────────────
 // Tri-state fields (0363/0365/0386): true/false = an explicit decision, null =
@@ -103,6 +104,8 @@ const ConfigBody = z.object({
   // inherit from, so a project either requires the manager role for coordination or it
   // does not — exactly like `requireSignoffToComplete` above.
   coordinationRequiresManager: z.boolean().optional(),
+  // PRD 23 canary mode (1312) — NOT NULL, project-only, so a plain boolean.
+  canary: z.boolean().optional(),
 });
 
 const ClosePrsBody = z.object({
@@ -601,6 +604,7 @@ export function createManagerRoutes(
       // 1177 — plain `!!` like the line above, not triStateBool: NOT NULL column, no tier
       // below it, so there is no "inherit" state for a null to mean.
       ...(body.coordinationRequiresManager !== undefined ? { coordinationRequiresManager: !!body.coordinationRequiresManager } : {}),
+      ...(body.canary !== undefined ? { canary: !!body.canary } : {}),
       // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which
       // `!!null === false` would silently turn into "this project refuses merge authority".
       ...(triStateBool(body.allowAutoMerge) !== undefined ? { allowAutoMerge: triStateBool(body.allowAutoMerge) } : {}),
@@ -667,6 +671,7 @@ export function createManagerRoutes(
     // any orphaned prior pass first, so a new pass never starts while older manager
     // cards still appear open.
     const runTaskId = await createManagerRunTask(db, { tenantId, projectId, policy });
+    if (runTaskId != null) await publishProjectStaffingChanged(c.env as Env, tenantId, projectId); // the card's owner chip
     c.executionCtx.waitUntil((async () => {
       let summary: Awaited<ReturnType<typeof runManagerForProject>> | null = null;
       let ok = false;
@@ -694,7 +699,7 @@ export function createManagerRoutes(
           // would surface as an undefined count on the run card.
           summary: summary ?? {
             projectId, skipped: !ok, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
-            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
+            prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
             stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
             censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
             truncated: [],

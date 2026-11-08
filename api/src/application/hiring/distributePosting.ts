@@ -33,21 +33,32 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { connectorConnections, jobPostings } from '../../infrastructure/database/schema';
+import { connectorConnections } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { fillTemplate, type ConnectorAction, type ConnectorManifest } from '../connectors/connectorManifest';
+import type { ConnectorAction, ConnectorManifest } from '../connectors/connectorManifest';
 import { listPublishedConnectors } from '../connectors/connectorRegistry';
-import { mapConnectorResponse, responseHeaderNames } from '../connectors/connectorResponseMapping';
-import { executeConnectorAction, loadConnection } from '../connectors/connectorRuntime';
+import { firstOf, mapConnectorResponse, responseHeaderNames } from '../connectors/connectorResponseMapping';
+import { loadConnection } from '../connectors/connectorRuntime';
 import { AtsError } from './atsError';
+import { PUBLISH_POSTING_ACTION } from './postingActionKeys';
+import {
+  DEFAULT_DISTRIBUTE_DEPS,
+  connectionBackedInput,
+  derivedUrl,
+  isUniqueViolation,
+  missingConnectionParams,
+  publicUrl,
+  requirePosting,
+  type DistributablePosting,
+  type DistributeDeps,
+} from './postingDistributionSupport';
 import {
   readPostingDistributions,
   recordPostingDistribution,
   type PostingDistributionView,
 } from './postingDistributionStore';
 
-/** The action every hiring board publishes with — one key across the category. */
-export const PUBLISH_POSTING_ACTION = 'create_posting';
+export { PUBLISH_POSTING_ACTION };
 
 /** Boards per press. A requisition goes to a handful of boards; more than this is a
  *  syndication job, and the feed connector is the tool for it. */
@@ -113,18 +124,6 @@ export interface DistributePostingResult {
   distributions: PostingDistributionView[];
 }
 
-/** The seam a test replaces; production is the one connector executor. */
-export interface DistributeDeps {
-  execute: typeof executeConnectorAction;
-  /**
-   * Decrypt one connection. Injected so a test can supply the organisation URN
-   * (and any other connection-backed param) without standing up encryption.
-   * Production uses {@link loadConnection}.
-   */
-  loadConnection?: typeof loadConnection;
-}
-
-const DEFAULT_DEPS: DistributeDeps = { execute: executeConnectorAction, loadConnection };
 
 /**
  * Every board this workspace can publish to, oldest connection per board.
@@ -190,33 +189,6 @@ export async function readPostingDistribution(
   return { distributions: byPosting.get(postingId) ?? [], boards };
 }
 
-/** The posting facts a board listing is built from. */
-export type DistributablePosting = {
-  id: string;
-  title: string;
-  description: string | null;
-  requirements: string | null;
-  status: string;
-  experienceLevel: string | null;
-};
-
-async function requirePosting(db: Db, tenantId: number, postingId: string): Promise<DistributablePosting> {
-  const [row] = await db
-    .select({
-      id: jobPostings.id,
-      title: jobPostings.title,
-      description: jobPostings.description,
-      requirements: jobPostings.requirements,
-      status: jobPostings.status,
-      experienceLevel: jobPostings.experienceLevel,
-    })
-    .from(jobPostings)
-    .where(scopedToTenant(jobPostings, tenantId, eq(jobPostings.id, postingId)))
-    .limit(1);
-  if (!row) throw new AtsError('No posting in this workspace has that id', 404);
-  return row;
-}
-
 const text = (value: string | null | undefined): string | undefined => {
   const trimmed = typeof value === 'string' ? value.trim() : '';
   return trimmed || undefined;
@@ -254,44 +226,6 @@ export function postingInputFor(posting: DistributablePosting, listing: Distribu
   return input;
 }
 
-/**
- * Action params that a posting does not own — they live on the connection.
- *
- * A default of `{{auth.x}}` is the declaration: the value is a connection fact,
- * not a requisition fact. LinkedIn's organisation URN is the one today; a board
- * that needs a similar tenant-level id declares the same default and is filled
- * the same way, so this file still names no vendor.
- *
- * Empty after substitution is omitted: the caller then sees the param as missing
- * and refuses to publish, rather than sending `company_id: ''` upstream.
- */
-export function connectionBackedInput(
-  action: ConnectorAction,
-  auth: Record<string, string>,
-): Record<string, unknown> {
-  const extra: Record<string, unknown> = {};
-  for (const [name, param] of Object.entries(action.params)) {
-    if (typeof param.default !== 'string' || !/\{\{\s*auth\./.test(param.default)) continue;
-    const filled = fillTemplate(param.default, auth).trim();
-    if (filled) extra[name] = filled;
-  }
-  return extra;
-}
-
-/** Connection-backed params that are still empty after filling from auth. */
-export function missingConnectionParams(
-  action: ConnectorAction,
-  body: Record<string, unknown>,
-): string[] {
-  const missing: string[] = [];
-  for (const [name, param] of Object.entries(action.params)) {
-    if (typeof param.default !== 'string' || !/\{\{\s*auth\./.test(param.default)) continue;
-    const value = body[name];
-    if (typeof value !== 'string' || !value.trim()) missing.push(name);
-  }
-  return missing;
-}
-
 const clip = (message: string): string => message.slice(0, 600);
 
 /**
@@ -305,7 +239,7 @@ export async function distributePosting(
   db: Db,
   env: Env,
   input: DistributePostingInput,
-  deps: DistributeDeps = DEFAULT_DEPS,
+  deps: DistributeDeps = DEFAULT_DISTRIBUTE_DEPS,
 ): Promise<DistributePostingResult> {
   const keys = [...new Set(input.connectorKeys.map((key) => key.trim()).filter(Boolean))];
   if (!keys.length) throw new AtsError('Choose at least one job board to distribute to', 400);
@@ -354,16 +288,28 @@ export async function distributePosting(
     const verdict = await publishToBoard(db, env, deps, {
       tenantId: input.tenantId, connectorKey, connectionId: target.board.connectionId, action: target.action, body,
     });
-    await recordPostingDistribution(db, {
+    const write = {
       tenantId: input.tenantId,
       postingId: input.postingId,
       connectorKey,
       connectionId: target.board.connectionId,
-      status: verdict.externalId ? 'posted' : 'failed',
-      externalId: verdict.externalId,
-      url: verdict.url,
-      lastError: verdict.error,
-    });
+    };
+    try {
+      await recordPostingDistribution(db, {
+        ...write,
+        status: verdict.externalId ? 'posted' : 'failed',
+        externalId: verdict.externalId,
+        url: verdict.url,
+        lastError: verdict.error,
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error) || !verdict.externalId) throw error;
+      // The board answered with an id another posting already holds (1328: one board job
+      // belongs to one posting). Not recorded as a publication of THIS posting.
+      verdict.externalId = null;
+      verdict.error = 'The job board answered with a posting id that is already linked to another posting here, so this is not recorded as published.';
+      await recordPostingDistribution(db, { ...write, status: 'failed', externalId: null, url: null, lastError: verdict.error });
+    }
     outcomes.push({
       connectorKey,
       outcome: verdict.externalId ? 'posted' : 'failed',
@@ -448,23 +394,10 @@ async function publishToBoard(
       error: `The job board answered ${result.status} but its response carried no posting id, so this is not recorded as published. Check the board before retrying — if the posting is there, it was created without a reference this workspace can follow.`,
     };
   }
-  return { externalId: mapped.externalId.slice(0, 255), url: publicUrl(mapped.url), error: null };
+  const externalId = mapped.externalId.slice(0, 255);
+  // A url the board reported wins; otherwise the manifest's template builds one.
+  const postId = firstOf(result, args.action.response?.postId);
+  const url = publicUrl(mapped.url) ?? await derivedUrl(db, env, deps, args, externalId, postId);
+  return { externalId, url, error: null };
 }
 
-/**
- * A board-reported URL, kept only when it is an absolute http(s) address.
- *
- * The URL is rendered as a link on the canvas card and in the seat, and it came from a
- * third party's response body. Anything else — a relative path, a `javascript:` URL —
- * is dropped rather than repaired: the publication is still confirmed by its id, it
- * simply has no link, which is the honest reading of a board that gave none usable.
- */
-export function publicUrl(value: string | null): string | null {
-  if (!value || value.length > 1000) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}

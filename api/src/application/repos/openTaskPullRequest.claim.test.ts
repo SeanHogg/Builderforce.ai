@@ -15,7 +15,7 @@
  * github_pr_url IS NULL) and assert the single-winner / release behavior.
  */
 import { describe, expect, it } from 'vitest';
-import { claimTaskPrOpen, releaseTaskPrClaim } from './openTaskPullRequest';
+import { claimTaskPrOpen, releaseTaskPrClaim, prClaimStaleBefore, PR_CLAIM_STALE_MS } from './openTaskPullRequest';
 import type { Db } from '../../infrastructure/database/connection';
 
 /** The claim is tenant-scoped (0944); the fake db ignores predicates, so this is
@@ -82,6 +82,16 @@ describe('claimTaskPrOpen', () => {
   it('denies the claim when a PR URL already exists (PR already opened)', async () => {
     const { db } = makeFakeDb({ id: 9, prOpeningAt: null, githubPrUrl: 'https://x/pr/1' });
     expect(await claimTaskPrOpen(db, TENANT, 9)).toBe(false);
+  });
+});
+
+describe('a dead claim', () => {
+  it('regression: M1 - a claim older than the bound is stale (so the human Done-drag stops getting a 409 forever), a fresh one is not', () => {
+    const now = new Date('2026-11-08T12:00:00Z');
+    const cutoff = prClaimStaleBefore(now);
+    expect(now.getTime() - cutoff.getTime()).toBe(PR_CLAIM_STALE_MS);
+    expect(new Date(now.getTime() - PR_CLAIM_STALE_MS - 1) < cutoff).toBe(true); // older than the bound: retaken
+    expect(new Date(now.getTime() - 1_000) < cutoff).toBe(false); // seconds old: still held
   });
 });
 

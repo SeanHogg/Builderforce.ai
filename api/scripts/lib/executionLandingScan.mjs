@@ -1,8 +1,8 @@
 /**
  * Lexical scan for writes to `executions.status`, shared by `check-execution-landing.mjs` and its self-test.
  *
- * The status of an execution moves in exactly two places: `ExecutionRepository` (`land` for a terminal status, the guarded `update`
- * for a non-terminal one) and the reaper's own conditional batch UPDATE. Anything else is a second writer that can resurrect or
+ * The status of an execution moves in exactly one place: `ExecutionRepository` (`land` for a terminal status, the guarded `update`
+ * for a non-terminal one, `failWhere` for the cron reaper's set-based batch). Anything else is a second writer that can resurrect or
  * overwrite a run another writer already settled. The scan is VALUE-AGNOSTIC on purpose: `'paused'` written without a non-terminal
  * predicate clobbered a cancelled row just as surely as `'failed'` would, so it is the write to the column that is flagged, not the
  * literal assigned to it.

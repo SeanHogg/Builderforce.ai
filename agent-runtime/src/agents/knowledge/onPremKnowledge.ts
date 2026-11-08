@@ -19,9 +19,11 @@ import path from "node:path";
 import { basename, resolve } from "node:path";
 import { realpath, stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
+import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history.js";
+import { migrateLegacyKnowledge, nodeIngestManifest } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  claimSimilarity, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReviewDetail,
+  claimSimilarity, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail,
   reviewIndexPort, reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import {
@@ -150,6 +152,37 @@ export interface OnPremKnowledgeDeps {
   linked: { client: KnowledgeClient; projectId: number };
 }
 
+/** One connection per workspace folder (manifest keys carry their root id, so every root shares it), closed when the process exits. */
+const onPremManifests = new Map<string, ReturnType<typeof nodeIngestManifest>>();
+let closeManifestsAtExit = false;
+
+/** Closes every folder's manifest connection (shutdown; tests). */
+export function closeOnPremManifests(): void {
+  for (const manifest of onPremManifests.values()) manifest.close();
+  onPremManifests.clear();
+}
+
+/**
+ * The root's review manifest: a table in the workspace's knowledge SQLite file (G03), committed directly (on-prem keeps no local
+ * fact store). The folder's connection is shared by its roots; the root's old `<stem>.manifest.json` is imported once, and the
+ * first read waits for it.
+ */
+function onPremManifest(workspaceRoot: string, rootId: string, legacyRootId: string | undefined): IngestManifest {
+  let manifest = onPremManifests.get(workspaceRoot);
+  if (!manifest) {
+    onPremManifests.set(workspaceRoot, (manifest = nodeIngestManifest(workspaceRoot)));
+    if (!closeManifestsAtExit) {
+      closeManifestsAtExit = true;
+      process.once("exit", closeOnPremManifests);
+    }
+  }
+  void migrateLegacyKnowledge(migratingRootFiles(containerKnowledgeFiles(workspaceRoot), rootId, legacyRootId), manifest, rootId, {
+    ...(legacyRootId ? { legacyRootId } : {}),
+    log: (line) => logDebug(`[knowledge] ${line}`),
+  }).catch(loggedFallback("legacy manifest import", undefined));
+  return manifest;
+}
+
 /** The review ports for one folder of the workspace, walked from `rootPath` (its absolute path). */
 async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: string, title: string, rootPath: string): Promise<KnowledgeReviewPorts> {
   const { workspaceRoot, caps, linked } = deps;
@@ -162,10 +195,7 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
   // under its old, name-based id keeps its manifest: migrated on first read.
   const shared = {
     store: linked.client.store,
-    manifest: rootManifest(rootId, () => fileManifest(
-      migratingRootFiles(containerKnowledgeFiles(workspaceRoot), rootId, onPremLegacyRootId(workspaceRoot, rel)),
-      manifestFileName(rootId),
-    ), workspaceRoot),
+    manifest: rootManifest(rootId, () => onPremManifest(workspaceRoot, rootId, onPremLegacyRootId(workspaceRoot, rel)), workspaceRoot),
   };
   return {
     source: createFsDirectorySource({

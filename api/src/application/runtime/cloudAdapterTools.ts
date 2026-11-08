@@ -16,7 +16,7 @@ import type { Env } from '../../env';
 import { checkFootprintLimits, type RunLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool } from '../../domain/trust/contentTrust';
 import type { Db } from '../../infrastructure/database/connection';
-import { callBuiltinTool, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool } from '../llm/builtinMcpService';
+import { builtinToolMutates, callBuiltinTool, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool } from '../llm/builtinMcpService';
 import { inspectOutboundContent } from '../trust/trustService';
 import { ANALYZE_CODEBASE_TOOL, withSavedAnalysis } from './cloudAgent/auditAnalysis';
 import { CLOUD_RUN_TENANT_ROLE } from './cloudAgentTools';
@@ -43,6 +43,12 @@ export function platformTools(a: PlatformToolsArgs): ToolExtension {
   return {
     schemas: () => schemas,
     handles: (name) => resolveCloudAgentPlatformTool(name, chat) != null,
+    // The catalog's own `mutates` flag, so a read-only builtin is neither prompted nor blocked by a mutate-class gate.
+    declared: (name) => {
+      const tool = resolveCloudAgentPlatformTool(name, chat);
+      const mutates = tool ? builtinToolMutates(tool) : undefined;
+      return mutates === undefined ? undefined : { mutates };
+    },
     async dispatch(name, args) {
       const tool = resolveCloudAgentPlatformTool(name, chat);
       if (!tool) return { data: { ok: false, error: `unknown platform tool '${name}'` }, isError: true };

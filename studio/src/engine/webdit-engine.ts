@@ -20,10 +20,10 @@
  * machinery would be redundant (it already models coherence) and wrong
  * (its latent shape is [B,C,T,H,W], not per-frame [B,C,H,W]).
  *
- * `@webdit/runtime` is imported LAZILY (dynamic `import()`) everywhere in
- * this module so it — and its ORT/tensor-runner weight — are code-split:
- * a consumer that only ever selects lcm-diffusion models never pulls webdit
- * into their bundle (see the `external` entries in studio's tsup.config.ts).
+ * `@webdit/runtime` is reached LAZILY, through `./webdit-runtime` (a named
+ * re-export of just the browser symbols used), so it — and its ORT/tensor-runner
+ * weight — are code-split: a consumer that only ever selects lcm-diffusion
+ * models never loads webdit (see `noExternal` in studio's tsup.config.ts).
  */
 
 import type { WebDiTManifest } from '@webdit/shared';
@@ -35,9 +35,9 @@ import type {
   WebDitModelDescriptor,
   WeightSource,
 } from '../types';
-import { configureOnnxRuntime } from './onnx-runtime-config';
+import { configureOnnxRuntime, configureWebGpuOrt } from './onnx-runtime-config';
 import { getOrFetchWeight } from './weight-cache';
-import { muxFramesToMp4, type MuxFrame } from './webcodecs-muxer';
+import { muxFramesToVideo, type MuxFrame } from './webcodecs-muxer';
 import { reportProgress } from './progress';
 import { throwIfAborted } from './abort';
 
@@ -88,6 +88,8 @@ export async function loadWebDitBundle(
   const onProgress = opts.onProgress;
 
   configureOnnxRuntime();
+  // webdit's runners import `onnxruntime-web/webgpu` — a second ORT instance with its own env.
+  await configureWebGpuOrt();
 
   const fetchBundleFile = (relPath: string): Promise<ArrayBuffer> =>
     getOrFetchWeight({
@@ -121,7 +123,7 @@ export async function loadWebDitBundle(
   }
 
   reportProgress(`Building WebDiT bundle (${manifest.backend} backend)…`, onProgress);
-  const { loadBundleFromBuffers } = await import('@webdit/runtime');
+  const { loadBundleFromBuffers } = await import('./webdit-runtime');
   const bundle = await loadBundleFromBuffers(manifest, files);
   reportProgress(`WebDiT bundle ready — ${descriptor.id} (${manifest.architecture}).`, onProgress);
   return bundle;
@@ -209,7 +211,7 @@ export async function runWebDitDenoise(
   bundle: LoadedBundle,
   args: RunWebDitDenoiseArgs,
 ): Promise<WebDitDenoiseResult> {
-  const { runDenoiseLoop } = await import('@webdit/runtime');
+  const { runDenoiseLoop } = await import('./webdit-runtime');
   const onProgress = args.onProgress;
   const frameOffset = args.frameOffset ?? 0;
 
@@ -250,7 +252,7 @@ export interface GenerateWebDitClipArgs extends RunWebDitDenoiseArgs {
 
 /**
  * Generate one clip through a loaded webdit bundle and mux it to MP4 —
- * `runWebDitDenoise` + a single `muxFramesToMp4` call, reused unchanged so
+ * `runWebDitDenoise` + a single `muxFramesToVideo` call, reused unchanged so
  * webdit and lcm-diffusion clips are muxed through the exact same encoder
  * path. Used by `VideoEngine.generate()`'s webdit branch.
  */
@@ -262,7 +264,7 @@ export async function generateWebDitClip(
   const { frames, muxFrames, width, height } = await runWebDitDenoise(bundle, args);
 
   reportProgress(`Encoding ${frames.length} frames to MP4…`, args.onProgress);
-  const blob = await muxFramesToMp4(muxFrames, {
+  const { blob } = await muxFramesToVideo(muxFrames, {
     width,
     height,
     fps: args.fps,

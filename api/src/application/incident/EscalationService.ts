@@ -16,6 +16,7 @@ import { escalationPolicies, escalationLevels, prodIncidents, incidentEvents } f
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { OnCallService } from './OnCallService';
 import { notifyIncident, type IncidentSummary } from './incidentNotifier';
+import { resolveStakeholderVoice } from '../kanban/stakeholderVoice';
 import { signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -169,7 +170,9 @@ export class EscalationService {
             tenantId, incidentId: incident.id, boardTaskId: row.boardTaskId, incidentRef: agentRef,
           });
           await this.db.insert(incidentEvents).values({
-            tenantId, incidentId: incident.id, kind: 'notified', actorRef: 'system',
+            tenantId, incidentId: incident.id, kind: 'notified',
+            // The bridged ticket's Coordinator speaks for the system page (PRD 37 §5.5).
+            actorRef: (await resolveStakeholderVoice(this.db, { tenantId, taskId: row.boardTaskId, actingLabel: 'system' })).slice(0, 128),
             channel: 'agent', target: agentRef.slice(0, 255), level: level.level,
             message: dispatched ? 'Dispatched on-call agent to triage' : 'On-call agent already engaged',
           });

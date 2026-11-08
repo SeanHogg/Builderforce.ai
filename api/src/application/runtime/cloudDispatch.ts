@@ -386,6 +386,39 @@ export function parseFollowUp(payload: string | undefined): FollowUpContext | nu
 }
 
 /**
+ * A client-supplied run payload without `policyGates`. Governance gates are resolved server-side at `submit`; a gate a client
+ * writes into the body would otherwise ride under tenant ids, so the routes drop it here (internal callers, such as a sub-agent
+ * child inheriting its parent's gates, do not pass through this and are merged by `RuntimeService.withPolicyGates`).
+ */
+export function stripClientPolicyGates(payload: string | undefined): string | undefined {
+  if (!payload) return payload;
+  let obj: unknown;
+  try { obj = JSON.parse(payload); } catch { return payload; }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) || !('policyGates' in obj)) return payload;
+  const { policyGates: _dropped, ...rest } = obj as Record<string, unknown>;
+  return JSON.stringify(rest);
+}
+
+/** Keys only the dispatch/admission path may write: where a run landed, and its admission stamp. */
+const SERVER_STAMPED_KEYS = ['executor', 'cloud_admitted_seq', 'cloudAdmittedSeq'] as const;
+
+/**
+ * A run payload without the keys only the server stamps (`executor`, an admission stamp). A
+ * client- or prior-run-supplied value would otherwise ride into a new run claiming a landing
+ * it never had; dispatch re-stamps the real one.
+ */
+export function stripAdmissionStamps(payload: string | undefined): string | undefined {
+  if (!payload) return payload;
+  let obj: unknown;
+  try { obj = JSON.parse(payload); } catch { return payload; }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return payload;
+  const record = obj as Record<string, unknown>;
+  if (!SERVER_STAMPED_KEYS.some((key) => key in record)) return payload;
+  for (const key of SERVER_STAMPED_KEYS) delete record[key];
+  return JSON.stringify(record);
+}
+
+/**
  * Build the payload for a follow-up run started from a terminal run's "Send": keep
  * the prior run's agent/model/repo pin so the re-run executes AS the same agent,
  * drop any stale one-shot blocks (a prior remediation/follow-up), and attach the
@@ -397,6 +430,8 @@ export function buildFollowUpPayload(priorPayload: string | null | undefined, fo
     try { obj = JSON.parse(priorPayload) as Record<string, unknown>; } catch { obj = {}; }
   }
   delete obj.remediation; // a re-run is not the prior run's auto-fix attempt
+  delete obj.policyGates; // the prior run's snapshot of policy: `submit` re-resolves the CURRENT tenant gates for the new run
+  for (const key of SERVER_STAMPED_KEYS) delete obj[key]; // where the PRIOR run landed; dispatch stamps this run's own
   obj.followUp = { directive: followUp.directive, priorExecutionId: followUp.priorExecutionId };
   return JSON.stringify(obj);
 }

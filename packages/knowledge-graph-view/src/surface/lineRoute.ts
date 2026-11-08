@@ -8,6 +8,7 @@
  */
 
 import type { KEdge } from '@seanhogg/builderforce-memory/knowledge';
+import { weakMemo } from '../memo';
 import { cmp } from '../order';
 import { layerRank, type Provenance } from './layers';
 import { stationOfRef, type Station, type StationModel } from './stations';
@@ -52,7 +53,12 @@ function majorityVerdict(edge: Edge): Verdict {
     return (Object.keys(VERDICT_RANK) as Verdict[]).reduce((best, v) => (edge.tally[v] > edge.tally[best] || (edge.tally[v] === edge.tally[best] && VERDICT_RANK[v] < VERDICT_RANK[best]) ? v : best), 'allowed' as Verdict);
 }
 
-export function stationEdges(edges: readonly KEdge[], model: StationModel): Map<string, Map<string, Edge>> {
+/** The station-to-station references of `edges`, aggregated ONCE per (edges array, station map): a rebuilt LinesModel over the same graph reuses it. Read-only. */
+export const stationEdges = (edges: readonly KEdge[], model: StationModel): Map<string, Map<string, Edge>> => aggregated({ edges, model });
+
+const aggregated = weakMemo(({ edges, model }: { edges: readonly KEdge[]; model: StationModel }) => aggregate(edges, model), (i) => i.edges, (i) => i.model.stationOf);
+
+function aggregate(edges: readonly KEdge[], model: StationModel): Map<string, Map<string, Edge>> {
     const out = new Map<string, Map<string, Edge>>();
     for (const e of edges) {
         if (e.kind !== 'references') continue;

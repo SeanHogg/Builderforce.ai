@@ -27,6 +27,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ambientEnv, bumpVersion, versionToken } from '../../infrastructure/cache/versionToken';
 import { AssignmentScope as ArtifactScope } from '../../domain/shared/types';
 import type { Env } from '../../env';
+import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   agentAssignmentsVersionKey,
@@ -87,6 +88,15 @@ export class AgentAssignmentService {
 
   private bump(tenantId: number): Promise<void> {
     return bumpAgentAssignmentsVersion(this.cacheEnv, tenantId);
+  }
+
+  /** Publish the live-room change event for each project a write touched, so the board's
+   *  agent chips refetch. Every write path below ends here — one seam, not per caller. */
+  private async publishChanged(tenantId: number, projectIds: ReadonlyArray<number | null>): Promise<void> {
+    const env = this.cacheEnv;
+    if (!env) return;
+    const unique = [...new Set(projectIds.filter((p): p is number => p != null))];
+    await Promise.all(unique.map((p) => publishProjectStaffingChanged(env, tenantId, p)));
   }
 
   // ── Reads ───────────────────────────────────────────────────────────────────
@@ -205,6 +215,7 @@ export class AgentAssignmentService {
     }
     if (!row) throw new Error(`agent assignment upsert returned no row (${input.scope}:${scopeId ?? '_'})`);
     await this.bump(tenantId);
+    await this.publishChanged(tenantId, [row.projectId]);
     return toAssignment(row);
   }
 
@@ -221,6 +232,7 @@ export class AgentAssignmentService {
     // Run governance folds the assignment token into its cache key, so this bump is what
     // makes the new rules bind the very next run.
     await this.bump(tenantId);
+    await this.publishChanged(tenantId, [row.projectId]);
     return toAssignment(row);
   }
 
@@ -295,5 +307,6 @@ export class AgentAssignmentService {
       .delete(agentAssignments)
       .where(scopedToTenant(agentAssignments, tenantId, inArray(agentAssignments.id, rows.map((r) => r.id))));
     await this.bump(tenantId);
+    await this.publishChanged(tenantId, rows.map((r) => r.projectId));
   }
 }

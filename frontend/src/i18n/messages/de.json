@@ -4126,6 +4126,8 @@
     "delta": "+{count}"
   },
   "personProfile": {
+    "seoTitle": "Teammitglied",
+    "seoDescription": "Ein Teammitglied in Ihrem Workspace: Rolle, Persönlichkeit und die anstehende Arbeit.",
     "loading": "Profil wird geladen",
     "work": "Arbeit",
     "open": "Offene Tickets",
@@ -4735,7 +4737,7 @@
         "surface": "{count, plural, =0 {Zeichnung, leer} one {Zeichnung, 1 Strich} other {Zeichnung, # Striche}}",
         "empty": "Noch keine Zeichnung.",
         "emptyHint": "Hier mit Maus, Stift oder Finger zeichnen.",
-        "limit": "Diese Zeichnung hat ihr Limit von {max} Strichen erreicht. Lösche einige, um weitere hinzuzufügen.",
+        "limit": "Diese Zeichnung ist voll: höchstens {max} Striche und ein Limit für die Gesamtdetailmenge. Lösche einige, um weitere hinzuzufügen.",
         "clear": "Zeichnung löschen",
         "clearConfirm": "Alle Striche dieser Zeichnung entfernen? Andere, die sie gerade bearbeiten, verlieren sie ebenfalls.",
         "textLabel": "Zeichnungstext",
@@ -4968,6 +4970,7 @@
         "exportAs": "{format} exportieren",
         "exporting": "Wird gerendert …",
         "exportFailed": "Der Export ist fehlgeschlagen. Bitte erneut versuchen.",
+        "exportTooLarge": "Diese Animation ist zu groß für den Export (Breite × Höhe × Einzelbilder überschreitet das Limit). Reduziere die Anzahl der Einzelbilder oder die Größe der Zeichenfläche.",
         "summary": "{count, plural, one {# Einzelbild} other {# Einzelbilder}} · {fps} fps · {seconds} s",
         "dimensions": "{width} × {height} px",
         "maxFramesReached": "Limit an Einzelbildern erreicht ({max}). Lösche ein Einzelbild, um ein weiteres hinzuzufügen.",
@@ -15734,6 +15737,10 @@
     "prdFallback": "PRD {id}"
   },
   "kanbanTemplateCheckout": {
+    "previewLockedNotice": "Dies ist eine kostenpflichtige Vorlage. Schalte sie frei, um Anforderungen und Besetzung zu sehen.",
+    "previewLanes": "Lanes",
+    "previewUnlock": "Für {price} freischalten",
+    "previewBack": "Zurück",
     "redirecting": "„{name}“ ist eine kostenpflichtige Vorlage. Weiterleitung zur Kasse ...",
     "checkoutFailed": "Die Kasse für diese Vorlage konnte nicht gestartet werden. Bitte erneut versuchen.",
     "completeFailed": "Die Zahlung konnte noch nicht bestätigt werden. Falls abgebucht wurde, wird die Vorlage in Kürze freigeschaltet; dann bitte erneut versuchen."
@@ -38547,7 +38554,10 @@
         "checking": "Clip wird geprüft …",
         "watermarkDetected": "Dieser Clip trägt ein Builderforce-Wasserzeichen für Clip {clipId}.",
         "audioMatches": "Das Audio stimmt mit dem signierten Eintrag überein.",
-        "selfReported": "Dieser Eintrag wurde vom Gerät des Erstellers selbst gemeldet.",
+        "selfReported": "Vom Lizenznehmer der Stimme registriert; die Plattform hat dieses Audio nicht gesehen.",
+        "watermarkMismatch": "Trägt die Markierung von Clip {clipId}, aber dieses Audio ist nicht das signierte Audio.",
+        "watermarkUnchecked": "Trägt die Markierung von Clip {clipId}, aber für dieses Format konnte kein Audio-Fingerabdruck geprüft werden.",
+        "voiceDeleted": "Gelöschte Stimme",
         "metaTitle": "Sprachclip prüfen",
         "metaDescription": "Prüfen Sie, ob ein Sprachclip ein Builderforce-Wasserzeichen trägt und mit welcher Einwilligung er erstellt wurde.",
         "noWatermark": "Kein Wasserzeichen gefunden. Der Clip wurde möglicherweise nicht auf Builderforce erstellt oder wurde bearbeitet oder neu codiert.",
@@ -38581,6 +38591,7 @@
       "checkoutCancelled": "Der Kauf wurde abgebrochen. Dir wurde nichts berechnet.",
       "checkoutFailed": "Wir konnten diese Zahlung nicht bestätigen. Falls dir etwas berechnet wurde, aktualisiere in einem Moment.",
       "checkoutDone": "Kauf abgeschlossen. Die Stimme ist jetzt in deinen Stimmen.",
+      "licenseRevoked": "Deine Lizenz für diese Stimme wurde nach einer Rückerstattung oder einem Streitfall widerrufen. Wende dich an den Support, um sie wiederherzustellen.",
       "checkoutOpened": "Der Kauf wurde in deinem Browser geöffnet. Aktualisiere hier, sobald du bezahlt hast.",
       "acquireFailed": "Diese Stimme konnte nicht hinzugefügt werden. Versuche es erneut.",
       "refresh": "Aktualisieren"

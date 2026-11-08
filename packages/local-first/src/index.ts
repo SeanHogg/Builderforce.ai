@@ -6,6 +6,8 @@ export * from './store.js';
 export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, destinationKey, isTerminalExecutionStatus } from './records.js';
 export type {
   AuditFindingValue,
+  ChatTicketLinkType,
+  ChatTicketLinkValue,
   ChangeSetValue,
   DestinationBinding,
   EntityDestination,
@@ -103,6 +105,8 @@ export {
   type SyncStatusStoreEvent,
 } from './syncStatus.js';
 export * from './bootDeniedHost.js';
+export * from './holdLimits.js';
+export * from './requeueJournalDeadLetter.js';
 export {
   HTTP_SYNC_PULL_PATH,
   HTTP_SYNC_PUSH_PATH,
@@ -124,3 +128,18 @@ export {
   type JournalWriteOptions,
 } from './journalRules.js';
 export { bindWorkForSync, ticketWaitsOn } from './workBinding.js';
+export {
+  chatTicketLinkId,
+  chatTicketLinkWaitsOn,
+  linkServerIds,
+  linkChatTicket,
+  unlinkChatTicket,
+  type ChatTicketLinkInput,
+  type LinkChatTicketInput,
+} from './chatTicketLink.js';
+export {
+  ingestServerRecords,
+  type IngestServerRecordsOptions,
+  type IngestServerRecordsResult,
+  type ServerRecordRow,
+} from './ingestServerRecords.js';

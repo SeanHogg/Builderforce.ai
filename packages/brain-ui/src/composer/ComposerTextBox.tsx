@@ -31,7 +31,7 @@ export type ComposerTextBoxProps = ComposerTextSource & {
   onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
   onFocus: () => void;
   onBlur: () => void;
-  mentions: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick'> | undefined;
+  mentions: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick' | 'detail'> | undefined;
   tickets: Pick<UseTicketAutocompleteOptions, 'tickets' | 'onPick'> | undefined;
   pickersDisabled: boolean;
   mentionLabels: UseMentionAutocompleteOptions['labels'];
@@ -58,6 +58,7 @@ function ComposerTextBoxInner(props: ComposerTextBoxProps) {
   const mention = useMentionAutocomplete({
     textareaRef, value, setValue, participants: mentions?.participants ?? NO_PARTICIPANTS,
     onPick: mentions?.onPick ?? noop, disabled: disabled || pickersDisabled, labels: mentionLabels,
+    detail: mentions?.detail,
   });
   const ticket = useTicketAutocomplete({
     textareaRef, value, setValue, tickets: tickets?.tickets ?? NO_TICKETS,

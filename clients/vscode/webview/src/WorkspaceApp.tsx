@@ -40,6 +40,7 @@ import { VsCodeChatSurface } from './chat/VsCodeChatSurface';
 import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
+import { VoiceMarketplaceScreen } from './VoiceMarketplaceScreen';
 import { VisualizationPanel } from './visualization/VisualizationPanel';
 import { usePendingDiff } from './visualization/usePendingDiff';
 import { applyLiveOverlay } from '@builderforce/knowledge-browser';
@@ -129,6 +130,7 @@ export function WorkspaceApp() {
   if (init.view === 'visualization') return <VisualizationScreen init={init} />;
   if (init.view === 'project360') return <Project360Screen init={init} />;
   if (init.view === 'evermind') return <EvermindScreen init={init} />;
+  if (init.view === 'voiceMarketplace') return <VoiceMarketplaceScreen init={init} />;
   if (init.view === 'backlog' || init.view === 'prd' || init.view === 'roadmap' || init.view === 'retros' || init.view === 'poker') {
     return <ProjectPageScreen init={init} view={init.view} />;
   }

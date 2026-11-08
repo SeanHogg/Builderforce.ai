@@ -124,7 +124,11 @@ export type MergeRecordedPrResult =
 export async function mergeRecordedPullRequest(
   db: Db,
   env: Env,
-  args: { tenantId: number; prId: string; method?: MergeMethod | string; mergedBy?: string | null; updateBranch?: boolean },
+  args: {
+    tenantId: number; prId: string; method?: MergeMethod | string; mergedBy?: string | null; updateBranch?: boolean;
+    /** The head commit the security gate verified; the provider refuses the merge (`head_moved`) if it moved. */
+    expectedHeadSha?: string;
+  },
 ): Promise<MergeRecordedPrResult> {
   const [row] = await db
     .select()
@@ -167,11 +171,12 @@ export async function mergeRecordedPullRequest(
     number: row.number,
     method: normalizeMergeMethod(args.method),
     commitTitle: `Task #${row.taskId ?? ''}: merge ${row.branchName ?? ''}`.trim(),
+    expectedHeadSha: args.expectedHeadSha,
   });
 
   if (!result.ok) {
     const httpStatus = result.code === 'unsupported' ? 501
-      : (result.code === 'conflict' || result.code === 'not_mergeable') ? 409
+      : (result.code === 'conflict' || result.code === 'not_mergeable' || result.code === 'head_moved') ? 409
       : 502;
     return { ok: false, httpStatus, error: result.reason, code: result.code };
   }
@@ -179,6 +184,7 @@ export async function mergeRecordedPullRequest(
   const updated = await markPullRequestMergedById(db, args.prId, args.tenantId, {
     mergeSha: result.sha ?? null,
     mergedBy: args.mergedBy ?? null,
+    env,
   });
 
   await invalidatePullRequestDetail(

@@ -4,6 +4,8 @@ import {
   type CanvasVideoSource,
   type CanvasVideoTimeline,
 } from '@builderforce/creation-canvas-contract';
+import { fetchCanvasMediaBlob } from '@/lib/canvasMediaStore';
+import { isAuthedMediaUrl, loadAuthedImage } from '@/lib/loadAuthedImage';
 
 type RenderElement = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
 
@@ -12,13 +14,17 @@ function recorderMime(): string {
     .find((mime) => MediaRecorder.isTypeSupported?.(mime)) ?? 'video/webm';
 }
 
-async function loadElement(source: CanvasVideoSource): Promise<RenderElement> {
-  if (source.kind === 'image') return new Promise((resolve, reject) => {
-    const image = new Image(); image.crossOrigin = 'anonymous'; image.onload = () => resolve(image); image.onerror = reject; image.src = source.url;
-  });
+async function loadElement(source: CanvasVideoSource, objectUrls: string[]): Promise<RenderElement> {
+  if (source.kind === 'image') return loadAuthedImage(source.url);
+  // A tenant-authenticated upload needs the bearer token: read it to a same-origin blob first.
+  let src = source.url;
+  if (isAuthedMediaUrl(source.url)) {
+    src = URL.createObjectURL(await fetchCanvasMediaBlob(source.url));
+    objectUrls.push(src);
+  }
   return new Promise((resolve, reject) => {
     const media = document.createElement(source.kind === 'audio' ? 'audio' : 'video');
-    media.crossOrigin = 'anonymous'; media.preload = 'auto'; media.onloadeddata = () => resolve(media); media.onerror = reject; media.src = source.url; media.load();
+    media.crossOrigin = 'anonymous'; media.preload = 'auto'; media.onloadeddata = () => resolve(media); media.onerror = reject; media.src = src; media.load();
   });
 }
 
@@ -50,13 +56,28 @@ export async function renderCanvasVideo(
   sources: readonly CanvasVideoSource[],
   onProgress?: (progress: number) => void,
 ): Promise<Blob> {
+  // Authed media is fetched into blob object URLs; they live exactly as long as the render.
+  const objectUrls: string[] = [];
+  try {
+    return await recordTimeline(timeline, sources, objectUrls, onProgress);
+  } finally {
+    objectUrls.forEach((url) => URL.revokeObjectURL(url));
+  }
+}
+
+async function recordTimeline(
+  timeline: CanvasVideoTimeline,
+  sources: readonly CanvasVideoSource[],
+  objectUrls: string[],
+  onProgress?: (progress: number) => void,
+): Promise<Blob> {
   const duration = canvasVideoDuration(timeline);
   if (!duration) throw new Error('The timeline has no clips');
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const clipElements = new Map<string, RenderElement>();
   await Promise.all(timeline.clips.map(async (clip) => {
     const source = sourceById.get(clip.sourceId);
-    if (source) clipElements.set(clip.id, await loadElement(source));
+    if (source) clipElements.set(clip.id, await loadElement(source, objectUrls));
   }));
 
   const canvas = document.createElement('canvas');

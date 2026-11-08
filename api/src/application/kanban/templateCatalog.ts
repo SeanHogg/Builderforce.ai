@@ -9,11 +9,15 @@
  * lane keys; those are materialised as extra swimlanes used by audit + gating.
  */
 import type { KanbanTemplate, TemplateLane } from './types';
+import { BACKLOG_LANE_GATE } from '../swimlane/defaultSwimlanes';
+import { TaskStatus } from '../../domain/shared/types';
 
 function lane(l: Partial<TemplateLane> & Pick<TemplateLane, 'key' | 'name' | 'position'>): TemplateLane {
   return {
     isTerminal: false,
-    gate: 'auto',
+    // Backlog is the human-gated staging lane in EVERY template (one source of truth:
+    // BACKLOG_LANE_GATE) so parked work cannot spend tokens; every other lane is auto.
+    gate: l.key === TaskStatus.BACKLOG ? BACKLOG_LANE_GATE : 'auto',
     requirementGate: 'soft',
     requirements: [],
     ...l,

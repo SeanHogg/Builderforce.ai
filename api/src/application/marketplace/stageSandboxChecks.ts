@@ -100,7 +100,7 @@ export function sandboxChecks(harness: ListingHarness, state: StageSandboxState 
     case 'error':
       // Fails OPEN — an infrastructure failure (unbound container, timeout,
       // crash) is not the seller's product failing. Matches
-      // `enforceMonthlyTenantCap`'s "metering must never block the operation
+      // `enforceTenantCap`'s "metering must never block the operation
       // it measures", applied to the runner rather than to a cap.
       return [check(
         'sandbox.unavailable', 'warn', 'The sandbox could not finish',

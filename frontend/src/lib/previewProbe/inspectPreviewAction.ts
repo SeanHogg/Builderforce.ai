@@ -127,6 +127,7 @@ export function inspectPreviewAction(ctx: {
         path: { type: 'string', description: 'In-app route or #anchor to load, e.g. "/pricing". Defaults to the home page.' },
       },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = (raw ?? {}) as { selectors?: unknown; viewports?: unknown; widths?: unknown; path?: unknown };
       const previewUrl = ctx.previewUrl();

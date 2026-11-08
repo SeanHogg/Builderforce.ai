@@ -41,7 +41,13 @@ import { AgentBody } from './AgentBody';
 import { BrainObjectBody } from './BrainObjectBody';
 import { BuildBody } from './BuildBody';
 import { CourseBody } from './CourseBody';
-import { CREATIVE_STUDIO_KINDS, CreativeStudioBody } from './CreativeStudioBody';
+import { CreativeStudioBody } from './CreativeStudioBody';
+import { ImageEditorBody } from '../image/ImageEditorBody';
+import { PodcastEditorBody } from '../podcast/PodcastEditorBody';
+import { AnimationBody } from './AnimationBody';
+import { ComicBody } from './ComicBody';
+import { CadBody } from './CadBody';
+import { Model3dBody } from './Model3dBody';
 import { DashboardBody } from './DashboardBody';
 import { DataGridBody } from './DataGridBody';
 import { DocumentBody } from './DocumentBody';
@@ -125,8 +131,10 @@ const ROWS: ReadonlyArray<readonly [Iterable<CreationObjectKind>, CreationBody]>
   [['defect'], DefectBody],
   [['voice'], VoiceBody],
   [['video'], VideoBody],
+  [['image'], ImageEditorBody],
+  [['podcast'], PodcastEditorBody],
   [['resume'], ResumeBody],
-  [CREATIVE_STUDIO_KINDS, CreativeStudioBody],
+  [['template'], CreativeStudioBody],
   [['game'], GameBody],
   [['note'], NoteBody],
   [['sticky'], StickyBody],
@@ -153,6 +161,10 @@ const ROWS: ReadonlyArray<readonly [Iterable<CreationObjectKind>, CreationBody]>
   [['pitchApplication'], PitchApplicationBody],
   [['standup'], StandupBody],
   [['drawing'], DrawingBody],
+  [['animation'], AnimationBody],
+  [['comic'], ComicBody],
+  [['cad'], CadBody],
+  [['model3d'], Model3dBody],
   [['frame'], FrameObjectBody],
   [['flowStep'], FlowStepBody],
   [['timer', 'stopwatch'], ClockBody],

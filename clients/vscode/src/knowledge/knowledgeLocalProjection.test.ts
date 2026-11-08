@@ -43,8 +43,9 @@ vi.mock("@builderforce/repo-map", () => ({ repoMapPort: {} }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({ NOT_SIGNED_IN: "not-signed-in" }));
 
 import { codeFileNode, forgetRootPorts } from "@builderforce/agent-tools/knowledge";
-import { fileManifest, localKnowledgeStore, manifestFileName } from "./knowledgeStores";
-import { loadGraph, rootKnowledgeFiles } from "./knowledgeService";
+import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
+import { closeFolderKnowledge, folderKnowledge } from "./folderKnowledge";
+import { loadGraph } from "./knowledgeService";
 import { rootForPath } from "./knowledgeRoots";
 import { forgetReachability, notReviewedHere } from "./knowledgeNotHere";
 import { rootSyncStatus } from "./knowledgeSync";
@@ -60,19 +61,20 @@ beforeEach(() => {
   forgetReachability();
 });
 
-afterEach(async () => { await disposeReplicas(); });
+afterEach(async () => { await disposeReplicas(); await closeFolderKnowledge(); });
 
 async function reviewedLocally() {
   const root = rootForPath(mocks.folder, [{ path: mocks.folder }])!;
-  const files = rootKnowledgeFiles(root);
+  // The folder's ONE SQLite store, the one `openRoot` reads (G03).
+  const { store, manifest } = folderKnowledge(mocks.folder);
   const ref = srcRef(root.rootId, "a.ts");
   const ex: Extracted = { sourceRef: ref, sourceHash: "h1", nodes: [codeFileNode(root.rootId, "a.ts", { sourceHash: "h1" })], edges: [], keys: [] };
-  await localKnowledgeStore(files, root.rootId).putExtracted!("h1", [ex]);
-  await fileManifest(files, manifestFileName(root.rootId)).set(filesManifestKey(root.rootId), [{ id: "a.ts", hash: "h1" }]);
+  await store.putExtracted!("h1", [ex]);
+  await manifest.set(filesManifestKey(root.rootId), [{ id: "a.ts", hash: "h1" }]);
   return root;
 }
 
-describe("a linked workspace draws from the local projection", () => {
+describe.skipIf(!localSqliteAvailable())("a linked workspace draws from the local projection", () => {
   it("builds the graph from the local store and never reads the server's graph", async () => {
     const root = await reviewedLocally();
     const graph = await loadGraph(secrets, root.rootId, { maxNodes: 50 });

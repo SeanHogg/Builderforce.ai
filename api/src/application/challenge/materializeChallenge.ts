@@ -35,7 +35,7 @@ import { listProjectSecrets } from '../secrets/projectSecrets';
 import { BUILTIN_CONNECTORS } from '../connectors/defaults';
 import { connectorConnections } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { isBuildTask } from './blueprint';
 import type { ChallengePlan } from './planChallenge';
@@ -187,7 +187,7 @@ const MAX_AUTO_DISPATCH = 8;
  * Offer the freshly-seeded BUILD tickets to autonomy.
  *
  * Deliberately "offer", not "start": every candidate goes through
- * {@link maybeAutoRunOnLaneEntry}, the same gate a drag onto a lane uses, which
+ * {@link routeLaneEntry}, the same gate a drag onto a lane uses, which
  * already decides whether a lane is staffed, whether the board is human-gated,
  * whether the workspace has budget and whether an agent is even eligible. A
  * project whose board has no staffed lane declines every candidate and nothing
@@ -206,7 +206,7 @@ async function dispatchBuildTasks(
   let dispatched = 0;
   for (const taskId of args.taskIds.slice(0, MAX_AUTO_DISPATCH)) {
     try {
-      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+      const started = await routeLaneEntry(env, db, runtimeService, {
         tenantId: args.tenantId,
         projectId: args.projectId,
         taskId,

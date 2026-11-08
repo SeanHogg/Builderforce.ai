@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src', 'i18n', 'messages');
@@ -33,7 +34,7 @@ const OUT = path.join(ROOT, 'public', 'i18n');
  * Cloudflare rejects a static asset over 25 MiB. A catalog is nowhere near that
  * today, but the failure would surface as a deploy error far from this file.
  */
-const MAX_ASSET_BYTES = 25 * 1024 * 1024;
+const { MAX_ASSET_BYTES } = createRequire(import.meta.url)('./cloudflareAssetCap.cjs');
 
 function main() {
   const catalogs = fs.readdirSync(SRC).filter((file) => file.endsWith('.json'));

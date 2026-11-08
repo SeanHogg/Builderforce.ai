@@ -386,7 +386,34 @@ export const socEvidence = pgTable('soc_evidence', {
   uploadedBy:   varchar('uploaded_by', { length: 64 }),
   sourceRef:    text('source_ref'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  /** One automated evidence row per (control, provenance) — mig 1321: `source_ref = auto:<kind>:<id>`. */
+  uniqueIndex('uq_soc_evidence_auto_ref').on(t.controlId, t.sourceRef).where(sql`source_ref LIKE 'auto:%'`),
+]);
+
+/**
+ * Open questions the governance-auditor sweep raises for the SOC 2 page (mig 1322): a merged PR that
+ * was never scanned/reviewed, a control with no evidence in 90 days. NOT evidence — kept out of
+ * `soc_evidence` so the evidence export never hands an auditor a gap as proof.
+ */
+export const governanceAuditGaps = pgTable('governance_audit_gaps', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  gapType:    varchar('gap_type', { length: 40 }).notNull(),
+  subjectRef: varchar('subject_ref', { length: 120 }).notNull(),
+  controlId:  uuid('control_id').references(() => socControls.id, { onDelete: 'cascade' }),
+  detail:     text('detail'),
+  /** 'open' | 'resolved' */
+  status:     varchar('status', { length: 16 }).notNull().default('open'),
+  detectedAt: timestamp('detected_at').notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_governance_audit_gaps_subject').on(t.tenantId, t.segmentId, t.gapType, t.subjectRef),
+  index('idx_governance_audit_gaps_open').on(t.tenantId, t.segmentId, t.status),
+]);
 
 
 export const piiDataAssets = pgTable('pii_data_assets', {
@@ -460,6 +487,8 @@ export const dataSubjectRequests = pgTable('data_subject_requests', {
   rejectionReason:   text('rejection_reason'),
   submittedIp:       varchar('submitted_ip', { length: 64 }),
   submittedUserAgent: varchar('submitted_user_agent', { length: 500 }),
+  /** JSON text: what executing this request for its Segment did, per store (mig 1322). */
+  executionResult:   text('execution_result'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -693,6 +722,8 @@ export const policyGates = pgTable('policy_gates', {
   gateKey:   varchar('gate_key', { length: 128 }).notNull(),
   /** NULL or '*' governs EVERY tool (how a broad deny posture is authored). */
   tool:      varchar('tool', { length: 128 }),
+  /** 'read' / 'verify' / 'mutate': governs every tool of that class (unclassified ⇒ mutate). NULL = no class criterion. */
+  sideEffect: varchar('side_effect', { length: 10 }),
   effect:    varchar('effect', { length: 20 }).notNull(),
   directive: text('directive'),
   reason:    text('reason'),

@@ -13,7 +13,9 @@ const h = vi.hoisted(() => ({
   record: vi.fn(async (..._a: unknown[]) => undefined),
   children: vi.fn(async (..._a: unknown[]) => 'wait for your sub-agents' as string | null),
   absorb: vi.fn(async (..._a: unknown[]) => undefined),
+  draft: vi.fn(async (v: unknown, ..._a: unknown[]) => v),
 }));
+vi.mock('../../ci/draftPrForCi', () => ({ ciVerdictWithDraftPr: h.draft }));
 vi.mock('../../repos/verifyWrittenFiles', () => ({ verifyWrittenFiles: h.verify }));
 vi.mock('../../ci/pollCommitCiStatus', async (orig) => ({ ...(await orig<Record<string, unknown>>()), pollBranchCi: h.poll }));
 vi.mock('../../repos/scanForPlaceholders', () => ({ scanWrittenForPlaceholders: h.scan }));
@@ -40,6 +42,17 @@ describe('cloudFinishPorts', () => {
     const decision = await ports.pollBranchCi!({ pendingBlocks: 0, failureBlocks: 0 });
     expect(decision).toMatchObject({ pendingBlocks: 1, ciVerified: false });
     expect(decision.block).toMatch(/still running/);
+  });
+
+  it('a run WITHOUT a sandbox routes the branch CI verdict through the early draft PR; one with a sandbox does not', async () => {
+    const ports = { tag: 'ports' } as never;
+    h.poll.mockResolvedValueOnce({ status: 'none', sha: 'abcdef1234', count: 0, summary: 'none', failed: [] });
+    const withoutShell = cloudFinishPorts({ db, evt, repoCtx, delegated: false, noSandboxPr: { ports } });
+    await withoutShell.pollBranchCi!({ pendingBlocks: 0, failureBlocks: 0 });
+    expect(h.draft).toHaveBeenCalledWith(expect.objectContaining({ status: 'none' }), { ports });
+    h.draft.mockClear();
+    await cloudFinishPorts({ db, evt, repoCtx, delegated: false }).pollBranchCi!({ pendingBlocks: 0, failureBlocks: 0 });
+    expect(h.draft).not.toHaveBeenCalled();
   });
 
   it('shares ONE read memo between the child-write re-hash and the static validation within an attempt, and starts afresh on the next', async () => {

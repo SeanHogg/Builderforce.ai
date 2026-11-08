@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { makeNonce, renderBundleShell } from '../src/webviewBundleShell';
+import { localSqliteAvailable, openLocalSqlite } from '../../../packages/agent-tools/src/node-local-sqlite';
 
 const EXTENSION_ID = 'builderforce.builderforce-ai';
 
@@ -185,6 +186,26 @@ suite('webview ↔ host bridge', () => {
 
 /** The message type the prelude reports boot errors under. Never a real app message. */
 const BOOT_ERROR = '__bridgeTest.bootError';
+
+/**
+ * The local knowledge store (G03) is a SQLite file opened through `node:sqlite`, loaded at runtime. `@vscode/test-electron`
+ * resolves the latest stable VS Code that satisfies `engines.vscode` (^1.101.0), NOT the floor, so this asserts the host it
+ * actually runs on (the version is in the failure message). The floor itself is covered by the pinned `@types/vscode` and the
+ * Node 22.13+ requirement on that Electron build: a host without `node:sqlite` fails here, loudly, rather than at first review.
+ */
+suite('local SQLite', () => {
+  test(`node:sqlite loads and opens a database in this host (VS Code ${vscode.version}, Node ${process.versions.node})`, () => {
+    assert.ok(localSqliteAvailable(), `node:sqlite is not available in VS Code ${vscode.version} (Node ${process.versions.node})`);
+    const { db } = openLocalSqlite(':memory:', { busyTimeoutMs: 100 });
+    try {
+      db.exec('CREATE TABLE t(a)');
+      db.prepare('INSERT INTO t VALUES (?)').run(1);
+      assert.strictEqual((db.prepare('SELECT a FROM t').get() as { a: number }).a, 1);
+    } finally {
+      db.close();
+    }
+  });
+});
 
 /**
  * The panel shell — the SAME `renderBundleShell` and CSP the panels ship — plus a

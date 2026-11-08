@@ -34,5 +34,11 @@ export function syncReferenceReader(db: Db): SyncReferenceReader {
 export function syncStoresFor(db: Db, env: Env): SyncStores {
   const usage = syncUsageLedger(db, env);
   const steps = syncStepStore(db);
-  return createSyncRepository(db, (tx) => namedSyncImporters(tx, usage, steps), syncReferenceReader(db));
+  return createSyncRepository(
+    db,
+    (tx) => namedSyncImporters(tx, usage, steps),
+    syncReferenceReader(db),
+    // A push batch is ONE transaction: a chat an earlier event created is only visible on it.
+    (tx) => syncReferenceReader(tx as unknown as Db),
+  );
 }

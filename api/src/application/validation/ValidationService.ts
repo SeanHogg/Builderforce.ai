@@ -28,6 +28,8 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskType, TaskPriority } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { taskCreatedHook } from '../task/taskCreationHook';
+import type { Env } from '../../env';
+import { bridgeValidatorReview } from '../kanban/validatorSlotBridge';
 
 export type ReviewVerdict = 'complete' | 'gaps';
 
@@ -66,6 +68,10 @@ export interface RecordReviewInput {
   summary?: string | null;
   /** Gaps found — each becomes a GAP task. Empty ⇒ the work is complete. */
   gaps?: ReviewGapInput[];
+  /** The execution that produced this review (PRD 23 §5.2). */
+  executionId?: number | null;
+  /** The PR head commit the review was made against; a newer head invalidates the acceptance. */
+  reviewedHeadSha?: string | null;
 }
 
 export interface RecordReviewResult {
@@ -99,7 +105,7 @@ export class ValidationService {
    * Record one Validator review pass. Creates the ledger row + any GAP tasks and
    * bumps the task's denormalised review counters, all tenant-scoped.
    */
-  async recordReview(tenantId: number, input: RecordReviewInput): Promise<RecordReviewResult> {
+  async recordReview(tenantId: number, input: RecordReviewInput, env?: Env): Promise<RecordReviewResult> {
     const owned = await this.ownedTask(tenantId, input.taskId);
     if (!owned) throw new Error('Task not found in workspace');
 
@@ -133,7 +139,20 @@ export class ValidationService {
       verdict,
       summary: input.summary ?? undefined,
       gapsCount: gapTaskIds.length,
+      executionId: input.executionId ?? undefined,
+      reviewedHeadSha: input.reviewedHeadSha ?? undefined,
     }).returning({ id: taskReviews.id });
+
+    // PRD 23 §5.2: link the review to the ticket's Validator slot and, for a `complete`
+    // verdict, record the matching sign-off on THAT slot only. Needs the platform env
+    // (the sign-off writer publishes to the PR); without it the review stays unlinked.
+    if (env) {
+      await bridgeValidatorReview(env, this.db, {
+        tenantId, taskId: input.taskId, reviewId: review!.id, verdict,
+        reviewerRef: input.reviewerRef ?? null, summary: input.summary ?? null,
+        executionId: input.executionId ?? null, reviewedHeadSha: input.reviewedHeadSha ?? null,
+      });
+    }
 
     // 3. Denormalise the latest pass onto the task for cheap board reads.
     const [updated] = await this.db.update(tasksTable).set({

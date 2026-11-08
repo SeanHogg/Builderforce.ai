@@ -1,199 +1,177 @@
+| G3 | CLOSED | `insideClone` in `container/sandboxCore.mjs` is realpath-based and follows dangling symlinks by hand (hop-limited); the `list` op and job `cwd` use it; `.git` is unreachable; reads re-check the resolved path; writes re-check it and open the final component with `O_NOFOLLOW`; `mkdir`/`rm` failures return `{ok:false}`. The model's shell (foreground and background) runs with a scrubbed environment (`shellEnv`: no `BUILDERFORCE_*`, no Actions OIDC/runtime tokens), and the Actions checkout does not persist its token (`persist-credentials: false`). Tests: `containerSandboxFsGuard.test.ts` (`../`, absolute, symlink, dangling and looping links, symlinked parent and job cwd, `.git`, `..\`, URL-encoded, env scrub). This guard is defence in depth UNDER E2: the shell is unrestricted inside the container, so it only constrains the structured fs/cwd ops. Accepted residuals: a TOCTOU between the check and the open, and hard links to files outside the clone; both sit under the E2 boundary. |
+| G2 | PARTIAL | Done: ONE redactor (`packages/secret-redaction`, shared by api and agent-runtime); ONE write path for `tool_audit_events` (`insertToolAudit`, `application/audit/toolAuditWrite.ts`, redacting args/result structurally before the insert) enforced by `check:tool-audit-writes`; redaction BEFORE truncation (`resultCap`, `redactThenCap`); the live stream is scrubbed at the one publish primitive (`notifyExecutionSubscribers`); `executions.result` / `error_message` are scrubbed where `ExecutionRepository` writes them; `llm_traces`, the eval case store and `caughtErrorReporter` (record, log lines and Quality sink get a redacted clone) use `redactDeep`. Tests: `redactSecrets.test.ts`, `toolAuditWrite.test.ts`, `cloudToolEvents.redaction.test.ts`, `hostTelemetryIngest.redaction.test.ts`, `executionEvents.redaction.test.ts`, `caughtErrorReporter.test.ts`. Remaining: the reaper's rows (`staleExecutionReaper.ts`, and `recordRunFailureEvent.ts` which is covered only by a local wrapper) are built by `runFailureEventRow` and must be redacted there; both are the guard's two listed exceptions until then. G2 closes when `runFailureEventRow` redacts and the exceptions are deleted. |
 # 09 — PRD: Cloud Agent Validation & Hardening
 
-**Status: Planned (P0 — validation gate).** Continues doc 04 (Agentic Dev Layer) and the "Cloud Agent Engines V1/V2" + "Cloud Agent Observability" + "Ticket Workspace Flow" passes (2026-06-07).
-
-> **Re-audit needed (note added 2026-10-25).** The 50 gaps below were enumerated against the June 2026
-> execution paths. Since then every cloud run moved onto the one engine with the container as its
-> sandbox (DONE.md 2026-10-24), which partly addresses the isolation gaps (G1 and the workspace
-> group); the sandbox deploy and the no-sandbox build path are open in [ROADMAP.md](../../ROADMAP.md)
-> › Make › Cloud and IDE agent runs. Re-audit each gap against the current tree before acting on it.
-> Doc 04 shipped and was removed (DONE.md).
+**Status: Planned (P0 — validation gate).** Re-audited 2026-11-08 against the one-engine architecture
+(DONE.md 2026-10-24). This document holds only the work that is still open; closed and superseded
+gaps are listed once in §7 with their evidence and move to DONE.md.
 
 This PRD exists so the operator can **validate the cloud agents** end-to-end before they are sold as a
-first-class runtime alongside self-hosted agent hosts. Today a "cloud agent" is a real, wired path
-(dispatch → engine → workspace → telemetry → steering), but it has only been exercised on the happy
-path. This doc (1) **summarizes the core capabilities as built**, so there is a single source of truth
-to validate against, and (2) **enumerates 50 concrete gaps** — each a falsifiable check that must pass
-(or a hole that must be closed) before cloud agents are GA.
+first-class runtime alongside self-hosted agent hosts. It (1) states the architecture being validated,
+(2) records the operator decisions that bound the remaining gaps, and (3) lists each remaining gap as a
+falsifiable check.
 
 **Personas:** Tenant operator (runs a cloud agent against a ticket, watches it work, steers it); the
 platform SRE (verifies isolation, billing attribution, observability); the buyer evaluating "do cloud
 agents actually deliver a merged PR without a self-hosted host online?"
-
-> **Locked decisions (carried from the engine/observability passes + this PRD):**
-> 1. **Three execution paths, one contract.** V1 (`builderforce-v1`, pi loop via gateway `chat.send`),
->    V2 (`builderforce-v2`, Claude Agent SDK with file/bash tools), and the **cloud Worker fallback**
->    (`runCloudExecution`, server-side bounded tool loop, provider-REST commits, no filesystem). All
->    three converge on the same task workspace, file-change attribution, and telemetry ledger.
-> 2. **Engine is data, not code.** `ide_agents.engine` (migration 0087, default V1) is read at
->    dispatch (`resolveCloudAgent`); validation must cover all three engines, not just the default.
-> 3. **Telemetry is the contract surface.** Migrations 0092/0096 make a cloud run attributable by
->    `cloud_agent_ref` + `execution_id` across `tool_audit_events`, `usage_snapshots`, and
->    `llm_usage_log`. "Validated" means a run is fully reconstructable from those tables.
-> 4. **No new untested code ships in this pass.** Every gap below is either a *validation check* (assert
->    existing behaviour) or a *bounded fix* with an acceptance criterion. Anything bigger is logged to
->    the root `README.md` Consolidated Gap Register, not silently widened here.
 
 ---
 
 ## 1. Scope
 
 ### In scope
-- A **validation matrix** across the three engines (V1 / V2 / cloud-Worker fallback) × the task
-  lifecycle (dispatch → clone → work → steer → cancel → finalize/PR → teardown).
-- **50 gaps** (§4), each tagged with engine(s) affected, the file(s) that own the behaviour, severity,
-  and an acceptance check.
+- A **validation matrix** (§3) across the task lifecycle (dispatch → clone → work → steer → cancel → finalize/PR → teardown) on the ONE cloud engine.
+- The open **gaps** (§4), each with the file that owns the behaviour and an acceptance check.
 - A **golden-path E2E** (§5) the operator can run repeatedly to self-validate.
 
-### Out of scope (→ Gap Register)
-- New engine types beyond V1/V2/fallback.
+### Out of scope
 - Multi-repo / monorepo-aware cloud workspaces (single repo per ticket for now).
 - Governance gating of cloud runs — owned by doc 08; cloud runs consume its findings, not re-implement.
 
 ---
 
-## 2. Core capabilities (as built — the thing we are validating)
+## 2. Architecture being validated
 
-| # | Capability | Where it lives | One-line behaviour |
-|---|-----------|----------------|--------------------|
-| C1 | **Execution dispatch + queue** | `api/.../routes/runtimeRoutes.ts` (`dispatchAndQueue`, ~928) | Portal `POST /executions` → resolve engine → dispatch via relay DO → if no online host claims it, queue a background cloud Worker run. |
-| C2 | **Engine resolution** | `runtimeRoutes.ts` (`resolveCloudAgent`, ~899) | Reads `ide_agents.engine`; defaults to `builderforce-v1`. |
-| C3 | **V1 runner (pi loop)** | `agent-runtime/.../builderforce-relay.ts` (~346) | Runs pi-embedded loop via gateway `chat.send` against the cloned workspace; diffs + attributes changes after the session. |
-| C4 | **V2 runner (Claude Agent SDK)** | `agent-runtime/.../claude-agent-sdk-runner.ts` (~42) | `query()` with Read/Write/Edit/Bash/Glob/Grep, `bypassPermissions`, inference routed through gateway to tenant BYO Anthropic key. |
-| C5 | **Cloud Worker fallback** | `runtimeRoutes.ts` (`runCloudExecution` ~753, `runCloudToolLoop` ~562) | Server-side bounded loop with `write_file`/`finish` tools; commits land on the ticket branch via provider REST API; no local FS. |
-| C6 | **Task workspace** | `agent-runtime/.../task-workspace.ts` | Clone once to `.builderforce/tasks/<taskId>`, checkout `builderforce/task-<taskId>`, `git status --porcelain` diff, change attribution. |
-| C7 | **Finalize → PR** | `builderforce-relay.ts` (`finalizeTask` ~488); `api/.../openTaskPullRequest.ts` | On task Done: commit remaining changes, push branch, open/update PR, tear down workspace. |
-| C8 | **Cloud telemetry** | `runtimeRoutes.ts` (`recordCloudToolEvent` ~435, `recordCloudUsage` ~478); migrations 0092/0096 | Tool calls → `tool_audit_events`; tokens → `usage_snapshots` + `llm_usage_log`, all tagged `cloud_agent_ref` + `execution_id`. |
-| C9 | **Execution steering** | `api/.../relay/AgentHostRelayDO.ts` + `executionMessage.ts`; `agent-runtime/.../relay-steering.ts` | Portal follow-up → `execution.message` frame → relay DO → agent-runtime injects as next `chat.send` turn in the live session. |
-| C10 | **Cancellation** | `AgentHostRelayDO.ts` (`execution.cancel`); `builderforce-relay.ts` (~1077) | Portal cancel → frame → abort V2 handle / `chat.abort` for V1. |
-| C11 | **BYO key routing** | `api/.../llm/tenantProviderKeyService.ts` | Tenant's encrypted Anthropic key resolved from gateway `x-api-key`; V2 inference billed to tenant. |
-| C12 | **Unified observability UI** | `frontend/.../ObservabilityContent.tsx` (KIND_PILL ~109) | One timeline; ON-PREM (gray) vs CLOUD (coral) pills; merged host+cloud agent picker. |
+There is ONE cloud engine. Every cloud run, on every plan, takes the same path:
+
+1. **Dispatch** (`runtimeRoutes.ts` → `dispatchCloudRun.ts`) records the execution and hands it to `CloudRunnerDO`.
+2. **`CloudRunnerDO` ticks every run.** It drives the agent loop (`runAgentLoop` via `cloudAgentEngine`), one bounded tick at a time, so the run survives Worker restarts. Between turns `applyPendingSteering` drains steers and `startCancelWatcher` honours cancel (`cloudLoopControl.ts`).
+3. **The container is a sandbox.** Per-execution, non-root, with an egress allowlist. It executes tools (shell, filesystem, background jobs) and reports events back through `/internal/container-op`. It has no loop and no model access of its own.
+4. **Credentials stay in the Worker.** Provider keys (BYO and platform), git-provider tokens and the LLM call itself never enter the container; the Worker performs authenticated git and provider calls on the sandbox's behalf.
+5. **Finalize** (`cloudFinalize.ts`) commits, pushes and opens or updates the PR through the Worker's git provider; the run's telemetry lands in `tool_audit_events`, `usage_snapshots` and `llm_usage_log`, all keyed by `execution_id` (§2.1).
+
+The legacy V1 relay runner, V2 Claude Agent SDK runner, the Worker "fallback" loop and the
+host-queue handoff no longer exist as cloud paths. Self-hosted agent hosts are a separate runtime that
+is not validated here.
+
+### 2.1 Session-key contract: `exec:<executionId>`
+
+`tool_audit_events.session_key` is `exec:<executionId>` for every row belonging to an execution; a
+task-scoped event with no live execution passes its own key (`task:<taskId>`). The default is applied in
+ONE place, `recordCloudToolEvent` (`cloudToolEvents.ts`). The key is read or written by:
+
+- `cloudRunUsage.ts` — joins usage rows to the run.
+- `cloudOutcomeRow.ts` — the run's outcome row.
+- `cloudRunnerStub.ts` — the DO stub's event correlation.
+- `ingestRepoCiEvent.ts` — attaches repo CI events to the run that pushed the commit.
+
+Never build the string by hand elsewhere; add a caller to the list above if it must join on it.
+
+### 2.2 Operator decisions (2026-11-08)
+
+| Id | Decision |
+|----|----------|
+| E3 | **No step cap on cloud runs.** A runaway is bounded by the kernel failure-streak breaker, the stall ladder and the per-run spend cap, not an iteration count. |
+| S7 | **A steer to a terminal run starts a follow-up run** (`followUpRun.ts`) instead of returning `409 execution_not_live`. |
+| E2 | **The per-execution non-root container plus the egress allowlist is the command boundary.** There is no command allowlist. The `/sandbox/fs` path guard (G3) is defence in depth UNDER this boundary, not a replacement: the shell is unrestricted inside the container, so the guard only constrains the structured fs/cwd ops. |
+| D4 | **A run with no bound repository is legitimate** (research and docs deliverables). It ends with `pr_skipped: no_repository`; there is no `needs_host` status. |
+| W9 | **Full clone stays** (agents need history). A repo-size ceiling with a clear error is required (GAP-W9). |
+| O7 | **`exec:<id>` is the documented session-key contract** (§2.1). |
 
 ---
 
 ## 3. Validation matrix
 
-Each cell must produce a green run AND a reconstructable telemetry trail (§4 GAP-O*).
+Each cell must produce a green run AND a reconstructable telemetry trail.
 
-| Lifecycle stage | V1 (pi) | V2 (SDK) | Cloud Worker fallback |
-|-----------------|:---:|:---:|:---:|
-| Dispatch + engine resolve | ☐ | ☐ | ☐ |
-| Clone + branch | ☐ | ☐ | n/a (provider REST) |
-| Produce file changes | ☐ | ☐ | ☐ |
-| Live steering mid-run | ☐ | ☐ | ☐ (gap — see GAP-S5) |
-| Cancellation | ☐ | ☐ | ☐ (gap — see GAP-S6) |
-| Finalize → push → PR | ☐ | ☐ | ☐ |
-| Teardown | ☐ | ☐ | n/a |
-| Telemetry reconstructable | ☐ | ☐ | ☐ |
+| Lifecycle stage | Cloud engine |
+|-----------------|:---:|
+| Dispatch | ☐ |
+| Clone + branch | ☐ |
+| Produce file changes | ☐ |
+| Live steering mid-run | ☐ |
+| Cancellation | ☐ |
+| Finalize → push → PR (or `pr_skipped: no_repository`) | ☐ |
+| Teardown | ☐ |
+| Telemetry reconstructable | ☐ |
 
 ---
 
-## 4. The 50 gaps
+## 4. Open gaps
 
 Severity: **P0** = blocks GA / data-integrity, **P1** = must-fix before broad rollout, **P2** = hardening.
-Each gap is phrased as a check that currently fails, is unverified, or is missing. `E:` = engines affected.
 
-### A. Dispatch, engine selection & routing
-
-1. **GAP-D1 (P0, E:all)** — No test asserts `resolveCloudAgent` falls back to V1 when `ide_agents.engine` is NULL/unknown. A typo'd engine value silently runs the wrong loop. *Acceptance:* unit test covering NULL, `builderforce-v2`, and a garbage value.
-2. **GAP-D2 (P0, E:fallback)** — The "no online host claims it → queue cloud Worker" handoff (`dispatchAndQueue`) has no timeout assertion; if a host is *flaky* (connects then drops), the run may neither be claimed nor queued. *Acceptance:* claim-window timeout + integration test for the drop-mid-claim race.
-3. **GAP-D3 (P1, E:all)** — Engine is resolved once at dispatch; if the agent's engine is changed mid-flight there is no reconciliation. *Acceptance:* document as immutable-per-execution and snapshot `engine` onto the execution row.
-4. **GAP-D4 (P1, E:fallback)** — When clone/repo-bind fails the cloud loop tells the model "return deliverable in summary" but there is **no escalation back to a real agent host**. *Acceptance:* on repo-required tasks, fall back to host queue or mark execution `needs_host`.
-5. **GAP-D5 (P1, E:all)** — `tasks.assignedAgentRef` self-assignment (~957) is not surfaced on the task card UI, so a buyer can't see *which* cloud agent ran. *Acceptance:* render agent attribution on the task card.
-6. **GAP-D6 (P2, E:all)** — No idempotency key on `POST /executions`; a double-click can spawn two concurrent runs on the same ticket branch → conflicting commits. *Acceptance:* idempotency key + dedupe within an in-flight window.
-7. **GAP-D7 (P1, E:all)** — Dispatch payload is not schema-validated at the relay boundary the way `executionMessage` frames are. *Acceptance:* zod/validator on the dispatch frame.
-8. **GAP-D8 (P2, E:all)** — No concurrency cap per cloud agent or per tenant on simultaneous executions; a tenant can fan out unbounded cloud runs. *Acceptance:* per-tenant concurrent-execution limit.
+### A. Dispatch & routing
+1. **GAP-D2 (P0)** — The dispatch → `CloudRunnerDO` handoff has no assertion for a drop between "recorded" and "first tick" (the run could sit unclaimed). *Acceptance:* a start-timeout plus a test for the dropped-handoff race.
+2. **GAP-D5 (P1)** — `tasks.assignedAgentRef` is not surfaced on the task card, so a buyer cannot see which cloud agent ran. *Acceptance:* render agent attribution on the task card.
+3. **GAP-D6 (P2)** — No idempotency key on `POST /executions`; a double-click can spawn two concurrent runs on one ticket branch. *Acceptance:* idempotency key plus dedupe within an in-flight window.
+4. **GAP-D8 (P2)** — No per-tenant cap on simultaneous cloud executions. *Acceptance:* per-tenant concurrent-execution limit.
 
 ### B. Workspace, git & PR lifecycle
+5. **GAP-W5 (P1)** — An empty-diff finalize (agent changed nothing) must not open an empty PR. *Acceptance:* skip the PR and mark the execution `no_changes`.
+6. **GAP-W6 (P1)** — PR open/update has no merge-base check; if base moved the PR may be unmergeable with no signal. *Acceptance:* surface mergeability on the execution.
+7. **GAP-W7 (P1)** — A revoked or expired provider token surfaces as a raw provider error. *Acceptance:* typed `provider_auth_failed` with a re-auth prompt.
+8. **GAP-W9 (P2)** — Full clone stays (decision W9) but a huge repo can exhaust the sandbox. *Acceptance:* a repo-size ceiling checked before the clone, failing with a clear, typed error.
+9. **GAP-W10 (P1)** — `builderforce/task-<taskId>` has no collision handling if a human created that branch. *Acceptance:* detect and suffix, or refuse with a clear message.
+10. **GAP-W12 (P2)** — Assert the workspace lives outside the checkout so it can never be committed.
+11. **GAP-D4 (P1)** — Implement the D4 decision: a run with no bound repository ends `pr_skipped: no_repository` (emitted by `cloudFinalize.ts`), never a failure and never `needs_host`. *Acceptance:* test for the no-repository terminal path.
 
-9. **GAP-W1 (P0, E:V1,V2)** — `ensureTaskWorkspace` clones once per ticket but there is no validation that a *re-run* on the same ticket reuses vs. re-clones cleanly (stale branch state). *Acceptance:* re-run test asserting branch is reset/fast-forwarded, not duplicated.
-10. **GAP-W2 (P0, E:V1,V2)** — Workspace teardown (`finalizeTask` ~504) only runs on the Done path; an **errored/cancelled** run leaks `.builderforce/tasks/<taskId>` on disk. *Acceptance:* teardown in a `finally`/on terminal states. — **CLOSED**: `releaseTaskWorkspaceOnTerminal` (task-workspace.ts) is the ONE teardown; the relay releases on done/failed/cancelled/aborted, committing + pushing the branch first so nothing is lost.
-11. **GAP-W3 (P0, E:fallback)** — Cloud-Worker commits go straight to the ticket branch via provider REST with **no diff preview**; a bad write is already on the branch before review. *Acceptance:* stage to a draft/PR-only branch, never the protected base.
-12. **GAP-W4 (P1, E:V1)** — V1 attributes changes by diffing `git status --porcelain` *after* the session; concurrent edits or an interrupted session mis-attribute or drop changes. *Acceptance:* per-turn snapshotting or a clean-tree precondition assertion.
-13. **GAP-W5 (P1, E:all)** — No handling for an **empty diff** finalize (agent ran, changed nothing): does it open an empty PR? *Acceptance:* skip PR + mark execution `no_changes`.
-14. **GAP-W6 (P1, E:all)** — PR open/update (`openTaskPullRequest`) has no conflict/merge-base check; if base moved, the PR may be unmergeable with no signal. *Acceptance:* surface mergeability state on the execution.
-15. **GAP-W7 (P1, E:all)** — Provider token decryption path (`commitFileAsPendingChange`) has no validation for revoked/expired tokens; failure mode is a raw provider error. *Acceptance:* typed `provider_auth_failed` with re-auth prompt.
-16. **GAP-W8 (P2, E:V1,V2)** — `buildTaskCloneUrl` routes through the host git-proxy; for a *pure cloud* run with no host, the proxy path is untested. *Acceptance:* cloud-direct clone path test.
-17. **GAP-W9 (P2, E:all)** — Large-repo clone has no depth/size guard; a huge repo can blow the Worker/runtime budget. *Acceptance:* shallow clone + size ceiling with a clear error.
-18. **GAP-W10 (P1, E:all)** — Branch naming `builderforce/task-<taskId>` has no collision handling if a human created the same branch. *Acceptance:* detect + suffix or refuse with a clear message.
-19. **GAP-W11 (P2, E:fallback)** — Binary/large file writes via `write_file` provider REST are unbounded. *Acceptance:* reject binaries/over-size with a tool error.
-20. **GAP-W12 (P2, E:all)** — `.builderforce/` workspace path is not gitignored-by-construction; risk of committing the workspace into the repo. *Acceptance:* assert workspace lives outside the checkout.
-
-### C. Engine behaviour & parity
-
-21. **GAP-E1 (P0, E:V1↔V2)** — No parity test that the **same ticket** produces equivalent (committed, attributed) output on V1 vs V2; buyers will A/B engines. *Acceptance:* golden-ticket parity harness.
-22. **GAP-E2 (P0, E:V2)** — V2 runs `permissionMode: 'bypassPermissions'` with Bash enabled in cloud — **arbitrary command execution** with no allowlist in the cloud trust boundary. *Acceptance:* command policy/sandbox for cloud V2 (see §G).
-23. **GAP-E3 (P1, E:fallback)** — Cloud-Worker tool loop is bounded (`write_file`/`finish`) but the max-iteration cap is unverified; a model that never calls `finish` could spin to the cap silently. *Acceptance:* assert cap + emit `max_iterations` terminal reason.
-24. **GAP-E4 (P1, E:fallback)** — Fallback loop has **no Read/Grep tool**, so it writes files without reading existing code → overwrites. *Acceptance:* add read tools or document fallback as "greenfield only" and gate accordingly.
-25. **GAP-E5 (P1, E:V2)** — V2 `anthropicBaseUrl = ${builderforce.ai}/llm`; no test that gateway correctly injects the tenant key vs. default key per `x-api-key`. *Acceptance:* BYO-vs-default routing test (ties to GAP-B*).
-26. **GAP-E6 (P1, E:all)** — No model-selection validation per engine; if a tenant's plan lacks the model the engine requests, failure mode is unclear. *Acceptance:* pre-flight model-entitlement check.
-27. **GAP-E7 (P2, E:V1)** — pi loop "runs to completion, no tools" — there is no guard that it actually wrote to the workspace vs. just emitted prose. *Acceptance:* assert non-empty diff or mark `no_changes`.
-28. **GAP-E8 (P2, E:V2)** — V2 abort handle registration (~436) is keyed by `executionId`; no test that a stale handle is cleared after normal completion (memory leak / wrong-run abort). *Acceptance:* handle-lifecycle test.
+### C. Engine behaviour
+12. **GAP-E6 (P1)** — No model-selection validation up front; if the tenant's plan lacks the requested model the failure mode is unclear. *Acceptance:* pre-flight model-entitlement check.
 
 ### D. Steering & cancellation
-
-29. **GAP-S1 (P0, E:V1,V2)** — Steering injects via the **same session key** as the original dispatch; no test that an injected message lands in the *correct* live session (cross-execution bleed). *Acceptance:* multi-concurrent-execution steering isolation test.
-30. **GAP-S2 (P1, E:V1,V2)** — `buildSteeringInjection` formats the follow-up as the next user turn, but there's no ordering guarantee if two steers arrive before the agent's turn. *Acceptance:* queue + ordering test.
-31. **GAP-S3 (P1, E:all)** — No backpressure: a user can spam `execution.message` frames; relay DO forwards all. *Acceptance:* rate-limit per execution.
-32. **GAP-S4 (P1, E:V2)** — Cancel aborts the V2 SDK handle but does **not** verify the in-flight provider request is actually torn down (token spend continues). *Acceptance:* assert request abort + stop usage accrual.
-33. **GAP-S5 (P0, E:fallback)** — The cloud-Worker fallback loop has **no steering path** (it's a server-side loop, not a live session). Steering silently no-ops. *Acceptance:* either support mid-loop injection or surface "steering unavailable for cloud-fallback runs" in the UI. — **CLOSED**: mid-loop injection is real. `applyPendingSteering` (cloudLoopControl.ts) drains the durable steering thread between iterations and splices each steer in as the next user turn; both cloud surfaces (loop + container `llm` op) call it.
-34. **GAP-S6 (P0, E:fallback)** — Same for **cancellation**: a queued/running cloud-Worker run has no `execution.cancel` honoring. *Acceptance:* cooperative cancel check between loop iterations. — **CLOSED**: `startCancelWatcher` (cloudLoopControl.ts) gives the loop a between-iteration `check()` plus a background poll that aborts the in-flight fetch; the container `llm` op now refuses a cancelled run BEFORE the paid call.
-35. **GAP-S7 (P2, E:all)** — Steering after a run has terminated returns no clear error to the portal (silent drop). *Acceptance:* `409 execution_not_live`.
+13. **GAP-S3 (P1)** — No backpressure: a user can spam steers. *Acceptance:* rate limit per execution.
+14. **GAP-S4 (P1)** — Cancel must tear down the in-flight provider request and stop usage accrual. *Acceptance:* test asserting the abort and no further usage rows.
+15. **GAP-S7 (P1)** — Implement the S7 decision end to end: a steer to a terminal run starts a follow-up run via `followUpRun.ts`; the portal shows the new run. *Acceptance:* test that a terminal-run steer yields a linked follow-up execution, not a 409 and not a silent drop.
 
 ### E. Observability & telemetry integrity
-
-36. **GAP-O1 (P0, E:all)** — No test reconstructs a full run from `tool_audit_events` + `usage_snapshots` + `llm_usage_log` by `execution_id`; this is the core "validated" claim. *Acceptance:* reconstruction test asserting every tool call + token row is present and joinable. — **CLOSED**: `cloudRunReconstruction.test.ts`.
-37. **GAP-O2 (P0, E:fallback)** — `recordCloudUsage` writes to both `usage_snapshots` and `llm_usage_log`; no assertion the two **agree** (double-count or drift in the billing ledger). *Acceptance:* invariant test: ledger total == snapshot total per execution. — **CLOSED**: `cloudRunReconstruction.test.ts`; the two ledgers agree today (one shared clamp, one row per turn each).
-38. **GAP-O3 (P1, E:V2)** — V2 inference flows through the gateway; verify tool-call telemetry is captured for SDK-internal tools (Read/Edit/Bash), not just file changes. *Acceptance:* per-tool emission for V2 (logged today as a known gap).
-39. **GAP-O4 (P1, E:all)** — On a crashed run, partial telemetry leaves the execution with no terminal status row → "stuck running" forever in the UI. *Acceptance:* heartbeat + reaper that marks orphaned executions `failed`.
-40. **GAP-O5 (P1, E:all)** — CLOUD vs ON-PREM pill derives from `kind`; no test that a cloud run never renders as ON-PREM (mis-attribution in the buyer-facing timeline). *Acceptance:* snapshot test on KIND_PILL mapping.
-41. **GAP-O6 (P2, E:all)** — No cost-per-execution rollup surfaced; telemetry exists but the operator can't see "$ for this ticket". *Acceptance:* execution cost summary from `llm_usage_log`.
-42. **GAP-O7 (P2, E:all)** — `sessionKey: exec:<executionId>` convention is undocumented; future joins risk drift. *Acceptance:* document the key contract in this spec + a schema comment.
+16. **GAP-O4 (P1)** — A crashed run can leave an execution "running" forever. *Acceptance:* heartbeat plus reaper marks orphaned executions `failed`.
+17. **GAP-O6 (P2)** — No per-execution cost rollup surfaced ("$ for this ticket"). *Acceptance:* execution cost summary from `llm_usage_log`.
 
 ### F. Billing, limits & BYO keys
-
-43. **GAP-B1 (P0, E:fallback)** — Cloud execution uses **global tenant plan limits, not per-host daily caps** (V1/on-prem honors these). A cloud run can exceed a cap the operator believed was enforced. *Acceptance:* apply a per-cloud-agent budget ceiling.
-44. **GAP-B2 (P0, E:V2)** — If a tenant BYO Anthropic key is missing/invalid, does V2 silently fall to the **default (platform-billed) key**? That's a billing-leak. *Acceptance:* explicit "BYO required" mode that fails closed. — **CLOSED**: `cloudByoPolicy.ts`. A request declaring itself a cloud execution (`x-builderforce-surface: cloud` + `x-builderforce-execution-id`) is refused `402 byo_key_missing` rather than served from the platform pool; ordinary gateway traffic is untouched.
-45. **GAP-B3 (P1, E:all)** — No pre-flight budget check before dispatch; a run starts, burns tokens, then hits the limit mid-loop with a half-done PR. *Acceptance:* reserve/estimate before dispatch.
-46. **GAP-B4 (P1, E:V2)** — `tenantProviderKeyService` decrypt failures during a run have an unclear failure mode. *Acceptance:* typed `byo_key_error`, no fallback to platform key. — **CLOSED**: `classifyCloudByoAnthropic` returns `byo_key_error` with the reason (undecryptable/revoked/expired); `assertCloudRunByo` is the cloud loop's pre-flight — a workspace whose connected providers ALL failed to resolve stops before the first paid call (`byo.blocked` on the timeline).
+18. **GAP-B1 (P0)** — Cloud execution uses tenant plan limits, not a per-cloud-agent ceiling. *Acceptance:* per-cloud-agent budget ceiling (the per-run spend cap of decision E3 is part of this).
+19. **GAP-B3 (P1)** — No pre-flight budget check before dispatch. *Acceptance:* reserve or estimate before dispatch.
 
 ### G. Security & isolation
+20. **GAP-G1 (P0)** — The isolation model (non-root container, egress allowlist, credentials in the Worker; §2) must be documented as the operator-facing boundary and red-teamed. *Acceptance:* a documented isolation model plus a red-team checklist run against a deployed sandbox.
 
-47. **GAP-G1 (P0, E:V2,fallback)** — Cloud V2 with `bypassPermissions` + Bash runs tenant-authored prompts against a cloned repo on **shared infrastructure** with no documented sandbox/network egress boundary. This is the single biggest GA blocker. *Acceptance:* documented isolation model (container/network egress allowlist) + a red-team check.
-48. **GAP-G2 (P0, E:all)** — Decrypted provider tokens live in the runtime process during a run; no assertion they're scrubbed from memory/logs on completion. *Acceptance:* secret-lifecycle audit + log-redaction test.
-49. **GAP-G3 (P1, E:all)** — Cross-tenant isolation of the task workspace dir (`.builderforce/tasks/<taskId>`) on a shared runtime is unverified — taskId collision or path traversal could expose another tenant's checkout. *Acceptance:* tenant-namespaced paths + traversal test.
-
-### H. Validation harness itself
-
-50. **GAP-V1 (P0, E:all)** — There is **no repeatable golden-path E2E** (§5) wired into `qa-e2e/` that an operator can run to validate the whole cloud-agent flow on demand. Without it, every validation is manual and non-reproducible. *Acceptance:* a single `pnpm qa:cloud-agents` run that walks the §3 matrix and asserts §4 P0 checks. — **PARTIAL**: `pnpm qa:cloud-agents` exists in `api/` and runs the offline cloud-agent P0 assertion suite (telemetry reconstruction, ledger==snapshot, steering/cancel, BYO fail-closed) with no network. The §5 golden path itself is still OPEN: it needs a live deploy + a sandbox repo + provider credentials, which cannot be asserted offline and must not be faked.
+### H. Validation harness
+21. **GAP-V1 (P0, PARTIAL)** — `pnpm qa:cloud-agents` (in `api/`) runs the offline P0 assertion suite (telemetry reconstruction, ledger == snapshot, steering/cancel, BYO fail-closed). The §5 golden path is still OPEN: it needs a live deploy, a sandbox repo and provider credentials, and cannot be asserted offline.
 
 ---
 
 ## 5. Golden-path E2E (the operator's self-validation button)
 
-A scripted run under `qa-e2e/` that, for each engine in {V1, V2, fallback}:
+A scripted run under `qa-e2e/` that:
 
-1. Creates a throwaway ticket bound to a sandbox repo.
-2. `POST /executions` with that engine; asserts dispatch + engine resolution (GAP-D1).
-3. Asserts workspace clone + branch (or provider-REST path for fallback) (GAP-W1).
-4. Waits for ≥1 `file.change`; asserts attribution to the cloud agent (GAP-D5).
-5. Sends a steering message; asserts it lands in the live session (GAP-S1) — or asserts the documented no-op for fallback (GAP-S5).
-6. Lets it finish → asserts PR opened (or `no_changes`) (GAP-W5).
-7. Reconstructs the run from telemetry by `execution_id`; asserts ledger==snapshot (GAP-O1, GAP-O2).
-8. Asserts workspace teardown, including on a forced-cancel variant (GAP-W2, GAP-S6).
+1. Creates a throwaway ticket bound to a sandbox repo (and a variant with no repository: expects `pr_skipped: no_repository`).
+2. `POST /executions`; asserts dispatch and the tick loop starting (GAP-D2).
+3. Asserts the clone and branch.
+4. Waits for at least one `file.change`; asserts attribution to the cloud agent (GAP-D5).
+5. Sends a steering message mid-run and asserts it lands; then steers after completion and asserts a follow-up run starts (GAP-S7).
+6. Lets it finish; asserts PR opened or `no_changes` (GAP-W5).
+7. Reconstructs the run from telemetry by `execution_id`; asserts ledger == snapshot.
+8. Asserts workspace teardown, including a forced-cancel variant (GAP-S4).
 
-**Acceptance for GA:** every P0 gap closed, the §3 matrix all-green, and `pnpm qa:cloud-agents` passing
-three consecutive times.
+**Acceptance for GA:** every P0 gap closed, the §3 matrix all-green, and `pnpm qa:cloud-agents` passing three consecutive times.
 
 ---
 
 ## 6. Phasing
 
-- **9a — Telemetry & billing integrity (P0 O*/B*):** make a run reconstructable and correctly billed. Nothing else can be trusted until this is true.
-- **9b — Isolation & secrets (P0 G*):** the GA security gate; cloud V2/Bash must not be a shared-infra footgun.
-- **9c — Lifecycle correctness (P0 D*/W*/S*):** teardown-on-error, fallback steering/cancel, idempotency.
-- **9d — Parity + harness (E*/V1):** V1↔V2 parity and the repeatable E2E button.
+- **9a — Telemetry & billing integrity (P0 B\*):** per-agent budget ceiling and the pre-flight check.
+- **9b — Isolation (P0 G\*):** document and red-team the boundary.
+- **9c — Lifecycle correctness (D\*/W\*/S\*):** start-timeout, no-repository terminal path, follow-up on terminal steer, repo-size ceiling.
+- **9d — Harness (V1):** the live golden-path E2E.
 
-> Sibling gaps surfaced but deferred (per-host cloud token budget detail, multi-repo workspaces,
-> V2 per-tool telemetry depth) are logged to the root `README.md` Consolidated Gap Register rather than
-> widened here.
+---
+
+## 7. Closed, superseded and partial (evidence; closed rows move to DONE.md)
+
+| Gap | Verdict | Evidence |
+|-----|---------|----------|
+| D1, D3, D7 | SUPERSEDED | The per-agent V1/V2 engine switch (`ide_agents.engine`) no longer selects a cloud loop; there is one engine. |
+| W1, W2, W4, W8 | SUPERSEDED | Host-side `task-workspace.ts` clone/teardown is not the cloud path; the sandbox's clone is per execution and discarded with it. Teardown on terminal states was already closed by `releaseTaskWorkspaceOnTerminal`. |
+| W3, W11 | SUPERSEDED | The provider-REST fallback writer is gone; edits happen in the sandbox clone and land on the ticket branch through `cloudFinalize.ts`. |
+| E1, E5, E7, E8, O3 | SUPERSEDED | V1/V2 parity, the V2 SDK base URL, pi-loop prose check, V2 abort handles and V2 per-tool telemetry have no counterpart: one engine, every tool call recorded by `recordCloudToolEvent`. |
+| E2 | DECIDED | Operator decision 2026-11-08 (§2.2): container + egress allowlist is the boundary, no command allowlist. |
+| E3 | DECIDED | Operator decision 2026-11-08 (§2.2): no step cap; failure-streak breaker, stall ladder, per-run spend cap. |
+| E4 | SUPERSEDED | The fallback's missing read tools; the sandbox exposes the full read/grep/shell catalog. |
+| S1, S2 | SUPERSEDED | Steering is the durable steering thread drained by `applyPendingSteering`, per execution; there is no shared live session key. |
+| S5, S6 | CLOSED | `applyPendingSteering` / `startCancelWatcher` in `cloudLoopControl.ts`. |
+| O1, O2 | CLOSED | `cloudRunReconstruction.test.ts`. |
+| O5 | CLOSED | `AGENT_KIND_PILL` (`frontend/src/components/observability/agentKindPill.ts`) with `agentKindPill.test.ts`: each kind owns a localized label (`observability.agentKind.*`, five catalogs) and a CLOUD run never maps to ON-PREM. |
+| O7 | CLOSED | Contract documented in §2.1. |
+| B2, B4 | CLOSED | `cloudByoPolicy.ts` (`402 byo_key_missing`, `byo_key_error`, `assertCloudRunByo`). |
+| G2 | CLOSED | Every `tool_audit_events` inserter runs `redactAuditRow` (`infrastructure/security/redactSecrets.ts`): `recordCloudToolEvent`, the host telemetry ingest (`toolAuditRows`), `cloudOutcomeRow`, `recordRunFailureEvent`, `failStrandedDispatch` and both CI ingest files. Redaction walks string LEAVES (`redactDeep`), so stored args stay valid JSON and quoted/escaped secrets are caught, and runs BEFORE any truncation (`redactThenCap` in `cloudAdapterPorts.ts` / `cloudLlmTurn.ts`); the live assistant-text publish and `caughtErrorReporter` (message, stack, cause, context) use the same redactor. Tests: `redactSecrets.test.ts`, `cloudToolEvents.redaction.test.ts`, `hostTelemetryIngest.redaction.test.ts`. Open follow-up: `staleExecutionReaper.ts` still inserts raw rows (two sites) and must call `redactAuditRow`; G2 is not fully closed until it does. |
+| G3 | CLOSED | `insideClone` in `container/sandboxCore.mjs` is realpath-based and follows dangling symlinks by hand (hop-limited); the `list` op and job `cwd` use it; writes open the final component with `O_NOFOLLOW`. Tests: `containerSandboxFsGuard.test.ts` (`../`, absolute, symlink, dangling and looping links, symlinked job cwd, `..\`, URL-encoded). Accepted residuals: a TOCTOU between the check and the open, and hard links to files outside the clone (no containment possible without a mount boundary); both sit under the E2 boundary. |

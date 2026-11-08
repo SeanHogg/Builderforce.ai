@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import type { TenantService } from '../../application/tenant/TenantService';
-import type { PaymentProvider } from '../../infrastructure/payment/PaymentProvider';
+import { WebhookUpstreamError, type PaymentProvider } from '../../infrastructure/payment/PaymentProvider';
 import {
   markCardValidatedByCustomer,
   markCardValidationFailedByCustomer,
@@ -23,7 +23,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
 import type { Db } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
-import { addonRecorderFor, oneOffSettlerFor } from '../../application/billing/purchaseRegistry';
+import { addonRecorderFor, oneOffSettlerFor, purchaseReverserFor } from '../../application/billing/purchaseRegistry';
 import { setSubscriptionState } from '../../application/developer/extensionBilling';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 
@@ -107,6 +107,11 @@ export function createWebhookRoutes(
     try {
       event = await paymentProvider.parseWebhook(rawBody, signatureHeader);
     } catch (err) {
+      // A verified event whose follow-up lookup at the processor failed is OUR/their outage, not a
+      // forged request: 500 so the processor redelivers (and the alert says what happened).
+      if (err instanceof WebhookUpstreamError) {
+        return failResponse(c, new InternalError('Webhook lookup failed', { cause: err }), { source: 'presentation/routes/webhookRoutes.ts', operation: 'parseWebhookUpstream', context: { logMessage: '[webhook] upstream lookup failed:' } });
+      }
       reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] signature verification failed:', details: err } });
       return c.json({ error: 'Invalid signature' }, 401);
     }
@@ -247,6 +252,23 @@ export function createWebhookRoutes(
      * to the purchase registry, which re-reads the session from the processor; a
      * kind with no settler is settled only by its redirect and is acknowledged here.
      */
+    /**
+     * MONEY WENT BACK (full refund / dispute) on a pay-once purchase. Dispatched by
+     * `purchaseKind` to the registry's reverser, which takes back what the flow
+     * granted. Unlike a settlement there is no redirect leg to fall back on, so a
+     * failure answers 500 and the processor redelivers; reversers are idempotent.
+     */
+    if (event.type === 'purchase.reversed') {
+      const reverse = purchaseReverserFor(event.purchaseKind);
+      if (!reverse) return c.json({ received: true, processed: false });
+      try {
+        const processed = await reverse(buildDatabase(c.env as Env), c.env as Env, { metadata: event.metadata ?? {} });
+        return c.json({ received: true, processed: processed ?? false });
+      } catch (err) {
+        return failResponse(c, new InternalError('Processing failed', { cause: err }), { source: 'presentation/routes/webhookRoutes.ts', operation: `reversal:${event.purchaseKind}`, context: { logMessage: '[webhook] purchase reversal failed:' } });
+      }
+    }
+
     if (event.type === 'checkout.completed' || event.type === 'invoice.paid') {
       const settle = oneOffSettlerFor(event.purchaseKind);
       const checkoutSessionId = event.checkoutSessionId;

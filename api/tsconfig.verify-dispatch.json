@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "src/application/swimlane/findOrCreateBoard.test.ts", "src/application/runtime/RuntimeService.policyGates.test.ts"]
+}

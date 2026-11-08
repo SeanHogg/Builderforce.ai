@@ -11,6 +11,8 @@ export default [
   // toolchain in the repository, and this is the gate every change goes through.
   // The guard derives its own repo root, so the cwd it runs from does not matter.
   ['check:source-package-graph', '../../scripts/check-source-package-graph.mjs'],
+  // One tool side-effect classifier: no second TOOL_SIDE_EFFECT / isMutatingTool / evaluatePolicyGate outside packages/agent-tools.
+  ['check:single-tool-classifier', '../../scripts/check-single-tool-classifier.mjs'],
   // Also repo-level: a package nobody depends on directly is held at one version by
   // an `overrides` entry per project, and the version itself lives in exactly one
   // file. Without this, the number is copied into a manifest per project and the
@@ -54,6 +56,8 @@ export default [
   ['check:project-ownership', 'check-project-ownership.mjs'],
   ['check:tenant-scope', 'check-tenant-scope.mjs'],
   ['check:execution-landing', 'check-execution-landing.mjs'],
+  // tool_audit_events is inserted ONLY through insertToolAudit, which redacts args/result first.
+  ['check:tool-audit-writes', 'check-tool-audit-writes.mjs'],
   ['check:source', 'check-source-text.mjs'],
   // Repo-level: ONE silent-catch guard scans every package's source tree against
   // the shared baseline in scripts/silent-catches.baseline.json. api's chain runs
@@ -71,6 +75,8 @@ export default [
   ['check:tests-unchanged', '../../scripts/check-tests-unchanged.mjs'],
   // The guard's own test: which paths it holds to section 5.1 (scripts/lib/oracleScope.mjs). Plain node:test, run with node.
   ['check:tests-unchanged-scope', '../../scripts/lib/oracleScope.test.mjs'],
+  // The publish guard's built-output import scan (scripts/lib/distImports.mjs). Plain node:test.
+  ['check:publishable-deps-scan', '../../scripts/lib/distImports.test.mjs'],
   // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the
   // one validated read. Seeded 2026-09-06; the counts can only fall.
   ['check:unvalidated-bodies', 'check-unvalidated-bodies.mjs'],

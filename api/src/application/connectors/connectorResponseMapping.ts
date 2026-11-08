@@ -14,7 +14,8 @@
  * means no confirmed row.
  */
 
-import type { ConnectorResponseMapping } from './connectorManifest';
+import type { ConnectorManifest, ConnectorResponseMapping } from './connectorManifest';
+import { URL_TEMPLATE_PLACEHOLDER_RE, matchesPattern } from './connectorMappingValidators';
 import { getDeep, type ConnectorCallResult } from './connectorRuntime';
 
 const HEADER_PREFIX = 'header:';
@@ -37,7 +38,9 @@ export function responseHeaderNames(mapping: ConnectorResponseMapping | undefine
   if (!mapping) return [];
   const names = new Set<string>();
   for (const selectors of Object.values(mapping)) {
-    for (const selector of selectors ?? []) {
+    // `urlTemplate` is a string, not a selector list — iterating it would read characters.
+    if (!Array.isArray(selectors)) continue;
+    for (const selector of selectors) {
       if (selector.startsWith(HEADER_PREFIX)) names.add(selector.slice(HEADER_PREFIX.length).toLowerCase());
     }
   }
@@ -60,12 +63,68 @@ function scalarAt(result: Pick<ConnectorCallResult, 'data' | 'headers'>, selecto
   return null;
 }
 
-function firstOf(result: Pick<ConnectorCallResult, 'data' | 'headers'>, selectors: readonly string[] | undefined): string | null {
+/** The first selector that yields a non-empty scalar, or null. Also reads one list item
+ *  (`{ data: item }`) for the applicant mapping. */
+export function firstOf(result: Pick<ConnectorCallResult, 'data' | 'headers'>, selectors: readonly string[] | undefined): string | null {
   for (const selector of selectors ?? []) {
     const hit = scalarAt(result, selector);
     if (hit) return hit;
   }
   return null;
+}
+
+/**
+ * Render a mapping's `urlTemplate`, or null.
+ *
+ * Null when the template is absent, when `{externalId}` has no id, or when ANY
+ * `{connection.<field>}` is missing or empty on the connection — a URL with a hole in
+ * it is a link to the wrong page, which is worse than no link. Values are
+ * percent-encoded so a connection field cannot inject path or query structure.
+ * Pure: the caller supplies the connection's non-secret fields and still passes the
+ * result through its own absolute-http(s) check.
+ */
+export function renderUrlTemplate(
+  template: string | undefined,
+  values: {
+    externalId: string | null;
+    /** The second id (`response.postId`), for `{postId}`. */
+    postId?: string | null;
+    /** `response.externalIdPattern`: the id must fully match it or nothing fires. */
+    externalIdPattern?: string;
+    connection: Readonly<Record<string, string>>;
+  },
+): string | null {
+  if (!template) return null;
+  if (values.externalIdPattern && (!values.externalId || !matchesPattern(values.externalIdPattern, values.externalId))) return null;
+  let missing = false;
+  const rendered = template.replace(URL_TEMPLATE_PLACEHOLDER_RE, (_m, name: string) => {
+    const value = name === 'externalId' ? values.externalId
+      : name === 'postId' ? values.postId
+      : values.connection[name.slice('connection.'.length)];
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (!trimmed) { missing = true; return ''; }
+    return encodeURIComponent(trimmed);
+  });
+  return missing ? null : rendered;
+}
+
+/** Whether a mapping can ever produce a public link for a posting. */
+export function mappingYieldsUrl(mapping: ConnectorResponseMapping | undefined): boolean {
+  return Boolean(mapping?.url?.length || mapping?.urlTemplate);
+}
+
+/**
+ * Whether a board can EVER give a posting a public link, by any route its manifest
+ * declares: a `url` selector or `urlTemplate` on its publish action, a `resolve_url`
+ * action, or a link on the jobs it lists (`boardJobs.url` / the list action's own
+ * `urlTemplate`, which is how a job linked from Workable gets one). Indeed declares none.
+ */
+export function manifestYieldsPublicLink(manifest: Pick<ConnectorManifest, 'actions'>, publishKey: string): boolean {
+  return manifest.actions.some((action) => {
+    if (action.key === publishKey) return mappingYieldsUrl(action.response);
+    if (action.key === 'resolve_url') return Boolean(action.resolve);
+    return Boolean(action.boardJobs?.url?.length || action.response?.urlTemplate);
+  });
 }
 
 /** Apply a mapping to a response. An absent mapping maps nothing. */

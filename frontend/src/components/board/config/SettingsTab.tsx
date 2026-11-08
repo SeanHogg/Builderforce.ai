@@ -10,6 +10,7 @@ import { boardsApi, kanbanApi, type Board } from '@/lib/builderforceApi';
 import type { TemplateSummary } from '@/lib/kanban';
 import { btnPrimary, btnSubtle, inputStyle, sectionPad } from './configStyles';
 import { faultMessage } from '@/lib/apiClient';
+import { useKanbanTemplateCheckout } from '@/lib/useKanbanTemplateCheckout';
 export function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: number; onSaved: () => void }) {
   const t = useTranslations('boardConfig');
   const confirm = useConfirm();
@@ -30,6 +31,11 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [templateBusy, setTemplateBusy] = useState(false);
   const [templateError, setTemplateError] = useState<string | null>(null);
+  // A priced template answers 402 → ordinary listing checkout; once bought, apply it.
+  const handlePurchaseRequired = useKanbanTemplateCheckout('board-settings', {
+    onGranted: (id) => { setSelectedTemplateId(id); setTemplateError(null); },
+    onFailed: setTemplateError,
+  });
 
   useEffect(() => {
     let live = true;
@@ -61,7 +67,7 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
       setActiveTemplateId(selectedTemplateId);
       onSaved();
     } catch (e) {
-      setTemplateError(faultMessage(e, t('templateApplyError')));
+      setTemplateError((await handlePurchaseRequired(e, selectedTemplateId)) ?? faultMessage(e, t('templateApplyError')));
     } finally {
       setTemplateBusy(false);
     }

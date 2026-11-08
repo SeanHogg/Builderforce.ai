@@ -29,11 +29,14 @@ import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executionPauseState, executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
-import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { buildRuntimeService } from '../../buildRuntimeService';
+import { runFailureEventRow } from './recordRunFailureEvent';
+import type { LandedRun } from './executionLandedEffects';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
-import { recordReapedOutcomes } from './cloudOutcomeRow';
-import { markReaperRequeued, parseExecutor } from './cloudDispatch';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
+import type { ExecutionRepository, ReapedExecutionRow } from '../../infrastructure/repositories/ExecutionRepository';
+import { markReaperRequeued, parseCloudAgentRef, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
 import { anyStale, LIVE_RUN_MAX_AGE_MS, probeStaleWork, REAP_BATCH_LIMIT, stalePredicates } from './staleExecutionProbe';
@@ -93,18 +96,18 @@ export interface ReapResult {
   parkAge: ParkAgeTimeoutResult;
 }
 
-/**
- * The snake_case projection every reap UPDATE returns. Deliberately aliased back to
- * the raw column names ({@link ReapedRow}) — the telemetry mirror, the chat
- * narration and the self-heal re-dispatch all read these keys, and the reaper's
- * rows are also the shape the read-path repair speaks.
- */
-const REAPED_RETURNING = {
-  id: executions.id, tenant_id: executions.tenantId, agent_host_id: executions.agentHostId, cloud_agent_ref: executions.cloudAgentRef,
-  payload: executions.payload, error_message: executions.errorMessage, task_id: executions.taskId,
-} as const;
+/** The fan-out a reaped (FAILED) run is owed beyond its row: the SAME one `RuntimeService.update` fires (task sync, managed callback,
+ *  attribution, chat milestone, audit). Injectable so the sweep's tests assert the hand-off without a full runtime. */
+export type SettleReapedFailures = (runs: ReadonlyArray<LandedRun & { errorMessage: string | null }>) => Promise<void>;
 
-export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ReapResult> {
+export async function reapStaleExecutions(
+  env: Env,
+  nowMs = Date.now(),
+  db: Db = buildDatabase(env),
+  settleFailures: SettleReapedFailures = async (runs) => buildRuntimeService(env, db).settleLandedFailures(runs),
+): Promise<ReapResult> {
+  // The ONE writer of a reaped run's terminal status (a set-based, guarded UPDATE that records the outcome rows).
+  const executionRepo = buildExecutionRepository(db);
   const stale = stalePredicates({
     running: new Date(nowMs - RUNNING_DEADLINE_MS).toISOString(),
     cloudRunning: new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString(),
@@ -131,7 +134,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
   // tighter deadline, so scope this to host runs only.
   const running: ReapedRow[] = probe.hostRunning
-    ? await failStaleBatch(db, stale.hostRunning, 'Execution timed out — the agent did not report completion (host crash or dropped connection).')
+    ? await failStaleBatch(executionRepo, stale.hostRunning, 'Execution timed out — the agent did not report completion (host crash or dropped connection).')
     : [];
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
@@ -214,23 +217,13 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // One UPDATE per distinct reason (in practice one or two), not one per row: the
   // reason text is the only per-row variable, so rows sharing it share a statement.
   for (const [reason, ids] of toFail) {
-    const failed = await db
-      .update(executions)
-      .set({
-        status: 'failed',
-        errorMessage: reason,
-        completedAt: sql`now()`,
-        updatedAt: sql`now()`,
-      })
-      .where(acrossTenants(executions, 'scheduled_sweep', and(inArray(executions.id, ids), eq(executions.status, 'running'))))
-      .returning(REAPED_RETURNING);
+    const failed = await executionRepo.failWhere(and(inArray(executions.id, ids), eq(executions.status, 'running'))!, reason);
     cloudRunning.push(...failed);
-    await recordReapedOutcomes(db, failed); // per batch, right after the UPDATE that landed it
   }
 
   // Dropped queue: submitted/pending but no agent ever took it.
   const queued: ReapedRow[] = probe.queued
-    ? await failStaleBatch(db, stale.queued, 'Execution was never picked up by an agent within the dispatch window.')
+    ? await failStaleBatch(executionRepo, stale.queued, 'Execution was never picked up by an agent within the dispatch window.')
     : [];
 
   // Abandoned agent QUESTION: a run parked on `ask_human` that nobody answered
@@ -239,7 +232,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // `laneRequirementGate` both count a paused run as LIVE, so until this row goes
   // terminal the ticket can never auto-run again. Measured from `updated_at` so a
   // still-active back-and-forth on the question keeps the run alive.
-  const paused: ReapedRow[] = probe.paused ? await failStaleBatch(db, stale.paused, PAUSED_ORPHAN_REASON) : [];
+  const paused: ReapedRow[] = probe.paused ? await failStaleBatch(executionRepo, stale.paused, PAUSED_ORPHAN_REASON) : [];
 
   // A full batch means a backlog remains: keep the next tick's gate open so it drains
   // promptly instead of waiting for the floor sweep.
@@ -280,14 +273,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     const chunk = reaped.slice(i, i + REAP_BATCH_LIMIT);
     try {
       await runTelemetryDatabase(db).insert(toolAuditEvents).values(chunk.map(({ row: r, toolName }) => ({
-        tenantId: r.tenant_id,
-        agentHostId: r.agent_host_id,
-        cloudAgentRef: cloudRefFromPayload(r.payload),
-        executionId: r.id,
-        sessionKey: 'exec:' + r.id,
-        toolName,
-        category: 'error',
-        result: r.error_message ?? 'Run failed',
+        ...runFailureEventRow({ tenantId: r.tenant_id, agentHostId: r.agent_host_id, payload: r.payload, executionId: r.id, errorMessage: r.error_message }, toolName),
         ts: sql`now()`,
       })));
     } catch (error) {
@@ -308,13 +294,18 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     } } }));
 
-  // …and narrate each reaped failure into the ticket's linked Brain chats. The
-  // bulk sweeps above bypass RuntimeService.update, so without this a run that
-  // dies silently (hung host, evicted cloud isolate, dropped queue, abandoned
-  // ask_human) NEVER reaches the human driving the conversation — the chat shows
-  // "started working on…" and then nothing, forever. Idempotent per execution
-  // (run:{id}:failed), so racing the read-path reaper's narration is harmless.
-  await narrateReapedRuns(env, db, reaped.map(({ row }) => row));
+  // …and hand each reaped failure to the SAME fan-out RuntimeService.update fires for a FAILED run:
+  // the task-lane sync + ticket metrics, the managed-board callback, manifest attribution, the audit
+  // event and the narration into the ticket's linked Brain chats. The set-based UPDATEs above are the
+  // only thing that differs from the canonical transition; without this a run that dies silently
+  // (hung host, evicted cloud isolate, dropped queue, abandoned ask_human) left its ticket's metrics
+  // and coordinator blind and its chat saying "started working on…" forever. Idempotent per execution
+  // (run:{id}:failed), so racing the read-path reaper is harmless. Best-effort: never breaks the sweep.
+  await settleFailures(reaped.flatMap(({ row }) => reapedRunOf(row)))
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[execution-reaper] landed-effects fan-out failed', details: {
+      executionIds: reaped.map(({ row }) => row.id),
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } }));
 
   // A reaped run is terminal, so a steer still pending on it never reached it: it is
   // LATE and starts a follow-up run (lateSteerFollowUp.ts). The bulk updates above
@@ -353,62 +344,24 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
  * that completed between the subquery's read and the update is left alone, exactly as
  * the old unbounded UPDATE behaved.
  */
-async function failStaleBatch(db: Db, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {
-  const failed: ReapedRow[] = await db
-    .update(executions)
-    .set({ status: 'failed', errorMessage, completedAt: sql`now()`, updatedAt: sql`now()` })
-    .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate, inArray(executions.id, db
-      .select({ id: executions.id })
-      .from(executions)
-      .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate))
-      .limit(REAP_BATCH_LIMIT))))
-    .returning(REAPED_RETURNING);
-  return recordReapedOutcomes(db, failed).then(() => failed); // per batch, right after the UPDATE that landed it
+function failStaleBatch(executionRepo: ExecutionRepository, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {
+  return executionRepo.failWhere(stalePredicate, errorMessage, REAP_BATCH_LIMIT); // outcome rows recorded per batch by the repository
 }
 
-interface ReapedRow {
-  id: number;
-  tenant_id: number;
-  agent_host_id: number | null;
-  payload: string | null;
-  error_message: string | null;
-  /** The ticket the run served — the chat-narration fan-out key (chat_ticket_links). */
-  task_id: number | null;
-  cloud_agent_ref: string | null;
-}
+/** The snake_case row a reap UPDATE returns - the telemetry mirror, the lifecycle fan-out and the self-heal re-dispatch read these keys. */
+type ReapedRow = ReapedExecutionRow;
 
 /**
- * Post a `failed` run-milestone into every Brain chat linked to each reaped run's
- * ticket ({@link ChatTicketService.postRunMilestone} — insert + DO `changed`
- * broadcast, so a mounted web/VSIX Brain re-reads and shows it live). One batched
- * `tasks` read resolves the chat-ticket kind (task|epic|gap); per-execution+phase
- * idempotent; best-effort — narration must never break the reap sweep.
+ * A reaped row as the shared fan-out reads it. A run with no ticket has no lane, metrics or chat to
+ * notify, so it yields nothing. A cloud run's agent attribution lives in its payload, not a column.
  */
-async function narrateReapedRuns(env: Env, db: Db, rows: ReapedRow[]): Promise<void> {
-  const withTask = rows.filter((r) => r.task_id != null);
-  if (withTask.length === 0) return;
-  try {
-    const taskIds = [...new Set(withTask.map((r) => Number(r.task_id)))];
-    const kinds = await db
-      .select({ id: tasks.id, task_type: tasks.taskType })
-      .from(tasks)
-      .where(inArray(tasks.id, taskIds));
-    const kindByTask = new Map(kinds.map((k) => [Number(k.id), ticketKindForTaskType(k.task_type)]));
-    const chatTickets = new ChatTicketService(db, env);
-    await Promise.all(withTask.map((r) => chatTickets.postRunMilestone(r.tenant_id, {
-      kind: kindByTask.get(Number(r.task_id)) ?? 'task',
-      ref: String(r.task_id),
-      agentRef: cloudRefFromPayload(r.payload),
-      phase: 'failed',
-      executionId: r.id,
-      errorMessage: r.error_message,
-    })));
-  } catch (error) {
-    reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "narrateReapedRuns", context: { logMessage: '[execution-reaper] chat narration failed', details: {
-      executionIds: withTask.map((r) => r.id),
-      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    } } });
-  }
+function reapedRunOf(row: ReapedRow): Array<LandedRun & { errorMessage: string | null }> {
+  if (row.task_id == null) return [];
+  return [{
+    id: row.id, tenantId: row.tenant_id, taskId: Number(row.task_id), payload: row.payload,
+    cloudAgentRef: row.cloud_agent_ref ?? parseCloudAgentRef(row.payload ?? undefined) ?? null,
+    agentHostId: row.agent_host_id, errorMessage: row.error_message,
+  }];
 }
 
 /** A stale cloud run + the task context the durable executor needs to resume it. */
@@ -488,16 +441,4 @@ async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promis
     } } });
   }
   return true;
-}
-
-/** Cloud-agent ref pinned in the execution payload, if any (cloud runs have no
- *  cloud_agent_ref column — attribution lives in the payload). */
-function cloudRefFromPayload(payload: string | null): string | null {
-  if (!payload) return null;
-  try {
-    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
-    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : null;
-  } catch {
-    return null;
-  }
 }

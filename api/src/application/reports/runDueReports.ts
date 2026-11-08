@@ -23,6 +23,8 @@ import type { Env } from '../../env';
 const MAX_SCHEDULES_PER_TICK = 200;
 
 export interface ScheduleRowForGen {
+  /** The delivering schedule row, so a generator can resolve its period from exactly that row. */
+  scheduleId?: string;
   reportType: string;
   tenantId: number;
   segmentId: string | null;
@@ -89,7 +91,7 @@ export async function runDueReports(env: Env, generate: ScheduledReportGenerator
       if (recipients.length > 0) {
         const built = await generate(
           db,
-          { reportType: s.reportType, tenantId: s.tenantId, segmentId: s.segmentId, subjectKind: s.subjectKind, subjectRef: s.subjectRef },
+          { scheduleId: s.id, reportType: s.reportType, tenantId: s.tenantId, segmentId: s.segmentId, subjectKind: s.subjectKind, subjectRef: s.subjectRef },
           now,
         );
         if (built) {

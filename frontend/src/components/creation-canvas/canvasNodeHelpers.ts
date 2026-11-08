@@ -3,7 +3,7 @@ import { makeSpecDeriveBoard } from '@/lib/specObjects';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import { createDefaultCreationData } from './creationObjectRegistry';
-import { type CanvasDrawingTool, canvasStrokes } from '@/lib/canvasDrawing';
+import { canvasStrokes } from '@/lib/canvasDrawing';
 import { objectAtPoint } from '@/domains/canvas/domain/canvasBoard';
 import { canvasNodeDimensions } from './creationCanvasLayout';
 import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
@@ -41,17 +41,6 @@ export function restyleDrawing(data: CreationNodeData, style: { stroke?: string;
   const strokes = canvasStrokes(data).map((stroke) => ({ ...stroke, ...style }));
   return { strokes, ...style } as Partial<CreationNodeData>;
 }
-
-/** One glyph per tool, so the tray is scannable without reading it. The label
- *  stays beside it — an icon-only pen tray is a memory test. */
-export const DRAWING_TOOL_GLYPH: Readonly<Record<CanvasDrawingTool, string>> = {
-  pen: '✎', highlighter: '▬', line: '╱', rect: '▭', ellipse: '◯', text: 'T', eraser: '⌫',
-};
-
-/** `<input type="color">` cannot show a CSS variable, and the default stroke IS
- *  one (so a sketch reads correctly in both themes). The swatch falls back to the
- *  hex of that variable until the user picks a colour of their own. */
-export const DRAWING_FALLBACK_HEX = '#4d9eff';
 
 /**
  * The object a point lands on — `objectAtPoint`, given this surface's measurer.

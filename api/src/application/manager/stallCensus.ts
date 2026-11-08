@@ -35,8 +35,11 @@
  * The fast ladder is a strict SUBSET of the real evaluator. It cannot resolve
  * capability requirements (they need per-agent artifact resolution), the re-run
  * cooldown, same-lane re-entry, the workspace token gate, or the lane REQUIREMENT gate.
- * Tickets it cannot place land on `will_run`, and the deep stage — which does see those
- * — remains authoritative for the tickets it reaches. So the census is honest about
+ * Tickets it cannot place land on `will_run` — but for those, the dispatcher's own
+ * recorded refusal (`auto_run_skipped` / `auto_run_error`, read in ONE batched query by
+ * `censusRecordedRefusals`) supplies the real reason, so they stop being mislabelled
+ * `never_started`. The deep stage — which does see everything — remains authoritative
+ * for the tickets it reaches. So the census is honest about
  * being a floor: {@link StallCensus.deepDiagnosed} reports how much of it has been
  * confirmed in depth, and a reader is never invited to mistake breadth for certainty.
  */
@@ -59,6 +62,7 @@ import {
 } from '../kanban/managedLaneRoles';
 import { MAX_AUTONOMOUS_RUNS_PER_TASK, MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
+import { loadRecordedRefusalReasons } from './censusRecordedRefusals';
 import { getEffectiveManagerPolicy } from './managerPolicyStore';
 import { managerHoldsReviewGate } from './reviewGateAuthority';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -117,6 +121,12 @@ export interface CensusTicketFacts {
    * sign-off cohort classify as itself rather than as a dispatch problem.
    */
   stageOwedRoles: string[];
+  /**
+   * The refusal the dispatcher RECORDED for this ticket, for a reason the fast ladder is
+   * blind to (see `censusRecordedRefusals`). Only ever set on tickets the ladder would
+   * otherwise call `will_run`; null/absent means nothing usable was recorded.
+   */
+  recordedRefusal?: AutoRunReason | null;
 }
 
 /**
@@ -212,7 +222,10 @@ export function classifyBulkAutoRunReason(f: CensusTicketFacts): AutoRunReason {
   // the ceiling on runs that all SUCCEEDED never appears in a failure-keyed census at all.
   if (f.totalRuns >= MAX_AUTONOMOUS_RUNS_PER_TASK) return 'run_cap_exhausted';
   if (f.consecutiveFailures >= MAX_CONSECUTIVE_AUTORUN_FAILURES) return 'run_cap_exhausted';
-  return 'will_run';
+  // Everything above is what the ladder can derive. `will_run` here means "nothing the
+  // ladder models refuses it" — NOT "the dispatcher will run it": the real refusal, when
+  // one was recorded, is the truth for the reasons the ladder cannot see.
+  return f.recordedRefusal ?? 'will_run';
 }
 
 /**
@@ -425,7 +438,7 @@ export async function loadCensusFacts(
   }
 
   const managed = !!board?.lifecycleManaged;
-  return args.tasks.map((t): CensusTicketFacts => {
+  const facts = args.tasks.map((t): CensusTicketFacts => {
     const last = shared.lastMovedAt.get(t.id) ?? t.createdAt;
     const lane = laneByKey.get(t.status) ?? null;
     // The SAME pure pick the evaluator and the guard use, applied to bulk-loaded inputs —
@@ -480,6 +493,16 @@ export async function loadCensusFacts(
       stageOwedRoles: (owedRoles as Map<string, string[]>).get(`${t.id}:${t.status}`) ?? [],
     };
   });
+
+  // Tickets the fast ladder calls runnable get their RECORDED refusal, if any — one
+  // batched read for the whole set, never per ticket.
+  const runnable = facts
+    .filter((f) => classifyBulkAutoRunReason(f) === 'will_run')
+    .map((f) => ({ taskId: f.taskId, lastMovedAtMs: now - f.idleMs }));
+  const recorded = await loadRecordedRefusalReasons(db, args.tenantId, runnable, now);
+  return recorded.size === 0
+    ? facts
+    : facts.map((f) => (recorded.has(f.taskId) ? { ...f, recordedRefusal: recorded.get(f.taskId) ?? null } : f));
 }
 
 /** Manifest producer slots for many tickets at once, keyed `taskId:stageKey`. */

@@ -21,17 +21,18 @@ import { executions, tasks, projects, toolAuditEvents } from '../../infrastructu
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
-import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { mergeBranchToBase, cloudMergeOnGreenCi, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
-import { ticketBranchName } from '../repos/commitFileAsPendingChange';
-import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { cloudMergeOnGreenCi, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
+import { mergeOnGreen } from './mergeOnGreen';
+import { findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus, isMergeCandidate } from '../repos/recordPullRequestRow';
 import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { HOUR_MS } from '../../domain/shared/time';
+import { insertToolAudit } from '../audit/toolAuditWrite';
+import { redactThenCap } from '../../infrastructure/security/redactSecrets';
 
 export interface RepoCiEvent {
   /** GitHub event name, e.g. 'check_suite' | 'deployment_status' | 'workflow_run' | 'status'. */
@@ -220,12 +221,12 @@ async function applyBuildOutcome(
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
   });
 
-  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+  await insertToolAudit(db, {
     tenantId, agentHostId: null, cloudAgentRef: agentRef,
     executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
     toolName: 'build.result', category: 'ci',
     args: JSON.stringify({ phase, branch: evt.branch, sha: evt.sha, runId: evt.runId, url: evt.targetUrl }),
-    result: `${phaseLabel} ${outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`.slice(0, 300),
+    result: redactThenCap(`${phaseLabel} ${outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`, 300),
     ts: new Date(),
   }).catch((error) => {
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
@@ -261,7 +262,7 @@ async function applyBuildOutcome(
   }
 
   if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
-    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+    await insertToolAudit(db, {
       tenantId, agentHostId: null, cloudAgentRef: agentRef,
       executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
       toolName: 'build.needs_human', category: 'ci',
@@ -371,12 +372,12 @@ async function ingestDesignerEvent(
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
   });
 
-  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+  await insertToolAudit(db, {
     tenantId: project.tenantId, agentHostId: null, cloudAgentRef: null,
     executionId: null, sessionKey: `project:${projectId}`,
     toolName: 'build.result', category: 'ci',
     args: JSON.stringify({ branch: evt.branch, sha: evt.sha, projectId }),
-    result: (outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')).slice(0, 300),
+    result: redactThenCap((outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')), 300),
     ts: new Date(),
   }).catch((error) => { /* telemetry best-effort */ 
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
@@ -398,13 +399,13 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
   const execId = await latestExecutionId(db, taskId, task.tenantId);
 
   const result = `${evt.outcome ?? evt.rawState ?? 'unknown'}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`;
-  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+  await insertToolAudit(db, {
     tenantId: task.tenantId, agentHostId: null, cloudAgentRef: task.assignedAgentRef ?? null,
     executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
     toolName: evt.eventType === 'deployment_status' ? 'deploy.status' : `ci.${evt.eventType}`,
     category: 'ci',
     args: JSON.stringify({ branch: evt.branch, sha: evt.sha, state: evt.rawState, url: evt.targetUrl }),
-    result: result.slice(0, 300), ts: new Date(),
+    result: redactThenCap(result, 300), ts: new Date(),
   }).catch((error) => { /* telemetry best-effort */ 
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
   });
@@ -414,47 +415,25 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
   // run so the agent fixes the build it doesn't yet know it broke. Only runs when the
   // agent has actually opened a PR for the task; otherwise we keep the bare event above.
   let buildResult: IngestResult | null = null;
-  if (evt.outcome === 'success' || evt.outcome === 'failure') {
-    const pr = await findOpenPullRequestByTask(db, task.tenantId, taskId);
-    if (pr) {
-      buildResult = await applyBuildOutcome(db, env, secret, {
-        phase: 'pre_merge', taskId, tenantId: task.tenantId, execId,
-        agentRef: task.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
-        evt, allowAutoFix: evt.authoritative ?? evt.runId != null,
-      });
-    }
+  const pr = evt.outcome === 'success' || evt.outcome === 'failure' ? await findOpenPullRequestByTask(db, task.tenantId, taskId, evt.branch) : null;
+  // A DRAFT is recorded (so the ticket shows its build) but never acted on: its run is still live (or a human is not done).
+  const actionable = !pr || isMergeCandidate(pr);
+  if (pr) {
+    buildResult = await applyBuildOutcome(db, env, secret, {
+      phase: 'pre_merge', taskId, tenantId: task.tenantId, execId,
+      agentRef: task.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
+      evt, allowAutoFix: actionable && (evt.authoritative ?? evt.runId != null),
+    });
   }
 
   // Gated shipping: merge only on green, and only when auto-merge is actually
   // enabled. Green is the default when auto-merge is on; the default overall is
   // still "PR open, human approves" (CLOUD_AUTOMERGE_ENABLED off).
   let merged = false;
-  if (evt.outcome === 'success' && cloudMergeOnGreenCi(env)) {
-    const repoRef = await resolveDefaultRepoForTask(db, task.tenantId, taskId);
-    if (repoRef) {
-      const resolved = await resolveRepoCredential(db, secret, task.tenantId, repoRef.repoId);
-      const ticketBranch = ticketBranchName(taskId);
-      if (!isResolveError(resolved) && evt.branch === ticketBranch) {
-        const base = (resolved.repo.defaultBranch ?? 'main').trim();
-        const mr = await mergeBranchToBase({
-          provider: resolved.repo.provider, host: resolved.repo.host,
-          owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-          base, head: ticketBranch, message: `Task #${taskId}: merge on green CI (BuilderForce)`,
-        });
-        merged = mr.ok;
-        // Stamp the merge SHA so the resulting deploy-branch build correlates back.
-        if (mr.ok) {
-          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch((error) => {
-            reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
-          });
-          // Merge on green → ticket complete, through the same review gate every automatic
-          // close obeys (1153). Held: the merge above stands and the ticket waits in review.
-          await closeTicketAutomatically(env, db, { tenantId: task.tenantId, taskId, source: 'ci_merge' }).catch((error) => {
-            reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
-          });
-        }
-      }
-    }
+  if (evt.outcome === 'success' && actionable && cloudMergeOnGreenCi(env)) {
+    merged = await mergeOnGreen(db, env, secret, {
+      tenantId: task.tenantId, taskId, execId: execId ?? null, branch: evt.branch ?? null, eventSha: evt.sha ?? null,
+    }, 'defer');
   }
 
   // Carry the build status + any auto-fix intent (failure) up to the webhook, which

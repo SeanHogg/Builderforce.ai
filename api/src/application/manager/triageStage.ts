@@ -41,7 +41,7 @@ import { executions, pullRequests, tasks, taskFileChanges, taskStatusTransitions
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
@@ -66,6 +66,7 @@ import {
   type DispatchReserver,
 } from '../runtime/tickDispatchBudget';
 import { DAY_MS } from '../../domain/shared/time';
+import { loadSweepOwnedTickets } from '../repos/conductOwnership';
 
 /**
  * How many stalled tickets one pass diagnoses in depth — the CEILING, not the schedule.
@@ -243,7 +244,7 @@ export const TRIAGE_PASS_STATE_KEY = 'triage_pass_limits';
  * each re-diagnosed and re-deferred every pass with no attempt counted — so no escalation
  * to a human was reachable either.
  *
- * Racing is not the risk it sounds like: `maybeAutoRunOnLaneEntry` dedupes on a live
+ * Racing is not the risk it sounds like: `routeLaneEntry` dedupes on a live
  * execution, and every start is bounded by {@link MAX_TRIAGE_DISPATCHES_PER_RUN} and the
  * tenant's shared per-tick ceiling. `ownsDispatch` still governs `mayRaceExecutor` — the
  * optional "and start it" step a COST-FREE remedy may take — which is where the
@@ -527,12 +528,34 @@ export async function loadBulkSignals(
 }
 
 /**
+ * Is this ticket's review-stage work owned by the PR conduct sweep (`repos/prConductSweep.ts`)?
+ * PURE, derived from durable state — no in-pass hand-off. A review ticket with no live run
+ * is the sweep's whenever PR conduct is on (any policy but 'queue'). Such tickets are still
+ * diagnosed and recorded (the register must be complete, or "what is stuck" silently omits
+ * everything in review), but their remedy is not re-applied — that would double-dispatch the
+ * very agent the sweep just asked to sign off.
+ */
+export function isConductedBySweep(
+  task: { status: string }, prMergePolicy: string, hasLiveRun: boolean,
+  pr: { buildStatus: string | null } | null = null,
+  /**
+   * Did the sweep examine this ticket recently AND is the reconciler control on? The sweep
+   * is silent when paused, disabled, out of dispatch budget or capped, so without this
+   * triage withheld its remedy for tickets nobody was conducting. Triage passes the real
+   * answer; the default keeps the pure-state callers (and their tests) unchanged.
+   */
+  conductedRecently = true,
+): boolean {
+  if (!conductedRecently) return false;
+  if (task.status !== TaskStatus.IN_REVIEW || prMergePolicy === 'queue' || hasLiveRun) return false;
+  // `wait_for_build`: under on_green, a PR whose build is neither green nor red is a WAIT
+  // the sweep takes no action on, so the ticket is not owned by it — triage keeps its remedies.
+  if (prMergePolicy === 'on_green' && pr && pr.buildStatus !== 'success' && pr.buildStatus !== 'failure') return false;
+  return true;
+}
+
+/**
  * Diagnose and unstick. See the module header for the four steps.
- *
- * `conductedTaskIds` are tickets the PR/review stage ALREADY acted on this pass. They
- * are still diagnosed and recorded (the register must be complete, or "what is stuck"
- * silently omits everything in review), but their remedy is not re-applied — that
- * would double-dispatch the very agent the review stage just asked to sign off.
  */
 export async function runStallTriage(
   env: Env,
@@ -543,7 +566,6 @@ export async function runStallTriage(
     projectId: number;
     managed: TriageTask[];
     policy: TriagePolicy;
-    conductedTaskIds: ReadonlySet<number>;
     /**
      * Whether THIS pass owns dispatch. False on the cron path, where the always-on
      * autonomous executor is the single dispatcher for runnable work (the same rule
@@ -672,6 +694,9 @@ export async function runStallTriage(
     }
   }
 
+  const recentlyConducted = await loadSweepOwnedTickets(env, db, {
+    tenantId, projectId, now, taskIds: managed.filter((t) => t.status === TaskStatus.IN_REVIEW).map((t) => t.id),
+  });
   const batch = selectTriageBatch(candidates, openStalls);
   // Hiring budget for the whole pass, shared across every ticket it looks at — a stage
   // gap is a per-BOARD defect, so one hire typically unblocks a large cohort at once and
@@ -818,7 +843,9 @@ export async function runStallTriage(
       const { verdict, priorAttempts } = gradeStall(openStalls.get(task.id), task.status, diagnosis);
 
       // 4. ACT.
-      const alreadyConducted = ctx.conductedTaskIds.has(task.id);
+      const alreadyConducted = isConductedBySweep(
+        task, policy.prMergePolicy, signals.liveTaskIds.has(task.id), prRow, recentlyConducted.has(task.id),
+      );
       let applied = false;
       let attempted = false;
       let outcomeNote = '';
@@ -991,7 +1018,7 @@ export async function applyRemedy(
       // needs to pick it up on its next tick. Starting it here as well is an
       // optimisation, taken only when this pass owns dispatch and has budget.
       const started = args.mayRaceExecutor
-        ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        ? await routeLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: task.status, submittedBy: by,
         }).catch(() => false)
         : false;
@@ -1000,7 +1027,7 @@ export async function applyRemedy(
 
     case 'dispatch': {
       if (!args.mayStartRun) return nothing;
-      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+      const started = await routeLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: task.status, submittedBy: by,
       }).catch(() => false);
       // Starting IS the remedy — a trigger that declined has not attempted it.
@@ -1120,7 +1147,7 @@ export async function applyRemedy(
       });
       if (!returned.returned) return { ...ineffective, note: ` ${describeReturnBlock(returned.blockedReason)}` };
       const restarted = args.mayRaceExecutor
-        ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        ? await routeLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS, submittedBy: by,
         }).catch(() => false)
         : false;
@@ -1176,7 +1203,7 @@ export async function applyRemedy(
           updatedAt: new Date(),
         }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, task.id)));
       }
-      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+      const started = await routeLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
         submittedBy: composeDispatcherLabel(by, 'conflict-resolution'),
       }).catch(() => false);

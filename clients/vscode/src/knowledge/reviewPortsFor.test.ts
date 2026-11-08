@@ -40,7 +40,8 @@ vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => {
   };
 });
 
-import { fileManifest, type KnowledgeFiles } from "./knowledgeStores";
+import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
+import type { KnowledgeFiles } from "./knowledgeStores";
 import { PLAN_STEP_MS, RUN_STEP_MS, reviewPortsFor } from "./reviewPortsFor";
 import type { OpenRoot } from "./knowledgeService";
 
@@ -59,7 +60,7 @@ function openRoot(): OpenRoot {
       read: async (p: string) => ({ id: p, tenantId: "r1", title: p, content: { kind: "text", text: "x", mediaType: "text/typescript" } }),
     },
     store: {},
-    manifest: fileManifest(files, "m.json"),
+    manifest: new InMemoryIngestManifest(),
     files,
   } as unknown as OpenRoot;
 }

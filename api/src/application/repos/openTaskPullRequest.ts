@@ -9,13 +9,18 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * This is the shared core; {@link openDispatchPullRequest} delegates to it after
  * resolving a dispatch → task.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq, isNull, lt, type SQL } from 'drizzle-orm';
 import { tasks } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { createPullRequest, type OpenPrInput, type OpenPrResult } from './createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from './mergeBranchToBase';
-import { recordPullRequestRow } from './recordPullRequestRow';
+import { recordPullRequestRow, markPullRequestMergedById } from './recordPullRequestRow';
+import { recordTaskPullRequest } from './recordTaskPullRequest';
+import { runPullRequestSecurityStep } from '../security/pullRequestSecurityStep';
+import { describeSecurityBlock } from '../security/prSecurityGate';
+import { gateReason, type PinnedVerdict } from '../security/securityMergeGate';
+import type { Env } from '../../env';
 import { listSpanningRepoWrites, recordBindingPullRequest } from './taskRepoSet';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -36,6 +41,14 @@ export type OpenTaskPrResult =
   | { ok: false; status: 409; error: string; claimLost: true }
   | { ok: false; status: 400 | 404 | 409 | 501 | 502; error: string };
 
+/** How long a PR-open claim may be held without a recorded PR before it counts as dead (one provider call plus one transaction). */
+export const PR_CLAIM_STALE_MS = 5 * 60_000;
+
+/** A claim stamped before this instant is stale. */
+export function prClaimStaleBefore(now: Date): Date {
+  return new Date(now.getTime() - PR_CLAIM_STALE_MS);
+}
+
 /**
  * Atomically claim the right to open this task's PR. Returns true for exactly one
  * concurrent caller (the row is updated only WHERE no claim and no URL yet); a
@@ -43,31 +56,39 @@ export type OpenTaskPrResult =
  * released by {@link releaseTaskPrClaim} if the subsequent create fails.
  */
 export async function claimTaskPrOpen(db: Db, tenantId: number, taskId: number): Promise<boolean> {
-  // Scoped on tasks.tenant_id (0944). This used to say "tasks is tenant-scoped via
-  // project/segment, not a tenant_id column; the caller has already resolved this
-  // taskId for the tenant" — true, but it made the guarantee a property of the
-  // CALLER. A write this consequential (it decides who opens a PR) states its own
-  // scope now.
-  const now = new Date();
-  const claimed = await db
+  return (await takeTaskPrClaim(db, tenantId, taskId)).claimed;
+}
+
+/** What a caller learns from taking the claim: when (the owner's token for {@link releaseTaskPrClaim}) and whether it RETOOK a dead one. */
+export interface TakenClaim { claimed: boolean; retook: boolean; at: Date }
+
+/**
+ * {@link claimTaskPrOpen} with the detail. A fresh claim (none held) and the retake of a STALE one (held with no PR,
+ * past {@link PR_CLAIM_STALE_MS}: the opener died between the provider create and the record) are separate
+ * statements, so the caller knows which it got — a retake means a PR for the branch may already exist that was ours.
+ */
+export async function takeTaskPrClaim(db: Db, tenantId: number, taskId: number): Promise<TakenClaim> {
+  // Scoped on tasks.tenant_id (0944): a write this consequential (it decides who opens a PR) states its own scope.
+  const at = new Date();
+  const take = async (held: SQL) => (await db
     .update(tasks)
-    .set({ prOpeningAt: now })
-    .where(scopedToTenant(tasks, tenantId,
-      eq(tasks.id, taskId),
-      isNull(tasks.prOpeningAt),
-      isNull(tasks.githubPrUrl),
-    ))
-    .returning({ id: tasks.id });
-  return claimed.length > 0;
+    .set({ prOpeningAt: at })
+    .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId), held, isNull(tasks.githubPrUrl)))
+    .returning({ id: tasks.id })).length > 0;
+  if (await take(isNull(tasks.prOpeningAt))) return { claimed: true, retook: false, at };
+  if (await take(lt(tasks.prOpeningAt, prClaimStaleBefore(at)))) return { claimed: true, retook: true, at };
+  return { claimed: false, retook: false, at };
 }
 
 /** Release a claim taken by {@link claimTaskPrOpen} when the PR-create failed, so a
- *  retry can re-claim. No-op once `github_pr_url` is set (success is permanent). */
-export async function releaseTaskPrClaim(db: Db, tenantId: number, taskId: number): Promise<void> {
+ *  retry can re-claim. No-op once `github_pr_url` is set (success is permanent).
+ *  With `claimedAt` only the claim THIS caller wrote is released: a slow opener whose claim was retaken must not
+ *  free the claim of whoever retook it. */
+export async function releaseTaskPrClaim(db: Db, tenantId: number, taskId: number, claimedAt?: Date): Promise<void> {
   await db
     .update(tasks)
     .set({ prOpeningAt: null })
-    .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId), isNull(tasks.githubPrUrl)))
+    .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId), isNull(tasks.githubPrUrl), ...(claimedAt ? [eq(tasks.prOpeningAt, claimedAt)] : [])))
     .catch((error) => { /* best-effort — a stale claim only blocks an auto-retry, never data */ 
       reportCaughtError(error, { source: "application/repos/openTaskPullRequest.ts", operation: "releaseTaskPrClaim" });
     });
@@ -88,13 +109,16 @@ export async function openClaimedPullRequest(
   tenantId: number,
   taskId: number,
   pr: OpenPrInput,
+  /** Filled with the claim this call took (when it took one), for a caller that must know whether it retook a dead claim or release it as its owner. */
+  claim?: { retook?: boolean; at?: Date },
 ): Promise<OpenPrResult | { ok: false; claimLost: true }> {
-  const claimed = await claimTaskPrOpen(db, tenantId, taskId);
-  if (!claimed) return { ok: false, claimLost: true };
+  const taken = await takeTaskPrClaim(db, tenantId, taskId);
+  if (!taken.claimed) return { ok: false, claimLost: true };
+  if (claim) { claim.retook = taken.retook; claim.at = taken.at; }
   const created = await createPullRequest(pr)
     .catch((error): OpenPrResult => ({ ok: false, code: 'provider_error', reason: error instanceof Error ? error.message : 'pr failed' }));
   // Release so a manual/automatic retry can re-attempt the create.
-  if (!created.ok) await releaseTaskPrClaim(db, tenantId, taskId);
+  if (!created.ok) await releaseTaskPrClaim(db, tenantId, taskId, taken.at);
   return created;
 }
 
@@ -147,23 +171,14 @@ export async function openTaskPullRequest(
   // rather than merging unverified code; the CI-success webhook ships it. Best-effort
   // — a conflict/failure leaves the PR open for manual resolution rather than
   // blocking the finalize.
-  const merge = !cloudAutoMergeEnabled(env)
-    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: awaiting in-product approval' }
-    : cloudAutoMergeRequiresGreen(env)
-    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: merge on green CI' }
-    : await mergeBranchToBase({
-        provider: resolved.repo.provider,
-        host: resolved.repo.host,
-        owner: resolved.repo.owner,
-        repo: resolved.repo.repo,
-        token: resolved.token,
-        base,
-        head: input.branch.trim(),
-        message: `${title} (BuilderForce auto-merge)`,
-      });
-
-  const now = new Date();
-  await recordPullRequestRow(db, {
+  //
+  // SECURITY (PRD 08 §10): the PR row is recorded 'open' FIRST so the post-PR security step has a
+  // row to link its scans to, and the SAME gate cloudFinalize / the CI-merge path / the merge sweep
+  // consult runs before `mergeBranchToBase`. Fails closed: no `env` (the step needs it) or a step
+  // that did not run means no immediate merge. A merged PR is stamped through
+  // `markPullRequestMergedById`, the one place a merge becomes a merge.
+  // The row AND the task's PR stamp, in one transaction (`recordTaskPullRequest`).
+  const prRow = await recordTaskPullRequest(db, {
     tenantId,
     segmentId: resolved.repo.segmentId,
     projectId: resolved.repo.projectId,
@@ -174,12 +189,55 @@ export async function openTaskPullRequest(
     url: pr.url,
     branchName: input.branch.trim(),
     baseBranch: base,
-    status: merge.ok ? 'merged' : 'open',
+    status: 'open',
+  }).catch(async (error) => {
+    // The PR EXISTS on the provider: report the failed record, still stamp the task so the card shows it, and return success with the URL.
+    reportCaughtError(error, { source: 'application/repos/openTaskPullRequest.ts', operation: 'recordTaskPullRequest' });
+    await db.update(tasks)
+      .set({ githubPrUrl: pr.url, githubPrNumber: pr.number, gitBranch: input.branch.trim(), updatedAt: new Date() })
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)))
+      .catch((stampError) => reportCaughtError(stampError, { source: 'application/repos/openTaskPullRequest.ts', operation: 'stampTaskPr' }));
+    return null;
   });
-  await db
-    .update(tasks)
-    .set({ githubPrUrl: pr.url, githubPrNumber: pr.number, gitBranch: input.branch.trim(), updatedAt: now })
-    .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)));
+
+  let securityVerdict: PinnedVerdict = { allow: false, reasons: [gateReason('step_not_run', 'the security step has not run')], headSha: null };
+  if (env && prRow?.id) {
+    const step = await runPullRequestSecurityStep(env as Env, db, {
+      tenantId, segmentId: resolved.repo.segmentId, pullRequestId: prRow.id, prNumber: pr.number, prUrl: pr.url,
+      executionId: null, agentLabel: 'task Done',
+      read: {
+        provider: resolved.repo.provider, host: resolved.repo.host, owner: resolved.repo.owner,
+        repo: resolved.repo.repo, token: resolved.token, ref: input.branch.trim(),
+      },
+      base,
+    });
+    securityVerdict = step.verdict;
+  } else {
+    securityVerdict = { allow: false, reasons: [gateReason('step_unavailable', 'the security scan could not run for this PR (no runtime environment or PR row)')], headSha: null };
+  }
+
+  const merge = !cloudAutoMergeEnabled(env)
+    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: awaiting in-product approval' }
+    : cloudAutoMergeRequiresGreen(env)
+    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: merge on green CI' }
+    : !securityVerdict.allow
+    ? { ok: false as const, code: 'provider_error' as const, reason: `deferred: ${describeSecurityBlock(securityVerdict)}` }
+    : await mergeBranchToBase({
+        provider: resolved.repo.provider,
+        host: resolved.repo.host,
+        owner: resolved.repo.owner,
+        repo: resolved.repo.repo,
+        token: resolved.token,
+        base,
+        head: input.branch.trim(),
+        message: `${title} (BuilderForce auto-merge)`,
+        // Merge exactly the commit the gate verified; a head that moved since is a non-merge (`head_moved`).
+        expectedHeadSha: securityVerdict.headSha,
+      });
+  if (merge.ok && prRow?.id) {
+    await markPullRequestMergedById(db, prRow.id, tenantId, { mergeSha: merge.sha ?? null, env: env as Env | undefined })
+      .catch((error) => reportCaughtError(error, { source: 'application/repos/openTaskPullRequest.ts', operation: 'openTaskPullRequest' }));
+  }
 
   // MULTI-REPO (0956): the primary PR is open; now open one per OTHER repo in the
   // task's set that actually received writes. No-op for a single-repo task.

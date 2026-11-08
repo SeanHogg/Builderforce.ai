@@ -19,7 +19,8 @@
  */
 
 import { importKey, isOwnRecord, queueImport } from './journalRules.js';
-import type { EntityDestination, LocalRecord, ProjectValue, TicketValue } from './records.js';
+import { chatTicketLinkWaitsOn } from './chatTicketLink.js';
+import type { ChatTicketLinkValue, EntityDestination, LocalRecord, ProjectValue, TicketValue } from './records.js';
 import { SCAN_STOP, selectRecords, type LocalFirstStore } from './store.js';
 
 const SERVER_REFERENCE = /^\d+$/;
@@ -57,7 +58,7 @@ export async function bindWorkForSync(store: LocalFirstStore, deviceId: string, 
   // so a pass with nothing to move must not write.
   const anything = await store.read(async (tx) => {
     let found = false;
-    for (const type of ['project', 'ticket'] as const) {
+    for (const type of ['project', 'ticket', 'chat-ticket-link'] as const) {
       if (found) break;
       await tx.scan(type, (row) => { if (unbound(row)) { found = true; return SCAN_STOP; } });
     }
@@ -78,6 +79,11 @@ export async function bindWorkForSync(store: LocalFirstStore, deviceId: string, 
     }
     for (const ticket of parentsFirst(await selectRecords<TicketValue>(tx, 'ticket', unbound))) {
       await queueImport(tx, await rebind(ticket), ticket.payload.chatClientId, ticketWaitsOn(ticket.payload));
+      moved += 1;
+    }
+    // Links last: each waits on its chat's and its ticket's import.
+    for (const link of await selectRecords<ChatTicketLinkValue>(tx, 'chat-ticket-link', unbound)) {
+      await queueImport(tx, await rebind(link), undefined, chatTicketLinkWaitsOn(link.payload));
       moved += 1;
     }
     return moved;

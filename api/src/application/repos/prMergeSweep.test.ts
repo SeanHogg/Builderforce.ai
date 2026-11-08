@@ -59,8 +59,8 @@ describe('the PR merge loop moved OUT of the manager pass', () => {
 
   it('drops the stage from the rotation, so nothing can yield a turn to a stage that is gone', () => {
     expect(ROTATABLE_STAGES.has('pr_merge')).toBe(false);
-    // The conduct half stayed in the pass and stayed rotatable.
-    expect(ROTATABLE_STAGES.has('pr_conduct')).toBe(true);
+    // The conduct half has since left the pass too (prConductSweep.ts).
+    expect(ROTATABLE_STAGES.has('pr_conduct')).toBe(false);
   });
 
   it('reports what landed by READING the journal, not by doing the work', () => {

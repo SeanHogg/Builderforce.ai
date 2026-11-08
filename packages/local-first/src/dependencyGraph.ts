@@ -23,7 +23,7 @@ import type { LocalFirstTransaction } from './storeContract.js';
 const KNOWN_TYPES: ReadonlySet<string> = new Set<LocalEntityType>([
   'project', 'ticket', 'chat', 'message', 'execution', 'step', 'approval', 'audit-definition', 'audit-run',
   'audit-finding', 'change-set', 'memory-fact', 'attachment-manifest', 'policy-snapshot', 'remediation',
-  'usage', 'run-outcome',
+  'usage', 'run-outcome', 'chat-ticket-link',
 ]);
 
 const bySequence = (a: JournalEvent, b: JournalEvent): number => a.localSequence - b.localSequence;
@@ -84,7 +84,16 @@ export function resolveDependency(dependency: string, index: DependencyIndex, de
   const home = destinationKey(dependent.destination);
   const pool = new Set<JournalEvent>(index.byKey.get(dependency) ?? []);
   const referenced = index.byId.get(dependency);
-  if (referenced) pool.add(referenced);
+  if (referenced) {
+    pool.add(referenced);
+    // A dependency named by WIRE ID follows its logical write: a requeued dead letter
+    // (`requeueJournalDeadLetter`) is the same write appended again under the same key with a new id,
+    // so an UPDATE/DELETE dependency (not a creating write, which the entity pass below finds) is
+    // satisfied by its live successor instead of staying blocked behind the dead letter.
+    if (referenced.idempotencyKey !== undefined) {
+      for (const successor of index.byKey.get(referenced.idempotencyKey) ?? []) pool.add(successor);
+    }
+  }
   if (entity) {
     for (const event of index.byEntity.get(entityKey(entity.type, entity.id)) ?? []) {
       if (isCreating(event)) pool.add(event);

@@ -17,11 +17,14 @@
  * it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
  */
 import { spawn } from 'node:child_process';
-import { access, mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { access, lstat, mkdir, open as openFile, readFile, readdir, readlink, realpath, rm, stat } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { join, dirname, relative, resolve as resolvePath, sep } from 'node:path';
 import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
-import { bootJobIdPrefix, createJobTable, killTree } from './sandboxJobs.mjs';
+import { bootJobIdPrefix, createJobTable, killTree, shellEnv } from './sandboxJobs.mjs';
+
+export { shellEnv };
 
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
@@ -50,7 +53,7 @@ const SHELL_SETTLE_MS = 2_000;
  *  `/sandbox/run` request (the engine's cancel) can stop it. */
 function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', command], { cwd, env: process.env, detached: true });
+    const child = spawn('bash', ['-lc', command], { cwd, env: shellEnv(), detached: true });
     let out = '';
     const cap = (chunk) => { out = keepTail(out + chunk, SHELL_CAPTURE_CHARS.container); };
     child.stdout.on('data', cap);
@@ -225,16 +228,81 @@ function startPostEditChecks(box) {
     workdir,
     run: (command, cwd, timeoutMs) => runShell(command, cwd, null, timeoutMs),
     io: cloneCheckIo(workdir, { access, readFile, hasBin }),
+    // Accepted split: output is elided HERE (container, head+tail cut) and again by the Worker's tool-output policy.
+    // Redaction happens at the Worker's writers (`insertToolAudit`, the stream publish), not here: the container
+    // holds no policy about secrets, only the bytes, and the cut never exposes more than the uncut text would.
     fit: (output) => fitToolText(output, toolOutputCap('run_command'), { tool: 'run_command', summarize: true }),
     onEvent: (e) => box.emit('runtime.post_edit_check', e, `${e.check}${e.cwd ? ` (${e.cwd})` : ''}: ${e.skipped ? `skipped (${e.skipped})` : e.timedOut ? 'timed out' : `exit ${e.exitCode}`}`),
   });
 }
 
 /** A repo-relative path inside the clone, or null when it would escape it. */
-function insideClone(workdir, path) {
+function lexicallyInside(root, abs) {
+  return abs === root || abs.startsWith(root + sep);
+}
+
+const MAX_LINK_HOPS = 16;
+
+/**
+ * Whether `p` (absolute) resolves inside `realRoot` once every symlink on its path is followed.
+ * `realpath` throws ENOENT for a path that does not exist yet (a file about to be created) AND
+ * for a dangling symlink, so on ENOENT the probe is `lstat`ed: a dangling link is resolved by
+ * hand (`readlink`, against the real parent) and re-checked, up to a hop limit; a genuinely
+ * missing component walks up to the nearest ancestor that exists.
+ */
+async function resolvesInside(realRoot, p, hops = 0) {
+  let probe = p;
+  for (;;) {
+    try {
+      return lexicallyInside(realRoot, await realpath(probe));
+    } catch (e) {
+      if (!e || e.code !== 'ENOENT') return false;
+    }
+    let link = null;
+    try {
+      const st = await lstat(probe);
+      if (st.isSymbolicLink()) link = await readlink(probe);
+    } catch (e) {
+      if (!e || e.code !== 'ENOENT') return false;
+    }
+    if (link !== null) {
+      if (hops >= MAX_LINK_HOPS) return false;
+      let parentReal;
+      try { parentReal = await realpath(dirname(probe)); } catch { return false; }
+      return resolvesInside(realRoot, resolvePath(parentReal, link), hops + 1);
+    }
+    const parent = dirname(probe);
+    if (parent === probe) return false;
+    probe = parent;
+  }
+}
+
+/**
+ * A repo-relative path inside the clone, or null when it would escape it — lexically
+ * (`../`, a leading `/` is treated as clone-relative) AND through symlinks, including a
+ * dangling link whose target is outside (see {@link resolvesInside}). This is defence in
+ * depth: the shell is unrestricted inside the container (the non-root user + egress allowlist
+ * are the boundary). Accepted residuals: a TOCTOU between this check and the open, and hard
+ * links to files outside the clone.
+ */
+async function insideClone(workdir, path) {
   if (typeof path !== 'string' || !path.trim()) return null;
   const abs = resolvePath(workdir, path.replace(/^\/+/, ''));
-  return abs === workdir || abs.startsWith(workdir + sep) ? abs : null;
+  if (!lexicallyInside(workdir, abs)) return null;
+  // `.git` is the clone's own control directory (hooks run as code, config can point at anything): never reachable through an fs op or a cwd.
+  if (relative(workdir, abs).split(sep).includes('.git')) return null;
+  let realRoot;
+  try { realRoot = await realpath(workdir); } catch { return null; }
+  return (await resolvesInside(realRoot, abs)) ? abs : null;
+}
+
+/** Write `content` to `abs` without following a symlink at the final component (where the platform has O_NOFOLLOW). */
+async function writeNoFollow(workdir, abs, content) {
+  const real = await realpath(abs).catch(() => abs); // an in-clone alias is resolved by the guard; write its real file
+  // Recheck the RESOLVED path (the guard ran before this realpath, and the tree may have changed since).
+  if (real !== abs && !lexicallyInside(await realpath(workdir), real)) throw new Error('path resolves outside the repository');
+  const fh = await openFile(real, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | (fsConstants.O_NOFOLLOW ?? 0), 0o644);
+  try { await fh.writeFile(content); } finally { await fh.close(); }
 }
 
 /** A git-safe ref name, or null. */
@@ -270,26 +338,37 @@ async function absorbCommit(box, abs, content) {
 async function sandboxFs(box, body) {
   const { workdir } = box;
   if (body.op === 'list') {
+    if (typeof body.path === 'string' && body.path && !(await insideClone(workdir, body.path))) {
+      return { ok: false, error: 'path must stay inside the repository' };
+    }
     return listFiles(workdir, typeof body.path === 'string' && body.path ? body.path : undefined,
       typeof body.glob === 'string' && body.glob.trim() ? body.glob.trim() : undefined);
   }
-  const abs = insideClone(workdir, body.path);
+  const abs = await insideClone(workdir, body.path);
   if (!abs) return { ok: false, error: 'path is required and must stay inside the repository' };
   if (body.op === 'read') {
-    try { return { ok: true, path: body.path, content: await readFile(abs, 'utf8') }; }
+    try {
+      const real = await realpath(abs);
+      if (!lexicallyInside(await realpath(workdir), real)) return { ok: false, error: 'path must stay inside the repository' };
+      return { ok: true, path: body.path, content: await readFile(real, 'utf8') };
+    }
     catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
   }
   if (body.op === 'write') {
     if (typeof body.content !== 'string') return { ok: false, error: 'content is required' };
     if (!(body.committed === true && await absorbCommit(box, abs, body.content))) {
-      await mkdir(dirname(abs), { recursive: true });
-      await writeFile(abs, body.content);
+      try {
+        await mkdir(dirname(abs), { recursive: true });
+        await writeNoFollow(workdir, abs, body.content);
+      } catch (e) { return { ok: false, error: `write failed: ${e.message}` }; }
     }
     box.checks?.touch(body.path);
     return { ok: true, path: body.path };
   }
   if (body.op === 'delete') {
-    if (!(body.committed === true && await absorbCommit(box, abs, null))) await rm(abs, { force: true });
+    try {
+      if (!(body.committed === true && await absorbCommit(box, abs, null))) await rm(abs, { force: true });
+    } catch (e) { return { ok: false, error: `delete failed: ${e.message}` }; }
     box.checks?.touch(body.path);
     return { ok: true, path: body.path };
   }
@@ -300,7 +379,7 @@ async function sandboxFs(box, body) {
  *  repo-relative directory. `{ error }` when it escapes the clone or is not a directory. */
 async function commandDir(box, cwd) {
   if (cwd == null || cwd === '' || cwd === '.') return { dir: box.workdir };
-  const abs = insideClone(box.workdir, cwd);
+  const abs = await insideClone(box.workdir, cwd);
   if (!abs) return { error: 'cwd must be a directory inside the repository' };
   const isDir = await stat(abs).then((s) => s.isDirectory(), () => false);
   return isDir ? { dir: abs } : { error: `cwd '${cwd}' is not a directory in the repository` };

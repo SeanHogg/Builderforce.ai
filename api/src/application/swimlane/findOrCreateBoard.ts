@@ -5,6 +5,8 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import type { Db } from '../../infrastructure/database/connection';
 import { findCanonicalBoard } from './canonicalBoard';
+import { invalidateSwimlaneOrdinals } from './laneOrdinals';
+import type { Env } from '../../env';
 
 type Board = typeof boards.$inferSelect;
 
@@ -17,6 +19,9 @@ export interface FindOrCreateBoardInput {
   needsAttentionLane?: string;
   /** Seed the standard status-mirroring swimlanes on first creation (default true). */
   seedDefaultLanes?: boolean;
+  /** The Worker env, when the caller has one: lets a created / re-pinned board drop the lane router's and ordinal map's cached
+   *  "no board" for the project (laneRouting.ts). A caller without one leaves the cache TTL as the backstop. */
+  env?: Env;
 }
 
 export interface FindOrCreateBoardResult {
@@ -128,6 +133,9 @@ export async function findOrCreateBoard(
     .catch((error) => {
       reportCaughtError(error, { source: "application/swimlane/findOrCreateBoard.ts", operation: "stampPrimaryBoard" });
     });
+
+  // The project's board (and its pin) just changed: the cached "no board" / old board's facts are stale.
+  if (input.env) await invalidateSwimlaneOrdinals(input.env, input.projectId, input.tenantId);
 
   return { board: created, created: true };
 }

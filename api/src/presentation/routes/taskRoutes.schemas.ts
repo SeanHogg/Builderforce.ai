@@ -92,6 +92,8 @@ export const UpdateTaskBody = z.object({
   dueDate: z.string().nullish(),
   persona: z.string().nullish(),
   archived: z.boolean().optional(),
+  /** Flag or clear the work item as an investor milestone. A yes/no fact, so never null. */
+  investorMilestone: z.boolean().optional(),
 });
 
 /** `POST /:id/move`. */

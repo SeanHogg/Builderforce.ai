@@ -79,6 +79,7 @@ const LastBoardBridge = dynamic(() => import('./workspace/LastBoardBridge').then
 const PlatformAnnouncements = dynamic(() => import('./announcements/PlatformAnnouncements').then((m) => m.PlatformAnnouncements), { ssr: false });
 const ProductUpdatesHost = dynamic(() => import('./releaseNotes/ProductUpdatesHost').then((m) => m.ProductUpdatesHost), { ssr: false });
 const LiveBar = dynamic(() => import('./live/LiveBar').then((m) => m.LiveBar), { ssr: false });
+const RemoteAudioSink = dynamic(() => import('./live/RemoteAudioSink').then((m) => m.RemoteAudioSink), { ssr: false });
 const ExitIntentPrompt = dynamic(() => import('./marketing/ExitIntentPrompt').then((m) => m.ExitIntentPrompt), { ssr: false });
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
@@ -467,6 +468,8 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
                   and controllable — from wherever the person has navigated to.
                   Self-gating: no room, no bar. */}
               <LiveBar />
+              {/* The ONE place a call's remote audio plays (every gallery <video> is muted). */}
+              <RemoteAudioSink />
               {/* Superadmin-authored messages to whoever is on the page. Mounted
                   here rather than in a shell because it must reach BOTH the
                   logged-out marketing pages and the signed-in app; it decides

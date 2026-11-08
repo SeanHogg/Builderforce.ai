@@ -1,15 +1,17 @@
 /**
  * Application — serve one sync pull page (G18).
  *
- * No cursor starts a SNAPSHOT: the tenant tip is read FIRST, then the
- * projection is keyset-paged; the tip rides every snapshot cursor, so a change
+ * No cursor starts a SNAPSHOT: the database `xmin` is read FIRST, then the
+ * projection is keyset-paged; that `xmin` rides every snapshot cursor, so a change
  * written while the snapshot pages is still delivered by the delta that follows.
- * The last snapshot page hands over a DELTA cursor at that tip.
+ * The last snapshot page hands over a DELTA cursor at `(xmin, 0)`.
  *
- * A delta page reads the tip, then this destination's changes after the
- * cursor. A page that drains the destination advances the cursor to the tip —
- * a destination with no changes of its own moves with the log instead of
- * sitting at 0 — and a full page advances to its last row.
+ * A delta page reads this destination's COMMITTED-AND-FINAL changes after the
+ * cursor in `(txid, seq)` order (commit order — see `domain/sync/deltaWatermark`),
+ * together with the database `xmin` of the same statement. A page that drains the
+ * destination advances the cursor to `(xmin, 0)` — an idle destination moves with
+ * the database instead of sitting still — never to a per-tenant tip, and a full
+ * page advances to its last row. A legacy (seq only) cursor is translated once.
  *
  * A cursor this codec did not mint, or a delta whose following rows may have
  * been swept (`deltaCursorExpired`), is `{ records: [], resnapshotRequired:
@@ -21,7 +23,9 @@ import {
   deltaCursorExpired,
   encodeSyncCursor,
   type DeltaCursor,
+  type LegacyDeltaCursor,
 } from '../../domain/sync/cursorCodec';
+import { WATERMARK_ORIGIN, nextDeltaCursor, type SyncWatermark } from '../../domain/sync/deltaWatermark';
 import { SYNC_CHANGE_RETENTION_DAYS } from '../../domain/sync/syncRetention';
 import type { SyncPullResult } from '../../domain/sync/syncProtocol';
 import { readPullRequest } from './syncEnvelope';
@@ -49,7 +53,7 @@ async function snapshotPage(
   deps: SyncPullDeps,
   bound: BoundSyncDestination,
   after: { entityType: string; clientEntityId: string } | null,
-  tip: number,
+  tipTxid: string,
   issuedAt: number,
   limit: number,
 ): Promise<SyncPullResponse> {
@@ -60,38 +64,52 @@ async function snapshotPage(
     return page({
       records,
       cursor: encodeSyncCursor({
-        v: 1,
+        v: 2,
         kind: 'snapshot',
         afterEntityType: last.entityType,
         afterClientEntityId: last.clientEntityId,
-        tip,
+        tipTxid,
         issuedAt,
       }),
     });
   }
-  return page({ records, cursor: encodeSyncCursor({ v: 1, kind: 'delta', seq: tip, issuedAt }) });
+  // The delta resumes at (xmin, 0): everything below that xmin was final when the snapshot began.
+  return page({ records, cursor: encodeSyncCursor({ v: 2, kind: 'delta', txid: tipTxid, seq: 0, issuedAt }) });
+}
+
+/**
+ * The cursor's watermark. A v2 cursor carries it. A legacy (seq only) cursor S is ALWAYS
+ * translated to `('0', S)`: rows written during the migration window by the previous Worker
+ * carry real txids that need not follow their seq order, so anchoring S on the txid of S's own
+ * row would sort those rows below the cursor and skip them. `('0', S)` re-delivers every row
+ * with a real txid (a plain re-put on the client — idempotent) and loses none; rows at txid 0
+ * resume strictly after S. Expiry is still checked against this position.
+ */
+function cursorPosition(cursor: DeltaCursor | LegacyDeltaCursor): SyncWatermark {
+  if (cursor.v === 2) return { txid: cursor.txid, seq: cursor.seq };
+  return cursor.seq === 0 ? WATERMARK_ORIGIN : { txid: '0', seq: cursor.seq };
 }
 
 async function deltaPage(
   deps: SyncPullDeps,
   bound: BoundSyncDestination,
-  cursor: DeltaCursor,
+  cursor: DeltaCursor | LegacyDeltaCursor,
   limit: number,
 ): Promise<SyncPullResponse> {
   const tenantId = deps.auth.tenantId;
-  const destinationMinSeq = await deps.stores.minChangeSeq(tenantId, bound.key);
-  if (deltaCursorExpired(cursor, { now: deps.now, retentionDays: SYNC_CHANGE_RETENTION_DAYS, destinationMinSeq })) {
+  const position = cursorPosition(cursor);
+  const destinationMin = await deps.stores.minChangeWatermark(tenantId, bound.key);
+  // A legacy cursor is a bare seq: a retained row at or before that seq proves the later ones survived
+  // (the watermark order of a migration-window row need not follow its seq).
+  const expiryPosition = cursor.v === 1 && destinationMin && destinationMin.seq <= cursor.seq ? destinationMin : position;
+  if (deltaCursorExpired(cursor, expiryPosition, { now: deps.now, retentionDays: SYNC_CHANGE_RETENTION_DAYS, destinationMin })) {
     return resnapshot();
   }
-  const tip = await deps.stores.maxChangeSeq(tenantId);
-  const changes = await deps.stores.changesAfter(tenantId, bound.key, cursor.seq, limit);
-  const last = changes[changes.length - 1];
-  const seq = changes.length === limit && last
-    ? last.seq
-    : Math.max(cursor.seq, tip, last ? last.seq : 0);
+  const { rows, xmin } = await deps.stores.changesAfter(tenantId, bound.key, position, limit);
+  const next = nextDeltaCursor({ rows, limit, prior: position, xmin });
   return page({
-    records: changes.map((change) => copyRecord(change.record)),
-    cursor: encodeSyncCursor({ v: 1, kind: 'delta', seq, issuedAt: deps.now.getTime() }),
+    records: rows.map((change) => copyRecord(change.record)),
+    cursor: encodeSyncCursor({ v: 2, kind: 'delta', txid: next.txid, seq: next.seq, issuedAt: deps.now.getTime() }),
   });
 }
 
@@ -106,8 +124,8 @@ export async function handleSyncPull(body: unknown, deps: SyncPullDeps): Promise
 
   if (request.cursorMalformed) return resnapshot();
   if (request.cursor === null) {
-    const tip = await deps.stores.maxChangeSeq(deps.auth.tenantId);
-    return snapshotPage(deps, bound, null, tip, deps.now.getTime(), request.limit);
+    const tipTxid = await deps.stores.databaseXmin();
+    return snapshotPage(deps, bound, null, tipTxid, deps.now.getTime(), request.limit);
   }
   const decoded = decodeSyncCursor(request.cursor);
   if (!decoded) return resnapshot();
@@ -116,7 +134,7 @@ export async function handleSyncPull(body: unknown, deps: SyncPullDeps): Promise
       deps,
       bound,
       { entityType: decoded.afterEntityType, clientEntityId: decoded.afterClientEntityId },
-      decoded.tip,
+      decoded.tipTxid,
       decoded.issuedAt,
       request.limit,
     );

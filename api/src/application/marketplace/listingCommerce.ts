@@ -49,6 +49,7 @@ import { fireEventTriggers } from '../workflow/eventTriggers';
 import { PayoutAccountService } from '../payouts/PayoutAccountService';
 import { verifyPaidCheckout } from '../finance/verifiedCheckout';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
+import { InvalidReturnPathError, checkoutReturnUrls } from './checkoutReturn';
 import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
 import { USD_CENTS } from '../kernel/denominations';
 import { userAccount } from '../kernel/ledgerAccount';
@@ -489,7 +490,7 @@ export async function acquireListing(
 export async function startListingCheckout(
   db: Db,
   env: Env,
-  input: { tenantId: number; buyerRef: string; buyerEmail?: string | null; slug: string; returnUrl: string; quantity?: number },
+  input: { tenantId: number; buyerRef: string; buyerEmail?: string | null; slug: string; returnUrl: string; returnPath?: string | null; quantity?: number },
 ): Promise<{ checkoutUrl: string }> {
   const [listing] = await db
     .select()
@@ -512,7 +513,13 @@ export async function startListingCheckout(
   }
 
   const quantity = marketplaceListingQuantity(input.quantity);
-  const base = new URL(input.returnUrl);
+  let returnUrls: ReturnType<typeof checkoutReturnUrls>;
+  try {
+    returnUrls = checkoutReturnUrls(input.returnUrl, input.returnPath);
+  } catch (error) {
+    if (error instanceof InvalidReturnPathError) throw new ListingError(error.message, 400);
+    throw error;
+  }
   const session = await buildPaymentProvider(env).createMarketplaceListingCheckoutSession({
     amountCents: priceCents,
     currency: listing.currency ?? 'USD',
@@ -522,8 +529,7 @@ export async function startListingCheckout(
     // `{CHECKOUT_SESSION_ID}` is substituted by Stripe, so the value that comes
     // back is one Stripe minted — and it is still re-read from Stripe before it
     // grants anything.
-    successUrl: `${base.origin}${base.pathname}?checkout={CHECKOUT_SESSION_ID}`,
-    cancelUrl: `${base.origin}${base.pathname}?checkout=cancelled`,
+    ...returnUrls,
     metadata: {
       purchaseKind: MARKETPLACE_LISTING_KIND,
       listingId: listing.id,

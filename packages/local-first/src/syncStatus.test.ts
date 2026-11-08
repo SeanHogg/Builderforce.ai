@@ -498,3 +498,26 @@ describe('assertStatusFresh', () => {
     }
   });
 });
+
+describe('deriveRecordSyncStatus: server-observed records', () => {
+  it('an imported server-observed record with no events or receipts is synced', () => {
+    const imported: LocalRecord = {
+      ...record('ticket', 'ticket-9'),
+      provenance: { deviceId: 'server', source: 'imported', evidence: 'server-observed' },
+    };
+    expect(deriveRecordSyncStatus({ record: imported })).toBe('synced');
+  });
+
+  it('regression: a local record with no events still reads local', () => {
+    expect(deriveRecordSyncStatus({ record: record('ticket', 'ticket-10') })).toBe('local');
+  });
+
+  it('a server-observed record with a pending local edit is syncing, not synced', () => {
+    const imported: LocalRecord = {
+      ...record('ticket', 'ticket-11'),
+      provenance: { deviceId: 'server', source: 'imported', evidence: 'server-observed' },
+    };
+    const pending = event({ eventId: 'e1', clientEntityId: 'ticket-11', entityType: 'ticket' });
+    expect(deriveRecordSyncStatus({ record: imported, events: [pending] })).toBe('syncing');
+  });
+});

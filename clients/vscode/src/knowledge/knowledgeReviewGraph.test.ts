@@ -1,10 +1,14 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EDIT_DEBOUNCE_MS, buildStoredGraph, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, watchFileEdits, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge";
 import type { JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
 import { createDirectorySource, type KnowledgeFs } from "./vscodeDirectorySource";
-import { fileManifest, localKnowledgeStore, manifestFileName, type KnowledgeFiles } from "./knowledgeStores";
+import { localSqliteAvailable } from "@builderforce/agent-tools/node-local-sqlite";
+import { nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store";
 
 /**
  * PRD 38 §6 WS4/WS5 acceptance, end to end through the editor's host pieces: a fixture folder
@@ -52,9 +56,15 @@ function fakeFs(files: Record<string, string>) {
   return { fs, emit: (paths: string[]) => watcher?.(paths) };
 }
 
-function memoryFiles(): KnowledgeFiles {
-  const data = new Map<string, string>();
-  return { read: async (n) => data.get(n), write: async (n, t) => { data.set(n, t); } };
+// The folder's SQLite store (G03) in a fresh temp folder per review, closed afterwards. The suite skips where node:sqlite is absent.
+const opened: NodeKnowledgeStore[] = [];
+const folders: string[] = [];
+function nodeStore(): NodeKnowledgeStore {
+  const dir = mkdtempSync(join(tmpdir(), "bf-review-graph-"));
+  folders.push(dir);
+  const k = nodeKnowledgeStore(dir);
+  opened.push(k);
+  return k;
 }
 
 /** One claim per section, quoted from it. */
@@ -70,12 +80,12 @@ const judgement: JudgementPort = {
 async function review() {
   const disk = { ...FILES };
   const { fs, emit } = fakeFs(disk);
-  const files = memoryFiles();
+  const local = nodeStore();
   const source = createDirectorySource({ fs, rootPath: ROOT, rootId: ROOT_ID, title: "specs" });
   const ports: KnowledgeReviewPorts = {
     source,
-    store: localKnowledgeStore(files, ROOT_ID),
-    manifest: fileManifest(files, manifestFileName(ROOT_ID)),
+    store: local.store,
+    manifest: local.manifest,
     judgement,
   };
   const detail = await planKnowledgeReviewDetail(ports);
@@ -84,7 +94,7 @@ async function review() {
   return { ports, fs, disk, emit, source, detail, report, graph };
 }
 
-describe("a reviewed fixture folder in the editor's host", () => {
+describe.skipIf(!localSqliteAvailable())("a reviewed fixture folder in the editor's host", () => {
   it("loads as a graph of file, section and claim nodes", async () => {
     const { report, detail, graph } = await review();
     expect(detail.plan.files).toBe(3);
@@ -99,7 +109,11 @@ describe("a reviewed fixture folder in the editor's host", () => {
     expect(g.nodes.some((n) => n.stale)).toBe(false);
   });
 
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    for (const k of opened.splice(0)) k.close();
+    for (const d of folders.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
 
   it("marks a document's claims stale when it is edited, on the editor's file watcher", async () => {
     const { ports, fs, disk, emit, source, graph } = await review();

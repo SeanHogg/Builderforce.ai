@@ -21,28 +21,40 @@ export interface IdleTask<T> {
     result(): T;
 }
 
+/**
+ * Runs a task on idle callbacks, `SLICE_MS` of steps per callback: the ONE idle-step runner (the hook below, and the
+ * compute client's in-process fallback). `onDone` gets the result; `onError` gets whatever `start`, a step or `onDone`
+ * threw. Neither is called after the returned function (cancel) has been.
+ */
+export function runIdleTask<T>(start: () => IdleTask<T>, onDone: (value: T) => void, onError: (error: unknown) => void): () => void {
+    let live = true;
+    let cancel = (): void => undefined;
+    let task: IdleTask<T> | null = null;
+    const run = (): void => {
+        if (!live) return;
+        try {
+            task ??= start();
+            const t0 = Date.now();
+            let done = false;
+            do done = task.step(); while (!done && live && Date.now() - t0 < SLICE_MS);
+            if (done) { if (live) onDone(task.result()); } else cancel = scheduleIdle(run);
+        } catch (error) {
+            if (live) onError(error);
+        }
+    };
+    cancel = scheduleIdle(run);
+    return () => { live = false; cancel(); };
+}
+
 export function useIdleSteps<T>(start: () => IdleTask<T>, deps: readonly unknown[], fallback?: T, enabled = true): T | null {
     const [value, setValue] = useState<T | null>(null);
     useEffect(() => {
-        let live = true;
-        let cancel = (): void => undefined;
-        let task: IdleTask<T> | null = null;
         if (fallback === undefined || !enabled) setValue(null);
-        const run = (): void => {
-            if (!live) return;
-            try {
-                task ??= start();
-                const t0 = Date.now();
-                let done = false;
-                do done = task.step(); while (!done && live && Date.now() - t0 < SLICE_MS);
-                if (done) { if (live) setValue(task.result()); } else cancel = scheduleIdle(run);
-            } catch (error) {
-                console.error('useIdleSteps: the task failed', error);
-                if (live && fallback !== undefined) setValue(fallback);
-            }
-        };
-        if (enabled) cancel = scheduleIdle(run);
-        return () => { live = false; cancel(); };
+        if (!enabled) return undefined;
+        return runIdleTask(start, setValue, (error) => {
+            console.error('useIdleSteps: the task failed', error);
+            if (fallback !== undefined) setValue(fallback);
+        });
         // `start` closes over `deps`; callers list exactly what it reads.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [...deps, enabled]);

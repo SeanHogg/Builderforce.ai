@@ -4,28 +4,47 @@
  * A cursor is base64url JSON so a client treats it as opaque while the server
  * can still reject a garbled one deterministically. Two shapes:
  *
- * - DELTA `{ seq, issuedAt }`: every `sync_changes` row of this destination
- *   with `seq > seq` is still unread. `seq` is a POSITION in the tenant's log,
- *   not "the last row this destination saw" — a page that drains the
- *   destination advances it to the tenant tip read before the page, so a
- *   destination with no changes of its own does not sit at 0 while the global
- *   sequence moves on (the resnapshot-forever bug).
- * - SNAPSHOT `{ afterEntityType, afterClientEntityId, tip, issuedAt }`: keyset
- *   over `sync_records`. `tip` is the tenant's max change seq captured on the
- *   FIRST snapshot page, so a change written while the snapshot pages is still
- *   delivered by the delta that follows (it has `seq > tip`).
+ * Version 2 (commit-ordered watermark, migration 1304 — see `deltaWatermark.ts`):
  *
- * `issuedAt` (epoch ms) is when the guarantee "nothing after `seq` was swept"
- * was last proven. `sync_changes` is swept by age, so a cursor younger than the
- * retention window cannot have lost a row. An older one is still good while the
- * destination retains a row at or before `seq` — sweeping removes the oldest
- * rows first, so a retained earlier row proves the later ones survived.
- * Otherwise it is {@link RESNAPSHOT_REQUIRED}, never a partial page.
+ * - DELTA `{ txid, seq, issuedAt }`: every `sync_changes` row of this
+ *   destination with `(txid, seq) > (txid, seq)` is still unread. `txid` is the
+ *   writing transaction's `xid8` as a DECIMAL STRING (it exceeds 2^53). A page
+ *   that drains the destination advances it to `(xmin, 0)`, never to a tenant
+ *   tip, so a late commit can never fall behind it.
+ * - SNAPSHOT `{ afterEntityType, afterClientEntityId, tipTxid, issuedAt }`:
+ *   keyset over `sync_records`. `tipTxid` is the database `xmin` captured on
+ *   the FIRST snapshot page, so a change written while the snapshot pages is
+ *   still delivered by the delta that follows (it has `txid >= tipTxid`).
+ *
+ * Version 1 (`seq` only) is still READ, never written. A v1 DELTA cursor decodes
+ * as {@link LegacyDeltaCursor}: the pull translates seq S to `('0', S)` (never via
+ * the txid of S's row, which would skip migration-window rows), and still applies
+ * the expiry check, resnapshotting when the retained rows no longer reach back to S. A v1
+ * SNAPSHOT cursor is `null` (resnapshot): its tenant-tip `tip` has no txid.
+ *
+ * `issuedAt` (epoch ms) is when the guarantee "nothing after the cursor was
+ * swept" was last proven. `sync_changes` is swept by age, so a cursor younger
+ * than the retention window cannot have lost a row. An older one is still good
+ * while the destination retains a row at or before the cursor — sweeping
+ * removes the oldest rows first, so a retained earlier row proves the later
+ * ones survived. Otherwise it is {@link RESNAPSHOT_REQUIRED}, never a partial page.
  *
  * Pure: no database, no HTTP, no clock read (`now` is an argument).
  */
 
+import { compareWatermark, isXid8, type SyncWatermark } from './deltaWatermark';
+
 export interface DeltaCursor {
+  v: 2;
+  kind: 'delta';
+  /** `xid8` of the last transaction fully read, decimal string. */
+  txid: string;
+  seq: number;
+  issuedAt: number;
+}
+
+/** A v1 delta cursor (seq only). Decoded for translation, never minted. */
+export interface LegacyDeltaCursor {
   v: 1;
   kind: 'delta';
   seq: number;
@@ -33,17 +52,21 @@ export interface DeltaCursor {
 }
 
 export interface SnapshotCursor {
-  v: 1;
+  v: 2;
   kind: 'snapshot';
   /** Keyset: the last `(entityType, clientEntityId)` pair served. */
   afterEntityType: string;
   afterClientEntityId: string;
-  /** Tenant max change seq read before the first snapshot page. */
-  tip: number;
+  /** Database `xmin` (decimal `xid8`) read before the first snapshot page. */
+  tipTxid: string;
   issuedAt: number;
 }
 
+/** What a pull may mint. */
 export type SyncCursor = DeltaCursor | SnapshotCursor;
+
+/** What a pull may read. */
+export type DecodedSyncCursor = SyncCursor | LegacyDeltaCursor;
 
 /**
  * A bad or expired cursor. One key, frozen, so a caller cannot ignore the flag
@@ -85,7 +108,7 @@ export function encodeSyncCursor(cursor: SyncCursor): string {
  * or fractional `seq`, a missing `issuedAt` or `tip`, or any other string is
  * `null` — the caller answers {@link RESNAPSHOT_REQUIRED}.
  */
-export function decodeSyncCursor(raw: unknown): SyncCursor | null {
+export function decodeSyncCursor(raw: unknown): DecodedSyncCursor | null {
   if (typeof raw !== 'string' || raw.trim() === '') return null;
   let value: unknown;
   try {
@@ -96,22 +119,29 @@ export function decodeSyncCursor(raw: unknown): SyncCursor | null {
   }
   if (typeof value !== 'object' || value === null) return null;
   const cursor = value as Record<string, unknown>;
-  if (cursor.v !== 1 || !isEpochMs(cursor.issuedAt)) return null;
-  if (cursor.kind === 'delta' && isSeq(cursor.seq)) {
-    return { v: 1, kind: 'delta', seq: cursor.seq, issuedAt: cursor.issuedAt };
+  if (!isEpochMs(cursor.issuedAt)) return null;
+  if (cursor.v === 1) {
+    // Legacy: only a delta survives (translated by the pull); a v1 snapshot restarts.
+    return cursor.kind === 'delta' && isSeq(cursor.seq)
+      ? { v: 1, kind: 'delta', seq: cursor.seq, issuedAt: cursor.issuedAt }
+      : null;
+  }
+  if (cursor.v !== 2) return null;
+  if (cursor.kind === 'delta' && isSeq(cursor.seq) && isXid8(cursor.txid)) {
+    return { v: 2, kind: 'delta', txid: cursor.txid, seq: cursor.seq, issuedAt: cursor.issuedAt };
   }
   if (
     cursor.kind === 'snapshot'
     && typeof cursor.afterEntityType === 'string'
     && typeof cursor.afterClientEntityId === 'string'
-    && isSeq(cursor.tip)
+    && isXid8(cursor.tipTxid)
   ) {
     return {
-      v: 1,
+      v: 2,
       kind: 'snapshot',
       afterEntityType: cursor.afterEntityType,
       afterClientEntityId: cursor.afterClientEntityId,
-      tip: cursor.tip,
+      tipTxid: cursor.tipTxid,
       issuedAt: cursor.issuedAt,
     };
   }
@@ -122,17 +152,22 @@ export interface DeltaWindow {
   now: Date;
   /** `sync_changes` retention (`SYNC_CHANGE_RETENTION_DAYS`). */
   retentionDays: number;
-  /** Lowest retained change seq FOR THIS DESTINATION, or null when it has none. */
-  destinationMinSeq: number | null;
+  /** Lowest retained `(txid, seq)` FOR THIS DESTINATION, or null when it has none. */
+  destinationMin: SyncWatermark | null;
 }
 
 /**
- * True when rows after `cursor.seq` may have been swept, so the delta cannot
- * be trusted and the device must resnapshot. See the module comment.
+ * True when rows after the cursor may have been swept, so the delta cannot be
+ * trusted and the device must resnapshot. See the module comment. `position` is
+ * the cursor's watermark (a legacy cursor is translated to one first).
  */
-export function deltaCursorExpired(cursor: DeltaCursor, window: DeltaWindow): boolean {
+export function deltaCursorExpired(
+  cursor: { issuedAt: number },
+  position: SyncWatermark,
+  window: DeltaWindow,
+): boolean {
   const ageMs = Math.max(0, window.now.getTime() - cursor.issuedAt);
   const safeMs = Math.max(0, window.retentionDays - CURSOR_RETENTION_MARGIN_DAYS) * DAY_MS;
   if (ageMs < safeMs) return false;
-  return window.destinationMinSeq === null || window.destinationMinSeq > cursor.seq;
+  return window.destinationMin === null || compareWatermark(window.destinationMin, position) > 0;
 }

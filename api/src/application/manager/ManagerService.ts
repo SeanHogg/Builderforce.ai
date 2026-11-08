@@ -31,14 +31,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * the pass, and each mutation is idempotent (re-scoring/re-ranking is a no-op-ish
  * overwrite; merge dedupes on an already-merged PR), so overlapping runs are safe.
  */
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, notInArray, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { cronSweepEnabled, readCronControls } from '../runtime/cronControls';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
-  tasks, boards, swimlanes, pullRequests,
-  projectManagerConfigs, managerActions, managerRuns, managerStallWatch, projects, featureScores, taskFileChanges,
+  tasks, boards, swimlanes,
+  projectManagerConfigs, managerActions, managerRuns, managerStallWatch, projects, featureScores,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, TaskPriority, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
@@ -68,18 +67,13 @@ export {
   type ManagerConfigRowWithMeta, type TenantManagerDefaultsPatch,
 } from './managerPolicyStore';
 import { getEffectiveManagerPolicy, getManagerConfigRow, getProjectManagerState } from './managerPolicyStore';
-import { countPrMergesSince, recordManagerAction, recordManagerActionOnChange, stateFingerprint } from './managerActionJournal';
+import { BOOKKEEPING_ACTION_TYPES, countPrMergesSince, recordManagerAction, recordManagerActionOnChange, stateFingerprint } from './managerActionJournal';
 import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { assignTicketOwner } from './assignOwner';
-import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
-import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
-import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
-import { describeReturnBlock, returnToImplementation } from './returnToImplementation';
-import { normalizeBuildStatus, pickCurrentPr } from '../../domain/task/buildStatus';
-import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
+import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 import {
   runStallTriage, loadBulkSignals, describeTriageDeferral,
   MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_PASS_STATE_KEY,
@@ -93,16 +87,14 @@ import {
 import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
-import { dispatchTaskFinalize } from '../task/taskFinalize';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { coordinateTicket } from './coordinateTicket';
 import {
   createTickDispatchBudget, tenantDispatchReserver, MAX_TENANT_DISPATCHES_PER_TICK,
-  type DispatchReserver, type TickDispatchBudget,
+  type TickDispatchBudget,
 } from '../runtime/tickDispatchBudget';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
-import { closeTicketAutomatically, loadReviewLaneGates, type CloseContext } from './reviewGateAuthority';
 
 /** Statuses an agent could pick up (Blocked waits on a dependency, not an agent). */
 const RUNNABLE: string[] = [
@@ -114,7 +106,6 @@ const RUNNABLE: string[] = [
 const MAX_AI_SCORES_PER_RUN = 8;   // LLM calls — the rest fall back to the free heuristic
 const MAX_RANKED = 300;
 const MAX_ASSIGNMENTS_PER_RUN = 15;
-const MAX_PR_ACTIONS_PER_RUN = 20;
 
 // ── THE PASS BUDGET LIVES IN ITS OWN LEAF MODULE ────────────────────────────────
 // `passBudget.ts`. It was extracted when the PR merge loop became its own registry
@@ -158,7 +149,6 @@ export interface ManagerRunSummary {
   /** Previously-undated tickets this pass placed on the timeline (0364). */
   scheduled: number;
   assigned: number;
-  prsConducted: number;
   prsMerged: number;
   dispatched: number;
   /** Tickets audited for role/diagnostic coverage, and how many were flagged. */
@@ -245,7 +235,10 @@ export async function listManagerActions(
     })
     .from(managerActions)
     .leftJoin(tasks, eq(tasks.id, managerActions.taskId))
-    .where(and(eq(managerActions.tenantId, tenantId), eq(managerActions.projectId, projectId)))
+    .where(and(
+      eq(managerActions.tenantId, tenantId), eq(managerActions.projectId, projectId),
+      notInArray(managerActions.actionType, [...BOOKKEEPING_ACTION_TYPES]),
+    ))
     .orderBy(desc(managerActions.createdAt))
     .limit(Math.min(200, Math.max(1, limit)));
 }
@@ -387,7 +380,7 @@ export async function finalizeManagerRunTask(
     const now = new Date();
     const line =
       `Scored ${summary.scored} · ranked ${summary.ranked} · assigned ${summary.assigned} · ` +
-      `PRs ${summary.prsConducted + summary.prsMerged} · dispatched ${summary.dispatched} · ` +
+      `PRs ${summary.prsMerged} · dispatched ${summary.dispatched} · ` +
       `audited ${summary.audited}${summary.flagged ? ` (${summary.flagged} flagged)` : ''}` +
       // A pass that shed stages says WHICH, on the run card itself. The diagnostics
       // report parses this line, so the truncation reaches the operator on the same
@@ -460,7 +453,7 @@ export function managerPassChangedSomething(s: ManagerRunSummary): boolean {
   if (s.skipped) return false;
   return (
     s.scored > 0 || s.ranked > 0 || s.scheduled > 0 || s.assigned > 0
-    || s.prsConducted > 0 || s.prsMerged > 0 || s.dispatched > 0
+    || s.prsMerged > 0 || s.dispatched > 0
     || s.flagged > 0 || s.remediated > 0
     || s.unstuck > 0 || s.escalated > 0 || s.stallsResolved > 0
     || s.systemicFindings > 0 || s.systemicTicketsCreated > 0
@@ -563,6 +556,7 @@ export async function createManagerCoachingTask(
       }
     }
     if (taskId == null) return null;
+    await publishProjectStaffingChanged(env, tenantId, projectId);
 
     if (args.autoAssignAgent) {
       await assignTicketOwner(env, db, {
@@ -578,7 +572,7 @@ export async function createManagerCoachingTask(
         // see work start on the click. The autonomous tick ceiling governs the cron
         // sweeps, not a person's explicit action, exactly as "Run now" overrides a
         // breaker. It is bounded by the human, not by a loop.
-        await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        await routeLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId, status: TaskStatus.TODO,
           submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
         });
@@ -843,8 +837,6 @@ export async function runManagerForProject(
      * behaviour exactly as `tickDispatchBudget` documents.
      */
     dispatchBudget?: TickDispatchBudget;
-    /** Platform PR kill switch; omitted callers resolve it from KV. */
-    prManagementEnabled?: boolean;
   },
 ): Promise<ManagerRunSummary> {
   const { tenantId, projectId } = args;
@@ -858,13 +850,11 @@ export async function runManagerForProject(
   // immediately so a human sees work start the instant they click. Callers may force
   // either way via `dispatch`.
   const shouldDispatch = args.dispatch ?? (submittedBy !== 'system:manager-cron');
-  const prManagementEnabled = args.prManagementEnabled
-    ?? cronSweepEnabled(await readCronControls(env), 'pr-ticket-reconciler');
   // The board task representing this run (manual runs only) — every decision below
   // links to it so the run task shows exactly what this pass changed.
   const runTaskId = args.runTaskId ?? null;
   const summary: ManagerRunSummary = {
-    projectId, skipped: false, scored: 0, ranked: 0, scheduled: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
+    projectId, skipped: false, scored: 0, ranked: 0, scheduled: 0, assigned: 0, prsMerged: 0, dispatched: 0,
     audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
     stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
     censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
@@ -927,7 +917,6 @@ export async function runManagerForProject(
    * did not run out of time. See `carryOverRotation`.
    */
   const mayRunStage = (stage: string): boolean => {
-    if (!prManagementEnabled && stage === 'pr_conduct') return false;
     if (rotation.mayRun(stage)) return true;
     rotation.skip(stage);
     budget.shed(stage);
@@ -1258,7 +1247,7 @@ export async function runManagerForProject(
   // diagnosis — a handful of set-based queries and at most two model calls — and it is
   // the stage that answers "what is actually wrong with this project", so it must not be
   // the first thing starved by a slow merge loop. It also has no dependency on anything
-  // stage 4+ produces (unlike triage, which needs `conductedTaskIds`).
+  // stage 4+ produces (unlike triage, which derives conduct ownership from durable state).
   //
   // The bulk signals it loads are handed to triage below, so paying for them early costs
   // nothing overall — the same reads, just earlier in the pass.
@@ -1346,7 +1335,7 @@ export async function runManagerForProject(
             // every other manager stage. Reserve before invoking the canonical trigger;
             // release the slot when its idempotency/gating checks decline to start.
             const { refused, result: started } = await runs.spend(
-              () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+              () => routeLaneEntry(env, db, runtimeService, {
                 tenantId, projectId, taskId, status,
                 submittedBy: composeDispatcherLabel('manager', 'systemic-verify', policy.managerRef ?? 'system'),
               }),
@@ -1371,17 +1360,10 @@ export async function runManagerForProject(
   }
 
   budget.mark('census');
-  // 4. PR — conduct (open) PRs for finished work, then merge/close per policy. ---
-  // Records which tickets it acted on so the TRIAGE stage below can diagnose them
-  // without re-applying a remedy the review pass just applied.
-  // This is the stage that evicts the pass: each PR does provider round-trips, and 354
-  // of them will not fit in one invocation however high MAX_PR_ACTIONS_PER_RUN is set.
-  // It now stops at the budget instead of running until the isolate dies.
-  const conductedTaskIds = new Set<number>();
-  await coordinatePullRequests(env, db, runtimeService, {
-    tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs, mayRunStage,
-  });
-
+  // 4. PR — NOT HERE. Conducting review tickets is `repos/prConductSweep.ts` and merging is
+  // `repos/prMergeSweep.ts`, each a registry sweep with its own budget. TRIAGE below derives
+  // "conduct owns this ticket" from durable state (`isConductedBySweep`), not from a set
+  // handed over in memory.
   // WHAT LANDED, READ FROM THE JOURNAL THE MERGE SWEEP WRITES (see `countPrMergesSince`).
   // The pass no longer merges anything — `application/repos/prMergeSweep.ts` does, on its
   // own budget — but "what shipped since I last looked" is still part of what a manager
@@ -1409,7 +1391,7 @@ export async function runManagerForProject(
       // straight back if it declines, so the tenant ceiling bounds what this stage
       // actually starts rather than being reconciled against it afterwards.
       const { refused, result: started } = await runs.spend(
-        () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        () => routeLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: t.id, status: t.status, submittedBy,
         }),
         (v) => v === true,
@@ -1594,7 +1576,7 @@ export async function runManagerForProject(
     }).catch(() => undefined);
   } else {
     const triage = await runStallTriage(env, db, runtimeService, {
-      tenantId, projectId, managed, conductedTaskIds,
+      tenantId, projectId, managed,
       ...(censusSignals ? { signals: censusSignals } : {}),
       // Same dispatch-ownership rule step 5 follows: on the cron path the autonomous
       // executor is the single dispatcher, so triage staffs and coordinates but does
@@ -1705,7 +1687,7 @@ export async function runManagerForProject(
   await savePassRotation(env, tenantId, projectId, rotation, budget.truncated);
   const didSomething =
     summary.scored || summary.ranked || summary.scheduled || summary.assigned ||
-    summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged ||
+    summary.dispatched || summary.prsMerged || summary.flagged ||
     summary.stalled || summary.unstuck || summary.escalated || summary.staleRunTasksClosed ||
     summary.truncated.length > 0;
   if (didSomething) {
@@ -1720,7 +1702,7 @@ export async function runManagerForProject(
         `Managed the backlog — scored ${summary.scored}, ranked ${summary.ranked}, ` +
         `${summary.scheduled ? `scheduled ${summary.scheduled}, ` : ''}` +
         `assigned ${summary.assigned}, dispatched ${summary.dispatched}, ` +
-        `PRs ${summary.prsConducted + summary.prsMerged}` +
+        `PRs ${summary.prsMerged}` +
         `${summary.flagged ? `, flagged ${summary.flagged}` : ''}` +
         `${summary.remediated ? `, staffed ${summary.remediated}` : ''}` +
         `${summary.remediationDeferred ? ` (${summary.remediationDeferred} deferred)` : ''}` +
@@ -1739,7 +1721,7 @@ export async function runManagerForProject(
         `${summary.truncated.length ? ` — pass budget spent after ${Math.round(budget.elapsedMs() / 1000)}s, deferred: ${summary.truncated.join(', ')}` : ''}.`,
       metadata: {
         scored: summary.scored, ranked: summary.ranked, scheduled: summary.scheduled, assigned: summary.assigned,
-        dispatched: summary.dispatched, prsConducted: summary.prsConducted,
+        dispatched: summary.dispatched,
         prsMerged: summary.prsMerged, flagged: summary.flagged,
         remediated: summary.remediated, remediationDeferred: summary.remediationDeferred,
         stalled: summary.stalled, unstuck: summary.unstuck, escalated: summary.escalated,
@@ -1767,360 +1749,4 @@ export async function runManagerForProject(
   await invalidateDailyDigest(env, tenantId, projectId).catch(() => undefined);
 
   return summary;
-}
-
-/**
- * PR CONDUCT for one project: a finished-but-parked ticket (in review, has a branch, no
- * PR, no live run) is advanced to Done under any non-'queue' policy, opening its PR
- * through the shared finalize path.
- *
- * MERGING used to be the second half of this function and is now its own registry sweep
- * (`application/repos/prMergeSweep.ts`) — see the note at the end of the body for the
- * measurement that split them.
- */
-async function coordinatePullRequests(
-  env: Env,
-  db: Db,
-  runtimeService: RuntimeService,
-  ctx: {
-    tenantId: number; projectId: number; policy: EffectiveManagerPolicy;
-    managed: ManagedTaskRow[]; summary: ManagerRunSummary; runTaskId: number | null;
-    /** Populated with every ticket this stage acted on, so TRIAGE does not double-act. */
-    conductedTaskIds: Set<number>;
-    /** The pass's wall-clock budget — checked between tickets, never mid-write. */
-    budget: PassBudget;
-    /** The tenant's shared per-tick RUN ceiling. Every billable start reserves first. */
-    runs: DispatchReserver;
-    /**
-     * Whose turn it is. Both PR stages are rotatable: they are the stages that starved
-     * triage on the measured board, so they must be able to give up a turn to it.
-     */
-    mayRunStage: (stage: string) => boolean;
-  },
-): Promise<void> {
-  const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs } = ctx;
-
-  // CONDUCT: complete review-ready tickets and open their PRs (skip under 'queue').
-  //
-  // SELF-GOVERNANCE (0362): this step is where the manager exercises completion
-  // authority, so it is where unanimous sign-off is enforced. Previously it force-wrote
-  // `status = DONE` for ANY in-review ticket with a branch, with no manifest check —
-  // agent work was merged unreviewed. `requireSignoffToComplete` demands every REQUIRED
-  // participation slot be satisfied first, and a ticket whose manifest has no required
-  // slots never qualifies (signoffGate fails closed).
-  //
-  // IT IS A PROJECT SETTING, AND OFF BY DEFAULT SINCE 0380. `resolveRequiredSignoffGate`
-  // is the one read that consults it: a project that has not opted in owes nothing, skips
-  // the manifest read entirely, and completes on the deliverable + build checks alone.
-  //
-  // The eligibility filter also no longer requires `gitBranch`: a ticket can be real
-  // work with nothing to merge (a decision, a doc, a non-code chore). Those used to sit
-  // in review forever because only branch-bearing tickets were ever conducted. A
-  // fully-signed-off ticket with no branch is now closed directly — there is simply no
-  // PR to open for it.
-  if (policy.prMergePolicy !== 'queue' && ctx.mayRunStage('pr_conduct')) {
-    const reviewReady = managed
-      .filter((t) => t.status === TaskStatus.IN_REVIEW)
-      .slice(0, MAX_PR_ACTIONS_PER_RUN);
-    // One scan for in-flight runs across ALL review-ready tasks instead of a
-    // listByTask() round-trip per task (N+1). listActiveByTasks already filters
-    // to the non-terminal statuses (the former ACTIVE_EXEC set), so any task with
-    // a returned execution still has a live run.
-    const liveExecs = reviewReady.length
-      ? await runtimeService.listActiveByTasks(reviewReady.map((t) => t.id))
-      : [];
-    const liveTaskIds = new Set<number>(liveExecs.map((e) => e.taskId as unknown as number));
-    // THE REVIEW LANE'S GATE (1153), one read for the whole cohort. Null when it cannot be
-    // read, and a null gate CLOSES NOTHING this pass: completing past a gate whose
-    // configuration is unknown is exactly the override the setting exists to govern.
-    const closeContext: CloseContext = {
-      laneGates: reviewReady.length
-        ? await loadReviewLaneGates(db, tenantId, projectId).catch(() => null)
-        : new Map<string, string>(),
-      managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
-    };
-    // Build statuses for the whole review cohort in ONE query rather than a poll per
-    // ticket (this loop runs every 5 minutes across every project).
-    const reviewPrBuild = reviewReady.length
-      ? await db
-        .select({ taskId: pullRequests.taskId, buildStatus: pullRequests.buildStatus, status: pullRequests.status })
-        .from(pullRequests)
-        .where(and(
-          eq(pullRequests.tenantId, tenantId),
-          inArray(pullRequests.taskId, reviewReady.map((t) => t.id)),
-        ))
-        // NEWEST FIRST, so the "no open PR left" fallback below is the most recent
-        // settled one rather than whatever the heap scan happened to yield last.
-        .orderBy(desc(pullRequests.updatedAt))
-      : [];
-    const reviewFileRows = reviewReady.length
-      ? await db.select({ taskId: taskFileChanges.taskId, path: taskFileChanges.path })
-        .from(taskFileChanges)
-        .where(and(
-          eq(taskFileChanges.tenantId, tenantId),
-          inArray(taskFileChanges.taskId, reviewReady.map((t) => t.id)),
-        ))
-      : [];
-    const reviewPathsByTask = new Map<number, string[]>();
-    for (const row of reviewFileRows) {
-      reviewPathsByTask.set(row.taskId, [...(reviewPathsByTask.get(row.taskId) ?? []), row.path]);
-    }
-    // ── WHAT EACH REVIEW TICKET'S PULL REQUEST IS DOING ─────────────────────────────
-    // An OPEN row wins over every other row a ticket has: a ticket can carry an old
-    // closed PR and a live one, and it is the live one that decides both whether there is
-    // anything left to land and whose build verdict matters. Reading "the last row the
-    // scan happened to return" is how a settled PR's green build could speak for an open
-    // PR that had not built at all.
-    // The rule itself is `pickCurrentPr` (domain/task/buildStatus.ts) — the same one the
-    // board card's build badge is derived through, so the ticket and its card can never
-    // disagree about which pull request speaks for it.
-    const prRowsByTask = new Map<number, typeof reviewPrBuild>();
-    for (const r of reviewPrBuild) {
-      if (r.taskId == null) continue;
-      const list = prRowsByTask.get(r.taskId);
-      if (list) list.push(r);
-      else prRowsByTask.set(r.taskId, [r]);
-    }
-    const prByTask = new Map<number, { state: TicketPrState; buildStatus: string | null }>();
-    for (const [taskId, rows] of prRowsByTask) {
-      const current = pickCurrentPr(rows);
-      if (!current) continue;
-      prByTask.set(taskId, {
-        state: current.status === 'open' ? 'open' : 'settled',
-        buildStatus: current.buildStatus,
-      });
-    }
-
-    for (const t of reviewReady) {
-      // BETWEEN tickets, never mid-ticket: a conduct/merge already begun always
-      // completes, so shedding work can never leave a half-applied action.
-      if (budget.over()) { budget.shed('pr_conduct'); break; }
-      try {
-        // THE EVALUATION. Four questions, one verdict, one recorded action — see
-        // `evaluateTicketReadiness`. Every outcome is journalled, including the ones
-        // that do nothing, because the old silent `continue` is precisely how 280
-        // tickets sat in review for up to 19 days with no explanation anywhere.
-        const signoff = await resolveRequiredSignoffGate(env, db, {
-          tenantId, taskId: t.id, requireSignoff: policy.requireSignoffToComplete,
-        });
-        const pr = prByTask.get(t.id);
-        const readiness = decideTicketReadiness({
-          taskType: t.taskType,
-          actionType: t.actionType,
-          title: t.title,
-          hasBranch: !!t.gitBranch,
-          // The RECORDED pull request decides this, not `tasks.github_pr_url`: that column
-          // is stamped when a PR opens and never cleared, so it cannot tell an open PR
-          // from one that merged weeks ago. A ticket carrying the URL with no row left is
-          // 'settled' — there is no pull request for the merge stage to act on.
-          prState: pr?.state ?? (t.githubPrUrl ? 'settled' : 'none'),
-          hasAssignee: !!t.assignedAgentRef || t.assignedAgentHostId != null,
-          buildStatus: normalizeBuildStatus(pr?.buildStatus),
-          hasLiveRun: liveTaskIds.has(t.id),
-          deliverableEvidence: reviewPathsByTask.has(t.id)
-            ? classifyDeliverablePaths(reviewPathsByTask.get(t.id)!)
-            : (!t.gitBranch && !pr ? 'none' : 'unknown'),
-          signoff,
-          requireSignoff: policy.requireSignoffToComplete,
-          requireGreenBuild: policy.prMergePolicy === 'on_green',
-        });
-
-        if (readiness.action === 'wait_for_run' || readiness.action === 'wait_for_build') {
-          continue; // transient by definition — re-evaluated next pass, no noise
-        }
-        // Past the transient checks this pass WILL act on the ticket — here or, for an
-        // open PR, in the merge stage below — so claim it: TRIAGE still diagnoses and
-        // registers it (the stuck list must be complete) but must not re-apply a remedy
-        // on top of the one about to run. That matters most for `await_merge`: triage's
-        // `resolve_conflict` remedy starts a BILLABLE run against the same branch the
-        // merge queue is already working.
-        conductedTaskIds.add(t.id);
-
-        // AN OPEN PULL REQUEST STILL HAS TO LAND. Not completed here, and not journalled
-        // here either: the merge stage immediately below is the single writer for a PR's
-        // fate (merged, conflicting, or retired to a human), and duplicating that verdict
-        // once per review ticket per pass would add up to 20 rows every five minutes to a
-        // table already growing ~3.5k rows a day per project.
-        if (readiness.action === 'await_merge') continue;
-
-        // Expected a deliverable and there is none, or the build is red: this ticket is
-        // not reviewable, it is unfinished. Send it BACK to implementation and start its
-        // agent — the behaviour whose absence let implementable work rot in review.
-        if (readiness.action === 'return_to_implementation' || readiness.action === 'return_build_failed') {
-          // ONE return primitive: it holds a ticket whose repository is unavailable (no run
-          // could land the deliverable — re-dispatching would loop) and otherwise records
-          // the reopen of the implementation producer, which is what makes the rework run
-          // below dispatchable now that a completed producer slot stays closed.
-          const returned = await returnToImplementation(env, db, {
-            tenantId, taskId: t.id, fromStatus: TaskStatus.IN_REVIEW,
-            expectsCode: readiness.expectsCode,
-            reason: readiness.detail,
-            actor: { kind: 'agent', ref: policy.managerRef ?? null, name: 'AI Manager' },
-          });
-          if (!returned.returned) {
-            await recordManagerAction(db, {
-              tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-              summary: `Held "${t.title}" in review — ${describeReturnBlock(returned.blockedReason)}`,
-              detail: { action: readiness.action, expectsCode: readiness.expectsCode, held: true, blockedReason: returned.blockedReason },
-            });
-            continue;
-          }
-          // The RETURN is a state change and always happens; the restart is billable, so
-          // it reserves first. A ticket returned but not restarted is picked up by the
-          // executor's next tick — strictly better than silently outspending the ceiling.
-          const restarted = (await runs.spend(
-            () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-              tenantId, projectId, taskId: t.id, status: TaskStatus.IN_PROGRESS,
-              submittedBy: composeDispatcherLabel('manager', 'review-return', policy.managerRef ?? 'system'),
-            }).catch(() => false),
-            (v) => v === true,
-          )).result === true;
-          if (restarted) summary.dispatched += 1;
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-            summary: `Returned "${t.title}" to implementation — ${readiness.detail}`,
-            detail: { action: readiness.action, expectsCode: readiness.expectsCode, restarted, reopenedRoles: returned.reopenedRoles },
-          });
-          continue;
-        }
-
-        // Sign-offs outstanding: ASK for them. Dispatching the owing role is what closes
-        // the accountability loop — without it the manifest just accumulates `assigned`
-        // slots forever (measured: 487 required slots, 0 ever satisfied).
-        if (readiness.action === 'drive_signoff') {
-          // Asking a reviewer to sign off IS a billable run, so it reserves first. Out of
-          // budget the ask is deferred to the next tick, and the journal below says
-          // exactly that instead of claiming the ticket is merely "held in review".
-          const spend = await runs.spend(
-            () => driveOutstandingSignoffs(env, db, runtimeService, {
-              tenantId, projectId, task: t, signoff, managerRef: policy.managerRef,
-            }),
-            (d) => d.asked.length > 0,
-          );
-          const drive = spend.result ?? {
-            asked: [] as string[],
-            blockedDetail: 'The workspace has used its dispatch budget for this tick; the sign-off ask goes out on the next one.',
-            ownership: classifySignoffOwnership(signoff.outstanding),
-          };
-          summary.dispatched += drive.asked.length;
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-            summary: drive.asked.length
-              ? `Requested sign-off on "${t.title}" from ${drive.asked.join(', ')} — ${readiness.detail}`
-              // "Held in review" alone was unactionable and, worse, indistinguishable
-              // from a ticket whose reviewer WAS asked. Say why nothing was asked.
-              : `Held "${t.title}" in review — ${readiness.detail}${drive.blockedDetail ? ` ${drive.blockedDetail}` : ''}`,
-            detail: {
-              action: readiness.action,
-              signoffGate: signoff.reason,
-              requiredCount: signoff.requiredCount,
-              satisfiedCount: signoff.satisfiedCount,
-              // Carry the ASSIGNEE, not just the role. "Waiting on Architect" reads as a
-              // staffed ticket; "Waiting on Architect (nobody assigned)" is the fact.
-              outstanding: signoff.outstanding.map((o) => ({
-                roleKey: o.roleKey,
-                roleName: o.roleName,
-                state: o.state,
-                assigneeKind: o.assigneeKind,
-                assigneeName: o.assigneeName,
-              })),
-              unstaffedCount: drive.ownership.unstaffed.length,
-              humanOwedCount: drive.ownership.humanOwed.length,
-              dispatchableCount: drive.ownership.dispatchable.length,
-              // Agent-owed but NO LONGER ASKABLE — the agent finished its runs without
-              // ever recording a verdict. Reported separately because it is subtracted
-              // from `dispatchableCount`, and a reader watching that number fall with no
-              // stated reason would read it as slots being satisfied.
-              exhaustedCount: drive.ownership.exhausted.length,
-              dispatchedTo: drive.asked,
-            },
-          });
-          continue;
-        }
-
-        // readiness.action === 'complete' — every check passed, including "there is
-        // nothing left to land". WHICH closure applies is decided by the pure evaluator
-        // (`CompletionShape`), not re-derived here: the inline `hasBranch && !hasPr` this
-        // replaces was used to choose whether to OPEN a pull request and then reported as
-        // if it also meant there was nothing to MERGE, which is how ticket -085 was
-        // journalled "(no branch to merge)" 78ms before its own PR #103 was retired.
-        // ── WHO MAY CLOSE IT (1153) ───────────────────────────────────────────────
-        // The review verdict above is the manager's; whether the manager may ACT on it
-        // through a human-gated review lane is the workspace admin's decision, answered
-        // by `closeTicketAutomatically` — the ONE automatic-close path the merge sweep, the
-        // CI/deploy webhooks, the delta merge, the stage advance and the security re-scan
-        // also go through, and the same gate triage and the census read. Held (or a gate
-        // that could not be read): nothing is closed and a person closes it; the hold is
-        // journalled once, as a state rather than a per-pass row.
-        //
-        // The close itself goes through `completeTaskOnMerge` inside that wrapper — the
-        // shared completion path whose header explains why the manager's old plain
-        // `db.update` was deleted: it recorded no lane hop, so the digest, the ledger and
-        // the autonomy audit disagreed about who finished the ticket. The executor is
-        // credited (on a managed board the assignee is the Coordinator, never an
-        // executor), or the manager when it closes under delegated authority.
-        const close = await closeTicketAutomatically(env, db, {
-          tenantId, taskId: t.id, source: 'manager_review', managerRef: policy.managerRef,
-          actor: { actorAgentRef: t.assignedAgentRef, actorAgentHostId: t.assignedAgentHostId },
-          heldDetail: readiness.detail, runTaskId,
-          known: { status: t.status, projectId, title: t.title, context: closeContext },
-        });
-        if (!close.closed) continue;
-        const reviewGate = close.verdict;
-        const canOpenPr = readiness.completion === 'open_pr';
-        if (canOpenPr) {
-          await dispatchTaskFinalize(env as never, db, tenantId, t.id, {
-            assignedAgentHostId: t.assignedAgentHostId,
-            assignedAgentRef: t.assignedAgentRef,
-            gitBranch: t.gitBranch,
-            githubPrUrl: t.githubPrUrl,
-            title: t.title,
-          });
-          summary.prsConducted += 1;
-        }
-        // ONE SENTENCE PER CLOSURE. "(no branch to merge)" used to be printed for all of
-        // them, and it was true for exactly one — a reader could not tell a genuinely
-        // empty ticket from one closing on top of an unmerged branch.
-        const CLOSURE: Record<Exclude<CompletionShape, 'open_pr'>, string> = {
-          no_deliverable: `Closed "${t.title}" — no branch and no pull request, so there was nothing to merge.`,
-          pr_settled: `Closed "${t.title}" — its pull request has already landed.`,
-          branch_unopened: `Closed "${t.title}" — branch ${t.gitBranch} was never opened as a pull request and no agent is assigned to open one, so nothing was merged.`,
-        };
-        await recordManagerAction(db, {
-          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-          summary: canOpenPr
-            ? `${readiness.detail} Opened PR for "${t.title}".`
-            : `${readiness.detail} ${CLOSURE[(readiness.completion ?? 'no_deliverable') as Exclude<CompletionShape, 'open_pr'>]}`,
-          detail: {
-            action: readiness.action,
-            completion: readiness.completion,
-            signoffGate: signoff.reason,
-            requiredCount: signoff.requiredCount,
-            satisfiedCount: signoff.satisfiedCount,
-            openedPr: canOpenPr,
-            reviewGate,
-          },
-        });
-      } catch (error) { /* skip */ 
-        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "coordinatePullRequests" });
-      }
-    }
-  }
-
-  // ── THE MERGE LOOP IS NOT HERE ANY MORE ─────────────────────────────────────────
-  // It is its own registry sweep: `application/repos/prMergeSweep.ts`, registered in
-  // `cronSweeps.ts` beside `runBoardSyncSweep` with its own budget.
-  //
-  // WHY. Merging is mechanical, high-volume, provider-bound work whose cadence is set by
-  // PR volume and provider latency — nothing to do with how often a backlog is worth
-  // re-ranking or a stall worth re-triaging. Inside this pass it was 93% of the measured
-  // wall-clock (project 11, 2026-07-30: `pr: 28839ms` of a 30888ms pass) and it starved
-  // every stage behind it. The merge queue later bounded it to ~4s, which stopped the
-  // bleeding without fixing the shape: the guarantee that triage still ran was a tuned
-  // depth rather than a structural fact. Split out, the pass cannot be starved by PR
-  // volume BY CONSTRUCTION.
-  //
-  // The pass still REPORTS what landed (`summary.prsMerged`) — it reads
-  // `countPrMergesSince` off the journal the sweep writes. Reading the result is not the
-  // same as doing the work, and that distinction is the whole point of the split.
 }

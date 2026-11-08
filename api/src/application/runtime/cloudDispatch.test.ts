@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, isTerminalExecutionStatus,
-  parseFollowUp, buildFollowUpPayload,
+  parseFollowUp, buildFollowUpPayload, stripClientPolicyGates,
   parseModel, parseCloudAgentRef, parseRepoId, parseRemediation,
   markReaperRequeued, wasReaperRequeued, withDefaultModel,
   parseExecutor, withExecutor,
@@ -249,5 +249,22 @@ describe('payload parsers — malformed / wrong-type input is defended', () => {
     expect(withDefaultModel(JSON.stringify({ model: 'pinned' }), 'm')).toBe(JSON.stringify({ model: 'pinned' })); // pin wins
     expect(JSON.parse(withDefaultModel(undefined, 'm')!).model).toBe('m');       // seeds the fallback
     expect(JSON.parse(withDefaultModel(JSON.stringify({ x: 1 }), 'm')!)).toEqual({ x: 1, model: 'm' });
+  });
+});
+
+describe('governance gates in a client or follow-up payload', () => {
+  it('a follow-up drops the prior run\'s policyGates so submit re-resolves the current tenant policy', () => {
+    const prior = JSON.stringify({ cloudAgentRef: 'ada', policyGates: [{ id: 'old:g', effect: 'block' }] });
+    const out = JSON.parse(buildFollowUpPayload(prior, { directive: 'again', priorExecutionId: 1 }));
+    expect(out.policyGates).toBeUndefined();
+    expect(out.cloudAgentRef).toBe('ada');
+  });
+
+  it('stripClientPolicyGates removes gates a client wrote into a run payload and leaves the rest', () => {
+    const body = JSON.stringify({ model: 'm', policyGates: [{ id: 'forged', effect: 'block' }] });
+    expect(JSON.parse(stripClientPolicyGates(body)!)).toEqual({ model: 'm' });
+    expect(stripClientPolicyGates('{"model":"m"}')).toBe('{"model":"m"}');
+    expect(stripClientPolicyGates('not json')).toBe('not json');
+    expect(stripClientPolicyGates(undefined)).toBeUndefined();
   });
 });

@@ -55,8 +55,14 @@ const KIND_TONE: Record<string, ThemeTone> = {
     'co-changed': 'changed', about: 'nodeFact', mentions: 'nodeEntity',
 };
 
+/** A link that breaks the layer rule. */
+export const isViolation = (e: KEdge): boolean => e.verdict === 'upward' || e.verdict === 'skips';
+
+/** A link drawn in a warning colour: a layer violation or a cycle (what the picture is for). */
+export const isLoudEdge = (e: KEdge): boolean => isViolation(e) || !!e.cycle;
+
 export function edgeBucket(e: KEdge): { bucket: string; tone: ThemeTone } {
-    if (e.verdict === 'upward' || e.verdict === 'skips') return { bucket: 'violation', tone: 'violation' };
+    if (isViolation(e)) return { bucket: 'violation', tone: 'violation' };
     if (e.cycle) return { bucket: 'cycle', tone: 'cycle' };
     return { bucket: e.kind, tone: KIND_TONE[e.kind] ?? 'edge' };
 }
@@ -74,18 +80,23 @@ export function groupEdges<P>(edges: readonly KEdge[], at: (ref: string) => P | 
     for (const e of edges) {
         const a = at(e.from), b = at(e.to);
         if (!a || !b) continue;
-        const { bucket, tone } = edgeBucket(e);
-        const g = groups.get(bucket) ?? groups.set(bucket, { bucket, tone, pairs: [] }).get(bucket)!;
+        // The bucket name alone decides the group; the tone is read once, from the group's first edge.
+        const name = isViolation(e) ? 'violation' : e.cycle ? 'cycle' : e.kind;
+        let g = groups.get(name);
+        if (!g) { const { bucket, tone } = edgeBucket(e); g = { bucket, tone, pairs: [] }; groups.set(bucket, g); }
         g.pairs.push([a, b]);
     }
     return [...groups.values()].sort((a, b) => cmp(a.bucket, b.bucket));
 }
 
 export function edgeBuffers(edges: readonly KEdge[], layout: Layout3D): EdgeBuffer[] {
-    return groupEdges(edges, (ref) => layout.positions.get(ref)).map((g) => ({
-        bucket: g.bucket,
-        tone: g.tone,
-        positions: new Float32Array(g.pairs.flatMap(([a, b]) => [a[0], a[1], a[2], b[0], b[1], b[2]])),
-        count: g.pairs.length,
-    }));
+    return groupEdges(edges, (ref) => layout.positions.get(ref)).map((g) => {
+        const positions = new Float32Array(g.pairs.length * 6);
+        let at = 0;
+        for (const [a, b] of g.pairs) {
+            positions[at++] = a[0]; positions[at++] = a[1]; positions[at++] = a[2];
+            positions[at++] = b[0]; positions[at++] = b[1]; positions[at++] = b[2];
+        }
+        return { bucket: g.bucket, tone: g.tone, positions, count: g.pairs.length };
+    });
 }

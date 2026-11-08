@@ -4126,6 +4126,8 @@
     "delta": "+{count}"
   },
   "personProfile": {
+    "seoTitle": "Teammate",
+    "seoDescription": "A teammate in your workspace: role, personality and the work on their plate.",
     "loading": "Loading the profile",
     "work": "Work",
     "open": "Open tickets",
@@ -4735,7 +4737,7 @@
         "surface": "{count, plural, =0 {Drawing, empty} one {Drawing, 1 stroke} other {Drawing, # strokes}}",
         "empty": "No drawing yet.",
         "emptyHint": "Draw here with a mouse, pen or finger.",
-        "limit": "This drawing has reached its limit of {max} strokes. Erase or clear some to add more.",
+        "limit": "This drawing is full: it holds at most {max} strokes, and a limit on total detail. Erase or clear some to add more.",
         "clear": "Clear drawing",
         "clearConfirm": "Remove every stroke from this drawing? Other people editing it will lose them too.",
         "textLabel": "Drawing text",
@@ -4968,6 +4970,7 @@
         "exportAs": "Export {format}",
         "exporting": "Rendering…",
         "exportFailed": "The export failed. Try again.",
+        "exportTooLarge": "This animation is too large to export (width × height × frames is over the limit). Reduce the frame count or the canvas size.",
         "summary": "{count, plural, one {# frame} other {# frames}} · {fps} fps · {seconds} s",
         "dimensions": "{width} × {height} px",
         "maxFramesReached": "Frame limit reached ({max} frames). Delete a frame to add another.",
@@ -15734,6 +15737,10 @@
     "prdFallback": "PRD {id}"
   },
   "kanbanTemplateCheckout": {
+    "previewLockedNotice": "This is a paid template. Unlock it to see its requirements and staffing.",
+    "previewLanes": "Lanes",
+    "previewUnlock": "Unlock for {price}",
+    "previewBack": "Back",
     "redirecting": "\"{name}\" is a paid template. Taking you to checkout...",
     "checkoutFailed": "Could not start checkout for this template. Try again.",
     "completeFailed": "The payment could not be confirmed yet. If you were charged, the template unlocks shortly; then try again."
@@ -38547,7 +38554,10 @@
         "checking": "Checking the clip…",
         "watermarkDetected": "This clip carries a Builderforce watermark for clip {clipId}.",
         "audioMatches": "Audio matches the signed record.",
-        "selfReported": "This record was self-reported by the creator's device.",
+        "selfReported": "Registered by the voice's licensee; the platform did not see this audio.",
+        "watermarkMismatch": "Carries the mark of clip {clipId}, but this audio is not the signed audio.",
+        "watermarkUnchecked": "Carries the mark of clip {clipId}, but no audio fingerprint could be checked for this format.",
+        "voiceDeleted": "Deleted voice",
         "metaTitle": "Verify a voice clip",
         "metaDescription": "Check whether a voice clip carries a Builderforce watermark, and which consent it was made under.",
         "noWatermark": "No watermark found. This clip may not have been made on Builderforce, or it was edited or re-encoded.",
@@ -38581,6 +38591,7 @@
       "checkoutCancelled": "Checkout was cancelled. You have not been charged.",
       "checkoutFailed": "We could not confirm that payment. If you were charged, refresh in a moment.",
       "checkoutDone": "Purchase complete. The voice is now in your voices.",
+      "licenseRevoked": "Your licence for this voice was revoked after a refund or dispute. Contact support to restore it.",
       "checkoutOpened": "Checkout opened in your browser. Refresh here once you have paid.",
       "acquireFailed": "Could not add this voice. Try again.",
       "refresh": "Refresh"

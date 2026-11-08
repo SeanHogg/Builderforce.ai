@@ -17,6 +17,7 @@ import {
   type AgentEngine,
   type PolicyGate,
   coercePolicyGates,
+  SIDE_EFFECT_GATES_WIRE_LEVEL,
   CURRENT_ENGINE_ID,
   resolveEngineById,
 } from "@builderforce/agent-tools";
@@ -762,7 +763,8 @@ export class BuilderforceRelayService implements IRelayService {
       .replace(/^http:/, "ws:");
     // API key is passed via Authorization header, not as a query param.
     // Query params appear in server access logs and CDN caches — headers are safer.
-    this.upstreamWsUrl = `${base}/api/agent-hosts/${opts.agentNodeId}/upstream`;
+    // `gates` declares the wire level this build reads: compact `sideEffect` class gates (an older host is sent them spelled out per tool).
+    this.upstreamWsUrl = `${base}/api/agent-hosts/${opts.agentNodeId}/upstream?gates=${SIDE_EFFECT_GATES_WIRE_LEVEL}`;
     this.heartbeatHttpUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/heartbeat`;
     this.assignmentContextUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/assignment-context`;
     this.gatewayWsUrl = opts.gatewayUrl ?? "ws://127.0.0.1:18789";

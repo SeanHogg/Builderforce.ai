@@ -44,6 +44,8 @@ import {
 } from '../templates/catalogTemplateStore';
 import { TEMPLATE_KINDS } from '../templates/templateKinds';
 import { kanbanBodyOf, kanbanPriceValues, kanbanTemplateFromStored, parseKanbanBody } from './kanbanTemplateCodec';
+import { assertTemplateEntitled, lockedTemplateListing } from './templateEntitlement';
+import { previewOf, type TemplatePreview } from './templatePreview';
 
 const KIND = TEMPLATE_KINDS.kanban;
 
@@ -103,6 +105,22 @@ export class KanbanTemplateService {
     return pub ? kanbanTemplateFromStored(pub, tenantId) : null;
   }
 
+  /**
+   * The template as a MEMBER may see it: full when usable, otherwise (a foreign priced
+   * template the tenant is not licensed for) only the {@link TemplatePreview}.
+   */
+  async getForViewer(
+    env: Env,
+    tenantId: number,
+    id: string,
+    buyerRef: string | null,
+  ): Promise<{ template: KanbanTemplate } | { template: TemplatePreview } | null> {
+    const t = await this.get(env, tenantId, id);
+    if (!t) return null;
+    const locked = await lockedTemplateListing(this.db, env, { tenantId, buyerRef, templateId: id });
+    return { template: locked ? previewOf(t, locked) : t };
+  }
+
   /** Create a new tenant template (optionally forked from a built-in / existing one). */
   async create(
     env: Env,
@@ -118,6 +136,8 @@ export class KanbanTemplateService {
     if (input.forkFrom) {
       const src = await this.get(env, tenantId, input.forkFrom);
       if (!src) throw new Error(`template '${input.forkFrom}' not found`);
+      // A fork is a private copy that applies free: a priced foreign template needs its licence first.
+      await assertTemplateEntitled(this.db, env, { tenantId, buyerRef: authorId, templateId: input.forkFrom });
       lanes = lanes ?? src.lanes;
       parentTemplateId = src.id;
     }
@@ -187,7 +207,7 @@ export class KanbanTemplateService {
     env: Env,
     tenantId: number,
     id: string,
-    opts: { published: boolean; visibility?: TemplateVisibility; priceCents?: number | null; pricingModel?: string | null; priceUnit?: string | null },
+    opts: { published: boolean; visibility?: TemplateVisibility; priceCents?: number | null; pricingModel?: string | null; priceUnit?: string | null; publisherRef?: string | null },
   ): Promise<void> {
     if (isBuiltinTemplateId(id)) throw new Error('built-in templates are already public');
     const existing = await getTenantTemplate(this.db, env, { tenantId, kind: KIND, id });
@@ -197,6 +217,13 @@ export class KanbanTemplateService {
       publishedAt: opts.published ? new Date(existing.publishedAt ?? Date.now()) : null,
       visibility: opts.visibility ?? (opts.published ? 'public' : 'private'),
       ...kanbanPriceValues(opts.priceCents),
+      // The seller of record: `grantListing` credits this ref on a paid sale (and blocks
+      // buying one's own template). Without it a sale would credit nobody.
+      // Set only when unclaimed or the author re-publishing: another manager's publish must
+      // not redirect the proceeds.
+      ...(opts.published && opts.publisherRef && (!existing.publisherRef || existing.createdBy === opts.publisherRef)
+        ? { publisherRef: opts.publisherRef }
+        : {}),
     };
     if (opts.pricingModel !== undefined || opts.priceUnit !== undefined) {
       const body = parseKanbanBody(existing.body);
@@ -213,6 +240,7 @@ export class KanbanTemplateService {
   async install(env: Env, tenantId: number, authorId: string | null, sourceId: string): Promise<KanbanTemplate> {
     const src = await this.get(env, tenantId, sourceId);
     if (!src) throw new Error(`template '${sourceId}' not found`);
+    await assertTemplateEntitled(this.db, env, { tenantId, buyerRef: authorId, templateId: sourceId });
     const copy = await this.create(env, tenantId, authorId, {
       name: src.name,
       description: src.description,
@@ -238,12 +266,15 @@ export class KanbanTemplateService {
     projectId: number,
     templateId: string,
     projectName: string,
+    /** The acting user, for the licence check on a priced template (null = system). */
+    buyerRef: string | null = null,
   ): Promise<{ boardId: string; lanesApplied: number; requirementsApplied: number; lanesStaffed: number }> {
     const template = await this.get(env, tenantId, templateId);
     if (!template) throw new Error(`template '${templateId}' not found`);
+    await assertTemplateEntitled(this.db, env, { tenantId, buyerRef, templateId });
 
     const { board: realBoard } = await findOrCreateBoard(this.db, {
-      tenantId, projectId, name: projectName, seedDefaultLanes: false,
+      tenantId, projectId, name: projectName, seedDefaultLanes: false, env,
     });
     const boardId = realBoard.id;
     const now = new Date();
@@ -322,8 +353,9 @@ export class KanbanTemplateService {
     const seeded = await seedLaneStaffingFromWorkforce(env, this.db, { tenantId, projectId, boardId });
 
     // Every lane's position/terminal/parking just changed (or the board is new):
-    // drop the cached ordinal map the ticket-move path reads.
-    await Promise.all([invalidateSwimlaneOrdinals(env, projectId), invalidateBoardLanesCache(env, tenantId, boardId)]);
+    // drop the cached ordinal map the ticket-move path reads. The same call drops the lane router's cached facts
+    // (board id, `lifecycleManaged`, lanes) - the batch above rewrote the board's flag, so they are stale too.
+    await Promise.all([invalidateSwimlaneOrdinals(env, projectId, tenantId), invalidateBoardLanesCache(env, tenantId, boardId)]);
     return { boardId, lanesApplied: template.lanes.length, requirementsApplied, lanesStaffed: seeded.staffed };
   }
 }

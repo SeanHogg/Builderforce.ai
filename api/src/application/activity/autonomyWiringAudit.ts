@@ -31,7 +31,8 @@
  *   3. A check that cannot be evaluated reports `unknown` — never `pass`. Silence must
  *      not read as health; that is exactly how the first audit misled.
  */
-import { and, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, notInArray, sql } from 'drizzle-orm';
+import { BOOKKEEPING_ACTION_TYPES } from '../manager/managerActionJournal';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -174,7 +175,7 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
   const mergeActions = await db
     .select({ actionType: managerActions.actionType, n: sql<number>`count(*)::int` })
     .from(managerActions)
-    .where(eq(managerActions.tenantId, tenantId))
+    .where(and(eq(managerActions.tenantId, tenantId), notInArray(managerActions.actionType, [...BOOKKEEPING_ACTION_TYPES])))
     .groupBy(managerActions.actionType);
   const actionCount = new Map(mergeActions.map((r) => [r.actionType, Number(r.n)]));
   const syncPr = actionCount.get('sync_pr') ?? 0;

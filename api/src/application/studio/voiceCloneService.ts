@@ -15,17 +15,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * interactive tx — we reconcile via conflict, not a lock).
  */
 
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { usageDatabaseOf } from '../llm/usageLedger';
 import type { Env } from '../../env';
 import {
   llmUsageLog,
-  studioVoiceCloneLicenses,
   studioVoiceClones,
   studioVoiceovers,
 } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
 import {
@@ -33,24 +31,29 @@ import {
   synthesizeClonedAudio,
   TtsProviderUnavailable,
 } from './ttsProvider';
+import {
+  canUseClone,
+  VoiceCloneConsentRequired,
+  VoiceCloneForbidden,
+  VoiceCloneNotFound,
+} from './voiceCloneAccess';
+import { markServerClip } from './voiceClipMarking';
+import { createVoiceProvenancePorts, findProvenanceForVoiceover } from './voiceProvenancePorts';
+import { issueVoiceProvenance, VoiceProvenanceConflict } from './voiceProvenanceService';
 
-// Each refusal carries the status it answers with (`statusOf` reads it), so no
-// route re-decides whether a missing consent attestation is a 403 or a 422.
-export class VoiceCloneNotFound extends Error {
-  readonly status = 404;
-  constructor() { super('Voice clone not found.'); this.name = 'VoiceCloneNotFound'; }
-}
-export class VoiceCloneForbidden extends Error {
-  readonly status = 403;
-  constructor() { super('You do not own or hold a license for this voice.'); this.name = 'VoiceCloneForbidden'; }
-}
-export class VoiceCloneConsentRequired extends Error {
-  readonly status = 422;
-  constructor() { super('This voice clone has no consent attestation; synthesis is blocked.'); this.name = 'VoiceCloneConsentRequired'; }
-}
+// The access refusals and the access predicate live in voiceCloneAccess (shared
+// with provenance issuing); re-exported so existing imports keep resolving.
+export { VoiceCloneNotFound, VoiceCloneForbidden, VoiceCloneConsentRequired, canUseClone };
+
 export class VoiceCloneReferenceMissing extends Error {
   readonly status = 422;
   constructor() { super('The clone has no reference sample to synthesize from.'); this.name = 'VoiceCloneReferenceMissing'; }
+}
+
+/** A concurrent identical synthesis won the race but its clip is withdrawn or not yet signed. Retry. */
+export class VoiceCloneSynthesisConflict extends Error {
+  readonly status = 409;
+  constructor() { super('A concurrent synthesis of this clip did not complete. Retry.'); this.name = 'VoiceCloneSynthesisConflict'; }
 }
 
 export { TtsProviderUnavailable };
@@ -74,28 +77,6 @@ export interface SynthesisRecord {
   cached: boolean;
 }
 
-/** Owner OR an active license. The single access predicate — routes never
- *  recompute it. */
-export async function canUseClone(
-  db: Db,
-  clone: { id: number; tenantId: number },
-  tenantId: number,
-): Promise<boolean> {
-  if (clone.tenantId === tenantId) return true;
-  const [license] = await db
-    .select({ id: studioVoiceCloneLicenses.id })
-    .from(studioVoiceCloneLicenses)
-    .where(
-      and(
-        eq(studioVoiceCloneLicenses.cloneId, clone.id),
-        eq(studioVoiceCloneLicenses.tenantId, tenantId),
-        eq(studioVoiceCloneLicenses.status, 'active'),
-      ),
-    )
-    .limit(1);
-  return Boolean(license);
-}
-
 /** Normalise text so trivially-different inputs share a cache entry. */
 function normalizeText(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
@@ -103,12 +84,13 @@ function normalizeText(text: string): string {
 
 /** sha256 hex of the synthesis parameters — the read-through cache key. */
 async function computeCacheKey(
+  tenantId: number,
   cloneId: number,
   text: string,
   speed: number,
   language: string,
 ): Promise<string> {
-  const material = `${cloneId}\u0000${normalizeText(text)}\u0000${speed}\u0000${language}`;
+  const material = `${tenantId}\u0000${cloneId}\u0000${normalizeText(text)}\u0000${speed}\u0000${language}`;
   return sha256Hex(material);
 }
 
@@ -141,7 +123,7 @@ export async function synthesizeForClone(
 
   const speed = params.speed ?? 1;
   const language = params.language ?? 'en';
-  const cacheKey = await computeCacheKey(params.cloneId, params.text, speed, language);
+  const cacheKey = await computeCacheKey(params.tenantId, params.cloneId, params.text, speed, language);
 
   return getOrSetCached(
     env,
@@ -195,9 +177,13 @@ async function loadOrSynthesize(
     ...(params.signal ? { signal: params.signal } : {}),
   });
 
-  const audioKey = `${clone.tenantId}/voiceovers/${clone.id}/${cacheKey}.wav`;
-  await env.UPLOADS?.put(audioKey, out.audio, {
-    httpMetadata: { contentType: out.contentType },
+  // Every clip is watermarked before it is stored. The key carries the watermark
+  // id, so two racing identical requests each write their OWN object and the
+  // provenance hash always describes the bytes the winning row points at.
+  const marked = await markServerClip(out.audio, out.contentType);
+  const audioKey = `${clone.tenantId}/voiceovers/${clone.id}/${cacheKey}-${marked.watermarkId}.wav`;
+  await env.UPLOADS?.put(audioKey, marked.audio, {
+    httpMetadata: { contentType: marked.contentType },
     customMetadata: { cloneId: String(clone.id), tenantId: String(clone.tenantId) },
   });
 
@@ -221,20 +207,53 @@ async function loadOrSynthesize(
     .returning({ id: studioVoiceovers.id });
 
   if (inserted.length === 0) {
-    // Lost the race — return the row the winner persisted (no double-bill).
+    // Lost the race — drop our own copy of the audio and return the row the
+    // winner persisted (no double-bill).
+    await env.UPLOADS?.delete(audioKey).catch((error) => {
+      reportCaughtError(error, { source: 'application/studio/voiceCloneService.ts', operation: 'loadOrSynthesize' });
+    });
     const [winner] = await db
       .select()
       .from(studioVoiceovers)
       .where(eq(studioVoiceovers.cacheKey, cacheKey))
       .limit(1);
-    if (winner) {
-      return {
-        voiceoverId: winner.id,
-        audioKey: winner.audioKey,
-        durationMs: winner.durationMs,
-        wordTimestamps: winner.wordTimestamps,
-        cached: true,
-      };
+    // The winner's row is only servable once its provenance is signed: a winner that failed
+    // signing is WITHDRAWN (row + audio deleted), and one still in flight has no manifest yet.
+    // Either way this is a miss, and our own audio is already gone, so the caller retries.
+    const winnerServable = winner
+      ? Boolean(await findProvenanceForVoiceover(db, params.tenantId, winner.id))
+      : false;
+    if (!winner || !winnerServable) throw new VoiceCloneSynthesisConflict();
+    return {
+      voiceoverId: winner.id,
+      audioKey: winner.audioKey,
+      durationMs: winner.durationMs,
+      wordTimestamps: winner.wordTimestamps,
+      cached: true,
+    };
+  }
+
+  // Sign the clip's provenance. Fail closed: a clip with no signed manifest must
+  // not be served, so on failure the row and object are withdrawn and the error
+  // surfaces (a retry re-synthesizes; nothing was billed yet). A duplicate means a
+  // concurrent request already registered it — not an error.
+  const voiceoverId = inserted[0]?.id ?? 0;
+  try {
+    await issueVoiceProvenance(createVoiceProvenancePorts(db, env), {
+      tenantId: params.tenantId,
+      userId: params.userId,
+      cloneId: clone.id,
+      voiceoverId: voiceoverId || null,
+      engine: 'clone-server',
+      model: clone.provider,
+      audioSha256: marked.audioSha256,
+      watermarkId: marked.watermarkId,
+      watermarked: marked.watermarked,
+    });
+  } catch (error) {
+    if (!(error instanceof VoiceProvenanceConflict)) {
+      await withdrawVoiceover(db, env, voiceoverId, audioKey);
+      throw error;
     }
   }
 
@@ -251,6 +270,16 @@ async function loadOrSynthesize(
     wordTimestamps: out.wordTimestamps,
     cached: false,
   };
+}
+
+/** Undo a half-finished synthesis: remove the voiceover row and its audio. */
+async function withdrawVoiceover(db: Db, env: Env, voiceoverId: number, audioKey: string): Promise<void> {
+  try {
+    if (voiceoverId) await db.delete(studioVoiceovers).where(eq(studioVoiceovers.id, voiceoverId));
+    await env.UPLOADS?.delete(audioKey);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/studio/voiceCloneService.ts', operation: 'withdrawVoiceover' });
+  }
 }
 
 /** Best-effort ledger insert for a synthesis charge — never fails the request. */

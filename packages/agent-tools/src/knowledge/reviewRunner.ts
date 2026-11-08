@@ -41,6 +41,7 @@ import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 import { runJudgePass } from './reviewJudgePass.js';
 import { directoryArgs } from './reviewDirectoryArgs.js';
+import { isLandingManifest, landingManifest } from './landingManifest.js';
 
 /** Judged sections per review before the chip asks again (PRD 38 §8.2). */
 export const KNOWLEDGE_REVIEW_MODEL_CALLS = DEFAULT_REVIEW_MODEL_CALLS;
@@ -133,7 +134,10 @@ function recordingAnalyzers(inner: AnalyzerPort, manifest: IngestManifest): Anal
     return {
         async analyse(rootId, signal) {
             const out = await inner.analyse(rootId, signal);
-            await manifest.set(analysisManifestKey(rootId), out.map((e) => ({ id: e.sourceRef, hash: e.sourceHash })));
+            const entries = out.map((e) => ({ id: e.sourceRef, hash: e.sourceHash }));
+            // The review stores these outputs AFTER this returns: the entry lands with or after them, never ahead (landingManifest.ts).
+            if (isLandingManifest(manifest)) manifest.hold(analysisManifestKey(rootId), entries);
+            else await manifest.set(analysisManifestKey(rootId), entries);
             return out;
         },
     };
@@ -237,7 +241,11 @@ async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOpti
 
 const directoryArgsOf = (
     ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'], extra: Pick<ReviewArgs, 'mechanical' | 'only'> = {},
-): ReviewArgs => directoryArgs(ports, opts, reviewPacks(ports, ports.manifest, opts.plan), progress, KNOWLEDGE_REVIEW_MODEL_CALLS, extra);
+): ReviewArgs => {
+    // One run, one landing manifest: what the analyzers produced is recorded only once the review has stored it.
+    const manifest = landingManifest(ports.manifest);
+    return directoryArgs({ ...ports, manifest }, opts, reviewPacks(ports, manifest, opts.plan), progress, KNOWLEDGE_REVIEW_MODEL_CALLS, extra);
+};
 
 async function reviewAndIndex(
     ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],

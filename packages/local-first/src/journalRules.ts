@@ -31,10 +31,19 @@
  */
 
 import { selectPending, type LocalFirstTransaction } from './store.js';
-import type { EntityDestination, JournalOperation, LocalRecord, ServerMapping } from './records.js';
+import { hashPayload } from './payloadHash.js';
+import type { EntityDestination, JournalOperation, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
 
 /** The version a sign-in binding records: a server chat exists, nothing was imported. */
 export const BOUND_ONLY_VERSION = 0;
+
+/**
+ * Entity types whose server-bound DELETE still carries the payload. A relation (a chat-ticket link)
+ * is identified by its pair, and the server may hold it without a sync mapping (made through its
+ * own API, only ingested here), so the event must name the pair for the server to find it.
+ * Data, not a branch: a new relation type is a new entry.
+ */
+export const PAYLOAD_ON_DELETE: ReadonlySet<LocalEntityType> = new Set<LocalEntityType>(['chat-ticket-link']);
 
 /** The idempotency key of a row's pending import. */
 export const importKey = (type: string, id: string): string => `${type}:${id}:import`;
@@ -58,20 +67,6 @@ export function isImported(mapping: ServerMapping | undefined): boolean {
   return mapping !== undefined && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
 
-/**
- * FNV-1a over the JSON of the real payload — the same alphabet the store's
- * `hashPayload` mints into a frame's `payloadHash` — so the unbound marker can
- * keep a content hash without computing it in two alphabets.
- */
-function hashPayload(payload: unknown): string {
-  const text = JSON.stringify(payload) ?? 'null';
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
-}
 
 /**
  * The marker an unbound write appends instead of a payload copy: ids, type,
@@ -258,6 +253,6 @@ export async function journalWrite(
     baseVersion: mapping!.serverVersion,
     dependsOn: [],
     destination: record.destination,
-    payload: operation === 'delete' ? null : record.payload,
+    payload: operation === 'delete' && !PAYLOAD_ON_DELETE.has(record.entityType) ? null : record.payload,
   });
 }

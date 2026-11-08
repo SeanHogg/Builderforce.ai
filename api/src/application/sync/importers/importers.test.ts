@@ -13,6 +13,7 @@ describe('syncImporterFor', () => {
     expect(syncImporterFor('chat')).toBe('importSyncedChat');
     expect(syncImporterFor('message')).toBe('importSyncedMessage');
     expect(syncImporterFor('usage')).toBe('importSyncedUsage');
+    expect(syncImporterFor('chat-ticket-link')).toBe('importSyncedChatTicketLink');
     expect(syncImporterFor('execution')).toBe('importMirrorRecord');
     expect(syncImporterFor('remediation')).toBe('importMirrorRecord');
     expect(syncImporterFor('widget')).toBeNull();
@@ -20,6 +21,7 @@ describe('syncImporterFor', () => {
     expect(mirrorRefuses('project')).toBe(true);
     expect(mirrorRefuses('remediation')).toBe(false);
     expect(mirrorRefuses('chat')).toBe(true);
+    expect(mirrorRefuses('chat-ticket-link')).toBe(true);
   });
 });
 

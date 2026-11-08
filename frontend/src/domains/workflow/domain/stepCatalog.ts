@@ -55,6 +55,20 @@ export function isFieldVisible(field: ConfigField, config: Record<string, unknow
   return Array.isArray(equals) ? equals.includes(current) : current === equals;
 }
 
+/**
+ * Merge a config patch into a config. A key patched to `undefined` is REMOVED, not
+ * stored as `undefined` — so "clear this choice" leaves the key absent, and the
+ * saved definition never carries a dangling `credentialId`/`connectionId` key.
+ */
+export function applyConfigPatch(
+  config: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...config, ...patch };
+  for (const key of Object.keys(patch)) if (patch[key] === undefined) delete next[key];
+  return next;
+}
+
 export type NodeGroup =
   | 'Trigger' | 'LLM Logic' | 'Evermind Build' | 'Integrations' | 'ETL' | 'Agent' | 'Output'
   | 'Flow Control' | 'Tools' | 'Text Parser' | 'Diagnostics' | 'AI Agents';

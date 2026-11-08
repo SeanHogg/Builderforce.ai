@@ -31,14 +31,16 @@ vi.mock('./postingDistributionStore', () => ({
 
 import { readPostingDistributions, recordPostingDistribution } from './postingDistributionStore';
 import {
-  connectionBackedInput,
   distributableAction,
   distributePosting,
-  missingConnectionParams,
   postingInputFor,
+} from './distributePosting';
+import {
+  connectionBackedInput,
+  missingConnectionParams,
   publicUrl,
   type DistributeDeps,
-} from './distributePosting';
+} from './postingDistributionSupport';
 import { AtsError } from './atsError';
 
 const ENV = {} as Env;
@@ -87,7 +89,8 @@ const linkedinConnection = (auth: Record<string, string>): ConnectionContext => 
 });
 
 const posted = (connectorKey: string): PostingDistributionView => ({
-  postingId: 'posting-a', connectorKey, board: connectorKey, connectionId: 'conn', externalId: 'ext-1',
+  postingId: 'posting-a', connectorKey, board: connectorKey, publicLinkSupported: true, sourceAliases: [],
+  connectionId: 'conn', externalId: 'ext-1',
   url: null, status: 'posted', postedAt: '2026-10-01T00:00:00.000Z', lastError: null, updatedAt: '2026-10-01T00:00:00.000Z',
   applicantCount: 0,
 });
@@ -280,9 +283,15 @@ describe('connection-backed board params', () => {
 });
 
 describe('which boards are distributable', () => {
-  it('is every hiring board, by the declaration alone', () => {
+  it('is every hiring board that can create a posting, by the declaration alone', () => {
     expect(HIRING_CONNECTORS.filter((manifest) => distributableAction(manifest)).map((m) => m.key).sort())
-      .toEqual(HIRING_CONNECTORS.map((m) => m.key).sort());
+      .toEqual(HIRING_CONNECTORS.filter((m) => m.key !== 'workable').map((m) => m.key).sort());
+  });
+
+  it('never offers Workable, whose public API cannot create a job', () => {
+    const workable = HIRING_CONNECTORS.find((m) => m.key === 'workable')!;
+    expect(workable.actions.some((a) => a.key === 'create_posting')).toBe(false);
+    expect(distributableAction(workable)).toBeNull();
   });
 
   it('is not a board whose create answer names no id, or a non-hiring connector', () => {
@@ -294,9 +303,12 @@ describe('which boards are distributable', () => {
 });
 
 describe('the board-reported url', () => {
-  it('keeps an absolute http(s) address and drops anything a card should not link to', () => {
+  it('keeps an absolute HTTPS address and drops anything a card should not link to', () => {
     expect(publicUrl('https://jobs.lever.co/acme/1')).toBe('https://jobs.lever.co/acme/1');
+    // https-only: a plain-http link is a downgrade on a board that serves https.
+    expect(publicUrl('http://jobs.lever.co/acme/1')).toBeNull();
     expect(publicUrl('javascript:alert(1)')).toBeNull();
+    expect(publicUrl('data:text/html,x')).toBeNull();
     expect(publicUrl('/jobs/1')).toBeNull();
     expect(publicUrl(null)).toBeNull();
   });

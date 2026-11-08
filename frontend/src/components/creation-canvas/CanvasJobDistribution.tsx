@@ -4,10 +4,13 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import styles from './styles/panels.module.css';
-import { atsApi, type DistributionBoard, type PostingDistribution } from '@/lib/hiringApi';
+import { atsApi, type DistributionBoard, type LinkableBoard, type PostingDistribution } from '@/lib/hiringApi';
 import { distributionListingFromCard, distributionRowsFrom } from '@/lib/canvasHiringPostingTools';
 import { useFormat } from '@/i18n/useFormat';
 import { faultText } from '@/lib/apiClient';
+import { RoleGate } from '@/components/RoleGate';
+import { usePermission } from '@/lib/rbac';
+import { BoardJobLinkPicker } from './BoardJobLinkPicker';
 
 /**
  * The `jobPosting` card's Distribute control (FO-B4) — pick boards, publish, see where
@@ -39,6 +42,10 @@ export function CanvasJobDistribution({ data, onEdit }: {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [linkBoards, setLinkBoards] = useState<LinkableBoard[]>([]);
+  const { allowed: canManage } = usePermission('hiring.manage');
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState('');
 
   useEffect(() => {
     if (!postingId) return undefined;
@@ -50,6 +57,7 @@ export function CanvasJobDistribution({ data, onEdit }: {
         if (!live) return;
         setDistributions(read.distributions);
         setBoards(read.boards);
+        setLinkBoards(read.linkBoards ?? []);
       })
       .catch((err: unknown) => { if (live) setError(faultText(err, t('readFailed'))); })
       .finally(() => { if (live) setLoading(false); });
@@ -64,6 +72,7 @@ export function CanvasJobDistribution({ data, onEdit }: {
   // a second posting on every board but the feed.
   const liveOn = new Set(distributions.filter((row) => row.status === 'posted').map((row) => row.connectorKey));
   const choosable = boards.filter((board) => !liveOn.has(board.connectorKey));
+  const linkableNow = linkBoards.filter((board) => !liveOn.has(board.connectorKey));
 
   const toggle = (key: string) => setSelected((current) => {
     const next = new Set(current);
@@ -91,6 +100,38 @@ export function CanvasJobDistribution({ data, onEdit }: {
     }
   };
 
+  const importApplicants = async () => {
+    setImporting(true);
+    setError('');
+    setImportNote('');
+    try {
+      const result = await atsApi.postings.importApplicants(postingId);
+      const failedBoard = result.boards.find((board) => board.error);
+      if (failedBoard) setError(t('importBoardFailed', { board: boardName(failedBoard.connectorKey), detail: failedBoard.error ?? '' }));
+      const skipped = result.boards.reduce((sum, board) => sum + board.failedApplicants, 0);
+      setImportNote([
+        t('importDone', { count: result.imported }),
+        result.more ? t('importMore') : '',
+        skipped > 0 ? t('importPartial', { count: skipped }) : '',
+      ].filter(Boolean).join(' '));
+      // The per-board applicant counts moved; redraw from the same read the card uses.
+      const read = await atsApi.postings.distributions(postingId);
+      setDistributions(read.distributions);
+      onEdit?.({ distribution: distributionRowsFrom(read.distributions) });
+    } catch (err) {
+      setError(faultText(err, t('importFailed')));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const linked = (next: PostingDistribution[]) => {
+    setDistributions(next);
+    onEdit?.({ distribution: distributionRowsFrom(next) });
+  };
+
+  const boardName = (key: string) => distributions.find((row) => row.connectorKey === key)?.board ?? key;
+
   return (
     <div className={`${styles.jobDistribution} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
       <strong className={styles.jobDistributionTitle}>{t('title')}</strong>
@@ -108,6 +149,9 @@ export function CanvasJobDistribution({ data, onEdit }: {
               )}
               {row.status === 'posted' && row.url && (
                 <a href={row.url} target="_blank" rel="noopener noreferrer">{t('view')}</a>
+              )}
+              {row.status === 'posted' && !row.url && !row.publicLinkSupported && (
+                <small>{t('noPublicLink', { board: row.board })}</small>
               )}
               {row.status === 'failed' && row.lastError && (
                 <small className={styles.jobDistributionError}>{row.lastError}</small>
@@ -143,6 +187,18 @@ export function CanvasJobDistribution({ data, onEdit }: {
           {busy ? t('distributing') : t('distribute', { count: selected.size })}
         </button>
       )}
+      <BoardJobLinkPicker postingId={postingId} boards={linkableNow} canEdit={Boolean(onEdit)} onLinked={linked} />
+
+      {liveOn.size > 0 && (
+        // Rendered disabled, never hidden, below manager: RoleGate names the role needed
+        // and `disabled` also stops the keyboard.
+        <RoleGate capability="hiring.manage">
+          <button type="button" disabled={!canManage || importing || busy} onClick={() => void importApplicants()}>
+            {importing ? t('importing') : t('importApplicants')}
+          </button>
+        </RoleGate>
+      )}
+      {importNote && <small role="status">{importNote}</small>}
       {error && <p role="alert" className={styles.jobDistributionError}>{error}</p>}
     </div>
   );

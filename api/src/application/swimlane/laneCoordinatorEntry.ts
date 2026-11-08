@@ -17,14 +17,17 @@
  * exactly (one staffed agent, default policy, no action) keeps the cheap path, so
  * nothing that works today changes shape.
  */
-import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { swimlanes } from '../../infrastructure/database/schema';
-import { forLane, laneAgentAssignments } from './laneAgentAssignments';
+import { tasks } from '../../infrastructure/database/schema';
+import { eq } from 'drizzle-orm';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { findCanonicalBoard } from './canonicalBoard';
+import type { RuntimeService } from '../runtime/RuntimeService';
+import { invalidateLaneRouting, readLaneRouting } from './laneRouting';
 import { makeSwimlaneCoordinator } from './makeCoordinator';
+import { TicketRunNotFoundError } from './SwimlaneCoordinator';
+import { admitStageEntry, recordStageRefusal } from './laneCoordinatorAdmission';
+import type { TenantTokenVerdict } from './evaluateAutoRun';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** The lane facts the routing decision reads. */
@@ -75,53 +78,90 @@ export type CoordinatorEntryOutcome =
   /** The lane is expressible by the simple executor (or does not auto-run at all). */
   | 'not_applicable';
 
+/** The ticket's lane RIGHT NOW (one tenant-scoped primary-key read); null when the row is gone or the read fails. */
+async function readLiveLane(db: Db, tenantId: number, taskId: number): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ status: tasks.status })
+      .from(tasks)
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)))
+      .limit(1);
+    return row?.status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** What the coordinator branch needs of its caller: the dispatch options the one-agent engine honours too. */
+export interface CoordinatorEntryArgs {
+  tenantId: number;
+  projectId: number;
+  taskId: number;
+  /** The caller's expectation of the lane — possibly a stale snapshot (the sweep). The live row wins. */
+  status: string;
+  submittedBy: string;
+  force?: boolean;
+  tenantTokens?: TenantTokenVerdict;
+  onBlocked?: (verdict: { reason: string; cooldownRemainingMs?: number }) => void;
+}
+
 /**
  * Hand a lane entry to the coordinator when the lane needs it. Never throws.
  */
 export async function tryCoordinatorLaneEntry(
   env: Env,
   db: Db,
-  args: { tenantId: number; projectId: number; taskId: number; status: string },
+  runtimeService: RuntimeService,
+  args: CoordinatorEntryArgs,
 ): Promise<CoordinatorEntryOutcome> {
-  const board = await findCanonicalBoard(db, args.projectId, args.tenantId).catch(() => null);
-  if (!board) return 'not_applicable';
+  // THE LANE, live. A caller working from a snapshot (the auto-exec sweep scans hundreds of rows, then enters them one at a
+  // time) would otherwise move a ticket that has since advanced BACK to the lane it used to be in. The evaluator re-reads
+  // for the same reason; the stage must be entered for the lane the ticket is actually in.
+  const status = (await readLiveLane(db, args.tenantId, args.taskId)) ?? args.status;
 
-  const [lane] = await db
-    .select({
-      id: swimlanes.id,
-      gate: swimlanes.gate,
-      isTerminal: swimlanes.isTerminal,
-      successPolicy: swimlanes.successPolicy,
-      successThreshold: swimlanes.successThreshold,
-      actionType: swimlanes.actionType,
-      executionMode: swimlanes.executionMode,
-    })
-    .from(swimlanes)
-    .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, args.status)))
-    .limit(1);
+  // The board, its lanes and their staffing come from ONE cached read per project (laneRouting.ts): a sweep routing many
+  // tickets of a board reads it once, and the lane / staffing / board writers drop it.
+  const routing = await readLaneRouting(env, db, args.tenantId, args.projectId).catch(() => null);
+  if (!routing) return 'not_applicable';
+  // A lifecycle-managed board has its own state machine (the manager); a second one here would race it.
+  if (routing.lifecycleManaged) return 'not_applicable';
+  const lane = routing.lanes.find((l) => l.key === status);
 
   // A human-gated or terminal lane never auto-starts anything, by EITHER engine — so the
   // coordinator is never handed a stage the gate forbids.
   if (!lane || lane.isTerminal || lane.gate === 'human') return 'not_applicable';
 
-  const assignments = await db
-    .select({ runtime: laneAgentAssignments.runtime })
-    .from(laneAgentAssignments)
-    // Tenant-scoped as well as lane-scoped: the lane id already came from a
-    // tenant-scoped board read, but the isolation predicate belongs on the query that
-    // reads a tenant-owned table, not on the one two steps upstream.
-    .where(scopedToTenant(laneAgentAssignments, args.tenantId, forLane(lane.id)));
+  if (!laneNeedsCoordinator(lane, lane.runtimes.map((runtime) => ({ runtime })))) return 'not_applicable';
 
-  if (!laneNeedsCoordinator(lane, assignments)) return 'not_applicable';
+  // The same admission the one-agent engine applies (execution switch, live run, breaker / cooldown, token budget) plus the
+  // ticket run's own lifecycle — the coordinator has none of them itself.
+  const admission = await admitStageEntry(env, db, runtimeService, {
+    tenantId: args.tenantId, boardId: routing.boardId, taskId: args.taskId,
+    ...(args.force ? { force: true } : {}),
+    ...(args.tenantTokens ? { tenantTokens: args.tenantTokens } : {}),
+  });
+  if (!admission.admitted) {
+    await recordStageRefusal(env, db, {
+      tenantId: args.tenantId, taskId: args.taskId, lane: status, submittedBy: args.submittedBy,
+      ...(args.onBlocked ? { onBlocked: args.onBlocked } : {}),
+    }, admission);
+    return 'refused';
+  }
 
-  const run = await makeSwimlaneCoordinator(db, env)
-    .enterLaneForTask(board.id, args.taskId, args.tenantId, args.status)
-    .catch((error) => {
-      reportCaughtError(error, {
-        source: 'application/swimlane/laneCoordinatorEntry.ts',
-        operation: 'tryCoordinatorLaneEntry',
-      });
-      return null;
+  try {
+    const run = await makeSwimlaneCoordinator(db, env).enterLaneForTask(routing.boardId, args.taskId, args.tenantId, status);
+    return run != null ? 'started' : 'refused';
+  } catch (error) {
+    if (error instanceof TicketRunNotFoundError) {
+      // The cached board is gone (deleted or re-pinned since): drop the stale facts and let the one-agent engine, which reads
+      // the board live, take the entry instead of reporting a refusal for a board that no longer exists.
+      await invalidateLaneRouting(env, args.tenantId, args.projectId).catch(() => undefined);
+      return 'not_applicable';
+    }
+    reportCaughtError(error, {
+      source: 'application/swimlane/laneCoordinatorEntry.ts',
+      operation: 'tryCoordinatorLaneEntry',
     });
-  return run != null ? 'started' : 'refused';
+    return 'refused';
+  }
 }

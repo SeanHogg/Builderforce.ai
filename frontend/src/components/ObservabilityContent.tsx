@@ -21,6 +21,7 @@ import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { ExecutionTimelineChart } from './ExecutionTimelineChart';
+import { AGENT_KIND_PILL, type AgentKind } from './observability/agentKindPill';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
@@ -75,11 +76,10 @@ export interface ObservabilityContentProps {
   reportTransaction?: () => Promise<string>;
 }
 
-/** Self-hosted hosts, cloud agents, and connected VS Code editors — one unified
- *  directory. VS Code connections are presence-only (no tool-audit telemetry, so no
- *  timeline tracks); they appear as directory chips with a live/offline pill. */
-type AgentKind = 'host' | 'cloud' | 'vscode';
-
+/** One entry of the unified agent directory: a self-hosted host, a cloud agent, or a
+ *  connected VS Code editor (kinds in `observability/agentKindPill`). VS Code connections
+ *  are presence-only (no tool-audit telemetry, so no timeline tracks); they appear as
+ *  directory chips with a live/offline pill. */
 interface UnifiedAgent {
   /** Stable selection key: `host:<id>`, `cloud:<ref>`, or `vscode:<id>`. */
   key: string;
@@ -157,12 +157,6 @@ function colorForKey(selectedKeys: string[], key: string): string {
   const idx = selectedKeys.indexOf(key);
   return AGENT_COLORS[(idx >= 0 ? idx : 0) % AGENT_COLORS.length];
 }
-
-const KIND_PILL: Record<AgentKind, { label: string; bg: string; color: string }> = {
-  host: { label: 'ON-PREM', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
-  cloud: { label: 'CLOUD', bg: 'var(--surface-coral-soft)', color: 'var(--accent)' },
-  vscode: { label: 'VS CODE', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
-};
 
 function pillStyle(bg: string, color: string): React.CSSProperties {
   return {
@@ -691,7 +685,7 @@ export function ObservabilityContent({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {unifiedAgents.map((a) => {
               const checked = selectedKeySet.has(a.key);
-              const pill = KIND_PILL[a.kind];
+              const pill = AGENT_KIND_PILL[a.kind];
               return (
                 <button
                   key={a.key}
@@ -714,7 +708,7 @@ export function ObservabilityContent({
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: colorForKey(selectedKeys, a.key), flexShrink: 0 }} />
                   )}
                   {a.name}
-                  <span style={pillStyle(pill.bg, pill.color)}>{pill.label}</span>
+                  <span style={pillStyle(pill.bg, pill.color)}>{t(pill.labelKey)}</span>
                   {(a.kind === 'host' || a.kind === 'vscode') && (
                     <span
                       style={pillStyle(

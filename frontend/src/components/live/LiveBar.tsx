@@ -72,10 +72,10 @@ function Tile({ stream, label, self, sharing, speaking }: {
   }, [stream]);
   return (
     <div className={styles.tile} data-self={self ? '1' : '0'} data-speaking={speaking ? '1' : '0'}>
-      {/* Muted is not a preference here: playing your own microphone back is a
-          feedback loop, and an unmuted remote tile is handled by the audio
-          element the media room already owns. */}
-      <video ref={ref} autoPlay playsInline muted={self} className={styles.tileVideo} />
+      {/* ALWAYS muted. Your own microphone played back is a feedback loop, and every
+          remote voice is played once by the session provider's `RemoteAudioSink` —
+          an unmuted tile here would double it whenever a second gallery is open. */}
+      <video ref={ref} autoPlay playsInline muted className={styles.tileVideo} />
       <span className={styles.tileLabel} data-sharing={sharing ? '1' : '0'}>{label}</span>
     </div>
   );

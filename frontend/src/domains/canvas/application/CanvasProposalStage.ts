@@ -40,6 +40,7 @@ import type { Edge } from '@xyflow/react';
 import type { CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 import { patchWithProvenance, type Actor } from '@/lib/canvasApprovalGate';
+import { preserveInlineDataUrls } from '@/lib/creation/inlineDataUrls';
 import { authorshipSourceFromActor, patchWithIntegrity } from '@/lib/academic/integrity';
 import type { CanvasObject, CanvasObjectData, CreationObjectKind } from '../domain/canvasObject';
 import type { ProposedCanvasChange } from '../domain/canvasChange';
@@ -214,8 +215,10 @@ export class CanvasProposalStage {
    * patches to one field in one turn record two moves, and the second does not
    * overwrite the first's entry.
    */
-  updateObject(label: string, objectId: string, patch: Partial<CanvasObjectData>): void {
+  updateObject(label: string, objectId: string, incoming: Partial<CanvasObjectData>): void {
     const before = this.current(objectId);
+    // Inline art (`data:` URLs) is never overwritten by a truncated or non-data-URL value.
+    const patch = preserveInlineDataUrls(before, incoming);
     const withProvenance = before ? patchWithProvenance(before, patch, this.actor, this.now(), label) : patch;
     const stamped = before
       ? patchWithIntegrity(before, withProvenance, authorshipSourceFromActor(this.actor.kind), this.now(), objectId)

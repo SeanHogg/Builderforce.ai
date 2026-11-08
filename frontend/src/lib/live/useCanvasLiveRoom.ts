@@ -44,15 +44,22 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
  * board, and what lets someone arriving at the same board join the call already
  * in progress. Keying it on the pathname would end the call at the first click.
  */
+export interface CanvasLiveStartOptions {
+  /** Join with the microphone only; the camera stays off until toggled. Default: video too. */
+  audioOnly?: boolean;
+}
+
 export interface CanvasLiveRoom {
   /** A call is running right now (on this canvas or any other). */
   live: boolean;
+  /** The running call is THIS canvas's own room (not another canvas's, not a meeting). */
+  here: boolean;
   /** There is a room to open here, and this visitor may open it. */
   canStart: boolean;
   /** How many people are on the call. Zero when there is none. */
   onCall: number;
   /** Open the room. No-op when {@link canStart} is false. */
-  start: () => void;
+  start: (options?: CanvasLiveStartOptions) => void;
   /** Leave the room. No-op when there is none. */
   leave: () => void;
 }
@@ -82,11 +89,14 @@ export function useCanvasLiveRoom(): CanvasLiveRoom | null {
   // rather than one of them, so "a call about which of these?" has no answer there.
   const canStartDefault = viewer.hasTenant && active != null && pathname !== '/create';
 
-  const startRoom = useCallback(() => {
+  const startRoom = useCallback((options?: CanvasLiveStartOptions) => {
     if (!start) return;
-    if (anchor) { start(anchor); return; }
+    // Only spread the option when given, so every other caller's target is unchanged.
+    const media = options?.audioOnly ? { audioOnly: true } : {};
+    if (anchor) { start({ ...anchor, ...media }); return; }
     if (!canStartDefault || !active) return;
     start({
+      ...media,
       roomKey: `canvas:${active.sessionId}`,
       label: t('onThisCanvas'),
       scopeLabel: [tenantName, scope?.currentProject?.name].filter(Boolean).join(' › '),
@@ -99,12 +109,14 @@ export function useCanvasLiveRoom(): CanvasLiveRoom | null {
 
   return useMemo(() => {
     if (!live) return null;
+    const thisRoomKey = anchor?.roomKey ?? (active ? `canvas:${active.sessionId}` : null);
     return {
       live: live.live,
+      here: thisRoomKey != null && live.room?.roomKey === thisRoomKey,
       canStart: anchor != null || canStartDefault,
       onCall: live.members.filter((member) => member.onCall).length,
       start: startRoom,
       leave: leaveRoom,
     };
-  }, [anchor, canStartDefault, live, leaveRoom, startRoom]);
+  }, [active, anchor, canStartDefault, live, leaveRoom, startRoom]);
 }

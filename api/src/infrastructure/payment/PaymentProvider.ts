@@ -33,6 +33,19 @@ export class PaymentNotConfiguredError extends Error {
   }
 }
 
+/**
+ * The webhook's signature was valid but a follow-up lookup at the processor failed (e.g. reading
+ * the payment intent behind a refund). It is NOT a signature failure: the route answers 500 so the
+ * processor redelivers, instead of a 401 that makes the failure look like a forged event.
+ */
+export class WebhookUpstreamError extends Error {
+  readonly code = 'webhook_upstream_failed' as const;
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'WebhookUpstreamError';
+  }
+}
+
 export interface CheckoutSessionOpts {
   tenantId: number;
   /** Which plan to activate; defaults to PRO if omitted */
@@ -191,7 +204,14 @@ export interface WebhookEvent {
      * name fell through to `subscription.activated` (defaulting to Pro), and only
      * a customer-id lookup that happened to miss kept it from upgrading a workspace.
      */
-    | 'checkout.completed';
+    | 'checkout.completed'
+    /**
+     * Money for a pay-once purchase went BACK to the buyer: a full refund
+     * (`charge.refunded`) or a dispute (`charge.dispute.*`). Carries the purchase's
+     * signed metadata (`purchaseKind`, ...) so the purchase registry can hand it to
+     * that flow's reverser, which takes back what the flow granted.
+     */
+    | 'purchase.reversed';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;

@@ -18,6 +18,9 @@ import type { IgnoreFilePort } from "./knowledgeExclude";
 /** Changes a watcher batches before reporting them. */
 const WATCH_DEBOUNCE_MS = 400;
 
+/** `.builderforce/cache/` holds the knowledge SQLite file: every review write there would wake the watcher, so its events are dropped. */
+export const isKnowledgeCachePath = (path: string): boolean => /(^|\/)\.builderforce\/cache(\/|$)/.test(path.replace(/\\/g, "/"));
+
 const uriOf = (path: string): vscode.Uri => vscode.Uri.file(path);
 
 /** The tail of each file path's in-process write chain. */
@@ -51,6 +54,7 @@ export function vscodeKnowledgeFs(): KnowledgeFs {
       const changed = new Set<string>();
       let timer: ReturnType<typeof setTimeout> | undefined;
       const note = (uri: vscode.Uri): void => {
+        if (isKnowledgeCachePath(uri.fsPath)) return;
         changed.add(uri.fsPath.replace(/\\/g, "/"));
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {

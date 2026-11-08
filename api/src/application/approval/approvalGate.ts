@@ -22,6 +22,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { approvals } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { resolveStakeholderVoice } from '../kanban/stakeholderVoice';
 
 /** How many recent rows of one actionType the gate scans for this subject. */
 const SUBJECT_SCAN_LIMIT = 100;
@@ -120,6 +121,15 @@ export async function resolveApprovalGate(
   }
 
   const draft = await request.draft();
+  // SINGLE VOICE PER TICKET (PRD 37 §5.5): a task-scoped approval is exterior
+  // communication the ticket's Coordinator owns, so the queue names the Coordinator on
+  // behalf of whatever asked. Applied HERE so every task-scoped gate speaks the same way
+  // and no caller resolves the coordinator itself.
+  const taskId = request.subjectKey === 'taskId' ? Number(request.subjectId) : null;
+  if (taskId != null) {
+    const voiced = await resolveStakeholderVoice(db, { tenantId: request.tenantId, taskId, actingLabel: draft.requestedBy ?? '' });
+    draft.requestedBy = voiced || (draft.requestedBy ?? null);
+  }
   const approvalId = crypto.randomUUID();
   await db.insert(approvals).values({
     id: approvalId,

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { applyRemedy, type TriageTask, type TriagePolicy } from './triageStage';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import type { Db } from '../../infrastructure/database/connection';
@@ -21,12 +21,12 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  */
 
 vi.mock('../swimlane/evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
-vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: vi.fn() }));
+vi.mock('../swimlane/laneEntryTrigger', () => ({ routeLaneEntry: vi.fn() }));
 vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../kanban/driveSignoffs', () => ({ driveOutstandingSignoffs: vi.fn() }));
 
 const mockEvaluate = vi.mocked(evaluateTaskAutoRun);
-const mockLaneEntry = vi.mocked(maybeAutoRunOnLaneEntry);
+const mockLaneEntry = vi.mocked(routeLaneEntry);
 const mockDispatch = vi.mocked(dispatchCloudRunForTask);
 const mockDrive = vi.mocked(driveOutstandingSignoffs);
 

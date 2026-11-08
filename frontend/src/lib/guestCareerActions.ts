@@ -23,6 +23,7 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
+import { isMutatingTool } from '@builderforce/agent-tools';
 import { apiRequestStream } from './apiClient';
 import { getStoredGuestToken } from './guestChatApi';
 import { ensureGuestToken } from './guestRoomApi';
@@ -32,6 +33,8 @@ interface GuestCareerToolSpec {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /** The server's flag for this tool; absent ⇒ classified by name, failing closed. */
+  mutates?: boolean;
 }
 
 /**
@@ -89,6 +92,7 @@ export function loadGuestCareerActions(): Promise<BrainAction[]> {
         name: spec.name,
         description: spec.description,
         parameters: spec.parameters as BrainAction['parameters'],
+        mutates: typeof spec.mutates === 'boolean' ? spec.mutates : isMutatingTool(spec.name),
         run: (raw: unknown) => callCareerTool(spec.name, raw),
       }));
     } catch {

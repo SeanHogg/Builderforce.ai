@@ -19,6 +19,7 @@ import type { Env } from '../../env';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateBoardLanesCache } from './boardReads';
+import { invalidateLaneRouting } from './laneRouting';
 
 export type LaneInfo = {
   position: number;
@@ -54,11 +55,14 @@ export async function loadLaneOrdinals(env: Env, db: Db, projectId: number): Pro
 }
 
 /** Call when a project's swimlanes change so the cached ordinal map re-loads. */
-export async function invalidateSwimlaneOrdinals(env: Env | undefined, projectId: number): Promise<void> {
+export async function invalidateSwimlaneOrdinals(env: Env | undefined, projectId: number, tenantId: number): Promise<void> {
   // The cache helper reads `env?.AUTH_CACHE_KV` and treats a missing binding as
   // "nothing to invalidate" (the Brain tool context carries no Worker env), so the
   // bridge is one assertion here — the same one `hiring/pipeline.invalidatePipeline` makes.
   await invalidateCached(env as Env, ordinalsCacheKey(projectId));
+  // The lane router's per-project board / lane / staffing read (laneRouting.ts) changes with the same writes.
+  // Keyed by tenant (laneRouting.ts).
+  await invalidateLaneRouting(env, tenantId, projectId);
 }
 
 /**
@@ -75,5 +79,5 @@ export async function invalidateBoardLaneOrdinals(env: Env | undefined, db: Db, 
   if (!board) return;
   // The board's cached lane list (`boardReads.ts`) is dropped by the same writers.
   await invalidateBoardLanesCache(env, board.tenantId, boardId);
-  if (board.projectId != null) await invalidateSwimlaneOrdinals(env, board.projectId);
+  if (board.projectId != null) await invalidateSwimlaneOrdinals(env, board.projectId, board.tenantId);
 }

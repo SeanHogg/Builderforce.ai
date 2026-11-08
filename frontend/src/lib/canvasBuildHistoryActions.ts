@@ -20,6 +20,7 @@ export function canvasBuildHistoryActions(ctx: CanvasBuildToolsContext, helpers:
       type: 'object', additionalProperties: false,
       properties: { objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' } },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = raw as { objectId?: unknown };
       const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
@@ -57,6 +58,7 @@ export function canvasBuildHistoryActions(ctx: CanvasBuildToolsContext, helpers:
         objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
       },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = raw as { path?: unknown; objectId?: unknown };
       const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);

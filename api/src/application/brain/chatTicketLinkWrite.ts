@@ -10,7 +10,7 @@
  * the caller decides when the write is durable (a transaction bumps after it commits).
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { ambientEnv } from '../../infrastructure/cache/versionToken';
 import type { Db, Tx } from '../../infrastructure/database/connection';
@@ -73,4 +73,16 @@ export async function upsertChatTicketLink(db: Db | Tx, input: ChatTicketLinkWri
     createdBy: input.createdBy,
   }).returning();
   return row!;
+}
+
+/**
+ * Remove the (chat, kind, ref) link: the ONE delete of a link row, shared by `unlinkTicket`
+ * (an API caller) and the sync importer (a device's unlink tombstone). Like the upsert it takes
+ * any database handle and does not bump the caches. Returns whether a row was removed.
+ */
+export async function deleteChatTicketLink(db: Db | Tx, tenantId: number, chatId: number, kind: string, ref: string): Promise<boolean> {
+  const rows = await db.delete(chatTicketLinks)
+    .where(and(eq(chatTicketLinks.tenantId, tenantId), eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref)))
+    .returning();
+  return rows.length > 0;
 }

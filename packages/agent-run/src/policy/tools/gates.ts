@@ -21,7 +21,7 @@
  * and Node.
  */
 
-import { evaluatePolicyGate, normalizeToolName, policyGateCallKey, toolCallPaths, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
+import { classifyTool, CONTROL_TOOL_NAMES, evaluatePolicyGate, normalizeToolName, policyGateCallKey, toolCallPaths, toolSideEffect, type DeclaredToolEffect, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
 import type { ApprovalRefusal } from "../../contract.js";
 import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { emit } from "../../runContext.js";
@@ -33,7 +33,7 @@ export { policyGateCallKey };
 const INPUT_PATH_TOOLS: ReadonlySet<string> = new Set(["apply_patch"]);
 
 /** How a run ends or asks. A gate that names no tool never gets between a run and these. */
-const CONTROL_TOOLS: ReadonlySet<string> = new Set(["finish", "ask_human", "ask_user"]);
+const CONTROL_TOOLS: ReadonlySet<string> = new Set(CONTROL_TOOL_NAMES);
 
 export type PolicyRefusal = Extract<PolicyDecision, { action: "block" | "require-approval" }>;
 
@@ -52,6 +52,11 @@ export function policyRefusalMessage(d: PolicyRefusal): string {
   );
 }
 
+/** The surface's own declaration for a tool it supplies (`PlatformTools.declared`, or `ToolExtension.declared` for an extension), if it makes one. */
+export function declaredBy(ports: PolicyContext["ports"], name: string | undefined): DeclaredToolEffect | undefined {
+  return name ? (ports.platform?.declared?.(name) ?? ports.extensions?.declared?.(name)) : undefined;
+}
+
 /** The gates that apply to `toolName`: for a control tool, only those that NAME a tool. */
 function gatesFor(gates: readonly PolicyGate[] | undefined, toolName: string): readonly PolicyGate[] {
   const all = gates ?? [];
@@ -59,22 +64,47 @@ function gatesFor(gates: readonly PolicyGate[] | undefined, toolName: string): r
 }
 
 /**
+ * The side-effect class of ONE call, judged once: the first name the call is evaluated as
+ * (spelled, alias-resolved, action-rule family, synonyms) that the shared catalog classifies,
+ * else the host's declaration, else `mutate`. Judged once and not per synonym, so a `Read`
+ * is `read_file`'s class, not a catalog miss on `Read` (which would fail closed to mutate).
+ */
+function callSideEffect(toolName: string, args: Record<string, unknown> | undefined, declared?: DeclaredToolEffect) {
+  const cataloged = candidateToolNames(toolName, args).find((n) => toolSideEffect(n) !== undefined);
+  return classifyTool(cataloged ?? toolName, declared, args);
+}
+
+/**
+ * Keep the gates whose `sideEffect` (if any) is this call's class, with the criterion
+ * consumed: what is left is judged by tool name and path alone, per synonym.
+ */
+function resolveSideEffectGates(gates: readonly PolicyGate[], toolName: string, args: Record<string, unknown> | undefined, declared?: DeclaredToolEffect): PolicyGate[] {
+  if (!gates.some((g) => g.sideEffect)) return [...gates];
+  const effect = callSideEffect(toolName, args, declared);
+  return gates
+    .filter((g) => !g.sideEffect || g.sideEffect === effect)
+    .map(({ sideEffect: _class, ...rest }) => rest);
+}
+
+/**
  * Evaluate compiled gates against one tool call. Empty/missing args (no path) omit the
  * path argument so path-scoped gates stay unmatched — the same contract as the shared
  * `evaluatePolicyGate`. `block` wins over `require-approval` across every synonym.
+ * `declared` is the host's own `mutates` flag for a tool the catalog does not know.
  */
 export function evaluatePolicyGateSeam(
   gates: readonly PolicyGate[] | undefined,
   toolName: string,
   args?: Record<string, unknown>,
   workspaceRoot?: string,
+  declared?: DeclaredToolEffect,
 ): PolicyDecision {
   const paths = toolCallPaths(args);
   const pathArg = paths.length ? paths : undefined;
   // A tool whose files are INSIDE its input (a patch) that names none we can read is not known to stay outside a scope: FAIL CLOSED,
   // so a path-scoped gate applies to it as if it were unscoped, rather than a malformed input stepping around the scope.
   const unreadable = INPUT_PATH_TOOLS.has(toolName) && typeof args?.input === "string" && args.input.trim().length > 0 && paths.length === 0;
-  const applicable = gatesFor(gates, toolName).map((g) => {
+  const applicable = resolveSideEffectGates(gatesFor(gates, toolName), toolName, args, declared).map((g) => {
     if (!unreadable || !g.paths) return g;
     const { paths: _scope, ...unscoped } = g;
     return unscoped;
@@ -93,8 +123,8 @@ export function evaluatePolicyGateSeam(
  * path-scoped block still needs the tool for the unmatched paths — {@link gateCall} refuses
  * the matching calls at dispatch.
  */
-export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolName: string): boolean {
-  const blocking = gatesFor(gates, toolName).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
+export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolName: string, declared?: DeclaredToolEffect): boolean {
+  const blocking = resolveSideEffectGates(gatesFor(gates, toolName), toolName, undefined, declared).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
   if (blocking.length === 0) return false;
   if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
   const blocked = new Set(blocking.map((g) => normalizeToolName(g.tool ?? "")));
@@ -150,7 +180,7 @@ export async function gateCall(
 ): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> {
   const gates = ctx.policy.approvalGates;
   if (!gates || gates.length === 0) return undefined;
-  const decision = evaluatePolicyGateSeam(gates, call.name, call.args, ctx.task.workspace?.defaultRepo);
+  const decision = evaluatePolicyGateSeam(gates, call.name, call.args, ctx.task.workspace?.defaultRepo, declaredBy(ctx.ports, call.name));
   if (decision.action === "block") {
     await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
     return {
@@ -165,7 +195,7 @@ export async function gateCall(
   const refusedBefore = ctx.state.refusedCalls?.[key] ?? ctx.ports.refusals?.recall(key);
   if (refusedBefore) return { data: { ok: false, gate: decision.gateId, error: refusedBefore }, isError: true };
 
-  const gate: PolicyGate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
+  const gate: PolicyGate = gates.find((g) => g.id === decision.gateId || g.baseGateId === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
   const question = `Approve the agent's use of "${call.name}"? ${decision.reason}`;
   const human = ctx.ports.human;
   const parkedOn = ctx.state.parkedCalls?.[key];

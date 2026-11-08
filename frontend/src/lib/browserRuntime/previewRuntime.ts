@@ -18,6 +18,7 @@
  */
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 import { attachPreviewSignals } from './previewSignals';
+import { measureFiles, setPreviewRunningProbe, timeWrite } from './writeTiming';
 
 const RELAY_URL = process.env.NEXT_PUBLIC_PREVIEW_RELAY_URL || 'https://preview.builderforce.ai/__bfwc/relay.html';
 
@@ -30,6 +31,7 @@ export function bootSharedPreviewRuntime(): Promise<PreviewRuntime> {
       // The preview's errors and console reach the workspace through the runtime's own
       // channel, attached once for the page (`previewSignals.ts`).
       attachPreviewSignals(runtime);
+      setPreviewRunningProbe(() => runtime.listProcesses().length > 0);
       return runtime;
     })
     .catch((error: unknown) => {
@@ -57,8 +59,9 @@ const INSTALLED = '/node_modules/';
  * project, or files deleted since) go first.
  */
 export function replaceProjectFiles(runtime: PreviewRuntime, files: Record<string, string>): void {
-  for (const path of runtime.fs.list()) {
-    if (!path.startsWith(INSTALLED)) runtime.fs.rm(path);
-  }
-  runtime.writeTree(files);
+  const stale = runtime.fs.list().filter((path) => !path.startsWith(INSTALLED));
+  timeWrite('rm', { fileCount: stale.length, totalBytes: 0 }, () => {
+    for (const path of stale) runtime.fs.rm(path);
+  });
+  timeWrite('writeTree', measureFiles(files), () => runtime.writeTree(files));
 }

@@ -32,7 +32,7 @@ vi.mock('../../infrastructure/payment', () => ({
   buildPaymentProvider: () => ({ createOneTimeCheckoutSession, retrieveCheckoutSession }),
 }));
 
-const env = { STRIPE_SECRET_KEY: 'sk_test_x' } as unknown as Env;
+const env = { STRIPE_SECRET_KEY: 'sk_test_x', CORS_ORIGINS: 'https://app.example.com' } as unknown as Env;
 const BUYER = { tenantId: 42, buyerUserId: 'u-buyer' };
 
 /** The seller's workspace. Its ledger is where an agent sale has to land. */

@@ -30,6 +30,7 @@ export { importSyncedTicket } from './importSyncedTicket';
 export { importSyncedChat } from './importSyncedChat';
 export { importSyncedMessage } from './importSyncedMessage';
 export { importSyncedUsage } from './importSyncedUsage';
+export { importSyncedChatTicketLink } from './importSyncedChatTicketLink';
 export type { BoundedImportOutcome, SyncImportMapping } from '../syncPorts';
 
 export type SyncImporterName =
@@ -38,6 +39,7 @@ export type SyncImporterName =
   | 'importSyncedChat'
   | 'importSyncedMessage'
   | 'importSyncedUsage'
+  | 'importSyncedChatTicketLink'
   | 'importMirrorRecord';
 
 /** Entity type → its owning importer. Data, not branches: a new owner is a new row. */
@@ -48,6 +50,8 @@ const OWNED_BY: Readonly<Record<string, SyncImporterName>> = {
   chat: 'importSyncedChat',
   message: 'importSyncedMessage',
   usage: 'importSyncedUsage',
+  // G21: a device's chat-to-ticket link lands as a real link row.
+  'chat-ticket-link': 'importSyncedChatTicketLink',
 };
 
 /**
@@ -165,6 +169,13 @@ export function sameCanonical(row: SyncEntityMappingRow, payload: unknown): bool
  *
  * `null` means "write it".
  */
+/**
+ * Entity types whose server record may be RE-CREATED after a sync delete. A relation (a chat-ticket
+ * link) is idempotent, so an update or create over its tombstone un-deletes it instead of being
+ * refused `entity_deleted`. Data, not a branch: a new relation type is a new entry.
+ */
+export const REVIVABLE_ENTITY_TYPES: ReadonlySet<string> = new Set(['chat-ticket-link']);
+
 export function mutateGate(
   event: SyncEventInput,
   ctx: SyncImportContext,
@@ -174,6 +185,7 @@ export function mutateGate(
   if (!mapping) return rejected('entity_not_imported');
   if (mapping.destinationKey !== ctx.destinationKey) return rejected('destination_mismatch');
   if (event.baseVersion === undefined) return rejected('base_version_required');
+  if (mapping.deletedAt && event.operation !== 'delete' && REVIVABLE_ENTITY_TYPES.has(event.entityType)) return null;
   const verdict = resolveConflict(
     {
       version: event.baseVersion,

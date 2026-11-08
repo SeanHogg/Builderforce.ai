@@ -8,11 +8,16 @@
  * (see `selectVideoCodec`) instead of hardcoding one profile string, because
  * Safari's WebCodecs builds reject specific profile/dimension combinations. When
  * no AVC profile is supported the muxer throws an explicit, actionable error
- * rather than an opaque `configure()` failure. (A WebM/VP9 container fallback for
- * Firefox would need an extra `webm-muxer` dependency and is tracked separately.)
+ * rather than an opaque `configure()` failure.
+ *
+ * Container fallback: AVC/MP4 is probed first; when the browser has no AVC
+ * encode path (Firefox), VP9 then VP8 are probed and muxed into WebM with
+ * `webm-muxer`. The order and the per-container codec lists live in the
+ * `ENCODING_TABLE` data table. The result carries its own mime type and file
+ * extension so callers never hard-code ".mp4".
  */
 
-import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
 
 export interface MuxOptions {
   width: number;
@@ -71,20 +76,31 @@ export async function selectVideoCodec(
   opts: { width: number; height: number; bitrate?: number; fps: number },
   probe?: VideoEncoderConfigProbe,
 ): Promise<string | null> {
-  const probeImpl =
-    probe ??
-    (typeof VideoEncoder !== 'undefined' &&
-    typeof (VideoEncoder as unknown as VideoEncoderConfigProbe).isConfigSupported === 'function'
-      ? (VideoEncoder as unknown as VideoEncoderConfigProbe)
-      : undefined);
+  const probeImpl = resolveProbe(probe);
 
   // No probe available (older WebCodecs without isConfigSupported): fall back to
   // the historical default and let configure() surface any real incompatibility.
   if (!probeImpl) return AVC_CODEC_CANDIDATES[0];
 
-  for (const codec of AVC_CODEC_CANDIDATES) {
+  return firstSupportedCodec(AVC_CODEC_CANDIDATES, opts, probeImpl);
+}
+
+function resolveProbe(probe?: VideoEncoderConfigProbe): VideoEncoderConfigProbe | undefined {
+  if (probe) return probe;
+  return typeof VideoEncoder !== 'undefined' &&
+    typeof (VideoEncoder as unknown as VideoEncoderConfigProbe).isConfigSupported === 'function'
+    ? (VideoEncoder as unknown as VideoEncoderConfigProbe)
+    : undefined;
+}
+
+async function firstSupportedCodec(
+  candidates: readonly string[],
+  opts: { width: number; height: number; bitrate?: number; fps: number },
+  probe: VideoEncoderConfigProbe,
+): Promise<string | null> {
+  for (const codec of candidates) {
     try {
-      const res = await probeImpl.isConfigSupported({
+      const res = await probe.isConfigSupported({
         codec,
         width: opts.width,
         height: opts.height,
@@ -100,33 +116,145 @@ export async function selectVideoCodec(
   return null;
 }
 
-export async function muxFramesToMp4(frames: MuxFrame[], opts: MuxOptions): Promise<Blob> {
+/** Output container. */
+export type VideoContainer = 'mp4' | 'webm';
+
+/** A muxing backend: how to build the muxer for a chosen codec and read it back. */
+export interface ContainerMuxer {
+  addVideoChunk(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): void;
+  finalize(): ArrayBuffer;
+}
+
+export interface EncodingRow {
+  container: VideoContainer;
+  mimeType: string;
+  extension: string;
+  /** WebCodecs codec strings to probe, most-compatible first. */
+  codecs: readonly string[];
+  createMuxer(codec: string, opts: MuxOptions): Promise<ContainerMuxer>;
+}
+
+/** VP9 profile 0 levels 1.0 / 3.1, then VP8. WebM cannot carry AVC. */
+export const VP9_CODEC_CANDIDATES = ['vp09.00.10.08', 'vp09.00.31.08'] as const;
+export const VP8_CODEC_CANDIDATES = ['vp8'] as const;
+
+/**
+ * Container/codec preference table, probed in order: the first row with a
+ * supported codec wins. MP4/AVC first (widest playback), then WebM/VP9, then
+ * WebM/VP8. Adding a codec or container is a new row, not new control flow.
+ */
+export const ENCODING_TABLE: readonly EncodingRow[] = [
+  {
+    container: 'mp4',
+    mimeType: 'video/mp4',
+    extension: 'mp4',
+    codecs: AVC_CODEC_CANDIDATES,
+    async createMuxer(_codec, opts) {
+      const muxer = new Mp4Muxer({
+        target: new Mp4Target(),
+        video: { codec: 'avc', width: opts.width, height: opts.height, frameRate: opts.fps },
+        fastStart: 'in-memory',
+      });
+      return {
+        addVideoChunk: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        finalize: () => {
+          muxer.finalize();
+          return muxer.target.buffer;
+        },
+      };
+    },
+  },
+  {
+    container: 'webm',
+    mimeType: 'video/webm',
+    extension: 'webm',
+    codecs: VP9_CODEC_CANDIDATES,
+    createMuxer: (_codec, opts) => createWebmMuxer('V_VP9', opts),
+  },
+  {
+    container: 'webm',
+    mimeType: 'video/webm',
+    extension: 'webm',
+    codecs: VP8_CODEC_CANDIDATES,
+    createMuxer: (_codec, opts) => createWebmMuxer('V_VP8', opts),
+  },
+];
+
+async function createWebmMuxer(codec: 'V_VP9' | 'V_VP8', opts: MuxOptions): Promise<ContainerMuxer> {
+  // Lazy: only Firefox-class browsers ever reach this, so keep it a code-split.
+  const { Muxer, ArrayBufferTarget } = await import('webm-muxer');
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: { codec, width: opts.width, height: opts.height, frameRate: opts.fps },
+  });
+  return {
+    addVideoChunk: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    finalize: () => {
+      muxer.finalize();
+      return muxer.target.buffer;
+    },
+  };
+}
+
+export interface SelectedEncoding {
+  row: EncodingRow;
+  codec: string;
+}
+
+/**
+ * Pick the first (container, codec) the browser can encode, walking
+ * `ENCODING_TABLE`. Returns null when nothing is supported. With no probe
+ * available it assumes the historical MP4/AVC default.
+ */
+export async function selectVideoEncoding(
+  opts: { width: number; height: number; bitrate?: number; fps: number },
+  probe?: VideoEncoderConfigProbe,
+  table: readonly EncodingRow[] = ENCODING_TABLE,
+): Promise<SelectedEncoding | null> {
+  const probeImpl = resolveProbe(probe);
+  if (!probeImpl) return { row: table[0], codec: table[0].codecs[0] };
+
+  for (const row of table) {
+    const codec = await firstSupportedCodec(row.codecs, opts, probeImpl);
+    if (codec !== null) return { row, codec };
+  }
+  return null;
+}
+
+/** Thrown when the browser can encode neither AVC/MP4 nor VP9/VP8 WebM. */
+export class UnsupportedVideoEncodingError extends Error {
+  constructor() {
+    super(
+      'This browser has no supported video encode configuration (tried H.264/MP4, VP9/WebM and VP8/WebM). ' +
+        'Use a current Chrome, Edge, Safari or Firefox to export video.',
+    );
+    this.name = 'UnsupportedVideoEncodingError';
+  }
+}
+
+export interface MuxedVideo {
+  blob: Blob;
+  /** `video/mp4` or `video/webm` — also set as `blob.type`. */
+  mimeType: string;
+  /** File extension without the dot: `mp4` or `webm`. */
+  extension: string;
+}
+
+/** File extension for a video mime type produced by this muxer (defaults to mp4). */
+export function videoExtensionForMime(mimeType: string): string {
+  return ENCODING_TABLE.find((r) => r.mimeType === mimeType.split(';')[0].trim())?.extension ?? 'mp4';
+}
+
+export async function muxFramesToVideo(frames: MuxFrame[], opts: MuxOptions): Promise<MuxedVideo> {
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('WebCodecs VideoEncoder is not available in this browser');
   }
 
-  // Probe for a supported AVC profile instead of hardcoding avc1.42E01F (which
-  // Safari rejects for many dimension/profile combinations). A null result means
-  // this browser has no usable MP4/AVC encode path — surface that explicitly.
-  const codec = await selectVideoCodec(opts);
-  if (codec === null) {
-    throw new Error(
-      'This browser has no supported MP4 (H.264/AVC) encode configuration. ' +
-        'MP4 export currently requires a WebCodecs AVC encoder (Chrome 113+, Edge). ' +
-        'Use a Chromium-based browser to export video.',
-    );
-  }
+  const selected = await selectVideoEncoding(opts);
+  if (selected === null) throw new UnsupportedVideoEncodingError();
+  const { row, codec } = selected;
 
-  const muxer = new Muxer({
-    target: new ArrayBufferTarget(),
-    video: {
-      codec: 'avc',
-      width: opts.width,
-      height: opts.height,
-      frameRate: opts.fps,
-    },
-    fastStart: 'in-memory',
-  });
+  const muxer = await row.createMuxer(codec, opts);
 
   const encoder = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
@@ -163,10 +291,13 @@ export async function muxFramesToMp4(frames: MuxFrame[], opts: MuxOptions): Prom
 
   await encoder.flush();
   encoder.close();
-  muxer.finalize();
 
-  const { buffer } = muxer.target;
-  return new Blob([buffer], { type: 'video/mp4' });
+  const buffer = muxer.finalize();
+  return {
+    blob: new Blob([buffer], { type: row.mimeType }),
+    mimeType: row.mimeType,
+    extension: row.extension,
+  };
 }
 
 async function frameToImageBitmap(

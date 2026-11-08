@@ -121,7 +121,7 @@ export interface RuntimePorts {
   /**
    * Autonomous-trigger sink invoked when an execution ADVANCES its ticket into a
    * new non-terminal lane. Wired to the SAME lane auto-run trigger a human
-   * board-drag uses (`maybeAutoRunOnLaneEntry`), so the next lane's configured
+   * board-drag uses (`routeLaneEntry`), so the next lane's configured
    * cloud agent kicks off after an agent finishes. The trigger itself is
    * idempotent (dedupes on a live execution) and no-ops on a Done lane.
    */

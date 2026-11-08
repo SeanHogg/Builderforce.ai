@@ -24,6 +24,7 @@ import type { DomainToolRequest } from "./installLocalDomainTools";
 import type { LocalDomainToolName } from "./localDomainTools";
 import { bridgeLocalTicketIds, type TicketServerIdLookup } from "./localTicketIdBridge";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 
 /**
  * The server MCP tools whose job the local adapter now does. Hidden from the editor's
@@ -56,7 +57,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       },
       required: ["name"],
     },
-    mutating: true,
+    mutating: toolMutating("project-create", { mutates: true }),
   },
   {
     name: "project-update",
@@ -71,7 +72,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       },
       required: ["id"],
     },
-    mutating: true,
+    mutating: toolMutating("project-update", { mutates: true }),
   },
   {
     name: "project-archive",
@@ -81,7 +82,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       properties: { id: { type: "string", description: "Local project id to archive." } },
       required: ["id"],
     },
-    mutating: true,
+    mutating: toolMutating("project-archive", { mutates: true }),
   },
   {
     name: "ticket-create",
@@ -106,7 +107,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       },
       required: ["projectId", "title"],
     },
-    mutating: true,
+    mutating: toolMutating("ticket-create", { mutates: true }),
   },
   {
     name: "ticket-update",
@@ -124,7 +125,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       },
       required: ["id"],
     },
-    mutating: true,
+    mutating: toolMutating("ticket-update", { mutates: true }),
   },
   {
     name: "ticket-move",
@@ -138,7 +139,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       },
       required: ["id", "status"],
     },
-    mutating: true,
+    mutating: toolMutating("ticket-move", { mutates: true }),
   },
   {
     name: "ticket-archive",
@@ -151,7 +152,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       },
       required: ["id"],
     },
-    mutating: true,
+    mutating: toolMutating("ticket-archive", { mutates: true }),
   },
   {
     name: "ticket-delete",
@@ -161,7 +162,7 @@ export const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"
       properties: { id: { type: "string", description: "Local ticket id to delete." } },
       required: ["id"],
     },
-    mutating: true,
+    mutating: toolMutating("ticket-delete", { mutates: true }),
   },
 ];
 

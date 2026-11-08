@@ -3,7 +3,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * autonomousExecutionSweep — the always-on, server-side executor for the board's
  * autonomous agents.
  *
- * The board "autonomous trigger" ({@link maybeAutoRunOnLaneEntry}) fires when a
+ * The board "autonomous trigger" ({@link routeLaneEntry}) fires when a
  * ticket ENTERS a lane (created / PATCHed / an agent advanced it). That covers the
  * live path, but a run whose kickoff was dropped (a `waitUntil` isolate evicted
  * before dispatch), a ticket created into a staffed lane while nothing was polling,
@@ -39,7 +39,7 @@ import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
 import { tenantMayRunAutonomously } from '../llm/tenantTokenAvailability';
 import { sendPendingAgentsUpgradeEmail } from './pendingAgentsUpgradeEmail';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import type { Env } from '../../env';
 import { enforceCloudRunCap } from './cloudRunLedger';
 import { recordTenantAutoRunSkip, clearTenantAutoRunSkip } from './autoRunSkipLedger';
@@ -110,7 +110,7 @@ interface CandidateTask extends CandidateInputs {
  *   • its current-status lane is STAFFED (the swimlane matching its status has ≥1
  *     `swimlane_agent_assignments` row) — a lane agent should pick it up even
  *     though no one owns the ticket.
- * The lane evaluator ({@link maybeAutoRunOnLaneEntry}) still has the final say per
+ * The lane evaluator ({@link routeLaneEntry}) still has the final say per
  * ticket (gate / capability / live-run), so this is a superset filter that only
  * bounds the scan.
  *
@@ -413,7 +413,7 @@ export async function runAutonomousExecutionSweep(
         }
         const seen: { verdict?: BlockVerdict } = {};
         try {
-          const spend = await runs.spend(() => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          const spend = await runs.spend(() => routeLaneEntry(env, db, runtimeService, {
             tenantId: c.tenantId,
             projectId: c.projectId,
             taskId: c.taskId,

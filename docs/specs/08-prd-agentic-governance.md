@@ -368,5 +368,37 @@ implemented deliberately so neither leaves a compliance gap.
 finding is Segment-scoped and audited; scanners run in the same sandboxed runner as the dev agents;
 scanner config is least-privilege over the Segment's connected repos only.
 
-**Status:** not built. Tracked in [ROADMAP.md](../../ROADMAP.md) › Run › `[governance]` "Security
-automation incomplete".
+**Status:** built (2026-11-08), with the limits below. Every agent PR is scanned and reviewed in the
+post-PR step (`application/security/pullRequestSecurityStep.ts`): secret + SAST rules over the changed
+files (`domain/security/diffScanRules.ts`, read through the provider API with the repo's own credential),
+SCA against OSV.dev for the changed manifests (`application/security/osvScaScan.ts`: npm incl. `^`/`~`
+resolved from a lockfile in the same diff, PyPI `==` pins, Go; unresolvable ranges listed in the scan
+notes; an OSV failure records the scan `failed`, never clean), and the assigned security
+agent's review (`dev.security_review`, findings `category = 'SECURITY'`). BLOCKER maps onto the existing
+severities as CRITICAL or HIGH. ONE pure complete verdict (`evaluateSecurityGate`) is consulted by
+cloudFinalize's immediate auto-merge, the Done-drag path, the merge-on-green-CI path and `prMergeSweep`:
+a PR may merge only when, for its CURRENT head commit (read from the provider on GitHub, GitLab and
+Bitbucket Cloud/Server), the SECRET, SAST, SCA and REVIEW scans are all completed and untruncated and no
+blocking finding is open; a missing, skipped, failed, truncated or stale scan blocks with a named reason.
+The merge call is pinned to the verified commit (`expectedHeadSha`: native `sha` on GitHub and GitLab, a
+re-read on Bitbucket), so a head that moved is a non-merge (`head_moved`) and the next sweep re-scans.
+The CI webhook never runs a scan inline: it schedules one past the response. A manager can accept the
+risk of one PR at one commit (audited, recorded as `override` evidence; a PR that belongs to no segment
+only a tenant owner can accept, recorded at tenant scope), so a PR the scanners cannot fully cover is not
+held forever. A change touching an executable the static rules and the reviewer do not read (a minified
+bundle, a vendored or built script, WebAssembly) is recorded as an incomplete scan; the SECRET scan reads
+every changed file regardless. The `security-verdict-catchup` sweep is the safety net for a lost deferred
+scan: it scans green PRs whose latest head has no complete verdict and merges those CI is green on. A CRITICAL finding auto-opens a `security_incidents` row (detection source `agent`,
+idempotent per fingerprint). Automated SOC 2 evidence (`evidence_type = 'automated'`, `source_ref`
+provenance, idempotent) is written for CC8.1 on every merge and for CC7.1 / CC8.1 on scan and review.
+Every governance mutation writes ONE audit envelope (`application/governance/mutationAudit.ts` into
+`activity_log`). The `governance-auditor` daily sweep raises merged-without-scan / -review and
+no-evidence-in-90-days gaps (`governance_audit_gaps`), shown on the SOC 2 page. `/vuln-scans` has a Run
+scan action; `/dsr` has a per-Segment Execute action; suppression is honoured at every outbound send seam
+(`marketing/suppression.ts`).
+**Not built:** (1) a full SAST engine - the scanner is the rule set above until a sandboxed runner is
+wired in (SCA covers only the manifests a change touched, and only versions it can resolve); (2) DSR
+erasure beyond do-not-contact - the executor takes Segment-scoped erase adapters and only the two
+governance registers are adapted, so an erasure request stays `processing` and names the stores it
+could not erase, and an access / portability export is persisted for download but completes only when a
+manager marks it delivered.

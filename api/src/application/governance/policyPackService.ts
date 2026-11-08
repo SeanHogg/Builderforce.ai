@@ -32,18 +32,10 @@ import {
 } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { isPolicyGateEffect, readStoredSideEffect, validateGatePatchInput, validateNewGateInput, type PolicyGateEffect, type PolicyGateInput } from './policyGateValidation';
+// Re-exported so existing importers keep one module for the pack service's vocabulary.
+export { isPolicyGateEffect, isValidGateSideEffect, POLICY_GATE_EFFECTS, POLICY_GATE_SIDE_EFFECTS, type PolicyGateEffect, type PolicyGateInput } from './policyGateValidation';
 
-export type PolicyGateEffect = PolicyGate['effect'];
-
-export const POLICY_GATE_EFFECTS: readonly PolicyGateEffect[] = [
-  'inject-directive',
-  'require-approval',
-  'block',
-];
-
-export function isPolicyGateEffect(v: unknown): v is PolicyGateEffect {
-  return typeof v === 'string' && (POLICY_GATE_EFFECTS as readonly string[]).includes(v);
-}
 
 /** A gate row as the CRUD surface exposes it (superset of the wire `PolicyGate`). */
 export interface PolicyGateRow {
@@ -51,6 +43,7 @@ export interface PolicyGateRow {
   packId: string;
   gateKey: string;
   tool: string | null;
+  sideEffect: string | null;
   effect: PolicyGateEffect;
   directive: string | null;
   reason: string | null;
@@ -78,15 +71,6 @@ export interface PolicyPackInput {
   agentRef?: string | null;
 }
 
-export interface PolicyGateInput {
-  gateKey?: string;
-  tool?: string | null;
-  effect?: string;
-  directive?: string | null;
-  reason?: string | null;
-  position?: number;
-}
-
 /** Scope a resolution is asked for. Absent project/agent = "unscoped run". */
 export interface PolicyScope {
   tenantId: number;
@@ -112,7 +96,6 @@ export async function invalidatePolicyCache(env: Env, tenantId: number): Promise
   });
 }
 
-const isBlank = (v: string | null | undefined): boolean => !v || v.trim().length === 0;
 
 function toGateRow(g: typeof policyGates.$inferSelect): PolicyGateRow {
   return {
@@ -120,6 +103,7 @@ function toGateRow(g: typeof policyGates.$inferSelect): PolicyGateRow {
     packId: g.packId,
     gateKey: g.gateKey,
     tool: g.tool,
+    sideEffect: readStoredSideEffect(g.sideEffect) ?? null,
     effect: (isPolicyGateEffect(g.effect) ? g.effect : 'inject-directive'),
     directive: g.directive,
     reason: g.reason,
@@ -161,8 +145,10 @@ export async function loadPolicyGates(db: Db, scope: PolicyScope): Promise<Polic
 
   const rows = await db
     .select({
+      packId: policyGates.packId,
       gateKey: policyGates.gateKey,
       tool: policyGates.tool,
+      sideEffect: policyGates.sideEffect,
       effect: policyGates.effect,
       directive: policyGates.directive,
       reason: policyGates.reason,
@@ -188,8 +174,11 @@ export async function loadPolicyGates(db: Db, scope: PolicyScope): Promise<Polic
   // parser and the on-prem relay use.
   return coercePolicyGates(
     rows.map((r) => ({
-      id: r.gateKey,
+      // Gate keys are unique per pack only: EVERY gate's wire id is `pack:key`, so it never changes when a gate's class is edited,
+      // and a class gate lowered to per-tool gates (id `pack:key:tool`) stays traceable to its authored gate.
+      id: `${r.packId}:${r.gateKey}`,
       ...(r.tool ? { tool: r.tool } : {}),
+      ...(r.sideEffect ? { sideEffect: readStoredSideEffect(r.sideEffect) } : {}),
       effect: r.effect,
       ...(r.directive ? { directive: r.directive } : {}),
       ...(r.reason ? { reason: r.reason } : {}),
@@ -333,14 +322,9 @@ export async function createPolicyGate(
   packId: string,
   input: PolicyGateInput,
 ): Promise<PolicyGateRow | { error: string }> {
-  const gateKey = input.gateKey?.trim();
-  if (!gateKey) return { error: 'gateKey is required' };
-  if (!isPolicyGateEffect(input.effect)) {
-    return { error: `effect must be one of ${POLICY_GATE_EFFECTS.join(', ')}` };
-  }
-  if (input.effect === 'inject-directive' && isBlank(input.directive)) {
-    return { error: 'directive is required for an inject-directive gate' };
-  }
+  const invalid = validateNewGateInput(input);
+  if (invalid) return { error: invalid };
+  const gateKey = input.gateKey!.trim();
 
   const [pack] = await db
     .select({ id: policyPacks.id })
@@ -356,6 +340,7 @@ export async function createPolicyGate(
       packId,
       gateKey,
       tool: input.tool?.trim() || null,
+      sideEffect: input.sideEffect || null,
       effect: input.effect,
       directive: input.directive ?? null,
       reason: input.reason ?? null,
@@ -375,18 +360,12 @@ export async function updatePolicyGate(
   input: PolicyGateInput,
 ): Promise<{ ok: true } | { error: string }> {
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (input.gateKey !== undefined) {
-    const key = input.gateKey.trim();
-    if (!key) return { error: 'gateKey cannot be empty' };
-    patch.gateKey = key;
-  }
-  if (input.effect !== undefined) {
-    if (!isPolicyGateEffect(input.effect)) {
-      return { error: `effect must be one of ${POLICY_GATE_EFFECTS.join(', ')}` };
-    }
-    patch.effect = input.effect;
-  }
+  const invalid = validateGatePatchInput(input);
+  if (invalid) return { error: invalid };
+  if (input.gateKey !== undefined) patch.gateKey = input.gateKey.trim();
+  if (input.effect !== undefined) patch.effect = input.effect;
   if (input.tool !== undefined) patch.tool = input.tool?.trim() || null;
+  if (input.sideEffect !== undefined) patch.sideEffect = input.sideEffect || null;
   if (input.directive !== undefined) patch.directive = input.directive;
   if (input.reason !== undefined) patch.reason = input.reason;
   if (input.position !== undefined) patch.position = input.position;

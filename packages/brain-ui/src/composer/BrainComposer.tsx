@@ -103,7 +103,7 @@ export interface BrainComposerBaseProps {
   onAddContext?: () => void;
   webBrowsing?: { on: boolean; onChange: (on: boolean) => void };
   addMenuItems?: readonly ComposerAddMenuItem[];
-  mentions?: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick'>;
+  mentions?: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick' | 'detail'>;
   tickets?: Pick<UseTicketAutocompleteOptions, 'tickets' | 'onPick'>;
   /** Close the @-mention and #-ticket pickers while the box stays open (e.g. mid-run
    *  with nobody else to address). Always closed while `disabled`. */

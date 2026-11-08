@@ -14,7 +14,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 function action(name: string, run: () => unknown): BrainAction {
-  return { name, description: name, parameters: { type: 'object', properties: {} }, run: async () => run() };
+  return { name, description: name, parameters: { type: 'object', properties: {} }, mutates: false, run: async () => run() };
 }
 
 describe('BrainActionsContext', () => {
@@ -32,6 +32,21 @@ describe('BrainActionsContext', () => {
     expect(out).toBe('created');
   });
 
+  it('fails closed on mutation: unregistered names are mutating, catalog reads are not', () => {
+    const { result } = renderHook(() => useBrainActions(), { wrapper });
+    act(() => {
+      result.current.register([
+        { ...action('some_page_action', () => 1), mutates: true },
+        { ...action('declared_read', () => 1), mutates: false },
+      ]);
+    });
+    expect(result.current.isMutating('never_registered', {})).toBe(true);
+    expect(result.current.isMutating('some_page_action', {})).toBe(true);
+    expect(result.current.isMutating('declared_read', {})).toBe(false);
+    expect(result.current.isMutating('read_file', {})).toBe(false);
+    expect(result.current.isMutating('write_file', {})).toBe(true);
+  });
+
   it('returns a recoverable error object for unknown tools', async () => {
     const { result } = renderHook(() => useBrainActions(), { wrapper });
     let out: unknown;
@@ -45,7 +60,7 @@ describe('BrainActionsContext', () => {
     const { result } = renderHook(() => useBrainActions(), { wrapper });
     act(() => {
       result.current.register([
-        { name: 'boom', description: '', parameters: {}, run: async () => { throw new Error('kaboom'); } },
+        { name: 'boom', description: '', parameters: {}, mutates: false, run: async () => { throw new Error('kaboom'); } },
       ]);
     });
     let out: unknown;
@@ -102,7 +117,7 @@ describe('BrainActionsContext — registration is loop-proof', () => {
   function Registrant({ value, onRender }: { value: string; onRender?: () => void }) {
     onRender?.();
     useRegisterBrainActions([
-      { name: 'live', description: 'live', parameters: { type: 'object', properties: {} }, run: () => value },
+      { name: 'live', description: 'live', parameters: { type: 'object', properties: {} }, mutates: false, run: () => value },
     ]);
     return null;
   }
@@ -114,6 +129,7 @@ describe('BrainActionsContext — registration is loop-proof', () => {
         name: 'pick',
         description: 'pick one',
         parameters: { type: 'object', properties: { id: { type: 'string', enum: ids } } },
+        mutates: false,
         run: (args: unknown) => (args as { id: string }).id,
       },
     ]);
@@ -122,7 +138,7 @@ describe('BrainActionsContext — registration is loop-proof', () => {
 
   function Other() {
     useRegisterBrainActions([
-      { name: 'other', description: 'other', parameters: { type: 'object', properties: {} }, run: () => 'other' },
+      { name: 'other', description: 'other', parameters: { type: 'object', properties: {} }, mutates: false, run: () => 'other' },
     ]);
     return null;
   }
@@ -204,7 +220,7 @@ describe('BrainActionsContext — registration is loop-proof', () => {
     );
     const rendersAfterMount = renders;
 
-    act(() => { read().register([{ name: 'external', description: 'x', parameters: {}, run: () => 'x' }]); });
+    act(() => { read().register([{ name: 'external', description: 'x', parameters: {}, mutates: false, run: () => 'x' }]); });
 
     expect(read().toolSpecs.map((t) => t.function.name)).toContain('external');
     // The registry changed; a registrant subscribes to the STABLE registrar seam

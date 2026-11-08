@@ -1,5 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { coordinatorVoice, resolveTicketCoordinator } from '../kanban/ticketCoordinator';
+import { resolveStakeholderVoice } from '../kanban/stakeholderVoice';
 /**
  * Parking a cloud run on `ask_human` — the ONE place a run becomes `paused`.
  *
@@ -245,11 +245,10 @@ export async function pauseExecutionForQuestion(
   // to be running. `cloudAgentRef` below still carries the acting agent, so provenance is
   // unchanged; only the accountable name on the request changes. Best-effort: an
   // unresolvable coordinator (an unowned ticket) keeps today's label.
-  const coordinator = await resolveTicketCoordinator(db, args.tenantId, args.taskId).catch(() => null);
   const approvalId = await createCloudQuestion(env, db, {
     tenantId: args.tenantId, executionId: args.executionId,
     ...(args.cloudAgentRef ? { cloudAgentRef: args.cloudAgentRef } : {}),
-    agentLabel: coordinatorVoice(coordinator, args.agentLabel), question: args.question,
+    agentLabel: await resolveStakeholderVoice(db, { tenantId: args.tenantId, taskId: args.taskId, actingLabel: args.agentLabel }), question: args.question,
     ...(args.context ? { context: args.context } : {}),
     ...(args.kind ? { kind: args.kind } : {}),
   });

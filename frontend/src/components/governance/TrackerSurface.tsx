@@ -38,7 +38,17 @@ export interface TrackerField {
  */
 export interface TrackerRowAction {
   labelKey: string;
-  render: (row: TrackerRow, close: () => void) => React.ReactNode;
+  /** `reload` refreshes the list - for an action that changes the row (e.g. executing a request). */
+  render: (row: TrackerRow, close: () => void, reload: () => void) => React.ReactNode;
+}
+
+/**
+ * An optional tracker-level action (not tied to a row): a button beside "Add" that opens a surface
+ * which may change the list (e.g. "Run scan" creates scan rows), so it is handed `reload`.
+ */
+export interface TrackerHeaderAction {
+  labelKey: string;
+  render: (open: boolean, close: () => void, reload: () => void) => React.ReactNode;
 }
 
 export interface TrackerSurfaceProps {
@@ -50,6 +60,7 @@ export interface TrackerSurfaceProps {
   listKey?: string;
   fields: TrackerField[];
   rowAction?: TrackerRowAction;
+  headerAction?: TrackerHeaderAction;
 }
 
 /**
@@ -66,7 +77,7 @@ function cellText(fmt: Formatter, t: (key: string) => string, field: TrackerFiel
   return String(value);
 }
 
-export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: TrackerSurfaceProps) {
+export function TrackerSurface({ title, apiBase, listKey, fields, rowAction, headerAction }: TrackerSurfaceProps) {
   const fmt = useFormat();
   const tCommon = useTranslations('common');
   const tTracker = useTranslations('governance.tracker');
@@ -84,6 +95,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionRow, setActionRow] = useState<TrackerRow | null>(null);
+  const [headerOpen, setHeaderOpen] = useState(false);
 
   // `useCallback`, not a bare closure passed straight to `useEffect`: the failure
   // message comes from `tTracker`, so the effect depends on the translator as well
@@ -144,7 +156,12 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
-        {!form && <button onClick={openAdd} style={btn}>{tTracker('add')}</button>}
+        {!form && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {headerAction && <button onClick={() => setHeaderOpen(true)} style={btnGhost}>{tRoot(headerAction.labelKey)}</button>}
+            <button onClick={openAdd} style={btn}>{tTracker('add')}</button>
+          </div>
+        )}
       </div>
       {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
 
@@ -192,7 +209,8 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
           </tbody>
         </table>
       )}
-      {rowAction && actionRow && rowAction.render(actionRow, () => setActionRow(null))}
+      {rowAction && actionRow && rowAction.render(actionRow, () => setActionRow(null), load)}
+      {headerAction && headerAction.render(headerOpen, () => setHeaderOpen(false), load)}
     </div>
   );
 }

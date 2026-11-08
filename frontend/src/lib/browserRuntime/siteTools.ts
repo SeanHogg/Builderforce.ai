@@ -9,6 +9,7 @@
 import type { BuiltFile, FlatFiles } from '@seanhogg/builderforce-webcontainers';
 import type { Checker, CheckDiagnostic } from '@seanhogg/builderforce-webcontainers/check';
 import type { CheckPorts } from './projectChecks';
+import { measureFiles, timeWrite } from './writeTiming';
 
 /** A relative base, so the site works at `<sub>.builderforce.ai/` AND under the `/api/sites/<sub>/` path form. */
 const SITE_BASE = './';
@@ -68,7 +69,7 @@ export function hasTypeScript(files: FlatFiles): boolean {
 export async function projectSupport(files: FlatFiles): Promise<{ supported: boolean; reason?: string }> {
   const { VirtualFileSystem, detectProject } = await import('@seanhogg/builderforce-webcontainers');
   const fs = new VirtualFileSystem();
-  fs.writeTree(files);
+  timeWrite('writeTree', measureFiles(files), () => fs.writeTree(files));
   const { supported, reason } = detectProject(fs);
   return { supported, reason };
 }

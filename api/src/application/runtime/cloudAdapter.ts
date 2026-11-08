@@ -165,6 +165,7 @@ export async function runCloudAgent(
       modules: cloudPolicyModules({
         env, db, run: refs, runRole: host.runRole, repoCtx: host.repoCtx, delegated: !!opts.delegation, writtenHashes: host.writtenHashes, writtenPaths: host.writtenPaths,
         ...(host.verify ? { sandbox: host.verify.sandbox } : {}),
+        taskTitle: host.taskRow.title,
         ladder: host.ladder, features: host.features, resolvedModel: model.servedModel,
         ...(opts.execParams ? { execParams: opts.execParams } : {}),
         onState: (state) => { live.state = state; },

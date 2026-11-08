@@ -12,6 +12,7 @@ import type { Capability } from "@builderforce/agent-tools";
 import { buildCoreToolRegistry, schemaForCapabilities } from "@builderforce/agent-tools";
 import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabilities";
 import { findRipgrep } from "./ripgrep";
+import { toolMutating } from "./toolMutating";
 import { hostCostLeverOn } from "./hostCostLevers";
 import { resolveLocalSemantic } from "./localSemantic";
 import { editorResearchCapability } from "./localResearch/researchCapability";
@@ -53,23 +54,6 @@ const registry = buildCoreToolRegistry();
  *  ticket-branch finish/PR step), so they're not offered in the editor. */
 const EXCLUDED_TOOLS = new Set(["finish"]);
 
-/** Tools that read but never change the workspace — so they skip the approval gate
- *  even though they ride a write/shell-capable surface. */
-const READ_ONLY_TOOLS = new Set([
-  "list_files", "read_file", "search_code", "find_symbol", "file_outline", "git_status", "git_diff", "git_history",
-  "semantic_search", "repo_map", "read_compressed", "local_research",
-]);
-
-// `git.write` is here for the same reason `shell` is, and more so: committing, pushing
-// and opening a pull request move work out of the working tree, and a push to the base
-// branch leaves the machine entirely. The approval prompt is the ONLY thing standing
-// between "the human asked me to push to main" and it happening.
-const MUTATING_CAPS: ReadonlySet<Capability> = new Set<Capability>(["repo.write", "repo.edit", "repo.delete", "shell", "git.write"]);
-
-function isMutating(name: string, requires: readonly Capability[]): boolean {
-  if (READ_ONLY_TOOLS.has(name)) return false;
-  return requires.some((c) => MUTATING_CAPS.has(c));
-}
 
 /**
  * Whether a call can reach `repo.semantic`: the tools that require it (`semantic_search`,
@@ -90,7 +74,8 @@ export const TOOL_DEFS: ToolDef[] = registry
     name: def.name,
     description: schemaForCapabilities(def, LOCAL_SURFACE_CAPS).function.description,
     parameters: def.schema.function.parameters as Record<string, unknown>,
-    mutating: isMutating(def.name, def.requires),
+    // The shared classifier decides (catalog entry, else fail closed) — no local read-only list or capability guess.
+    mutating: toolMutating(def.name),
     execute: async (args, root, run) => {
       const research = editorResearchCapability(root);
       const compressLargeOutputs = hostCostLeverOn("c8_token_compression");

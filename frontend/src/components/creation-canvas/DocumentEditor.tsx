@@ -50,7 +50,7 @@ const AUTOSAVE_MS = 1200;
 
 /** `<input type="color">` accepts only a literal `#rrggbb`, never `var()` — the
  * swatch states this until the author picks a colour of their own, which is then
- * persisted as their value (see `DRAWING_FALLBACK_HEX` in `CreationCanvas.tsx`,
+ * persisted as their value (see `DRAWING_FALLBACK_HEX` in `components/drawing/drawingConstants.ts`,
  * the same consumer-can't-read-a-token exemption). */
 const TEXT_COLOR_FALLBACK_HEX = '#111827';
 

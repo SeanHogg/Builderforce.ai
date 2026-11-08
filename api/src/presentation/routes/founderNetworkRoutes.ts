@@ -12,7 +12,8 @@
  */
 
 import { Hono, type Context } from 'hono';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -28,6 +29,7 @@ import {
   upsertFundingRound,
 } from '../../application/finance/fundingRounds';
 import { sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
+import { pendingInvestorMilestones } from '../../application/investor/investorMilestones';
 import { parseBody, z, zJsonObject, zNumberLike } from './requestBody';
 import { requireTenantId } from '../middleware/tenantContext';
 
@@ -246,7 +248,7 @@ export function createInvestorUpdateRoutes(db: Db): Hono<HonoEnv> {
    * knows which failures are worth retrying. This endpoint adds an audience and a
    * renderer, not a second sender.
    */
-  router.post('/send', async (c) => {
+  router.post('/send', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, zJsonObject);
     const content = body.content as Record<string, unknown> | undefined;
     if (!content || typeof content.title !== 'string') {
@@ -267,6 +269,15 @@ export function createInvestorUpdateRoutes(db: Db): Hono<HonoEnv> {
     });
     return Response.json(result);
   });
+
+  /**
+   * What the next update would list as shipped: the founder sees it BEFORE sending.
+   * Mounted at `/api/investor-updates/milestones/pending`. The read is the same
+   * (uncached) one the send and the board pack use, scoped to the caller's tenant.
+   * Manager and above, like `/send`.
+   */
+  router.get('/milestones/pending', requireRole(TenantRole.MANAGER), async (c) =>
+    Response.json(await pendingInvestorMilestones(db, tenant(c), new Date())));
 
   return router;
 }

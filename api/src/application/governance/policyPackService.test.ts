@@ -19,6 +19,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type GateRow = {
+  packId: string;
   gateKey: string;
   tool: string | null;
   effect: string;
@@ -63,27 +64,27 @@ describe('isPolicyGateEffect', () => {
 describe('loadPolicyGates', () => {
   it('projects rows onto the wire PolicyGate shape, omitting empty optionals', async () => {
     const { db } = makeDb([
-      { gateKey: 'no-shell', tool: 'run_command', effect: 'block', directive: null, reason: 'prod safety' },
-      { gateKey: 'be-careful', tool: null, effect: 'inject-directive', directive: 'Prefer small diffs.', reason: null },
+      { packId: 'p1', gateKey: 'no-shell', tool: 'run_command', effect: 'block', directive: null, reason: 'prod safety' },
+      { packId: 'p1', gateKey: 'be-careful', tool: null, effect: 'inject-directive', directive: 'Prefer small diffs.', reason: null },
     ]);
 
     const gates = await loadPolicyGates(db, { tenantId: 1, projectId: 7, agentRef: 'ada' });
 
     expect(gates).toEqual([
-      { id: 'no-shell', tool: 'run_command', effect: 'block', reason: 'prod safety' },
-      { id: 'be-careful', effect: 'inject-directive', directive: 'Prefer small diffs.' },
+      { id: 'p1:no-shell', tool: 'run_command', effect: 'block', reason: 'prod safety' },
+      { id: 'p1:be-careful', effect: 'inject-directive', directive: 'Prefer small diffs.' },
     ]);
   });
 
   it('drops a row whose effect is not a known PolicyGate effect', async () => {
     const { db } = makeDb([
-      { gateKey: 'bogus', tool: null, effect: 'nuke-everything', directive: null, reason: null },
-      { gateKey: 'good', tool: null, effect: 'block', directive: null, reason: null },
+      { packId: 'p1', gateKey: 'bogus', tool: null, effect: 'nuke-everything', directive: null, reason: null },
+      { packId: 'p1', gateKey: 'good', tool: null, effect: 'block', directive: null, reason: null },
     ]);
 
     const gates = await loadPolicyGates(db, { tenantId: 1 });
 
-    expect(gates.map((g) => g.id)).toEqual(['good']);
+    expect(gates.map((g) => g.id)).toEqual(['p1:good']);
   });
 
   it('returns [] when the tenant has authored nothing (the ungated default)', async () => {
@@ -95,27 +96,27 @@ describe('loadPolicyGates', () => {
 describe('resolvePolicyGates — end-to-end into the evaluator', () => {
   it('a tool:"*" block gate makes a deny-by-default posture authorable', async () => {
     const { db } = makeDb([
-      { gateKey: 'deny-all', tool: '*', effect: 'block', directive: null, reason: 'locked down' },
+      { packId: 'p1', gateKey: 'deny-all', tool: '*', effect: 'block', directive: null, reason: 'locked down' },
     ]);
 
     const gates = await resolvePolicyGates(env, db, { tenantId: 42 });
 
     // The exact call the engine makes at its tool seam.
     expect(evaluatePolicyGate(gates, 'write_file')).toEqual({
-      action: 'block', gateId: 'deny-all', reason: 'locked down',
+      action: 'block', gateId: 'p1:deny-all', reason: 'locked down',
     });
     expect(evaluatePolicyGate(gates, 'anything_at_all').action).toBe('block');
   });
 
   it('a tool-specific gate leaves every other tool allowed', async () => {
     const { db } = makeDb([
-      { gateKey: 'ask-first', tool: 'open_pull_request', effect: 'require-approval', directive: null, reason: null },
+      { packId: 'p1', gateKey: 'ask-first', tool: 'open_pull_request', effect: 'require-approval', directive: null, reason: null },
     ]);
 
     const gates = await resolvePolicyGates(env, db, { tenantId: 43 });
 
     expect(evaluatePolicyGate(gates, 'open_pull_request')).toEqual({
-      action: 'require-approval', gateId: 'ask-first', reason: 'approval required by policy',
+      action: 'require-approval', gateId: 'p1:ask-first', reason: 'approval required by policy',
     });
     expect(evaluatePolicyGate(gates, 'read_file')).toEqual({ action: 'allow' });
   });
@@ -124,7 +125,7 @@ describe('resolvePolicyGates — end-to-end into the evaluator', () => {
 describe('resolvePolicyGates — read-through cache', () => {
   it('serves the second read from cache without re-querying', async () => {
     const { db, calls } = makeDb([
-      { gateKey: 'g1', tool: null, effect: 'block', directive: null, reason: null },
+      { packId: 'p1', gateKey: 'g1', tool: null, effect: 'block', directive: null, reason: null },
     ]);
 
     await resolvePolicyGates(env, db, { tenantId: 50, projectId: 3, agentRef: 'ada' });
@@ -146,7 +147,7 @@ describe('resolvePolicyGates — read-through cache', () => {
 
   it('a write invalidates the tenant and the next read sees the NEW posture', async () => {
     const rows: GateRow[] = [
-      { gateKey: 'old', tool: null, effect: 'inject-directive', directive: 'be nice', reason: null },
+      { packId: 'p1', gateKey: 'old', tool: null, effect: 'inject-directive', directive: 'be nice', reason: null },
     ];
     const calls = { count: 0 };
     const db = {
@@ -162,14 +163,14 @@ describe('resolvePolicyGates — read-through cache', () => {
     } as unknown as Db;
 
     const before = await resolvePolicyGates(env, db, { tenantId: 52 });
-    expect(before.map((g) => g.id)).toEqual(['old']);
+    expect(before.map((g) => g.id)).toEqual(['p1:old']);
 
     // An operator adds a hard block. Every write path funnels through this.
-    rows.push({ gateKey: 'new-block', tool: 'run_command', effect: 'block', directive: null, reason: null });
+    rows.push({ packId: 'p1', gateKey: 'new-block', tool: 'run_command', effect: 'block', directive: null, reason: null });
     await invalidatePolicyCache(env, 52);
 
     const after = await resolvePolicyGates(env, db, { tenantId: 52 });
-    expect(after.map((g) => g.id)).toEqual(['old', 'new-block']);
+    expect(after.map((g) => g.id)).toEqual(['p1:old', 'p1:new-block']);
     expect(calls.count).toBe(2);
     expect(evaluatePolicyGate(after, 'run_command').action).toBe('block');
   });

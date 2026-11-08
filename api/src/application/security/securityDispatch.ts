@@ -121,13 +121,17 @@ export async function dispatchSecurityAudit(
   );
   const deferred: Promise<unknown>[] = [];
   try {
-    const { executionId, refusal } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+    const { executionId, refusal, deferred: admissionDeferred } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: anchorTaskId,
       tenantId: params.tenantId,
       payload,
       submittedBy: params.submittedBy ?? `security:${securityRef}`,
+      // One-shot: nothing re-sweeps an audit, so a deferred admission is parked and retried.
+      parkIfDeferred: true,
     });
     await Promise.allSettled(deferred);
+    // Deferred = parked, not refused: the audit stays `running` until the retry starts it.
+    if (admissionDeferred) return auditId;
     // A refused dispatch left the audit sitting `running` with nothing running it —
     // indistinguishable from an audit in progress, forever. Finish it with the reason.
     if (executionId == null) {

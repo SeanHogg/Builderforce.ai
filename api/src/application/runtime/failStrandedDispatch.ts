@@ -6,11 +6,10 @@
  */
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
-import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { landExecution } from './executionLanding';
+import { insertToolAudit } from '../audit/toolAuditWrite';
 
 /** A dispatched execution that has not yet reported in. */
 export interface StrandedRow {
@@ -39,7 +38,7 @@ export async function failStrandedDispatch(db: Db, row: StrandedRow, reason: str
     });
   if (updated.length === 0) return false;
 
-  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+  await insertToolAudit(db, {
     tenantId: row.tenantId,
     agentHostId: null,
     cloudAgentRef: row.cloudAgentRef,

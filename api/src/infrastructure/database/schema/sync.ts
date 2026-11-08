@@ -16,9 +16,11 @@
  * exempts by rule.
  */
 
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
+  customType,
   index,
   integer,
   jsonb,
@@ -30,6 +32,15 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { tenants } from './identity';
+
+/**
+ * Postgres `xid8` (64-bit transaction id). Drizzle has no builder for it and the value
+ * exceeds 2^53, so it is carried as its DECIMAL TEXT form and compared in SQL (or as a
+ * BigInt in `domain/sync/deltaWatermark`), never as a JS number.
+ */
+const xid8 = customType<{ data: string }>({
+  dataType() { return 'xid8'; },
+});
 
 /** Durable per-(tenant, device, event) receipt journal — the replay anchor. */
 export const syncEvents = pgTable('sync_events', {
@@ -117,8 +128,16 @@ export const syncChanges = pgTable('sync_changes', {
   recordedAt:    timestamp('recorded_at').notNull().defaultNow(),
   deviceId:      varchar('device_id', { length: 128 }).notNull(),
   eventId:       uuid('event_id').notNull(),
+  /**
+   * Migration 1304: `xid8` of the WRITING transaction. The database default fills it
+   * inside that transaction — an insert never sets it. With `seq` it is the commit-ordered
+   * pull watermark (`domain/sync/deltaWatermark`).
+   */
+  txid:          xid8('txid').notNull().default(sql`pg_current_xact_id()`),
 }, (t) => [
   index('idx_sync_changes_cursor').on(t.tenantId, t.seq),
-  // Migration 1251: per-destination delta pages and cursor-expiry MIN(seq).
+  // Migration 1251: per-destination delta pages by seq (dropped once nothing reads by seq alone).
   index('idx_sync_changes_destination').on(t.tenantId, t.destinationKey, t.seq),
+  // Migration 1304: the watermark order — delta pages and cursor-expiry MIN(txid, seq).
+  index('idx_sync_changes_destination_txid').on(t.tenantId, t.destinationKey, t.txid, t.seq),
 ]);

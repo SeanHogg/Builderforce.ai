@@ -132,6 +132,12 @@ export class CeremonyRoomDO implements DurableObject {
     // claiming to be one is dropped.
     if (msg.type === 'changed') return;
 
+    // `caption` and `agent-say` are SERVER signals too (the transcript route and the agent
+    // turn broadcast them through `POST /broadcast`; agents have no socket). Receivers
+    // trust their `ref`, so a client frame of either type would put words in another
+    // participant's mouth — dropped here, never relayed.
+    if (msg.type === 'caption' || msg.type === 'agent-say') return;
+
     if (msg.type === 'join') {
       // The route's assertion wins over anything the client declared. See the class doc.
       const claimed = this.asserted.get(peer.id);

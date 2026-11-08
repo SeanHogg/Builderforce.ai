@@ -33,6 +33,7 @@ export {
   probeDevice,
   hasWebGPUSupport,
   configureOnnxRuntime,
+  setOrtWasmBase,
   MODEL_REGISTRY,
   planScene,
   CAMERA_MOVES,

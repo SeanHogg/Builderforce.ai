@@ -25,7 +25,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  * The leak was structural, not arithmetic. `decideRemedyExecution` classifies `coordinate`
  * as a NON-dispatching remedy — "costs no run" — and therefore hands it
  * `mayStartRun: false`. But `applyRemedy`'s coordinate branch did not consult that flag:
- * it called `coordinateTicket`, which calls `maybeAutoRunOnLaneEntry` internally and
+ * it called `coordinateTicket`, which calls `routeLaneEntry` internally and
  * started a run whatever the budget said. The remedy was classified by what it was
  * *intended* to cost, and nothing checked what it actually cost. It was the only one of
  * eight branches that read neither flag.
@@ -42,7 +42,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 
 vi.mock('./coordinateTicket', () => ({ coordinateTicket: vi.fn() }));
 vi.mock('../swimlane/evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
-vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: vi.fn() }));
+vi.mock('../swimlane/laneEntryTrigger', () => ({ routeLaneEntry: vi.fn() }));
 vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../kanban/driveSignoffs', () => ({ driveOutstandingSignoffs: vi.fn() }));
 vi.mock('./staffUnfilledRole', () => ({ staffUnfilledRole: vi.fn() }));

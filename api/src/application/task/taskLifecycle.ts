@@ -32,6 +32,7 @@ import { fireEventTriggers } from '../workflow/eventTriggers';
 import { TaskStatus, ExecutionStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 import { awardForCompletedTask } from "../points/taskEarning";
+import { earnBoardBudget } from '../delivery/boardBudget';
 import { loadLaneOrdinals, type OrdinalMap } from '../swimlane/laneOrdinals';
 
 /**
@@ -204,6 +205,11 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   if (nowDone && !wasDone) {
     await awardForCompletedTask(db, env, {
       tenantId, taskId, actorKind: actor.actorKind, actorRef: actor.actorRef,
+    });
+    // The BOARD earns too, whoever closed it: a ticket done by an agent still
+    // delivered. Idempotent on the ticket id like the award above.
+    await earnBoardBudget(db, env, { tenantId, taskId }).catch((error) => {
+      reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "earnBoardBudget" });
     });
   }
 

@@ -1,4 +1,4 @@
-import type { BrainAction, BrainToolSpec } from '@seanhogg/builderforce-brain-embedded';
+import { isBrainActionMutating, type BrainAction, type BrainToolSpec } from '@seanhogg/builderforce-brain-embedded';
 import { NON_AUTHORING_TOOL_NAMES } from '@/lib/canvasTurnOutcome';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
@@ -32,13 +32,6 @@ export function specsFor(actions: BrainAction[]): BrainToolSpec[] {
   }));
 }
 
-function mutates(action: BrainAction, args: unknown): boolean {
-  if (typeof action.mutates === 'function') {
-    try { return !!action.mutates(args); } catch { return true; }
-  }
-  return !!action.mutates;
-}
-
 async function runAction(action: BrainAction, args: unknown): Promise<unknown> {
   try { return await action.run(args); } catch (error) { return { error: toolErrorMessage(error, 'Tool failed') }; }
 }
@@ -57,7 +50,7 @@ export async function executeCanvasTool(
     return { error: 'Search stopped after two encyclopedic results. Fetch a known official URL directly or create the requested Canvas artifacts with the evidence already gathered.' };
   }
   if (!action) return { error: `Unknown tool: ${name}` };
-  if (!name.startsWith('canvas_') && mutates(action, args) && !gate.autoApprove) {
+  if (!name.startsWith('canvas_') && isBrainActionMutating(action, args) && !gate.autoApprove) {
     const approved = gate.confirmAction ? await gate.confirmAction({ name, args }) : false;
     if (!approved) return { error: gate.confirmAction ? 'The user declined this tenant mutation.' : 'This tenant mutation requires in-app approval.' };
   }

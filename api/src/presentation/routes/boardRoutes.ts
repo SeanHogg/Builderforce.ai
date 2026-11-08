@@ -21,7 +21,7 @@
  *   POST   /api/boards/:boardId/orphaned-tasks/adopt    Re-home them onto a lane
  *
  * Agent assignments (nested under a lane):
- *   GET    /api/boards/:boardId/swimlanes/:laneId/agents          List assignments
+ *   GET    /api/boards/:boardId/swimlanes/:laneId/agents          List assignments (compat shim over lane-agents)
  *   POST   /api/boards/:boardId/swimlanes/:laneId/agents          Add assignment
  *   DELETE /api/boards/:boardId/swimlanes/:laneId/agents/:id      Remove assignment
  *
@@ -59,6 +59,7 @@ import {
   type AgentKind,
 } from '../../application/swimlane/resolveAssignedAgent';
 import { buildDefaultLaneRows, findOrCreateBoard } from '../../application/swimlane/findOrCreateBoard';
+import { deleteBoardRow, updateBoardRow } from '../../application/swimlane/boardWrites';
 import {
   adoptOrphanedTasks,
   countOrphanedTasks,
@@ -71,9 +72,10 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { forLane, laneAgentAssignments, laneAssignmentValues } from '../../application/swimlane/laneAgentAssignments';
+import { readBoardLaneAgents, readBoardTicketOwners, readLaneAgents } from '../../application/kanban/boardLiveReads';
+import { deleteLaneAssignments, insertLaneAssignment, laneAgentAssignments } from '../../application/swimlane/laneAgentAssignments';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
-import { invalidateBoardLaneOrdinals, invalidateSwimlaneOrdinals } from '../../application/swimlane/laneOrdinals';
+import { invalidateBoardLaneOrdinals } from '../../application/swimlane/laneOrdinals';
 import { bumpBoardLive, invalidateBoardLanesCache, readBoardDispatches, readBoardLanesCached, readBoardTickets } from '../../application/swimlane/boardReads';
 import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 
@@ -252,10 +254,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       maxConcurrentTickets: body.maxConcurrentTickets,
       needsAttentionLane: body.needsAttentionLane,
       seedDefaultLanes: body.seedDefaultLanes,
+      // Replaces the empty ordinal / routing maps a project with no board cached (see findOrCreateBoard).
+      env: c.env as Env,
     });
-    // A project with no board cached an EMPTY ordinal map; the new board's lanes
-    // must replace it or every ticket move reads "no lanes" until the TTL.
-    if (created) await invalidateSwimlaneOrdinals(c.env as Env, body.projectId);
 
     return c.json(board, created ? 201 : 200);
   });
@@ -312,9 +313,10 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       throw new ForbiddenError('Only a manager can change the approval requirement for this board');
     }
 
-    await db
-      .update(boards)
-      .set({
+    const row = await updateBoardRow(c.env as Env, db, {
+      tenantId,
+      boardId,
+      patch: {
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.maxConcurrentTickets !== undefined ? { maxConcurrentTickets: body.maxConcurrentTickets } : {}),
         ...(body.needsAttentionLane !== undefined ? { needsAttentionLane: body.needsAttentionLane } : {}),
@@ -328,10 +330,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.hideDoneItems !== undefined ? { hideDoneItems: body.hideDoneItems } : {}),
         ...(body.requireExecutionApproval !== undefined ? { requireExecutionApproval: body.requireExecutionApproval } : {}),
         updatedAt: new Date(),
-      })
-      .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
-
-    const [row] = await db.select().from(boards).where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+      },
+    });
     if (!row) return c.json({ error: 'Board not found' }, 404);
     return c.json(row);
   });
@@ -339,8 +339,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/:boardId', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
-    await db.delete(boards).where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
-    await Promise.all([invalidateBoardLanesCache(c.env as Env, tenantId, boardId), bumpBoardLive(tenantId, c.env as Env)]);
+    // The seam drops the lane-router / ordinal / lane-list caches the board feeds with the delete.
+    await deleteBoardRow(c.env as Env, db, { tenantId, boardId });
+    await bumpBoardLive(tenantId, c.env as Env);
     return c.body(null, 204);
   });
 
@@ -621,19 +622,33 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return (await loadLaneKey(tenantId, boardId, laneId)) != null;
   }
 
+  // Hosts that OWN open tickets on the board (a different fact from lane staffing),
+  // per lane, in one batched query — the board shows them as `via: 'ticket'` chips.
+  router.get('/:boardId/ticket-owners', async (c) => {
+    const tenantId = requireTenantId(c);
+    const boardId = c.req.param('boardId');
+    const ownersByLane = await readBoardTicketOwners(db, c.env as Env, tenantId, boardId);
+    if (!ownersByLane) return c.json({ error: 'Board not found' }, 404);
+    return c.json({ ownersByLane });
+  });
+
+  // Every lane's staffed agents in ONE query (the board used to request them lane by lane).
+  router.get('/:boardId/lane-agents', async (c) => {
+    const tenantId = requireTenantId(c);
+    const agentsByLane = await readBoardLaneAgents(db, c.env as Env, tenantId, c.req.param('boardId'));
+    if (!agentsByLane) return c.json({ error: 'Board not found' }, 404);
+    return c.json({ agentsByLane });
+  });
+
+  // Compat: shipped VSIX webview bundles still call this; remove once the rebuilt VSIX is released (ROADMAP).
   router.get('/:boardId/swimlanes/:laneId/agents', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
-    const rows = await db
-      .select()
-      .from(laneAgentAssignments)
-      // Lane staffing lives in the canonical `agent_assignments` since 1085; `forLane` is
-      // the ONE place the `scope = 'swimlane'` predicate is written.
-      .where(forLane(laneId, eq(laneAgentAssignments.tenantId, tenantId)))
-      .orderBy(asc(laneAgentAssignments.position));
-    return c.json({ assignments: rows });
+    const assignments = await readLaneAgents(db, c.env as Env, tenantId, boardId, laneId);
+    if (!assignments) return c.json({ error: 'Board not found' }, 404);
+    return c.json({ assignments });
   });
 
   router.post('/:boardId/swimlanes/:laneId/agents', async (c) => {
@@ -678,25 +693,22 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       throw err;
     }
 
-    const [row] = await db
-      .insert(laneAgentAssignments)
-      .values(laneAssignmentValues({
-        tenantId,
-        segmentId: c.get('segmentId') ?? null,
-        swimlaneId: laneId,
-        agentKind: resolved.agentKind,
-        agentRef: resolved.agentRef,
-        name: resolved.name,
-        role: resolved.role,
-        runtime: resolved.runtime,
-        target: resolved.target,
-        taskTemplate: body.taskTemplate ?? null,
-        requiredCapabilities:
-          body.requiredCapabilities != null ? JSON.stringify(body.requiredCapabilities) : null,
-        model: resolved.model,
-        position: body.position ?? 0,
-      }))
-      .returning();
+    const row = await insertLaneAssignment(db, c.env as Env, {
+      tenantId,
+      segmentId: c.get('segmentId') ?? null,
+      swimlaneId: laneId,
+      agentKind: resolved.agentKind,
+      agentRef: resolved.agentRef,
+      name: resolved.name,
+      role: resolved.role,
+      runtime: resolved.runtime,
+      target: resolved.target,
+      taskTemplate: body.taskTemplate ?? null,
+      requiredCapabilities:
+        body.requiredCapabilities != null ? JSON.stringify(body.requiredCapabilities) : null,
+      model: resolved.model,
+      position: body.position ?? 0,
+    });
     if (!row) throw new Error('agent_assignments insert returned no row');
 
     // ── THE MOMENT THE ANSWER CHANGES ───────────────────────────────────────────
@@ -753,13 +765,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = requireTenantId(c);
     const laneId = c.req.param('laneId');
     const id = c.req.param('id');
-    await db
-      .delete(laneAgentAssignments)
-      .where(forLane(
-        laneId,
-        eq(laneAgentAssignments.id, id),
-        eq(laneAgentAssignments.tenantId, tenantId),
-      ));
+    await deleteLaneAssignments(db, c.env as Env, tenantId, laneId, eq(laneAgentAssignments.id, id));
     return c.body(null, 204);
   });
 

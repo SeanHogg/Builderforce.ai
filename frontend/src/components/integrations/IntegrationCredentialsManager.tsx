@@ -7,6 +7,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { faultMessage } from '@/lib/apiClient';
 import { useConnectableCatalog, type ConnectableProvider } from '@/lib/connectableCatalog';
 import { CredentialKeyForm, type CredentialKeyEdit } from './CredentialKeyForm';
+import { canManageIntegrations } from './canManageIntegrations';
 import { credentialsPayload, type CredentialDraft } from './credentialDraft';
 import { btnPrimary, btnSubtle, panelCard } from './integrationStyles';
 /**
@@ -50,7 +51,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
   const tc = useTranslations('common');
   const t = useTranslations('integrationCredentials');
   const role = getStoredTenant()?.role;
-  const canManage = role === 'owner' || role === 'manager';
+  const canManage = canManageIntegrations(role);
   const { catalog, byId, loading: catalogLoading, failed: catalogFailed } = useConnectableCatalog();
 
   // A stable primitive keeps the loader in sync even though callers commonly pass

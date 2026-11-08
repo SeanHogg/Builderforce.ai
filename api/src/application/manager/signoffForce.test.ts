@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { coordinateTicket } from './coordinateTicket';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -13,7 +13,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  * on exactly the tickets it exists for: a ticket whose last runs failed has its reviewer
  * dispatch refused by the failure breaker inside `dispatchCloudRunForTask`, so the click
  * reported `dispatched: false` and no reviewer could ever be asked. `force` now rides
- * from the route to the role dispatch — route → coordinateTicket → maybeAutoRunOnLaneEntry
+ * from the route to the role dispatch — route → coordinateTicket → routeLaneEntry
  * → enforceLaneRequirements → requestRoleRun. Each link is a one-line pass-through, and a
  * one-line pass-through is exactly what silently disappears in a refactor.
  *
@@ -21,13 +21,13 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  * dispatcher unless the caller asked for the override").
  */
 
-vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: vi.fn() }));
+vi.mock('../swimlane/laneEntryTrigger', () => ({ routeLaneEntry: vi.fn() }));
 vi.mock('../swimlane/canonicalBoard', () => ({ findCanonicalBoard: vi.fn() }));
 vi.mock('../kanban/ticketParticipants', () => ({
   TicketParticipantsService: class { async listParticipants() { return []; } },
 }));
 
-const mockLaneEntry = vi.mocked(maybeAutoRunOnLaneEntry);
+const mockLaneEntry = vi.mocked(routeLaneEntry);
 const mockBoard = vi.mocked(findCanonicalBoard);
 
 const env = {} as Env;

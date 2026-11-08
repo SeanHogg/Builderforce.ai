@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Execution-landing guard - the status of an execution is written ONLY by `ExecutionRepository` (`land` for a terminal status, the
- * guarded `update` for a non-terminal one) or, for the bulk cron sweep, the reaper's own conditional batch UPDATE.
+ * guarded `update` for a non-terminal one, `failWhere` for the cron reaper's set-based batch).
  *
  * Any other write to `executions.status` - a drizzle `update(executions).set({ status ... })` (nested, conditional or computed
  * included) or a raw `UPDATE executions SET status =` (in a `sql` template too) - is a second writer: it can overwrite or resurrect a
@@ -15,10 +15,10 @@ import { fileURLToPath } from 'node:url';
 import { scanExecutionStatusWrites } from './lib/executionLandingScan.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'src');
-const ALLOWED_FILES = new Set(['infrastructure/repositories/ExecutionRepository.ts', 'application/runtime/staleExecutionReaper.ts']);
+const ALLOWED_FILES = new Set(['infrastructure/repositories/ExecutionRepository.ts']);
 /**
  * Explicit per-site exceptions for a NON-terminal raw writer that cannot go through the repository: `{ file, contains, reason }`, where
- * `contains` is a fragment of the flagged statement. Empty: every status writer today is the repository or the reaper.
+ * `contains` is a fragment of the flagged statement. Empty: the repository is the only status writer.
  */
 const ALLOWED_SITES = [];
 
@@ -40,9 +40,9 @@ for (const file of walk(ROOT)) {
 }
 
 if (violations.length > 0) {
-  console.error('Execution-landing guard: executions.status is written outside ExecutionRepository / the reaper:\n');
+  console.error('Execution-landing guard: executions.status is written outside ExecutionRepository:\n');
   for (const v of violations) console.error(`   ${v}`);
   console.error('\nTerminal: `landExecution` (application/runtime/executionLanding.ts) / `ExecutionRepository.land` - one winner, one outcome row.\nNon-terminal: `ExecutionRepository.update` (guarded: never resurrects a landed run).');
   process.exit(1);
 }
-console.log('Execution-landing guard OK - no executions.status write outside ExecutionRepository / the reaper.');
+console.log('Execution-landing guard OK - no executions.status write outside ExecutionRepository.');

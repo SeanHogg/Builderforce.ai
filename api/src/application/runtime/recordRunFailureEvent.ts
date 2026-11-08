@@ -3,21 +3,34 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Execution } from '../../domain/execution/Execution';
 import { toolAuditEvents } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { parseCloudAgentRef } from './cloudDispatch';
+import { redactAuditRow } from '../../infrastructure/security/redactSecrets';
+
+/** The failed run as the trace event reads it (an `Execution`, or a set-based UPDATE's RETURNING row). */
+export interface FailedRunEventSource {
+  tenantId: number;
+  agentHostId: number | null;
+  payload: string | null;
+  executionId: number;
+  errorMessage: string | null;
+}
 
 /**
- * Cloud-agent ref pinned in an execution's JSON payload, if any. Cloud runs carry
- * no `cloud_agent_ref` column (attribution lives in the payload / the ticket's
- * assigned agent), so we recover it from the payload to attribute the failure
- * event to the same chip the run's other telemetry is attributed to.
+ * The `tool_audit_events` row (minus `ts`) for a run that terminally failed - the ONE shape, so the per-run writer below and the
+ * reaper's multi-row insert cannot drift. Cloud runs carry no `cloud_agent_ref` column (attribution lives in the payload), so the
+ * ref is recovered from it to attribute the event to the same chip the run's other telemetry is attributed to.
  */
-function cloudRefFromPayload(payload: string | null): string | null {
-  if (!payload) return null;
-  try {
-    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
-    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : null;
-  } catch {
-    return null;
-  }
+export function runFailureEventRow(r: FailedRunEventSource, toolName = 'run.failed') {
+  return {
+    tenantId:      r.tenantId,
+    agentHostId:   r.agentHostId,
+    cloudAgentRef: parseCloudAgentRef(r.payload ?? undefined) ?? null,
+    executionId:   r.executionId,
+    sessionKey:    `exec:${r.executionId}`,
+    toolName,
+    category:      'error',
+    result:        r.errorMessage ?? 'Run failed',
+  };
 }
 
 /**
@@ -26,25 +39,22 @@ function cloudRefFromPayload(payload: string | null): string | null {
  *
  * The Logs/Timeline are derived *only* from `tool_audit_events`; a failure that
  * is written solely to `executions.error_message` (orphan-reap, in-loop FAILED,
- * the stale-run reaper) is invisible there — the timeline just stops at the last
+ * the stale-run reaper) is invisible there - the timeline just stops at the last
  * successful tool call. Emitting a `run.failed` event (category `error`) closes
  * that gap with one source of truth, keyed by `execution_id` (the per-run trace
  * key) so the embedded per-execution Logs/Timeline pick it up regardless of how
- * the run was attributed. Best-effort — telemetry must never break a transition.
+ * the run was attributed. Best-effort - telemetry must never break a transition.
  */
 export async function recordRunFailureEvent(db: Db, e: Execution): Promise<void> {
   try {
-    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
-      tenantId:      e.tenantId,
-      agentHostId:   e.agentHostId ?? null,
-      cloudAgentRef: cloudRefFromPayload(e.payload),
-      executionId:   e.id,
-      sessionKey:    `exec:${e.id}`,
-      toolName:      'run.failed',
-      category:      'error',
-      result:        e.errorMessage ?? 'Run failed',
-      ts:            new Date(),
-    });
+    // Allowed direct insert (check:tool-audit-writes): the row comes from `runFailureEventRow`, which will redact itself; until then `redactAuditRow` covers it.
+    await runTelemetryDatabase(db).insert(toolAuditEvents).values(redactAuditRow({
+      ...runFailureEventRow({
+        tenantId: Number(e.tenantId), agentHostId: e.agentHostId != null ? Number(e.agentHostId) : null,
+        payload: e.payload, executionId: Number(e.id), errorMessage: e.errorMessage,
+      }),
+      ts: new Date(),
+    }));
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/recordRunFailureEvent.ts", operation: "recordRunFailureEvent", context: { logMessage: '[run-failure-event] telemetry append failed', details: {
       tenantId: Number(e.tenantId),

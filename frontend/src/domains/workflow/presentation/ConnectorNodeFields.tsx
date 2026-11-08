@@ -5,6 +5,7 @@ import { connectorsApi, type CatalogAction, type CatalogConnector } from '@/lib/
 import { faultMessage } from '@/lib/apiClient';
 // The four styles every live-catalog step editor is drawn with, shared so this one
 // and the canvas-composition one cannot drift apart inside the same form.
+import { StepConnectorConnectionPicker } from './StepConnectorConnectionPicker';
 import { hintStyle, inputStyle, labelStyle, optionStyle } from './stepFieldStyles';
 /**
  * The `connector` node's editor — two pickers and an input template.
@@ -68,7 +69,7 @@ export function ConnectorNodeFields({ config, setConfig, patchConfig }: Props) {
   /** Switching connector clears the action: an action key from the previous one
    *  would not exist here, and a node pointing at a missing action fails at run
    *  time rather than showing anything wrong in the editor. */
-  const chooseConnector = (key: string) => patchConfig({ connector: key, action: '', input: '{}' });
+  const chooseConnector = (key: string) => patchConfig({ connector: key, action: '', input: '{}', connectionId: undefined });
 
   const chooseAction = (key: string, next: CatalogAction | undefined) =>
     patchConfig({
@@ -157,7 +158,14 @@ export function ConnectorNodeFields({ config, setConfig, patchConfig }: Props) {
       {action?.mutates && <div style={{ ...hintStyle, color: 'var(--warning)' }}>{t('mutatesWarning')}</div>}
 
       {connector && connector.authFields.length > 0 && (
-        <div style={hintStyle}>{t('connectionHint', { name: connector.name })}</div>
+        <>
+          <StepConnectorConnectionPicker
+            connectorKey={connector.key}
+            value={typeof config.connectionId === 'string' ? config.connectionId : ''}
+            onChange={(id) => setConfig('connectionId', id || undefined)}
+          />
+          <div style={hintStyle}>{t('connectionHint', { name: connector.name })}</div>
+        </>
       )}
 
       {error && <div style={{ ...hintStyle, color: 'var(--danger)' }}>{error}</div>}

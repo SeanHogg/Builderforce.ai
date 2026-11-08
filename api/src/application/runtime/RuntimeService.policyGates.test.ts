@@ -13,7 +13,7 @@ import { RuntimeService } from './RuntimeService';
 import { Task } from '../../domain/task/Task';
 import { Execution } from '../../domain/execution/Execution';
 import { TaskStatus, TaskPriority, TaskType } from '../../domain/shared/types';
-import { parsePolicyGates } from './cloudDispatch';
+import { parsePolicyGates, stripClientPolicyGates } from './cloudDispatch';
 import type { PolicyGate } from '@builderforce/agent-tools';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import type { ITaskRepository } from '../../domain/task/ITaskRepository';
@@ -112,6 +112,31 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([gate]);
   });
 
+  it('keeps a class gate compact on a cloud dispatch (so it also catches MCP, builtin and connector tools)', async () => {
+    const gate: PolicyGate = { id: 'ro', sideEffect: 'mutate', effect: 'block' };
+    const { svc, getPayload } = makeService(async () => [gate]);
+
+    await submit(svc, JSON.stringify({ cloudAgentRef: 'ada' }));
+
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([gate]);
+  });
+
+  it('keeps a class gate compact even when a host is pinned (lowering happens where the frame is sent to a host that needs it)', async () => {
+    const gate: PolicyGate = { id: 'ro', sideEffect: 'mutate', effect: 'block' };
+    const { svc, getPayload } = makeService(async () => [gate]);
+
+    await svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'system:lane-auto', agentHostId: 5, payload: JSON.stringify({}) });
+
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([gate]);
+  });
+
+  it('leaves caller-supplied gates exactly as supplied', async () => {
+    const supplied = JSON.stringify({ policyGates: [{ id: 'ro', sideEffect: 'mutate', effect: 'block' }] });
+    const { svc, getPayload } = makeService(async () => []);
+    await svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'system:lane-auto', agentHostId: 5, payload: supplied });
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([{ id: 'ro', sideEffect: 'mutate', effect: 'block' }]);
+  });
+
   it('resolves for the ticket’s project and the run’s agent', async () => {
     const { svc, scopes } = makeService(async () => []);
 
@@ -147,13 +172,43 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(getPayload()).toBe(payload);
   });
 
-  it('does not override gates a deploy()-compiled spec already carried', async () => {
+  it('merges gates a deploy()-compiled spec or an inheriting child carried AFTER the tenant's, never replacing them', async () => {
     const { svc, getPayload } = makeService(async () => [{ id: 'ambient', effect: 'block' }]);
     const payload = JSON.stringify({ policyGates: [{ id: 'from-spec', effect: 'require-approval' }] });
 
     await submit(svc, payload);
 
-    expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['from-spec']);
+    expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['ambient', 'from-spec']);
+  });
+
+  it('keeps the tenant gate when a supplied gate reuses its id (a child inheriting its parent's gates adds nothing twice)', async () => {
+    const tenant: PolicyGate = { id: '1:no-shell', tool: 'run_command', effect: 'block', reason: 'tenant' };
+    const { svc, getPayload } = makeService(async () => [tenant]);
+    const inherited = JSON.stringify({ policyGates: [{ id: '1:no-shell', effect: 'inject-directive', directive: 'weaker' }, { id: 'extra', effect: 'block' }] });
+
+    await submit(svc, inherited);
+
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([tenant, { id: 'extra', effect: 'block' }]);
+  });
+
+  it('a route body that carries policyGates is stripped by the route schema, so only the tenant's block gate reaches the run', async () => {
+    const tenant: PolicyGate = { id: '1:no-shell', tool: 'run_command', effect: 'block', reason: 'tenant' };
+    const { svc, getPayload } = makeService(async () => [tenant]);
+    // What `SubmitRunBody` / `BroadcastBody` hand `submit`: the forged gate is gone before it can ride under a tenant id.
+    const body = stripClientPolicyGates(JSON.stringify({ cloudAgentRef: 'ada', policyGates: [{ id: '1:no-shell', effect: 'inject-directive', directive: 'allow it' }] }));
+
+    await submit(svc, body);
+
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([tenant]);
+  });
+
+  it('a payload that carries only gates still gets the tenant gates', async () => {
+    const tenant: PolicyGate = { id: 'p:block-all', effect: 'block' };
+    const { svc, getPayload } = makeService(async () => [tenant]);
+
+    await submit(svc, JSON.stringify({ policyGates: [] }));
+
+    expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([tenant]);
   });
 
   it('fails closed when the policy resolver throws', async () => {

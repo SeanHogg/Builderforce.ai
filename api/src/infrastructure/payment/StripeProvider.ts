@@ -42,7 +42,7 @@ import type {
   CardValidationSessionResult,
   WebhookEvent,
 } from './PaymentProvider';
-import { PaymentNotConfiguredError } from './PaymentProvider';
+import { PaymentNotConfiguredError, WebhookUpstreamError } from './PaymentProvider';
 import { checkoutSessionParams, type CheckoutLineItem, type HostedCheckoutDescriptor } from './stripeCheckoutSession';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import { timingSafeEqual } from '../crypto/constantTime';
@@ -929,9 +929,59 @@ export class StripeProvider implements PaymentProvider {
         };
       }
 
+      /**
+       * Money went back to the buyer of a pay-once purchase: a FULL refund, or a dispute
+       * that was LOST. The charge and dispute carry no session, so the purchase's signed
+       * metadata (mirrored onto the payment intent at checkout) is read back from the
+       * intent. A charge that is not ours (no `purchaseKind`) is acknowledged and ignored.
+       *
+       * Disputes reverse on exactly ONE event, `charge.dispute.closed` with status `lost`:
+       * `created` only opens a dispute the merchant may still win (so reversing there would
+       * have to be un-done), and `funds_withdrawn` also fires for disputes later won back
+       * (`funds_reinstated`). A won dispute therefore needs no restore at all.
+       */
+      case 'charge.refunded':
+      case 'charge.dispute.closed': {
+        if (event.type === 'charge.refunded' && obj['refunded'] !== true) return null; // partial refund
+        if (event.type === 'charge.dispute.closed' && obj['status'] !== 'lost') return null;
+        const intentId = obj['payment_intent'];
+        if (typeof intentId !== 'string' || !intentId) return null;
+        const meta = await this.fetchPaymentIntentMetadata(intentId);
+        const kind = meta?.['purchaseKind'];
+        if (!meta || !kind) return null;
+        const rawTenantId = Number(meta['buyerTenantId'] ?? meta['tenantId']);
+        return {
+          type: 'purchase.reversed',
+          purchaseKind: kind,
+          metadata: meta,
+          ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+          externalCustomerId: typeof obj['customer'] === 'string' ? obj['customer'] : '',
+          externalSubscriptionId: '',
+          raw: event,
+        };
+      }
+
       default:
         return null; // unhandled event type — not an error
     }
+  }
+
+  /** The signed metadata stamped on a payment intent at checkout, or null when unreadable. */
+  private async fetchPaymentIntentMetadata(intentId: string): Promise<Record<string, string> | null> {
+    let res: Response;
+    try {
+      res = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(intentId)}`, {
+        headers: { Authorization: `Bearer ${this.config.secretKey}` },
+      });
+    } catch (cause) {
+      throw new WebhookUpstreamError('Stripe payment_intent lookup failed (network)', { cause });
+    }
+    if (res.status === 404) return null; // not an intent of ours
+    // Any other failure THROWS (a distinct type, so the route answers 500, not "Invalid signature")
+    // and Stripe redelivers: a reversal swallowed here would leave a refunded purchase usable.
+    if (!res.ok) throw new WebhookUpstreamError(`Stripe payment_intent lookup failed: ${res.status}`);
+    const body = await res.json() as { metadata?: Record<string, string> };
+    return body.metadata ?? null;
   }
 
   /**

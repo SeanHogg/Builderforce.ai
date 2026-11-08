@@ -212,6 +212,8 @@ export interface PostingDistribution {
   postingId: string;
   connectorKey: string;
   board: string;
+  /** False when the board can never give a posting a per-job public link (Indeed). */
+  publicLinkSupported: boolean;
   connectionId: string | null;
   externalId: string | null;
   url: string | null;
@@ -230,6 +232,29 @@ export interface DistributionBoard {
   icon: string;
   connectionId: string;
   connectionName: string;
+}
+
+/** A connected board whose existing jobs can be linked to a posting. */
+export interface LinkableBoard { connectorKey: string; name: string; icon: string }
+
+/** One job a board lists. */
+export interface BoardJob { externalId: string; title: string; state: string | null; url: string | null }
+
+/** What one "Import applicants" press did, per board. */
+export interface ApplicantImportResult {
+  imported: number;
+  /** True when a cap stopped any board before it was exhausted — run it again. */
+  more: boolean;
+  boards: Array<{
+    connectorKey: string;
+    fetched: number;
+    imported: number;
+    /** Applicants whose own write failed; the rest of the board still imported. */
+    failedApplicants: number;
+    unsupported: boolean;
+    more: boolean;
+    error: string | null;
+  }>;
 }
 
 /** What one board did with one press of Distribute. */
@@ -453,7 +478,7 @@ export const atsApi = {
       post('/api/ats/postings', body),
     /** Where the posting is published, and the connected boards it could go to next.
      *  Uncached, like the server read: it is asked straight after a publish. */
-    distributions: (postingId: string): Promise<{ distributions: PostingDistribution[]; boards: DistributionBoard[] }> =>
+    distributions: (postingId: string): Promise<{ distributions: PostingDistribution[]; boards: DistributionBoard[]; linkBoards?: LinkableBoard[] }> =>
       apiRequest(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions`),
     /** Publish to the chosen boards. Answers with each board's verdict AND the posting's
      *  whole publication list, so the caller redraws from the response that wrote it. */
@@ -462,6 +487,15 @@ export const atsApi = {
       body: { connectorKeys: string[]; listing?: DistributionListing },
     ): Promise<{ outcomes: DistributionOutcome[]; distributions: PostingDistribution[] }> =>
       post(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions`, body),
+    /** The jobs a connected board lists, for the "link an existing board job" picker. */
+    boardJobs: (postingId: string, connectorKey: string): Promise<{ jobs: BoardJob[]; capped: boolean }> =>
+      apiRequest(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions/${encodeURIComponent(connectorKey)}/board-jobs`),
+    /** Record that the posting IS this board job. Answers with the posting's publication list. */
+    linkBoardJob: (postingId: string, body: { connectorKey: string; externalId: string }): Promise<{ distributions: PostingDistribution[] }> =>
+      post(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions/link`, body),
+    /** Pull the applicants each confirmed board holds into the ATS. Idempotent. */
+    importApplicants: (postingId: string): Promise<ApplicantImportResult> =>
+      post(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions/import`, {}),
   },
 
   pipelines: (): Promise<AtsPipelineSummary[]> =>

@@ -12,6 +12,7 @@
 import * as vscode from "vscode";
 import { recallProjectFacts, rememberProjectFact } from "./bfApi";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 import { staleNote, staleReferences } from "./memoryStaleness";
 
 /** Facts a single `recall_facts` call hands back by default. */
@@ -47,7 +48,7 @@ export function cognitionToolDefs(secrets: vscode.SecretStorage, projectId: numb
         },
         required: ["query"],
       },
-      mutating: false,
+      mutating: toolMutating("recall_facts", { mutates: false }),
       execute: async (args, root) => {
         if (!projectId) return JSON.stringify({ ok: false, error: "Select a project first — memory is scoped to the active project." });
         const query = String(args.query ?? "").trim();
@@ -83,7 +84,7 @@ export function cognitionToolDefs(secrets: vscode.SecretStorage, projectId: numb
         },
         required: ["key", "content"],
       },
-      mutating: false,
+      mutating: toolMutating("remember_fact", { mutates: true }),
       execute: async (args) => {
         if (!projectId) return "Select a project first — memory is scoped to the active project.";
         const ok = await rememberProjectFact(secrets, projectId, String(args.key ?? ""), String(args.content ?? ""));

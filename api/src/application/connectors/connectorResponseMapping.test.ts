@@ -95,7 +95,8 @@ describe('the hiring catalog', () => {
   it('declares where every board returns its posting id', () => {
     // Every board ships `create_posting`, and every one says where its id comes back —
     // otherwise the distribute use case could only ever record a failure for it.
-    for (const manifest of HIRING_CONNECTORS) {
+    // Workable is import-only: its public API creates no jobs, so it ships no publish action.
+    for (const manifest of HIRING_CONNECTORS.filter((m) => m.key !== 'workable')) {
       const action = manifest.actions.find((candidate) => candidate.key === 'create_posting');
       expect(action, manifest.key).toBeDefined();
       expect(action?.response?.externalId?.length, manifest.key).toBeGreaterThan(0);
@@ -114,7 +115,7 @@ describe('the hiring catalog', () => {
       'linkedin-jobs': { data: { elements: [{ id: 'urn:li:simpleJobPostingTask:3', status: 201 }] } },
       'job-feed': { data: { id: 'posting-a', url: 'https://careers.acme.test/jobs/posting-a' } },
     };
-    for (const manifest of HIRING_CONNECTORS) {
+    for (const manifest of HIRING_CONNECTORS.filter((m) => m.key !== 'workable')) {
       const action = manifest.actions.find((candidate) => candidate.key === 'create_posting');
       const answer = answers[manifest.key];
       expect(answer, `no fixture for ${manifest.key}`).toBeDefined();

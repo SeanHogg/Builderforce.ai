@@ -25,6 +25,7 @@ import { buildGatewaySummarizer } from '../llm/gatewaySummarizer';
 import { readRepoFile } from '../repos/readRepoContents';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { cloudFinishPorts } from './cloudAgent/finishGates';
+import { earlyDraftPrFor } from './cloudAgent/earlyDraftPr';
 import type { WrittenFileHashes } from './cloudAgent/writtenFileHashes';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { pauseExecutionForQuestion } from './executionPause';
@@ -46,6 +47,8 @@ export interface CloudHookDeps {
   writtenPaths?: Set<string>;
   /** The run's sandbox, when it has one (the project's own fast checks judge a turn's edits). */
   sandbox?: RunSandbox;
+  /** The ticket's title, for a draft PR opened early when the run has no sandbox. */
+  taskTitle?: string;
   ladder: TierLadder;
   /** The D2 features of the step about to be judged, from the transcript as it stands. */
   features: (step: number, messages: readonly unknown[]) => DifficultyFeatures;
@@ -102,6 +105,9 @@ export function cloudPolicyModules(d: CloudHookDeps): Partial<PolicyModules> {
     }
     : undefined;
 
+  // The early draft PR, for a run whose branch CI is its only build (none for a run with a sandbox or a delegated child).
+  const noSandboxPr = earlyDraftPrFor({ db, run, repoCtx, hasSandbox: !!d.sandbox, delegated: d.delegated, ...(d.taskTitle ? { taskTitle: d.taskTitle } : {}) });
+
   let live: RunState | undefined;
   const liveState = (): RunState => {
     if (!live) throw new Error('the guards ran before the agent named the run state');
@@ -128,6 +134,6 @@ export function cloudPolicyModules(d: CloudHookDeps): Partial<PolicyModules> {
     compaction: createCompactionHook({ summarize: (text) => buildGatewaySummarizer(env)(text, { tenantId: run.tenantId }) }),
     guards: bindLiveState(createGuardsHook(guardPorts), (state) => { live = state; d.onState?.(state); }),
     // The same couplings the cloud's `evaluateFinishGates` entry binds (one definition: `cloudAgent/finishGates`).
-    finish: createFinishHook(cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) })),
+    finish: createFinishHook(cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(noSandboxPr ? { noSandboxPr } : {}), ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) })),
   };
 }

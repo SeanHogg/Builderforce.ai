@@ -6698,7 +6698,7 @@ var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain
 var import_jsx_runtime56 = require("react/jsx-runtime");
 var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
-  const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
+  const { textareaRef, value, setValue, participants, onPick, labels, disabled, detail } = opts;
   const [token, setToken] = (0, import_react48.useState)(null);
   const [index, setIndex] = (0, import_react48.useState)(0);
   const matches = (0, import_react48.useMemo)(
@@ -6765,10 +6765,10 @@ function useMentionAutocomplete(opts) {
         return false;
     }
   }, [open, matches, index, choose]);
-  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime56.jsx)(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
+  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime56.jsx)(MentionPopup, { matches, index, labels, detail, onHover: setIndex, onPick: choose }) : null;
   return { onKeyDown, onSelect: recompute, popup, open };
 }
-function MentionPopup({ matches, index, labels, onHover, onPick }) {
+function MentionPopup({ matches, index, labels, detail, onHover, onPick }) {
   return /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime56.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? DEFAULT_MENTION_LABELS.title, style: POP.list, children: [
     labels?.title && /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
     matches.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime56.jsxs)(
@@ -6784,7 +6784,10 @@ function MentionPopup({ matches, index, labels, onHover, onPick }) {
         style: POP.item(i === index),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime56.jsx)(Avatar, { name: m.name, kind: m.kind, size: 20 }),
-          /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("span", { style: POP.name, children: m.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime56.jsxs)("span", { style: POP.nameCol, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("span", { style: POP.name, children: m.name }),
+            detail?.(m) && /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("span", { style: POP.detail, children: detail(m) })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? DEFAULT_MENTION_LABELS.agent : labels?.human ?? DEFAULT_MENTION_LABELS.human })
         ]
       },
@@ -6815,7 +6818,9 @@ var POP = {
     boxShadow: "0 8px 26px rgba(0,0,0,0.28)"
   },
   group: { padding: "4px 8px 5px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: T.muted },
-  name: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text, fontSize: 13, fontWeight: 600 },
+  nameCol: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" },
+  name: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text, fontSize: 13, fontWeight: 600 },
+  detail: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.muted, fontSize: 11 },
   kind: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", color: T.muted, flexShrink: 0 },
   item: (active) => ({
     display: "flex",
@@ -10256,7 +10261,8 @@ function ComposerTextBoxInner(props) {
     participants: mentions?.participants ?? NO_PARTICIPANTS,
     onPick: mentions?.onPick ?? noop,
     disabled: disabled || pickersDisabled,
-    labels: mentionLabels
+    labels: mentionLabels,
+    detail: mentions?.detail
   });
   const ticket = useTicketAutocomplete({
     textareaRef,

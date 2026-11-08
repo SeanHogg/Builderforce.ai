@@ -106,6 +106,7 @@
       "@builderforce/provider-connect": ["../../../packages/provider-connect/src/index.ts"],
       "@builderforce/run-policy": ["../../../packages/run-policy/src/index.ts"],
       "@builderforce/spend-contract": ["../../../packages/spend-contract/src/index.ts"],
+      "@builderforce/voice-provenance": ["../../../packages/voice-provenance/src/index.ts"],
       "@builderforce/agent-stall": ["../../../packages/agent-stall/src/index.ts"],
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/node-desktop": ["../../../packages/agent-tools/src/node-desktop.ts"],

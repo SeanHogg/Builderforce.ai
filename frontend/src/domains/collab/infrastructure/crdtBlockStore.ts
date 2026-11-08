@@ -1,4 +1,5 @@
 import * as Y from 'yjs';
+import { admitStrokes, patchedStroke, retainStrokes, type CanvasStroke } from '@/lib/canvasDrawing';
 import { emptyBlock, type BlockAttrs, type DocumentBlock } from '../domain/blockDocument';
 import { diffText } from '../domain/textDiff';
 import { indexOfBlock, moveTarget, type BlockStore } from '../domain/blockStore';
@@ -52,19 +53,94 @@ export function toYBlock(block: DocumentBlock): Y.Map<unknown> {
   const text = new Y.Text();
   if (block.text) text.insert(0, block.text);
   map.set('text', text);
-  map.set('attrs', { ...block.attrs });
+  const { strokes, ...rest } = block.attrs;
+  map.set('attrs', rest);
+  // A drawing's strokes are their OWN shared array (see STROKES_KEY), never part of the attrs value.
+  // Every drawing block is born with its array, so no operation ever has to create one concurrently.
+  if (strokes || block.type === 'drawing') map.set(STROKES_KEY, strokesToYArray(strokes ?? []));
   return map;
 }
+
+/**
+ * ── STROKES ARE A `Y.Array` OF `Y.Map`s, NOT PART OF `attrs` ──────────────────
+ * `attrs` is last-write-wins as a unit, which is right for an upload and wrong for a
+ * drawing: two people drawing at once would each write the whole stroke list and one
+ * set of strokes would vanish. A drawing block therefore keeps `strokes` as a sibling
+ * `Y.Array` in the block's map, and EACH STROKE is itself a `Y.Map`
+ * (`id, tool, points, stroke, strokeWidth` and, for a text stroke, a `Y.Text`).
+ *
+ * - An append is an array insert; an erase deletes that stroke's item. Concurrent edits
+ *   merge to the union, and an erase only removes strokes the eraser had seen.
+ * - An UPDATE mutates the stroke's map in place (text through its `Y.Text`), never
+ *   delete+insert, so two people typing in one text stroke converge on ONE stroke, and
+ *   an update that races an erase cannot resurrect the erased stroke.
+ *
+ * Strokes are reachable ONLY through the stroke ops (and initial block construction);
+ * `setAttrs` ignores them, so there is no last-write-wins path to the stroke list.
+ */
+const STROKES_KEY = 'strokes';
+
+type StrokeMap = Y.Map<unknown>;
+
+function strokeToYMap(stroke: CanvasStroke): StrokeMap {
+  const map = new Y.Map<unknown>();
+  map.set('id', stroke.id);
+  map.set('tool', stroke.tool);
+  map.set('points', stroke.points);
+  map.set('stroke', stroke.stroke);
+  map.set('strokeWidth', stroke.strokeWidth);
+  if (stroke.tool === 'text') {
+    const text = new Y.Text();
+    if (stroke.text) text.insert(0, stroke.text);
+    map.set('text', text);
+  }
+  return map;
+}
+
+/**
+ * Copies an EXISTING stroke list (seed, replace, move): sanitised and de-duplicated by `retainStrokes`,
+ * which keeps the NEWEST strokes over the read ceiling. New appends go through `admitStrokes` instead.
+ */
+function strokesToYArray(strokes: readonly CanvasStroke[]): Y.Array<StrokeMap> {
+  const array = new Y.Array<StrokeMap>();
+  array.push(retainStrokes(strokes).map(strokeToYMap));
+  return array;
+}
+
+const readStroke = (map: StrokeMap): CanvasStroke => map.toJSON() as CanvasStroke;
 
 /** One shared map, read back as a plain block. */
 export function fromYBlock(map: Y.Map<unknown>): DocumentBlock {
   const text = map.get('text');
+  const attrs: BlockAttrs = { ...((map.get('attrs') as BlockAttrs | undefined) ?? {}) };
+  const shared = map.get(STROKES_KEY);
+  if (shared instanceof Y.Array) attrs.strokes = (shared.toArray() as StrokeMap[]).map(readStroke);
   return {
     id: String(map.get('id') ?? ''),
     type: (map.get('type') as DocumentBlock['type']) ?? 'text',
     text: text instanceof Y.Text ? text.toString() : String(text ?? ''),
-    attrs: { ...((map.get('attrs') as BlockAttrs | undefined) ?? {}) },
+    attrs,
   };
+}
+
+/**
+ * The block's shared stroke array. A drawing block is born with one, so a missing array
+ * is unexpected; the op still has to land, so it is created here — and logged, because
+ * two peers doing this at once would each create their own and one would win.
+ */
+function sharedStrokes(map: Y.Map<unknown>): Y.Array<StrokeMap> {
+  const existing = map.get(STROKES_KEY);
+  if (existing instanceof Y.Array) return existing as Y.Array<StrokeMap>;
+  console.warn('[blockStore] drawing block had no strokes array; creating it', { blockId: map.get('id') });
+  const created = new Y.Array<StrokeMap>();
+  map.set(STROKES_KEY, created);
+  return created;
+}
+
+/** The map for one stroke id, or null once it has been erased. */
+function strokeMapFor(shared: Y.Array<StrokeMap>, strokeId: string): StrokeMap | null {
+  for (const item of shared) if (item.get('id') === strokeId) return item;
+  return null;
 }
 
 /**
@@ -138,8 +214,68 @@ export function createCrdtBlockStore(doc: Y.Doc, origin: unknown = 'local'): Blo
     setAttrs(id, attrs) {
       const map = mapFor(id);
       if (!map) return;
+      // `strokes` is deliberately dropped: the stroke list changes only through the stroke ops.
+      const { strokes: _ignored, ...plain } = attrs;
       const current = (map.get('attrs') as BlockAttrs | undefined) ?? {};
-      doc.transact(() => map.set('attrs', { ...current, ...attrs }), origin);
+      doc.transact(() => map.set('attrs', { ...current, ...plain }), origin);
+    },
+
+    appendStrokes(id, strokes) {
+      const map = mapFor(id);
+      if (!map || strokes.length === 0) return;
+      doc.transact(() => {
+        const shared = sharedStrokes(map);
+        // Sanitised, given unique ids and held to MAX_STROKES against what is there now.
+        const admitted = admitStrokes((shared.toArray() as StrokeMap[]).map(readStroke), strokes);
+        if (admitted.length > 0) shared.push(admitted.map(strokeToYMap));
+      }, origin);
+    },
+
+    removeStrokes(id, strokeIds) {
+      const map = mapFor(id);
+      if (!map || strokeIds.length === 0) return;
+      doc.transact(() => {
+        const shared = sharedStrokes(map);
+        // Back to front so a delete never shifts an index still to be visited.
+        for (let index = shared.length - 1; index >= 0; index -= 1) {
+          const stroke = shared.get(index).get('id');
+          if (typeof stroke === 'string' && strokeIds.includes(stroke)) shared.delete(index, 1);
+        }
+      }, origin);
+    },
+
+    updateStroke(id, strokeId, patch) {
+      const map = mapFor(id);
+      if (!map) return;
+      doc.transact(() => {
+        // In place: a stroke erased in the meantime is simply not found, so it stays erased.
+        const item = strokeMapFor(sharedStrokes(map), strokeId);
+        if (!item) return;
+        const all = (sharedStrokes(map).toArray() as StrokeMap[]).map(readStroke);
+        const next = patchedStroke(readStroke(item), patch, all);
+        if (!next) return;
+        // The tool and id are the stroke's identity; everything else may change.
+        if (JSON.stringify(item.get('points')) !== JSON.stringify(next.points)) item.set('points', next.points);
+        if (item.get('stroke') !== next.stroke) item.set('stroke', next.stroke);
+        if (item.get('strokeWidth') !== next.strokeWidth) item.set('strokeWidth', next.strokeWidth);
+        if (next.tool === 'text') {
+          const shared = item.get('text');
+          if (shared instanceof Y.Text) {
+            const edit = diffText(shared.toString(), next.text ?? '');
+            if (edit?.remove) shared.delete(edit.at, edit.remove);
+            if (edit?.insert) shared.insert(edit.at, edit.insert);
+          }
+        }
+      }, origin);
+    },
+
+    clearStrokes(id) {
+      const map = mapFor(id);
+      if (!map) return;
+      doc.transact(() => {
+        const shared = sharedStrokes(map);
+        if (shared.length > 0) shared.delete(0, shared.length);
+      }, origin);
     },
 
     insertAfter(afterId, block) {
@@ -169,6 +305,7 @@ export function createCrdtBlockStore(doc: Y.Doc, origin: unknown = 'local'): Blo
       // therefore a NEW sequence, so a peer typing into this block at the moment it
       // moves loses those keystrokes. That is the documented cost of a reorder, and
       // it is why moving is a button rather than something a drag does continuously.
+      // The stroke array is re-created too, so a peer's concurrent stroke edits on this block are lost the same way (accepted).
       const copy = toYBlock(fromYBlock(source));
       doc.transact(() => {
         array.delete(target.from, 1);

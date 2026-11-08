@@ -25,7 +25,7 @@
  */
 
 /** The `ledger_entries.account_kind` values a SELLER's balance can be held under. */
-export type LedgerAccountKind = 'user' | 'tenant';
+export type LedgerAccountKind = 'user' | 'tenant' | 'board';
 
 /** One ledger account — the `(account_kind, account_ref)` pair as one value. */
 export interface LedgerAccount {
@@ -45,3 +45,9 @@ export const userAccount = (userId: string): LedgerAccount => ({ kind: 'user', r
  * user id in any deployment whose user ids are numeric.
  */
 export const workspaceAccount = (tenantId: number): LedgerAccount => ({ kind: 'tenant', ref: `tenant:${tenantId}` });
+
+/**
+ * A BOARD's earned budget. A board is a uuid, unique across tenants, so the ref
+ * needs no prefix; the ledger row's own `tenant_id` still scopes every read.
+ */
+export const boardAccount = (boardId: string): LedgerAccount => ({ kind: 'board', ref: boardId });

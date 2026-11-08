@@ -3178,6 +3178,12 @@ interface UseMentionAutocompleteOptions {
     /** Called with the participant the user picked — wire to `useRecipientChoice`'s `choose`. */
     onPick: (r: DirectedRecipient) => void;
     labels?: MentionLabels;
+    /**
+     * An optional one-line signal shown under a participant's name (the host decides what —
+     * the web app passes a trait summary). Called per rendered row, so it must be a cheap
+     * lookup into data the host already holds, never a fetch.
+     */
+    detail?: (r: DirectedRecipient) => string | undefined;
     /** Suppress the picker entirely (e.g. while a run is streaming). */
     disabled?: boolean;
 }
@@ -4772,7 +4778,7 @@ interface BrainComposerBaseProps {
         onChange: (on: boolean) => void;
     };
     addMenuItems?: readonly ComposerAddMenuItem[];
-    mentions?: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick'>;
+    mentions?: Pick<UseMentionAutocompleteOptions, 'participants' | 'onPick' | 'detail'>;
     tickets?: Pick<UseTicketAutocompleteOptions, 'tickets' | 'onPick'>;
     /** Close the @-mention and #-ticket pickers while the box stays open (e.g. mid-run
      *  with nobody else to address). Always closed while `disabled`. */

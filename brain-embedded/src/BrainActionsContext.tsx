@@ -17,6 +17,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrainToolSpec } from './streamChatCompletion';
 import { toolSpecsFor } from './toolSpecs';
+import { isMutatingTool } from '@builderforce/agent-tools';
 
 /** A capability a consumer exposes to the Brain (the MCP extension unit). */
 export interface BrainAction<A = unknown, R = unknown> {
@@ -29,9 +30,11 @@ export interface BrainAction<A = unknown, R = unknown> {
    * Whether running this action changes state — drives the host's
    * confirm-before-mutate gate (see `useBrainConversation`'s `confirmTool`).
    * Use a predicate when mutation depends on the args (e.g. a dispatcher tool
-   * that proxies both reads and writes). Defaults to read-only (no gate).
+   * that proxies both reads and writes). REQUIRED: every action must classify itself,
+   * so a new action cannot be added unclassified (the shared `isMutatingTool` only
+   * backs unregistered names, failing closed).
    */
-  mutates?: boolean | ((args: A) => boolean);
+  mutates: boolean | ((args: A) => boolean);
   run(args: A): Promise<R> | R;
 }
 
@@ -40,7 +43,7 @@ export interface BrainActionsContextValue {
   toolSpecs: BrainToolSpec[];
   /** Execute a registered action by name. Returns a recoverable error object for unknown tools. */
   runTool(name: string, args: unknown): Promise<unknown>;
-  /** Whether the named action would mutate state for these args (false if unknown). */
+  /** Whether the named action would mutate state for these args. Unknown or undeclared ⇒ classified by the shared `isMutatingTool` (unclassified ⇒ mutating, fail closed). */
   isMutating(name: string, args: unknown): boolean;
   /** Register a batch of actions; returns an unregister function. (Used by the hook.) */
   register(actions: BrainAction[]): () => void;
@@ -112,13 +115,7 @@ export function BrainActionsProvider({ children }: { children: React.ReactNode }
 
   const isMutating = useCallback((name: string, args: unknown): boolean => {
     const entry = registry.current.get(name);
-    if (!entry) return false;
-    const m = entry.action.mutates;
-    if (typeof m === 'function') {
-      // A throwing predicate is treated as "mutating" so we fail safe (gate it).
-      try { return !!(m as (a: unknown) => boolean)(args); } catch { return true; }
-    }
-    return !!m;
+    return entry ? isBrainActionMutating(entry.action, args) : isMutatingTool(name);
   }, []);
 
   const toolSpecs = useMemo<BrainToolSpec[]>(() => {
@@ -193,7 +190,7 @@ function liveAction(name: string, latest: { current: BrainAction[] }): BrainActi
     name,
     get description() { return current()?.description ?? ''; },
     get parameters() { return current()?.parameters ?? { type: 'object', properties: {} }; },
-    get mutates() { return current()?.mutates; },
+    get mutates() { return current()?.mutates ?? true; },
     run: (args: unknown) => {
       const action = current();
       // The owner re-rendered this name away between registration and the call.
@@ -238,4 +235,21 @@ export function useRegisterBrainActions(actions: BrainAction[]): void {
     // `names` is derivable from `signature` and would only ever re-fire with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [register, signature]);
+}
+
+/**
+ * Whether one action's call would mutate — the ONE answer for the Brain panel's confirm
+ * gate and the Canvas tool loop. The shared classifier (`isMutatingTool`) decides: a
+ * catalog name by the catalog, otherwise the action's own `mutates` declaration. A
+ * throwing predicate is treated as mutating (fail safe).
+ */
+export function isBrainActionMutating(action: BrainAction, args: unknown): boolean {
+  const m = action.mutates;
+  let declared: boolean | undefined;
+  if (typeof m === 'function') {
+    try { declared = !!(m as (a: unknown) => boolean)(args); } catch { return true; }
+  } else {
+    declared = m;
+  }
+  return isMutatingTool(action.name, { mutates: declared });
 }

@@ -19,7 +19,7 @@
 
 import type * as vscode from "vscode";
 import { fetchPolicyGates } from "./bfApi";
-import type { PolicyGate } from "./policy";
+import type { PolicyGate } from "@builderforce/agent-tools";
 import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./policySnapshots";
 
 /** Raised when a tenant's gates could not be resolved — the run must not start. */

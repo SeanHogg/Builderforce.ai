@@ -65,6 +65,21 @@ describe("tool mutation helpers", () => {
     expect(isLikelyMutatingToolName("sessions_send")).toBe(true);
     expect(isLikelyMutatingToolName("browser_actions")).toBe(true);
     expect(isLikelyMutatingToolName("message_slack")).toBe(true);
-    expect(isLikelyMutatingToolName("browser")).toBe(false);
+    expect(isLikelyMutatingToolName("read")).toBe(false);
+  });
+
+  it("fails closed: a name in neither catalog is mutating, unless an explicit read-only action clears it", () => {
+    expect(isLikelyMutatingToolName("browser")).toBe(true);
+    expect(isLikelyMutatingToolName("totally_new_tool")).toBe(true);
+    expect(isMutatingToolCall("totally_new_tool", {})).toBe(true);
+    expect(isMutatingToolCall("browser", { action: "click" })).toBe(true);
+    expect(isMutatingToolCall("browser", { action: "list" })).toBe(false);
+  });
+
+  it("classifies shared-catalog names by the shared classifier", () => {
+    expect(isLikelyMutatingToolName("write_file")).toBe(true);
+    expect(isLikelyMutatingToolName("read_file")).toBe(false);
+    expect(isMutatingToolCall("git_push", {})).toBe(true);
+    expect(isMutatingToolCall("search_code", { action: "delete" })).toBe(false);
   });
 });

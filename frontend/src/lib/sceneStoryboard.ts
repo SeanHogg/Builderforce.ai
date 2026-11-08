@@ -2,6 +2,7 @@ import type { CanvasSceneShot } from '@builderforce/creation-canvas-contract';
 import type { Storyboard } from '@seanhogg/builderforce-studio';
 import { getStoredTenantToken } from './auth';
 import { getApiBaseUrl } from './apiClient';
+import { loadStudio } from './studioLoader';
 
 /**
  * Storyboards for CLOUD scenes — the studio's own two-pass planner (director →
@@ -48,7 +49,7 @@ export function shotsFromStoryboard(
 export async function planCloudScene(args: { request: string; totalSeconds: number; signal?: AbortSignal }): Promise<{ storyboard: Storyboard; shots: CanvasSceneShot[] }> {
   // Lazy: the planner module is small, but it lives in the studio package
   // whose engine half must never land in a board that does not plan a scene.
-  const { planScene, composeShotPrompt } = await import('@seanhogg/builderforce-studio');
+  const { planScene, composeShotPrompt } = await loadStudio();
   const storyboard = await planScene({
     apiKey: getStoredTenantToken() ?? '',
     baseUrl: getApiBaseUrl(),

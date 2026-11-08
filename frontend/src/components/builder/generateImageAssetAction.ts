@@ -33,6 +33,7 @@ export function generateImageAssetAction(media: MediaStudioPort): BrainAction {
       },
       required: ['prompt'],
     },
+    mutates: true,
     run: async ({ prompt, size }: { prompt?: unknown; size?: unknown }) => {
       const text = typeof prompt === 'string' ? prompt.trim() : '';
       if (!text) return { error: 'A prompt describing the image is required.' };

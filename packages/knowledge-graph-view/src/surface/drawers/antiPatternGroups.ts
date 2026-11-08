@@ -34,35 +34,42 @@ export interface GroupOptions {
 
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
 
-function keyOf(f: Finding): Pick<AntiPatternGroup, 'id' | 'from' | 'to' | 'verdict'> {
-    if (f.kind !== PARTITION_VIOLATION) return { id: f.kind };
+/** The group a finding folds into: its kind, or for a layer violation the verdict and layer pair. Cheap: one string per finding. */
+function idOf(f: Finding): string {
+    if (f.kind !== PARTITION_VIOLATION) return f.kind;
+    return `${f.kind}:${f.params.verdict === 'upward' ? 'upward' : 'skips'}:${text(f.params.from) ?? ''}>${text(f.params.to) ?? ''}`;
+}
+
+/** The group's fields beyond its id, read once from the first finding that opens it. */
+function keyOf(f: Finding, id: string): Pick<AntiPatternGroup, 'id' | 'from' | 'to' | 'verdict'> {
+    if (f.kind !== PARTITION_VIOLATION) return { id };
     const verdict: Verdict = f.params.verdict === 'upward' ? 'upward' : 'skips';
     const from = text(f.params.from), to = text(f.params.to);
-    return { id: `${f.kind}:${verdict}:${from ?? ''}>${to ?? ''}`, verdict, ...(from ? { from } : {}), ...(to ? { to } : {}) };
+    return { id, verdict, ...(from ? { from } : {}), ...(to ? { to } : {}) };
 }
 
 export function groupAntiPatterns(findings: readonly Finding[], opts: GroupOptions = {}): AntiPatternGroup[] {
     const { layer, model } = opts;
-    const groups = new Map<string, AntiPatternGroup>();
-    const touched = new Map<string, Map<string, number>>();
+    const groups = new Map<string, { group: AntiPatternGroup; touched: Map<string, number> }>();
     for (const f of findings) {
         if (layer && model && findingLayer(f, model) !== layer) continue;
-        const key = keyOf(f);
-        let g = groups.get(key.id);
-        if (!g) {
-            g = { ...key, kind: f.kind, findings: [], files: [], count: 0 };
-            groups.set(key.id, g);
-            touched.set(key.id, new Map());
+        const id = idOf(f);
+        let entry = groups.get(id);
+        if (!entry) {
+            entry = { group: { ...keyOf(f, id), kind: f.kind, findings: [], files: [], count: 0 }, touched: new Map() };
+            groups.set(id, entry);
         }
-        g.findings.push(f);
-        const tally = touched.get(key.id)!;
+        entry.group.findings.push(f);
+        const tally = entry.touched;
         for (const ref of f.nodes) tally.set(ref, (tally.get(ref) ?? 0) + 1);
     }
-    for (const g of groups.values()) {
+    const out: AntiPatternGroup[] = [];
+    for (const { group: g, touched } of groups.values()) {
         g.count = g.findings.length;
-        g.files = [...touched.get(g.id)!].sort((a, b) => b[1] - a[1] || cmp(a[0], b[0])).map(([ref]) => ref);
+        g.files = [...touched].sort((a, b) => b[1] - a[1] || cmp(a[0], b[0])).map(([ref]) => ref);
+        out.push(g);
     }
-    return [...groups.values()].sort((a, b) => b.count - a.count || cmp(a.id, b.id));
+    return out.sort((a, b) => b.count - a.count || cmp(a.id, b.id));
 }
 
 /** The kinds the groups hold with their finding totals, biggest first: the list's filter chips. */

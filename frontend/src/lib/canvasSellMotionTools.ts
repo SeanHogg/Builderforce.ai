@@ -157,6 +157,7 @@ export function canvasSellMotionActions(ctx: CanvasFounderOpsContext): BrainActi
       name: 'canvas_list_prospect_shares',
       description: 'List the live prospect links on this board — what each one points at, when it expires, how many times it has been opened and when it was last seen. Call this before revoking one, and before answering "who has a link to this".',
       parameters: { type: 'object', required: [], additionalProperties: false, properties: {} },
+      mutates: false,
       run: async () => {
         const blocked = guard();
         if (blocked) return blocked;

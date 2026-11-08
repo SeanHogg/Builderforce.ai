@@ -97,7 +97,7 @@ import { MigrationService, type ImportMode } from '../migration/MigrationService
 import { createMigrationStore } from '../migration/migrationStore';
 import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
-import { maybeAutoRunOnLaneEntry, mutationCanTriggerLaneEntry, type LaneEntryInputs } from '../swimlane/laneEntryTrigger';
+import { routeLaneEntry, mutationCanTriggerLaneEntry, type LaneEntryInputs } from '../swimlane/laneEntryTrigger';
 import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
@@ -110,8 +110,10 @@ import { readChatRunHistoryForCaller } from '../brain/chatRunHistory';
 import { BrainService } from '../brain/BrainService';
 import { normalizeChatTitle } from '../brain/chatTitle';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
+import { resolveIncidentVoice } from '../incident/incidentVoice';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
 import { publishReviewToPr } from '../validation/publishReviewToPr';
+import { resolveTaskPrTarget } from '../checks/publishTaskVerdict';
 import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from '../security/SecurityAuditService';
 import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../incident/IncidentService';
 import { OnCallService } from '../incident/OnCallService';
@@ -170,7 +172,8 @@ import { getTenantTask, resolveTenantTask, replayRoute, requireEnv, type Builtin
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { taskCreatedHook } from '../task/taskCreationHook';
-import { forLane, laneAgentAssignments, laneAssignmentValues } from '../swimlane/laneAgentAssignments';
+import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
+import { deleteLaneAssignments, forLane, insertLaneAssignment, laneAgentAssignments } from '../swimlane/laneAgentAssignments';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 
 
@@ -280,7 +283,11 @@ const parseTenantSettings = (raw: string | null | undefined): Json => parseJsonO
  *  segment is the owning tenant; also rejects traversal. Mirrors the route's own
  *  `isKeyOwnedByTenant` so the attachment tools can't read/write across tenants. */
 const keyOwnedByTenant = (key: string, tenantId: number): boolean =>
-  typeof key === 'string' && key.length > 0 && !key.includes('..') && key.split('/')[0] === String(tenantId);
+  typeof key === 'string' && key.length > 0 && !key.includes('..') && key.split('/')[0] === String(tenantId)
+  // `<tenant>/private/...` holds objects the platform keeps about people (a data subject request's
+  // export). They are not attachments: the model must not read them, and must not overwrite one.
+  // The ONE private-key predicate lives with the asset store; this does not restate it.
+  && !isPrivateAssetKey(key);
 
 // ---------------------------------------------------------------------------
 // List projections — keep the Brain's context window bounded
@@ -1206,6 +1213,11 @@ const CATALOG: BuiltinTool[] = [
         assignedAgentRef: a.assignedAgentRef !== undefined ? (a.assignedAgentRef === null ? null : str(a.assignedAgentRef)) : undefined,
         assignedAgentHostId: a.assignedAgentHostId !== undefined ? (a.assignedAgentHostId === null ? null : num(a.assignedAgentHostId)) : undefined,
       });
+      // An owner change must reach the board's live room (the REST route publishes; this
+      // path did not), so the agent chips and ticket cards refetch.
+      if (a.assignedUserId !== undefined || a.assignedAgentRef !== undefined || a.assignedAgentHostId !== undefined) {
+        await publishProjectStaffingChanged(ctx.env, ctx.tenantId, (updated.toPlain() as { projectId?: number }).projectId);
+      }
       // The ticket may have just entered a new lane, or gained a NEW cloud-agent owner
       // (itself a "go"): ONE trigger decision for the write (AS the lane agent, or the
       // owner via the fallback; the ticket's own assignee is left untouched).
@@ -1282,13 +1294,21 @@ const CATALOG: BuiltinTool[] = [
         : [];
       const taskId = num(a.taskId);
       const summary = a.summary != null ? str(a.summary) : null;
+      // PRD 23 §5.2: the review records the PR head it was made against (best-effort —
+      // a task with no open PR simply has none) and the execution that produced it.
+      const reviewedHeadSha = ctx.env
+        ? await resolveTaskPrTarget(ctx.env, ctx.db, ctx.tenantId, taskId)
+          .then((r) => (r.ok ? r.target.headSha : null)).catch(() => null)
+        : null;
       const result = await new ValidationService(ctx.db).recordReview(ctx.tenantId, {
         taskId,
         verdict: a.verdict != null ? (str(a.verdict) as ReviewVerdict) : undefined,
         summary,
         reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
         gaps,
-      });
+        executionId: ctx.executionId ?? null,
+        reviewedHeadSha,
+      }, ctx.env);
 
       // Publish the review onto the ticket's pull request. This is the point of
       // the whole review: a verdict that lives only in Builderforce is invisible
@@ -1408,7 +1428,12 @@ const CATALOG: BuiltinTool[] = [
     tool: 'incidents.add_note', mutates: true,
     description: 'Post an update onto the incident timeline / war-room feed (what you are seeing, what you are doing). Params: incidentId, message.',
     parameters: obj({ incidentId: S, message: S }, ['incidentId', 'message']),
-    run: async (ctx, a) => { await new IncidentService(ctx.db).addEvent(ctx.tenantId, str(a.incidentId), { kind: 'note', actorRef: 'agent', message: str(a.message) }); return { ok: true }; },
+    run: async (ctx, a) => {
+      const incidentId = str(a.incidentId);
+      const actorRef = await resolveIncidentVoice(ctx.db, { tenantId: ctx.tenantId, incidentId, actingLabel: 'agent' });
+      await new IncidentService(ctx.db).addEvent(ctx.tenantId, incidentId, { kind: 'note', actorRef, message: str(a.message) });
+      return { ok: true };
+    },
   },
   { tool: 'incidents.list', mutates: false, description: 'List incidents in the workspace, newest first. Pass activeOnly:true to exclude resolved ones.', parameters: obj({ activeOnly: B }), run: (ctx, a) => new IncidentService(ctx.db).listIncidents(ctx.tenantId, { activeOnly: a.activeOnly === true }) },
   { tool: 'incidents.get', mutates: false, description: 'Get one incident + its timeline (the war-room detail). Params: incidentId.', parameters: obj({ incidentId: S }, ['incidentId']), run: (ctx, a) => new IncidentService(ctx.db).getIncident(ctx.tenantId, str(a.incidentId)) },
@@ -2821,12 +2846,12 @@ const CATALOG: BuiltinTool[] = [
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.maxConcurrentTickets != null) patch.maxConcurrentTickets = num(a.maxConcurrentTickets);
-      const [row] = await ctx.db.update(boards).set(patch).where(and(eq(boards.id, str(a.boardId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).returning();
+      const row = await updateBoardRow(ctx.env, ctx.db, { tenantId: ctx.tenantId, boardId: str(a.boardId), patch: patch as Partial<typeof boards.$inferInsert>, also: eq(boards.segmentId, seg) });
       if (!row) throw new Error('board not found');
       return row;
     },
   },
-  { tool: 'boards.remove', mutates: true, description: 'Delete a board.', parameters: obj({ boardId: S }, ['boardId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(boards).where(and(eq(boards.id, str(a.boardId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).returning({ id: boards.id }); return { deleted: rows.length > 0 ? str(a.boardId) : null }; } },
+  { tool: 'boards.remove', mutates: true, description: 'Delete a board.', parameters: obj({ boardId: S }, ['boardId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const deleted = await deleteBoardRow(ctx.env, ctx.db, { tenantId: ctx.tenantId, boardId: str(a.boardId), also: eq(boards.segmentId, seg) }); return { deleted: deleted ? str(a.boardId) : null }; } },
 
   { tool: 'swimlanes.list', mutates: false, description: "List a board's swimlanes.", parameters: obj({ boardId: S }, ['boardId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [board] = await ctx.db.select({ id: boards.id }).from(boards).where(and(eq(boards.id, str(a.boardId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).limit(1); if (!board) return []; return ctx.db.select().from(swimlanes).where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).orderBy(swimlanes.position); } },
   {
@@ -2853,11 +2878,10 @@ const CATALOG: BuiltinTool[] = [
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1);
       if (!lane) throw new Error('swimlane not found');
-      const [row] = await ctx.db.insert(laneAgentAssignments).values(laneAssignmentValues({ tenantId: ctx.tenantId, segmentId: seg, swimlaneId: lane.id, agentKind: str(a.agentKind), agentRef: str(a.agentRef), role: a.role != null ? str(a.role) : 'agent', ...(a.model != null ? { model: str(a.model) } : {}) })).returning();
-      return row;
+      return insertLaneAssignment(ctx.db, ctx.env, { tenantId: ctx.tenantId, segmentId: seg, swimlaneId: lane.id, agentKind: str(a.agentKind), agentRef: str(a.agentRef), role: a.role != null ? str(a.role) : 'agent', ...(a.model != null ? { model: str(a.model) } : {}) });
     },
   },
-  { tool: 'swimlane_agents.remove', mutates: true, description: 'Unassign an agent from a swimlane.', parameters: obj({ boardId: S, laneId: S, id: S }, ['boardId', 'laneId', 'id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1); if (!lane) return { deleted: null }; const rows = await ctx.db.delete(laneAgentAssignments).where(forLane(lane.id, eq(laneAgentAssignments.id, str(a.id)), eq(laneAgentAssignments.tenantId, ctx.tenantId), eq(laneAgentAssignments.segmentId, seg))).returning({ id: laneAgentAssignments.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'swimlane_agents.remove', mutates: true, description: 'Unassign an agent from a swimlane.', parameters: obj({ boardId: S, laneId: S, id: S }, ['boardId', 'laneId', 'id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1); if (!lane) return { deleted: null }; const removed = await deleteLaneAssignments(ctx.db, ctx.env, ctx.tenantId, lane.id, eq(laneAgentAssignments.id, str(a.id)), eq(laneAgentAssignments.segmentId, seg)); return { deleted: removed.length > 0 ? str(a.id) : null }; } },
 
   // ---- CONNECTED MAILBOXES + EMAIL MARKETING -------------------------------
   //
@@ -4033,6 +4057,7 @@ const CATALOG: BuiltinTool[] = [
       + 'managerRef: who manages — "u:<userId>" for a person, "c:<agentRef>" for a cloud agent, "" for the system service. '
       + 'prMergePolicy: "immediate" | "on_green" | "queue". managerType: a manager type id (e.g. "general"). '
       + 'allowAutoMerge, allowUnattendedCeremonies, allowAgentReassignment, allowAutoStaffLanes, agentReassignIdleHours and agentReassignMaxPerSession also accept null = inherit the workspace default. '
+      + 'canary: PRD 23 canary mode (default false) - when true, auto-merge and auto-close are disabled for this project and the sweeps journal what they would have merged/closed. '
       + 'coordinationRequiresManager: whether kanban.coordinate / assess_resource / assign_participant / remove_participant / materialize_work_items need the manager role on this project (default false — any developer or agent may coordinate). '
       + 'Read the current values with manager.policy first.',
     parameters: obj({
@@ -4053,6 +4078,7 @@ const CATALOG: BuiltinTool[] = [
       agentReassignMaxPerSession: N,
       allowAutoStaffLanes: B,
       coordinationRequiresManager: B,
+      canary: B,
     }, ['projectId']),
     run: (ctx, a) => {
       const { projectId, ...patch } = a;
@@ -4268,7 +4294,7 @@ function putManagerConfig(ctx: BuiltinCtx, projectId: unknown, patch: Json): Pro
 
 /**
  * Fire the board's autonomous lane trigger for a Brain task write. This is the
- * SAME canonical {@link maybeAutoRunOnLaneEntry} the HTTP board path, RuntimeService
+ * SAME canonical {@link routeLaneEntry} the HTTP board path, RuntimeService
  * (agent hand-off) and qaRoutes all call — the single source of truth for "a ticket
  * entered a lane; run the lane's configured agent AS that agent". The decision and
  * dispatch logic live ONCE in that function; each status-write entry point only has
@@ -4333,7 +4359,7 @@ async function evaluateAndDispatch(
   // gate (which can itself dispatch a reviewer round-trip) and emits the
   // `auto_run_skipped` / `auto_run_error` Observability events. Short-circuiting on
   // the evaluation above would silently drop both.
-  const run = maybeAutoRunOnLaneEntry(env, ctx.db, runtimeService, {
+  const run = routeLaneEntry(env, ctx.db, runtimeService, {
     tenantId: ctx.tenantId,
     projectId: plain.projectId,
     taskId: plain.id,
@@ -4463,6 +4489,8 @@ export function listBuiltinTools(): McpToolEntry[] {
 export { CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from './cloudAgentToolset';
 import { CLOUD_AGENT_PLATFORM_TOOLS } from './cloudAgentToolset';
 import { invalidateBoardLaneOrdinals } from '../swimlane/laneOrdinals';
+import { deleteBoardRow, updateBoardRow } from '../swimlane/boardWrites';
+import { isPrivateAssetKey } from '../assets/tenantAssetStore';
 
 const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
 const ORIGINATING_CHAT_TOOL = 'chats.post_to_brain';
@@ -4499,6 +4527,15 @@ export function resolveCloudAgentPlatformTool(advertised: string, originatingCha
     _cloudAgentPlatformNameMap = new Map(CLOUD_AGENT_PLATFORM_TOOLS.map((t) => [advertisedName(t), t]));
   }
   return _cloudAgentPlatformNameMap.get(advertised);
+}
+
+/**
+ * Whether a builtin tool (by its dotted catalog id) writes, as the catalog declares it. `undefined` for an id the catalog does
+ * not know. The cloud run hands this to the governance class gates as the surface's declaration, so a read-only builtin is not
+ * withheld by a mutate gate.
+ */
+export function builtinToolMutates(tool: string): boolean | undefined {
+  return CATALOG.find((t) => t.tool === tool)?.mutates;
 }
 
 /** Canonical verbs for the common mutating tools so an MCP-driven change reads the

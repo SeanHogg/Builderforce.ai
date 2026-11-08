@@ -50,6 +50,7 @@ export function canvasReadPreviewConsoleAction(
         objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
       },
     },
+    mutates: false,
     run: async (raw: unknown) => {
       const args = (raw ?? {}) as { level?: unknown; limit?: unknown; objectId?: unknown };
       const resolved = resolve(args.objectId);

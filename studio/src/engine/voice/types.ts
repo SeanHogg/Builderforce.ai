@@ -107,8 +107,11 @@ export interface SynthesizeOptions {
 }
 
 export interface CloneSynthesisResult {
-  /** Synthesized mono PCM in [-1, 1]. */
+  /** Synthesized mono PCM in [-1, 1], carrying an inaudible watermark. */
   pcm: Float32Array;
+  /** The 64-bit id embedded in `pcm` (16 hex chars), or null when the clip was
+   *  too short or quiet to carry one. */
+  watermarkId: string | null;
   sampleRate: number;
   durationMs: number;
   /** Per-word spans, aligned to the synthesized audio. */

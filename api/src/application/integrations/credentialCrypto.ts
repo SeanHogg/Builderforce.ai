@@ -88,6 +88,11 @@ export async function deriveTenantAesKey(secret: string, tenantId?: number): Pro
   return deriveKey(secret, tenantId == null ? globalSalt() : tenantSalt(tenantId));
 }
 
+/** The AES-GCM `additionalData` param, or nothing when the caller binds no context. */
+function aad(additionalData: string | undefined): { additionalData?: Uint8Array } {
+  return additionalData === undefined ? {} : { additionalData: new TextEncoder().encode(additionalData) };
+}
+
 /**
  * Encrypt a credential blob → versioned base64 ciphertext + hex IV. Always writes
  * a v2 (per-tenant) blob: the returned `enc` is `v2:<base64>`, sealed with a key
@@ -98,10 +103,12 @@ export async function encryptCredentials(
   data: Record<string, unknown>,
   secret: string,
   tenantId: number,
+  /** Optional AEAD additional data: binds the blob to a context (a row id) so it cannot be swapped between rows. */
+  additionalData?: string,
 ): Promise<{ enc: string; iv: string }> {
   const key = await deriveKey(secret, tenantSalt(tenantId));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(data)));
+  const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, ...aad(additionalData) }, key, new TextEncoder().encode(JSON.stringify(data)));
   return {
     enc: V2_PREFIX + bytesToBase64(enc),
     iv: bytesToHex(iv),
@@ -121,6 +128,8 @@ export async function decryptCredentials(
   ivHex: string,
   secret: string,
   tenantId?: number,
+  /** Must equal the `additionalData` the blob was sealed with (none for legacy callers). */
+  additionalData?: string,
 ): Promise<Record<string, unknown> | null> {
   try {
     let salt: string;
@@ -141,7 +150,7 @@ export async function decryptCredentials(
     }
     const key = await deriveKey(secret, salt);
     const iv = hexToBytes(ivHex);
-    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, base64ToBytes(payload));
+    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, ...aad(additionalData) }, key, base64ToBytes(payload));
     return JSON.parse(new TextDecoder().decode(dec));
   } catch {
     return null;

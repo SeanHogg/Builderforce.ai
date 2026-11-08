@@ -59,6 +59,8 @@ export function useCanvasProjectActions({ errorText, nodes, openNodeInspector, p
               kind: 'task', title: task.title, taskKey: task.key, status: task.status,
               content: task.description || undefined, priority: task.priority,
               agentRef: task.assignedAgentRef || undefined,
+              storyPoints: task.storyPoints ?? undefined,
+              investorMilestone: task.investorMilestone === true,
               assignee: agentNode?.title || task.assignedAgentRef || (task.assignedUserId ? 'Assigned teammate' : undefined),
               prdTitle: primaryPrd?.goal || undefined, prdStatus: primaryPrd?.status || undefined,
               prdSummary: primaryPrd?.prd?.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 240) || undefined,

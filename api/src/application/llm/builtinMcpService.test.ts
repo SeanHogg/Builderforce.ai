@@ -557,6 +557,19 @@ describe('attachments tools (Brain uploads, R2-backed)', () => {
     expect(store.get(`${TENANT}/u/rm.md`)).toBe('new body');
   });
 
+  it('attachments.read refuses a PRIVATE key (a data subject export) even for its own tenant', async () => {
+    const key = `${TENANT}/private/dsr/abc.json`;
+    const store = new Map([[key, '{"email":"subject@example.com"}']]);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.read', arguments: { key }, env: fakeEnv(store) })).rejects.toThrow(/not found/);
+  });
+
+  it('attachments.write will not overwrite a PRIVATE key, and leaves it untouched', async () => {
+    const key = `${TENANT}/private/dsr/abc.json`;
+    const store = new Map([[key, 'original']]);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.write', arguments: { key, content: 'tampered' }, env: fakeEnv(store) })).rejects.toThrow(/not found/);
+    expect(store.get(key)).toBe('original');
+  });
+
   it('attachments.write will not create/overwrite a missing or foreign key', async () => {
     const store = new Map<string, string>();
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.write', arguments: { key: `${TENANT}/u/nope.md`, content: 'x' }, env: fakeEnv(store) })).rejects.toThrow(/not found/);

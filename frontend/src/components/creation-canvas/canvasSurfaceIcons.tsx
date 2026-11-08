@@ -45,6 +45,7 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   ideas: IdeasSurfaceIcon,
   knowledge: KnowledgeSurfaceIcon,
   scene3d: ThreeDIcon,
+  model3d: ThreeDIcon,
   app: AppSurfaceIcon,
   operate: OperateSurfaceIcon,
   insights: InsightsSurfaceIcon,

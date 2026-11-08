@@ -9,7 +9,7 @@
  */
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
-import { verifyUpload } from '../../infrastructure/auth/uploadSign';
+import { verifyPublishUpload, verifyUpload } from '../../infrastructure/auth/uploadSign';
 import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 export function createBrainFilesRoutes(): Hono<HonoEnv> {
@@ -23,7 +23,11 @@ export function createBrainFilesRoutes(): Hono<HonoEnv> {
     const key = wildcardPath(c);
     const exp = Number(c.req.query('exp'));
     const sig = c.req.query('sig') ?? '';
-    if (!key || !(await verifyUpload(key, exp, sig, env.JWT_SECRET))) {
+    // Two distinct signatures: the 10-minute upload one (JWT-secret key) and the long-lived
+    // PUBLISH one (HKDF-derived key, `publish|` domain prefix). Neither verifies as the other.
+    const valid = !!key
+      && ((await verifyUpload(key, exp, sig, env.JWT_SECRET)) || (await verifyPublishUpload(key, exp, sig, env.JWT_SECRET)));
+    if (!key || !valid) {
       return c.json({ error: 'Not found' }, 404);
     }
 

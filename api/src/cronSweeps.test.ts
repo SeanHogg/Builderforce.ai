@@ -59,11 +59,20 @@ describe('CRON_SWEEPS registry', () => {
       // `agent-benchmark` runs each workspace's fixed benchmark set on the tenant's own
       // plan, so it is billable and declares the flag — listed here as the deliberate
       // decision this assertion exists to force.
-      'agent-benchmark', 'auto-exec', 'mailbox-automation', 'manager', 'pr-merge', 'qa-sweep',
+      'agent-benchmark', 'auto-exec',
+      // `deferred-dispatch` re-dispatches parked one-shot runs (CI auto-fix, incident, ...) that admission deferred.
+      'deferred-dispatch', 'mailbox-automation', 'manager', 'pr-conduct', 'pr-merge', 'qa-sweep',
       // `specialist-evals` (cost lever E2) replays each job's eval set through the
       // candidates and a frontier judge on the gateway — token spend, so it confirms.
       'security', 'specialist-evals', 'validator',
     ]);
+  });
+
+  /** PRD 23 §6: the backlog pass is a scheduled DRY RUN - it must never be a dispatching sweep. */
+  it('registers the daily backlog-disposition sweep as non-dispatching', () => {
+    const sweep = CRON_SWEEPS.find((s) => s.key === 'backlog-disposition');
+    expect(sweep?.cadence).toBe('daily');
+    expect(sweep?.dispatches).toBeFalsy();
   });
 
   /** PRD 33 §5.2: the weekly floor of the page review's captures (a new release captures on first sight). */

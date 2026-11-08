@@ -40,6 +40,12 @@ export class TaskRepository implements ITaskRepository {
     return row ? toDomain(row) : null;
   }
 
+  async findByIdsAcrossTenants(ids: TaskId[]): Promise<Task[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db.select().from(tasksTable).where(inArray(tasksTable.id, ids));
+    return rows.map(toDomain);
+  }
+
   async findChildren(parentId: TaskId): Promise<Task[]> {
     const rows = await this.db
       .select()
@@ -115,6 +121,7 @@ export class TaskRepository implements ITaskRepository {
         decompositionSource: plain.decompositionSource ?? undefined,
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
+        investorMilestone: plain.investorMilestone,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -170,6 +177,7 @@ export class TaskRepository implements ITaskRepository {
         decompositionSource: plain.decompositionSource ?? null,
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
+        investorMilestone: plain.investorMilestone,
         updatedAt:         plain.updatedAt,
         // Isolation column, not a domain field — written only when a caller (a move)
         // names the segment, in this same statement (see ITaskRepository.update).
@@ -235,6 +243,7 @@ type Row = typeof tasksTable.$inferSelect;
 function toDomain(row: Row): Task {
   return Task.reconstitute({
     id:                asTaskId(row.id),
+    tenantId:          row.tenantId,
     projectId:         asProjectId(row.projectId),
     key:               row.key,
     title:             row.title,
@@ -269,6 +278,7 @@ function toDomain(row: Row): Task {
     decompositionSource: row.decompositionSource ?? null,
     persona:           row.persona ?? null,
     archived:          row.archived,
+    investorMilestone: row.investorMilestone,
     createdAt:         row.createdAt,
     updatedAt:         row.updatedAt,
   });

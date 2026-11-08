@@ -23,6 +23,7 @@ import { notifyExecutionSubscribers } from './executionEvents';
 import { clearPauseState, loadPauseState, restoreTicketLane, type PausedRunState } from './executionPause';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { cloudRunnerStub } from './cloudRunnerStub';
+import { admitResumedRun } from './dispatchAdmission';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -52,6 +53,15 @@ export async function resumePausedExecution(
   });
 
   const state = await loadPauseState(db, { tenantId: args.tenantId, executionId: args.executionId });
+
+  // 2b. A paused run holds no compute, so it was not counted; waking it makes it a live cloud
+  //     run again and it is admitted through the same primitive as a new one. Over the
+  //     concurrent cap it STAYS paused with the answer queued (resumable once a run finishes).
+  const refusal = await admitResumedRun(env, db, { tenantId: args.tenantId, executionId: args.executionId });
+  if (refusal) {
+    if (state) await recordResumeFailure(db, args, state, refusal.message);
+    return;
+  }
 
   // 3. Put the ticket back in the lane the pause moved it out of. Done BEFORE the
   //    wake so the board never shows a running ticket sitting in needs-attention.

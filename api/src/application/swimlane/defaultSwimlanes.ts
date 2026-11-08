@@ -11,6 +11,15 @@ export interface DefaultSwimlaneSeed {
 }
 
 /**
+ * The gate EVERY backlog lane is seeded with — this module's default board AND every
+ * built-in kanban template (`kanban/templateCatalog.ts` derives its backlog lanes from
+ * this). Operator decision 2026-11-07: parked work must never spend tokens, for new
+ * applies and for every live board (migration 1311 flipped the existing `auto` rows).
+ * See "WHY `backlog` IS `human`" below.
+ */
+export const BACKLOG_LANE_GATE: DefaultSwimlaneSeed['gate'] = 'human';
+
+/**
  * Default swimlanes seeded when a board is first created.
  *
  * They mirror the task board's kanban columns 1:1 — each `key` is exactly a
@@ -59,7 +68,7 @@ export interface DefaultSwimlaneSeed {
  * with — a default change must never silently re-gate a running board.
  */
 export const DEFAULT_SWIMLANES: DefaultSwimlaneSeed[] = [
-  { key: TaskStatus.BACKLOG, name: 'Backlog', position: 0, isTerminal: false, gate: 'human' },
+  { key: TaskStatus.BACKLOG, name: 'Backlog', position: 0, isTerminal: false, gate: BACKLOG_LANE_GATE },
   { key: TaskStatus.TODO, name: 'To Do', position: 1, isTerminal: false, gate: 'auto' },
   { key: TaskStatus.READY, name: 'Ready', position: 2, isTerminal: false, gate: 'auto' },
   { key: TaskStatus.IN_PROGRESS, name: 'In Progress', position: 3, isTerminal: false, gate: 'auto' },

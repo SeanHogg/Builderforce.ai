@@ -9,6 +9,8 @@ import {
   configFieldLabel, configFieldPlaceholder, integrationDescription, integrationOperationLabel,
 } from '../domain/stepCatalogI18n';
 import { STEP_FIELD_EDITORS } from './stepFieldEditors';
+import { StepCredentialPicker } from './StepCredentialPicker';
+import { STEP_CREDENTIAL_KEY, credentialIdOf, credentialProviderFor, stepUsesCredential } from '../domain/stepCredential';
 import styles from './StepConfigForm.module.css';
 
 /**
@@ -45,7 +47,8 @@ export interface StepConfigFormProps {
   label?: string;
   onLabelChange?: (label: string) => void;
   /** A patch to merge into the config — never a whole config, so two edits in
-   *  flight cannot clobber each other's fields. */
+   *  flight cannot clobber each other's fields. A key patched to `undefined` is
+   *  REMOVED (see `applyConfigPatch`) — that is how a choice is cleared. */
   onConfigChange: (patch: Record<string, unknown>) => void;
   /** Activation state for a trigger step (webhook URL, next run, …), if any. */
   triggerInfo?: WorkflowTriggerInfo;
@@ -130,6 +133,17 @@ export function StepConfigForm({ kind, config, label, onLabelChange, onConfigCha
             {integ.operations.map((op) => <option key={op.id} value={op.id}>{integrationOperationLabel(wb, op.label)}</option>)}
           </Select>
         </label>
+      )}
+
+      {/* Which stored connection this integration runs with. Self-gating: renders
+          nothing for a step that takes no credential. */}
+      {stepUsesCredential(integ) && (
+        <StepCredentialPicker
+          provider={credentialProviderFor(integ)}
+          auth={integ.auth}
+          value={credentialIdOf(config)}
+          onChange={(id) => setConfig(STEP_CREDENTIAL_KEY, id || undefined)}
+        />
       )}
 
       {/* A kind whose options are not knowable at build time brings its own editor

@@ -25,6 +25,8 @@ export type CanvasDrawingTool = (typeof DRAWING_TOOLS)[number];
 export type CanvasStrokeTool = Exclude<CanvasDrawingTool, 'eraser'>;
 
 export interface CanvasStroke {
+  /** Stable identity, so a collaborative store can add/remove ONE stroke without rewriting the list. */
+  id?: string;
   tool: CanvasStrokeTool;
   /** Freehand: the path. Shapes: [start, end]. Text: [anchor]. */
   points: Array<{ x: number; y: number }>;
@@ -40,8 +42,33 @@ export const DEFAULT_STROKE_WIDTH = 3;
 export const HIGHLIGHTER_OPACITY = 0.35;
 export const HIGHLIGHTER_WIDTH_FACTOR = 5;
 
-const MAX_STROKES = 400;
-const MAX_POINTS = 2_000;
+/** The most strokes one drawing may hold; appends past it are refused (see `admitStrokes`). */
+export const MAX_STROKES = 400;
+/** The most points one stroke may hold. Capture stops growing a path at this (see `extendStrokePath`). */
+export const MAX_POINTS = 2_000;
+/**
+ * The most points one drawing may hold IN TOTAL, across all its strokes.
+ *
+ * The cap that actually bounds storage: a drawing block lives in a Yjs room whose state is
+ * persisted to a Durable Object (single values ~2 MB, the room chunks them and refuses a
+ * merged state past a hard cap). 40 000 points at ~25 bytes each encoded is about 1 MB, so
+ * one drawing cannot by itself approach the room's cap. Appends and patches that would
+ * cross it are refused (see `admitStrokes`, `patchedStroke`); the UI then shows
+ * `blocks.drawing.limit`.
+ */
+export const MAX_TOTAL_POINTS = 40_000;
+/** Reading tolerates more than may be appended, so a legacy board is never silently truncated at the cap. */
+const MAX_READ_STROKES = MAX_STROKES * 4;
+
+/** Points across a stroke list: what `MAX_TOTAL_POINTS` budgets. */
+export function totalPoints(strokes: readonly CanvasStroke[]): number {
+  return strokes.reduce((sum, stroke) => sum + stroke.points.length, 0);
+}
+
+/** Can another stroke be added? False at either cap. */
+export function drawingHasRoom(strokes: readonly CanvasStroke[]): boolean {
+  return strokes.length < MAX_STROKES && totalPoints(strokes) < MAX_TOTAL_POINTS;
+}
 
 function point(value: unknown): { x: number; y: number } | null {
   if (!value || typeof value !== 'object') return null;
@@ -50,7 +77,23 @@ function point(value: unknown): { x: number; y: number } | null {
 }
 
 function points(value: unknown): Array<{ x: number; y: number }> {
-  return Array.isArray(value) ? value.slice(0, MAX_POINTS).flatMap((item) => { const parsed = point(item); return parsed ? [parsed] : []; }) : [];
+  if (!Array.isArray(value)) return [];
+  const parsed = value.flatMap((item) => { const next = point(item); return next ? [next] : []; });
+  if (parsed.length <= MAX_POINTS) return parsed;
+  // Over the cap: sample evenly, always keeping the first AND last point, so a long
+  // stroke is thinned rather than having its tail silently cut off.
+  return Array.from({ length: MAX_POINTS }, (_, index) => parsed[Math.round((index * (parsed.length - 1)) / (MAX_POINTS - 1))]!);
+}
+
+const SAFE_STROKE_COLOR = /^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([0-9a-z%.,\s/+-]+\)|var\(--[a-z0-9_-]+\)|currentColor)$/i;
+/** A colour that is safe to put in an SVG attribute: hex, rgb(a), hsl(a), a CSS variable or currentColor. */
+export function isSafeStrokeColor(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 64 && SAFE_STROKE_COLOR.test(value);
+}
+
+/** A drawing surface dimension, clamped to something renderable. */
+export function clampDrawingDimension(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(100, Math.min(value, 4000)) : fallback;
 }
 
 function strokeTool(value: unknown): CanvasStrokeTool {
@@ -65,7 +108,8 @@ function strokeTool(value: unknown): CanvasStrokeTool {
  */
 export function canvasStrokes(data: Readonly<Record<string, unknown>>): CanvasStroke[] {
   if (Array.isArray(data.strokes)) {
-    return data.strokes.slice(0, MAX_STROKES).flatMap((entry) => {
+    // Over the ceiling, keep the NEWEST: the strokes just drawn are the ones that must not vanish.
+    return data.strokes.slice(-MAX_READ_STROKES).flatMap((entry) => {
       if (!entry || typeof entry !== 'object') return [];
       const raw = entry as Record<string, unknown>;
       const tool = strokeTool(raw.tool);
@@ -75,7 +119,8 @@ export function canvasStrokes(data: Readonly<Record<string, unknown>>): CanvasSt
       return [{
         tool,
         points: path,
-        stroke: typeof raw.stroke === 'string' ? raw.stroke : DEFAULT_STROKE_COLOR,
+        stroke: isSafeStrokeColor(raw.stroke) ? raw.stroke : DEFAULT_STROKE_COLOR,
+        ...(typeof raw.id === 'string' && raw.id.length > 0 && raw.id.length <= 64 ? { id: raw.id } : {}),
         strokeWidth: typeof raw.strokeWidth === 'number' ? Math.max(1, Math.min(raw.strokeWidth, 48)) : DEFAULT_STROKE_WIDTH,
         ...(tool === 'text' ? { text } : {}),
       }];
@@ -86,9 +131,124 @@ export function canvasStrokes(data: Readonly<Record<string, unknown>>): CanvasSt
   return [{
     tool: 'pen',
     points: legacy,
-    stroke: typeof data.stroke === 'string' ? data.stroke : DEFAULT_STROKE_COLOR,
+    stroke: isSafeStrokeColor(data.stroke) ? data.stroke : DEFAULT_STROKE_COLOR,
     strokeWidth: typeof data.strokeWidth === 'number' ? data.strokeWidth : DEFAULT_STROKE_WIDTH,
   }];
+}
+
+/** The pen in hand: tool + colour + width. The canvas and the knowledge block share it. */
+export interface DrawingPen { tool: CanvasDrawingTool; color: string; width: number }
+
+/** How far the eraser reaches around its path. */
+export function eraserRadius(width: number): number {
+  return Math.max(8, width * 3);
+}
+
+/**
+ * The stroke a captured pointer path becomes, or null when the gesture is not a
+ * stroke (eraser, or a tap with a tool that needs a drag). The ONE place a path
+ * is turned into a stroke — the canvas stage and the document drawing block both call it.
+ */
+export function strokeFromPath(pen: DrawingPen, path: readonly { x: number; y: number }[]): CanvasStroke | null {
+  const start = path[0];
+  if (!start || pen.tool === 'eraser') return null;
+  // Freehand and shapes need a drag; text acts on a tap.
+  if (pen.tool !== 'text' && path.length < 2) return null;
+  const tool = pen.tool;
+  const rounded = (point: { x: number; y: number }) => ({ x: Math.round(point.x * 10) / 10, y: Math.round(point.y * 10) / 10 });
+  return {
+    tool,
+    points: (tool === 'text' ? [start] : tool === 'pen' || tool === 'highlighter' ? path : [start, path[path.length - 1]!]).map(rounded),
+    stroke: pen.color,
+    strokeWidth: pen.width,
+    ...(tool === 'text' ? { text: '' } : {}),
+  };
+}
+
+/** A path being recorded between pointer-down and pointer-up. */
+export interface StrokePathRef { current: Array<{ x: number; y: number }> }
+export function beginStrokePath(ref: StrokePathRef, point: { x: number; y: number }): void { ref.current = [point]; }
+/**
+ * Extends only a path that was begun, so a hover never records.
+ *
+ * `minDistance` thins the path in the CALLER'S coordinate space: a point closer
+ * than that to the last kept one is not kept. The newest point is always held as a
+ * provisional tail (replaced by the next point while it is still close), so the
+ * stroke always ends exactly where the pointer did.
+ */
+export function extendStrokePath(ref: StrokePathRef, point: { x: number; y: number }, minDistance = 0): void {
+  const path = ref.current;
+  const n = path.length;
+  if (!n) return;
+  const last = path[n - 1]!;
+  // At the point cap the path stops growing but keeps following the pointer: the tail is replaced.
+  if (n >= MAX_POINTS) { path[n - 1] = point; return; }
+  if (n >= 2 && Math.hypot(path[n - 2]!.x - last.x, path[n - 2]!.y - last.y) < minDistance) { path[n - 1] = point; return; }
+  path.push(point);
+}
+/** Stroke-capture thinning threshold, in the surface's own units. */
+export const STROKE_MIN_POINT_DISTANCE = 0.75;
+export function endStrokePath(ref: StrokePathRef): Array<{ x: number; y: number }> { return ref.current.splice(0); }
+
+let idCounter = 0;
+/** A fresh stroke id: a full UUID, with a fallback for a non-secure context where `crypto.randomUUID` is absent. */
+export function mintStrokeId(): string {
+  const cryptoApi = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (cryptoApi?.randomUUID) return `k-${cryptoApi.randomUUID()}`;
+  idCounter += 1;
+  return `k-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${idCounter}`;
+}
+
+/** A stroke with an identity: its own when it has one that is not `taken`, else a fresh one. */
+export function withStrokeId(stroke: CanvasStroke, taken?: ReadonlySet<string>): CanvasStroke & { id: string } {
+  return stroke.id && !taken?.has(stroke.id) ? (stroke as CanvasStroke & { id: string }) : { ...stroke, id: mintStrokeId() };
+}
+
+/**
+ * What a store accepts from a caller that wants to ADD strokes: the input sanitised
+ * through `canvasStrokes` (the same bounds a reader applies), every stroke given an id
+ * unique within the target, and the lot truncated so the drawing never exceeds
+ * `MAX_STROKES`. Both block stores call this, so the write path is bounded in one place.
+ */
+export function admitStrokes(existing: readonly CanvasStroke[], incoming: readonly CanvasStroke[]): Array<CanvasStroke & { id: string }> {
+  const taken = new Set(existing.flatMap((stroke) => (stroke.id ? [stroke.id] : [])));
+  const room = Math.max(0, MAX_STROKES - existing.length);
+  let pointRoom = Math.max(0, MAX_TOTAL_POINTS - totalPoints(existing));
+  const admitted: Array<CanvasStroke & { id: string }> = [];
+  for (const stroke of canvasStrokes({ strokes: incoming })) {
+    if (admitted.length >= room || stroke.points.length > pointRoom) break;
+    pointRoom -= stroke.points.length;
+    const next = withStrokeId(stroke, taken);
+    taken.add(next.id);
+    admitted.push(next);
+  }
+  return admitted;
+}
+
+/**
+ * An EXISTING stroke list, copied as-is (seed, replace, move, rebuild): sanitised, ids unique,
+ * and — over the read ceiling — the NEWEST kept. NOT `admitStrokes`: that applies the append
+ * caps from empty and would keep the OLDEST strokes of a drawing that is being copied.
+ */
+export function retainStrokes(strokes: readonly CanvasStroke[]): Array<CanvasStroke & { id: string }> {
+  const taken = new Set<string>();
+  return canvasStrokes({ strokes }).map((stroke) => {
+    const kept = withStrokeId(stroke, taken);
+    taken.add(kept.id);
+    return kept;
+  });
+}
+
+/**
+ * An existing stroke with a patch applied, re-sanitised; null when the result is no longer a
+ * valid stroke, or (when `all` — the drawing's strokes — is given) when the patch would grow
+ * the drawing past `MAX_TOTAL_POINTS`. A patch that does not add points is never refused.
+ */
+export function patchedStroke(stroke: CanvasStroke, patch: Partial<CanvasStroke>, all?: readonly CanvasStroke[]): CanvasStroke | null {
+  const [next] = canvasStrokes({ strokes: [{ ...stroke, ...patch, id: stroke.id }] });
+  if (!next) return null;
+  if (all && next.points.length > stroke.points.length && totalPoints(all) - stroke.points.length + next.points.length > MAX_TOTAL_POINTS) return null;
+  return next;
 }
 
 export function strokesBounds(strokes: readonly CanvasStroke[]): { minX: number; minY: number; maxX: number; maxY: number } {

@@ -30,7 +30,8 @@
 
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { creationSessionObjects, creationSessions } from '../../infrastructure/database/schema';
+import { listShippedMilestones, type InvestorMilestone } from '../investor/investorMilestones';
+import { creationSessionObjects, creationSessions, reportSchedules } from '../../infrastructure/database/schema';
 
 /** `"<sessionId>:<frameObjectId>"`, as stored in `report_schedules.subject_ref`. */
 export interface BoardPackSubject {
@@ -57,6 +58,67 @@ export function boardPackSubjectRef(sessionId: string, frameId: string): string 
   return `${sessionId}:${frameId}`;
 }
 
+/**
+ * The reporting period a pack covers, half-open `[since, until)`, and where it came from:
+ * `last_run` (the schedule's previous delivery), `cadence` (a schedule that has not run yet:
+ * one cadence back), or `default_30d` (no schedule, an ad hoc pack).
+ */
+export interface BoardPackPeriod { since: Date; until: Date; basis: 'last_run' | 'cadence' | 'default_30d' }
+
+/** Days an ad hoc pack covers (the executive summary's convention). */
+const BOARD_PACK_PERIOD_DAYS = 30;
+const CADENCE_DAYS: Readonly<Record<string, number>> = { daily: 1, weekly: 7 };
+
+/** Same day of the month in the previous month (UTC), clamped to that month's last day. */
+function oneMonthBack(now: Date): Date {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const lastDayOfPrevious = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return new Date(Date.UTC(
+    year, month - 1, Math.min(now.getUTCDate(), lastDayOfPrevious),
+    now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds(),
+  ));
+}
+
+export function defaultBoardPackPeriod(now: Date): BoardPackPeriod {
+  return { since: new Date(now.getTime() - BOARD_PACK_PERIOD_DAYS * 86_400_000), until: now, basis: 'default_30d' };
+}
+
+/**
+ * `[lastRunAt ?? one cadence back, now)` for a schedule. A `lastRunAt` at or after `now`
+ * cannot start a window, so it is treated as never having run. Monthly goes back one
+ * calendar month; daily and weekly one and seven days; an unknown cadence 30 days.
+ */
+export function periodForSchedule(schedule: string, lastRunAt: Date | null, now: Date): BoardPackPeriod {
+  if (lastRunAt && lastRunAt < now) return { since: lastRunAt, until: now, basis: 'last_run' };
+  if (schedule === 'monthly') return { since: oneMonthBack(now), until: now, basis: 'cadence' };
+  const days = CADENCE_DAYS[schedule] ?? BOARD_PACK_PERIOD_DAYS;
+  return { since: new Date(now.getTime() - days * 86_400_000), until: now, basis: 'cadence' };
+}
+
+/**
+ * The period of the schedule that is delivering this frame. `runDueReports` advances the
+ * schedule's `last_run_at` AFTER generating, so during generation it still holds the previous
+ * delivery — exactly the start of this pack's period.
+ *
+ * Resolved from EXACTLY the delivering schedule row (`scheduleId`): two schedules (weekly and
+ * monthly) can target one frame, and each has its own period. No schedule id (an ad hoc run)
+ * ⇒ the labelled 30-day default.
+ */
+export async function resolveBoardPackPeriod(db: Db, tenantId: number, scheduleId: string | undefined, now: Date): Promise<BoardPackPeriod> {
+  if (!scheduleId) return defaultBoardPackPeriod(now);
+  const [row] = await db
+    .select({ schedule: reportSchedules.schedule, lastRunAt: reportSchedules.lastRunAt })
+    .from(reportSchedules)
+    .where(and(
+      eq(reportSchedules.id, scheduleId),
+      eq(reportSchedules.tenantId, tenantId),
+      eq(reportSchedules.reportType, 'board_pack'),
+    ))
+    .limit(1);
+  return row ? periodForSchedule(row.schedule, row.lastRunAt, now) : defaultBoardPackPeriod(now);
+}
+
 /** One tile as it appears in the delivered pack. */
 export interface BoardPackTile {
   id: string;
@@ -73,6 +135,12 @@ export interface BoardPack {
   sessionTitle: string;
   generatedAtISO: string;
   tiles: BoardPackTile[];
+  /** Milestones shipped in the pack's own period — the same read the investor update uses. */
+  milestones: InvestorMilestone[];
+  /** Milestones beyond the listed ones in the same period. */
+  milestonesMoreCount: number;
+  /** The period the milestones cover and how it was decided, so the pack can say so. */
+  milestonesPeriod: { since: string; until: string; basis: BoardPackPeriod['basis'] };
   /** Tiles the frame references that no longer exist. Reported, never silently dropped —
    *  a pack that quietly lost a section reads as a pack with nothing to say there. */
   missing: string[];
@@ -130,7 +198,7 @@ function readString(source: Record<string, unknown>, key: string): string | null
  * Returns null when the frame or its session is gone — a deleted board must stop
  * delivering rather than deliver an empty pack that reads as "nothing happened".
  */
-export async function buildBoardPack(db: Db, tenantId: number, subject: BoardPackSubject, now: Date): Promise<BoardPack | null> {
+export async function buildBoardPack(db: Db, tenantId: number, subject: BoardPackSubject, now: Date, period: BoardPackPeriod = defaultBoardPackPeriod(now)): Promise<BoardPack | null> {
   const [session] = await db
     .select({ id: creationSessions.id, title: creationSessions.title })
     .from(creationSessions)
@@ -177,11 +245,16 @@ export async function buildBoardPack(db: Db, tenantId: number, subject: BoardPac
     });
   }
 
+  // The pack's OWN period, not "since the last investor update".
+  const { milestones, moreCount } = await listShippedMilestones(db, { tenantId, since: period.since, until: period.until });
   return {
     frameTitle: readString(frameData, 'title') ?? 'Board pack',
     sessionTitle: session.title,
     generatedAtISO: now.toISOString(),
     tiles,
+    milestones,
+    milestonesMoreCount: moreCount,
+    milestonesPeriod: { since: period.since.toISOString(), until: period.until.toISOString(), basis: period.basis },
     missing,
   };
 }
@@ -200,10 +273,13 @@ export async function buildBoardPackReport(
   subjectKind: string | null,
   subjectRef: string | null,
   now: Date,
+  /** The delivering `report_schedules.id`; absent for an ad hoc run. */
+  scheduleId?: string,
 ): Promise<{ subject: string; report: Record<string, unknown> } | null> {
   const parsed = parseBoardPackSubject(subjectKind, subjectRef);
   if (!parsed) return null;
-  const pack = await buildBoardPack(db, tenantId, parsed, now);
+  const period = await resolveBoardPackPeriod(db, tenantId, scheduleId, now);
+  const pack = await buildBoardPack(db, tenantId, parsed, now, period);
   if (!pack || pack.tiles.length === 0) return null;
   return {
     subject: `[Builderforce] ${pack.frameTitle}`,

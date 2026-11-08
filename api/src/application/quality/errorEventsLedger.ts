@@ -14,7 +14,7 @@ import { errorEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveErrorEventsMonthly } from '../../domain/tenant/PlanLimits';
-import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
+import { enforceTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 import { dailyTenantCounts, sumTenantRowCount, type DailyCount } from '../shared/dailyTenantCounts';
 
 /** The rows that count as one ingested error event, in the one place both the
@@ -47,7 +47,7 @@ export type ErrorEventsCapResult = MonthlyTenantCapResult;
  * query error — a metering hiccup must not drop a legitimate error report.
  */
 export async function enforceErrorEventsCap(db: Db, tenantId: number, env?: Env): Promise<ErrorEventsCapResult> {
-  return enforceMonthlyTenantCap({
+  return enforceTenantCap({
     db,
     tenantId,
     env,

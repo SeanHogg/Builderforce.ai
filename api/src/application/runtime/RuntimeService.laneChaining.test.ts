@@ -260,8 +260,8 @@ describe('RuntimeService lane chaining', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       '[caught-error]',
       expect.objectContaining({
-        source: 'application/runtime/RuntimeService.ts',
-        operation: 'runEffect',
+        source: 'application/runtime/executionLandedEffects.ts',
+        operation: 'runIsolatedEffect',
         context: expect.objectContaining({
           details: expect.objectContaining({
             effect: 'task_status_sync',

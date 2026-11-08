@@ -36,10 +36,11 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { pullRequests, tasks, workDeltas } from '../../infrastructure/database/schema';
+import { projectRepositories, pullRequests, tasks, workDeltas } from '../../infrastructure/database/schema';
 import { TaskStatus } from '../../domain/shared/types';
 import { resolveRepoLink } from '../contributors/activityIngest';
 import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
+import { ticketIdsOnBranch } from './deltaBranchMatch';
 
 /** The merged pull request, in the shape a provider webhook can supply. */
 export interface MergedPullRequestRef {
@@ -50,6 +51,9 @@ export interface MergedPullRequestRef {
   /** The PR's head branch. The fallback join, and only for OUR OWN conventions. */
   branchName: string | null;
   provider?: string;
+  /** The repo's default branch as the provider's payload states it. Preferred over the
+   *  stored `project_repositories.default_branch`; main/master remain the fallback. */
+  defaultBranch?: string | null;
 }
 
 export interface DeltaMergeOutcome {
@@ -110,16 +114,49 @@ async function eligibleDeltaTickets(
 }
 
 /**
+ * The merged repo's `project_repositories` row (its id and stored default branch) plus every
+ * sibling repo's default branch, in ONE query. `repo` is null when the project has no row for
+ * `repoFullName` — then no branch can be attributed to a repository and branch matching is
+ * skipped (fail closed).
+ */
+async function projectRepoScope(
+  db: Db, tenantId: number, projectId: number, repoFullName: string,
+): Promise<{ repo: { id: string; defaultBranch: string | null; isProjectDefault: boolean } | null; allDefaultBranches: string[] }> {
+  const [owner, repo, ...rest] = repoFullName.split('/');
+  const rows = await db
+    .select({
+      id: projectRepositories.id, owner: projectRepositories.owner, repo: projectRepositories.repo,
+      defaultBranch: projectRepositories.defaultBranch, isDefault: projectRepositories.isDefault,
+    })
+    .from(projectRepositories)
+    .where(and(eq(projectRepositories.tenantId, tenantId), eq(projectRepositories.projectId, projectId)));
+  const merged = owner && repo && !rest.length
+    ? rows.find((r) => r.owner === owner && r.repo === repo)
+    : undefined;
+  return {
+    repo: merged
+      ? {
+        id: merged.id,
+        defaultBranch: merged.defaultBranch?.trim() || null,
+        isProjectDefault: merged.isDefault || rows.length === 1,
+      }
+      : null,
+    allDefaultBranches: rows.flatMap((r) => (r.defaultBranch?.trim() ? [r.defaultBranch.trim()] : [])),
+  };
+}
+
+/**
  * Candidate ticket ids for a merged PR, most trustworthy first: the `task_id` this
- * platform already recorded against the PR row, then the id its branch name encodes.
- * Both are exact identities — see the module header for why nothing softer is used.
+ * platform already recorded against the PR row, then the id its branch name encodes,
+ * then the tickets whose recorded working branch IS the head branch. All exact
+ * identities — see the module header for why nothing softer is used.
  */
 async function candidateTaskIds(
   db: Db,
   tenantId: number,
   projectId: number,
   pr: MergedPullRequestRef,
-): Promise<number[]> {
+): Promise<{ ids: number[]; ambiguousBranchTickets: number[] }> {
   const ids = new Set<number>();
 
   if (pr.number != null) {
@@ -140,7 +177,31 @@ async function candidateTaskIds(
   const fromBranch = taskIdFromBranch(pr.branchName);
   if (fromBranch != null) ids.add(fromBranch);
 
-  return [...ids];
+  // A delta whose run left its change on ANY other branch, merged by a PR that names no
+  // ticket: join the head branch to the branch the platform recorded for the ticket.
+  //
+  // SCOPED TO THE MERGED REPOSITORY (a branch name is only unique within one repo), never a
+  // base / default / long-lived branch, and never when MORE THAN ONE ticket records it: the
+  // merge cannot say which of them it shipped, and a wrongly-closed ticket is invisible
+  // while an open one is merely stale.
+  const scope = await projectRepoScope(db, tenantId, projectId, pr.repoFullName);
+  let ambiguousBranchTickets: number[] = [];
+  if (scope.repo) {
+    const defaultBranch = pr.defaultBranch?.trim() || scope.repo.defaultBranch;
+    const onBranch = await ticketIdsOnBranch(db, tenantId, projectId, pr.branchName, defaultBranch, {
+      repoId: scope.repo.id, isProjectDefault: scope.repo.isProjectDefault, allDefaultBranches: scope.allDefaultBranches,
+    });
+    if (onBranch.length === 1) ids.add(onBranch[0]!);
+    else if (onBranch.length > 1) {
+      ambiguousBranchTickets = onBranch;
+      console.warn(
+        `[delta-merge] ${pr.repoFullName} branch '${pr.branchName}' is recorded by ${onBranch.length} tickets `
+        + `(${onBranch.join(', ')}); completing none of them by branch`,
+      );
+    }
+  }
+
+  return { ids: [...ids], ambiguousBranchTickets };
 }
 
 /**
@@ -162,9 +223,12 @@ export async function completeDeltaTicketsOnMerge(
     return { completed: [], reason: `repo '${pr.repoFullName}' is linked to a tenant but not to a project` };
   }
 
-  const candidates = await candidateTaskIds(db, link.tenantId, projectId, pr);
+  const { ids: candidates, ambiguousBranchTickets } = await candidateTaskIds(db, link.tenantId, projectId, pr);
   if (candidates.length === 0) {
-    return { completed: [], reason: 'the merged pull request names no ticket (no recorded task_id, and its branch is not a ticket branch)' };
+    if (ambiguousBranchTickets.length > 0) {
+      return { completed: [], reason: `the merged head branch '${pr.branchName}' is recorded by ${ambiguousBranchTickets.length} tickets (${ambiguousBranchTickets.join(', ')}), so the merge cannot say which it shipped; none was completed` };
+    }
+    return { completed: [], reason: 'the merged pull request names no ticket (no recorded task_id, and its branch is neither a ticket branch nor any ticket\'s recorded working branch)' };
   }
 
   const eligible = await eligibleDeltaTickets(db, link.tenantId, projectId, candidates);

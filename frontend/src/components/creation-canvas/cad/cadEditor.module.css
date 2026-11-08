@@ -1,0 +1,21 @@
+/* The CAD editor inside a card. Buttons, fields and the toolbar come from
+   `creativeEditors.module.css`; this holds only what is the drawing's own. Every colour
+   is a canvas token except the sheet itself, which is white paper in both themes — it is
+   the medium and it is what the exported file shows. 360px-safe: nothing here has a
+   fixed width, and the canvas scales to the card. */
+
+.sheet { width:100%; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); touch-action:pan-y pinch-zoom; }
+.sheet[data-tool] { cursor:default; }
+.sheet:not([data-tool='select']) { cursor:crosshair; touch-action:none; }
+.sheet[data-blocked] { cursor:not-allowed; }
+.imported { display:block; width:100%; max-height:200px; object-fit:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); }
+.sheetCanvas { display:block; width:100%; height:auto; touch-action:inherit; }
+
+.layers { display:grid; gap:6px; min-width:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:var(--font-size-eyebrow); }
+.layersHead { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.layerList { display:grid; gap:4px; margin:0; padding:0; list-style:none; }
+.layerRow { display:flex; align-items:center; gap:4px; min-width:0; padding:2px; border:1px solid transparent; border-radius:var(--radius-sm); }
+.layerRow[data-active] { border-color:var(--canvas-accent); background:var(--canvas-hover); }
+.layerColor { flex:0 0 32px; width:32px; height:32px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.layerName { flex:1 1 auto; min-width:0; min-height:32px; padding:0 6px; overflow:hidden; border:0; background:transparent; color:var(--canvas-ink); font:inherit; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.layerName:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:1px; }

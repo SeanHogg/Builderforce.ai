@@ -9,6 +9,7 @@ import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
 import type { TaskFileChange, TaskFileContent, TaskRepoStatus } from './taskWorkspaceTypes';
 import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
 import { gatewayErrorMessage, type VisionContentPart } from '@builderforce/agent-tools/knowledge';
+import { SIDE_EFFECT_GATES_WIRE_LEVEL } from '@builderforce/agent-tools';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
@@ -136,7 +137,7 @@ export const toolsApi = {
 // ---------------------------------------------------------------------------
 
 import type {
-  JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
+  JobRole, KanbanTemplate, KanbanTemplatePreview, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
   RoleAssignment, AssigneeKind, AccountabilityReport, ManifestParticipant, SignoffContribution, ParticipantsSummaryRow, ImplicatedTicket,
 } from './kanban';
 
@@ -191,8 +192,8 @@ export const kanbanApi = {
     request<{ templates: TemplateSummary[] }>('/api/kanban/templates').then((r) => r.templates),
   listPublicTemplates: (): Promise<TemplateSummary[]> =>
     request<{ templates: TemplateSummary[] }>('/api/kanban/templates/public').then((r) => r.templates),
-  getTemplate: (id: string): Promise<KanbanTemplate> =>
-    request<{ template: KanbanTemplate }>(`/api/kanban/templates/${encodeURIComponent(id)}`).then((r) => r.template),
+  getTemplate: (id: string): Promise<KanbanTemplate | KanbanTemplatePreview> =>
+    request<{ template: KanbanTemplate | KanbanTemplatePreview }>(`/api/kanban/templates/${encodeURIComponent(id)}`).then((r) => r.template),
   createTemplate: (body: Partial<KanbanTemplate> & { name: string; forkFrom?: string }): Promise<KanbanTemplate> =>
     request<{ template: KanbanTemplate }>('/api/kanban/templates', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.template),
   updateTemplate: (id: string, body: Partial<KanbanTemplate>): Promise<KanbanTemplate> =>
@@ -1340,6 +1341,8 @@ export interface Task {
   releaseId?: string | null;
   /** Story-point estimate, or null when unestimated — drives derived sprint velocity. */
   storyPoints?: number | null;
+  /** Shipping this is news for the investor update and board pack. */
+  investorMilestone?: boolean;
   assignedAgentType: string | null;
   assignedAgentHostId: number | null;
   /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
@@ -1880,6 +1883,8 @@ export const tasksApi = {
       dueDate: string | null;
       /** Story-point estimate (0246). null clears it back to unestimated. */
       storyPoints: number | null;
+      /** Flag (true) or clear (false) this work item as an investor milestone (mig 1325). */
+      investorMilestone: boolean;
       /** Pin the business value 0–100 (or null to clear). Setting it server-side
        *  marks the source 'manual'. */
       businessValue: number | null;
@@ -2272,7 +2277,7 @@ export interface ManagerRunTask {
  */
 export type ManagerPassSummary = Record<string, unknown> & {
   scored?: number; ranked?: number; scheduled?: number; assigned?: number;
-  prsConducted?: number; prsMerged?: number; dispatched?: number;
+  prsMerged?: number; dispatched?: number;
   audited?: number; flagged?: number; remediated?: number;
   stalled?: number; unstuck?: number; escalated?: number;
   truncated?: string[];
@@ -4142,6 +4147,7 @@ export const securityApi = {
 
 /** The three effects the runtime evaluator switches on. */
 export type PolicyGateEffect = 'inject-directive' | 'require-approval' | 'block';
+export type PolicyGateSideEffect = 'read' | 'verify' | 'mutate';
 
 export interface PolicyGate {
   id: string;
@@ -4150,6 +4156,8 @@ export interface PolicyGate {
   gateKey: string;
   /** null or '*' governs EVERY tool — how a broad deny posture is authored. */
   tool: string | null;
+  /** read / verify / mutate: governs every tool of that class (unclassified ⇒ mutate); null = any. */
+  sideEffect: PolicyGateSideEffect | null;
   effect: PolicyGateEffect;
   directive: string | null;
   reason: string | null;
@@ -4179,6 +4187,7 @@ export interface PolicyPackInput {
 export interface PolicyGateInput {
   gateKey?: string;
   tool?: string | null;
+  sideEffect?: PolicyGateSideEffect | null;
   effect?: PolicyGateEffect;
   directive?: string | null;
   reason?: string | null;
@@ -4189,6 +4198,7 @@ export interface PolicyGateInput {
 export interface EffectivePolicyGate {
   id: string;
   tool?: string;
+  sideEffect?: PolicyGateSideEffect;
   effect: PolicyGateEffect;
   directive?: string;
   reason?: string;
@@ -4229,6 +4239,7 @@ export const policyPacksApi = {
     const qs = new URLSearchParams();
     if (projectId != null) qs.set('project', String(projectId));
     if (agentRef) qs.set('agent', agentRef);
+    qs.set('gates', String(SIDE_EFFECT_GATES_WIRE_LEVEL)); // this panel reads compact sideEffect gates
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<{ gates: EffectivePolicyGate[] }>(`/api/governance/policy-gates/effective${suffix}`)
       .then((r) => r.gates ?? []);
@@ -5749,8 +5760,9 @@ export const meetingsApi = {
   start: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/start`, { method: 'POST' }),
   end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
   cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
-  ice: (mode: 'direct-only' | 'relay-fallback' = 'relay-fallback'): Promise<{ iceServers: unknown[]; mode: 'direct-only' | 'relay-fallback'; turnEnabled: boolean }> =>
-    request(`${MEETINGS_BASE}/ice?mode=${mode}`),
+  /** TURN/STUN config for ONE room: the server only mints it for a room the caller may join. */
+  ice: (mode: 'direct-only' | 'relay-fallback', room: string): Promise<{ iceServers: unknown[]; mode: 'direct-only' | 'relay-fallback'; turnEnabled: boolean }> =>
+    request(`${MEETINGS_BASE}/ice?mode=${mode}&room=${encodeURIComponent(room)}`),
 
   // Recording / transcription + agent voice (0330).
   transcript: (id: string, sinceAtMs?: number): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript${sinceAtMs != null ? `?sinceAtMs=${Math.max(0, Math.floor(sinceAtMs))}` : ''}`),
@@ -7700,6 +7712,18 @@ export interface SwimlaneAgent {
   createdAt: string;
 }
 
+/**
+ * An agent host that OWNS open tickets in a lane (`tasks.assigned_agent_host_id`) —
+ * a different fact from lane staffing ({@link SwimlaneAgent}). `via: 'ticket'` is what
+ * tells the board to render it as an owner, not a staffed agent.
+ */
+export interface BoardTicketOwner {
+  hostId: number;
+  name: string;
+  ticketCount: number;
+  via: 'ticket';
+}
+
 /** A live per-agent dispatch status across a board's tickets. */
 export interface BoardDispatch {
   id: string;
@@ -7791,9 +7815,15 @@ export const boardsApi = {
       request(`/api/boards/${boardId}/orphaned-tasks/adopt`, { method: 'POST', body: JSON.stringify({ into }) }),
   },
 
+  /** Hosts owning open tickets on the board, keyed by swimlane id (one batched query). */
+  ticketOwners: (boardId: string): Promise<Record<string, BoardTicketOwner[]>> =>
+    request<{ ownersByLane: Record<string, BoardTicketOwner[]> }>(`/api/boards/${boardId}/ticket-owners`).then((r) => r.ownersByLane ?? {}),
+
+  /** Every lane's staffed agents, keyed by swimlane id, in one request. */
+  laneAgents: (boardId: string): Promise<Record<string, SwimlaneAgent[]>> =>
+    request<{ agentsByLane: Record<string, SwimlaneAgent[]> }>(`/api/boards/${boardId}/lane-agents`).then((r) => r.agentsByLane ?? {}),
+
   agents: {
-    list: (boardId: string, laneId: string): Promise<SwimlaneAgent[]> =>
-      request<{ assignments: SwimlaneAgent[] }>(`/api/boards/${boardId}/swimlanes/${laneId}/agents`).then((r) => r.assignments ?? []),
     create: (boardId: string, laneId: string, body: { agentKind: 'workforce' | 'registered'; agentRef: string; name?: string | null; role?: string | null; model?: string | null; position?: number }): Promise<SwimlaneAgent> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}/agents`, { method: 'POST', body: JSON.stringify(body) }),
     remove: (boardId: string, laneId: string, id: string): Promise<void> =>

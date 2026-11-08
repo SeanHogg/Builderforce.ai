@@ -22,23 +22,28 @@ type Pair = readonly [number, number];
 export function layoutSprings(
     edges: readonly KEdge[], index: ReadonlyMap<string, number>, max: number = LAYOUT_MAX_SPRINGS,
 ): Pair[] {
-    const pairOf = (e: KEdge): Pair | null => {
-        const a = index.get(e.from), b = index.get(e.to);
-        return a === undefined || b === undefined || a === b ? null : [a, b];
-    };
-    // Count first: over the budget, the full list of pairs is never built.
-    let total = 0;
-    for (const e of edges) if (pairOf(e)) total++;
+    // One pass resolves every edge to its [from, to] indexes (typed arrays: no pair is allocated for an edge that is not kept).
+    const n = edges.length;
+    const a = new Int32Array(n), b = new Int32Array(n);
+    const structure = new Uint8Array(n);
+    let total = 0, preferredCount = 0;
+    for (let i = 0; i < n; i++) {
+        const e = edges[i]!;
+        const from = index.get(e.from);
+        if (from === undefined) continue;
+        const to = index.get(e.to);
+        if (to === undefined || from === to) continue;
+        a[total] = from; b[total] = to;
+        if (e.kind === 'contains') structure[total] = 1; else preferredCount++;
+        total++;
+    }
+    const pair = (j: number): Pair => [a[j]!, b[j]!];
     if (total <= max) {
-        const all: Pair[] = [];
-        for (const e of edges) { const pair = pairOf(e); if (pair) all.push(pair); }
+        const all: Pair[] = new Array(total);
+        for (let j = 0; j < total; j++) all[j] = pair(j);
         return all;
     }
-    const preferred: Pair[] = [];
-    const structural: Pair[] = [];
-    for (const e of edges) {
-        const pair = pairOf(e);
-        if (pair) (e.kind === 'contains' ? structural : preferred).push(pair);
-    }
-    return [...strideSample(preferred, max), ...strideSample(structural, Math.max(0, max - preferred.length))];
+    const preferred: number[] = [], structural: number[] = [];
+    for (let j = 0; j < total; j++) (structure[j] ? structural : preferred).push(j);
+    return [...strideSample(preferred, max), ...strideSample(structural, Math.max(0, max - preferredCount))].map(pair);
 }

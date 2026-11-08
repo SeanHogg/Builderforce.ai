@@ -29,6 +29,7 @@ class InMemoryTaskRepo implements ITaskRepository {
   async findAll(): Promise<Task[]> { return [...this.store.values()]; }
   async findByProjectIds(): Promise<Task[]> { return [...this.store.values()]; }
   async findById(id: TaskId): Promise<Task | null> { return this.store.get(id as number) ?? null; }
+  async findByIdsAcrossTenants(ids: TaskId[]): Promise<Task[]> { return ids.flatMap((id) => this.store.get(id as number) ?? []); }
   async findChildren(parentId: TaskId): Promise<Task[]> {
     return [...this.store.values()].filter(t => (t.parentTaskId as number | null) === (parentId as number));
   }

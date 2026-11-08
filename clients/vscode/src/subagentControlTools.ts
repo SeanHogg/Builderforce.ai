@@ -13,6 +13,7 @@ import {
   type LiveChildControls,
 } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
+import { toolMutating } from "./toolMutating";
 import type { ChildControls } from "./childRunSpawner";
 
 
@@ -31,7 +32,7 @@ export function subagentControlToolDefs(children: ChildControls, signal: () => A
     name: tool.name,
     description: tool.schema.function.description,
     parameters: tool.schema.function.parameters as Record<string, unknown>,
-    mutating: false,
+    mutating: toolMutating(tool.name),
     execute: async (args: Record<string, unknown>) => {
       const s = signal();
       const out = await tool.execute(args, { caps, ...(s ? { signal: s } : {}) });

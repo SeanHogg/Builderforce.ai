@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import {
   readAssetByKey,
   readTenantAsset,
+  signPublishAsset,
   signTenantAsset,
   storeTenantAsset,
   type AssetRejection,
@@ -72,6 +73,9 @@ export async function handleAssetUpload(c: Context<HonoEnv>) {
     (c.env as { UPLOADS?: R2Bucket }).UPLOADS,
     formData.get('file') as File | null,
     { tenantId: c.get('tenantId') as number, userId: c.get('userId') as string },
+    // `visibility=private` (canvas / creative media): stored under `<tenant>/private/media/`, so the
+    // unauthenticated `GET /api/assets/*` refuses it; read it via `/api/brain/uploads/<key>`.
+    { private: formData.get('visibility') === 'private' },
   );
   if ('error' in stored) return assetErrorResponse(c, stored);
   return c.json(stored, 201);
@@ -98,16 +102,24 @@ export async function handleTenantAssetRead(c: Context<HonoEnv>) {
   return result;
 }
 
-const SignBody = z.object({ key: zNonEmptyString });
+const SignBody = z.object({ key: zNonEmptyString, purpose: z.enum(['publish']).optional() });
 
 /** POST a signing request — a short-lived public URL for one owned object, for a
  *  consumer (an upstream LLM's vision fetch) that needs a TIME-BOXED link rather
  *  than the durable one `GET /api/assets/*` already hands out. */
 export async function handleAssetSign(c: Context<HonoEnv>) {
   const tenantId = c.get('tenantId') as number;
-  const { key } = await parseBody(c, SignBody);
+  const { key, purpose } = await parseBody(c, SignBody);
   const secret = (c.env as Env).JWT_SECRET;
   if (!secret) return c.json({ error: 'Signing not configured' }, 503);
+  if (purpose === 'publish') {
+    // Long-lived and purpose-limited (audio / chapters only); see `signPublishAsset`.
+    const published = await signPublishAsset((c.env as { UPLOADS?: R2Bucket }).UPLOADS, key, tenantId, secret);
+    if (published === 'unconfigured') return c.json({ error: 'File storage not configured' }, 503);
+    if (published === 'type-not-allowed') return c.json({ error: 'Only audio and chapters files can be published' }, 400);
+    if (published === 'not-found') return c.json({ error: 'Not found' }, 404);
+    return c.json(published);
+  }
   const signed = await signTenantAsset(key, tenantId, secret);
   if (!signed) return c.json({ error: 'Not found' }, 404);
   return c.json(signed);

@@ -559,6 +559,10 @@ export const executions = pgTable('executions', {
    *  A child is part of its parent's run: excluded by `liveExecution()`, metered under
    *  the parent, never moves the ticket. Written only by `cloudChildRuns.ts`. */
   parentExecutionId: integer('parent_execution_id').references((): AnyPgColumn => executions.id, { onDelete: 'cascade' }),
+  /** Admission order of a CLOUD run (migration 1330): `nextval('executions_cloud_admitted_seq')`, assigned by
+   *  `dispatchAdmission.admitCloudRun` in the same UPDATE that marks the row cloud-bound. NULL = not (yet) a
+   *  cloud run - a host run, a refused run, a legacy row. The concurrent-run cap counts and ranks by it. */
+  cloudAdmittedSeq: bigint('cloud_admitted_seq', { mode: 'number' }),
   /** Monotonic lifecycle transition number. Maintained by the database trigger
    * that appends execution_lifecycle_outbox rows. */
   lifecycleVersion: integer('lifecycle_version').notNull().default(1),

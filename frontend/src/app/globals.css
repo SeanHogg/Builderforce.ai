@@ -8,6 +8,20 @@
    ============================================================ */
 
 :root {
+  /* Export palette — the concrete colours the creative editors write INTO exported files
+     (DXF/PDF/SVG/GIF/CBZ, a comic page, a model's material). A file opens in someone
+     else's viewer, so these are paper-and-ink values that do NOT flip with the theme.
+     Read at export time through `lib/creation/exportColors.ts`, never copied into code. */
+  --export-paper: #ffffff;
+  --export-ink: #0f172a;
+  --export-layer-ink: #000000;
+  --export-grid-line: #e2e8f0;
+  --export-caption: #fff3b0;
+  --export-panel-empty: #dcdcdc;
+  --export-default-brush: #1e3a8a;
+  --export-material: #d9dde4;
+  --export-pen-fallback: #4d9eff;
+
   /* Backgrounds */
   --bg-deep: #050810;
   --bg-surface: #0a0f1a;

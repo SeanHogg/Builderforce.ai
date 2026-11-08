@@ -50,7 +50,7 @@ function fileSafe(value: unknown): string {
   return slugify(String(value || 'builderforce-artifact'), { maxLength: 60, fallback: 'builderforce-artifact' });
 }
 
-function textDataUrl(mimeType: string, value: string): string {
+export function textDataUrl(mimeType: string, value: string): string {
   return `data:${mimeType};charset=utf-8,${encodeURIComponent(value)}`;
 }
 
@@ -528,3 +528,20 @@ export function mediaFrameDataUrl(frame: string, width: number, height: number, 
   context.putImageData(pixels, 0, 0);
   return canvas.toDataURL('image/png');
 }
+
+/**
+ * Export MIME types of the podcast editor's own deliverables, so they live beside every
+ * other deliverable type. (The image editor's PNG/WebP sit with its format table,
+ * `IMAGE_EXPORT_FORMATS`, because that table also names the extension and quality.)
+ */
+export const EDITED_MEDIA_MIME = {
+  podcastRss: 'application/rss+xml',
+  podcastShowNotes: 'text/markdown',
+  // CAD drawings and the solids both CAD kinds export. `meshStl`/`meshStep` are shared by
+  // `cad` (its closed shapes extruded) and `model3d`.
+  cadSvg: 'image/svg+xml',
+  cadDxf: 'application/dxf',
+  cadPdf: 'application/pdf',
+  meshStl: 'model/stl',
+  meshStep: 'model/step',
+} as const;

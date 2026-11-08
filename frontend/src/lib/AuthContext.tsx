@@ -29,6 +29,7 @@ import {
   type AuthStepResult,
 } from './auth/credentials';
 import { profileApi } from './auth/session';
+import './voiceEmbeddingStore'; // registers its per-user cache wipe on sign-out
 import { signInWithPasskey } from './passkeys';
 
 // ---------------------------------------------------------------------------

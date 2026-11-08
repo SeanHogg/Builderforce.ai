@@ -80,7 +80,7 @@ export async function pullPendingSteering(db: Db, tenantId: number, executionId:
       .select({ text: executionMessages.text })
       .from(executionMessages)
       .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.executionId, executionId), eq(executionMessages.role, 'user'), isNull(executionMessages.consumedAt)))
-      .orderBy(asc(executionMessages.createdAt));
+      .orderBy(asc(executionMessages.createdAt), asc(executionMessages.id));
     if (rows.length === 0) return [];
     // Stamp consumed before returning so a later tick can't re-deliver the same steer.
     await db.update(executionMessages)

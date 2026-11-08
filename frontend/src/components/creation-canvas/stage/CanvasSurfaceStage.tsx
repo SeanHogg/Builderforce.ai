@@ -16,7 +16,7 @@ import { CanvasFacilitateSurface } from '../CanvasFacilitateSurface';
 import { CanvasFormSurface } from '../CanvasFormSurface';
 import { CanvasCalendarSurface } from '../CanvasCalendarSurface';
 import { CanvasKnowledgeSurface } from '../CanvasKnowledgeSurface';
-import { CanvasSceneGeneratorPanel, CanvasWorldView } from '../canvasLazyPanels';
+import { CanvasModel3dSurface, CanvasSceneGeneratorPanel, CanvasWorldView } from '../canvasLazyPanels';
 import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData, CreationObjectKind } from '../types';
 import type { useCanvasResumeShares } from '../hooks/useCanvasResumeShares';
@@ -181,6 +181,13 @@ export function CanvasSurfaceStage({
               {...editSurfaceNode}
             /> : null,
             world: surfaceNode ? <CanvasWorldView
+              data={surfaceNode.data}
+              onExit={exitSurface}
+              {...editSurfaceNode}
+            /> : null,
+            // A hand-built 3D model: the part of a `model3d` a card cannot draw is the
+            // turn. Same object-scoped shape as the world above, and the same single write.
+            model3d: surfaceNode ? <CanvasModel3dSurface
               data={surfaceNode.data}
               onExit={exitSurface}
               {...editSurfaceNode}

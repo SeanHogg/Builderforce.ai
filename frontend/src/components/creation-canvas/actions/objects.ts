@@ -234,7 +234,7 @@ export function canvasObjectActions(ctx: CanvasActionContext): BrainAction[] {
     name: 'canvas_invoke_object_action',
     description: 'Invoke a native capability declared by a canvas object. Inspect and edit return guidance immediately; operational actions are proposed for user review before execution.',
     parameters: { type: 'object', required: ['objectId', 'action'], additionalProperties: false, properties: { objectId: { type: 'string' }, action: { type: 'string' } } },
-    mutates: (raw: unknown) => !['inspect', 'edit'].includes(String((raw as { action?: unknown })?.action || '')),
+    mutates: (raw: unknown) => String((raw as { action?: unknown })?.action || '') !== 'inspect',
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; action?: string };
       const target = stage.object(args.objectId);

@@ -24,6 +24,7 @@ import { gatePathCandidates } from "./gatePaths.js";
 import { normalizeToolName } from "./toolAliases.js";
 import { matchGlob } from "./glob.js";
 import { inScope } from "./workstreamScope.js";
+import { classifyTool, classScopedDirective, sideEffectLabel, TOOL_SIDE_EFFECTS, type DeclaredToolEffect, type ToolSideEffect } from "./tool-side-effect.js";
 
 /**
  * Execution levers an agent's persona/affect can set. Canonical shape shared
@@ -119,6 +120,11 @@ export interface AgentSpecMemory {
  */
 export interface PolicyGate {
   id: string;
+  /**
+   * Set on a gate that was lowered from a class gate: the authored gate's id. A decision, an approval key and the UI name
+   * the authored gate, so a run on an old host and the same run in the cloud line up.
+   */
+  baseGateId?: string;
   /** Tool this gate governs; omit (or `"*"`) to govern every tool call. */
   tool?: string;
   /**
@@ -128,6 +134,14 @@ export interface PolicyGate {
    * govern the tool regardless of path. Empty after coerce is treated as omitted.
    */
   paths?: string[];
+  /**
+   * Govern every tool of this side-effect class (`read` / `verify` / `mutate`),
+   * classified by the ONE classifier in `tool-side-effect.ts`. A tool that is not
+   * classified counts as `mutate` (fail closed), so a new or unknown tool is
+   * caught by a `mutate` gate until someone classifies it. Combines with `tool`
+   * and `paths`: every criterion that is set must match.
+   */
+  sideEffect?: ToolSideEffect;
   effect: "inject-directive" | "require-approval" | "block";
   /** The instruction injected (inject-directive) or the human-readable reason. */
   directive?: string;
@@ -155,7 +169,7 @@ export function coercePolicyGates(raw: unknown): PolicyGate[] {
   const out: PolicyGate[] = [];
   for (const g of raw) {
     if (!g || typeof g !== "object") continue;
-    const { id, tool, effect, directive, reason, paths } = g as Record<string, unknown>;
+    const { id, tool, effect, directive, reason, paths, sideEffect, baseGateId } = g as Record<string, unknown>;
     if (typeof id !== "string") continue;
     if (effect !== "inject-directive" && effect !== "require-approval" && effect !== "block") continue;
     const coercedPaths = coerceGatePaths(paths);
@@ -163,7 +177,9 @@ export function coercePolicyGates(raw: unknown): PolicyGate[] {
       id,
       effect,
       ...(typeof tool === "string" ? { tool } : {}),
+      ...(typeof baseGateId === "string" && baseGateId ? { baseGateId } : {}),
       ...(coercedPaths ? { paths: coercedPaths } : {}),
+      ...(TOOL_SIDE_EFFECTS.includes(sideEffect as ToolSideEffect) ? { sideEffect: sideEffect as ToolSideEffect } : {}),
       ...(typeof directive === "string" ? { directive } : {}),
       ...(typeof reason === "string" ? { reason } : {}),
     });
@@ -262,11 +278,13 @@ export function bulletBlock(header: string, items: readonly string[]): string {
 
 /** Render one {@link PolicyGate} as a binding system-prompt line. */
 function policyGateDirective(g: PolicyGate): string {
-  const scope = !g.tool || g.tool === "*" ? "any tool" : `the \`${g.tool}\` tool`;
+  const effectLabel = g.sideEffect ? sideEffectLabel(g.sideEffect) : "";
+  const anyTool = g.sideEffect ? `any ${effectLabel} tool` : "any tool";
+  const scope = !g.tool || g.tool === "*" ? anyTool : `the \`${g.tool}\` tool${g.sideEffect ? ` when it is a ${effectLabel} tool` : ""}`;
   const pathScope = g.paths?.length ? ` on ${g.paths.map((p) => `\`${p}\``).join(", ")}` : "";
   switch (g.effect) {
     case "inject-directive":
-      return (g.directive ?? "").trim();
+      return classScopedDirective((g.directive ?? "").trim(), g.sideEffect);
     case "require-approval":
       return `Before using ${scope}${pathScope}, pause and request explicit human approval${g.reason ? ` (${g.reason})` : ""}.`;
     case "block":
@@ -298,7 +316,8 @@ export type PolicyDecision =
  * same way: call this before invoking a tool and honour the decision. `block` wins
  * over `require-approval` when both match. Gates with no `tool` (or `"*"`) match all
  * tools; gates with `paths` additionally require the call path to hit a configured
- * glob or directory prefix. Pass `path` from {@link toolCallPaths} when the seam
+ * glob or directory prefix; gates with `sideEffect` additionally require the tool's
+ * classification (unclassified ⇒ `mutate`, fail closed) to equal it. Pass `path` from {@link toolCallPaths} when the seam
  * has args — omitting it leaves path-scoped gates unmatched (existing call sites
  * keep tool-only behaviour). Tool names match case-insensitively. `workspaceRoot`, when
  * the seam knows it, lets an absolute path inside it be judged by its workspace-relative form.
@@ -308,16 +327,21 @@ export function evaluatePolicyGate(
   toolName: string,
   path?: string | readonly string[],
   workspaceRoot?: string,
+  /** The host's own `mutates` flag for a tool the catalog does not know; the catalog classification wins. */
+  declared?: DeclaredToolEffect,
 ): PolicyDecision {
   const called = normalizeToolName(toolName);
   const matches = (gates ?? []).filter(
-    (g) => (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) && gateMatchesPath(g, path, workspaceRoot),
+    (g) =>
+      (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) &&
+      (!g.sideEffect || classifyTool(called, declared) === g.sideEffect) &&
+      gateMatchesPath(g, path, workspaceRoot),
   );
   const blocked = matches.find((g) => g.effect === "block");
-  if (blocked) return { action: "block", gateId: blocked.id, reason: blocked.reason ?? "blocked by policy" };
+  if (blocked) return { action: "block", gateId: blocked.baseGateId ?? blocked.id, reason: blocked.reason ?? "blocked by policy" };
   const approval = matches.find((g) => g.effect === "require-approval");
   if (approval) {
-    return { action: "require-approval", gateId: approval.id, reason: approval.reason ?? "approval required by policy" };
+    return { action: "require-approval", gateId: approval.baseGateId ?? approval.id, reason: approval.reason ?? "approval required by policy" };
   }
   return { action: "allow" };
 }

@@ -14,10 +14,8 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import { cmp, importanceOf } from '../order';
 import type { IdleTask } from '../useIdleSteps';
-import { edgeBucket } from './buffers';
-import { canonicalEdges } from './canonicalEdges';
+import { rankStages } from './rankStages';
 import { strideSample } from './stride';
 
 /** The most links a scene draws (15,000). */
@@ -39,51 +37,11 @@ export interface RankedEdges {
 /**
  * The ranking as steps (index maps; the canonical order; the split and the importance sort; the incident index), so a host
  * can run it a slice at a time. Splits and orders the links that can be drawn; independent of the selection. The canonical
- * order is shared with the layout ({@link canonicalEdges}); the importance sort is stable, so ties keep that order.
+ * order is shared with the layouts (`canonicalEdges`, computed once); the importance sort is stable, so ties keep that order.
+ * The stages live in `rankStages`.
  */
 export function rankTask(edges: readonly KEdge[], nodes: readonly Pick<KNode, 'ref' | 'importance'>[]): IdleTask<RankedEdges> {
-    let importance = new Map<string, number>();
-    let refRank = new Map<string, number>();
-    let canonical: KEdge[] = [];
-    let breaking: KEdge[] = [];
-    let rest: KEdge[] = [];
-    let incident = new Map<string, KEdge[]>();
-    const stages: Array<() => void> = [
-        () => {
-            importance = new Map(nodes.map((n) => [n.ref as string, importanceOf(n)] as const));
-            refRank = new Map([...importance.keys()].sort(cmp).map((r, i) => [r, i] as const));
-        },
-        () => { canonical = canonicalEdges(edges, refRank); },
-        () => {
-            const loud: KEdge[] = [];
-            const quiet: KEdge[] = [];
-            for (const e of canonical) {
-                const { bucket } = edgeBucket(e);
-                (bucket === 'violation' || bucket === 'cycle' ? loud : quiet).push(e);
-            }
-            const weight = quiet.map((e) => importance.get(e.from)! + importance.get(e.to)!);
-            breaking = loud;
-            rest = Array.from(quiet.keys()).sort((a, b) => weight[b]! - weight[a]!).map((i) => quiet[i]!);
-        },
-        () => {
-            incident = new Map();
-            const link = (ref: string, e: KEdge): void => { const l = incident.get(ref); if (l) l.push(e); else incident.set(ref, [e]); };
-            for (const list of [breaking, rest]) for (const e of list) { link(e.from, e); if (e.to !== e.from) link(e.to, e); }
-        },
-    ];
-    let done = false;
-    return {
-        step() {
-            const stage = stages.shift();
-            if (stage) stage();
-            done = stages.length === 0;
-            return done;
-        },
-        result() {
-            if (!done) throw new Error('rankTask: result() read before step() returned true');
-            return { total: breaking.length + rest.length, breaking, rest, incident };
-        },
-    };
+    return rankStages(edges, nodes);
 }
 
 /** The whole ranking in one go (tests, small graphs). */

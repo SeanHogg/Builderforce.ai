@@ -18,6 +18,7 @@ import { approvals } from '../../infrastructure/database/schema';
 import { normalizeRequestKind, type RequestKind } from '../../domain/approval/requestKind';
 import { isSelfOwnedApproval } from '../../domain/approval/selfOwned';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { resolveStakeholderVoice } from '../kanban/stakeholderVoice';
 import { notifyApprovalRequested, notifyRequesterOfOwnApproval } from './approvalNotifier';
 import { checkAutoApprovalRules } from './autoApprovalRules';
 
@@ -96,6 +97,18 @@ export async function requestApproval(db: Db, env: ApprovalEnv, input: ApprovalR
   const autoApproved = kind === 'approval' && !selfOwned
     && await checkAutoApprovalRules(db, tenantId, actionType, asObject(input.metadata));
 
+  // SINGLE VOICE PER TICKET (PRD 37 §5.5): an approval about a ticket (metadata.taskId) is
+  // requested by the ticket's Coordinator on behalf of whoever raised it. A self-owned
+  // approval belongs to the person who raised it and is never re-voiced.
+  const rawTaskId = asObject(input.metadata)?.taskId;
+  const taskId = typeof rawTaskId === 'number' ? rawTaskId : typeof rawTaskId === 'string' && /^\d+$/.test(rawTaskId) ? Number(rawTaskId) : null;
+  const actingLabel = input.requestedBy ?? (agentHostId ? String(agentHostId) : null);
+  const requestedBy = selfOwned
+    ? callerUserId!
+    : taskId != null
+      ? (await resolveStakeholderVoice(db, { tenantId, taskId, actingLabel: actingLabel ?? '' })) || actingLabel
+      : actingLabel;
+
   const approvalId = crypto.randomUUID();
   const now = new Date();
   const status = autoApproved ? 'approved' : 'pending';
@@ -104,7 +117,7 @@ export async function requestApproval(db: Db, env: ApprovalEnv, input: ApprovalR
     id:          approvalId,
     tenantId,
     agentHostId,
-    requestedBy: selfOwned ? callerUserId! : input.requestedBy ?? (agentHostId ? String(agentHostId) : null),
+    requestedBy,
     kind,
     actionType,
     description,

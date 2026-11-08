@@ -13,7 +13,8 @@ import { SCAN_STOP, selectPending, type LocalFirstStore, type LocalFirstTransact
 import type { CoordinatorLeaseFence } from './syncLease.js';
 import { blockedEventIds, dependencyIndex, loadMappedEntities, resolveDependency } from './dependencyGraph.js';
 import { rebaseImportsOntoMapping, rebaseNewerWrites } from './journalRules.js';
-import { isPermanentRefusal } from './permanentRefusals.js';
+import { holdGiveUpReason } from './holdLimits.js';
+import { isAlreadySatisfiedDelete, isPermanentRefusal } from './permanentRefusals.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -227,10 +228,9 @@ function batchEvents(
   return { batch: selected, bytes };
 }
 
-/** Backoff after a hold: 30s · 2^(n-1), capped at an hour. Give up only on AGE (7 days), never on a count. */
+/** Backoff after a hold: 30s · 2^(n-1), capped at an hour. Give up only on AGE (`holdLimits.ts`), never on a count. */
 const HOLD_BACKOFF_BASE_MS = 30_000;
 const HOLD_BACKOFF_CAP_MS = 60 * 60 * 1000;
-const HOLD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const maxEvents = options.maxEvents ?? 100;
@@ -268,7 +268,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
         }
         if (await mergePulled(tx, record, destination, now())) count += 1;
       }
-      await tx.setCursor(destination, result.cursor);
+      await tx.setCursor(destination, result.cursor, now().toISOString());
       return count;
     });
     return { count: result.records.length, conflicts };
@@ -326,8 +326,13 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     await options.store.transact(async (tx) => {
       const acknowledged: string[] = [];
       for (const event of batch) {
-        const receipt = byEvent.get(event.eventId);
-        if (!receipt) continue;
+        const answered = byEvent.get(event.eventId);
+        if (!answered) continue;
+        // A delete the server refused only because its target is already gone is SETTLED: it is
+        // recorded as a duplicate (the outcome already held), so it neither holds nor dead-letters.
+        const receipt: SyncReceipt = answered.status === 'rejected' && isAlreadySatisfiedDelete(event.entityType, event.operation, answered.detail)
+          ? { ...answered, status: 'duplicate' }
+          : answered;
         await tx.putReceipt(receipt);
         if (receipt.status === 'accepted') summary.pushed += 1;
         if (receipt.status === 'duplicate') summary.duplicates += 1;
@@ -373,10 +378,12 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
           const attempts = (sameKind ? (event.holdAttempts ?? 0) : 0) + 1;
           const since = sameKind ? (event.heldSince ?? at.toISOString()) : at.toISOString();
           // A dependency_pending hold is the server waiting on a parent, not a defect of this event:
-          // it backs off but never gives up. Everything else gives up once held for 7 days.
-          if (receipt.status !== 'dependency_pending' && at.getTime() - Date.parse(since) >= HOLD_MAX_AGE_MS) {
+          // it backs off for as long as the server could still hold the parent's receipt (its event
+          // retention), then is `dependency_unresolvable`. Everything else gives up after 7 days.
+          const giveUp = holdGiveUpReason(receipt.status as 'dependency_pending' | 'conflict' | 'rejected', receipt.detail, at.getTime() - Date.parse(since));
+          if (giveUp !== undefined) {
             // Out of patience: surface it in sync status instead of retrying forever.
-            await tx.deadLetter(event.eventId, `gave_up:${receipt.detail ?? receipt.status}`, at.toISOString());
+            await tx.deadLetter(event.eventId, giveUp, at.toISOString());
           } else {
             const wait = Math.min(HOLD_BACKOFF_CAP_MS, HOLD_BACKOFF_BASE_MS * 2 ** (attempts - 1));
             await tx.hold(event.eventId, { holdKind: receipt.status, holdAttempts: attempts, heldSince: since, nextAttemptAt: new Date(at.getTime() + wait).toISOString() });

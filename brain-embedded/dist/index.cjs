@@ -297,6 +297,7 @@ __export(src_exports, {
   installStepDurability: () => installStepDurability,
   invalidateGatewayModelOptions: () => invalidateGatewayModelOptions,
   isActivityMessage: () => isActivityMessage,
+  isBrainActionMutating: () => isBrainActionMutating,
   isChatMode: () => isChatMode,
   isCodeChangeTool: () => isCodeChangeTool,
   isCoderReask: () => isCoderReask,
@@ -2750,6 +2751,20 @@ function clone(value) {
   return structuredClone(value);
 }
 
+// ../packages/local-first/src/payloadHash.ts
+function fnv1a32(text2, seed = 2166136261) {
+  let hash2 = seed >>> 0;
+  for (let index = 0; index < text2.length; index += 1) {
+    hash2 ^= text2.charCodeAt(index);
+    hash2 = Math.imul(hash2, 16777619);
+  }
+  return hash2 >>> 0;
+}
+function hashPayload(payload) {
+  const text2 = JSON.stringify(payload) ?? "null";
+  return `fnv1a:${fnv1a32(text2).toString(16).padStart(8, "0")}`;
+}
+
 // ../packages/local-first/src/store.ts
 async function selectRecords(tx, type, where) {
   const matches = [];
@@ -2889,21 +2904,13 @@ var LOCAL_CREATE_PATHS = Object.freeze([
 
 // ../packages/local-first/src/journalRules.ts
 var BOUND_ONLY_VERSION = 0;
+var PAYLOAD_ON_DELETE = /* @__PURE__ */ new Set(["chat-ticket-link"]);
 var importKey = (type, id) => `${type}:${id}:import`;
 function isOwnRecord(row, deviceId) {
   return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
 }
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
-}
-function hashPayload(payload) {
-  const text2 = JSON.stringify(payload) ?? "null";
-  let hash2 = 2166136261;
-  for (let index = 0; index < text2.length; index += 1) {
-    hash2 ^= text2.charCodeAt(index);
-    hash2 = Math.imul(hash2, 16777619);
-  }
-  return `fnv1a:${(hash2 >>> 0).toString(16).padStart(8, "0")}`;
 }
 function unboundMarker(record3, operation) {
   const text2 = JSON.stringify(record3.payload) ?? "null";
@@ -2972,13 +2979,18 @@ async function journalWrite(tx, record3, operation, options) {
     baseVersion: mapping.serverVersion,
     dependsOn: [],
     destination: record3.destination,
-    payload: operation === "delete" ? null : record3.payload
+    payload: operation === "delete" && !PAYLOAD_ON_DELETE.has(record3.entityType) ? null : record3.payload
   });
 }
 
+// ../packages/local-first/src/holdLimits.ts
+var SYNC_EVENT_RETENTION_DAYS = 90;
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var HOLD_MAX_AGE_MS = 7 * DAY_MS;
+var DEPENDENCY_PENDING_MAX_AGE_MS = SYNC_EVENT_RETENTION_DAYS * DAY_MS;
+
 // ../packages/local-first/src/sync.ts
 var HOLD_BACKOFF_CAP_MS = 60 * 60 * 1e3;
-var HOLD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
 
 // ../packages/local-first/src/syncLease.ts
 var DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 6e4;
@@ -2993,6 +3005,12 @@ var INDEXEDDB_REDACTED_KEYS = [
   "clientsecret"
 ];
 var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
+
+// ../packages/local-first/src/tombstone.ts
+var RESNAPSHOT = Object.freeze({ action: "resnapshot" });
+
+// ../packages/local-first/src/applyServerCursor.ts
+var RESNAPSHOT2 = Object.freeze({ resnapshotRequired: true });
 
 // src/localFirstPersistence.ts
 var import_working2 = require("@seanhogg/builderforce-memory/working");
@@ -3130,7 +3148,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1662e-10, 101398e-10],
+  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3207,7 +3225,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
+  "deepseek/deepseek-v4-pro": [332688e-12, 665376e-12],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
@@ -3261,9 +3279,6 @@ var PRICE_SNAPSHOT = {
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
   "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
-  "inception/mercury-2": [25e-8, 75e-8],
-  "inception/mercury-2.5": [4e-8, 15e-8],
-  "inception/mercury-3": [1e-7, 35e-8],
   "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
@@ -3331,7 +3346,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
-  "moonshotai/kimi-k3:batch": [1084e-9, 6e-6],
+  "moonshotai/kimi-k3:batch": [997e-9, 6e-6],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
   "morph/morph-v3-fast:batch": [4e-7, 6e-7],
@@ -3439,7 +3454,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [27e-9, 1e-7],
+  "openai/gpt-oss-120b": [26e-9, 97e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -4571,8 +4586,8 @@ var MARKETPLACE_LISTING_KINDS = [
     icon: "\u{1F3A5}"
   }
 ];
-var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec) => spec.id);
-var DAY_MS = 24 * 60 * 60 * 1e3;
+var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec2) => spec2.id);
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
 
 // ../packages/creation-canvas-contract/src/academic.ts
 var ACADEMIC_OBJECT_KINDS = [
@@ -8749,7 +8764,7 @@ var ACTION_TYPE_SET = new Set(ACTION_TYPES);
 // ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;
 var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
-var DAY_MS2 = 24 * 60 * 60 * 1e3;
+var DAY_MS3 = 24 * 60 * 60 * 1e3;
 
 // ../packages/learned-routing/src/runOutcomeTelemetry.ts
 var ALL_ENTRY_POINTS = ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
@@ -9383,6 +9398,124 @@ function gatePathCandidates(path2, workspaceRoot) {
   return [.../* @__PURE__ */ new Set([resolved, ...tails])].filter(Boolean);
 }
 
+// ../packages/agent-tools/src/tool-side-effect.ts
+var TOOL_SIDE_EFFECT = {
+  // ── CORE_TOOLS (includes symbols, semantic, git) ──────────────────────────
+  list_files: "read",
+  search_code: "read",
+  read_file: "read",
+  find_symbol: "read",
+  file_outline: "read",
+  semantic_search: "read",
+  repo_map: "read",
+  read_compressed: "read",
+  // Its answer cache under .builderforce/ is a cache, like the symbol index
+  // find_symbol keeps there — no change the person would review.
+  local_research: "read",
+  // Shells out to the analyzers and writes their artifacts under
+  // .builderforce/code-analysis/, so it is a working-tree write, not a read.
+  analyze_codebase: "mutate",
+  write_file: "mutate",
+  edit_file: "mutate",
+  delete_file: "mutate",
+  run_checks: "verify",
+  run_command: "mutate",
+  // A background job's status is a read; stopping one kills processes.
+  command_status: "read",
+  command_stop: "mutate",
+  git_status: "read",
+  git_diff: "read",
+  git_history: "read",
+  git_sync_latest: "mutate",
+  git_undo: "mutate",
+  git_redo: "mutate",
+  git_commit: "mutate",
+  git_push: "mutate",
+  open_pull_request: "mutate",
+  git_cleanup_merged: "mutate",
+  web_fetch: "read",
+  web_search: "read",
+  memory_recall: "read",
+  memory_remember: "mutate",
+  memory_forget: "mutate",
+  claim_resource: "mutate",
+  release_resource: "mutate",
+  workspace_note: "mutate",
+  workspace_read: "read",
+  ask_human: "read",
+  update_prd: "mutate",
+  finish: "read",
+  // ── SKILL_TOOLS ───────────────────────────────────────────────────────────
+  skill_propose: "mutate",
+  skill_list: "read",
+  // ── SUBAGENT_TOOLS (includes live control verbs) ──────────────────────────
+  spawn_agent: "mutate",
+  spawn_agents: "mutate",
+  wait_agents: "read",
+  message_agent: "mutate",
+  stop_agent: "mutate"
+};
+function toolSideEffect(name) {
+  return Object.prototype.hasOwnProperty.call(TOOL_SIDE_EFFECT, name) ? TOOL_SIDE_EFFECT[name] : void 0;
+}
+function normalizeAction(value) {
+  if (typeof value !== "string") return void 0;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized || void 0;
+}
+function classifyTool(name, declared, args) {
+  const cataloged = toolSideEffect(name);
+  if (cataloged) return cataloged;
+  if (declared?.mutates !== void 0) return declared.mutates ? "mutate" : "read";
+  if (HOST_READ_ONLY_TOOLS.has(name.trim().toLowerCase())) return "read";
+  const action = normalizeAction(args?.action);
+  if (action && READ_ONLY_ACTIONS.has(action) && isActionDispatchedHostTool(name)) return "read";
+  return "mutate";
+}
+function isMutatingTool(name, declared) {
+  return classifyTool(name, declared) === "mutate";
+}
+function sideEffectLabel(effect) {
+  return effect === "mutate" ? "mutating" : effect === "verify" ? "verification" : "read-only";
+}
+function classScopedDirective(directive, sideEffect) {
+  return directive && sideEffect ? `For any ${sideEffectLabel(sideEffect)} tool: ${directive}` : directive;
+}
+var HOST_READ_ONLY_TOOLS = /* @__PURE__ */ new Set([
+  "read",
+  "ls",
+  "find",
+  "grep",
+  "glob",
+  "memory_search",
+  "memory_get",
+  "sessions_list",
+  "sessions_history",
+  "agents_list"
+]);
+var ACTION_DISPATCHED_HOST_TOOLS = /* @__PURE__ */ new Set(["process", "cron", "canvas", "gateway", "nodes", "browser"]);
+function isActionDispatchedHostTool(name) {
+  const normalized = name.trim().toLowerCase();
+  return ACTION_DISPATCHED_HOST_TOOLS.has(normalized) || normalized.endsWith("_actions");
+}
+var READ_ONLY_ACTIONS = /* @__PURE__ */ new Set([
+  "get",
+  "list",
+  "read",
+  "status",
+  "show",
+  "fetch",
+  "search",
+  "query",
+  "view",
+  "poll",
+  "log",
+  "inspect",
+  "check",
+  "probe"
+]);
+var CONTROL_TOOL_NAMES = ["finish", "ask_human", "ask_user"];
+
 // ../packages/agent-tools/src/spec.ts
 function pathHitsPattern(path2, pattern) {
   return matchGlob(path2, pattern) || inScope(path2, [pattern]);
@@ -9398,11 +9531,13 @@ function bulletBlock(header, items) {
   return [header, ...items.map((x) => `- ${x}`)].join("\n");
 }
 function policyGateDirective(g) {
-  const scope = !g.tool || g.tool === "*" ? "any tool" : `the \`${g.tool}\` tool`;
+  const effectLabel = g.sideEffect ? sideEffectLabel(g.sideEffect) : "";
+  const anyTool = g.sideEffect ? `any ${effectLabel} tool` : "any tool";
+  const scope = !g.tool || g.tool === "*" ? anyTool : `the \`${g.tool}\` tool${g.sideEffect ? ` when it is a ${effectLabel} tool` : ""}`;
   const pathScope = g.paths?.length ? ` on ${g.paths.map((p) => `\`${p}\``).join(", ")}` : "";
   switch (g.effect) {
     case "inject-directive":
-      return (g.directive ?? "").trim();
+      return classScopedDirective((g.directive ?? "").trim(), g.sideEffect);
     case "require-approval":
       return `Before using ${scope}${pathScope}, pause and request explicit human approval${g.reason ? ` (${g.reason})` : ""}.`;
     case "block":
@@ -9414,19 +9549,22 @@ function renderPolicyDirectives(gates) {
   if (lines.length === 0) return "";
   return bulletBlock("Governance (these gates are binding):", lines);
 }
-function evaluatePolicyGate(gates, toolName, path2, workspaceRoot) {
+function evaluatePolicyGate(gates, toolName, path2, workspaceRoot, declared) {
   const called = normalizeToolName(toolName);
   const matches = (gates ?? []).filter(
-    (g) => (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) && gateMatchesPath(g, path2, workspaceRoot)
+    (g) => (!g.tool || g.tool === "*" || normalizeToolName(g.tool) === called) && (!g.sideEffect || classifyTool(called, declared) === g.sideEffect) && gateMatchesPath(g, path2, workspaceRoot)
   );
   const blocked = matches.find((g) => g.effect === "block");
-  if (blocked) return { action: "block", gateId: blocked.id, reason: blocked.reason ?? "blocked by policy" };
+  if (blocked) return { action: "block", gateId: blocked.baseGateId ?? blocked.id, reason: blocked.reason ?? "blocked by policy" };
   const approval = matches.find((g) => g.effect === "require-approval");
   if (approval) {
-    return { action: "require-approval", gateId: approval.id, reason: approval.reason ?? "approval required by policy" };
+    return { action: "require-approval", gateId: approval.baseGateId ?? approval.id, reason: approval.reason ?? "approval required by policy" };
   }
   return { action: "allow" };
 }
+
+// ../packages/agent-tools/src/gate-lowering.ts
+var CONTROL = new Set(CONTROL_TOOL_NAMES);
 
 // ../packages/agent-tools/src/stableStringify.ts
 function stableStringify(value) {
@@ -11089,6 +11227,14 @@ function toDependencyCruiserRules(reg) {
   return rules;
 }
 
+// ../packages/agent-tools/src/analyzerPins.ts
+var TYPESCRIPT_PIN = "typescript@5.6.3";
+var ANALYZER_VERSIONS = {
+  "dependency-cruiser": "16.10.4",
+  jscpd: "4.0.5",
+  knip: "5.30.0"
+};
+
 // ../packages/agent-tools/src/knowledge/workspaceFingerprint.ts
 var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
@@ -11208,11 +11354,23 @@ async function workspaceFingerprint(ctx) {
 }
 
 // ../packages/agent-tools/src/codeAnalysisTool.ts
+function spec(name, version2, extraPackages, bin, args) {
+  const packages = [`${name}@${version2}`, ...extraPackages];
+  return { name, version: version2, packages, bin, args, command: analyzerCommand({ packages, bin, args }, ".") };
+}
 var ANALYZERS = [
-  { name: "dependency-cruiser", version: "16.10.4", command: 'npm exec --yes --package=dependency-cruiser@16.10.4 --package=typescript@5.6.3 --call="depcruise --config=.builderforce/code-analysis/dependencies.json --output-type=json ."' },
-  { name: "jscpd", version: "4.0.5", command: 'npm exec --yes --package=jscpd@4.0.5 --call="jscpd --silent --reporters=json --min-lines=5 --min-tokens=50 --ignore=**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.builderforce/** --output=.builderforce/code-analysis ."' },
-  { name: "knip", version: "5.30.0", command: 'npm exec --yes --package=knip@5.30.0 --package=typescript@5.6.3 --call="knip --reporter=json --no-progress"' }
+  spec("dependency-cruiser", ANALYZER_VERSIONS["dependency-cruiser"], [TYPESCRIPT_PIN], "depcruise", "--config=.builderforce/code-analysis/dependencies.json --output-type=json {scope}"),
+  spec("jscpd", ANALYZER_VERSIONS.jscpd, [], "jscpd", "--silent --reporters=json --min-lines=5 --min-tokens=50 --ignore=**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.builderforce/** --output=.builderforce/code-analysis {scope}"),
+  spec("knip", ANALYZER_VERSIONS.knip, [TYPESCRIPT_PIN], "knip", "--reporter=json --no-progress")
 ];
+var bundled;
+function bundledAnalyzers() {
+  return bundled;
+}
+function analyzerCommand(a, scope, entry) {
+  const args = a.args.replace("{scope}", () => scope);
+  return entry ? `node "${entry}" ${args}` : `npm exec --yes ${a.packages.map((p) => `--package=${p}`).join(" ")} --call="${a.bin} ${args}"`;
+}
 function parseAnalyzerJson(text2) {
   const start = text2.indexOf("{");
   if (start < 0) throw new Error("No JSON report in analyzer output");
@@ -11245,7 +11403,7 @@ function createAnalyzeCodebaseTool(options = {}) {
   const configBase64 = base64Utf8(JSON.stringify(dependencyCruiserConfig(options.partitions)));
   return defineTool({
     name: "analyze_codebase",
-    description: "Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Downloads pinned analyzer packages through npm cache on first use. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.",
+    description: "Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Runs the analyzers bundled with the host when it ships them, else downloads the pinned packages through npm cache on first use; an analyzer that cannot start is reported not_measured, never as zero findings. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.",
     parameters: { type: "object", properties: { path: { type: "string", description: "Relative project/package directory; use a smaller package for large monorepos. Defaults to repository root." } } },
     requires: ["shell", "repo.read"],
     async execute(args, ctx) {
@@ -11255,20 +11413,44 @@ function createAnalyzeCodebaseTool(options = {}) {
       const id = crypto.randomUUID();
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs = [];
+      const entries = bundledAnalyzers();
       for (const analyzer of ANALYZERS) {
+        const entry = entries?.[analyzer.name];
+        if (entries && !entry) {
+          outputs.push(null);
+          tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
+          continue;
+        }
+        let launched = false;
         try {
+          const setupFailed = (message2) => {
+            if (entry) return "unavailable";
+            throw new Error(message2);
+          };
+          let unavailable2;
           if (analyzer.name === "dependency-cruiser") {
             const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
-            if (!config.ok) throw new Error("Could not create dependency analysis configuration");
+            if (!config.ok) unavailable2 = setupFailed("Could not create dependency analysis configuration");
           }
           if (analyzer.name === "jscpd") {
             const cleanup = await shellRunWithStop(ctx, `node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
-            if (!cleanup.ok) throw new Error("Could not clear the previous duplication artifact");
+            if (!cleanup.ok) unavailable2 = setupFailed("Could not clear the previous duplication artifact");
           }
-          const command = analyzer.name === "knip" ? analyzer.command : analyzer.command.replace(/ \."$/, ` ${scope}"`);
+          if (unavailable2) {
+            outputs.push(null);
+            tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
+            continue;
+          }
+          const command = analyzerCommand(analyzer, scope, entry);
           const result = await shellRunWithStop(ctx, command.replaceAll(".builderforce/code-analysis", outputDir), analyzer.name === "knip" && scope !== "." ? scope : void 0);
+          launched = true;
           const artifact = analyzer.name === "jscpd" ? await ctx.caps.repoRead.readFile(`${outputDir}/jscpd-report.json`) : void 0;
           const text2 = artifact ? artifact.content : result.stdout;
+          if (entry && !text2) {
+            outputs.push(null);
+            tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
+            continue;
+          }
           if (!text2 || artifact?.truncated) throw new Error("Analyzer output is empty or truncated; scan a smaller project");
           const value = parseAnalyzerJson(text2);
           if (analyzer.name === "dependency-cruiser" && !Array.isArray(value.modules)) throw new Error("Invalid dependency report");
@@ -11278,6 +11460,11 @@ function createAnalyzeCodebaseTool(options = {}) {
           outputs.push(value);
           tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? "failed" : "complete", ...unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {} });
         } catch (error) {
+          if (entry && !launched) {
+            outputs.push(null);
+            tools.push({ name: analyzer.name, version: analyzer.version, status: "not_measured", reason: "analyzer-unavailable" });
+            continue;
+          }
           outputs.push(null);
           tools.push({ name: analyzer.name, version: analyzer.version, status: "failed", error: String(error).slice(0, 1e3) });
         }
@@ -12496,6 +12683,9 @@ var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 // ../packages/agent-tools/src/knowledge/replicaPump.ts
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
+// ../packages/agent-tools/src/knowledge/replicaGenerationCheck.ts
+var GENERATION_CHECK_INTERVAL_MS = 10 * 6e4;
+
 // ../packages/agent-tools/src/knowledge/replicaReconcile.ts
 var import_pack4 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var EMPTY_ROOT = (0, import_pack4.manifestTree)([]).root;
@@ -13022,9 +13212,9 @@ var COST_LEVERS = [
 ];
 var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
 function costLeverSpec(id) {
-  const spec = BY_ID.get(id);
-  if (!spec) throw new Error(`unknown cost lever: ${id}`);
-  return spec;
+  const spec2 = BY_ID.get(id);
+  if (!spec2) throw new Error(`unknown cost lever: ${id}`);
+  return spec2;
 }
 function costLeverEnvKey(id) {
   return `COST_LEVER_${id.toUpperCase()}`;
@@ -18044,16 +18234,7 @@ function BrainActionsProvider({ children }) {
   }, []);
   const isMutating = (0, import_react3.useCallback)((name, args) => {
     const entry = registry2.current.get(name);
-    if (!entry) return false;
-    const m = entry.action.mutates;
-    if (typeof m === "function") {
-      try {
-        return !!m(args);
-      } catch {
-        return true;
-      }
-    }
-    return !!m;
+    return entry ? isBrainActionMutating(entry.action, args) : isMutatingTool(name);
   }, []);
   const toolSpecs = (0, import_react3.useMemo)(() => {
     return toolSpecsFor([...registry2.current.values()].map((e) => e.action));
@@ -18091,7 +18272,7 @@ function liveAction(name, latest) {
       return current()?.parameters ?? { type: "object", properties: {} };
     },
     get mutates() {
-      return current()?.mutates;
+      return current()?.mutates ?? true;
     },
     run: (args) => {
       const action = current();
@@ -18112,6 +18293,20 @@ function useRegisterBrainActions(actions) {
     if (!register || names === "") return;
     return register(names.split(",").map((name) => liveAction(name, latest)));
   }, [register, signature]);
+}
+function isBrainActionMutating(action, args) {
+  const m = action.mutates;
+  let declared;
+  if (typeof m === "function") {
+    try {
+      declared = !!m(args);
+    } catch {
+      return true;
+    }
+  } else {
+    declared = m;
+  }
+  return isMutatingTool(action.name, { mutates: declared });
 }
 
 // src/useMcpExtensions.ts
@@ -22000,22 +22195,34 @@ function candidateToolNames(toolName, args) {
 
 // ../packages/agent-run/src/policy/tools/gates.ts
 var INPUT_PATH_TOOLS = /* @__PURE__ */ new Set(["apply_patch"]);
-var CONTROL_TOOLS = /* @__PURE__ */ new Set(["finish", "ask_human", "ask_user"]);
+var CONTROL_TOOLS = new Set(CONTROL_TOOL_NAMES);
 function policyRefusalMessage(d) {
   if (d.action === "block") {
     return `Policy gate ${d.gateId} blocked this tool call: ${d.reason}`;
   }
   return `Policy gate ${d.gateId} requires human approval before this tool call (${d.reason}). No approver is available on this host (no approval pause), so the call was refused.`;
 }
+function declaredBy(ports, name) {
+  return name ? ports.platform?.declared?.(name) ?? ports.extensions?.declared?.(name) : void 0;
+}
 function gatesFor(gates, toolName) {
   const all = gates ?? [];
   return CONTROL_TOOLS.has(toolName) ? all.filter((g) => g.tool && g.tool !== "*") : all;
 }
-function evaluatePolicyGateSeam(gates, toolName, args, workspaceRoot) {
+function callSideEffect(toolName, args, declared) {
+  const cataloged = candidateToolNames(toolName, args).find((n2) => toolSideEffect(n2) !== void 0);
+  return classifyTool(cataloged ?? toolName, declared, args);
+}
+function resolveSideEffectGates(gates, toolName, args, declared) {
+  if (!gates.some((g) => g.sideEffect)) return [...gates];
+  const effect = callSideEffect(toolName, args, declared);
+  return gates.filter((g) => !g.sideEffect || g.sideEffect === effect).map(({ sideEffect: _class, ...rest }) => rest);
+}
+function evaluatePolicyGateSeam(gates, toolName, args, workspaceRoot, declared) {
   const paths = toolCallPaths(args);
   const pathArg = paths.length ? paths : void 0;
   const unreadable = INPUT_PATH_TOOLS.has(toolName) && typeof args?.input === "string" && args.input.trim().length > 0 && paths.length === 0;
-  const applicable = gatesFor(gates, toolName).map((g) => {
+  const applicable = resolveSideEffectGates(gatesFor(gates, toolName), toolName, args, declared).map((g) => {
     if (!unreadable || !g.paths) return g;
     const { paths: _scope, ...unscoped } = g;
     return unscoped;
@@ -22028,8 +22235,8 @@ function evaluatePolicyGateSeam(gates, toolName, args, workspaceRoot) {
   }
   return approval ?? { action: "allow" };
 }
-function isToolWithheld(gates, toolName) {
-  const blocking = gatesFor(gates, toolName).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
+function isToolWithheld(gates, toolName, declared) {
+  const blocking = resolveSideEffectGates(gatesFor(gates, toolName), toolName, void 0, declared).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
   if (blocking.length === 0) return false;
   if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
   const blocked = new Set(blocking.map((g) => normalizeToolName(g.tool ?? "")));
@@ -22051,7 +22258,7 @@ async function refuseApproval(ctx, call2, decision, key, error) {
 async function gateCall(ctx, call2) {
   const gates = ctx.policy.approvalGates;
   if (!gates || gates.length === 0) return void 0;
-  const decision = evaluatePolicyGateSeam(gates, call2.name, call2.args, ctx.task.workspace?.defaultRepo);
+  const decision = evaluatePolicyGateSeam(gates, call2.name, call2.args, ctx.task.workspace?.defaultRepo, declaredBy(ctx.ports, call2.name));
   if (decision.action === "block") {
     await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call2.name, gateId: decision.gateId, reason: decision.reason });
     return {
@@ -22064,7 +22271,7 @@ async function gateCall(ctx, call2) {
   if ((ctx.state.approvedCalls ?? []).includes(key)) return void 0;
   const refusedBefore = ctx.state.refusedCalls?.[key] ?? ctx.ports.refusals?.recall(key);
   if (refusedBefore) return { data: { ok: false, gate: decision.gateId, error: refusedBefore }, isError: true };
-  const gate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
+  const gate = gates.find((g) => g.id === decision.gateId || g.baseGateId === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
   const question = `Approve the agent's use of "${call2.name}"? ${decision.reason}`;
   const human = ctx.ports.human;
   const parkedOn = ctx.state.parkedCalls?.[key];
@@ -22134,7 +22341,7 @@ function capToolResult(tool, data, maxChars) {
 var SIGNOFF_TOOL = "builtin_kanban_signoff";
 function selectedTools(ctx, offered) {
   const { policy, task } = ctx;
-  const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
+  const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
   if (isChatReplyScope(policy.toolScope)) {
     const allowed = new Set(CHAT_REPLY_SCOPED_TOOLS);
     const extension = ctx.ports.extensions;
@@ -22146,7 +22353,7 @@ function selectedTools(ctx, offered) {
   const required = policy.signoff ? [SIGNOFF_TOOL] : [];
   const pinned = [...pinnedNames(ctx), ...required];
   const own = selectPlatformCatalog(ctx, pinned);
-  if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
+  if (own) return own.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? "", declaredBy(ctx.ports, t.function?.name)));
   const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
   const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });
   const selected = selectToolsForTurn(catalog, { query: task.prompt, pinned });
@@ -26831,8 +27038,21 @@ function touchedStillDirty(touched, dirty) {
   const d = dirty.map(norm);
   return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
 }
+var DEFAULT_BRANCH_CMD = gitCommandPattern("remote|symbolic-ref|branch");
+function defaultBranchFromTrace(steps) {
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const ev = steps[i];
+    if (!succeeded5(ev) || !DEFAULT_BRANCH_CMD.test(commandOf(ev))) continue;
+    const out = outputOf(ev);
+    const m = /HEAD branch:\s*(\S+)/.exec(out) ?? /origin\/HEAD\s*->\s*origin\/(\S+)/.exec(out) ?? /^\s*refs\/remotes\/origin\/(\S+)\s*$/m.exec(out);
+    if (m?.[1] && m[1] !== "HEAD" && m[1] !== "(unknown)") return m[1];
+  }
+  return null;
+}
 function shippedToBaseBranch(events, opts) {
   const steps = events.filter((e) => e.category === "tool");
+  const defaultBranch = opts?.defaultBranch?.trim() || defaultBranchFromTrace(steps);
+  const isBase = (branch) => BASE_BRANCHES.has(branch) || branch === defaultBranch;
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
     if (succeeded5(steps[i]) && isPush(steps[i])) pushedAt = i;
@@ -26847,7 +27067,7 @@ function shippedToBaseBranch(events, opts) {
     const output = outputOf(ev);
     const status2 = parseGitShortStatus(output);
     if (!status2) continue;
-    if (!(status2.branch && BASE_BRANCHES.has(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
+    if (!(status2.branch && isBase(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
     if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
     return true;
   }
@@ -27546,9 +27766,9 @@ function handleRouterCall(catalog, name, args) {
   }
   if (name === TOOL_ROUTER_DESCRIBE) {
     const target2 = typeof a.name === "string" ? a.name : "";
-    const spec = describeTool(catalog, target2);
+    const spec2 = describeTool(catalog, target2);
     return {
-      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+      result: spec2 ? { name: target2, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
     };
   }
   const target = typeof a.name === "string" ? a.name : "";
@@ -33771,13 +33991,16 @@ function useDoorStopMarks(running) {
   const stopEpochs = (0, import_react17.useRef)(/* @__PURE__ */ new Map());
   return (0, import_react17.useMemo)(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
 }
+var stopEpochKey = (runKey, draftToken) => runKey === null && typeof draftToken === "number" ? `draft:${draftToken}` : runKey;
+var sendEpochKey = (ports) => stopEpochKey(ports.runKey, ports.runKey === null ? ports.drafts?.adopt() : void 0);
 var stopEpochOf = (marks, key) => marks.stopEpochs.current.get(key) ?? 0;
 function stopDoorTurns(ports, marks, clear) {
   const { stop: halt, runKey: key, drafts: binding } = ports;
   const token = key === null ? binding ? binding.current() : void 0 : void 0;
   clear();
   if (token === null) return;
-  marks.stopEpochs.current.set(key, stopEpochOf(marks, key) + 1);
+  const epochKey = stopEpochKey(key, token);
+  marks.stopEpochs.current.set(epochKey, stopEpochOf(marks, epochKey) + 1);
   if (ports.running) marks.markStopping(true);
   if (halt) halt(token);
   else if (key != null) stopRun(key);
@@ -34081,12 +34304,13 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
       let turn = first;
       while (turn !== void 0) {
         const key = ports.current.runKey;
-        const epoch = stopEpochOf(marks, key);
+        const epochKey = sendEpochKey(ports.current);
+        const epoch = stopEpochOf(marks, epochKey);
         const sent = turn;
         const kept = await new Promise((resolve) => {
           resolve(sendOnce(sent));
         }).then((ok) => ok !== false, () => false);
-        if (stopEpochOf(marks, key) !== epoch) return;
+        if (stopEpochOf(marks, epochKey) !== epoch) return;
         const { textOf: text2, attachmentsOf: attached2, isDirected: directed } = ports.current;
         if (kept) {
           const idle = ports.current.runKey === key && !startsRun(turnBody(sent, text2)) && !directed?.(sent);
@@ -34639,6 +34863,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   installStepDurability,
   invalidateGatewayModelOptions,
   isActivityMessage,
+  isBrainActionMutating,
   isChatMode,
   isCodeChangeTool,
   isCoderReask,

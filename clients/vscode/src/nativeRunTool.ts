@@ -8,7 +8,7 @@
 import { resolveToolAlias } from "@builderforce/agent-tools";
 import { toolSpecsFor, type BrainAction, type BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
 import { describeTool, type ToolDef } from "./fileTools";
-import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "./policy";
+import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforce/agent-tools";
 import type { RunHooks } from "./hooks/runHooks";
 import type { NativeApprovalRequest, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
 
@@ -66,6 +66,12 @@ export function nativeToolSpecs(defs: readonly ToolDef[]): BrainToolSpec[] {
   return toolSpecsFor(toolDefActions(defs, async () => ({ ok: false, error: "not dispatched here" })));
 }
 
+/** The host's own declaration for a tool of its (`mutating`), handed to the gate so a declared-read tool is not judged a mutation by a class gate; the catalog still wins. */
+function declaredOf(defs: readonly ToolDef[], name: string): { mutates: boolean } | undefined {
+  const def = defs.find((candidate) => candidate.name === name);
+  return def ? { mutates: def.mutating } : undefined;
+}
+
 /**
  * Whether a pending call must pause for a human. TRUE for a governance
  * `require-approval` gate (always — an "acceptEdits" preference cannot waive a
@@ -80,7 +86,7 @@ export function nativeNeedsConfirm(
   gates: readonly PolicyGate[] | undefined,
 ): (req: { name: string; args: unknown }) => boolean {
   return ({ name, args }) => {
-    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args))).action === "require-approval") return true;
+    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action === "require-approval") return true;
     if (permissionMode === "acceptEdits") return false;
     const def = defs.find((candidate) => candidate.name === name);
     // Fail safe: a tool we don't recognise is treated as mutating.
@@ -96,7 +102,7 @@ export function approvalRequestFor(
   args: unknown,
 ): NativeApprovalRequest {
   const record = argsRecord(args);
-  const decision = evaluatePolicyGate(gates, name, toolCallPaths(record));
+  const decision = evaluatePolicyGate(gates, name, toolCallPaths(record), undefined, declaredOf(defs, name));
   return {
     name,
     args: record,
@@ -146,7 +152,7 @@ export function createNativeRunTool(opts: {
     const resolved = resolveToolAlias(name);
     const record = argsRecord(args);
     const label = toolLabel(opts.defs, resolved, record);
-    const decision = evaluatePolicyGate(opts.gates, resolved, toolCallPaths(record));
+    const decision = evaluatePolicyGate(opts.gates, resolved, toolCallPaths(record), undefined, declaredOf(opts.defs, resolved));
     if (decision.action === "block") {
       const message = opts.labels.blockedByPolicy(decision.reason);
       opts.events.onToolResult(label, false);

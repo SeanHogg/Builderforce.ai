@@ -10,6 +10,8 @@ import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { NarrationResult } from '@/lib/voiceEngine';
+import type { WithProvenance } from '@/lib/voiceClipProvenance';
+import { VoiceProvenanceBadge } from './VoiceProvenanceBadge';
 
 const wrap: React.CSSProperties = {
   flex: 1,
@@ -30,7 +32,7 @@ export function VoiceOutput({
   busy,
   unavailable,
 }: {
-  result: NarrationResult | null;
+  result: (NarrationResult & WithProvenance) | null;
   audioUrl: string | null;
   busy: boolean;
   unavailable: string | null;
@@ -96,6 +98,7 @@ export function VoiceOutput({
           {result.engineId === 'clone-client' ? t('sourceOnDevice') : t('sourceServer')}
           {result.cloned ? '' : ` · ${t('fallbackVoice')}`}
         </div>
+        {result.provenance && <VoiceProvenanceBadge provenance={result.provenance} />}
         <p style={{ lineHeight: 2, fontSize: 'var(--font-size-card-title)' }}>
           {result.wordTimestamps.length > 0
             ? result.wordTimestamps.map((w, i) => (

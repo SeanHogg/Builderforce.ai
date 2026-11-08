@@ -27,6 +27,7 @@ import { evaluateExecutionApprovalGate } from './executionApprovalGate';
 import { checkTenantTokenGate } from '../llm/tenantTokenAvailability';
 import { enforceCloudRunCap, type CloudRunCapResult } from './cloudRunLedger';
 import { startDispatchedExecution, type ExecutionTaskRow, type SubmittedExecution } from './dispatchCloudRun';
+import { admissionRefusalOf, preAdmitRun, type AdmissionRefusal } from './dispatchAdmission';
 import { enqueueExecutionMessage } from './executionSteering';
 import { recordPrdDirective } from './cloudAgent/prd';
 import { submittingUserId } from './dispatcherLabel';
@@ -76,7 +77,12 @@ export type FollowUpEntitlementRefusal = 'cloud_run_limit' | 'tenant_token_limit
 export type FollowUpRunOutcome =
   | { kind: 'started'; executionId: number; dispatch: unknown }
   | { kind: 'awaiting_approval'; approvalId: string; reason: string }
-  | { kind: 'refused'; reason: FollowUpEntitlementRefusal; message: string };
+  /** `admission` is set when the refusal is run admission (a live run on the ticket, the
+   *  concurrent cap) rather than a billing entitlement - the route answers 409 / 429, not 402. */
+  | { kind: 'refused'; reason: FollowUpEntitlementRefusal | AdmissionRefusal['code']; message: string; admission?: AdmissionRefusal };
+
+const refusedByAdmission = (admission: AdmissionRefusal): FollowUpRunOutcome =>
+  ({ kind: 'refused', reason: admission.code, message: admission.message, admission });
 
 export interface FollowUpRunArgs {
   tenantId: number;
@@ -106,6 +112,13 @@ export async function startFollowUpRun(
   // On-prem runs execute on the user's own machine and are unlimited by policy, so only
   // a cloud-bound follow-up is held to the cloud-run cap (same rule as the dispatcher).
   const hostPinned = (prior.agentHostId ?? taskRow.assignedAgentHostId) != null;
+  // Admission, pre-row: one live run per ticket (D6) and the concurrent cap (D8). The
+  // cap look is skipped for a pinned host only as a shortcut: a pinned run that falls
+  // back to the cloud is gated again, after its row exists, in `startDispatchedExecution`.
+  const actingUserId = actingUserIdFor(submittedBy);
+  const preAdmission = await preAdmitRun(env, db, { tenantId, taskId: taskRow.id, actingUserId, checkCap: !hostPinned });
+  if (preAdmission) return refusedByAdmission(preAdmission);
+
   let cloudGate: CloudRunCapResult | undefined;
   if (!hostPinned) {
     cloudGate = await enforceCloudRunCap(db, tenantId, env);
@@ -140,7 +153,9 @@ export async function startFollowUpRun(
   const dispatch = await startDispatchedExecution(
     env, db, runtimeService, waitUntil, tenantId,
     execution as SubmittedExecution, taskRow, payload,
-    cloudGate ? { cloudGate } : undefined,
+    { ...(cloudGate ? { cloudGate } : {}), actingUserId },
   );
+  const lostAdmission = admissionRefusalOf(dispatch);
+  if (lostAdmission) return refusedByAdmission(lostAdmission);
   return { kind: 'started', executionId: execution.id, dispatch };
 }

@@ -29,6 +29,7 @@ export function generateVideoAssetAction(media: MediaStudioPort): BrainAction {
       },
       required: ['prompt'],
     },
+    mutates: true,
     run: async ({ prompt, durationSeconds, aspectRatio }: { prompt?: unknown; durationSeconds?: unknown; aspectRatio?: unknown }) => {
       const text = typeof prompt === 'string' ? prompt.trim() : '';
       if (!text) return { error: 'A prompt describing the clip is required.' };

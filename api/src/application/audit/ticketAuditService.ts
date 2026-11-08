@@ -78,6 +78,12 @@ export interface SignoffInput {
   summary?: string | null;
   contribution?: SignoffContribution | null;
   waiveReason?: string | null;
+  /**
+   * Mirror a review-role verdict onto the PR (default true). The Validator bridge
+   * (`kanban/validatorSlotBridge.ts`) passes false: `reviews.record` already posted the
+   * review via `publishReviewToPr`, so the bridged sign-off must not post it again.
+   */
+  publishToPr?: boolean;
 }
 
 export class TicketAuditService {
@@ -113,7 +119,7 @@ export class TicketAuditService {
     // review, and posting every role's sign-off would bury the ones that matter.
     //
     // Best-effort and after the ledger write, so GitHub can never cost us the record.
-    if (isReviewRole(input.roleKey)) {
+    if (input.publishToPr !== false && isReviewRole(input.roleKey)) {
       await publishSignoffToPr(env, this.db, tenantId, input.taskId, {
         roleKey: input.roleKey,
         verdict: input.verdict ?? 'approved',

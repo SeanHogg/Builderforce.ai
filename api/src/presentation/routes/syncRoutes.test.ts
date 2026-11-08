@@ -40,6 +40,7 @@ function app() {
       importSyncedChat: apply,
       importSyncedMessage: apply,
       importSyncedUsage: apply,
+      importSyncedChatTicketLink: apply,
       importMirrorRecord: apply,
     },
   });

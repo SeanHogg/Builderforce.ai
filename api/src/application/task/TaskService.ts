@@ -101,6 +101,7 @@ export interface UpdateTaskDto {
   dueDate?: string | null;
   persona?: string | null;
   archived?: boolean;
+  investorMilestone?: boolean;
 }
 
 /** Per-call knobs on {@link TaskService.createTask}. Absent ⇒ today's behaviour exactly. */

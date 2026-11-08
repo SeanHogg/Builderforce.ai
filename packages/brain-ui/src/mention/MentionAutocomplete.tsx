@@ -47,6 +47,12 @@ export interface UseMentionAutocompleteOptions {
   /** Called with the participant the user picked — wire to `useRecipientChoice`'s `choose`. */
   onPick: (r: DirectedRecipient) => void;
   labels?: MentionLabels;
+  /**
+   * An optional one-line signal shown under a participant's name (the host decides what —
+   * the web app passes a trait summary). Called per rendered row, so it must be a cheap
+   * lookup into data the host already holds, never a fetch.
+   */
+  detail?: (r: DirectedRecipient) => string | undefined;
   /** Suppress the picker entirely (e.g. while a run is streaming). */
   disabled?: boolean;
 }
@@ -67,7 +73,7 @@ export interface MentionAutocomplete {
 }
 
 export function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): MentionAutocomplete {
-  const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
+  const { textareaRef, value, setValue, participants, onPick, labels, disabled, detail } = opts;
   const [token, setToken] = useState<MentionToken | null>(null);
   const [index, setIndex] = useState(0);
 
@@ -122,7 +128,7 @@ export function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): Men
   }, [open, matches, index, choose]);
 
   const popup = open
-    ? <MentionPopup matches={matches} index={index} labels={labels} onHover={setIndex} onPick={choose} />
+    ? <MentionPopup matches={matches} index={index} labels={labels} detail={detail} onHover={setIndex} onPick={choose} />
     : null;
 
   return { onKeyDown, onSelect: recompute, popup, open };
@@ -130,10 +136,11 @@ export function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): Men
 
 // ── Presentational popup ──────────────────────────────────────────────────────
 
-function MentionPopup({ matches, index, labels, onHover, onPick }: {
+function MentionPopup({ matches, index, labels, detail, onHover, onPick }: {
   matches: DirectedRecipient[];
   index: number;
   labels?: MentionLabels;
+  detail?: (r: DirectedRecipient) => string | undefined;
   onHover: (i: number) => void;
   onPick: (r: DirectedRecipient) => void;
 }) {
@@ -153,7 +160,10 @@ function MentionPopup({ matches, index, labels, onHover, onPick }: {
             style={POP.item(i === index)}
           >
             <Avatar name={m.name} kind={m.kind} size={20} />
-            <span style={POP.name}>{m.name}</span>
+            <span style={POP.nameCol}>
+              <span style={POP.name}>{m.name}</span>
+              {detail?.(m) && <span style={POP.detail}>{detail(m)}</span>}
+            </span>
             <span style={POP.kind}>{m.kind === 'agent' ? (labels?.agent ?? DEFAULT_MENTION_LABELS.agent) : (labels?.human ?? DEFAULT_MENTION_LABELS.human)}</span>
           </li>
         ))}
@@ -179,6 +189,8 @@ const POP: {
   list: React.CSSProperties;
   group: React.CSSProperties;
   name: React.CSSProperties;
+  nameCol: React.CSSProperties;
+  detail: React.CSSProperties;
   kind: React.CSSProperties;
   item: (active: boolean) => React.CSSProperties;
 } = {
@@ -191,7 +203,9 @@ const POP: {
     boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
   },
   group: { padding: '4px 8px 5px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: T.muted },
-  name: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: T.text, fontSize: 13, fontWeight: 600 },
+  nameCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' },
+  name: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: T.text, fontSize: 13, fontWeight: 600 },
+  detail: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: T.muted, fontSize: 11 },
   kind: { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: T.muted, flexShrink: 0 },
   item: (active: boolean) => ({
     display: 'flex', alignItems: 'center', gap: 8,

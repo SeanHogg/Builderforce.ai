@@ -9,6 +9,18 @@ import type { CreationObjectKind } from './types';
 import type { AcademicObjectKind, CareerObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind, LegalObjectKind, MarketingObjectKind, OperationsObjectKind, PeopleObjectKind, SellMotionObjectKind, SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import type { DataArchitectureKind } from '@/lib/dataArchitectureObjects';
 
+/**
+ * Array length a model-facing patch may carry, unless a field below raises it. The
+ * sanitizer slices every array to this; a field whose own validator admits more lists
+ * its path here (`<field>.<key>…`) so the two limits cannot silently disagree.
+ */
+export const DEFAULT_MUTATION_ARRAY_CAP = 500;
+export const MUTATION_ARRAY_CAPS: Readonly<Record<string, number>> = {
+  // `cadState` accepts 5000 shapes (`lib/creation/cad/cadState.ts` MAX_SHAPES); the default
+  // cap would drop shape 501 onwards from a patch that is otherwise valid.
+  'cadState.shapes': 5000,
+};
+
 export const BASE_MUTABLE_FIELDS = {
   // NOT `steps`. Brain authored a free-form step list here while a server-side
   // compiler existed to lower it. That compiler is gone, so a list written onto a card
@@ -152,7 +164,7 @@ export const BASE_MUTABLE_FIELDS = {
   // triple plus sprint assignment (see its own note on why the client type used to omit
   // them) — without these here a task's estimate/schedule was writable through the API
   // but invisible to both Brain and the inspector that edits everything else about it.
-  task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'startDate', 'dueDate', 'storyPoints', 'sprintId'],
+  task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'startDate', 'dueDate', 'storyPoints', 'sprintId', 'investorMilestone'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
   mockup: ['content', 'items', 'viewport', 'sources', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName'],
@@ -190,10 +202,17 @@ export const BASE_MUTABLE_FIELDS = {
     // prose, which is what Brain reads and what a search matches — the same pairing
     // `podcast` and `voice` already have.
     'talktrack', 'transcript'],
-  image: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  // `imageEdit` is the non-destructive edit stack (orient/crop/adjust/annotations) the image
+  // editor renders over `outputUrl`; Brain may author it as readily as the editor does.
+  image: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'imageEdit', 'imageWidth', 'imageHeight', 'outputFileName', 'outputMimeType', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  // The frame strip (`data.animation`, see `lib/creation/animation`) is deliberately NOT
+  // here: each frame is a PNG data URL, and a model-facing patch truncates every string at
+  // 40k characters, which would silently corrupt a frame. The card writes it directly.
   animation: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'mcpServer', 'mcpTool', 'mcpArguments'],
-  podcast: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'duration', 'transcript', 'mcpServer', 'mcpTool', 'mcpArguments'],
-  comic: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'pages', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  // An episode is a one-track timeline of audio segments (the `video` kind's own clip and
+  // source shapes — see `lib/creation/podcast/podcastEpisode.ts`) plus episode and show metadata.
+  podcast: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'duration', 'transcript', 'podcastTimeline', 'podcastSources', 'podcastEpisode', 'podcastShow', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  comic: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'pages', 'comicPages', 'comicWidth', 'comicHeight', 'mcpServer', 'mcpTool', 'mcpArguments'],
   game: ['content', 'prompt', 'gamePlatform', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   cad: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'cadState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
   model3d: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'modelState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],

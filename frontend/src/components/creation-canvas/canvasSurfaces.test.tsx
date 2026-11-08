@@ -75,7 +75,7 @@ describe('canvas surface registry', () => {
     // into the room, and what was left — the AI scene's generation panel — is the
     // surface of ONE object, entered from its card.
     // The properties BELOW are what this test is actually for; the list is the roll call.
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'scene3d', 'facilitate', 'calendar', 'form']);
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'scene3d', 'facilitate', 'calendar', 'form', 'model3d']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
@@ -204,6 +204,10 @@ describe('canvas surface registry', () => {
     // card previews it and this opens it. Same promotion as the four above.
     expect(creationObjectSurface('calendar')).toBe('calendar');
     expect(creationObjectSurface('form')).toBe('form');
+    // A 3D model has an axis a card cannot draw (the turn); a 2D drawing's whole axis,
+    // the sheet, fits the card — so only one of the two opens a surface.
+    expect(creationObjectSurface('model3d')).toBe('model3d');
+    expect(creationObjectSurface('cad')).toBeNull();
     expect(creationObjectSurface('prototype')).toBe('site');
     expect(creationObjectSurface('document')).toBe('page');
     // A card IS the whole object for most kinds, and should stay that way.

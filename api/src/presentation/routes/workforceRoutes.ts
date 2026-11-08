@@ -376,7 +376,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     // The buyer comes back to the page they left, so the return url is theirs to
     // name — but only its origin and path are used, and the processor substitutes
     // the session id, so it cannot be turned into an open redirect carrying data.
-    const returnUrl = body.returnUrl ?? `${new URL(c.req.url).origin}/workforce`;
+    const returnUrl = body.returnUrl;
     // A `ListingError` carries its own status; `statusOf` renders it (no local map).
     const { checkoutUrl } = await startAgentCheckout(db, c.env as Env, {
       tenantId,

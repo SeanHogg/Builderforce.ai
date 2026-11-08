@@ -28,6 +28,7 @@ import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { JobRoleService } from '../../application/kanban/jobRoleService';
 import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
+import { TemplateLicenceRequiredError, licenceRequiredBody } from '../../application/kanban/templateEntitlement';
 import { RosterService } from '../../application/kanban/rosterService';
 import { RoleAssignmentService } from '../../application/kanban/roleAssignmentService';
 import { TicketAuditService, type SignoffVerdict } from '../../application/audit/ticketAuditService';
@@ -39,6 +40,7 @@ import { loadAssigneeProfiles, assigneeProfilesCacheKey } from '../../applicatio
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
+import { onReviewerVerdict } from '../../application/kanban/onReviewerVerdict';
 import { coordinationGate } from '../../application/kanban/coordinationGate';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { bulkCreateScope } from '../../application/task/TaskService';
@@ -312,8 +314,8 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   router.get('/templates/public', async (c) => c.json({ templates: await templateService.listPublic(env(c)) }));
 
   router.get('/templates/:id', async (c) => {
-    const t = await templateService.get(env(c), c.get('tenantId') as number, c.req.param('id'));
-    return t ? c.json({ template: t }) : c.json({ error: 'not found' }, 404);
+    const t = await templateService.getForViewer(env(c), c.get('tenantId') as number, c.req.param('id'), (c.get('userId') as string) ?? null);
+    return t ? c.json(t) : c.json({ error: 'not found' }, 404);
   });
 
   router.post('/templates', async (c) => {
@@ -346,7 +348,9 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const body = await parseBody(c, TemplatePublicationBody);
     try {
-      await templateService.setPublication(env(c), c.get('tenantId') as number, c.req.param('id'), body);
+      await templateService.setPublication(env(c), c.get('tenantId') as number, c.req.param('id'), {
+        ...body, publisherRef: (c.get('userId') as string) ?? null,
+      });
       return c.json({ ok: true });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
@@ -356,7 +360,10 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     try {
       const t = await templateService.install(env(c), c.get('tenantId') as number, (c.get('userId') as string) ?? null, c.req.param('id'));
       return c.json({ template: t }, 201);
-    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+    } catch (e) {
+      if (e instanceof TemplateLicenceRequiredError) return c.json(licenceRequiredBody(e), 402);
+      return c.json({ error: (e as Error).message }, 400);
+    }
   });
 
   // ── Apply a template to a project ────────────────────────────────────────────
@@ -369,10 +376,15 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId))).limit(1);
     if (!project) return c.json({ error: 'project not found' }, 404);
     try {
-      const result = await templateService.applyToProject(env(c), tenantId, projectId, templateId, project.name);
+      const result = await templateService.applyToProject(
+        env(c), tenantId, projectId, templateId, project.name, (c.get('userId') as string) ?? null,
+      );
       await rosterService.invalidate(env(c), tenantId, projectId);
       return c.json({ ok: true, ...result });
-    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+    } catch (e) {
+      if (e instanceof TemplateLicenceRequiredError) return c.json(licenceRequiredBody(e), 402);
+      return c.json({ error: (e as Error).message }, 400);
+    }
   });
 
   router.get('/projects/:projectId/roster', async (c) => {
@@ -448,6 +460,12 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       // Keep the participation manifest in step with the ledger.
       await participantsService.syncStates(env(c), tenantId, taskId);
       await participantsService.invalidate(env(c), taskId);
+      // A reviewer's changes_requested reopens the stage's producer slot(s); the
+      // coordinator call below dispatches the rework run.
+      await onReviewerVerdict(env(c), db, {
+        tenantId, taskId, roleKey: body.roleKey, laneKey: body.laneKey, verdict, summary: body.summary,
+        actor: { kind: memberKind, ref: memberRef ?? null, name: memberName ?? memberRef ?? 'reviewer' },
+      });
       // Sign-off may be the final missing requirement for this stage. Hand control
       // back to the ticket's Coordinator, which alone verifies + advances managed
       // tickets and dispatches the next role.

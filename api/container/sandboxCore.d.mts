@@ -25,3 +25,6 @@ export function closeSandboxBox(box: SandboxBox): Promise<void>;
 
 /** A fresh per-boot prefix for background job ids, so ids never alias across a restart. */
 export function bootJobIdPrefix(): string;
+
+/** The environment a model-run shell gets: `env` minus the credential variables (BUILDERFORCE_*, the Actions OIDC/runtime tokens). */
+export function shellEnv(env?: Record<string, string | undefined>): Record<string, string | undefined>;
