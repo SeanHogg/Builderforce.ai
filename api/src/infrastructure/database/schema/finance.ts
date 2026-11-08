@@ -12,6 +12,7 @@
  */
 
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -167,7 +168,7 @@ export const budgets = pgTable('budgets', {
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   scopeKind:    varchar('scope_kind', { length: 16 }).notNull().default('tenant'), // tenant | project | initiative
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'cascade' }),
   periodMonth:  varchar('period_month', { length: 7 }).notNull(), // 'YYYY-MM'
   limitUsd:     real('limit_usd').notNull().default(0),

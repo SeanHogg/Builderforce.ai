@@ -70,7 +70,7 @@ export const ceremonySessions = pgTable('ceremony_sessions', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   kind:           varchar('kind', { length: 16 }).notNull(),                       // 'standup' | 'planning'
   /** 'active' | 'completed' | 'abandoned' (0364). Abandoned = concluded without being
    *  conducted (nobody came and unattended ceremonies are not granted); it still frees
@@ -155,7 +155,7 @@ export const chatMemories = pgTable('chat_memories', {
   // are keyed on agent_host_session_id in practice; no FK (plain nullable id).
   chatId:         integer('chat_id').unique(),
   agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }),
-  projectId:      bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:      bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   summary:        text('summary').notNull().default(''),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
@@ -180,7 +180,7 @@ export const chatMemories = pgTable('chat_memories', {
 
 export const brainChats = pgTable('brain_chats', {
   id:        serial('id').primaryKey(),
-  projectId: bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
@@ -409,7 +409,7 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     bigint('project_id').references(() => projects.id, { onDelete: 'set null' }), // null = workspace-wide
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }), // null = workspace-wide
   docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error'
   title:         varchar('title', { length: 255 }).notNull(),
   summary:       varchar('summary', { length: 500 }),
@@ -492,7 +492,7 @@ export const knowledgeDocumentCollaborators = pgTable('knowledge_document_collab
 export const facts = pgTable('facts', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   subject:    varchar('subject', { length: 255 }).notNull(),
   predicate:  varchar('predicate', { length: 255 }).notNull(),
   object:     text('object').notNull(),
@@ -761,7 +761,7 @@ export const activityEvents = pgTable('activity_events', {
   /** Project this activity is attributed to, resolved at ingest from the connected
    *  repo (project_repositories, else projects.source_control_repo_full_name).
    *  NULL = repo not linked to a project yet. (0212) */
-  projectId:      bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:      bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   provider:       integrationProviderEnum('provider').notNull(),
   eventType:      activityEventTypeEnum('event_type').notNull(),
   externalId:     varchar('external_id', { length: 255 }),  // commit SHA, PR number, issue ID
@@ -931,7 +931,7 @@ export const ceremonySchedules = pgTable('ceremony_schedules', {
   id:               uuid('id').primaryKey().defaultRandom(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:        bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:        bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   kind:             varchar('kind', { length: 16 }).notNull().default('standup'),   // 'standup' | 'planning'
   cron:             varchar('cron', { length: 120 }).notNull(),
   timezone:         varchar('timezone', { length: 64 }).notNull().default('UTC'),
@@ -968,7 +968,7 @@ export const meetings = pgTable('meetings', {
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Nullable: an ad-hoc / direct call need not belong to a project.
-  projectId:        bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   kind:             varchar('kind', { length: 16 }).notNull().default('adhoc'),        // standup|planning|retrospective|adhoc|direct|interview|review
   title:            varchar('title', { length: 255 }).notNull(),
   description:      text('description'),
@@ -1146,7 +1146,7 @@ export const uptimeSamples = pgTable('uptime_samples', {
 export const freelancerEngagements = pgTable('freelancer_engagements', {
   id:                 varchar('id', { length: 36 }).primaryKey(),
   tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:          bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:          bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   freelancerUserId:   varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   status:             varchar('status', { length: 20 }).notNull().default('invited'), // invited|interviewing|active|declined|terminated
   /** Gig Marketplace (0293): how much of the employer workspace an ACTIVE engagement
@@ -1380,7 +1380,7 @@ export const coachingNotes = pgTable('coaching_notes', {
 export const rehearsals = pgTable('rehearsals', {
   id:                uuid('id').primaryKey().defaultRandom(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:         bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:         bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   /** 'dry_run' | 'replay' | 'trial'. */
   kind:              varchar('kind', { length: 16 }).notNull(),
   /** 'queued' | 'running' | 'completed' | 'failed'. */
@@ -1446,7 +1446,7 @@ export const creationSessionFolders = pgTable('creation_session_folders', {
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   name:       varchar('name', { length: 120 }).notNull(),
   /** Every session filed into this folder is, by that fact, tied to this Project. */
-  projectId:  bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
@@ -1626,7 +1626,7 @@ export const creationOutcomeEvents = pgTable('creation_outcome_events', {
   correlationId:  varchar('correlation_id', { length: 128 }).notNull(),
   sessionId:      uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:      bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:      bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   actorType:      varchar('actor_type', { length: 16 }).notNull().default('user'),
   actorRef:       varchar('actor_ref', { length: 128 }),
   action:         varchar('action', { length: 64 }).notNull(),
@@ -1675,7 +1675,7 @@ export const creationSessionComments = pgTable('creation_session_comments', {
 
 export const creationSessionProjectLinks = pgTable('creation_session_project_links', {
   sessionId: uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
-  projectId: bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /**
    * WHAT THIS LINK MEANS (0473).
    *

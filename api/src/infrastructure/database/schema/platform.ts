@@ -54,7 +54,7 @@ export const ingestionUsageLog = pgTable('ingestion_usage_log', {
   id:            serial('id').primaryKey(),
   tenantId:      integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
   /** Project the ingestion is attributed to (null for tenant-level sources). */
-  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** What was ingested: 'repo_import' today; room for 'integration_sync' etc. */
   source:        varchar('source', { length: 32 }).notNull().default('repo_import'),
   /** Integration provider (github/gitlab/…), when applicable. */
@@ -96,7 +96,7 @@ export const integrationCredentials = pgTable('integration_credentials', {
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   /** NULL = workspace-global credential; set = scoped to a single project (0074). */
-  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   provider:       integrationProviderEnum('provider').notNull(),
   /** Display label, e.g. "Production Jira" */
   name:           varchar('name', { length: 255 }).notNull(),
@@ -290,7 +290,7 @@ export const innovationIdeas = pgTable('innovation_ideas', {
   title:           varchar('title', { length: 255 }).notNull(),
   description:     text('description'),
   stage:           varchar('stage', { length: 16 }).notNull().default('idea'),
-  linkedProjectId: integer('linked_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  linkedProjectId: bigint('linked_project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   impact:          real('impact'),
   effort:          real('effort'),
   confidence:      real('confidence'),

@@ -141,7 +141,7 @@ export const managedAgentHostRequests = pgTable('managed_agent_host_requests', {
 export const managerDirectives = pgTable('manager_directives', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   directive:  text('directive').notNull(),
   status:     varchar('status', { length: 16 }).notNull().default('active'),
   createdBy:  varchar('created_by', { length: 36 }),
@@ -161,7 +161,7 @@ export const managerDirectives = pgTable('manager_directives', {
 export const managerActions = pgTable('manager_actions', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** The ticket the action was about (null for project-wide actions like a re-rank). */
   taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   /**
@@ -228,7 +228,7 @@ export const managerRuns = pgTable('manager_runs', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:  bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** The "Backlog management pass" card this row closes — UNIQUE, so a retried
    *  finalize upserts rather than writing a second row for one pass. */
   runTaskId:  integer('run_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
@@ -259,7 +259,7 @@ export const managerRuns = pgTable('manager_runs', {
 export const managerStallWatch = pgTable('manager_stall_watch', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:      bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   taskId:         integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   /** {@link ../../application/manager/stallTriage.StallCause}. */
   cause:          varchar('cause', { length: 32 }).notNull(),
@@ -294,7 +294,7 @@ export const managerStallWatch = pgTable('manager_stall_watch', {
 export const managerSystemicFindings = pgTable('manager_systemic_findings', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:     bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** {@link ../../application/manager/stallTriage.StallCause}. */
   cause:         varchar('cause', { length: 32 }).notNull(),
   ticketCount:   integer('ticket_count').notNull().default(0),
@@ -373,7 +373,7 @@ export const agentRegistrations = pgTable('agent_registrations', {
 export const ideAgents = pgTable('ide_agents', {
   id:               varchar('id', { length: 64 }).primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:        bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   name:             varchar('name', { length: 255 }).notNull(),
   /** Stable built-in-agent marker (e.g. 'validator', 'security'). NULL for ordinary
    *  user/marketplace agents. Decouples a built-in's IDENTITY from its display name,
@@ -687,7 +687,7 @@ export const executionLifecycleOutbox = pgTable('execution_lifecycle_outbox', {
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   executionId:      integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
   taskId:           integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-  projectId:        bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   lifecycleVersion: integer('lifecycle_version').notNull(),
   eventType:        varchar('event_type', { length: 64 }).notNull(),
   fromStatus:       varchar('from_status', { length: 32 }),
@@ -887,7 +887,7 @@ export const agentAssignments = pgTable('agent_assignments', {
   /** The integer handle per-agent capability assignments and schedules key on. */
   agentHandle:    serial('agent_handle').notNull(),
   /** The project a `scope = 'project'` row staffs — a real FK, so a project delete cascades. */
-  projectId:      bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   /** Per-agent rules bound into every run of this agent (project or workspace row). */
   governance:     text('governance'),
   addedBy:        varchar('added_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
@@ -953,7 +953,7 @@ export const agentHostDirectories = pgTable('agent_host_directories', {
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:       integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
-  projectId:    bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   absPath:      text('abs_path').notNull(),
   pathHash:     varchar('path_hash', { length: 128 }).notNull(),
   status:       agentHostDirectoryStatusEnum('status').notNull().default('pending'),
@@ -996,7 +996,7 @@ export const workflows = pgTable('workflows', {
   // self-hosted agentHost (then runtime='cloud' + cloudAgentRef identifies it).
   agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
   /** Optional project this workflow belongs to (0086). Tenant-wide when null. */
-  projectId:    bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:    bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** Source definition this run was instantiated from (0094); null for ad-hoc runs. */
   workflowDefinitionId: uuid('workflow_definition_id').references(() => workflowDefinitions.id, { onDelete: 'set null' }),
   /** Reliability linkage (0337): the incident/monitor whose event fired this run —
@@ -1035,7 +1035,7 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
   description: text('description'),
   // Project this workflow belongs to (0093). Tenant-wide (independent) when null;
   // when set, execution_scope is 'project' and runs inherit this projectId.
-  projectId:   bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   definition:  text('definition').notNull().default('{"nodes":[],"edges":[]}'),  // serialized WorkflowDefinition JSON
   // Run target (0080): where runs of this definition execute — manual runs, and
   // every trigger-fired run, inherit this. 'host' uses runTargetAgentHostId,
@@ -1289,7 +1289,7 @@ export const cronJobs = pgTable('cron_jobs', {
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
-  projectId:   bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** Scopes the schedule to one assigned agent (`agent_assignments.agent_handle`, migration
    *  1265); NULL = project-wide. The column keeps its name — deployed hosts read
    *  `projectAgentId` off the cron payload. The FK to the handle (ON DELETE CASCADE) was
@@ -1407,7 +1407,7 @@ export const qaRuns = pgTable('qa_runs', {
   id:            uuid('id').primaryKey().defaultRandom(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:     bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:     bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   testId:        uuid('test_id').references(() => qaTests.id, { onDelete: 'set null' }),
   // Which persona + target this run executed against (for role-aware result triage).
   credentialId:  uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
@@ -1669,7 +1669,7 @@ export const llmActionRatings = pgTable('llm_action_ratings', {
   /** Who pressed it — part of the uniqueness key, so two members of a shared chat
    *  keep their own votes instead of overwriting each other. */
   userId:           varchar('user_id', { length: 64 }).notNull(),
-  projectId:        bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   /** 'brain' | 'canvas' | 'vscode' | 'execution' — where the press happened. */
   surface:          varchar('surface', { length: 16 }).notNull().default('brain'),
   /** 'turn' (an assistant reply) | 'tool' (one tool execution). */
@@ -1707,7 +1707,7 @@ export const repoAnalysisRuns = pgTable('repo_analysis_runs', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:      bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:      bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   // queued | fetching | analyzing | writing_back | completed | partial | failed
   status:         varchar('status', { length: 24 }).notNull().default('queued'),
   stage:          varchar('stage', { length: 40 }),
@@ -1732,7 +1732,7 @@ export const repoAnalysisArtifacts = pgTable('repo_analysis_artifacts', {
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   runId:     uuid('run_id').notNull().references(() => repoAnalysisRuns.id, { onDelete: 'cascade' }),
-  projectId: bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId: bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   // diagnostic | business | arch_4plus1 | antipatterns | principles | recommendation
   kind:      varchar('kind', { length: 32 }).notNull(),
   title:     varchar('title', { length: 255 }),
@@ -1805,7 +1805,7 @@ export const toolRuns = pgTable('tool_runs', {
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // When set, the run was scored AGAINST this project; it contributes to the
   // project's diagnostic rating (which rolls up to the tenant). Null = workspace.
-  projectId:  bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   // When set, the diagnostic was scored against a single ticket (migration 0275) —
   // the ticket audit engine checks kind='diagnostic' requirements by looking for a
   // tool_run on the task. Null = project/workspace-scoped run.
@@ -1860,7 +1860,7 @@ export const executionRollbacks = pgTable('execution_rollbacks', {
   id:               uuid('id').primaryKey().defaultRandom(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:        bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   executionId:      integer('execution_id').references(() => executions.id, { onDelete: 'set null' }),
   repoId:           uuid('repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
@@ -2633,7 +2633,7 @@ export const proposalEvaluations = pgTable('proposal_evaluations', {
 /** Training dataset for an IDE project (0022). */
 export const ideDatasets = pgTable('ide_datasets', {
   id:               text('id').primaryKey(),
-  projectId:        bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:        bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   name:             text('name').notNull(),
   description:      text('description'),
   capabilityPrompt: text('capability_prompt').notNull(),
@@ -2661,7 +2661,7 @@ export const ideDatasets = pgTable('ide_datasets', {
 /** A fine-tune run and its eval scorecard (0022, eval columns added in 0323). */
 export const ideTrainingJobs = pgTable('ide_training_jobs', {
   id:                    text('id').primaryKey(),
-  projectId:             bigint('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:             bigint('project_id', { mode: 'number' }).notNull().references(() => projects.id, { onDelete: 'cascade' }),
   datasetId:             text('dataset_id').references(() => ideDatasets.id, { onDelete: 'set null' }),
   baseModel:             text('base_model').notNull(),
   loraRank:              integer('lora_rank').notNull().default(8),
@@ -2969,7 +2969,7 @@ export const previewSessions = pgTable('preview_sessions', {
   executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
   /** Denormalised so "the live preview for THIS project" is one indexed read — the
    *  Mobile panel mints by project and has no execution id to offer. */
-  projectId:   bigint('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:   bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'cascade' }),
   /** The port the dev server was told to bind inside the container. */
   port:        integer('port').notNull(),
   /** starting | live | failed | idle_evicted | stopped — see PreviewSessionStatus. */
@@ -3004,7 +3004,7 @@ export const chatSessions = pgTable('chat_sessions', {
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:     integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   sessionKey: varchar('session_key', { length: 255 }).notNull(),
-  projectId:  bigint('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:  bigint('project_id', { mode: 'number' }).references(() => projects.id, { onDelete: 'set null' }),
   startedAt:  timestamp('started_at').notNull().defaultNow(),
   endedAt:    timestamp('ended_at'),
   msgCount:   integer('msg_count').notNull().default(0),
