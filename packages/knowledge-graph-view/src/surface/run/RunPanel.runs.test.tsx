@@ -28,7 +28,12 @@ describe('the Runs tab', () => {
         expect(within(detail).getByText(r.paceTitle)).toBeTruthy();
         expect(within(detail).getByTestId('kg-run-slowest')).toBeTruthy();
         expect(within(detail).getByTestId('kg-run-left').textContent).toContain(fillTemplate(r.leftUpload, { count: 3 }));
-        fireEvent.click(within(detail).getByRole('button', { name: new RegExp(r.back) }));
+        // No Copy diagnostics here: a quiet link goes to the Diagnostics tab, where the one button is.
+        expect(within(detail).queryByRole('button', { name: /copy diagnostics/i })).toBeNull();
+        fireEvent.click(within(detail).getByTestId('kg-run-diagnostics'));
+        expect(tab(r.tabDiagnostics).getAttribute('aria-selected')).toBe('true');
+        fireEvent.click(tab(r.tabRuns));
+        fireEvent.click(within(await screen.findByTestId('kg-run-detail')).getByRole('button', { name: new RegExp(r.back) }));
         expect(await screen.findByTestId('kg-run-history')).toBeTruthy();
     });
 

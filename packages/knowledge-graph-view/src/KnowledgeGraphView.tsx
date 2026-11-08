@@ -157,7 +157,6 @@ export function KnowledgeGraphView({
             },
         } : {}),
     });
-    const diagnosticsText = () => diagnostics().text;
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
     const { select, show, pickLens, pickQuestion, pinpointed, unpin, showInTower } = useSurfaceActions(kg, surface, () => setTracing(false), { ids: cameras.map((c) => c.id), set: setMode });
     useClearHighlightOutsideTower(mode, surface.setHighlight);
@@ -267,7 +266,7 @@ export function KnowledgeGraphView({
             {layout.phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel(false)}</Sheet>}
             <PanelDrawer
                 graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} renderPanel={renderPanel} source={source} rootId={kg.rootId ?? undefined}
-                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnosticsText={diagnosticsText} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
+                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
                 lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
                 revision={keepsBaseline ? { value: showingBefore ? 'before' : 'after', hasBefore: !!kg.baseline, onChange: setRevision } : undefined}
                 onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}

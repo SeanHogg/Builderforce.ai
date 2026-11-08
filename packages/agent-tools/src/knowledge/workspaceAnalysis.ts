@@ -168,7 +168,8 @@ export async function analyseWorkspace(deps: WorkspaceAnalysisDeps, signal?: Abo
             }),
             readRepoGraph({ ...deps, progress, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),
         ]);
-        progress.finish();
+        // A run every asker stopped did not finish: it must not report done === total.
+        if (!shared?.aborted) progress.finish();
         // A run every asker stopped is nothing: neither part is trustworthy, and none is kept.
         if (shared?.aborted) return { analysis: { snapshot: null, repoGraph: null }, retainMs: 0 };
         if (snapshot === null) return { analysis: { snapshot, repoGraph, ...(graphReads ? { graphReads } : {}) }, retainMs: 0 };

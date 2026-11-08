@@ -37,7 +37,7 @@ export function ReviewTab({ labels, review, live, hostRunning, hostStoppingSince
     }
     switch (state.status) {
         case 'idle': case 'cancelled': return <ReviewIdle labels={labels} cancelled={state.status === 'cancelled'} />;
-        case 'planning': return <ReviewPlanning labels={labels} root={root} count={state.progress?.done} />;
+        case 'planning': return <ReviewPlanning labels={labels} root={root} count={state.progress?.done} total={state.progress?.total} />;
         case 'confirm': return <ReviewStart labels={labels} review={review} state={state} history={history} queued={queued} />;
         case 'running': return <ReviewNow labels={labels} run={live} progress={state.progress} judgeFiles={review.judgeFiles} onOpenRun={onOpenRun} />;
         case 'stopping': return <ReviewStopping labels={labels} progress={state.progress} since={state.stoppedAt} />;

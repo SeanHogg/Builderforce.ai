@@ -21,9 +21,16 @@ export function Kpi({ label, value, tone, badge }: { label: string; value: React
 
 export const kpiGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 };
 
-/** A horizontal bar filled to `frac` (0 to 1). */
-export function Bar({ frac, tone = 'accent', label, height = 6 }: { frac: number; tone?: ThemeTone; label: string; height?: number }) {
+/** A horizontal bar filled to `frac` (0 to 1); `indeterminate` (no known total yet) ignores `frac` and shows a moving, or under reduced motion a static partial, fill. */
+export function Bar({ frac, tone = 'accent', label, height = 6, indeterminate = false }: { frac: number; tone?: ThemeTone; label: string; height?: number; indeterminate?: boolean }) {
     const pct = Math.round(Math.min(1, Math.max(0, frac)) * 100);
+    if (indeterminate) {
+        return (
+            <div role="progressbar" aria-label={label} style={{ height, borderRadius: 999, background: cssVar('plane'), overflow: 'hidden' }}>
+                <div className="kg-bar-indeterminate" style={{ height: '100%', borderRadius: 999, background: cssVar(tone) }} />
+            </div>
+        );
+    }
     return (
         <div role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} style={{ height, borderRadius: 999, background: cssVar('plane'), overflow: 'hidden' }}>
             <div style={{ width: `${pct}%`, height: '100%', background: cssVar(tone) }} />

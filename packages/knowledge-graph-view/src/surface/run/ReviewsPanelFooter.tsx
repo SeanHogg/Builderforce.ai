@@ -23,8 +23,6 @@ export interface ReviewsPanelFooterProps {
     stoppingSince: number | undefined;
     /** After a stop: the files still to review and the time they take at the run's pace. */
     left?: { files: number; etaMs?: number | undefined } | undefined;
-    /** Beside the button (the Server tab: Copy diagnostics). */
-    extra?: ReactNode;
     /** Nothing is planned: count the files and start, in one press. */
     onCountAndStart(): void;
     onStart(): void;
@@ -34,7 +32,7 @@ export interface ReviewsPanelFooterProps {
     onAgain(): void;
 }
 
-export function ReviewsPanelFooter({ labels, state, running, stoppingSince, left, extra, onCountAndStart, onStart, onStop, onForceStop, onResume, onAgain }: ReviewsPanelFooterProps) {
+export function ReviewsPanelFooter({ labels, state, running, stoppingSince, left, onCountAndStart, onStart, onStop, onForceStop, onResume, onAgain }: ReviewsPanelFooterProps) {
     const r = labels.surface.run.review;
     const stuck = useStuckSince(stoppingSince);
     const danger = { ...primaryButton, background: 'transparent', color: cssVar('violation'), borderColor: cssVar('violation') };
@@ -66,7 +64,6 @@ export function ReviewsPanelFooter({ labels, state, running, stoppingSince, left
             style={{ flex: 'none', padding: '10px 16px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', background: cssVar('bg'), borderTop: `1px solid ${cssVar('border')}` }}
         >
             <p data-testid="kg-footer-note" style={{ ...TYPE.meta, margin: 0, flex: '1 1 160px', minWidth: 0 }}>{note}</p>
-            {extra}
             {button}
         </footer>
     );

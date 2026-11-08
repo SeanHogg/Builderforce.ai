@@ -1,6 +1,6 @@
 /**
  * One run in detail (a past run, or the one that just stopped), inside the Reviews panel with a Back button: its timeline on the run's time
- * axis, its pace against the earlier runs, its failures by reason, its slowest files, what it left, then Copy diagnostics and Every step.
+ * axis, its pace against the earlier runs, its failures by reason, its slowest files, what it left, then a link to the Diagnostics tab and Every step.
  */
 
 import { useState } from 'react';
@@ -11,7 +11,6 @@ import type { ReplicaState, StoredReviewRun } from '../../types';
 import { Section } from '../drawers/ui';
 import { counted } from '../plural';
 import { TYPE } from '../ui/type';
-import { CopyDiagnostics } from './CopyDiagnostics';
 import { FailuresByReason } from './FailuresByReason';
 import { RunAxis } from './RunAxis';
 import { RunPaceBars } from './RunPaceBars';
@@ -29,12 +28,13 @@ export interface RunDetailProps {
     onBack(): void;
     onRetry?: ((paths: string[]) => void) | undefined;
     canRetry?: boolean | undefined;
-    diagnosticsText?: (() => string) | undefined;
+    /** Switches the panel to its Diagnostics tab (the one place Copy diagnostics lives). */
+    onDiagnose(): void;
     /** Where the upload queue stands now, for a run still going; an ended run says where it stood then. */
     replica?: ReplicaState | undefined;
 }
 
-export function RunDetail({ labels, run, history, onBack, onRetry, canRetry, diagnosticsText, replica }: RunDetailProps) {
+export function RunDetail({ labels, run, history, onBack, onRetry, canRetry, onDiagnose, replica }: RunDetailProps) {
     const t = labels.surface.run;
     const r = t.review;
     const [steps, setSteps] = useState(false);
@@ -70,7 +70,7 @@ export function RunDetail({ labels, run, history, onBack, onRetry, canRetry, dia
                 </Section>
             )}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap', borderTop: `1px solid ${cssVar('border')}`, paddingTop: 12 }}>
-                <CopyDiagnostics labels={labels} text={diagnosticsText} />
+                <button type="button" data-testid="kg-run-diagnostics" style={quietButton} onClick={onDiagnose}>{r.tabDiagnostics}</button>
                 <button type="button" style={button} aria-expanded={steps} onClick={() => setSteps((v) => !v)}>{r.toggleSteps}</button>
             </div>
             {steps && <RunSteps key={run.id} run={run} labels={labels} />}

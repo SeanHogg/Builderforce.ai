@@ -23,14 +23,45 @@ function mount(initial: { status: ReviewState['status']; panel: string | null },
 }
 
 describe('a review that started elsewhere', () => {
-    it('opens the Reviews panel on its plan and on its run when no drawer is open', () => {
+    it('opens the Reviews panel at once, while the files are still being counted, when no drawer is open', () => {
         const { rerender, openPanel } = mount({ status: 'idle', panel: null });
         rerender({ status: 'planning', panel: null });
-        expect(openPanel).not.toHaveBeenCalled();
+        expect(openPanel).toHaveBeenCalledTimes(1);
+        expect(openPanel).toHaveBeenLastCalledWith('run');
+        // Now open: the plan and the run find it there and do not open it again.
+        rerender({ status: 'confirm', panel: 'run' });
+        rerender({ status: 'running', panel: 'run' });
+        expect(openPanel).toHaveBeenCalledTimes(1);
+    });
+
+    it('closed during the counting, an auto-confirmed run (planning straight to running) does not reopen it', () => {
+        const { result, rerender, openPanel } = mount({ status: 'idle', panel: null });
+        rerender({ status: 'planning', panel: null });
+        rerender({ status: 'planning', panel: 'run' });
+        result.current.setPanel(null);
+        rerender({ status: 'planning', panel: null });
+        rerender({ status: 'running', panel: null });
+        expect(openPanel.mock.calls.filter(([id]) => id === 'run')).toHaveLength(1);
+    });
+
+    it('opens the panel for its plan and its run when the review skipped the counting', () => {
+        const { rerender, openPanel } = mount({ status: 'idle', panel: null });
         rerender({ status: 'confirm', panel: null });
         expect(openPanel).toHaveBeenLastCalledWith('run');
         rerender({ status: 'running', panel: null });
         expect(openPanel).toHaveBeenCalledTimes(2);
+    });
+
+    it('closed during the counting, it stays closed when the plan lands, and the plan is answered no', () => {
+        const { result, rerender, openPanel, answer } = mount({ status: 'idle', panel: null });
+        rerender({ status: 'planning', panel: null });
+        expect(openPanel).toHaveBeenCalledTimes(1);
+        rerender({ status: 'planning', panel: 'run' });
+        result.current.setPanel(null);
+        rerender({ status: 'planning', panel: null });
+        rerender({ status: 'confirm', panel: null });
+        expect(answer).toHaveBeenCalledWith(false);
+        expect(openPanel.mock.calls.filter(([id]) => id === 'run')).toHaveLength(1);
     });
 
     it('never takes the screen from a drawer the person is reading, nor re-opens a panel that is already open', () => {

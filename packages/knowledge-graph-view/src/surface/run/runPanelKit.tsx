@@ -83,7 +83,7 @@ export function createKit({ fn, act, screen }: Injected) {
             <RetryUploadContext.Provider value={retryUpload}>
                 <button type="button" onClick={() => setOpen((v) => !v)}>toggle</button>
                 <div style={{ height: 600 }}>
-                    {open && <RunPanel {...({ labels: L, source, rootId: 'docs', rootTitle: 'Docs', runs: { read, review }, reviews, sync: syncStatus, diagnostics, diagnosticsText: () => diagnostics().text, revision, lastReviewedAt, history, onCompose, onResendSkipped, surface: { openPanel: openPanel ?? fn(() => undefined) } } as unknown as PanelProps)} />}
+                    {open && <RunPanel {...({ labels: L, source, rootId: 'docs', rootTitle: 'Docs', runs: { read, review }, reviews, sync: syncStatus, diagnostics, revision, lastReviewedAt, history, onCompose, onResendSkipped, surface: { openPanel: openPanel ?? fn(() => undefined) } } as unknown as PanelProps)} />}
                 </div>
             </RetryUploadContext.Provider>
         );

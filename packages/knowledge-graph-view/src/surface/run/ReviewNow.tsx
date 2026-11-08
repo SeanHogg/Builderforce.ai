@@ -58,6 +58,8 @@ export function ReviewNow({ labels, run, progress, judgeFiles, onOpenRun }: Revi
     const done = read?.done ?? (progress?.phase === 'extract' ? progress.done : 0);
     const total = read?.total ?? (progress?.phase === 'extract' ? progress.total : 0);
     const pct = read?.pct ?? (total > 0 ? Math.round((done / total) * 100) : undefined);
+    // Map the code: the record's `analyse` phase, else the review's own count. A total of 0 or 1 is "not known yet": an indeterminate bar.
+    const mapping = steps?.analyse ?? (progress?.phase === 'analyse' ? { state: 'active' as StepState, done: progress.done, total: progress.total } : undefined);
     const lines = run ? timeLines(run) : {};
     const lanes = run ? lanesOf(run, activePhase(run)).filter((l) => l.path) : [];
     const sec = (ms: number) => String(Math.max(1, Math.round(ms / 1000)));
@@ -93,7 +95,7 @@ export function ReviewNow({ labels, run, progress, judgeFiles, onOpenRun }: Revi
                         <Step state={steps.workers.state} name={r.stepWorkers} detail={steps.workers.ms !== undefined ? dur(steps.workers.ms) : undefined} />
                     </>
                 )}
-                <Step state={steps?.read.state ?? 'active'} name={r.stepRead} detail={readDetail}>
+                <Step state={steps?.read.state ?? (progress?.phase === 'analyse' ? 'done' : 'active')} name={r.stepRead} detail={readDetail}>
                     {total > 0 && (
                         <>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
@@ -104,6 +106,13 @@ export function ReviewNow({ labels, run, progress, judgeFiles, onOpenRun }: Revi
                         </>
                     )}
                 </Step>
+                {mapping && (
+                    <Step state={mapping.state} name={r.stepAnalyse} detail={mapping.state === 'active' && mapping.total > 1 ? fillTemplate(t.phaseProgress, { done: mapping.done, total: mapping.total }) : undefined}>
+                        {mapping.state === 'active' && (mapping.total > 1
+                            ? <Bar frac={mapping.done / mapping.total} label={labels.phases.analyse} height={8} />
+                            : <Bar frac={0} indeterminate label={labels.phases.analyse} height={8} />)}
+                    </Step>
+                )}
                 {steps?.judge && (
                     <Step
                         state={steps.judge.state} name={fillTemplate(r.stepJudge, { count: steps.judge.count })}

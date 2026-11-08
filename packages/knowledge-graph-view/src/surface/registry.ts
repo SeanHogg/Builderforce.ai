@@ -72,8 +72,6 @@ export interface PanelProps {
     rootTitle?: string | undefined;
     /** Reloads the graph after a drawer changed the code (Resolve applied a codemod). */
     onChanged?: (() => void) | undefined;
-    /** The *Copy diagnostics* text of the view, for the Sync drawer. */
-    diagnosticsText?: (() => string) | undefined;
     /** The diagnostics once: the groups the Diagnostics tab shows and the text Copy diagnostics copies. */
     diagnostics?: (() => Diagnostics) | undefined;
     /** The host's sync status, read ONCE by the root (`useSyncStatus`); the Sync drawer draws it and fetches nothing. */

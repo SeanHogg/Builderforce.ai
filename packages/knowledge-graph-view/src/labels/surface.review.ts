@@ -62,6 +62,7 @@ export const REVIEW_WORDS = {
     stepCount: 'Count',
     stepWorkers: 'Start the workers',
     stepRead: 'Read and save',
+    stepAnalyse: 'Map the code',
     stepJudge: 'Judge the {count} most connected',
     stepJudgeWait: 'after reading',
     stepUpdate: 'Update the map and upload',

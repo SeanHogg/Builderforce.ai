@@ -9,7 +9,7 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { card } from '../../styles';
 import type { ReviewRun } from '../../useReviewRun';
-import { Section } from '../drawers/ui';
+import { Bar, Section } from '../drawers/ui';
 import { counted } from '../plural';
 import { TYPE } from '../ui/type';
 import { etaMs, lastRunPace, type PaceRun } from './runPace';
@@ -20,15 +20,16 @@ type Confirming = Extract<ReviewRun['state'], { status: 'confirm' }>;
 const formatCost = (usd: number): string =>
     new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: usd < 1 ? 2 : 0 }).format(usd);
 
-/** Planning: the folder being counted, with the walk's own count when the host reports one, else an indeterminate bar. */
-export function ReviewPlanning({ labels, root, count }: { labels: KnowledgeGraphLabels; root: string; count?: number | undefined }) {
+/** Planning: the folder being counted, with a bar: determinate when the walk reports a total, else indeterminate, and the walk's own count when the host reports one. */
+export function ReviewPlanning({ labels, root, count, total }: { labels: KnowledgeGraphLabels; root: string; count?: number | undefined; total?: number | undefined }) {
     const r = labels.surface.run.review;
+    const title = fillTemplate(r.planning, { root });
+    const known = total !== undefined && total > 0 && count !== undefined;
     return (
         <section data-testid="kg-review-planning" aria-live="polite" style={{ ...card, display: 'grid', gap: 8 }}>
-            <p style={{ ...TYPE.subtitle, margin: 0 }}>{fillTemplate(r.planning, { root })}</p>
-            {count !== undefined && count > 0
-                ? <p style={{ ...TYPE.meta, margin: 0 }}>{fillTemplate(r.planningCount, { files: counted(labels, 'file', count) })}</p>
-                : <div role="progressbar" aria-label={fillTemplate(r.planning, { root })} style={{ height: 6, borderRadius: 999, background: cssVar('plane'), overflow: 'hidden' }}><div style={{ width: '35%', height: '100%', background: cssVar('accent') }} /></div>}
+            <p style={{ ...TYPE.subtitle, margin: 0, overflowWrap: 'anywhere' }}>{title}</p>
+            {count !== undefined && count > 0 && <p style={{ ...TYPE.meta, margin: 0 }}>{fillTemplate(r.planningCount, { files: counted(labels, 'file', count) })}</p>}
+            {known ? <Bar frac={count / total} label={title} height={8} /> : <Bar frac={0} indeterminate label={title} height={8} />}
         </section>
     );
 }

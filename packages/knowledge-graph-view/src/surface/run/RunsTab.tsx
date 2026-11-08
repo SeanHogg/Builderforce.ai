@@ -14,18 +14,18 @@ export interface RunsTabProps {
     source: KnowledgeGraphSource | undefined;
     read: RunRecordRead;
     review: ReviewRun;
-    diagnosticsText?: (() => string) | undefined;
+    onDiagnose(): void;
     replica?: ReplicaState | undefined;
 }
 
-export function RunsTab({ labels, source, read, review, diagnosticsText, replica }: RunsTabProps) {
+export function RunsTab({ labels, source, read, review, onDiagnose, replica }: RunsTabProps) {
     const history = read.history.runs;
     const shown = read.opened;
     if (shown) {
         // Retry only the latest run's failures, once it has ended, while no review is going.
         const canRetry = history[0]?.id === shown.id && shown.endedAt !== undefined && !reviewBusy(review.state.status) && !!source?.review;
         const retry = (paths: string[]) => review.start({ rootId: shown.root, retry: paths, ...(shown.kind === 'seed' ? { seed: true } : {}) });
-        return <RunDetail labels={labels} run={shown} history={history} onBack={read.close} onRetry={source?.review ? retry : undefined} canRetry={canRetry} diagnosticsText={diagnosticsText} replica={replica} />;
+        return <RunDetail labels={labels} run={shown} history={history} onBack={read.close} onRetry={source?.review ? retry : undefined} canRetry={canRetry} onDiagnose={onDiagnose} replica={replica} />;
     }
     return (
         <div data-testid="kg-runs-tab" style={{ display: 'grid', gap: 16 }}>

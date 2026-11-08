@@ -13,7 +13,6 @@ import type { ReviewRequest } from '../../types';
 import type { PanelProps } from '../registry';
 import { syncGap } from '../drawers/syncModel';
 import { syncPill } from '../syncPill';
-import { CopyDiagnostics } from './CopyDiagnostics';
 import { DiagnosticsTab } from './DiagnosticsTab';
 import { ReviewsPanelFooter } from './ReviewsPanelFooter';
 import { ReviewsPanelHeader } from './ReviewsPanelHeader';
@@ -29,7 +28,7 @@ export function RunPanel(props: PanelProps) {
     return props.runs ? <ReviewsPanelBody {...props} runs={props.runs} /> : null;
 }
 
-function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId, rootTitle, diagnostics, diagnosticsText, lastReviewedAt, revision, onCompose, onResendSkipped, surface }: PanelProps & { runs: RunPanelData }) {
+function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId, rootTitle, diagnostics, lastReviewedAt, revision, onCompose, onResendSkipped, surface }: PanelProps & { runs: RunPanelData }) {
     const { read, review } = runs;
     const state = review.state;
     const live = read.live;
@@ -63,7 +62,6 @@ function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId
     const forceStop = () => { if (state.status === 'stopping') review.forceStop(); if (live && port) void port.stop(live.id).catch(() => undefined); };
     const left = state.status === 'aborted' && live?.endedAt !== undefined ? stoppedLeft(live) : undefined;
     const notStored = syncGap(sync).missing;
-    const text = diagnostics ? () => diagnostics().text : diagnosticsText;
 
     return (
         <div data-testid="kg-run" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: cssVar('text') }}>
@@ -81,7 +79,7 @@ function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId
                         root={rootTitle ?? rootId ?? ''} onDetails={(id) => { setTab('runs'); read.open(id); }} onOpenRun={(id) => { setTab('runs'); read.open(id); }}
                     />
                 )}
-                {tab === 'runs' && <RunsTab labels={labels} source={source} read={read} review={review} diagnosticsText={text} replica={sync?.replica} />}
+                {tab === 'runs' && <RunsTab labels={labels} source={source} read={read} review={review} onDiagnose={() => setTab('diagnostics')} replica={sync?.replica} />}
                 {tab === 'server' && <ServerTab
                         labels={labels} sync={sync} revision={revision} onDiagnose={() => setTab('diagnostics')}
                         more={{ source, history, lastReviewedAt, onCompose, onResend: onResendSkipped, onOpenPanel: (id) => surface.openPanel(id) }}
@@ -91,7 +89,6 @@ function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId
             {review.available && (
                 <ReviewsPanelFooter
                     labels={labels} state={state} running={running} stoppingSince={stoppingSince} left={left}
-                    {...(tab === 'server' ? { extra: <CopyDiagnostics labels={labels} text={text} /> } : {})}
                     onCountAndStart={() => review.start(request, { autoConfirm: true })} onStart={() => review.answer(true)}
                     onStop={() => (hostRunning ? stopHostRun() : review.stop())} onForceStop={forceStop}
                     onResume={() => review.start(request, { autoConfirm: true })} onAgain={() => review.start(request)}

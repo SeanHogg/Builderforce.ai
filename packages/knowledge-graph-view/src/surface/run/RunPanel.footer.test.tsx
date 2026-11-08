@@ -39,11 +39,15 @@ describe('the pinned footer: one button that follows the state', () => {
         expect(review.stop).toHaveBeenCalled();
     });
 
-    it('adds Copy diagnostics beside the button on the Server tab only', () => {
+    it('has no Copy diagnostics in the footer on any tab: the one button is in the Diagnostics tab', () => {
         render(<Harness port={portOf().port} review={machine({ status: 'idle' })} />);
-        expect(screen.queryByRole('button', { name: L.copyDiagnostics })).toBeNull();
-        fireEvent.click(tab(r.tabServer));
-        expect(screen.getByTestId('kg-reviews-footer').contains(screen.getByRole('button', { name: L.copyDiagnostics }))).toBe(true);
+        for (const name of [r.tabReview, r.tabRuns, r.tabServer]) {
+            fireEvent.click(tab(name));
+            expect(screen.queryByRole('button', { name: L.copyDiagnostics })).toBeNull();
+        }
+        fireEvent.click(tab(r.tabDiagnostics));
+        expect(screen.getAllByRole('button', { name: L.copyDiagnostics })).toHaveLength(1);
+        expect(screen.getByTestId('kg-reviews-footer').contains(screen.getByRole('button', { name: L.copyDiagnostics }))).toBe(false);
     });
 
     it('with nothing planned, Start counts the files and starts in one press', () => {

@@ -4,7 +4,7 @@
  *
  *   - Closing the panel while a plan awaits its answer cancels it (nothing is written). Closing it while the files are still being counted means "not now": the plan
  *     is discarded (answered no) the moment it lands, and the panel does not pop back open.
- *   - A review started elsewhere (the empty state's launcher, a copy fix) opens the panel on Review for its plan and its run, but only over NO other drawer: a drawer the
+ *   - A review started elsewhere (the empty state's launcher, a copy fix) opens the panel on Review the moment it starts counting the files (the progress bar is the answer to "is it working"), then for its plan and its run, but only over NO other drawer: a drawer the
  *     person is reading is never taken from them. A review started from the panel itself finds it open already.
  *   - A host's "Choose a folder to review" chip (`openReview`) arrives on the panel.
  */
@@ -70,7 +70,9 @@ export function useReviewsPanel({ kg, surface, source, keepsBaseline, refreshSyn
     useEffect(() => {
         if (!hasReviews) return;
         if (status === 'confirm' && closedWhileCounting.current) { closedWhileCounting.current = false; discardPlan.current(false); return; }
-        if ((status === 'running' || status === 'confirm') && panelNow.current === null) { setTab('review'); openPanel.current('run'); }
+        // Closed while counting means not now, through the plan AND the run that follows it (an auto-confirmed run goes planning to running).
+        if (closedWhileCounting.current && status === 'running') return;
+        if ((status === 'planning' || status === 'running' || status === 'confirm') && panelNow.current === null) { setTab('review'); openPanel.current('run'); }
         if (status === 'idle' || status === 'cancelled' || status === 'done' || status === 'error' || status === 'aborted') closedWhileCounting.current = false;
     }, [status, hasReviews, setTab]);
     useEffect(() => { if (openReview && source.review) { setTab('review'); openPanel.current('run'); } }, [openReview, source.review, setTab]);

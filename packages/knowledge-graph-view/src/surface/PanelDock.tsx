@@ -70,7 +70,6 @@ export interface PanelDrawerProps {
     rootId?: string | undefined;
     rootTitle?: string | undefined;
     onChanged?: (() => void) | undefined;
-    diagnosticsText?: (() => string) | undefined;
     diagnostics?: PanelProps['diagnostics'];
     /** The root's ONE sync read (`useSyncStatus`), handed to the Sync drawer. */
     sync?: SyncRead | undefined;
@@ -92,14 +91,14 @@ export interface PanelDrawerProps {
 }
 
 export function PanelDrawer({
-    graph, env, labels, surface, panel, onPanel, renderPanel, source, rootId, rootTitle, onChanged, diagnosticsText, diagnostics, sync, history, runs, reviews, lastReviewedAt, onResendSkipped, onCamera, cameras, onShow, onCompose, revision, panels = PANELS,
+    graph, env, labels, surface, panel, onPanel, renderPanel, source, rootId, rootTitle, onChanged, diagnostics, sync, history, runs, reviews, lastReviewedAt, onResendSkipped, onCamera, cameras, onShow, onCompose, revision, panels = PANELS,
 }: PanelDrawerProps) {
     const open = availablePanels(graph, env, panels).find((p) => p.id === panel) ?? null;
     const Body = open?.component;
     const subtitle = open ? (labels.surface.drawerSubtitle as Record<string, string | undefined>)[open.id] : undefined;
     return (
         <Panel render={renderPanel} open={!!open} compact={env.compact} closeLabel={labels.close} title={open ? (open.id === 'run' && rootTitle ? rootTitle : labels[open.labelKey]) : ''} subtitle={subtitle} fill={open?.fill === true} width={500} onClose={() => onPanel(null)}>
-            {Body && <Body graph={graph} source={source} rootId={rootId} rootTitle={rootTitle} onChanged={onChanged} diagnosticsText={diagnosticsText} diagnostics={diagnostics} sync={sync?.status} history={history} runs={runs} reviews={reviews} lastReviewedAt={lastReviewedAt} onResendSkipped={onResendSkipped} onCamera={onCamera} cameras={cameras} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} revision={revision} onClose={() => onPanel(null)} />}
+            {Body && <Body graph={graph} source={source} rootId={rootId} rootTitle={rootTitle} onChanged={onChanged} diagnostics={diagnostics} sync={sync?.status} history={history} runs={runs} reviews={reviews} lastReviewedAt={lastReviewedAt} onResendSkipped={onResendSkipped} onCamera={onCamera} cameras={cameras} labels={labels} surface={surface} onShow={onShow} onCompose={onCompose} revision={revision} onClose={() => onPanel(null)} />}
         </Panel>
     );
 }

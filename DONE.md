@@ -26,6 +26,21 @@
 - **PRD 38 residuals.** The spec no longer claims a `docs/knowledge/38-review-*.md` persistence path, a step-kind status table with no runtime, or quote- and learning-level graph nodes; it matches the `--review-root` contract and the file-level graph.
 - **Also landed for this batch, still open in the roadmap:** the G1 egress allowlist behind `SANDBOX_EGRESS_ENFORCE` (b55198fc0, adc99aa42, e867b3bd1; live probe pending), builderforce-memory P1 Louvain partitions (2026.10.57/.58; Builderforce consumer pending), and the builderforce-memory 2026.10.59 pin everywhere (4397dbab4).
 
+## ✅ RESOLVED 2026-11-08: a knowledge review reports its post-write analysis instead of freezing on the last write (Local-first · knowledge: builderforce-memory 2026.10.59 + the Reviews panel)
+
+- **Root cause:** after the per-file writes, memory `review()` ran `retire()` and every pack's analyzers with no progress event. On a 6285-file root that is minutes of repo-graph re-reads plus dependency-cruiser/jscpd/knip, and the view sat on `write 6284/6285`.
+- **Fix (builderforce-memory `36b6b32`, tag `v2026.10.59`):** new `ReviewPhase` `analyse`.
+  - It opens at 0/1 right after the write loop, forwards summed per-pack progress through a new optional `AnalyzerPort.analyse(rootId, signal, onProgress)` (`AnalyzerProgress`), drops late callbacks, and always closes at done == total before `resolve`.
+  - A Stop during the analyzers now aborts the run: resolve/compare are skipped and the digest is not stamped.
+- **Proof:** contract-test + `regression:` tests fold the events through the run record. The `analyse` row stays active while an analyzer that never reports is pending. Jest passes 146/146 (contract, review*, reviewRun), and an Opus review returned ship.
+- **Part 2, the Builderforce.ai consumer:**
+  - **Analyzer progress:** `knowledge/analysisProgress.ts` counts repo-graph file reads plus one unit per tool (`runCodeAnalysis` `onToolSettled`) and feeds `AnalyzerPort.analyse`'s `onProgress`. `done` only grows, and a stopped run never reports done == total.
+  - **The Reviews panel opens on `planning`**, over no other drawer. Closing it while counting discards the plan, and a later `running` (Count and start) does not reopen it.
+  - **Progress bars:** the planning state has a progress bar, indeterminate until the walk has a total. `Bar` gained an `indeterminate` mode, styled in `tokens.css` (`kg-bar-slide`; a static fill under reduced motion).
+  - **"Map the code" step:** the Now card shows it from the run record's `analyse` phase. `analyse` is in `RUN_PHASE_ORDER` and the phase labels in all five catalogs.
+  - **ONE Copy diagnostics,** in the Diagnostics tab. The Server-footer copy and the RunDetail copy are gone (RunDetail links to the tab), along with the dead `diagnosticsText` / `extra` props.
+  - **Proof:** targeted vitest passes (agent-tools 26/26, knowledge-graph-view 40/40 after fixes, 70/70 on the first pass), the i18n key check passes, and a Sonnet review found nothing blocking. Its five findings are fixed.
+
 ## ✅ RESOLVED 2026-11-08: canvas runtimes and studio: six editors, drawing block, Room media, voice marketplace and provenance (Canvas)
 
 - **Six editing runtimes:** `image, animation, podcast, comic, cad, model3d` are registry rows in `bodies/registry.ts`.

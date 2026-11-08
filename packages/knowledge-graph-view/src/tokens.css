@@ -190,3 +190,8 @@ svg [data-id][role="button"]:focus-visible {
 @keyframes kg-spin { to { transform: rotate(360deg); } }
 :where(.kg-spin) { animation: kg-spin 0.9s linear infinite; }
 @media (prefers-reduced-motion: reduce) { :where(.kg-spin) { animation: none; } }
+
+/* The indeterminate Bar (no known total yet): a 35% fill sliding along the track. A static partial fill under reduced motion. */
+.kg-bar-indeterminate { width: 35%; }
+@keyframes kg-bar-slide { from { transform: translateX(0); } to { transform: translateX(185.7%); } }
+@media (prefers-reduced-motion: no-preference) { .kg-bar-indeterminate { animation: kg-bar-slide 1.4s ease-in-out infinite alternate; } }

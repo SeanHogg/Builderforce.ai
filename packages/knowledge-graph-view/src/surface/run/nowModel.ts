@@ -17,6 +17,8 @@ export interface NowSteps {
     read: { state: StepState; progress?: ExtractProgress };
     /** Absent when the record names no judge budget. */
     judge?: { state: StepState; count: number; done: number; total: number };
+    /** Map the code (dependency graph, duplication, unused code): present once the record has an `analyse` phase. A total of 0 or 1 is "not known yet". */
+    analyse?: { state: StepState; done: number; total: number };
     update: { state: StepState };
 }
 
@@ -40,7 +42,10 @@ export function nowSteps(run: StoredReviewRun, judgeBudget?: number): NowSteps {
     const gap = plan?.endedAt !== undefined && extract ? extract.startedAt - plan.endedAt : undefined;
     const count = extract?.total;
     const budget = judge?.total ?? judgeBudget ?? run.awaitingJudgeTotal;
-    const later = ['write', 'index', 'mapped'].some((n) => run.phases.some((p) => p.phase === n));
+    const analyse = phaseOf(run, 'analyse');
+    const reached = (n: string) => run.phases.some((p) => p.phase === n);
+    // Updating the map starts after the analysers: `write` alone does not mean it while they still run.
+    const later = reached('index') || reached('mapped') || (reached('write') && (!analyse || analyse.endedAt !== undefined));
     return {
         count: {
             state: stateOf(plan), ...(count !== undefined ? { files: count } : {}),
@@ -48,6 +53,7 @@ export function nowSteps(run: StoredReviewRun, judgeBudget?: number): NowSteps {
         },
         workers: { state: extract ? 'done' : plan ? 'active' : 'pending', ...(gap !== undefined && gap >= 0 ? { ms: gap } : {}) },
         read: { state: stateOf(extract), ...((): { progress?: ExtractProgress } => { const p = extractProgress(run); return p ? { progress: p } : {}; })() },
+        ...(analyse ? { analyse: { state: reached('index') || reached('mapped') ? 'done' : stateOf(analyse), done: analyse.done ?? 0, total: analyse.total ?? 0 } } : {}),
         ...(budget !== undefined && budget > 0
             ? { judge: { state: stateOf(judge), count: budget, done: judge?.done ?? 0, total: judge?.total ?? budget } }
             : {}),

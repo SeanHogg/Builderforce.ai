@@ -9,7 +9,7 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import type { StoredReviewRun } from '../../types';
 
 /** The order a review moves through its phases: pass 1 (mechanical) ends at the `mapped` milestone, then pass 2 judges (PRD 41 A10). */
-export const RUN_PHASE_ORDER: readonly ReviewPhase[] = ['plan', 'extract', 'resolve', 'compare', 'write', 'index', 'mapped', 'judge', 'done'];
+export const RUN_PHASE_ORDER: readonly ReviewPhase[] = ['plan', 'extract', 'resolve', 'compare', 'write', 'analyse', 'index', 'mapped', 'judge', 'done'];
 
 export type PhaseState = 'done' | 'active' | 'pending';
 
