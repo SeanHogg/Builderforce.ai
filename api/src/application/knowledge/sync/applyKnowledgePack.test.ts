@@ -227,6 +227,54 @@ describe('bodies', () => {
     await expect(apply(pack)).rejects.toMatchObject({ status: 409, code: 'extracted_missing', detail: { hashes: [copy.hash] } });
     expect(w.indexQueries).toBe(1);
   });
+
+  it('regression: an empty full body (nothing was extracted, a binary file) is recorded, so a later pack that omits the file passes verifyBodies and the body reads back as []', async () => {
+    const rows = rowsFor(2);
+    await apply(packOf(rows));
+    const bin = { path: 'assets/logo.png', hash: hashOf(900), bytes: 10 };
+    const none: Pack = { rootId: ROOT, baseGeneration: 1, files: [bin], extracted: [{ kind: 'full', hash: bin.hash, entries: [] }], targetDigest: ZERO_DIGEST };
+    expect(await apply(none)).toMatchObject({ applied: true, generation: 2, extracted: 1 });
+    const pair = [{ hash: bin.hash, sourceRef: refOf(ROOT, bin.path) }];
+    expect(await fakeSync(w).heldEntries(pair, undefined, { entryless: true })).toEqual(new Set([0])); // verifyBodies accepts it
+    expect(await fakeSync(w).heldEntries(pair)).toEqual(new Set()); // but it is never a have-answer: a real body is still asked for
+    expect(await fakeExtracted(w).getMany!([bin.hash])).toEqual(new Map([[bin.hash, []]]));
+
+    const again: Pack = { rootId: ROOT, baseGeneration: 2, files: [bin], targetDigest: ZERO_DIGEST };
+    expect(await apply(again)).toMatchObject({ applied: true, generation: 3 });
+  });
+
+  it('regression: an index row whose stored body cannot be read is healed (no 409): the arrival is written alone and the index names only its sources, so the other pairs re-upload', async () => {
+    const rows = rowsFor(1);
+    await apply(packOf(rows));
+    const shared = rows.files[0]!;
+    w.bundles.clear(); // the object behind the index row is gone
+    const copy = { path: 'src/copy.ts', hash: shared.hash, bytes: 1 };
+    const pack: Pack = { rootId: ROOT, baseGeneration: 1, files: [copy], extracted: [{ kind: 'full', hash: shared.hash, entries: [extraction(ROOT, copy.path, shared.hash)] }], targetDigest: ZERO_DIGEST };
+    expect(await apply(pack)).toMatchObject({ applied: true, generation: 2 });
+    expect(w.index.get(shared.hash)!.sourceRefs).toEqual([refOf(ROOT, copy.path)]); // the lost body's old sources are no longer claimed
+    expect(await fakeSync(w).heldEntries([{ hash: shared.hash, sourceRef: refOf(ROOT, rows.files[0]!.path) }])).toEqual(new Set()); // so that pair is asked for again
+  });
+
+  it('regression: the same bytes at two paths (a .png and a .txt) with an empty body: each path gets its OWN entry-less marker, so neither is re-shipped as owed', async () => {
+    await apply(packOf(rowsFor(1)));
+    const png = { path: 'assets/a.png', hash: hashOf(902), bytes: 5 };
+    const txt = { path: 'assets/a.txt', hash: hashOf(902), bytes: 5 };
+    await apply({ rootId: ROOT, baseGeneration: 1, files: [png, txt], extracted: [{ kind: 'full', hash: png.hash, entries: [] }], targetDigest: ZERO_DIGEST });
+    const pairs = [png, txt].map((f) => ({ hash: f.hash, sourceRef: refOf(ROOT, f.path) }));
+    expect(await fakeSync(w).heldEntries(pairs, undefined, { entryless: true })).toEqual(new Set([0, 1]));
+    expect(await fakeSync(w).heldEntries(pairs)).toEqual(new Set()); // never a have-answer
+  });
+
+  it('regression: a real body arriving later for an entry-less pair is stored, and the pair stops being entry-less', async () => {
+    await apply(packOf(rowsFor(1)));
+    const bin = { path: 'src/late.ts', hash: hashOf(901), bytes: 10 };
+    await apply({ rootId: ROOT, baseGeneration: 1, files: [bin], extracted: [{ kind: 'full', hash: bin.hash, entries: [] }], targetDigest: ZERO_DIGEST });
+    const real = extraction(ROOT, bin.path, bin.hash);
+    await apply({ rootId: ROOT, baseGeneration: 2, files: [bin], extracted: [{ kind: 'full', hash: bin.hash, entries: [real] }], targetDigest: ZERO_DIGEST });
+    expect(await fakeExtracted(w).get(bin.hash)).toEqual([real]);
+    expect(await fakeSync(w).heldEntries([{ hash: bin.hash, sourceRef: refOf(ROOT, bin.path) }])).toEqual(new Set([0]));
+    expect(w.index.get(bin.hash)!.sourceRefs).toEqual([refOf(ROOT, bin.path)]); // no entry-less marker left behind
+  });
 });
 
 describe('manifest, leaves and have', () => {

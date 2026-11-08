@@ -73,7 +73,7 @@ export interface BuiltPack {
     files: number;
     /** The touched keys this pack settles. */
     sentKeys: string[];
-    /** The pack carried every touched key (and so the rows, scope, analysis and the digest). */
+    /** The pack was not cut: it carried every touched key but the held-back files (and so the rows, scope and analysis; the digest only when nothing is held). */
     final: boolean;
     analysisSent: boolean;
     /** Rows left out because their path or key holds a control character; their keys are in `sentKeys` (settled, never retried). */
@@ -81,6 +81,10 @@ export interface BuiltPack {
     /** Rows that are not the pack's to carry, with their dirty keys: sent through `writeRows` after the pack. */
     sideRows: { facts: StoredFact[]; relations: StoredRelation[]; keys: string[] };
     decodedBytes: number;
+    /** Files left OUT of the pack because this store holds no body for their hash and the project holds none for the pair: they stay dirty. */
+    waiting: number;
+    /** The content hashes of those files (for the re-check channel). */
+    waitingHashes: string[];
 }
 
 /** Largest number of files a within-file diff is attempted for (each needs the server's prior hash). */
@@ -128,6 +132,7 @@ const rowsIn = (pack: Pack): number =>
     (pack.files?.length ?? 0) + (pack.facts?.length ?? 0) + (pack.relations?.length ?? 0)
     + (pack.extracted ?? []).reduce((n, x) => n + 1 + (x.kind === 'full' ? x.entries.reduce((m, e) => m + 1 + e.nodes.length + e.edges.length + e.keys.length, 0) : x.entries.length), 0);
 
+
 async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<BuiltPack & { oversize: boolean }> {
     const { rootId, local, client } = args;
     // Rows the server would refuse (a control character in a path or key) never enter the pack or its digest.
@@ -141,12 +146,41 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     const byKey = new Map<string, { path: string; hash: string; bytes: number }>();
     for (const s of sources) { const path = pathOfRef(rootId, s.ref); byKey.set(fileLeafKey(path, s.hash), { path, hash: s.hash, bytes: s.bytes ?? 0 }); }
 
-    const fileKeys = args.touched.filter((k) => k.startsWith('f:'));
+    // No single file may block a root. Holds are decided over ALL the touched files BEFORE any slicing, so a cut pack can never pull in
+    // an unchecked file: a body this store has none of (a locked or unreadable file, a text file not extracted yet) that the project
+    // does not hold for the pair (ONE have for those pairs) holds ITS file back. It stays dirty; everything else goes.
+    const allFileKeys = args.touched.filter((k) => k.startsWith('f:'));
+    const holdKeys = new Set<string>();
+    const holdHashes = new Set<string>();
+    // Pairs already asked of the project (and the held ones among them): the body batch below does not ask them again.
+    const answered = new Set<string>();
+    const heldAnswers = new Set<string>();
+    {
+        const absentHash = new Map<string, boolean>();
+        const pending: Array<{ key: string; hash: string; sourceRef: string }> = [];
+        for (const key of allFileKeys) {
+            const src = byKey.get(key);
+            if (!src) continue;
+            if (!absentHash.has(src.hash)) absentHash.set(src.hash, (await local.getExtracted?.(src.hash)) === undefined);
+            if (absentHash.get(src.hash)) pending.push({ key, hash: src.hash, sourceRef: srcRef(rootId, src.path) });
+        }
+        const heldPairs = pending.length > 0 ? await haveAll(client, rootId, pending) : new Set<string>();
+        for (const p of pending) answered.add(pairKey(p));
+        for (const k of heldPairs) heldAnswers.add(k);
+        for (const p of pending) {
+            if (!args.forceBodies?.has(p.hash) && heldPairs.has(pairKey(p))) continue; // the project holds the pair: nothing to send, nothing to wait for
+            holdKeys.add(p.key);
+            holdHashes.add(p.hash);
+        }
+    }
+
+    const fileKeys = allFileKeys.filter((k) => !holdKeys.has(k));
     const rowKeys = args.touched.filter((k) => !k.startsWith('f:'));
     const cut = limit !== undefined && fileKeys.length > limit;
     const sentFileKeys = cut ? fileKeys.slice(0, limit) : fileKeys;
+    // A pack that is not cut carries the rows, scope, analysis and side rows, held files or not. It asserts the root digest only when nothing is held back.
     const final = !cut;
-
+    const asserts = final && holdKeys.size === 0;
     // The local state, as the tree sees it: which keys are leaves, which rows exist.
     let allFacts: StoredFact[] = [], allRels: StoredRelation[] = [];
     let treeKeys = new Set<string>();
@@ -197,7 +231,7 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         const sourceRef = srcRef(rootId, f.path);
         for (const hash of [f.hash, priorOf.get(f.hash)]) if (hash) asked.set(pairKey({ hash, sourceRef }), { hash, sourceRef });
     }
-    const held = await haveAll(client, rootId, [...asked.values()]);
+    const held = new Set([...heldAnswers, ...(await haveAll(client, rootId, [...asked.values()].filter((p) => !answered.has(pairKey(p)))))]);
     const heldFor = (hash: string, f: { path: string }): boolean => held.has(pairKey({ hash, sourceRef: srcRef(rootId, f.path) }));
     const need = hashes.filter((h) => files.some((f) => f.hash === h && !heldFor(h, f)) || args.forceBodies?.has(h));
 
@@ -205,7 +239,15 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     const fullExtr: PackExtr[] = [];
     for (const hash of need) {
         const entries: Extracted[] | undefined = await local.getExtracted?.(hash);
-        if (!entries || entries.length === 0) continue;
+        // (An absent body never gets here: its files were held back above.) An explicit `[]` is the review's record that
+        // nothing is extracted for this file (binary): it goes as an explicit empty body, so the server stops asking for it.
+        if (!entries) continue; // defensive: every needed body was checked above, so an absent one has its files held back
+        if (entries.length === 0) {
+            const none: PackExtr = { kind: 'full', hash, entries: [] };
+            fullExtr.push(none);
+            extracted.push(none);
+            continue;
+        }
         fullExtr.push({ kind: 'full', hash, entries });
         const prior = priorOf.get(hash);
         const priorEntries = prior && files.some((f) => f.hash === hash && heldFor(prior, f)) ? await local.getExtracted?.(prior) : undefined;
@@ -243,17 +285,18 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
             }
         }
         const scope = (await local.scopes()).find((s) => s.rootId === rootId);
-        if (scope) pack.scope = scope;
+        // While a file is held back the review digest is not the server's state: the scope goes without it (the immutable review snapshot is keyed by it).
+        if (scope) { const { lastDigest: _held, ...rest } = scope; pack.scope = asserts ? scope : rest; }
         if (args.analysis) pack.analysis = { sha: args.analysis.sha, snapshot: args.analysis.snapshot };
         const current = sources.map((s) => ({ path: pathOfRef(rootId, s.ref), hash: s.hash }));
-        pack.targetDigest = rootDigestOf(rootId, { files: current, facts: allFacts, relations: allRels });
+        if (asserts) pack.targetDigest = rootDigestOf(rootId, { files: current, facts: allFacts, relations: allRels });
     }
     if (tombstones.files.length + tombstones.facts.length + tombstones.relations.length > 0) pack.deletes = tombstones;
 
     const stats = { decodedBytes: 0 };
     const bytes = await encodePack(pack, { stats });
     const oversize = stats.decodedBytes > (args.maxDecodedBytes ?? DEFAULT_MAX_DECODED) || rowsIn(pack) > (args.maxRows ?? DEFAULT_MAX_ROWS);
-    const sentKeys = final ? [...args.touched] : sentFileKeys;
+    const sentKeys = final ? args.touched.filter((k) => !holdKeys.has(k)) : sentFileKeys;
     const settled = new Set(sentKeys);
     return {
         bytes, oversize, decodedBytes: stats.decodedBytes,
@@ -265,6 +308,8 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         final,
         analysisSent: final && !!args.analysis,
         sideRows: side,
+        waiting: holdKeys.size,
+        waitingHashes: [...holdHashes],
     };
 }
 

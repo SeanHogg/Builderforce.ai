@@ -140,4 +140,43 @@ describe('replicatedKnowledgeStore', () => {
         expect(readThrough.getExtracted).toHaveBeenCalledTimes(1);
         expect(onError).toHaveBeenCalledTimes(1);
     });
+
+    it('regression: an entry for a source arriving where the body was [] (or lacked that source) marks its file dirty again, at the same hash', async () => {
+        const local = memoryLocal();
+        const queue = createReplicaQueue(memoryReplicaPersistence());
+        const known = new Map([[srcRef(ROOT, 'a.md') as string, 'h1']]);
+        const store = replicatedKnowledgeStore({ local, rootId: ROOT, replica: {}, queue, knownHashes: async () => known });
+        await store.putExtracted!('h1', []);                      // recorded as "nothing extracted"
+        expect(await dirtyOf(queue)).toEqual([]);                 // same hash as the last review: not a change
+        await store.putExtracted!('h1', [extracted('h1')]);       // now it has a real entry: the project's entry-less marker must be replaced
+        expect(await dirtyOf(queue)).toEqual([fileKey('a.md', 'h1')]);
+    });
+
+    it('regression: a re-checked hash answered with [] (nothing extracted) wakes the pump too, not only a real body', async () => {
+        const local = memoryLocal();
+        const queue = createReplicaQueue(memoryReplicaPersistence());
+        const onQueued = vi.fn();
+        const known = new Map([[srcRef(ROOT, 'a.md') as string, 'h1']]);
+        const store = replicatedKnowledgeStore({ local, rootId: ROOT, replica: {}, queue, onQueued, knownHashes: async () => known });
+        await store.markRecheck!(['h1']);   // the pump held the file back and asked the next review about it
+        await store.putExtracted!('h1', []); // the review answers: nothing to extract (a binary file)
+        expect(onQueued).toHaveBeenCalledTimes(1);
+        await store.putExtracted!('h9', []); // an unrelated [] wakes nothing
+        expect(onQueued).toHaveBeenCalledTimes(1);
+    });
+
+    it('regression: a live edit (stale first, output after) kicks the pump again when the output lands, so a held-back file settles without a review', async () => {
+        const local = memoryLocal();
+        const queue = createReplicaQueue(memoryReplicaPersistence());
+        const onQueued = vi.fn();
+        const store = replicatedKnowledgeStore({ local, rootId: ROOT, replica: {}, queue, onQueued });
+
+        await store.markStale({ rootId: ROOT }, srcRef(ROOT, 'a.md'), 'h2'); // as markFilesEdited does, before extractFile
+        expect(onQueued).toHaveBeenCalledTimes(1);                              // the pump may now run and hold the file back
+        await store.putExtracted!('h2', [{ ...extracted('h2') }]);              // the same hash: not a change, but the output the pump waited for
+        expect(onQueued).toHaveBeenCalledTimes(2);
+
+        await store.putExtracted!('h3', [{ ...extracted('h3'), sourceRef: srcRef(ROOT, 'b.md') }]); // output with nothing waiting: no extra kick beyond its own mark
+        expect(onQueued.mock.calls.length).toBe(3);
+    });
 });

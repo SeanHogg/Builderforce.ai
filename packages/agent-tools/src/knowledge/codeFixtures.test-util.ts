@@ -8,7 +8,7 @@ import { normalizeAnalysis, type CodeAnalysisSnapshot } from '../codeAnalysis.js
 
 /** The walk behind a review plan, as memory's `planDetail` returns it: nothing owed, nothing carried. */
 export function planDetailOf(plan: ReviewPlan, files: PlanDetail['files'] = []): PlanDetail {
-  return { plan, files, prior: new Map(), extractor: { version: EXTRACTOR_VERSION, owed: new Map() }, carried: [] };
+  return { plan, files, prior: new Map(), extractor: { version: EXTRACTOR_VERSION, owed: new Map(), failures: new Map() }, carried: [] };
 }
 
 export const dependency = {

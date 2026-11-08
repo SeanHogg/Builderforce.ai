@@ -61,7 +61,8 @@ export async function pushPack(
   if (state.paused === "unreachable") throw new PackUploadUnreachable();
   const refused = state.failed.filter((f) => f.status === 403 || f.status === 401)[0];
   if (refused) throw new KnowledgeApiError(refused.status ?? 403, "forbidden", refused.reason);
-  const incomplete = state.failed.length;
+  // A portable pack has no review to answer a held-back file, so one the pump held back (no extracted body) is as incomplete as a refused one.
+  const incomplete = state.failed.length + (state.awaitingReview ?? 0);
   if (incomplete > 0) throw new PackUploadIncomplete(incomplete);
   return counts;
 }

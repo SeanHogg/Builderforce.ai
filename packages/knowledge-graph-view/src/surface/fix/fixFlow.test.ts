@@ -129,13 +129,13 @@ describe('who handles a step', () => {
 
     it('codemods are data: a non-builtin kind needs the host to list it', () => {
         const applyFix = async () => ({ changed: [] });
-        expect(CODEMODS.map((r) => r.kind)).toContain('god-file');
+        expect(CODEMODS.map((r) => r.kind)).toContain('god-module');
         expect(canApplyKind({ applyFix }, 'unused-file')).toBe(true);
-        expect(canApplyKind({ applyFix }, 'god-file')).toBe(false);
-        expect(canApplyKind({ applyFix, applyFixKinds: ['god-file'] }, 'god-file')).toBe(true);
-        expect(canApplyKind({ applyFix, applyFixKinds: ['god-file'] }, 'unused-file')).toBe(false);
+        expect(canApplyKind({ applyFix }, 'god-module')).toBe(false);
+        expect(canApplyKind({ applyFix, applyFixKinds: ['god-module'] }, 'god-module')).toBe(true);
+        expect(canApplyKind({ applyFix, applyFixKinds: ['god-module'] }, 'unused-file')).toBe(false);
         expect(canApplyKind({}, 'unused-file')).toBe(false);
-        expect(codemodOf('god-file')?.labelKey).toBe('splitByCommand');
+        expect(codemodOf('god-module')?.labelKey).toBe('splitByCommand');
     });
 
     it('every codemod row has a label in the catalog', () => {

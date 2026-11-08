@@ -9,9 +9,11 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from './order';
 import { reviewDiagnosticsText } from './reviewDiagnostics';
 import type { ReviewState } from './useReviewRun';
-import { surfaceDiagnosticLines, type SurfaceDiagnosticsInput } from './surfaceDiagnostics';
+import { surfaceDiagnosticSections, type SurfaceDiagnosticsInput } from './surfaceDiagnostics';
+import type { DiagnosticSection, Diagnostics } from './diagnosticSection';
 import type { LensId, StoredReviewRun, ViewMode } from './types';
 import { runDiagnosticLines } from './surface/run/runDiagnostics';
+import { failureCountOf } from './surface/run/runModel';
 
 export interface GraphDiagnosticsInput {
     status: string;
@@ -54,39 +56,55 @@ export function truncationReasons(graph: KnowledgeGraph, drawnNodes: number, com
     return reasons;
 }
 
-export function graphDiagnosticsText(i: GraphDiagnosticsInput): string {
+const TITLE = 'Knowledge graph diagnostics';
+
+/** The diagnostics as labelled groups: graph, review and last run, then the surface's (coverage, lines, sync, findings). */
+export function graphDiagnosticSections(i: GraphDiagnosticsInput): DiagnosticSection[] {
     const g = i.graph;
     const s = i.review;
-    const lines: string[] = ['Knowledge graph diagnostics', `status: ${i.status}`];
-    if (i.rootId) lines.push(`root: ${i.rootId}`);
+    const graph: string[] = [`status: ${i.status}`];
+    if (i.rootId) graph.push(`root: ${i.rootId}`);
     if (g) {
-        lines.push(`packs: ${[...g.scope.packs].sort(cmp).join(', ') || 'none'}`);
-        lines.push(`stats: nodes=${g.stats.nodes} edges=${g.stats.edges} sources=${g.stats.sources}`);
+        graph.push(`packs: ${[...g.scope.packs].sort(cmp).join(', ') || 'none'}`);
+        graph.push(`stats: nodes=${g.stats.nodes} edges=${g.stats.edges} sources=${g.stats.sources}`);
         const drawn = i.drawn ?? { nodes: g.nodes.length, edges: g.edges.length };
         const reasons = truncationReasons(g, drawn.nodes, i.compact, i.showAll);
-        lines.push(`drawn: nodes=${drawn.nodes}/${g.nodes.length} edges=${drawn.edges}/${g.edges.length} · truncated: ${yn(reasons.length > 0)}`);
-        if (reasons.length) lines.push(`truncation reason: ${reasons.join('; ')}`);
+        graph.push(`drawn: nodes=${drawn.nodes}/${g.nodes.length} edges=${drawn.edges}/${g.edges.length} · truncated: ${yn(reasons.length > 0)}`);
+        if (reasons.length) graph.push(`truncation reason: ${reasons.join('; ')}`);
     }
-    lines.push(`webgl: ${yn(i.webgl)} · reduced-motion: ${yn(i.reducedMotion)} · view: ${i.mode}`);
-    lines.push(`container: width=${Math.round(i.width)} compact=${yn(i.compact)}`);
+    graph.push(`webgl: ${yn(i.webgl)} · reduced-motion: ${yn(i.reducedMotion)} · view: ${i.mode}`);
+    graph.push(`container: width=${Math.round(i.width)} compact=${yn(i.compact)}`);
     if (g) {
-        lines.push(`nodes by kind: ${counts(g.nodes.map((n) => n.kind))}`);
-        lines.push(`edges by kind: ${counts(g.edges.map((e) => e.kind))}`);
-        lines.push(`edges by origin: ${counts(g.edges.map((e) => e.origin))}`);
-        lines.push(`findings by kind: ${counts(g.findings.map((f) => f.kind))}`);
+        graph.push(`nodes by kind: ${counts(g.nodes.map((n) => n.kind))}`);
+        graph.push(`edges by kind: ${counts(g.edges.map((e) => e.kind))}`);
+        graph.push(`edges by origin: ${counts(g.edges.map((e) => e.origin))}`);
+        graph.push(`findings by kind: ${counts(g.findings.map((f) => f.kind))}`);
         const parts = [...new Set(g.nodes.flatMap((n) => (n.partition ? [n.partition] : [])))].sort(cmp);
-        lines.push(`partitions: ${parts.join(', ') || 'none'}`);
+        graph.push(`partitions: ${parts.join(', ') || 'none'}`);
     }
-    lines.push(`lens: ${i.lens}`);
-    lines.push(`review: ${s.status}${s.status === 'running' && s.progress ? ` (${s.progress.phase} ${s.progress.done}/${s.progress.total})` : ''}${i.lastPhase ? ` · last phase ${i.lastPhase}` : ''}`);
+    graph.push(`lens: ${i.lens}`);
+
+    const review: string[] = [`review: ${s.status}${(s.status === 'running' || s.status === 'stopping') && s.progress ? ` (${s.progress.phase} ${s.progress.done}/${s.progress.total})` : ''}${i.lastPhase ? ` · last phase ${i.lastPhase}` : ''}`];
     if (s.status === 'done') {
         const r = s.report;
         const perSecond = r.durationMs > 0 ? (r.extracted / (r.durationMs / 1000)).toFixed(1) : 'n/a';
-        lines.push(`report: extracted=${r.extracted} judged=${r.judged} readErrors=${r.readErrors} duration=${r.durationMs}ms files/s=${perSecond}`);
+        review.push(`report: extracted=${r.extracted} judged=${r.judged} readErrors=${r.readErrors} duration=${r.durationMs}ms files/s=${perSecond}`);
     }
-    if (i.run) lines.push(...runDiagnosticLines(i.run));
-    if (i.surface) lines.push(...surfaceDiagnosticLines(i.surface));
-    lines.push(`time: ${i.time}`);
-    if (s.status === 'error') lines.push('', reviewDiagnosticsText(s));
-    return lines.join('\n');
+    if (i.run) review.push(...runDiagnosticLines(i.run));
+    const failed = s.status === 'error' || (i.run?.outcome === 'failed') || (i.run ? failureCountOf(i.run) > 0 : false);
+    return [
+        { id: 'graph', lines: graph, attention: false },
+        { id: 'review', lines: review, attention: failed },
+        ...(i.surface ? surfaceDiagnosticSections(i.surface) : []),
+    ];
 }
+
+/** The diagnostics, once: the groups the tab shows and the text the clipboard gets are built from the same lines. */
+export function graphDiagnostics(i: GraphDiagnosticsInput): Diagnostics {
+    const sections = graphDiagnosticSections(i);
+    const lines = [TITLE, ...sections.flatMap((section) => section.lines), `time: ${i.time}`];
+    if (i.review.status === 'error') lines.push('', reviewDiagnosticsText(i.review));
+    return { sections, takenAt: i.time, text: lines.join('\n') };
+}
+
+export const graphDiagnosticsText = (i: GraphDiagnosticsInput): string => graphDiagnostics(i).text;

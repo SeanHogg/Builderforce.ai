@@ -27,6 +27,8 @@ export const CODE_BADGES = {
     unusedExports: 'unusedExports',
     /** knip: unused dependencies declared by the file (a package manifest). */
     unusedDependencies: 'unusedDependencies',
+    /** Lines in the file (deterministic): the god-module finding's size measure. */
+    lines: 'lines',
     /** Sum of cyclomatic complexity over the file's functions (deterministic). */
     complexity: 'complexity',
     /** The worst function's cyclomatic complexity (deterministic). */

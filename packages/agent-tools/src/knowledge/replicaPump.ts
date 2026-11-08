@@ -19,7 +19,7 @@
  *                             never lose the set. The next start resumes.
  *   409 body_conflict         another pack merged the same bodies at once: rebuild and resend now, at most 3 times;
  *   409                       `generation_mismatch` / `digest_mismatch`: reconcile; `prior_missing`: resend
- *                             without diffs; `extracted_missing`: resend with those bodies; at most 4 in a row.
+ *                             without diffs; `extracted_missing`: resend with those bodies (and ask the next review to re-check hashes this store has no body for); at most 4 in a row.
  *   413 pack_too_large        the pack is cut in half (by files) and the rest stays dirty.
  *   422 / any other error     recorded in `failed`; the set is kept and the pump stops.
  *   side rows (notes, agent facts)  a 4xx is final: the rows leave the set and stay in `failed`; a 5xx or network
@@ -70,6 +70,8 @@ export interface ReplicaState {
     parts?: { sent: number; total: number };
     /** Epoch ms the pump retries at, while it waits out a 429 or an outage. */
     waitingUntil?: number;
+    /** Files held back from the packs because their extracted output is not there yet: they wait for a review, the rest of the root is sent. */
+    awaitingReview?: number;
     /** Why it waits (`429`, `network`, or the server status). */
     waitingFor?: string;
     /** Why it stopped with work left: signed out (`auth`), the server unreachable, or the set moved to another project. */
@@ -139,6 +141,23 @@ const codeOf = (error: unknown): string | undefined => {
     return typeof code === 'string' ? code : undefined;
 };
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+/**
+ * Hashes whose bodies are missing (held back by the pack builder, or named by the server's `extracted_missing`): those this
+ * store holds NO body for (`getExtracted` undefined: a legacy binary file the review never recorded, a file not extracted yet)
+ * are asked of the next review through the store's re-check channel. The review reads just those files, stores `[]` for a
+ * binary one and extracts a text one. A store without the channel is left as it was. Never throws.
+ */
+async function askRecheck(local: KnowledgeStore, named: readonly string[]): Promise<void> {
+    if (!local.markRecheck || named.length === 0) return;
+    try {
+        const absent: string[] = [];
+        for (const hash of new Set(named)) if ((await local.getExtracted?.(hash)) === undefined) absent.push(hash);
+        if (absent.length > 0) await local.markRecheck(absent);
+    } catch {
+        // Best effort: the pump's own handling is unchanged.
+    }
+}
+
 /** Worth waiting for: rate limited, the server failing, or unreachable (the client reports that as status 0). */
 const transient = (status: number | undefined): boolean => status === 429 || status === 0 || (status !== undefined && status >= 500);
 
@@ -159,7 +178,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
     const sleep = args.sleep ?? sleepFor;
     const now = args.now ?? Date.now;
     const state: ReplicaState = { ...emptyReplicaState(), ...(args.initial ?? {}), failed: [...(args.initial?.failed ?? [])], sending: false };
-    delete state.waitingUntil; delete state.waitingFor; delete state.paused; delete state.pausedStatus; delete state.parts;
+    delete state.waitingUntil; delete state.waitingFor; delete state.paused; delete state.pausedStatus; delete state.parts; delete state.awaitingReview;
     const emit = async (): Promise<void> => {
         try {
             state.dirty = await queue.size();
@@ -250,6 +269,13 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                     ...(maxFiles !== undefined ? { maxFiles } : {}), noDiff, ...(force ? { forceBodies: force } : {}), ...(owned ? { ownedKeys: owned } : {}),
                 });
                 lastFiles = built.files;
+                if (built.waiting > 0) {
+                    state.awaitingReview = built.waiting;
+                    // Already known to be absent (the builder checked): no second lookup.
+                    try { await local.markRecheck?.(built.waitingHashes); } catch { /* best effort */ }
+                    // Only held-back files remain (and no analysis to send): the rest of the root already landed.
+                    if (built.sentKeys.length === 0 && !built.analysisSent) break;
+                } else delete state.awaitingReview;
                 const parts = splitParts(built.bytes, args.maxPartBytes ?? MAX_PART_BYTES);
                 // What the server accepts: parts adding up to MAX_SYNC_PACK_BYTES (so at most 3 of the 8 MB parts, under its cap of 8).
                 // A pack past it is cut in half by files BEFORE it is sent, the same way the server's 413 would have made it.
@@ -307,7 +333,11 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 if (status === 409 && code !== 'body_conflict' && conflicts < MAX_CONFLICTS) {
                     conflicts += 1;
                     if (code === 'prior_missing') noDiff = true;
-                    else if (code === 'extracted_missing') force = new Set((error as { hashes?: string[] }).hashes ?? []);
+                    else if (code === 'extracted_missing') {
+                        const named = (error as { hashes?: string[] }).hashes ?? [];
+                        force = new Set(named);
+                        await askRecheck(local, named);
+                    }
                     else if (code !== 'parts_missing') await queue.requestReconcile();
                     continue;
                 }

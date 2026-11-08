@@ -11,7 +11,7 @@ import { bucketDigest, bucketOf, MANIFEST_BUCKETS, relationLeafKey } from '@sean
 import type { Db } from '../../../infrastructure/database/connection';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
 import type { Bundle } from '../knowledgeBundles';
-import type { ExtractedLoc, KnowledgeLedgerPort, SourceRow } from '../knowledgeLedger';
+import { entrylessRef, type ExtractedLoc, type KnowledgeLedgerPort, type SourceRow } from '../knowledgeLedger';
 import type { ExtractedCachePort, KnowledgeStorePort } from '../knowledgePorts';
 import { storeMock } from '../knowledgeStoreMock.test-util';
 import type { PackUnit } from './applyKnowledgePack';
@@ -86,9 +86,9 @@ export function fakeLedger(w: World): KnowledgeLedgerPort {
   const ledger: KnowledgeLedgerPort = {
     index: {
       locate: async (hashes) => { w.indexQueries += 1; return hashes.flatMap((h) => (w.index.has(h) ? [w.index.get(h)!] : [])); },
-      holds: async (pairs) => {
+      holds: async (pairs, opts) => {
         w.indexQueries += 1;
-        return new Set(pairs.flatMap((p, i) => (w.index.get(p.hash)?.sourceRefs.includes(p.sourceRef) ? [i] : [])));
+        return new Set(pairs.flatMap((p, i) => (w.index.get(p.hash)?.sourceRefs.some((r) => r === p.sourceRef || (opts?.entryless === true && r === entrylessRef(p.sourceRef))) ? [i] : [])));
       },
       upsert: async (rows, expected) => {
         let n = 0;
@@ -186,7 +186,7 @@ export function fakeSync(w: World): KnowledgeSyncPort {
   return {
     state: async (root) => w.roots.get(root) ?? { generation: 0, digest: '' },
     sources: async (root) => all(root),
-    heldEntries: async (pairs) => fakeLedger(w).index.holds(pairs),
+    heldEntries: async (pairs, _over, opts) => fakeLedger(w).index.holds(pairs, opts),
     putBundle: async (bundle: Bundle) => { w.puts.push('bundle'); w.bundles.set(bundle.key, bundle.bytes); },
     snapshotReview: async (root, digest) => { w.puts.push(`snapshot:${root}:${digest}`); },
     stagePart: async (actor, id, part, bytes) => { w.puts.push('stage'); w.staged.set(stageKey(actor, id, part), bytes); },

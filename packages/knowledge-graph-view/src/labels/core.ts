@@ -50,7 +50,6 @@ export interface CoreLabels {
     viewSystem: string;
     viewHeat: string;
     viewSequence: string;
-    panelSync: string;
     panelRun: string;
     panelCoverage: string;
     panelPatterns: string;
@@ -167,20 +166,14 @@ export interface CoreLabels {
     /** The Before/After control's group name (shown when the host keeps a baseline). */
     revisionLabel: string;
     // Review
-    reviewPlanTitle: string;
-    reviewPlanUnchanged: string;
     reviewPlanCost: string;
     /** Shown in the confirm chip while the host cannot price the judgement pass. */
     reviewPlanCostPending: string;
     /** Shown in the confirm chip when the judgement pass runs on the person's own local model. */
     reviewPlanCostLocal: string;
-    reviewPlanJudgeBudget: string;
-    reviewPlanSkipped: string;
-    reviewConfirm: string;
-    reviewCancel: string;
-    reviewRereviewAll: string;
     reviewPlanning: string;
     reviewStop: string;
+    /** Shown from Stop until the host settles. */
     reviewCancelled: string;
     reviewDoneTitle: string;
     reviewDoneBody: string;
@@ -253,8 +246,7 @@ viewList: 'List',
 viewSystem: 'System',
 viewHeat: 'Heat',
 viewSequence: 'Sequence',
-panelSync: 'Sync',
-panelRun: 'Review run',
+panelRun: 'Reviews',
 panelCoverage: 'Coverage',
 panelPatterns: 'Patterns',
 panelApi: 'API',
@@ -296,7 +288,7 @@ findingsTitle: 'Findings',
 findingsNarrowed: 'Findings · {lens} lens ({shown} of {total})',
 findingsEmpty: 'No open findings at {scope}.',
 findingKinds: {
-    cycle: 'Cycle', cloneGroup: 'Clone group', nearDuplicate: 'Near-duplicate', partitionViolation: 'Layer violation',
+    godModule: 'God module', cycle: 'Cycle', cloneGroup: 'Clone group', nearDuplicate: 'Near-duplicate', partitionViolation: 'Layer violation',
     violation: 'Layer violation', unpartitioned: 'Unlayered files', unlayered: 'Unlayered files', stale: 'Stale knowledge',
     possibleSame: 'Possibly the same', brokenLink: 'Broken links', orphan: 'Orphan documents', unusedFile: 'Unused file',
     unusedExport: 'Unused exports', unusedDependency: 'Unused dependencies', unused: 'Unused code',
@@ -328,6 +320,7 @@ fix: {
     stale: 'Re-check the stale knowledge about {items} against the current source.',
     unlayered: 'Assign these files to a layer: {items}.',
     unpartitioned: 'Assign these files to a layer: {items}.',
+    godModule: 'Split {items} into modules with one job each, each under the size limits ({linesLimit} lines, {exportsLimit} exports, worst-function complexity {complexityLimit}); keep behaviour unchanged and run the checks.',
     generic: 'Look into this finding and fix it: {items}.',
 },
 nodePanelTitle: 'Details',
@@ -379,16 +372,9 @@ compareAdded: 'Appeared',
 compareResolved: 'Resolved',
 compareIncomparable: 'Before and after were measured differently, so a missing finding is not counted as resolved.',
 revisionLabel: 'Revision',
-reviewPlanTitle: 'Review {title}?',
-reviewPlanUnchanged: '{count} unchanged since the last review',
 reviewPlanCost: '≈ {cost}',
 reviewPlanCostPending: 'Cost is shown after routing.',
 reviewPlanCostLocal: 'Runs on your local model — no cost.',
-reviewPlanJudgeBudget: 'The first {count} files are judged in this run; the rest wait for the next.',
-reviewPlanSkipped: '{count} skipped',
-reviewConfirm: 'Review',
-reviewCancel: 'Cancel',
-reviewRereviewAll: 'Re-review all',
 reviewPlanning: 'Walking the folder…',
 reviewStop: 'Stop',
 reviewCancelled: 'Review cancelled. Nothing was written.',

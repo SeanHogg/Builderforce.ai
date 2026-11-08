@@ -117,33 +117,37 @@ describe('KnowledgeGraphView', () => {
         expect(screen.getByRole('button', { name: L.reviewFolder })).toBeTruthy();
     });
 
-    it('runs the review confirm handshake: plan → chip → Confirm → done', async () => {
+    it('runs the review confirm handshake: plan → the Reviews panel → Start review → done', async () => {
         const source = fixtureSource([]);
         render(<KnowledgeGraphView source={source} />);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
         expect(source.requests).toEqual([{ pick: true }]);
-        expect(await screen.findByText('Documents: 3 files')).toBeTruthy();
-        expect(screen.getByText('1 unchanged since the last review')).toBeTruthy();
-        expect(screen.getByText('≈ 4 model calls')).toBeTruthy();
-        // This source prices nothing: the chip says the cost comes after routing.
-        expect(screen.getByText(L.reviewPlanCostPending)).toBeTruthy();
+        // The plan opens the Reviews panel by itself: what was counted, then what this run will do.
+        const start = await screen.findByTestId('kg-review-start');
+        expect(within(start).getByText(L.surface.run.review.tileUnchanged).parentElement!.textContent).toContain('1');
+        // This source prices nothing: the panel says the cost comes after routing.
+        expect(within(start).getByText(new RegExp(`^≈ 4 model calls · ${L.reviewPlanCostPending}`))).toBeTruthy();
         expect(source.confirmed).toEqual([]);
-        fireEvent.click(screen.getByRole('button', { name: L.reviewConfirm }));
+        fireEvent.click(screen.getByTestId('kg-footer-action'));
         expect(await screen.findByText(L.reviewDoneTitle)).toBeTruthy();
         expect(source.confirmed).toEqual([true]);
     });
 
-    it('writes nothing on Cancel, and Re-review all plans again with force', async () => {
+    it('writes nothing when the panel is closed on the plan, and Everything again plans again with force', async () => {
         const source = fixtureSource([]);
         render(<KnowledgeGraphView source={source} />);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
-        fireEvent.click(await screen.findByRole('button', { name: L.reviewCancel }));
-        expect(await screen.findByText(L.reviewCancelled)).toBeTruthy();
-        expect(source.confirmed).toEqual([false]);
+        const panel = await screen.findByTestId('kg-review-start');
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: L.close }));
+        await waitFor(() => expect(source.confirmed).toEqual([false]));
+        expect(panel.isConnected).toBe(false);
 
-        fireEvent.click(screen.getByRole('button', { name: L.reviewFolder }));
-        fireEvent.click(await screen.findByRole('button', { name: L.reviewRereviewAll }));
+        fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
+        const again = await screen.findByTestId('kg-review-start');
+        fireEvent.click(within(again).getAllByRole('radio')[1]!);
         await waitFor(() => expect(source.requests.at(-1)).toMatchObject({ force: true, rootId: 'docs' }));
-        expect(await screen.findByText('0 unchanged since the last review')).toBeTruthy();
+        const [changed, everything] = within(await screen.findByTestId('kg-review-start')).getAllByRole('radio');
+        expect(everything!.getAttribute('aria-checked')).toBe('true');
+        expect(changed!.getAttribute('aria-checked')).toBe('false');
     });
 });

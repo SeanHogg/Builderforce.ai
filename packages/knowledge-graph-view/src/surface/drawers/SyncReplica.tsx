@@ -55,6 +55,7 @@ export function SyncReplica({ replica, labels }: { replica: ReplicaState; labels
             <div data-testid="kg-sync-replica" data-queued={replica.dirty} style={{ display: 'grid', gap: 4 }}>
                 <span role="status">{replicaHeadline(labels, replica, now)}</span>
                 {busy && replica.dirty > 0 && <span style={muted}>{counted(labels, 'replicaQueued', replica.dirty)}</span>}
+                {!!replica.awaitingReview && <span data-testid="kg-sync-replica-awaiting" style={muted}>{counted(labels, 'replicaAwaitingReview', replica.awaitingReview)}</span>}
                 {partsText && <span data-testid="kg-sync-replica-parts" style={muted}>{partsText}</span>}
                 {packText && <span data-testid="kg-sync-replica-pack" style={muted}>{packText}</span>}
                 {replica.failed.length > 0 && (

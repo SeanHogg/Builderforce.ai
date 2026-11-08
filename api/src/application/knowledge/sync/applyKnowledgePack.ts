@@ -133,7 +133,7 @@ async function assemble(deps: ApplyDeps, input: ApplyInput): Promise<Uint8Array[
 
 /**
  * A file whose body the client skipped (the project already held that hash) must still be named by the stored body:
- * the body is per hash, its entries per source. ONE indexed query answers it for every such `(hash, sourceRef)`; any that
+ * the body is per hash, its entries per source (a source declared entry-less, i.e. binary, counts). ONE indexed query answers it for every such `(hash, sourceRef)`; any that
  * fails is a 409 `extracted_missing` naming the hashes, and the client sends those bodies. Checked BEFORE anything is written.
  */
 async function verifyBodies(deps: ApplyDeps, pack: Pack, over?: KnowledgeLedgerPort): Promise<void> {
@@ -141,7 +141,7 @@ async function verifyBodies(deps: ApplyDeps, pack: Pack, over?: KnowledgeLedgerP
   const owed = (pack.files ?? []).filter((f) => !shipped.has(f.hash));
   if (owed.length === 0) return;
   const pairs = owed.map((f) => ({ hash: f.hash, sourceRef: srcRef(pack.rootId, f.path) }));
-  const held = await deps.sync.heldEntries(pairs, over);
+  const held = await deps.sync.heldEntries(pairs, over, { entryless: true });
   const missing = new Set<string>();
   pairs.forEach((p, i) => { if (!held.has(i)) missing.add(p.hash); });
   if (missing.size > 0) throw new KnowledgeSyncError(409, 'extracted_missing', 'the server lacks the extracted output of some files; send those bodies', { hashes: [...missing] });
@@ -228,7 +228,7 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
     const admin = (pack.deletes?.facts.length ?? 0) > 0 || migrated ? (await factViewer(deps.env, { userId: deps.userId, role: deps.actorRole })).canAdmin : false;
 
     // Objects and lookups that must not sit inside the transaction: the bodies as one bundle, the held sources.
-    const { bodies, basis } = await buildBodies(deps.extracted, deps.ledger, pack.extracted ?? []);
+    const { bodies, basis } = await buildBodies(deps.extracted, deps.ledger, pack.extracted ?? [], pack.files ?? [], root);
     const bundle = bodies.length > 0 ? buildBundle(deps.tenantId, bodies) : undefined;
     const plan = planSources(pack, await deps.sync.sources(root), migrated);
     if (bundle) await deps.sync.putBundle(bundle);

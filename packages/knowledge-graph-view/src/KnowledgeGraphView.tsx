@@ -18,13 +18,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { useKnowledgeGraph } from './useKnowledgeGraph';
-import { graphDiagnosticsText } from './graphDiagnostics';
+import { graphDiagnostics } from './graphDiagnostics';
 import { lensFindings } from './lenses';
 import { PHONE_FOCUS_NODES, focusGraph, lensGraph, nodeIndex } from './graphModel';
+import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
 import { layoutOf } from './layout';
 import type { Revision } from './revision';
-import { ReviewProgress } from './ReviewProgress';
 import { useReviewTargets } from './ReviewLauncher';
 import { ViewSurface } from './ViewSurface';
 import { LensPanel } from './LensPanel';
@@ -37,12 +37,15 @@ import { CAMERAS } from './surface/cameras';
 import { ActPanel } from './surface/ActPanel';
 import { SceneOverlay } from './surface/SceneOverlay';
 import { useSyncStatus } from './surface/useSyncStatus';
-import { useReviewRunRecord } from './surface/run/useReviewRunRecord';
+import { useReviewsPanel } from './surface/run/useReviewsPanel';
+import { RetryUploadContext } from './surface/run/useRetryUpload';
 import { useZoomHost, ZoomProvider } from './surface/zoom';
 import { LinesPanel } from './surface/LinesPanel';
 import { foldCopyFindings } from './surface/systems';
 import { PanelDrawer } from './surface/PanelDock';
 import { canApplyKind } from './surface/codemods';
+import { useClearHighlightOutsideTower } from './surface/useShowInTower';
+import { TowerLegend } from './surface/TowerLegend';
 import { isResolved } from './surface/fix/fixFlow';
 import { fixQueueCounts } from './surface/fix/fixModes';
 import { docStations } from './surface/transit/docs';
@@ -101,7 +104,7 @@ export function KnowledgeGraphView({
     const [chosen, setMode] = useState<ViewMode | null>(null);
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
     const [revision, setRevision] = useState<Revision>('after');
-    const targets = useReviewTargets(source); // read ONCE: the ⋯ menu and the empty state's launcher share it
+    const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
     const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
     const zoom = useZoomHost();
 
@@ -131,16 +134,17 @@ export function KnowledgeGraphView({
     }, [lensInEffect, lensAsked, setQuestion]);
     const layout = useMemo(() => layoutOf(width), [width]);
     const compact = layout.compact;
-    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasSync: !!source.syncStatus, hasRun: !!source.runs };
+    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasRun: !!source.runs || !!source.review || keepsBaseline };
     const cameras = CAMERAS.filter((c) => c.available(graph, surfaceEnv));
     const mode: ViewMode = cameras.find((c) => c.id === chosen)?.id ?? cameras.find((c) => c.id === 'transit')?.id ?? 'graph';
-    const visible = useMemo(() => focusGraph(graph, compact && !showAll ? PHONE_FOCUS_NODES : MAX_DRAWN_NODES, [...kg.focus, ...(selected ? [selected] : [])]), [graph, compact, showAll, kg.focus, selected]);
+    // Selecting a node already inside the drawn set must not change the arrays the cameras key their layouts on.
+    const visible = useStableGraph(useMemo(() => focusGraph(graph, compact && !showAll ? PHONE_FOCUS_NODES : MAX_DRAWN_NODES, [...kg.focus, ...(selected ? [selected] : [])]), [graph, compact, showAll, kg.focus, selected]));
     const drawn = useMemo(() => lensGraph(visible, lens), [visible, lens]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
     const canApplyFor = useMemo(() => (source.applyFix ? (kind: string) => canApplyKind(source, kind) : false), [source]);
     const resolvedFixes = useMemo(() => new Set(Object.values(surface.fixFlows).filter(isResolved).map((f) => f.findingId)), [surface.fixFlows]);
     const routeLabels = useMemo(() => hopRouteLabels(surface.path, surface.stations.byId, index), [surface.path, surface.stations.byId, index]);
-    const diagnosticsText = () => graphDiagnosticsText({
+    const diagnostics = () => graphDiagnostics({
         status: kg.status, rootId: kg.rootId, graph: real, drawn: { nodes: drawn.nodes.length, edges: drawn.edges.length },
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, run: runRead.live, time: new Date().toISOString(),
@@ -153,25 +157,22 @@ export function KnowledgeGraphView({
             },
         } : {}),
     });
+    const diagnosticsText = () => diagnostics().text;
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
-    const { select, show, pickLens, pickQuestion, pinpointed, unpin } = useSurfaceActions(kg, surface, () => setTracing(false));
+    const { select, show, pickLens, pickQuestion, pinpointed, unpin, showInTower } = useSurfaceActions(kg, surface, () => setTracing(false), { ids: cameras.map((c) => c.id), set: setMode });
+    useClearHighlightOutsideTower(mode, surface.setHighlight);
     // The open drawer is the surface's, so the header, the Act rail and the path strip all open one the same way.
-    const panel = surface.panel, setPanel = surface.openPanel;
-    // The review as a run (PRD 41 A8): its record is read once here; any review that is confirmed opens the Run drawer.
-    const runRead = useReviewRunRecord(source, kg.rootId, panel === 'run');
-    const runs = source.runs ? { read: runRead, review: kg.review } : undefined;
-    const openRun = useRef(setPanel);
-    openRun.current = setPanel;
+    const panel = surface.panel;
     const reviewStatus = kg.review.state.status;
+    // The Reviews panel (PRD 41 A8): its tab, run record, Retry upload and open / close rules are one hook.
+    const { reviews, retryUpload, runRead, runs, setPanel, openReviews } = useReviewsPanel({ kg, surface, source, keepsBaseline, refreshSync: sync.refresh, openReview });
     // Exclude from review (PRD 41 A9): the host writes the ignore file, then the normal plan, estimate, confirm review starts.
     const copyFix = source.folders && kg.rootId
         ? { exclude: (copy: string) => source.folders!.exclude(kg.rootId!, copy), rereview: () => kg.review.start({ rootId: kg.rootId! }), busy: reviewStatus === 'planning' || reviewStatus === 'confirm' || reviewStatus === 'running' }
         : undefined;
-    // Opened when the run starts (after the plan is confirmed), never over the confirm card.
-    useEffect(() => { if (reviewStatus === 'running' && source.runs) openRun.current('run'); }, [reviewStatus, source.runs]);
     const chrome = useSurfaceChrome({
         kg, surface, graph, labels, layout, index, titleOf, select, cameras, mode, setMode, zoom: zoom.api, pickQuestion, pickLens, lens,
-        visibleNodes: visible.nodes.length, showAll, setShowAll, sync: sync.status,
+        visibleNodes: visible.nodes.length, showAll, setShowAll,
     });
 
     const s = labels.surface;
@@ -205,19 +206,18 @@ export function KnowledgeGraphView({
     const stackLines = hasLines && layout.linesStacked && !layout.phone;
 
     return (
+        <RetryUploadContext.Provider value={retryUpload}>
         <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} hasGraph={!!real} surface={surface} env={surfaceEnv} narrow={layout.phone} sync={sync.status}
-                panelsMenu={layout.panelsMenu} targets={targets}
+                panelsMenu={layout.panelsMenu} run={runRead.live} rootTitle={titleOf(graph.scope.rootId)} onOpenReviews={openReviews}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
-                reviewCard={<ReviewProgress run={kg.review} labels={labels} titleOf={titleOf} onContinue={(rootId) => kg.review.start({ rootId })} onDetails={runs ? () => setPanel('run') : undefined} />}
                 panel={panel} onPanel={setPanel} history={history} pickedCommit={picked}
                 onPickCommit={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }}
                 changedStations={new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size}
-                revision={keepsBaseline ? { value: showingBefore ? 'before' : 'after', hasBefore: !!kg.baseline, onChange: setRevision } : undefined}
-                diagnosticsText={diagnosticsText} askName={chrome.askName}
+                askName={chrome.askName}
                 linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}
-                onSearch={(q) => void kg.search(q)} onSelect={select} onMatches={pinpointed} onClear={unpin} onCompose={onCompose} openReview={openReview}
+                onSearch={(q) => void kg.search(q)} onSelect={select} onMatches={pinpointed} onClear={unpin} onCompose={onCompose}
             />
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: layout.actBelow ? 'column' : 'row', overflow: layout.actBelow ? 'auto' : 'hidden' }}>
@@ -243,6 +243,7 @@ export function KnowledgeGraphView({
                                 <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} />
                             </div>
                             {!layout.phone && overlay}
+                            {surface.highlight && (mode === '3d' || mode === 'tower') && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
                         </div>
                         {stackLines && <div style={{ padding: 12, maxHeight: 260, overflow: 'auto', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>{linesPanel(false)}</div>}
                         {hasLines && (
@@ -266,7 +267,7 @@ export function KnowledgeGraphView({
             {layout.phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel(false)}</Sheet>}
             <PanelDrawer
                 graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} renderPanel={renderPanel} source={source} rootId={kg.rootId ?? undefined}
-                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnosticsText={diagnosticsText} sync={sync} history={history} runs={runs}
+                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnosticsText={diagnosticsText} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
                 lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
                 revision={keepsBaseline ? { value: showingBefore ? 'before' : 'after', hasBefore: !!kg.baseline, onChange: setRevision } : undefined}
                 onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}
@@ -275,7 +276,10 @@ export function KnowledgeGraphView({
             <NodeSheet
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
                 compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload} onShow={show}
+                onResolve={surface.resolve}
+                onShowInTower={showInTower}
             />
         </SurfaceFrame>
+        </RetryUploadContext.Provider>
     );
 }

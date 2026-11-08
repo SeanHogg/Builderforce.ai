@@ -1,5 +1,5 @@
 /**
- * The controls that float over the scene (mockup B-Surface): the error banner at the top, the
+ * The controls that float over the scene (mockup B-Surface): the
  * *View* group with "↑ Out to …", + , − and Fit, the question pills with the *More questions*
  * menu and the "{family} only ✕" chip, and the scale note in the bottom-left corner. The overlay
  * takes the scene's whole box but lets pointer events through: only its controls take them.
@@ -14,10 +14,9 @@
 import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from 'react';
 import { ScaleLine, type MapCap } from './ScaleLine';
 import type { KnowledgeGraphLabels } from '../labels';
-import { counted } from './plural';
 import type { LensDef } from '../lenses';
 import { cssVar } from '../scene/themeColors';
-import { CONTROL, muted } from '../styles';
+import { muted } from '../styles';
 import type { LensId, ViewMode } from '../types';
 import { CameraBar } from './CameraBar';
 import { QuestionBar } from './QuestionBar';
@@ -25,7 +24,6 @@ import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
 import type { Station } from './stations';
 import { Card } from './ui';
-import { TYPE } from './ui/type';
 import type { ZoomApi } from './zoom';
 
 export interface SceneOverlayProps {
@@ -60,27 +58,16 @@ export interface SceneOverlayProps {
     onShowAll(): void;
     /** The map shows only part of the files (`surface.stations.capped`, or the cut graph's own count). */
     capped?: MapCap | undefined;
-    // The error banner: files the server does not have. Absent or 0 ⇒ no banner.
-    missingFiles?: number | null | undefined;
-    /** How many of those the review could not store because they were too large (`syncGap`: never more than `missingFiles`). */
-    tooLarge?: number | null | undefined;
-    /** Opens the Sync drawer (`surface.openPanel('sync')`). */
-    onDiagnose?: (() => void) | undefined;
     /** A phone: stack in flow above the scene instead of floating over it. */
     narrow?: boolean | undefined;
 }
-
-const banner: CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 12px', borderRadius: 10, ...TYPE.meta, pointerEvents: 'auto',
-    border: `1px solid ${cssVar('cycle')}`, background: cssVar('warnBg'), color: cssVar('text'),
-};
 
 /** The CSS variable the scene's top edge reads: the measured height of the controls block, set on the overlay's parent (the scene's box). */
 export const SCENE_TOP_VAR = '--kg-scene-top';
 
 /**
  * Publishes the controls block's height as `--kg-scene-top` on the overlay's parent, so the scene starts BELOW the
- * floating controls in every camera. A ResizeObserver keeps it right as the bars change (a banner appears, a chip is
+ * floating controls in every camera. A ResizeObserver keeps it right as the bars change (a chip is
  * added); where there is none, or the box has no height yet, the variable is left unset and the scene falls back to
  * its default. `on` false (a phone stacks the controls in flow) publishes nothing.
  */
@@ -102,7 +89,6 @@ function useSceneTop(root: RefObject<HTMLElement | null>, controls: RefObject<HT
 export function SceneOverlay(p: SceneOverlayProps) {
     const { labels, narrow = false } = p;
     const t = labels.surface.overlay;
-    const missing = p.missingFiles ?? 0;
     const rootRef = useRef<HTMLDivElement>(null);
     const controls = useRef<HTMLDivElement>(null);
     useSceneTop(rootRef, controls, !narrow);
@@ -114,23 +100,6 @@ export function SceneOverlay(p: SceneOverlayProps) {
         <div ref={rootRef} role="group" aria-label={t.controls} data-testid="kg-scene-overlay" style={root}>
             {/* The controls block: what the scene must sit below. Its height is measured, never assumed. */}
             <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
-            {missing > 0 && (
-                <div role="alert" data-testid="kg-sync-banner" style={{ ...banner, margin: narrow ? 0 : '10px 12px 0' }}>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                        {(p.tooLarge ?? 0) > 0 && <strong style={{ color: cssVar('violation') }}>{counted(labels, 'fileTooLarge', Math.min(p.tooLarge ?? 0, missing))} </strong>}
-                        {counted(labels, 'fileMissing', missing)}
-                    </span>
-                    {p.onDiagnose && (
-                        <button
-                            type="button"
-                            style={{ height: CONTROL, padding: '0 12px', borderRadius: 8, cursor: 'pointer', font: 'inherit', ...TYPE.pill, border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text') }}
-                            onClick={p.onDiagnose}
-                        >
-                            {t.diagnose}
-                        </button>
-                    )}
-                </div>
-            )}
             <CameraBar
                 labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} zoom={p.zoom} outTo={p.outTo} onOut={p.onOut}
             />

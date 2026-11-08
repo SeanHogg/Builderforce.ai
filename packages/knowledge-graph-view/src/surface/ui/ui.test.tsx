@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { Menu, Segmented, StatusDot } from './index';
+import { Menu, Segmented } from './index';
 
 const ITEMS = [{ id: 'a', label: 'Alpha' }, { id: 'b', label: 'Beta', disabled: true }, { id: 'c', label: 'Gamma' }];
 
@@ -110,18 +110,5 @@ describe('Menu', () => {
         expect(onSelect).toHaveBeenCalledWith('y');
         expect(screen.queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(trigger);
-    });
-});
-
-describe('StatusDot', () => {
-    it.each(['synced', 'syncing', 'error', 'idle'] as const)('%s exposes its state in the accessible name', (state) => {
-        render(<StatusDot state={state} label="Sync" stateLabel={`is ${state}`} onClick={() => undefined} />);
-        const el = screen.getByRole('button', { name: `Sync is ${state}` });
-        expect(el.getAttribute('data-state')).toBe(state);
-    });
-
-    it('without onClick it is a status region', () => {
-        render(<StatusDot state="error" label="Sync" stateLabel="failed" />);
-        expect(screen.getByRole('status').textContent).toContain('failed');
     });
 });

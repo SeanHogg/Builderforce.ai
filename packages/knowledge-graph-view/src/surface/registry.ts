@@ -14,6 +14,8 @@ import type { Revision } from '../revision';
 import type { FindingEvidence, KnowledgeGraphSource, SourceLocation, SyncStatus, ViewMode } from '../types';
 import type { RunPanelData } from './run/useReviewRunRecord';
 import type { HistoryRead } from './TimeSlider';
+import type { Diagnostics } from '../diagnosticSection';
+import type { ReviewsTabState } from './run/useReviewsTab';
 import type { SurfaceModel } from './useSurface';
 
 /** What a row's `available` rule may depend on. */
@@ -23,8 +25,6 @@ export interface SurfaceEnv {
     /** The graph has entry points, so the transit map has lines to draw. */
     hasLines: boolean;
     compact: boolean;
-    /** The source can report its sync status, so the Sync drawer has something to show. */
-    hasSync?: boolean;
     /** The source records its reviews as runs, so the Run drawer has something to show. */
     hasRun?: boolean;
 }
@@ -74,20 +74,20 @@ export interface PanelProps {
     onChanged?: (() => void) | undefined;
     /** The *Copy diagnostics* text of the view, for the Sync drawer. */
     diagnosticsText?: (() => string) | undefined;
+    /** The diagnostics once: the groups the Diagnostics tab shows and the text Copy diagnostics copies. */
+    diagnostics?: (() => Diagnostics) | undefined;
     /** The host's sync status, read ONCE by the root (`useSyncStatus`); the Sync drawer draws it and fetches nothing. */
     sync?: SyncStatus | null | undefined;
-    /** That read failed. */
-    syncFailed?: boolean | undefined;
-    /** Reads again through the same hook. */
-    onRefreshSync?: (() => void) | undefined;
-    /** The root's ONE history read (the time slider's); the Sync drawer's delta feed draws it and fetches nothing. */
+    /** The root's ONE history read (the time slider's); the Server tab's commits-since-the-last-review feed draws it and fetches nothing. */
     history?: HistoryRead | undefined;
+    /** Starts the view's review flow again for this root, forcing every file (the confirm still asks); absent when the host cannot review. */
+    onResendSkipped?: (() => void) | undefined;
     /** The review's run record and the review state machine, for the Run drawer (PRD 41 A8). */
     runs?: RunPanelData | undefined;
-    /** When the root was last reviewed: the delta feed's line between applied and pending. */
+    /** The Reviews panel's open tab and how to change it (the root keeps it per folder, so closing the panel forgets nothing). */
+    reviews?: ReviewsTabState | undefined;
+    /** When the root was last reviewed (the Review tab and the status line). */
     lastReviewedAt?: string | undefined;
-    /** Starts the view's review flow again for this root (the confirm chip still asks); absent when the host cannot review. */
-    onResendSkipped?: (() => void) | undefined;
     labels: KnowledgeGraphLabels;
     surface: SurfaceModel;
     onShow(refs: string[]): void;
@@ -105,4 +105,6 @@ export interface PanelDef {
     labelKey: StringLabelKey;
     component: ComponentType<PanelProps>;
     available(graph: KnowledgeGraph, env: SurfaceEnv): boolean;
+    /** The panel lays out its own scroller and pinned footer (the Reviews panel): the host panel gives it the whole body, no padding. */
+    fill?: boolean;
 }

@@ -16,6 +16,7 @@ import type { StationModel } from './surface/stations';
 import { replicaPhase, replicaPhaseEnglish } from './surface/drawers/replicaState';
 import { hasNoLocalSnapshot } from './surface/syncPill';
 import { buildTiers } from './surface/tiers';
+import type { DiagnosticSection } from './diagnosticSection';
 import type { SyncStatus } from './types';
 
 export interface SurfaceDiagnosticsInput {
@@ -77,40 +78,47 @@ function syncLines(sync: SyncStatus | null): string[] {
         const state = replicaPhaseEnglish(replicaPhase(r), r.waitingUntil);
         out.push(`replica: ${state} · dirty=${r.dirty} · failed=${r.failed.length}${r.lastSyncAt ? ` · last sent ${r.lastSyncAt}` : ''}`);
         if (r.parts) out.push(`  replica parts ${r.parts.sent}/${r.parts.total}`);
+        if (r.awaitingReview) out.push(`  replica awaiting review: ${r.awaitingReview} file(s) held back until a review extracts them`);
         if (r.lastPack) out.push(`  replica last pack ${r.lastPack.mode} · ${r.lastPack.bytes} bytes · ${r.lastPack.percent}% of ${r.lastPack.jsonBytes} bytes JSON · ${r.lastPack.parts} part(s) · ${r.lastPack.files} file(s)`);
         for (const f of r.failed) out.push(`  replica failed: ${f.reason}`);
     }
     return out;
 }
 
-export function surfaceDiagnosticLines(i: SurfaceDiagnosticsInput): string[] {
+/** The surface's facts as labelled groups: data coverage, lines, sync and replica, findings. */
+export function surfaceDiagnosticSections(i: SurfaceDiagnosticsInput): DiagnosticSection[] {
     const { stations: model, lines: lm, coverage: c } = i;
-    const out: string[] = [];
-    out.push(...mapSourceLines(c, model.stations.length, i.mapFrom));
-    out.push(...coverageLines(c));
-    out.push(...systemDiagnosticLines(i.graph));
+    const coverage: string[] = [...mapSourceLines(c, model.stations.length, i.mapFrom), ...coverageLines(c), ...systemDiagnosticLines(i.graph)];
+    if (c) coverage.push(`partitions: files without a partition=${c.noPartition}/${c.files} (${pct(c.noPartition, c.files)})`);
 
-    if (c) out.push(`partitions: files without a partition=${c.noPartition}/${c.files} (${pct(c.noPartition, c.files)})`);
+    const lines: string[] = [];
     const tiers = buildTiers(model.stations);
-    out.push(`stations by tier: ${tiers.map((t) => `${t.layer}=${t.stations.length}`).join(', ') || 'none'}`);
-
+    lines.push(`stations by tier: ${tiers.map((t) => `${t.layer}=${t.stations.length}`).join(', ') || 'none'}`);
     const entries = model.stations.filter((s) => s.entry).length;
-    out.push(`lines: drawn=${lm.lines.length} · entry points found=${entries}${lm.omitted ? ` · not drawn=${lm.omitted}` : ''}`);
-    for (const l of lm.lines) out.push(`  line ${l.name}: stops=${l.stops.length}${stopDiagnostic(l)}`);
-    if (lm.lines.length <= 1) out.push(`lines note: ${lm.lines.length} line because ${entries === 0 ? 'no entry point was found' : `${counted(DEFAULT_KNOWLEDGE_GRAPH_LABELS, 'entryPoint', entries)} found`}${c?.source.kind === 'cut' ? ' (in the cut graph\'s files only)' : ''}`);
-
+    lines.push(`lines: drawn=${lm.lines.length} · entry points found=${entries}${lm.omitted ? ` · not drawn=${lm.omitted}` : ''}`);
+    for (const l of lm.lines) lines.push(`  line ${l.name}: stops=${l.stops.length}${stopDiagnostic(l)}`);
+    if (lm.lines.length <= 1) lines.push(`lines note: ${lm.lines.length} line because ${entries === 0 ? 'no entry point was found' : `${counted(DEFAULT_KNOWLEDGE_GRAPH_LABELS, 'entryPoint', entries)} found`}${c?.source.kind === 'cut' ? ' (in the cut graph\'s files only)' : ''}`);
     const inScope = i.scope ? [...i.scope].reduce((n, id) => n + (model.byId.get(id)?.files ?? 0), 0) : i.graph.nodes.length;
-    out.push(`scope: ${i.scopeName ?? 'whole graph'} · stations=${i.scope ? i.scope.size : model.stations.length} · ${i.scope ? 'files' : 'nodes'} in scope=${inScope}`);
+    lines.push(`scope: ${i.scopeName ?? 'whole graph'} · stations=${i.scope ? i.scope.size : model.stations.length} · ${i.scope ? 'files' : 'nodes'} in scope=${inScope}`);
 
-    out.push(...syncLines(i.sync));
-
+    const findings: string[] = [];
     const graphCount = i.graph.findings.length;
-    out.push(`findings: in the graph=${graphCount} · in this lens=${i.lensFindings} · listed (lens and scope)=${i.listedFindings} · fix queue=${i.queue.open} open of ${i.queue.shown} shown · ${i.queue.repo} in the repo`);
+    findings.push(`findings: in the graph=${graphCount} · in this lens=${i.lensFindings} · listed (lens and scope)=${i.listedFindings} · fix queue=${i.queue.open} open of ${i.queue.shown} shown · ${i.queue.repo} in the repo`);
     if (graphCount !== i.listedFindings) {
-        out.push('findings note: Insights counts every finding in the graph; the Findings list counts only those in the current lens and scope; the Fix queue counts open ones of the listed, then the repo total');
+        findings.push('findings note: Insights counts every finding in the graph; the Findings list counts only those in the current lens and scope; the Fix queue counts open ones of the listed, then the repo total');
     }
+    findings.push(`graph digest: ${i.graph.scope.digest}`);
+    findings.push(`reviewedAt: ${i.lastReviewedAt ?? 'unknown'} · graph/extractor version: not carried by the graph`);
 
-    out.push(`graph digest: ${i.graph.scope.digest}`);
-    out.push(`reviewedAt: ${i.lastReviewedAt ?? 'unknown'} · graph/extractor version: not carried by the graph`);
-    return out;
+    const sync = syncLines(i.sync);
+    const replica = i.sync?.replica;
+    return [
+        { id: 'coverage', lines: coverage, attention: i.mapFrom === 'server' || (c?.source.kind === 'cut') },
+        { id: 'lines', lines, attention: false },
+        { id: 'sync', lines: sync, attention: !!replica && replica.failed.length > 0 || (i.sync?.skipped?.length ?? 0) > 0 },
+        { id: 'findings', lines: findings, attention: false },
+    ];
 }
+
+/** The same facts as flat lines (the order the copied text has). */
+export const surfaceDiagnosticLines = (i: SurfaceDiagnosticsInput): string[] => surfaceDiagnosticSections(i).flatMap((s) => s.lines);

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyReplicaState, runFileName, runsIndexFileName, type KnowledgeFiles } from "@builderforce/agent-tools/knowledge";
 import type { ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeStoredRun } from "../knowledgeProtocol";
+import type { LagHistogram } from "./reviewHostLag";
 import { getRun, listRuns, onTheWire, RUN_SAVE_INTERVAL_MS, stopRunById, trackRun, WIRE_FAILURES } from "./reviewRuns";
 import { createRunStore, RUN_STALE_MS, RUNS_KEPT } from "./reviewRunStore";
 
@@ -347,5 +348,56 @@ describe("stopRunById", () => {
     expect(abort.signal.aborted).toBe(true);
     await tracker.finish("stopped");
     expect(stopRunById(tracker.id)).toBe(false);
+  });
+});
+
+describe("host thread measurement", () => {
+  const NS = 1e6;
+  const fakeHistogram = () => {
+    const calls: string[] = [];
+    const histogram: LagHistogram = {
+      enable: () => { calls.push("enable"); return true; },
+      disable: () => { calls.push("disable"); return true; },
+      max: 31_000 * NS, mean: 12 * NS, percentile: (p) => (p === 99 ? 900 * NS : 0),
+    };
+    return { histogram, calls };
+  };
+
+  it("samples the event loop for the run, records the stall on posted and kept runs, and stops sampling at the end", async () => {
+    const files = memoryFiles();
+    const posted: KnowledgeStoredRun[] = [];
+    const { histogram, calls } = fakeHistogram();
+    const tracker = trackRun({ rootId: "root-a", request: {}, files, post: (r) => posted.push(r), replica: async () => undefined, lagSampler: () => histogram });
+    expect(calls).toEqual(["enable"]);
+    await tracker.finish("done", report);
+    expect(calls).toEqual(["enable", "disable"]);
+    expect(posted.at(-1)!.hostLag).toEqual({ maxMs: 31_000, p99Ms: 900, meanMs: 12 });
+    const [listed] = await listRuns(files, "root-a");
+    expect(listed!.hostLag).toEqual({ maxMs: 31_000, p99Ms: 900, meanMs: 12 });
+  });
+
+  it("keeps the slowest record save as saveMsMax", async () => {
+    const files = memoryFiles();
+    const write = files.write.bind(files);
+    let clock = 0;
+    let step = 0;
+    const costs = [5, 40];
+    // A save is two writes (the run record, then the index): charge the fake clock once per SAVE, on the record's write,
+    // so the first save costs 5 and the second 40 (charging per write made the opening save span both costs: 45).
+    files.write = async (name, text) => { if (!text.startsWith('{"ids"')) clock += costs[Math.min(step++, costs.length - 1)]!; await write(name, text); };
+    const { histogram } = fakeHistogram();
+    const tracker = trackRun({ rootId: "root-a", request: {}, files, post: () => undefined, replica: async () => undefined, lagSampler: () => histogram, now: () => clock });
+    await settle(files); // the opening save has landed and been timed
+    await tracker.finish("done", report);
+    const [listed] = await listRuns(files, "root-a");
+    expect(listed!.saveMsMax).toBe(5);
+  });
+
+  it("records no lag when the sampler is unavailable", async () => {
+    const files = memoryFiles();
+    const posted: KnowledgeStoredRun[] = [];
+    const tracker = trackRun({ rootId: "root-a", request: {}, files, post: (r) => posted.push(r), replica: async () => undefined, lagSampler: () => { throw new Error("no perf_hooks"); } });
+    await tracker.finish("done", report);
+    expect(posted.at(-1)).not.toHaveProperty("hostLag");
   });
 });

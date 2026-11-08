@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraph, type Extracted, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { hashText } from '@seanhogg/builderforce-memory/ingest';
+import { lineCountOf } from './codeFileBadges.js';
 import { analysisToExtracted, repoGraphToExtracted } from './codeExtracted.js';
 import { codeAnalyzers } from './codeAnalyzers.js';
 import { CODE_LAYERS, codeParser, createCodePack, isCodePath, loadCodePartitions } from './codePack.js';
@@ -58,7 +59,7 @@ describe('code parser', () => {
     const out = codeParser().extract!(doc('src/routes/orders.ts', text), [], ctx);
     expect(out.nodes).toEqual([{
       ref: ref('src/routes/orders.ts'), kind: 'file', label: 'orders.ts', pack: 'code', area: ref('src/routes'),
-      importance: 0, origin: 'extracted', sourceHash: hashText(text), badges: { language: 'js', symbols: 1, exports: 1, complexity: 1, maxComplexity: 1 },
+      importance: 0, origin: 'extracted', sourceHash: hashText(text), badges: { language: 'js', symbols: 1, exports: 1, lines: lineCountOf(text), complexity: 1, maxComplexity: 1 },
     }]);
     expect(out.edges).toEqual([]);
     expect(out.keys.map((k) => k.key)).toEqual(['src/routes/orders.ts', 'orders.ts', 'orders', 'listOrders', 'listorders']);

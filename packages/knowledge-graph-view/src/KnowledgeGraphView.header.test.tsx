@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The header: the status strip (sync pill, parity, scrubber, ⋯), the ask bar, the Panels group, Risk overlays, and the narrow layout. */
+/** The header: the status strip (status chip, action button, scrubber), the ask bar, the Panels group, Risk overlays, and the narrow layout. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
@@ -9,14 +9,14 @@ import { counted } from './surface/plural';
 import { QUESTIONS } from './surface/questions';
 import { Toolbar } from './Toolbar';
 import { fixtureSource, surfaceFixture } from './testing';
-import { openMore, pressMore } from './testMenu';
+
 import type { KnowledgeGraphSource, SyncStatus } from './types';
 
 vi.mock('./scene/GraphScene', () => ({ default: () => <div data-testid="kg-scene" /> }));
 afterEach(() => vi.restoreAllMocks());
 
 const h = L.surface.header;
-const deps = { screen, fireEvent };
+
 const sync = (over: Partial<SyncStatus> = {}): SyncStatus => ({ local: { files: 120, docs: 0 }, server: { files: 120, docs: 0 }, sources: [{ id: 'code', state: 'collected' }], ...over });
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
@@ -37,59 +37,53 @@ async function mount(source: KnowledgeGraphSource) {
     await screen.findByTestId('kg-transit');
 }
 const strip = () => within(screen.getByTestId('kg-status-strip'));
-// The pill's name is its text followed by the state in words ("Review plan ready Syncing"): match on how it starts.
-const startsWith = (text: string) => (name: string) => name.startsWith(text);
 const askBox = () => screen.getByRole('searchbox', { name: L.searchLabel }) as HTMLInputElement;
 
-describe('the sync pill and the parity line', () => {
-    it('says Synced with how long ago, and the server parity in the strip', async () => {
+describe('the status chip and the action button', () => {
+    it('says Reviewed with how long ago and in sync, with the dot in the synced colour', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
-        const pill = await strip().findByRole('button', { name: /^Synced/ });
-        expect(pill.getAttribute('data-state')).toBe('synced');
-        expect((await screen.findByTestId('kg-parity')).textContent).toBe(counted(L, 'fileBoth', 120, { count: (120).toLocaleString() }));
+        const chip = await screen.findByTestId('kg-status-chip');
+        await waitFor(() => expect(chip.getAttribute('data-state')).toBe('synced'));
+        expect(chip.textContent).toContain('in sync');
     });
 
-    it('shows both counts when the server differs, and an error pill when files were skipped', async () => {
+    it('says how many files were not stored, in the error colour, and opens the Server tab', async () => {
         await mount(sourceOf({ syncStatus: async () => sync({ server: { files: 100, docs: 0 }, skipped: [{ path: 'big.bin', reason: 'too-large' }] }) }));
-        expect((await screen.findByTestId('kg-parity')).textContent).toBe(fillTemplate(h.parityDiffers, { local: '120', server: '100' }));
-        const pill = await strip().findByRole('button', { name: startsWith(counted(L, 'fileNotStored', 1)) });
-        expect(pill.getAttribute('data-state')).toBe('error');
+        const chip = await screen.findByTestId('kg-status-chip');
+        await waitFor(() => expect(chip.textContent).toContain(counted(L, 'fileNotStored', 1)));
+        expect(chip.getAttribute('data-state')).toBe('error');
+        fireEvent.click(chip);
+        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        expect(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabServer}`) }).getAttribute('aria-selected')).toBe('true');
+        expect(within(panel).getByTestId('kg-review-parity').textContent).toBe(fillTemplate(h.parityDiffers, { local: '120', server: '100' }));
     });
 
-    it('has no parity line when the host cannot report a sync status, and the pill is a plain status', async () => {
-        await mount(sourceOf());
-        expect(screen.queryByTestId('kg-parity')).toBeNull();
-        expect(strip().queryByRole('button', { name: /^Synced/ })).toBeNull();
-        expect(strip().getByRole('status').getAttribute('data-state')).toBe('synced');
-    });
-
-    it('opens the Sync drawer when the pill is pressed', async () => {
+    it('has exactly one action button on the strip and no parity line, ⋯ menu or review card', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
-        fireEvent.click(await strip().findByRole('button', { name: /^Synced/ }));
-        expect(await screen.findByRole('dialog', { name: L.panelSync })).toBeTruthy();
-        expect(screen.getByText(L.surface.drawerSubtitle.sync)).toBeTruthy();
+        await screen.findByTestId('kg-status-chip');
+        expect(screen.getAllByTestId('kg-review-action')).toHaveLength(1);
+        expect(screen.queryByTestId('kg-parity')).toBeNull();
+        expect(screen.queryByTestId('kg-review-card')).toBeNull();
+        expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull();
+    });
+
+    it('opens the Reviews panel when the button is pressed, and counts the files at once', async () => {
+        await mount(sourceOf({ syncStatus: async () => sync() }));
+        fireEvent.click(await screen.findByTestId('kg-review-action'));
+        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        expect(await within(panel).findByTestId('kg-review-start')).toBeTruthy();
+        expect(screen.getByTestId('kg-status-chip').getAttribute('data-kind')).toBe('ready');
     });
 });
 
 describe('the review in the strip', () => {
-    it('opens the plan card by itself for the confirm, then shows the running state in the pill', async () => {
+    it('opens the Reviews panel by itself for the plan, and the chip says it is running after Start', async () => {
         await mount(sourceOf());
-        await pressMore(deps, L.reviewFolder);
-        const card = await screen.findByTestId('kg-review-card');
-        expect(strip().getByRole('button', { name: startsWith(h.reviewPlan) })).toBeTruthy();
-        fireEvent.click(within(card).getByRole('button', { name: L.reviewConfirm }));
-        await waitFor(() => expect(strip().queryByRole('button', { name: startsWith(h.reviewPlan) })).toBeNull());
-        expect(screen.queryByText(L.reviewPlanning)).toBeNull(); // no duplicate "Walking the folder…" pill
-    });
-
-    it('opens the card from the pill and closes it again', async () => {
-        await mount(sourceOf());
-        await pressMore(deps, L.reviewFolder);
-        await screen.findByTestId('kg-review-card');
-        fireEvent.click(strip().getByRole('button', { name: startsWith(h.reviewPlan) }));
-        expect(screen.queryByTestId('kg-review-card')).toBeNull();
-        fireEvent.click(strip().getByRole('button', { name: startsWith(h.reviewPlan) }));
-        expect(screen.getByTestId('kg-review-card')).toBeTruthy();
+        fireEvent.click(await screen.findByTestId('kg-review-action'));
+        await screen.findByTestId('kg-review-start');
+        expect(screen.getByTestId('kg-status-chip').textContent).toContain(L.surface.run.review.chipReady);
+        fireEvent.click(screen.getByTestId('kg-footer-action'));
+        await waitFor(() => expect(screen.getByTestId('kg-status-chip').getAttribute('data-kind')).not.toBe('ready'));
     });
 });
 
@@ -108,60 +102,46 @@ describe('the commit scrubber', () => {
     });
 });
 
-describe('the ⋯ menu', () => {
-    it('offers Review a folder and Re-review, and Re-review plans the open root', async () => {
-        const source = sourceOf();
-        await mount(source);
-        const menu = await openMore(deps);
-        const names = [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent);
-        expect(names).toEqual([L.reviewFolder, h.reReview, L.copyDiagnostics]);
-        fireEvent.click(within(menu).getByRole('menuitem', { name: h.reReview }));
-        await screen.findByTestId('kg-review-card');
-        expect((source as ReturnType<typeof fixtureSource>).requests).toEqual([{ rootId: 'sys' }]);
+describe('what the ⋯ menu held, now in the Reviews panel', () => {
+    it('shows Before and After on the Server tab only when the host keeps a baseline', async () => {
+        await mount(sourceOf({ baseline: async () => null, syncStatus: async () => sync() }));
+        fireEvent.click(await screen.findByTestId('kg-status-chip'));
+        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        fireEvent.click(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabServer}`) }));
+        expect(within(panel).getByText(L.surface.run.review.revisionTitle)).toBeTruthy();
+        expect((within(panel).getByRole('radio', { name: L.compareBefore }) as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('lists Before and After only when the host keeps a baseline, and Before is disabled until one exists', async () => {
-        await mount(sourceOf({ baseline: async () => null }));
-        const menu = await openMore(deps);
-        const before = within(menu).getByRole('menuitem', { name: new RegExp(`^${L.compareBefore}`) }) as HTMLButtonElement;
-        expect(before.disabled).toBe(true);
-        expect(within(menu).getByRole('menuitem', { name: new RegExp(`^${L.compareAfter}`) }).getAttribute('data-selected')).toBe('true');
+    it('has no revision control for a host with no baseline', async () => {
+        await mount(sourceOf({ syncStatus: async () => sync() }));
+        fireEvent.click(await screen.findByTestId('kg-status-chip'));
+        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        fireEvent.click(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabServer}`) }));
+        expect(within(panel).queryByText(L.surface.run.review.revisionTitle)).toBeNull();
     });
 
-    it('has no Before/After for a host with no baseline', async () => {
-        await mount(sourceOf());
-        const menu = await openMore(deps);
-        expect(within(menu).queryByRole('menuitem', { name: new RegExp(`^${L.compareBefore}`) })).toBeNull();
-    });
-
-    it('copies the diagnostics and says Copied', async () => {
+    it('copies the diagnostics from the Diagnostics tab and says Copied', async () => {
         const writeText = vi.fn(async () => undefined);
         Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
         await mount(sourceOf());
-        await pressMore(deps, L.copyDiagnostics);
+        fireEvent.click(await screen.findByTestId('kg-review-action'));
+        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        fireEvent.click(within(panel).getByRole('tab', { name: L.surface.run.review.tabDiagnostics }));
+        fireEvent.click(within(panel).getByRole('button', { name: L.copyDiagnostics }));
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
         expect(await screen.findByText(L.copied)).toBeTruthy();
-    });
-
-    it('does not hold the folder picker, even with several reviewed folders (the spine root crumb is its one place)', async () => {
-        const second = { ...surfaceFixture('other') };
-        await mount(sourceOf({}, [surfaceFixture(), second]));
-        const menu = await openMore(deps);
-        expect(within(menu).queryByRole('menuitem', { name: /other/ })).toBeNull();
     });
 });
 
 describe('openReview with a graph on screen', () => {
-    it('opens the ⋯ menu focused on Review a folder', async () => {
+    it('opens the Reviews panel', async () => {
         render(<div style={{ height: 700 }}><KnowledgeGraphView source={sourceOf()} openReview /></div>);
-        const menu = await screen.findByRole('menu', { name: h.moreActions });
-        const item = within(menu).getByRole('menuitem', { name: L.reviewFolder });
-        await waitFor(() => expect(document.activeElement).toBe(item));
+        expect(await screen.findByRole('dialog', { name: 'Builderforce' })).toBeTruthy();
     });
 
-    it('leaves the menu closed without openReview', async () => {
+    it('leaves the panel closed without openReview', async () => {
         await mount(sourceOf());
-        expect(screen.queryByRole('menu', { name: h.moreActions })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Builderforce' })).toBeNull();
     });
 });
 
@@ -194,10 +174,10 @@ describe('the spine root crumb', () => {
 });
 
 describe('the Panels group', () => {
-    it('toggles Coverage, Patterns, API and Sync in order; a second press closes the drawer; Fix queue and Simulate have no button', async () => {
+    it('toggles Coverage, Patterns and API in order (Reviews opens from the strip); a second press closes the drawer; Fix queue and Simulate have no button', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
         const group = within(screen.getByRole('group', { name: L.surface.panelsLabel }));
-        expect(group.getAllByRole('button').map((b) => b.textContent)).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelSync]);
+        expect(group.getAllByRole('button').map((b) => b.textContent)).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi]);
         expect(group.queryByRole('button', { name: L.panelResolve })).toBeNull();
         expect(group.queryByRole('button', { name: L.panelSimulate })).toBeNull();
         fireEvent.click(group.getByRole('button', { name: L.panelCoverage }));
@@ -275,12 +255,14 @@ describe('the ask bar', () => {
 describe('narrow (phone) layout', () => {
     const narrow = () => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 360, height: 640, top: 0, left: 0, right: 360, bottom: 640, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
 
-    it('keeps only the dot, Risk ▾ and ⋯ in the strip; the Panels row scrolls sideways; the ask bar is 44px', async () => {
+    it('keeps only the chip dot, the action button and Risk ▾ in the strip; the Panels row scrolls sideways; the ask bar is 44px', async () => {
         narrow();
         await mount(sourceOf({ syncStatus: async () => sync() }));
         const s = strip();
         expect(s.getByRole('button', { name: `${L.surface.presets.risk} ▾` })).toBeTruthy();
-        expect(s.getByRole('button', { name: h.moreActions })).toBeTruthy();
+        expect(s.getByTestId('kg-review-action')).toBeTruthy();
+        expect(s.getByTestId('kg-status-chip').textContent).toBe(''); // the chip shrinks to its dot; the words stay in its accessible name
+        expect(s.getByTestId('kg-status-chip').getAttribute('aria-label')).toContain('in sync');
         expect(screen.queryByTestId('kg-parity')).toBeNull();
         expect(screen.queryByTestId('kg-time')).toBeNull();
         // The overlay menu is not duplicated in the header row.

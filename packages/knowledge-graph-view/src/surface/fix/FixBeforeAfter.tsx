@@ -1,4 +1,4 @@
-/** The Before/After toggle inside the fix flow; the same revision state the header overflow menu sets. Absent when the host keeps no baseline. */
+/** The Before/After toggle: inside the fix flow and in the Reviews panel (the one revision state). Absent when the host keeps no baseline. */
 
 import type { KnowledgeGraphLabels } from '../../labels';
 import type { Revision } from '../../revision';

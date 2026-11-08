@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { srcRef } from '@seanhogg/builderforce-memory/knowledge';
+import { ZERO_DIGEST } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { pumpReplica, type ReplicaClient } from './replicaPump.js';
 import { apiError, extraction, fakeServer, hashOf, pathOf, ROOT, world, type World } from './replicaTestkit.test-util.js';
 
@@ -93,3 +94,83 @@ describe('a lone surrogate or a NUL in a path, key or fact text', () => {
         expect(state.dirty).toBe(0);
     });
 });
+
+describe('a file whose extracted output is not there (a binary file the review never recorded, an unreadable file)', () => {
+    const addFile = async (w: World, path: string, hash: string, body?: Parameters<NonNullable<World['store']['putExtracted']>>[1]): Promise<void> => {
+        const ref = srcRef(ROOT, path);
+        if (body) await w.store.putExtracted!(hash, body);
+        await w.store.markStale({ rootId: ROOT }, ref as never, hash);
+        w.sources.push({ ref, hash });
+    };
+
+    it('regression: one file with no body among 50 good ones: the 50 land, the 1 stays dirty, no 409 loop, and the count is reported', async () => {
+        const w = world();
+        await w.review(0, 50);
+        const hash = hashOf(80), path = 'data/locked.bin';
+        await addFile(w, path, hash);
+        const srv = fakeServer();
+        const state = await pump(w, srv.client);
+        expect(srv.s.files.size).toBe(50);
+        expect(srv.s.files.has(path)).toBe(false);
+        expect(state.failed).toEqual([]);
+        expect(state.awaitingReview).toBe(1);
+        expect(state.dirty).toBe(1); // only the held-back file: the rows, scope and facts were carried by the same pack
+        expect(srv.s.facts.size).toBe(25);
+        expect(srv.syncs()).toHaveLength(1); // one pack, no extracted_missing round trips
+        expect(srv.syncs()[0]!.pack!.files?.some((f) => f.path === path)).toBe(false);
+        expect(srv.syncs()[0]!.pack!.targetDigest).toBe(ZERO_DIGEST); // a slice: it asserts no digest
+    });
+
+    it('regression: halving a big first sync by size never lets a held-back file slip into a slice: failed stays empty and no conflict loop', async () => {
+        const w = world();
+        await w.review(0, 40, 0, 4);
+        for (let i = 0; i < 6; i++) await addFile(w, `data/locked${i}.bin`, hashOf(300 + i));
+        const srv = fakeServer();
+        const state = await pumpReplica({
+            queue: w.queue, local: w.local, client: srv.client, signal: new AbortController().signal, rootId: ROOT, sources: async () => w.sources, projectId: 1,
+            maxPackBytes: 400,
+        });
+        expect(state.failed).toEqual([]);
+        expect(srv.s.files.size).toBe(40);
+        expect(state.awaitingReview).toBe(6);
+        expect(srv.syncs().every((s) => (s.pack?.files ?? []).every((f) => !f.path.startsWith('data/locked')))).toBe(true);
+    });
+
+    it('regression: a pending analysis snapshot ships even when every remaining file is held back', async () => {
+        const w = world();
+        const hash = hashOf(310), path = 'data/locked.bin';
+        await addFile(w, path, hash);
+        w.queue.setAnalysis({ sha: 'abc123', snapshot: { nodes: [] } });
+        const srv = fakeServer();
+        const state = await pump(w, srv.client);
+        expect(state.failed).toEqual([]);
+        expect(state.awaitingReview).toBe(1);
+        expect(srv.syncs().some((s) => (s.pack?.analysis as { sha?: string } | undefined)?.sha === 'abc123')).toBe(true);
+        expect((await w.queue.snapshot()).analysis).toBeUndefined();
+    });
+
+    it('regression: the held-back file\'s hash is put on the re-check channel (and only that one)', async () => {
+        const w = world();
+        await w.review(0, 2);
+        const hash = hashOf(82);
+        await addFile(w, 'data/blob.dat', hash);
+        await pump(w, fakeServer().client);
+        expect(await w.local.recheckHashes!()).toEqual([hash]);
+    });
+
+    it('regression: with an explicit stored [] the file is not held back: the empty body ships, lands first time, and the root settles', async () => {
+        const w = world();
+        await w.review(0, 2);
+        const hash = hashOf(81), path = 'assets/photo.png';
+        await addFile(w, path, hash, []);
+        const srv = fakeServer();
+        const state = await pump(w, srv.client);
+        expect(state.failed).toEqual([]);
+        expect(state.awaitingReview).toBeUndefined();
+        expect(state.dirty).toBe(0);
+        expect(srv.syncs()).toHaveLength(1);
+        expect(srv.syncs()[0]!.pack!.extracted?.find((x) => x.hash === hash)).toEqual({ kind: 'full', hash, entries: [] });
+        expect(srv.s.files.get(path)).toBe(hash);
+    });
+});
+

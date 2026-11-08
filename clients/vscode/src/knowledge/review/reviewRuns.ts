@@ -16,6 +16,7 @@ import type { ReviewProgress, ReviewReport, ReviewRunOutcome, ReviewStep } from 
 import type { KnowledgeFiles, ReplicaState } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeRunSummary, KnowledgeStoredRun } from "../knowledgeProtocol";
 import { createRunRecorder, newRunId, onTheWireReport, runKindOf } from "./reviewRunRecorder";
+import { startHostLag, type LagSampler } from "./reviewHostLag";
 import { createRunStore } from "./reviewRunStore";
 
 /** The failures a posted run carries; the rest are one `runRecord` call away. */
@@ -59,6 +60,10 @@ export interface TrackRunArgs {
   poolDown?: () => string | undefined;
   /** A run record that could not be kept is reported, never a failed review. */
   onSaveError?(error: unknown): void;
+  /** The event-loop sampler (default: node's monitorEventLoopDelay); a seam for tests. */
+  lagSampler?: LagSampler;
+  /** The clock the save timing reads (default: `Date.now`). */
+  now?: () => number;
 }
 
 export interface RunTracker {
@@ -71,16 +76,28 @@ export interface RunTracker {
 
 export function trackRun(args: TrackRunArgs): RunTracker {
   const store = storeOf(args.files);
+  const lag = startHostLag(args.lagSampler);
+  const now = args.now ?? Date.now;
+  let saveMsMax: number | undefined;
   const withPool = (run: KnowledgeStoredRun): KnowledgeStoredRun => {
     const down = args.poolDown?.();
-    return down ? { ...run, poolDown: down } : run;
+    const hostLag = lag.read();
+    return { ...run, ...(down ? { poolDown: down } : {}), ...(hostLag ? { hostLag } : {}), ...(saveMsMax !== undefined ? { saveMsMax } : {}) };
   };
   const recorder = createRunRecorder({ id: newRunId(), root: args.rootId, kind: runKindOf(args.request), post: (run) => args.post(onTheWire(withPool(run))) });
   const id = recorder.run.id;
   liveRuns.add(id);
   if (args.abort) runAborts.set(id, args.abort);
-  const keep = (run: KnowledgeStoredRun, opts?: { prune?: boolean }): Promise<void> =>
-    store.save(withPool(run), opts).catch((error: unknown) => args.onSaveError?.(error));
+  const keep = async (run: KnowledgeStoredRun, opts?: { prune?: boolean }): Promise<void> => {
+    const t0 = now();
+    try {
+      await store.save(withPool(run), opts);
+    } catch (error) {
+      args.onSaveError?.(error);
+    } finally {
+      saveMsMax = Math.max(saveMsMax ?? 0, now() - t0);
+    }
+  };
   // Interrupted if the window closes now: the record exists from the start and is refreshed while the run goes on.
   void keep(recorder.run);
   const refresh = setInterval(() => void keep({ ...recorder.run, updatedAt: Date.now() }), RUN_SAVE_INTERVAL_MS);
@@ -96,6 +113,7 @@ export function trackRun(args: TrackRunArgs): RunTracker {
         const run = recorder.close(outcome, report, replica);
         await keep(run, { prune: true });
       } finally {
+        lag.stop();
         liveRuns.delete(id);
         runAborts.delete(id);
         recorder.flush();

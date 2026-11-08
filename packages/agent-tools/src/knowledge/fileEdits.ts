@@ -20,7 +20,7 @@
  */
 
 import {
-    composePacks, extractFile, filesManifestKey, isBinaryText, knownKeysOfEntities, sha256Hex, srcRef,
+    composePacks, extractFile, filesManifestKey, isBinaryText, knownKeysOfEntities, putNoExtract, sha256Hex, srcRef,
     type DirectorySource, type KnowledgePack, type KnowledgeStore, type NodeRef,
 } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
@@ -148,8 +148,10 @@ export async function markFilesEdited(ports: FileEditPorts, rawPaths: readonly s
     let failure: unknown;
     for (const { path, hash, bytes } of changed) {
         try {
-            await store.markStale({ rootId }, srcRef(rootId, path), hash);
             const text = bytes ? new TextDecoder('utf-8').decode(bytes) : undefined;
+            // A binary file's "nothing extracted" is stored BEFORE the stale mark queues it, so a pump never sees it half-recorded.
+            if (text !== undefined && isBinaryText(text)) await putNoExtract(store, hash);
+            await store.markStale({ rootId }, srcRef(rootId, path), hash);
             if (text !== undefined && !isBinaryText(text)) {
                 await extractFile({ rootId, path, hash, doc: textDocument(rootId, path, text), packs: ports.packs, store, composed, knownKeys });
             }

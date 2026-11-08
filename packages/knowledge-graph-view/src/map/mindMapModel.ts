@@ -1,147 +1,174 @@
 /**
- * The mind map's model — PURE and DETERMINISTIC. A radial tree built from the file nodes'
- * paths: root → top-level folder → subfolder (to depth 3) → the top 8 files of each folder by
- * importance, plus a "+N more" leaf for the rest. Every branch carries its file count and the
- * worst severity among the findings that touch it. Children are sorted (folders by size then
- * name, files by importance then ref) and a branch's angular span is proportional to its
- * leaves, so equal input gives equal coordinates.
+ * The mind map's model — PURE and DETERMINISTIC. A radial tree built from the file nodes' paths, disclosed
+ * progressively so a big folder stays readable:
+ *
+ *   - the root and every top-level folder are always placed;
+ *   - subfolders are placed only for the FOCUSED folder (and the folders on the way to it); with nothing
+ *     focused, only for the {@link OPEN_TOP_FOLDERS} largest top-level folders;
+ *   - files are placed only for the focused folder: its top {@link FILES_PER_FOLDER} by importance, plus a
+ *     "+N more" leaf;
+ *   - everything else is folded into its parent, which carries the file count.
+ *
+ * Clicking a folder focuses it (the view's `onShow`), which is how a folder is expanded. At most
+ * {@link MAX_BRANCHES} branches are placed: the folders with the most files stay and the rest fold into a
+ * "+N folders" leaf on their parent. Equal input gives equal coordinates.
  */
 
 import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../graphModel';
-import { cmp, round } from '../order';
-import type { ThemeTone } from '../scene/themeColors';
-import type { Bounds } from '../graph2d/layout2d';
+import { cmp } from '../order';
+import { buildDirs, refsOf, walkDirs, worst, worstSeverity, type Dir } from './folderTree';
+import { layoutMindMap } from './mindLayout';
+import type { MapBranch, MindMap, Severity } from './mindTypes';
 
-export const MAX_FOLDER_DEPTH = 3;
+export { focusFolder, MAX_FOLDER_DEPTH, worstSeverity } from './folderTree';
+export { layoutMindMap, RING } from './mindLayout';
+export type { MapBranch, MapKind, MindMap, PlacedBranch, Severity } from './mindTypes';
+
+/** What a host draws when the map could not be computed: nothing placed (and, while a new map computes, the old one stays). */
+export const EMPTY_MIND_MAP: MindMap = { branches: [], bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 } };
+
 export const FILES_PER_FOLDER = 8;
-export const RING = 14;
+/** The largest top-level folders that show their subfolders while nothing is focused. */
+export const OPEN_TOP_FOLDERS = 6;
+/** The most branches (root included) the map places. */
+export const MAX_BRANCHES = 400;
 
-export type Severity = Finding['severity'];
-export type MapKind = 'root' | 'folder' | 'file' | 'more';
+/** The folders of a paged parent that always stay placed, so every page makes progress. */
+export const PAGE_MIN_FOLDERS = 40;
 
-export interface MapBranch {
-    id: string;
-    kind: MapKind;
-    /** A folder or file name; empty for `more` (the view words it from `count`) and for the root (the view names it). */
-    name: string;
-    /** Files beneath (a file: 1, a "+N more" leaf: N). */
-    count: number;
-    /** Every file ref beneath: what a click focuses. */
-    refs: string[];
-    /** The file's own ref; `file` only. */
-    ref?: string;
-    severity?: Severity;
-    tone: ThemeTone;
-    children: MapBranch[];
+export interface MindOptions {
+    /** The focused folder's path (`''` for the root), or null/absent for none. */
+    focus?: string | null | undefined;
+    /** Pages one parent's folders (a "+N folders" leaf was clicked): from the `start`-th largest folder of `parent` on. */
+    window?: { parent: string; start: number } | null | undefined;
+    /** Pages the focused folder's files (a "+N more" leaf was clicked): from the `start`-th most important file of `folder` on. */
+    files?: { folder: string; start: number } | null | undefined;
 }
 
-export interface PlacedBranch extends MapBranch {
-    depth: number;
-    x: number;
-    y: number;
-    /** Radians; the label sits on this side. */
-    angle: number;
-    parent?: string;
-}
-
-export interface MindMap {
-    branches: PlacedBranch[];
-    bounds: Bounds;
-}
-
-const RANK: Record<Severity, number> = { info: 1, warn: 2, error: 3 };
+type Tone = MapBranch['tone'];
 /** Severity → tone, as data. Folders and files with nothing found keep their quiet tone. */
-const SEVERITY_TONE: Record<Severity, ThemeTone> = { error: 'violation', warn: 'cycle', info: 'nodeSection' };
+const SEVERITY_TONE: Record<Severity, Tone> = { error: 'violation', warn: 'cycle', info: 'nodeSection' };
+const toneOf = (severity: Severity | undefined, quiet: Tone): Tone => (severity ? SEVERITY_TONE[severity] : quiet);
 
-/** The worst severity per node ref across all findings. */
-export function worstSeverity(findings: readonly Finding[]): Map<string, Severity> {
-    const out = new Map<string, Severity>();
-    for (const f of findings) {
-        for (const ref of f.nodes) {
-            const have = out.get(ref);
-            if (!have || RANK[f.severity] > RANK[have]) out.set(ref, f.severity);
-        }
-    }
-    return out;
+type Window = NonNullable<MindOptions['window']>;
+interface Ctx {
+    focus: string | null;
+    open: ReadonlySet<string>;
+    severities: ReadonlyMap<string, Severity>;
+    window: Window | null;
+    files: MindOptions['files'];
 }
 
-interface Folder { name: string; path: string; folders: Map<string, Folder>; files: KNode[] }
-const folder = (name: string, path: string): Folder => ({ name, path, folders: new Map(), files: [] });
+/** A parent's folders as the map lists them: all of them, or from the paged start on. */
+const foldersOf = (dir: Dir, win: Window | null): Dir[] => (win && win.parent === dir.path ? dir.folders.slice(win.start) : dir.folders);
 
-function worst(a: Severity | undefined, b: Severity | undefined): Severity | undefined {
-    return !a ? b : !b ? a : RANK[b] > RANK[a] ? b : a;
-}
-
-function toBranch(dir: Folder, kind: 'root' | 'folder', severities: ReadonlyMap<string, Severity>): MapBranch {
-    const subs = [...dir.folders.values()].map((f) => toBranch(f, 'folder', severities));
-    subs.sort((a, b) => b.count - a.count || cmp(a.name, b.name));
-    const files = [...dir.files].sort((a, b) => b.importance - a.importance || cmp(a.ref, b.ref));
-    const shown: MapBranch[] = files.slice(0, FILES_PER_FOLDER).map((n) => {
+/** A page of a folder's files (`start` on, most important first) and, when files remain, the "+N more" leaf that pages to the next. */
+function fileBranches(dir: Dir, severities: ReadonlyMap<string, Severity>, start: number): MapBranch[] {
+    const shown: MapBranch[] = dir.files.slice(start, start + FILES_PER_FOLDER).map((n) => {
         const severity = severities.get(n.ref);
         return {
             id: n.ref, kind: 'file', name: pathOf(n.ref)?.split('/').pop() ?? n.label, count: 1, refs: [n.ref], ref: n.ref,
-            ...(severity ? { severity } : {}), tone: severity ? SEVERITY_TONE[severity] : 'nodeFile', children: [],
+            ...(severity ? { severity } : {}), tone: toneOf(severity, 'nodeFile'), children: [],
         };
     });
-    const rest = files.slice(FILES_PER_FOLDER);
+    const rest = dir.files.slice(start + FILES_PER_FOLDER);
     if (rest.length) {
         const severity = rest.map((n) => severities.get(n.ref)).reduce<Severity | undefined>(worst, undefined);
         shown.push({
             id: `${dir.path}\u0000more`, kind: 'more', name: '', count: rest.length, refs: rest.map((n) => n.ref),
-            ...(severity ? { severity } : {}), tone: severity ? SEVERITY_TONE[severity] : 'edge', children: [],
+            page: { parent: dir.path, next: start + FILES_PER_FOLDER, of: 'files' },
+            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), children: [],
         });
     }
-    const children = [...subs, ...shown];
-    const severity = children.map((c) => c.severity).reduce<Severity | undefined>(worst, undefined);
+    return shown;
+}
+
+function toBranch(dir: Dir, kind: 'root' | 'folder', ctx: Ctx): MapBranch {
+    const expanded = kind === 'root' || ctx.open.has(dir.path);
+    const children = [
+        ...(expanded ? foldersOf(dir, ctx.window).map((f) => toBranch(f, 'folder', ctx)) : []),
+        ...(ctx.focus === dir.path ? fileBranches(dir, ctx.severities, ctx.files?.folder === dir.path ? ctx.files.start : 0) : []),
+    ];
     return {
-        id: dir.path || '\u0000root', kind, name: dir.name, count: children.reduce((n, c) => n + c.count, 0),
-        refs: children.flatMap((c) => c.refs), ...(severity ? { severity } : {}),
-        tone: severity ? SEVERITY_TONE[severity] : 'edge', children,
+        id: dir.path || '\u0000root', kind, name: dir.name, count: dir.count, refs: refsOf(dir),
+        ...(dir.severity ? { severity: dir.severity } : {}), tone: toneOf(dir.severity, 'edge'), children,
     };
 }
 
-/** The folder tree of the file nodes (deeper folders fold into their depth-3 ancestor). */
-export function buildMindTree(nodes: readonly KNode[], findings: readonly Finding[]): MapBranch {
-    const root = folder('', '');
-    for (const n of nodes) {
-        if (n.kind !== 'file') continue;
-        const path = pathOf(n.ref);
-        if (!path) continue;
-        const parts = path.split('/');
-        parts.pop();
-        let dir = root;
-        for (const part of parts.slice(0, MAX_FOLDER_DEPTH)) {
-            const next = `${dir.path}${dir.path ? '/' : ''}${part}`;
-            dir = dir.folders.get(part) ?? dir.folders.set(part, folder(part, next)).get(part)!;
-        }
-        dir.files.push(n);
+/** The focused folder and every folder on the way down to it (empty for no focus, or the root). */
+function focusChain(focus: string | null): Set<string> {
+    const parts = (focus ?? '').split('/').filter(Boolean);
+    return new Set(parts.map((_, i) => parts.slice(0, i + 1).join('/')));
+}
+
+/**
+ * Which folders show their subfolders: the focused one and the way down to it; with no focus (or the root, which is not a
+ * folder to drill into) the largest top-level ones.
+ */
+function openFolders(root: Dir, chain: ReadonlySet<string>): Set<string> {
+    return chain.size ? new Set(chain) : new Set(root.folders.slice(0, OPEN_TOP_FOLDERS).map((f) => f.path));
+}
+
+const total = (b: MapBranch): number => 1 + b.children.reduce((n, c) => n + total(c), 0);
+
+/** The tree with every folder outside `keep` folded into a "+N folders" leaf on its parent. */
+function fold(b: MapBranch, keep: ReadonlySet<string>, win: Window | null): MapBranch {
+    const kept: MapBranch[] = [];
+    const dropped: MapBranch[] = [];
+    for (const c of b.children) (c.kind === 'folder' && !keep.has(c.id) ? dropped : kept).push(c);
+    const children = kept.map((c) => fold(c, keep, win));
+    if (dropped.length) {
+        const severity = dropped.map((c) => c.severity).reduce<Severity | undefined>(worst, undefined);
+        const parent = b.kind === 'root' ? '' : b.id;
+        // The leaf pages its parent: the next page starts after the folders this parent shows now.
+        const start = win && win.parent === parent ? win.start : 0;
+        children.push({
+            id: `${b.id}\u0000folders`, kind: 'more', name: '', count: dropped.reduce((n, c) => n + c.count, 0), refs: dropped.flatMap((c) => c.refs),
+            folders: dropped.length, page: { parent, next: start + kept.filter((c) => c.kind === 'folder').length },
+            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), children: [],
+        });
     }
-    return toBranch(root, 'root', worstSeverity(findings));
+    return { ...b, children };
 }
 
-const leaves = (b: MapBranch): number => (b.children.length ? b.children.reduce((n, c) => n + leaves(c), 0) : 1);
-
-/** Radial layout: the angle span is proportional to leaf count; depth is the ring. */
-export function layoutMindMap(tree: MapBranch): MindMap {
-    const branches: PlacedBranch[] = [];
-    const place = (b: MapBranch, depth: number, from: number, to: number, parent?: string): void => {
-        const angle = (from + to) / 2;
-        const r = depth * RING;
-        branches.push({ ...b, depth, angle: round(angle), x: round(r * Math.cos(angle)), y: round(r * Math.sin(angle)), ...(parent !== undefined ? { parent } : {}) });
-        const total = b.children.reduce((n, c) => n + leaves(c), 0);
-        let cursor = from;
-        for (const c of b.children) {
-            const span = ((to - from) * leaves(c)) / total;
-            place(c, depth + 1, cursor, cursor + span, b.id);
-            cursor += span;
-        }
-    };
-    place(tree, 0, -Math.PI / 2, (3 * Math.PI) / 2);
-    const xs = branches.map((p) => p.x), ys = branches.map((p) => p.y);
-    // Labels sit beside the dots: leave room for them in x.
-    const room = RING * 0.9;
-    return { branches, bounds: { minX: Math.min(...xs) - room, maxX: Math.max(...xs) + room, minY: Math.min(...ys) - RING / 2, maxY: Math.max(...ys) + RING / 2 } };
+/** At most `max` branches: the folders with the most files first (a parent never has fewer files than its child, and shallower wins a tie). */
+function capBranches(tree: MapBranch, max: number, must: ReadonlySet<string>, win: Window | null): MapBranch {
+    if (total(tree) <= max) return tree;
+    const folders: Array<{ b: MapBranch; depth: number }> = [];
+    const walk = (b: MapBranch, depth: number): void => { for (const c of b.children) { if (c.kind === 'folder') folders.push({ b: c, depth }); walk(c, depth + 1); } };
+    walk(tree, 1);
+    // The focused folder and the way down to it always stay: that is the expansion the user asked for.
+    folders.sort((a, b) => Number(must.has(b.b.id)) - Number(must.has(a.b.id)) || b.b.count - a.b.count || a.depth - b.depth || cmp(a.b.id, b.b.id));
+    // Folding adds "+N folders" leaves, so find the most folders that can stay while the whole tree fits (the size only grows with the kept set).
+    const foldTo = (n: number): MapBranch => fold(tree, new Set(folders.slice(0, n).map((f) => f.b.id)), win);
+    let best = foldTo(0);
+    let lo = 1, hi = Math.min(folders.length, max - 1);
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const out = foldTo(mid);
+        if (total(out) <= max) { best = out; lo = mid + 1; } else hi = mid - 1;
+    }
+    return best;
 }
 
-export const mindMap = (nodes: readonly KNode[], findings: readonly Finding[]): MindMap => layoutMindMap(buildMindTree(nodes, findings));
+export function buildMindTree(nodes: readonly KNode[], findings: readonly Finding[], opts: MindOptions = {}): MapBranch {
+    const severities = worstSeverity(findings);
+    const root = buildDirs(nodes, severities);
+    const focus = opts.focus ?? null;
+    const chain = focusChain(focus);
+    const paging = opts.window ?? null;
+    // Stays placed whatever the count: the focus chain, and the first folders of a paged parent (so each page makes progress).
+    const must = new Set(chain);
+    if (paging) {
+        const parent = paging.parent === '' ? root : [...walkDirs(root)].find((d) => d.path === paging.parent);
+        // The paged parent itself (and the way down to it) stays placed, or its page would vanish with it.
+        for (const path of focusChain(paging.parent)) must.add(path);
+        for (const d of parent ? foldersOf(parent, paging).slice(0, PAGE_MIN_FOLDERS) : []) must.add(d.path);
+    }
+    const files = opts.files ?? null;
+    return capBranches(toBranch(root, 'root', { focus, open: openFolders(root, chain), severities, window: paging, files }), MAX_BRANCHES, must, paging);
+}
+
+export const mindMap = (nodes: readonly KNode[], findings: readonly Finding[], opts: MindOptions = {}): MindMap =>
+    layoutMindMap(buildMindTree(nodes, findings, opts));

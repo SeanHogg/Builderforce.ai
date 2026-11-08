@@ -65,6 +65,8 @@ export type KnowledgeCall =
   | { op: "pinpoint"; rootId: string; image: string }
   | { op: "history"; rootId: string }
   | { op: "syncStatus"; rootId: string }
+  // Retry upload: forget the root's recorded upload failures and drain its replica queue now (answers null once the pump has started; the sync status follows the upload).
+  | { op: "retrySync"; rootId: string }
   | { op: "applyFix"; rootId: string; finding: Finding }
   // The staged fix flow: one of the four checks (build, types, lint, tests) through the project's own script, and undo of an applied fix.
   | { op: "runFixCheck"; rootId: string; check: string; finding: Finding }
@@ -96,6 +98,9 @@ export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupt
  * count of all failures when `failures` holds only the latest (`runRecord` returns them all).
  * The view restates this as `StoredReviewRun`.
  */
+/** How long the extension host's event loop was blocked during the run (ms): a stall here is why steps overran their deadlines. */
+export interface KnowledgeHostLag { maxMs: number; p99Ms: number; meanMs: number }
+
 export type KnowledgeStoredRun = Omit<ReviewRun, "outcome" | "failures"> & {
   outcome?: KnowledgeRunOutcome;
   /** Every failure, oldest first (memory's run keeps them in chunks; the record, the wire and the file carry them flat). */
@@ -103,6 +108,10 @@ export type KnowledgeStoredRun = Omit<ReviewRun, "outcome" | "failures"> & {
   replica?: ReplicaState;
   /** Why the extraction pool was unavailable (the run extracted on one thread); absent ⇒ it was not. */
   poolDown?: string;
+  /** Event-loop stall sampled during the run; absent on older records. */
+  hostLag?: KnowledgeHostLag;
+  /** The slowest save of this run's record to disk (ms). */
+  saveMsMax?: number;
   failureCount?: number;
   /** Files owed judgement when the map was completed; the host sets it at `mapped`. */
   awaitingJudgeTotal?: number;

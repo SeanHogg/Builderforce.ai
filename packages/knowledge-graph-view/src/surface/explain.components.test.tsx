@@ -90,7 +90,7 @@ describe('the sync strip', () => {
 
     it('is never "Synced" when the counts differ: a folder held only on the server reads as such (neutral), the same as the parity line', () => {
         const pill = syncPill({ labels: L, review: { status: 'idle' }, stale: false, refreshFailed: false, sync: local0 });
-        expect(pill).toEqual({ state: 'serverOnly', text: L.surface.pillStates.serverOnly });
+        expect(pill).toMatchObject({ kind: 'serverOnly', state: 'serverOnly', tab: 'server' });
     });
 });
 

@@ -1,3 +1,32 @@
+## ✅ RESOLVED 2026-11-08 — Uploads no longer stall, a review stops when asked, the Graph loads, and anti-patterns explain themselves (builderforce-memory 2026.10.51–54 · VS Code 2026.10.141)
+
+- **The knowledge replica no longer stalls on `409 extracted_missing`.**
+  - The cause: a binary file was shipped with a hash and no body, the server rejected the pack, and the pump gave up after 4 conflicts with 18,829 keys left dirty.
+  - The review now records an explicit "no output" (`putNoExtract`, a stored `[]`) for a file with nothing to extract. The pack ships it as `{full, entries: []}`.
+  - The server keeps `entryless:<ref>` markers, which `verifyBodies` accepts and `haveBitmap` never counts as a body. `mergeBody` is the one merge rule.
+  - Holds are decided over every touched key before a pack is cut, so a cut pack never ships a file with no body. Rows, scope and analysis still upload while a file is held.
+  - A held file goes on a re-check set in the store. The next review settles it with no re-read, and the pump wakes when the answer lands.
+  - A failure counts as final only when it is proven (`ExtractFailed` from the parser, a moved hash, or the third failure in a row at the same hash). Timeouts, locks, worker crashes and Stops are retried by the next review.
+  - An unreadable stored body is healed rather than answered with a 409.
+  - It is ONE upload path for every host, and the facts live in the store.
+- **Starting, stopping and watching a review happens in one Reviews panel.**
+  - Tabs: Review, Runs, Server and Diagnostics. The pinned footer button cycles Start → Stop → Stopping… → Force stop → Resume.
+  - The strip has a status chip plus an action button, with a spinner and amber while stopping.
+  - Force stop settles the view after 10 s. Timings live in one module (`reviewTimings.ts`).
+  - Retry upload returns at once, and the status polls every 2 s while the upload is sending.
+  - Diagnostics are structured sections, failures first, with a "Taken" stamp.
+  - The Server tab holds parity, not-stored, upload, data sources, excluded folders, commits since the last review, and resend skipped.
+  - The old ⋯ menu, popover, amber banner and Sync drawer are gone.
+- **The Graph loads and the Mind map reads.**
+  - Edges are ranked once per graph in idle stages. A scene draws at most 15,000: the selection's links, then rule-breaking links, then a sample by importance. The caption says "shown of total".
+  - Layout runs in idle steps, and a click neither restarts it nor re-sorts the graph.
+  - The Mind map sees every file. It folds branches, pages "+N folders" and "+N files", and fits labels by direction. It supports `aria-expanded` and Escape to go Out, and shows "Laying out…" while computing.
+- **Anti-patterns explain themselves and can be fixed in a batch.**
+  - Anti-patterns are grouped by kind and layer pair, with the arrow, the reason and the files, and can be multi-selected.
+  - Preview shows before and after per fix, a real diff for codemods, and the plan for agent fixes. Apply runs with bounded concurrency, progress, Cancel and a failed count.
+  - Show in Tower lights offenders and partners and dims the rest, with a good-vs-bad legend. The highlight clears when you leave the Tower or the graph changes.
+  - Memory emits a `god-module` finding with measures against limits (`GOD_MODULE_LIMITS`). The file card names it, shows the bars, and offers Fix and Show in Tower.
+
 ## ✅ RESOLVED 2026-11-07 — One folder reads as many systems, a review maps in minutes, and sync is one compact pack (PRD 41 A9 + A10 + A11 · WS25 + WS26 · builderforce-memory 2026.10.46–48 · VS Code 2026.10.140)
 
 - **A9: a folder of many systems reads as many systems.**

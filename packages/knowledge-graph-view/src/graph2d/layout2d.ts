@@ -7,8 +7,8 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import { layout3d, type LayoutOptions } from '../scene/layout3d';
-import { cmp, round } from '../order';
+import { layoutTask, type Layout3D, type LayoutOptions } from '../scene/layout3d';
+import { cmp, finiteImportance, round } from '../order';
 import type { ViewBox } from '../usePanZoom';
 
 export interface Bounds { minX: number; maxX: number; minY: number; maxY: number }
@@ -29,6 +29,9 @@ export interface Layout2D {
     bounds: Bounds;
 }
 
+/** What a host draws when a layout failed: nothing placed. */
+export const EMPTY_LAYOUT_2D: Layout2D = { positions: new Map(), bands: [], bounds: { minX: 0, maxX: 0, minY: 0, maxY: 6 } };
+
 export const BAND_PAD = 2.5;
 export const BAND_GAP = 1.5;
 export const BAND_CAPTION = 2.5;
@@ -36,11 +39,26 @@ const MIN_BAND_HEIGHT = 6;
 
 /** A node's radius in layout units, from its 0–1 importance. */
 export function nodeRadius(importance: number): number {
-    return 0.35 + 0.9 * Math.sqrt(Math.max(0, Math.min(1, importance)));
+    return 0.35 + 0.9 * Math.sqrt(Math.max(0, Math.min(1, finiteImportance(importance))));
+}
+
+/**
+ * The layout in steps (one relaxation pass each), for hosts that run it on idle callbacks. The relaxation is the 3D
+ * layout's, so its spring budget ({@link LAYOUT_MAX_SPRINGS}) applies here too: 100k edges never mean 100k springs.
+ */
+export function layout2dTask(rootId: string, nodes: readonly KNode[], edges: readonly KEdge[], opts: LayoutOptions = {}): { step(): boolean; result(): Layout2D } {
+    const task = layoutTask(rootId, nodes, edges, opts);
+    let built: Layout2D | null = null;
+    return { step: () => task.step(), result: () => (built ??= project(nodes, task.result())) };
 }
 
 export function layout2d(rootId: string, nodes: readonly KNode[], edges: readonly KEdge[], opts: LayoutOptions = {}): Layout2D {
-    const l3 = layout3d(rootId, nodes, edges, opts);
+    const task = layout2dTask(rootId, nodes, edges, opts);
+    while (!task.step());
+    return task.result();
+}
+
+function project(nodes: readonly KNode[], l3: Layout3D): Layout2D {
     const byPlane = new Map<string, KNode[]>();
     // Canonical order: the output never depends on the order the nodes arrived in.
     for (const n of [...nodes].sort((a, b) => cmp(a.ref, b.ref))) {

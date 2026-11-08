@@ -3,9 +3,8 @@ import { surfaceFixture } from '../../testing';
 import { buildStations } from '../stations';
 import { curlOf, endpointsOf, groupByFile, openApiSkeleton, parseRoutes, postmanCollection, toOpenApiPath } from './apiModel';
 import { coverageModel, MAX_GAPS } from './coverageModel';
-import { patternMatrix, topAntiPatterns } from './patternsModel';
+import { patternMatrix } from './patternsModel';
 import { formatBytes } from '../../formatBytes';
-import { pipelineSteps, serverShare } from './syncModel';
 
 const graph = surfaceFixture();
 const model = buildStations(graph);
@@ -44,10 +43,9 @@ describe('patternMatrix', () => {
         expect(Object.values(m.anti).reduce((a, b) => a + b, 0)).toBe(2);
         expect(m.layers).toContain('application');
     });
-    it('has no families when the badge is absent, and lists worst findings first', () => {
+    it('has no families when the badge is absent', () => {
         const none = patternMatrix({ nodes: [], findings: [] }, model);
         expect(none.families).toEqual([]);
-        expect(topAntiPatterns(graph.findings)[0]!.severity).toBe('error');
     });
 });
 
@@ -84,28 +82,8 @@ describe('apiModel', () => {
     });
 });
 
-describe('syncModel', () => {
-    const counts = { files: 10, edges: 20, docs: 2 };
-    const status = { local: counts, server: counts, skipped: [], sources: [{ id: 'code' as const, state: 'collected' as const }] };
-    it('derives the six steps from what the host reported', () => {
-        expect(pipelineSteps(status).map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
-        const worse = pipelineSteps({ ...status, server: { ...counts, files: 7 }, skipped: [{ path: 'a', bytes: 1, reason: 'big' }], sources: [{ id: 'coverage', state: 'absent' }, { id: 'code', state: 'collected' }] });
-        expect(Object.fromEntries(worse.map((s) => [s.id, s.state]))).toMatchObject({ match: 'attention', skipped: 'attention', analyse: 'attention' });
-        const fresh = pipelineSteps({ local: { files: 0, edges: 0, docs: 0 }, skipped: [], sources: [] });
-        expect(fresh.filter((s) => s.state === 'pending').map((s) => s.id)).toEqual(['walk', 'graph', 'upload', 'match', 'analyse']);
-    });
-    it('never reads an unmeasured count or an unrecorded skip list as a match or as "nothing skipped"', () => {
-        const linked = { local: { files: 10, docs: 2 }, server: { files: 10, edges: 99, docs: 2 }, sources: [] };
-        const steps = Object.fromEntries(pipelineSteps(linked).map((s) => [s.id, s.state]));
-        expect(steps.match).toBe('ok'); // edges were not measured locally: only the measured counts are compared
-        expect(steps.skipped).toBe('pending'); // skipped absent = unknown, not ok
-        const cut = pipelineSteps({ local: { files: 10, edges: 5, docs: 2, truncated: true }, server: { files: 10, edges: 5, docs: 2 }, skipped: [], sources: [] });
-        expect(Object.fromEntries(cut.map((s) => [s.id, s.state]))).toMatchObject({ graph: 'attention', match: 'attention' });
-    });
-    it('shares and formats sizes', () => {
-        expect(serverShare(10, 5)).toBe(0.5);
-        expect(serverShare(10, 50)).toBe(1);
-        expect(serverShare(0, 3)).toBe(0);
+describe('formatBytes', () => {
+    it('formats sizes in words', () => {
         expect([formatBytes(12), formatBytes(2048), formatBytes(3 * 1024 * 1024)]).toEqual(['12 B', '2.0 KB', '3.0 MB']);
     });
 });

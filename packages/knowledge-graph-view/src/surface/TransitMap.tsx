@@ -18,6 +18,7 @@ import { COMPACT_WIDTH } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { counted } from './plural';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
+import { ROLE_TONE, type TowerRole } from '../scene/highlightRoles';
 import { usePanZoom } from '../usePanZoom';
 import { usePanZoomRegistration } from './zoom';
 import type { LinesModel } from './lines';
@@ -78,6 +79,8 @@ export interface TransitMapProps {
     onOpenPanel?: ((id: string) => void) | undefined;
     /** `tower` is the same map with each station a 2.5D tower and each line a pipe; absent ⇒ `map`. */
     variant?: 'map' | 'tower' | undefined;
+    /** An anti-pattern highlight by station: an offender takes the violation tone, a partner the partner tone, every other station is dimmed. */
+    roles?: ReadonlyMap<string, TowerRole> | undefined;
 }
 
 const NO_ENTER: EnterCheck = { can: false, reason: 'deepest' };
@@ -218,12 +221,14 @@ export function TransitMap(p: TransitMapProps) {
                     )}
 
                     {marked.map((station) => {
-                        const pos = layout.positions.get(station.id), label = placed.get(station.id), style = model.styles.get(station.id);
-                        if (!pos || !label || !style) return null;
+                        const pos = layout.positions.get(station.id), label = placed.get(station.id), base = model.styles.get(station.id);
+                        if (!pos || !label || !base) return null;
+                        const role = p.roles?.get(station.id);
+                        const style = role ? { ...base, tone: ROLE_TONE[role] } : base;
                         const inter = lines.interchanges.get(station.id);
                         return (
                             <Mark
-                                key={station.id} id={station.id} at={pos} style={style} selected={station.id === selectedStation} dim={dim(station.id)}
+                                key={station.id} id={station.id} at={pos} style={style} selected={station.id === selectedStation} dim={p.roles && p.roles.size > 0 ? !role : dim(station.id)}
                                 doc={model.docs.has(station.id)} interchange={inter ? counted(labels, 'interchange', inter.length) : null} label={label}
                                 aria={fillTemplate(s.stationAria, { name: station.name, layer: layerName(station.layer ?? OTHER_LAYER), files: counted(labels, 'file', station.files) })}
                                 accentNote={notes.get(station.id)?.accent === true} reducedMotion={reducedMotion} complexity={station.cx} onActivate={() => pick(station.id)}

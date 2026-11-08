@@ -6,7 +6,8 @@
  */
 
 import type { KnowledgeGraphState } from '../useKnowledgeGraph';
-import type { LensId } from '../types';
+import type { LensId, ViewMode } from '../types';
+import { towerCameraOf, type TowerHighlight } from './towerHighlight';
 import { questionDef, questionForLens, type QuestionId } from './questions';
 import { stationOfRef } from './stations';
 import type { SurfaceModel } from './useSurface';
@@ -21,9 +22,15 @@ export interface SurfaceActions {
     pinpointed(refs: string[]): void;
     /** Clear releases everything a pinpoint set. */
     unpin(): void;
+    /** Lights an anti-pattern's files in the Tower (3D, else the SVG Tower) and shows the refs; undefined when neither camera exists. */
+    showInTower: ((highlight: TowerHighlight, refs: string[]) => void) | undefined;
 }
 
-export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel, onSelected: () => void): SurfaceActions {
+/** The cameras on offer and how to switch to one: what Show in Tower needs. */
+export interface TowerCameras { ids: readonly string[]; set(mode: ViewMode): void }
+
+export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel, onSelected: () => void, cameras?: TowerCameras): SurfaceActions {
+    const camera = towerCameraOf(cameras?.ids);
     const select = (ref: string) => {
         onSelected();
         kg.select(ref);
@@ -43,5 +50,8 @@ export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel
         },
         pinpointed: (refs) => { kg.setFocus(refs); surface.pinPath(refs); surface.setQuestion('wrong'); },
         unpin: () => { surface.pinPath(null); kg.setFocus([]); },
+        showInTower: camera && cameras
+            ? (highlight, refs) => { surface.setHighlight(highlight); kg.focusRefs(refs); if (refs[0]) select(refs[0]); cameras.set(camera); }
+            : undefined,
     };
 }

@@ -18,7 +18,7 @@
 
 import { availableParallelism, cpus } from "node:os";
 import { Worker } from "node:worker_threads";
-import type { ExtractJob, ExtractJobResult, ExtractPool } from "@seanhogg/builderforce-memory/knowledge";
+import { ExtractFailed, type ExtractJob, type ExtractJobResult, type ExtractPool } from "@seanhogg/builderforce-memory/knowledge";
 
 /** What the pool uses of a `worker_threads` Worker (a test hands in its own). */
 export interface PoolWorker {
@@ -28,7 +28,7 @@ export interface PoolWorker {
 }
 
 /** A worker's answer to one `{ id, job }` message. */
-export type WorkerReply = { id: number; result: ExtractJobResult } | { id: number; error: string } | { ready: true };
+export type WorkerReply = { id: number; result: ExtractJobResult } | { id: number; error: string; final?: true } | { ready: true };
 
 export interface ExtractPoolOptions {
   /** Workers at most (see {@link defaultExtractPoolSize}). */
@@ -160,7 +160,7 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
       const held = slot.current;
       if (slot.worker !== worker || !held || held.id !== reply.id) return;
       slot.current = undefined;
-      finish(held, () => ("error" in reply ? held.reject(new Error(reply.error)) : held.resolve(reply.result)));
+      finish(held, () => ("error" in reply ? held.reject(reply.final ? new ExtractFailed(reply.error) : new Error(reply.error)) : held.resolve(reply.result)));
       dispatch();
     });
     worker.on("error", (error: unknown) => failSlot(slot, worker, `The extraction worker crashed: ${error instanceof Error ? error.message : String(error)}`));

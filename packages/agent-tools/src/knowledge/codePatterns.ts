@@ -8,7 +8,7 @@
  * the one anti-pattern. Pure.
  */
 
-import { compareStr } from '@seanhogg/builderforce-memory/knowledge';
+import { compareStr, GOD_MODULE_LIMITS } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeSymbol } from '../symbols.js';
 
 export interface PatternFacts {
@@ -27,10 +27,6 @@ export interface PatternDetector {
     id: string;
     test(f: PatternFacts): boolean;
 }
-
-export const GOD_MODULE_LINES = 1_000;
-export const GOD_MODULE_EXPORTS = 40;
-export const GOD_MODULE_COMPLEXITY = 60;
 
 const named = (f: PatternFacts, re: RegExp): boolean => f.exported.some((s) => re.test(s.name));
 const baseIs = (f: PatternFacts, re: RegExp): boolean => re.test(f.base);
@@ -69,7 +65,8 @@ export const PATTERN_DETECTORS: readonly PatternDetector[] = [
     { id: 'port', test: (f) => f.exported.some((s) => s.kind === 'interface' && /Port$/.test(s.name)) },
     {
         id: 'god-module',
-        test: (f) => f.lines > GOD_MODULE_LINES || f.exported.length > GOD_MODULE_EXPORTS || f.maxComplexity > GOD_MODULE_COMPLEXITY,
+        test: (f) => f.lines > GOD_MODULE_LIMITS.lines || f.exported.length > GOD_MODULE_LIMITS.exports
+            || f.maxComplexity > GOD_MODULE_LIMITS.complexity,
     },
 ];
 

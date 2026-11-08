@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
-import { buildBundle, bundlePrefix, readBundled } from './knowledgeBundles';
+import { buildBundle, bundlePrefix, mergeBody, readBundled } from './knowledgeBundles';
 import { r2ExtractedCache } from './knowledgeBlobs';
 import type { ExtractedLoc, KnowledgeLedgerPort } from './knowledgeLedger';
 
@@ -85,5 +85,21 @@ describe('extracted bundles', () => {
     // And without a ledger at all, only the legacy object exists.
     expect(await r2ExtractedCache({ UPLOADS: bucket }, 4, 9).get('old')).toEqual(body(9));
     expect(await r2ExtractedCache({ UPLOADS: bucket }, 4, 9).get('h2')).toBeUndefined();
+  });
+});
+
+describe('mergeBody keeps entry-less sources apart from entries', () => {
+  const loc = { sourceRefs: ['src:r::a.ts', 'entryless:src:r::bin.png'] };
+
+  it('regression: carries an already-held entry-less source only when the stored body was actually read', () => {
+    expect(mergeBody(loc, [], []).entryless).toEqual(['src:r::bin.png']);
+    expect(mergeBody(loc, undefined, []).entryless).toEqual([]); // unreadable object: nothing stays "held"
+  });
+
+  it('a real entry for a source ends its entry-less state, and the bundle names it as a real ref', () => {
+    const real = body(1);
+    const merged = mergeBody(loc, [], real, ['src:r::f1.ts']);
+    expect(merged.entryless).toEqual(['src:r::bin.png']);
+    expect(buildBundle(1, [{ hash: 'h', ...merged }]).locs[0]!.sourceRefs).toEqual(['src:r::f1.ts', 'entryless:src:r::bin.png']);
   });
 });

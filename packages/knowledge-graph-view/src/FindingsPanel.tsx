@@ -18,6 +18,7 @@ import { fillTemplate } from './template';
 import { nodeIndex } from './graphModel';
 import { findingBatchRequest, findingDetail, findingItems, findingRequest, findingTitle } from './findingText';
 import { EvidenceList } from './EvidenceList';
+import { useSelection } from './useSelection';
 import type { FindingEvidence, SourceLocation } from './types';
 import { cssVar } from './scene/themeColors';
 import { button, card, heading, list, muted, primaryButton, quietButton } from './styles';
@@ -95,7 +96,7 @@ function FindingRow({ f, labels, index, checked, onToggle, onShow, onCompose, ev
 export function FindingsPanel({ graph, findings, total, lensName, labels, onShow, onCompose, evidence, onOpenSource, badge, onResolve, scope }: FindingsPanelProps) {
     const index = useMemo(() => nodeIndex(graph), [graph]);
     // The multiselect Fix-with-agent selection (by finding id; stable within a load).
-    const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+    const { selected, toggle: toggleSelected, setAll, clear } = useSelection();
     // Which nested groups are expanded (lazy): a group renders its rows only once opened.
     const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
 
@@ -113,11 +114,7 @@ export function FindingsPanel({ graph, findings, total, lensName, labels, onShow
             || b[1].length - a[1].length || a[0].localeCompare(b[0]));
     }, [findings, labels]);
 
-    const toggle = (f: Finding) => setSelected((s) => {
-        const next = new Set(s);
-        if (next.has(f.id)) next.delete(f.id); else next.add(f.id);
-        return next;
-    });
+    const toggle = (f: Finding) => toggleSelected(f.id);
     const toggleGroup = (key: string) => setOpen((s) => {
         const next = new Set(s);
         if (next.has(key)) next.delete(key); else next.add(key);
@@ -144,10 +141,10 @@ export function FindingsPanel({ graph, findings, total, lensName, labels, onShow
                                 {fillTemplate(labels.fixSelected, { count: chosen.length })}
                             </button>
                             <span style={muted}>{fillTemplate(labels.selectedCount, { count: chosen.length })}</span>
-                            <button type="button" style={quietButton} onClick={() => setSelected(new Set(findings.map((f) => f.id)))}>
+                            <button type="button" style={quietButton} onClick={() => setAll(findings.map((f) => f.id))}>
                                 {labels.selectAll}
                             </button>
-                            <button type="button" style={quietButton} onClick={() => setSelected(new Set())} disabled={chosen.length === 0}>
+                            <button type="button" style={quietButton} onClick={clear} disabled={chosen.length === 0}>
                                 {labels.clearSelection}
                             </button>
                         </div>

@@ -6,7 +6,7 @@
  * entry) and the layer rule come from `codeRootSignals` / `codeGraph`.
  */
 
-import type { CodeSymbol } from '../symbols.js';
+import { extractSymbols, MAX_SYMBOLS_PER_FILE, type CodeSymbol } from '../symbols.js';
 import { cyclomaticComplexity } from './codeComplexity.js';
 import { codeLanguageOf, maskSource } from './codeMask.js';
 import { basenameOf, CODE_BADGES } from './codeNodes.js';
@@ -21,6 +21,13 @@ const baseNameOf = (path: string): string => {
     const base = basenameOf(path);
     const dot = base.lastIndexOf('.');
     return dot > 0 ? base.slice(0, dot) : base;
+};
+
+/** Lines in a file: a trailing newline ends the last line, it does not start another. */
+export const lineCountOf = (text: string): number => {
+    if (text === '') return 0;
+    const n = text.split('\n').length;
+    return text.endsWith('\n') ? n - 1 : n;
 };
 
 export function contentBadges(path: string, text: string, symbols: readonly CodeSymbol[]): Record<string, number | string> {
@@ -39,10 +46,15 @@ export function contentBadges(path: string, text: string, symbols: readonly Code
     const imports = importSpecifiers(code);
     const externals = externalsBadge(runtimeSpecifiers(code));
     if (externals) badges[CODE_BADGES.externals] = externals;
+    // The detector's own counts, stored so the god-module finding can show what tripped it.
+    const lines = lineCountOf(text);
+    // The symbol index is capped per file, but the detector needs the TRUE number of exports: rescan uncapped only for a file that hit the cap.
+    const all = symbols.length >= MAX_SYMBOLS_PER_FILE ? extractSymbols(path, text, Number.POSITIVE_INFINITY) : symbols;
+    const exported = all.filter((s) => s.exported);
+    badges[CODE_BADGES.lines] = lines;
+    badges[CODE_BADGES.exports] = exported.length;
     const patterns = patternsBadge({
-        path, base: baseNameOf(path), lines: text.split('\n').length,
-        exported: symbols.filter((s) => s.exported), imports, text: code,
-        maxComplexity: complexity.max,
+        path, base: baseNameOf(path), lines, exported, imports, text: code, maxComplexity: complexity.max,
     });
     if (patterns) badges[CODE_BADGES.patterns] = patterns;
     return badges;

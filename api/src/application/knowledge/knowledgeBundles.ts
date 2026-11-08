@@ -10,7 +10,7 @@
  */
 import { sha256Hex, type Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import type { ExtractedLoc } from './knowledgeLedger';
+import { ENTRYLESS_PREFIX, entrylessRef, type ExtractedLoc } from './knowledgeLedger';
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
@@ -28,9 +28,28 @@ export const bundleKey = (tenantId: number, digest: string): string => `${bundle
  * ref), so two roots that share a content hash never evict each other's entries. The ONE merge: pack sync and the
  * legacy per-hash upload both use it.
  */
-export function mergeBodies(stored: readonly Extracted[] | undefined, arrival: readonly Extracted[]): Extracted[] {
+function mergeBodies(stored: readonly Extracted[] | undefined, arrival: readonly Extracted[]): Extracted[] {
   const arrived = new Set(arrival.map((e) => e.sourceRef));
   return [...(stored ?? []).filter((e) => !arrived.has(e.sourceRef)), ...arrival];
+}
+
+/** The entry-less sources a located body names (see {@link entrylessRef}). */
+const entrylessOf = (loc: Pick<ExtractedLoc, 'sourceRefs'> | undefined): string[] =>
+  (loc?.sourceRefs ?? []).filter((r) => r.startsWith(ENTRYLESS_PREFIX)).map((r) => r.slice(ENTRYLESS_PREFIX.length));
+
+/**
+ * The ONE merge of a stored body with an arrival (pack sync and the legacy upload both use it): the entries merge by
+ * `sourceRef`, and the sources declared entry-less stay so — those the index already names (carried ONLY when the stored
+ * body was actually read, so an unreadable object never keeps a source "held" with nothing behind it), and `declared` now.
+ * A source that has an entry after the merge is no longer entry-less: a real body always wins.
+ */
+export function mergeBody(
+  loc: Pick<ExtractedLoc, 'sourceRefs'> | undefined, stored: readonly Extracted[] | undefined, arrival: readonly Extracted[], declared: Iterable<string> = [],
+): { entries: Extracted[]; entryless: string[] } {
+  const entries = mergeBodies(stored, arrival);
+  const have = new Set<string>(entries.map((e) => e.sourceRef));
+  const carried = stored ? entrylessOf(loc) : [];
+  return { entries, entryless: [...new Set([...carried, ...declared])].filter((r) => !have.has(r)) };
 }
 
 export interface Bundle {
@@ -39,14 +58,15 @@ export interface Bundle {
   locs: ExtractedLoc[];
 }
 
-export function buildBundle(tenantId: number, bodies: ReadonlyArray<{ hash: string; entries: readonly Extracted[] }>): Bundle {
+/** `entryless`: sources declared to carry no extracted output (a binary file): the index names them apart from the real entries. */
+export function buildBundle(tenantId: number, bodies: ReadonlyArray<{ hash: string; entries: readonly Extracted[]; entryless?: readonly string[] }>): Bundle {
   const parts = bodies.map((b) => ENCODER.encode(JSON.stringify(b.entries)));
   const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   const locs: ExtractedLoc[] = [];
   let at = 0;
   parts.forEach((p, i) => {
     bytes.set(p, at);
-    locs.push({ hash: bodies[i]!.hash, bundleKey: '', byteOffset: at, byteLength: p.length, sourceRefs: bodies[i]!.entries.map((e) => e.sourceRef) });
+    locs.push({ hash: bodies[i]!.hash, bundleKey: '', byteOffset: at, byteLength: p.length, sourceRefs: [...new Set<string>([...bodies[i]!.entries.map((e) => e.sourceRef), ...(bodies[i]!.entryless ?? []).map(entrylessRef)])] });
     at += p.length;
   });
   const key = bundleKey(tenantId, sha256Hex(bytes));

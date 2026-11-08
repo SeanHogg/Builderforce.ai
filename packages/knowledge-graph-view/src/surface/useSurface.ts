@@ -5,7 +5,7 @@
  * memoizes the readings, so a host with no entry points simply gets no lines.
  */
 
-import { useCallback, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { fixFlowReducer, initialFlow, type FixFlowAction, type FixFlowState } from './fix/fixFlow';
 import { buildLines, type Line, type LinesModel } from './lines';
@@ -16,6 +16,7 @@ import { pathOfLine, pathOfStations, type PathModel } from './path';
 import { litStations, type QuestionContext, type QuestionId } from './questions';
 import { buildStations, changedRefs, stationOfRef, type Station, type StationModel } from './stations';
 import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
+import type { TowerHighlight } from './towerHighlight';
 
 export interface Pin { stationId: string; count: number }
 
@@ -49,6 +50,9 @@ export interface SurfaceModel {
     /** The open drawer (a PANELS id) and the finding Resolve works on. */
     panel: string | null;
     resolving: Finding | null;
+    /** The anti-pattern lit in the Tower (offenders, partners, the rest dimmed); null = none. */
+    highlight: TowerHighlight | null;
+    setHighlight(h: TowerHighlight | null): void;
     /** The staged fix flow of every finding worked on, by finding id: closing the drawer keeps an applied fix's Undo. */
     fixFlows: Readonly<Record<string, FixFlowState>>;
     dispatchFix(findingId: string, action: FixFlowAction): void;
@@ -93,6 +97,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const [pinned, setPinned] = useState<readonly string[] | null>(null);
     const [panel, setPanel] = useState<string | null>(null);
     const [resolving, setResolving] = useState<Finding | null>(null);
+    const [highlight, setHighlight] = useState<TowerHighlight | null>(null);
     const [fixFlows, dispatchFlows] = useReducer((m: Record<string, FixFlowState>, a: { id: string; action: FixFlowAction }) => ({ ...m, [a.id]: fixFlowReducer(m[a.id] ?? initialFlow(a.id), a.action) }), {});
     const dispatchFix = useCallback((id: string, action: FixFlowAction) => dispatchFlows({ id, action }), []);
     const historyChanged = opts.changed;
@@ -139,8 +144,11 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     // The Act scope follows what is DRAWN: the station, else the drawn path (the line, or a pinned pinpoint), else the whole graph.
     const scope = useMemo(() => (station ? new Set([station.id]) : path.stops.length > 0 ? new Set(path.stops.map((x) => x.id)) : null), [station, path]);
 
-    const setQuestion = useCallback((id: QuestionId) => { setQuestionId(id); if (id !== 'patterns') setFamilyId(null); }, []);
-    const setFamily = useCallback((f: string | null) => { setFamilyId(f); if (f) setQuestionId('patterns'); }, []);
+    // A new question or family is a new reading of the Tower: the anti-pattern highlight (and its legend) ends with the old one.
+    const setQuestion = useCallback((id: QuestionId) => { setQuestionId(id); setHighlight(null); if (id !== 'patterns') setFamilyId(null); }, []);
+    const setFamily = useCallback((f: string | null) => { setFamilyId(f); setHighlight(null); if (f) setQuestionId('patterns'); }, []);
+    // A different graph (new load, baseline or Before/After toggle, a re-review reload) is not the one the highlight was made on.
+    useEffect(() => setHighlight(null), [graph, baseline]);
     const setStep = useCallback((n: number) => {
         setStepIndex(n);
         const stop = path.stops[n];
@@ -157,7 +165,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
 
     return {
         stations, lines, coverage, overlay, drill, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
-        context, pins, scope, pinned, panel, resolving, fixFlows, dispatchFix,
+        context, pins, scope, pinned, panel, resolving, highlight, setHighlight, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),
         setPins: (on) => setBindings((b) => ({ ...b, pins: on ? 'on' : 'off' })),

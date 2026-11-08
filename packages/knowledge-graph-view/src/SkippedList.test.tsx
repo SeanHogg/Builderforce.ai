@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /** The files a review did not store: a count that opens into the list, reasons in words, no invented sizes. */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render, renderHook, act, waitFor } from '@testing-library/react';
 import { FIXTURE_REPORT, fixtureSource } from './testing';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from './labels';
-import { ReviewProgress } from './ReviewProgress';
+import { ReviewDone } from './surface/run/ReviewDone';
 import { counted } from './surface/plural';
 import { skippedRowText, SkippedUploads } from './SkippedList';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
@@ -37,12 +37,9 @@ describe('SkippedUploads', () => {
     });
 });
 
-describe('the done card', () => {
+describe('the done summary', () => {
     const done = (extra: Partial<Extract<ReviewRun['state'], { status: 'done' }>>) => (
-        <ReviewProgress
-            run={{ state: { status: 'done', rootId: 'docs', report: FIXTURE_REPORT, ...extra }, available: true, start: vi.fn(), answer: vi.fn(), rereviewAll: vi.fn(), stop: vi.fn(), dismiss: vi.fn() }}
-            labels={L} titleOf={(id) => id} onContinue={() => undefined}
-        />
+        <ReviewDone labels={L} state={{ status: 'done', rootId: 'docs', report: FIXTURE_REPORT, ...extra }} onContinue={() => undefined} onDismiss={() => undefined} />
     );
 
     it('lists the skipped uploads when the review reported any, and says nothing otherwise', () => {

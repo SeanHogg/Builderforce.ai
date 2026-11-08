@@ -62,10 +62,3 @@ export function patternMatrix(graph: Pick<KnowledgeGraph, 'nodes' | 'findings'>,
         anti, antiTotal: graph.findings.length,
     };
 }
-
-const SEVERITY_RANK = { error: 0, warn: 1, info: 2 } as const;
-
-/** The anti-patterns the drawer lists: worst severity first, then by id; capped. */
-export function topAntiPatterns(findings: readonly Finding[], limit = 15): Finding[] {
-    return [...findings].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || cmp(a.id, b.id)).slice(0, limit);
-}

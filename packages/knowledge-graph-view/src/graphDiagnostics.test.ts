@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { graphDiagnosticsText, truncationReasons, type GraphDiagnosticsInput } from './graphDiagnostics';
+import { graphDiagnostics, graphDiagnosticsText, truncationReasons, type GraphDiagnosticsInput } from './graphDiagnostics';
+import { splitLine } from './diagnosticSection';
 import { codeFixture, FIXTURE_REPORT } from './testing';
 import type { ReviewState } from './useReviewRun';
 
@@ -76,5 +77,39 @@ describe('graphDiagnosticsText', () => {
         expect(out).toContain('status: loading');
         expect(out.some((l) => l.startsWith('stats:'))).toBe(false);
         expect(out).toContain('lens: structure');
+    });
+});
+
+describe('graphDiagnostics (the one source of the text and of the Diagnostics tab)', () => {
+    it('builds the text from the same lines the groups hold: the title, every group in order, then the time', () => {
+        const d = graphDiagnostics(base());
+        expect(d.sections.map((s) => s.id)).toEqual(['graph', 'review']);
+        expect(d.takenAt).toBe('2026-11-03T00:00:00.000Z');
+        expect(d.text).toBe(['Knowledge graph diagnostics', ...d.sections.flatMap((s) => s.lines), 'time: 2026-11-03T00:00:00.000Z'].join('\n'));
+        expect(d.text).toBe(graphDiagnosticsText(base()));
+    });
+
+    it('sorts the lines into groups by what they are, not by an English prefix', () => {
+        const d = graphDiagnostics(base({ review: { status: 'done', rootId: 'docs', report: FIXTURE_REPORT } }));
+        const graph = d.sections.find((s) => s.id === 'graph')!.lines;
+        const review = d.sections.find((s) => s.id === 'review')!.lines;
+        expect(graph).toContain('status: ready');
+        expect(graph).toContain('lens: structure');
+        expect(review[0]).toBe('review: done');
+        expect(review.some((l) => l.startsWith('report: extracted=2'))).toBe(true);
+    });
+
+    it('marks the review group for attention when the review failed, and not otherwise', () => {
+        const failed: ReviewState = { status: 'error', message: 'boom', at: '2026-11-03T00:00:00.000Z' };
+        expect(graphDiagnostics(base({ review: failed })).sections.find((s) => s.id === 'review')!.attention).toBe(true);
+        expect(graphDiagnostics(base()).sections.find((s) => s.id === 'review')!.attention).toBe(false);
+    });
+});
+
+describe('splitLine', () => {
+    it('splits a key from its value at the first colon, and leaves a continuation line whole', () => {
+        expect(splitLine('stats: nodes=10 edges=4')).toEqual({ key: 'stats', value: 'nodes=10 edges=4' });
+        expect(splitLine('  replica failed: 503')).toEqual({ value: 'replica failed: 503' });
+        expect(splitLine('no colon here')).toEqual({ value: 'no colon here' });
     });
 });

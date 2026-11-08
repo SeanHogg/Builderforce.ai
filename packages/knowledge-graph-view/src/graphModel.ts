@@ -21,14 +21,55 @@ export interface VisibleGraph {
 export const byImportance = (a: KNode, b: KNode): number =>
     b.importance - a.importance || cmp(a.ref, b.ref);
 
-/** The top `max` nodes by importance plus every `keep` ref, and the edges between them. */
+/** What `focusGraph` keeps per graph: the top-`max` base (per `max`), and the per-ref indexes that let a kept ref be added cheaply. */
+interface FocusCache {
+    nodes: readonly KNode[];
+    bases: Map<number, { visible: VisibleGraph; refs: ReadonlySet<string> }>;
+    index: { byRef: Map<string, KNode>; incident: Map<string, KEdge[]> } | null;
+}
+const focusCaches = new WeakMap<readonly KEdge[], FocusCache>();
+
+function cacheOf(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): FocusCache {
+    const held = focusCaches.get(graph.edges);
+    if (held && held.nodes === graph.nodes) return held;
+    const fresh: FocusCache = { nodes: graph.nodes, bases: new Map(), index: null };
+    focusCaches.set(graph.edges, fresh);
+    return fresh;
+}
+
+/**
+ * The top `max` nodes by importance plus every `keep` ref, and the edges between them.
+ *
+ * The expensive part (sorting every node, filtering every edge) is the BASE: it depends only on the graph and `max`, so it
+ * is computed once and remembered. `keep` is a cheap add-on: when every kept ref is already in the base, the base itself comes
+ * back (the very same arrays, so everything keyed on them stays put when the selection moves inside it); otherwise only the
+ * missing nodes and the edges touching them are added, from an incident index built once per graph.
+ */
 export function focusGraph(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>, max: number, keep: readonly string[] = []): VisibleGraph {
     if (graph.nodes.length <= max) return { nodes: graph.nodes, edges: graph.edges };
-    const wanted = new Set(keep);
-    const picked = [...graph.nodes].sort(byImportance).slice(0, max);
-    const refs = new Set(picked.map((n) => n.ref));
-    for (const n of graph.nodes) if (wanted.has(n.ref) && !refs.has(n.ref)) { picked.push(n); refs.add(n.ref); }
-    return { nodes: picked, edges: graph.edges.filter((e) => refs.has(e.from) && refs.has(e.to)) };
+    const cache = cacheOf(graph);
+    let base = cache.bases.get(max);
+    if (!base) {
+        const nodes = [...graph.nodes].sort(byImportance).slice(0, max);
+        const refs = new Set<string>(nodes.map((n) => n.ref));
+        base = { visible: { nodes, edges: graph.edges.filter((e) => refs.has(e.from) && refs.has(e.to)) }, refs };
+        cache.bases.set(max, base);
+    }
+    const missing = [...new Set(keep)].filter((r) => !base.refs.has(r));
+    if (missing.length === 0) return base.visible;
+
+    if (!cache.index) {
+        const incident = new Map<string, KEdge[]>();
+        const link = (ref: string, e: KEdge): void => { const l = incident.get(ref); if (l) l.push(e); else incident.set(ref, [e]); };
+        for (const e of graph.edges) { link(e.from, e); if (e.to !== e.from) link(e.to, e); }
+        cache.index = { byRef: new Map(graph.nodes.map((n) => [n.ref as string, n] as const)), incident };
+    }
+    const { byRef, incident } = cache.index;
+    const extra = missing.flatMap((r) => byRef.get(r) ?? []);
+    const refs = new Set<string>([...base.refs, ...extra.map((n) => n.ref)]);
+    const added = new Set<KEdge>();
+    for (const n of extra) for (const e of incident.get(n.ref) ?? []) if (refs.has(e.from) && refs.has(e.to)) added.add(e);
+    return { nodes: [...base.visible.nodes, ...extra], edges: [...base.visible.edges, ...added] };
 }
 
 /** A lens's reading: its edges only; nodes keep their place (dimmed by `nodeStyle`). */

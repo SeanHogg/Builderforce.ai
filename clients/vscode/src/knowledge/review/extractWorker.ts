@@ -7,7 +7,7 @@
  */
 
 import { parentPort } from "node:worker_threads";
-import { reasonOf } from "@seanhogg/builderforce-memory/knowledge";
+import { ExtractFailed, reasonOf } from "@seanhogg/builderforce-memory/knowledge";
 import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
 
 const port = parentPort;
@@ -16,7 +16,8 @@ if (!port) throw new Error("knowledgeExtractWorker must run in a worker thread")
 port.on("message", (message: { id: number; job: HostExtractJob }) => {
   handleExtractJob(message.job).then(
     (result) => port.postMessage({ id: message.id, result }),
-    (error: unknown) => port.postMessage({ id: message.id, error: reasonOf(error) }),
+    // `final` only for a parser or extractor error: every other rejection (a read, a lock, a timeout) is transient to the review.
+    (error: unknown) => port.postMessage({ id: message.id, error: reasonOf(error), ...(error instanceof ExtractFailed || (error as { name?: unknown } | null)?.name === "ExtractFailed" ? { final: true } : {}) }),
   );
 });
 

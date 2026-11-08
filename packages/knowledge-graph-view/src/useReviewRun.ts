@@ -4,7 +4,9 @@
  *   idle → planning → confirm(plan) ─Confirm→ running(progress…) → done(report)
  *                             ├─Cancel──→ cancelled (nothing written)
  *                             └─Re-review all→ a NEW review with `force: true`
- *   running ─Stop→ aborted (what was written stays)
+ *   running ─Stop→ stopping ─the host settles→ aborted (what was written stays) | done | error
+ *   stopping ─Force stop→ aborted at once (the stream is let go; the host's own record settles on its own)
+ *   start(req, { autoConfirm }) answers the plan yes as it lands (Resume); the Reviews panel is where all of this is driven
  *
  * `start` calls `source.review` SYNCHRONOUSLY, so a host picker that needs the user's
  * gesture opens inside the click that started it.
@@ -17,9 +19,13 @@ import type { KnowledgeGraphSource, ReviewEstimate, ReviewRequest, SkippedFile }
 
 export type ReviewState =
     | { status: 'idle' }
-    | { status: 'planning' }
-    | { status: 'confirm'; plan: ReviewPlan; estimate?: ReviewEstimate }
+    /** `progress`: the walk's own count, when the host reports one before the plan. */
+    | { status: 'planning'; progress?: ReviewProgress }
+    /** `force`: this plan ignores the manifest (*Everything again*), so every file is planned as changed. */
+    | { status: 'confirm'; plan: ReviewPlan; estimate?: ReviewEstimate; force?: boolean }
     | { status: 'running'; progress?: ReviewProgress }
+    /** Stop was pressed (at `stoppedAt`, epoch ms); the host is still finishing the file in hand. The real terminal state lands when it settles. */
+    | { status: 'stopping'; progress?: ReviewProgress; stoppedAt: number }
     | { status: 'done'; rootId: string; report: ReviewReport; skipped?: SkippedFile[] }
     | { status: 'cancelled' }
     | { status: 'aborted' }
@@ -37,20 +43,29 @@ export interface ReviewErrorState extends ReviewFailureDetail {
     lastPhase?: ReviewProgress['phase'];
 }
 
+export interface StartOptions {
+    autoConfirm?: boolean;
+}
+
 export interface ReviewRun {
     state: ReviewState;
     available: boolean;
-    start(req: ReviewRequest): void;
+    /** `autoConfirm`: answer the plan *yes* as soon as it lands (Resume: the person already chose). */
+    start(req: ReviewRequest, opts?: StartOptions): void;
     /** The confirm chip's answer. */
     answer(ok: boolean): void;
     /** Cancel this plan and plan again ignoring the manifest. */
     rereviewAll(): void;
     stop(): void;
+    /** Lets go of a review the host will not confirm stopped: the view is `aborted` at once (what was written stays) and the stream is detached; the host's own record settles on its own. */
+    forceStop(): void;
     dismiss(): void;
     /** The phase last reported by the run, for diagnostics. Ref-backed: reading it never re-renders. */
     readonly lastPhase?: ReviewProgress['phase'];
     /** The root the run is reviewing, once the plan or the request names it. Ref-backed like `lastPhase`. */
     readonly rootId?: string;
+    /** The plan's judge budget (files), once a plan landed. Ref-backed like `lastPhase`. */
+    readonly judgeFiles?: number;
 }
 
 export function useReviewRun(
@@ -62,6 +77,7 @@ export function useReviewRun(
     const running = useRef<AbortController | null>(null);
     const planRoot = useRef<string | undefined>(undefined);
     const lastPhase = useRef<ReviewProgress['phase'] | undefined>(undefined);
+    const judgeFiles = useRef<number | undefined>(undefined);
     const lastReq = useRef<ReviewRequest>({});
     const onDoneRef = useRef(onDone);
     onDoneRef.current = onDone;
@@ -72,7 +88,7 @@ export function useReviewRun(
         resolve?.(ok);
     };
 
-    const start = useCallback((req: ReviewRequest) => {
+    const start = useCallback((req: ReviewRequest, opts: StartOptions = {}) => {
         if (!source.review) return;
         settle(false);
         running.current?.abort();
@@ -83,13 +99,27 @@ export function useReviewRun(
         lastPhase.current = undefined;
         setState({ status: 'planning' });
         const live = () => running.current === ctl;
+        const force = req.force === true;
+        // The plan state, carrying whether it ignores the manifest (so the panel keeps "Everything again" chosen).
+        const confirming = (plan: ReviewPlan, estimate?: ReviewEstimate): ReviewState => ({
+            status: 'confirm', plan, ...(estimate ? { estimate } : {}), ...(force ? { force } : {}),
+        });
+        let autoAnswered = false;
         const iterable = source.review(req, {
             signal: ctl.signal,
             confirm: (plan, estimate) => new Promise<boolean>((resolve) => {
                 if (!live()) { resolve(false); return; }
-                pending.current = resolve;
                 planRoot.current = plan.rootId;
-                setState(estimate ? { status: 'confirm', plan, estimate } : { status: 'confirm', plan });
+                judgeFiles.current = plan.judgeFiles;
+                if (opts.autoConfirm) {
+                    // Resume: the person chose already; no confirm state is ever shown.
+                    autoAnswered = true;
+                    setState({ status: 'running' });
+                    resolve(true);
+                    return;
+                }
+                pending.current = resolve;
+                setState(confirming(plan, estimate));
             }),
         });
         void (async () => {
@@ -98,10 +128,11 @@ export function useReviewRun(
                     if (!live()) return;
                     if (ev.type === 'plan') {
                         planRoot.current = ev.plan.rootId;
-                        setState(ev.estimate ? { status: 'confirm', plan: ev.plan, estimate: ev.estimate } : { status: 'confirm', plan: ev.plan });
+                        judgeFiles.current = ev.plan.judgeFiles;
+                        if (!autoAnswered && !opts.autoConfirm) setState(confirming(ev.plan, ev.estimate));
                     } else if (ev.type === 'progress') {
                         lastPhase.current = ev.progress.phase;
-                        setState({ status: 'running', progress: ev.progress });
+                        setState((cur) => (cur.status === 'stopping' ? { ...cur, progress: ev.progress } : cur.status === 'planning' && ev.progress.phase === 'plan' ? { status: 'planning', progress: ev.progress } : { status: 'running', progress: ev.progress }));
                     } else if (ev.type === 'done') {
                         setState(ev.report.aborted ? { status: 'aborted' } : { status: 'done', rootId: ev.rootId, report: ev.report, ...(ev.skipped?.length ? { skipped: ev.skipped } : {}) });
                         onDoneRef.current(ev.rootId, ev.report);
@@ -109,6 +140,8 @@ export function useReviewRun(
                         setState({ status: 'cancelled' });
                     }
                 }
+                // The host closed the stream without a terminal event after Stop: the run is over.
+                if (live() && ctl.signal.aborted) setState((cur) => (cur.status === 'stopping' ? { status: 'aborted' } : cur));
             } catch (err) {
                 if (!live()) return;
                 if (ctl.signal.aborted) { setState({ status: 'aborted' }); return; }
@@ -138,6 +171,14 @@ export function useReviewRun(
     const stop = useCallback(() => {
         settle(false);
         running.current?.abort();
+        // Not over yet: the host settles when the file in hand is done; the iterable lands the real state.
+        setState((cur) => (cur.status === 'running' ? { status: 'stopping', stoppedAt: Date.now(), ...(cur.progress ? { progress: cur.progress } : {}) } : cur.status === 'stopping' ? cur : { status: 'aborted' }));
+    }, []);
+
+    const forceStop = useCallback(() => {
+        settle(false);
+        running.current?.abort();
+        running.current = null; // detached: nothing the stream says after this moves the state
         setState({ status: 'aborted' });
     }, []);
 
@@ -152,5 +193,5 @@ export function useReviewRun(
         running.current = null;
     }, []);
 
-    return { state, available: !!source.review, start, answer, rereviewAll, stop, dismiss, get lastPhase() { return lastPhase.current; }, get rootId() { return planRoot.current ?? lastReq.current.rootId; } };
+    return { state, available: !!source.review, start, answer, rereviewAll, stop, forceStop, dismiss, get lastPhase() { return lastPhase.current; }, get rootId() { return planRoot.current ?? lastReq.current.rootId; }, get judgeFiles() { return judgeFiles.current; } };
 }

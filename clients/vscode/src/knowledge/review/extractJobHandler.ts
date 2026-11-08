@@ -15,7 +15,7 @@ import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { reviewPacks, textDocument } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, extractJob, isBinaryText, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, reasonOf, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
 export const READ_TIMEOUT_MS = 5_000;
@@ -60,5 +60,14 @@ export async function handleExtractJob(job: HostExtractJob, readTimeoutMs: numbe
     const { readByPool: _unread, doc: _stale, ...base } = job;
     ready = { ...base, doc, hash: job.readFrom.hash } as ExtractJob;
   }
-  return extractJob(ready, reviewPacks(symbols ? { symbolsOf: () => symbols } : {}));
+  // Host setup (the packs, the symbol lookup) and a malformed job fail as plain errors: they say nothing about the file, so they are transient.
+  const packs = reviewPacks(symbols ? { symbolsOf: () => symbols } : {});
+  if (!ready.doc) throw new Error(`extract job for ${ready.path} carries no document (readByPool needs a reading worker)`);
+  // The read above fails TRANSIENTLY too (a lock, a timeout, a changed file). Only a throw from the parser or extractor itself is the PROVEN-final
+  // failure: it is marked, so the review records a terminal answer instead of retrying forever.
+  try {
+    return extractJob(ready, packs);
+  } catch (error) {
+    throw new ExtractFailed(reasonOf(error), { cause: error });
+  }
 }

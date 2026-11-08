@@ -22,10 +22,10 @@ function pickMore(name: RegExp) {
 describe('code audit visualizer', () => {
   it('shows real duplicate ranges and opens the selected source location', () => {
     const open = vi.fn(); render(<CodeAuditVisualizer analysis={{ current: baseline }} openSource={open} />);
-    // Before / After live in the header's overflow menu; with no baseline "Before" is disabled.
-    fireEvent.click(screen.getByRole('button', { name: L.surface.header.moreActions }));
-    expect(screen.getByRole('menuitem', { name: /codeAudit\.before/ })).toBeDisabled();
-    fireEvent.keyDown(screen.getByRole('menu', { name: L.surface.header.moreActions }), { key: 'Escape' });
+    // Before / After live in the Reviews panel's Server tab; with no baseline "Before" is disabled.
+    fireEvent.click(screen.getByTestId('kg-status-chip'));
+    expect(screen.getByRole('radio', { name: /codeAudit\.before/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: L.close }));
     // The lens tabs are gone: the Duplicates lens is reachable in its report's own words from the More questions menu.
     pickMore(/codeAudit\.duplicates/);
     // Findings are lazy: open the group to see its rows (and where each was seen).

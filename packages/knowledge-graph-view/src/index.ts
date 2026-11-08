@@ -15,6 +15,7 @@ export { QUESTIONS, type QuestionId } from './surface/questions';
 export type { CameraDef, PanelDef, SceneProps, PanelProps, SurfaceEnv } from './surface/registry';
 export { LENSES, LENS_ORDER, lensesFor, lensApplies, lensFindings, type LensDef } from './lenses';
 export { ReviewFailure, type ReviewFailureDetail } from './reviewFailure';
+export { ABORT_GRACE_MS, STUCK_AFTER_MS } from './reviewTimings';
 export { FIX_CHECK_IDS, HOST_CHECK_IDS, FixStepError, type FixCheckId, type FixCheckResult, type FixCheckUpdate, type FixCheckStatus, type FixPreview, type FixStepRequest, type AppliedFix, type RecordedRun, type RecordedValue } from './fixPorts';
 export { findingDetail, findingRequest, findingBatchRequest, findingTitle } from './findingText';
 export { edgeKindLabel, kindLabel, packLabel } from './names';

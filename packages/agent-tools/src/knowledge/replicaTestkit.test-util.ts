@@ -76,12 +76,16 @@ export function fakeServer() {
         rejectOver: Infinity,
         /** Errors thrown by the next `sync` calls, in order, before anything is applied. */
         failSync: [] as Array<() => unknown>,
+        /** Pairs a client DECLARED entry-less (an explicit empty body), as `pairOf`: they satisfy the by-pair body check but are never a have-answer. */
+        entryless: new Set<string>(),
         /** key → digest: the root's leaves on the server. */
         leaves: new Map<string, string>(),
         /** Rows written through the single writer (`writeRows`), not the pack. */
         sideWrites: [] as Array<{ facts: StoredFact[]; relations: StoredRelation[] }>,
     };
     const log: Logged[] = [];
+    const pairOf = (hash: string, ref: string): string => `${hash}|${ref}`;
+    const entryFor = (hash: string, ref: string): boolean => s.bodies.get(hash)?.some((e) => e.sourceRef === ref) === true;
     const staged = new Map<string, Uint8Array[]>();
     // The manifest is the LEAVES this root synced (rule 4b), exactly as the API keeps them — never the shared rows.
     const tree = () => manifestTree([...s.leaves].map(([key, digest]) => ({ key, digest })));
@@ -110,9 +114,18 @@ export function fakeServer() {
                 ...(pack.deletes?.files ?? []).map((id) => `f:${id}`), ...(pack.deletes?.facts ?? []).map(factLeafKey), ...(pack.deletes?.relations ?? []).map(relationLeafKey),
             ];
             if (tomb.some((k) => !s.leaves.has(k))) throw fail(422, 'not_owned');
+            // As the server's verifyBodies: a file whose body the pack leaves out must be held BY PAIR (an entry, or declared entry-less).
+            const shipped = new Set((pack.extracted ?? []).map((x) => x.hash));
+            const missing = new Set((pack.files ?? []).filter((f) => !shipped.has(f.hash) && !entryFor(f.hash, srcRef(ROOT, f.path)) && !s.entryless.has(pairOf(f.hash, srcRef(ROOT, f.path)))).map((f) => f.hash));
+            if (missing.size > 0) throw fail(409, 'extracted_missing', { hashes: [...missing] });
+            const savedEntryless = new Set(s.entryless);
             const saved = { files: new Map(s.files), facts: new Map(s.facts), relations: new Map(s.relations), leaves: new Map(s.leaves), bodies: new Map(s.bodies) };
             for (const x of pack.extracted ?? []) {
-                s.bodies.set(x.hash, x.kind === 'full' ? x.entries : applyEntryDiffs(s.bodies.get(x.prior) ?? [], x.entries));
+                // As the real server: the stored body is the UNION by sourceRef of what is held and what arrived (an empty arrival erases nothing).
+                const arrival = x.kind === 'full' ? x.entries : applyEntryDiffs(s.bodies.get(x.prior) ?? [], x.entries);
+                const arrived = new Set(arrival.map((e) => e.sourceRef));
+                s.bodies.set(x.hash, [...(s.bodies.get(x.hash) ?? []).filter((e) => !arrived.has(e.sourceRef)), ...arrival]);
+                if (x.kind === 'full' && x.entries.length === 0) for (const f of pack.files ?? []) if (f.hash === x.hash) s.entryless.add(pairOf(x.hash, srcRef(ROOT, f.path)));
             }
             for (const f of pack.files ?? []) { s.files.set(f.path, f.hash); s.leaves.set(fileLeafKey(f.path, f.hash), f.hash); }
             for (const f of pack.facts ?? []) { s.facts.set(f.key, f); s.leaves.set(factLeafKey(f.key), factDigest(f)); }
@@ -123,7 +136,7 @@ export function fakeServer() {
             for (const k of tomb) s.leaves.delete(k);
             if (pack.targetDigest !== ZERO_DIGEST && tree().root !== pack.targetDigest) {
                 // A transaction: nothing the pack did is kept.
-                s.files = saved.files; s.facts = saved.facts; s.relations = saved.relations; s.leaves = saved.leaves; s.bodies = saved.bodies;
+                s.files = saved.files; s.facts = saved.facts; s.relations = saved.relations; s.leaves = saved.leaves; s.bodies = saved.bodies; s.entryless = savedEntryless;
                 throw fail(409, 'digest_mismatch');
             }
             s.generation += 1;
@@ -131,7 +144,7 @@ export function fakeServer() {
         },
         syncManifest: async () => { log.push({ kind: 'manifest' }); const t = tree(); return { generation: s.generation, digest: t.root, buckets: t.buckets }; },
         syncLeaves: async (_r, ids) => { log.push({ kind: 'leaves' }); const t = tree(); return { generation: s.generation, leaves: ids.flatMap((b) => t.leaves.get(b) ?? []) }; },
-        syncHave: async (_r, pairs) => { log.push({ kind: 'have' }); return pairs.map((p) => s.bodies.has(p.hash)); },
+        syncHave: async (_r, pairs) => { log.push({ kind: 'have' }); return pairs.map((p) => entryFor(p.hash, p.sourceRef)); },
         writeRows: async (_r, rows) => {
             s.sideWrites.push({ facts: [...rows.facts], relations: [...rows.relations] });
             for (const f of rows.facts) s.facts.set(f.key, f);

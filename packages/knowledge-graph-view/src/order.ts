@@ -3,3 +3,9 @@
 export const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 export const round = (n: number): number => Math.round(n * 1e4) / 1e4;
+
+/** A number the models can trust: NaN and infinities count as 0. */
+export const finiteImportance = (value: number): number => (Number.isFinite(value) ? value : 0);
+
+/** A node's importance, with a missing or NaN value coerced to 0: the ONE reading every sort and size uses. */
+export const importanceOf = (n: { importance: number }): number => finiteImportance(n.importance);

@@ -3,7 +3,8 @@
  * 4a and 4b):
  *
  *   knowledge_extracted_index  hash → { bundle_key, byte_offset, byte_length, source_refs }: where a body lives in a
- *                              content-addressed bundle object, and which sources its entries name
+ *                              content-addressed bundle object, and which sources its entries name (plus, as `entryless:<ref>`,
+ *                              the sources a client declared carry NO extracted output, e.g. a binary file: held, never "have")
  *   knowledge_sources          the current sources of a root, one row each (not one R2 object each). A row with hash ''
  *                              is a REMOVAL MARKER: it hides a legacy per-source object and is swept once that is gone
  *   knowledge_sync_leaves      the leaf digests of the rows a root synced, as the client computed them (leaves + buckets:
@@ -27,12 +28,16 @@ import { KnowledgeSyncError, SYNC_LOCK_RETRY_SECONDS, SYNC_LOCK_TIMEOUT } from '
 
 export type { BucketsPort, LeafRow, LeavesPort } from './knowledgeLedgerLeaves';
 
+/** Marks a `source_refs` item as a source with no entry (see {@link ExtractedLoc}); real refs start `src:`, so it cannot collide. */
+export const ENTRYLESS_PREFIX = 'entryless:';
+export const entrylessRef = (ref: string): string => `${ENTRYLESS_PREFIX}${ref}`;
+
 export interface ExtractedLoc {
   hash: string;
   bundleKey: string;
   byteOffset: number;
   byteLength: number;
-  /** The `sourceRef` of each entry of the stored body. */
+  /** The `sourceRef` of each entry of the stored body, and `entryless:<ref>` for each source declared to have none (see {@link entrylessRef}). */
   sourceRefs: string[];
 }
 
@@ -51,8 +56,11 @@ export interface SourceMarker { rootId: string; sourceId: string }
 export interface ExtractedIndexPort {
   /** Where each of `hashes` lives; a hash with no row is absent. ONE query. */
   locate(hashes: readonly string[]): Promise<ExtractedLoc[]>;
-  /** Which of `pairs` (by position) the stored body of `hash` has an entry for `sourceRef`. ONE indexed query (`source_refs` is on the row). */
-  holds(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>): Promise<Set<number>>;
+  /**
+   * Which of `pairs` (by position) the stored body of `hash` has an ENTRY for `sourceRef`. ONE indexed query (`source_refs` is on the row).
+   * With `entryless`, a source declared to carry no extracted output also counts (`verifyBodies`); a have-answer never does.
+   */
+  holds(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>, opts?: { entryless?: boolean }): Promise<Set<number>>;
   /**
    * Records locations. With `expected` (hash → the bundle key the caller's merge was built from, null = no row), a row
    * is written only if the hash still names that key; the number written is returned, and fewer than `rows.length`
@@ -129,12 +137,13 @@ export function drizzleLedger(db: Db, tenantId: number, projectId: number): Know
         }));
       },
 
-      async holds(pairs) {
+      async holds(pairs, opts) {
         if (pairs.length === 0) return new Set();
         const payload = pairs.map((p, i) => ({ i, hash: p.hash, ref: p.sourceRef }));
         const rows = rowsOf<{ i: number }>(await db.execute(sql`
           SELECT p.i FROM jsonb_to_recordset(${json(payload)}::jsonb) AS p(i integer, hash text, ref text)
-          JOIN knowledge_extracted_index x ON x.tenant_id = ${tenantId} AND x.project_id = ${projectId} AND x.hash = p.hash AND p.ref = ANY (x.source_refs)`));
+          JOIN knowledge_extracted_index x ON x.tenant_id = ${tenantId} AND x.project_id = ${projectId} AND x.hash = p.hash
+              AND (p.ref = ANY (x.source_refs) OR (${opts?.entryless === true}::boolean AND (${ENTRYLESS_PREFIX}::text || p.ref) = ANY (x.source_refs)))`));
         return new Set(rows.map((r) => r.i));
       },
 

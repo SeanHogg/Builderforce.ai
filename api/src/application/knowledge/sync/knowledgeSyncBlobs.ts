@@ -66,7 +66,7 @@ export function r2KnowledgeSync(
     sources: (rootId, over) => listRootSources(env.UPLOADS, over ?? ledger, tenantId, projectId, rootId),
 
     // One indexed query, no object probe: the sweep is the only deleter and it deletes only bundles no index row names.
-    heldEntries: (pairs, over) => (over ?? ledger).index.holds(pairs),
+    heldEntries: (pairs, over, opts) => (over ?? ledger).index.holds(pairs, opts),
 
     async putBundle(bundle: Bundle) {
       await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });

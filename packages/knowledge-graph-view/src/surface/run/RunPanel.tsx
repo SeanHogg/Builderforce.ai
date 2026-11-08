@@ -1,79 +1,102 @@
 /**
- * The Run drawer (PRD 41 A8): a review as a run you can watch. The latest run's phase timeline, one
- * live lane per worker, the step feed, the failures with Retry, the replica row and Stop; below them
- * the root's past runs. Opening a past run shows it, frozen, in this same panel.
+ * The Reviews panel (PRD 41 A8): the ONE place a review is started, watched, stopped and looked back on. A header (the live percent as a ring, one status line),
+ * four tabs - Review, Runs, Server, Diagnostics - a body that scrolls on its own, and a footer OUTSIDE that scroller with the one action for the state. It composes;
+ * each tab is its own file. The panel is a flex column that fills its host panel's body (`fill`), so the footer stays put at 360px as it does wide.
  *
- * The data is the root's (`useReviewRunRecord`, read once and handed down); this drawer fetches nothing.
- * Retry is a normal review request (the host owes the failed files a review again, then the usual plan and
- * confirm), so it is offered only on the root's latest run, once it has ended, and never while a review is going.
+ * Opening the panel with nothing planned counts the files at once (free and local), so the plan is ready when it is read. Closing it while a plan awaits an
+ * answer cancels it (`useReviewsPanel` does that), and nothing is written. Closing it never stops a review that is running.
  */
 
-import { fillTemplate } from '../../labels';
-import { reviewBusy } from '../../ReviewLauncher';
-import { button } from '../../styles';
+import { useEffect, useId, useState } from 'react';
+import { cssVar } from '../../scene/themeColors';
+import type { ReviewRequest } from '../../types';
 import type { PanelProps } from '../registry';
-import { SyncReplica } from '../drawers/SyncReplica';
-import { Section } from '../drawers/ui';
-import { TYPE } from '../ui/type';
-import { RunFailures } from './RunFailures';
-import { RunHistory } from './RunHistory';
-import { RunLanes } from './RunLanes';
-import { RunSlowest } from './RunSlowest';
-import { RunSteps } from './RunSteps';
-import { RunTimeline } from './RunTimeline';
-import { kindKey, outcomeKey, runDurationMs, spanText, whenText } from './runModel';
+import { syncGap } from '../drawers/syncModel';
+import { syncPill } from '../syncPill';
+import { CopyDiagnostics } from './CopyDiagnostics';
+import { DiagnosticsTab } from './DiagnosticsTab';
+import { ReviewsPanelFooter } from './ReviewsPanelFooter';
+import { ReviewsPanelHeader } from './ReviewsPanelHeader';
+import { ReviewsTabs, tabId } from './ReviewsTabs';
+import { ReviewTab } from './ReviewTab';
+import { stoppedLeft } from './ReviewStopped';
+import { RunsTab } from './RunsTab';
+import { ServerTab } from './ServerTab';
+import type { RunPanelData } from './useReviewRunRecord';
+import type { ReviewsTab } from './useReviewsTab';
 
-export function RunPanel({ labels, source, runs, sync }: PanelProps) {
-    const t = labels.surface.run;
-    const port = source?.runs;
-    if (!port || !runs) return null;
+export function RunPanel(props: PanelProps) {
+    return props.runs ? <ReviewsPanelBody {...props} runs={props.runs} /> : null;
+}
+
+function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId, rootTitle, diagnostics, diagnosticsText, lastReviewedAt, revision, onCompose, onResendSkipped, surface }: PanelProps & { runs: RunPanelData }) {
     const { read, review } = runs;
-    const frozen = read.opened !== null;
-    const status = review.state.status;
-    const shown = read.opened ?? read.live;
-    const running = !!shown && !frozen && shown.endedAt === undefined;
-    // A run that ended says where the queue stood then; one underway shows the queue now.
-    const replica = shown ? (running ? sync?.replica : shown.replica) : undefined;
-    // Retry only the latest run's failures, once it has ended, while no review is going.
-    const latest = !frozen || read.history.runs[0]?.id === shown?.id;
-    const canRetry = !!shown && latest && shown.endedAt !== undefined && !reviewBusy(status) && !!source?.review;
+    const state = review.state;
+    const live = read.live;
+    const port = source?.runs;
+    const panelId = useId();
+    const [localTab, setLocalTab] = useState<ReviewsTab>('review');
+    // A host that cannot review (it only keeps a baseline) has nothing to start: its panel opens on the Server tab, where the revision is.
+    const asked = reviews?.tab ?? localTab;
+    const tab: ReviewsTab = !review.available && asked === 'review' ? 'server' : asked;
+    const setTab = reviews?.setTab ?? setLocalTab;
 
-    const stop = () => {
-        // The view's own review stops through its state machine; a run the host reports on its own by its id.
-        if (status === 'running' || status === 'planning') review.stop();
-        else if (shown) void port.stop(shown.id).catch(() => undefined);
-    };
-    const retry = (paths: string[]) => {
-        if (!shown) return;
-        review.start({ rootId: shown.root, retry: paths, ...(shown.kind === 'seed' ? { seed: true } : {}) });
-    };
+    // ONE source of "running": the chip's own reading (this view's review, or the run record of a review the host runs on its own).
+    const pill = syncPill({ labels, review: state, stale: false, refreshFailed: false, sync: sync ?? null, lastReviewedAt, run: live });
+    const hostRunning = pill.kind === 'running' && state.status !== 'running';
+    // Stop on a review the view does not own: remembered here, until the run record ends.
+    const [hostStop, setHostStop] = useState<{ runId: string; at: number } | null>(null);
+    const hostStoppingSince = hostStop && live && live.id === hostStop.runId && live.endedAt === undefined ? hostStop.at : undefined;
+    const stoppingSince = state.status === 'stopping' ? state.stoppedAt : hostStoppingSince;
+    const running = state.status === 'running' || hostRunning;
+
+    const canStart = review.available && !!rootId;
+    // Opening with nothing planned counts the files now. Once, on open: later states are the person's to move.
+    useEffect(() => {
+        if (canStart && !hostRunning && (state.status === 'idle' || state.status === 'cancelled')) review.start({ rootId: rootId! });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const request: ReviewRequest = rootId ? { rootId } : { pick: true };
+    const stopHostRun = () => { if (live && port) { setHostStop({ runId: live.id, at: Date.now() }); void port.stop(live.id).catch(() => undefined); } };
+    // Force stop: this view's review is let go at once (its state becomes stopped); a host-run one can only be asked again.
+    const forceStop = () => { if (state.status === 'stopping') review.forceStop(); if (live && port) void port.stop(live.id).catch(() => undefined); };
+    const left = state.status === 'aborted' && live?.endedAt !== undefined ? stoppedLeft(live) : undefined;
+    const notStored = syncGap(sync).missing;
+    const text = diagnostics ? () => diagnostics().text : diagnosticsText;
 
     return (
-        <div data-testid="kg-run" style={{ display: 'grid', gap: 16 }}>
-            {shown && (
-                <>
-                    <Section title={fillTemplate(t.headline, { kind: t.kinds[kindKey(shown.kind)], outcome: t.outcomes[outcomeKey(shown)] })}>
-                        <p style={{ ...TYPE.bodyMuted, margin: 0 }}>
-                            {fillTemplate(t.startedAt, { time: whenText(shown.startedAt) })}{' · '}{fillTemplate(t.duration, { time: spanText(labels, runDurationMs(shown)) })}
-                        </p>
-                        {shown.poolDown && <p role="status" data-testid="kg-run-pool-down" style={{ ...TYPE.meta, margin: 0 }}>{fillTemplate(t.poolDown, { reason: shown.poolDown })}</p>}
-                        {frozen && (
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span style={TYPE.meta}>{fillTemplate(t.frozenNote, { started: whenText(shown.startedAt) })}</span>
-                                <button type="button" style={button} onClick={read.close}>{t.backToLive}</button>
-                            </div>
-                        )}
-                        {running && <div><button type="button" style={button} onClick={stop}>{labels.reviewStop}</button></div>}
-                    </Section>
-                    <RunTimeline run={shown} labels={labels} />
-                    <RunLanes run={shown} labels={labels} />
-                    <RunSlowest run={shown} labels={labels} />
-                    <RunSteps key={shown.id} run={shown} labels={labels} />
-                    <RunFailures run={shown} labels={labels} onRetry={source?.review ? retry : undefined} canRetry={canRetry} />
-                    {replica && <SyncReplica replica={replica} labels={labels} />}
-                </>
+        <div data-testid="kg-run" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: cssVar('text') }}>
+            <div style={{ flex: 'none', display: 'grid', gap: 12, padding: '16px 16px 0' }}>
+                <ReviewsPanelHeader labels={labels} pill={pill} run={live} lastReviewedAt={lastReviewedAt} />
+                <ReviewsTabs
+                    labels={labels} tab={tab} onTab={setTab} panelId={panelId}
+                    badges={{ runs: { count: read.history.runs.length }, server: { count: notStored, tone: 'cycle' } }}
+                />
+            </div>
+            <div role="tabpanel" id={panelId} aria-labelledby={tabId(panelId, tab)} data-testid="kg-reviews-body" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16, display: 'grid', gap: 16, alignContent: 'start' }}>
+                {tab === 'review' && (
+                    <ReviewTab
+                        labels={labels} review={review} live={live} hostRunning={hostRunning} hostStoppingSince={hostStoppingSince} history={read.history.runs} queued={sync?.replica?.dirty}
+                        root={rootTitle ?? rootId ?? ''} onDetails={(id) => { setTab('runs'); read.open(id); }} onOpenRun={(id) => { setTab('runs'); read.open(id); }}
+                    />
+                )}
+                {tab === 'runs' && <RunsTab labels={labels} source={source} read={read} review={review} diagnosticsText={text} replica={sync?.replica} />}
+                {tab === 'server' && <ServerTab
+                        labels={labels} sync={sync} revision={revision} onDiagnose={() => setTab('diagnostics')}
+                        more={{ source, history, lastReviewedAt, onCompose, onResend: onResendSkipped, onOpenPanel: (id) => surface.openPanel(id) }}
+                    />}
+                {tab === 'diagnostics' && <DiagnosticsTab labels={labels} diagnostics={diagnostics} />}
+            </div>
+            {review.available && (
+                <ReviewsPanelFooter
+                    labels={labels} state={state} running={running} stoppingSince={stoppingSince} left={left}
+                    {...(tab === 'server' ? { extra: <CopyDiagnostics labels={labels} text={text} /> } : {})}
+                    onCountAndStart={() => review.start(request, { autoConfirm: true })} onStart={() => review.answer(true)}
+                    onStop={() => (hostRunning ? stopHostRun() : review.stop())} onForceStop={forceStop}
+                    onResume={() => review.start(request, { autoConfirm: true })} onAgain={() => review.start(request)}
+                />
             )}
-            <RunHistory history={read.history} labels={labels} shownId={shown?.id} onOpen={read.open} openFailed={read.openFailed} />
         </div>
     );
 }

@@ -49,6 +49,18 @@ describe('the Tower camera', () => {
         expect(feet).toEqual([...feet].sort((a, b) => a - b));
     });
 
+    it('lights an anti-pattern highlight: the offender in the violation tone, the partner in the partner tone, every other tower dimmed', () => {
+        const [offender, partner, ...rest] = model.stations;
+        expect(rest.length).toBeGreaterThan(0);
+        const c = draw('tower', { roles: new Map([[offender!.id, 'offender'], [partner!.id, 'partner']]) });
+        const paint = (el: Element) => `${el.getAttribute('fill')} ${el.getAttribute('stroke')}`;
+        const body = (id: string) => [...c.querySelectorAll('[data-station]')].find((el) => el.getAttribute('data-station') === id)!.querySelector('[data-tower-part="body"], [data-tower-part="shell"]')!;
+        expect(paint(body(offender!.id))).toContain('--kg-violation');
+        expect(body(offender!.id).getAttribute('opacity')).toBe('1');
+        expect(paint(body(partner!.id))).toContain('--kg-partner');
+        expect(body(rest[0]!.id).getAttribute('opacity')).toBe('0.3');
+    });
+
     it('puts a pin above its tower top', () => {
         const target = model.stations[0]!;
         const c = draw('tower', { pins: [{ stationId: target.id, count: 2 }] });

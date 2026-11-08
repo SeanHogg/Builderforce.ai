@@ -22,7 +22,7 @@ import { readLastSeen, workspaceKey, writeLastSeen } from "./knowledgeLastSeen";
 import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
-import { rootSyncStatus } from "./knowledgeSync";
+import { retryRootSync, rootSyncStatus } from "./knowledgeSync";
 import { rootSymbols, SymbolsGate } from "./knowledgeSymbols";
 import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
@@ -138,6 +138,7 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "pinpoint": return pinpointRoot(this.secrets, this.rootOf(call.rootId), call.image);
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
       case "syncStatus": return rootSyncStatus(this.secrets, this.rootOf(call.rootId));
+      case "retrySync": await retryRootSync(this.secrets, this.rootOf(call.rootId)); return null;
       case "applyFix": return this.applyFix(call.rootId, call.finding);
       case "runFixCheck": return this.fixes.check(call.rootId, this.rootOf(call.rootId).rootPath, call.check, call.finding);
       case "previewFix": return this.fixes.preview(call.rootId, this.rootOf(call.rootId).rootPath, call.finding);

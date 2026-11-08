@@ -241,30 +241,30 @@ describe('registries', () => {
         expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', 'tower', '3d', 'heat', 'sequence', 'list']);
     });
 
-    it('holds the seven drawers (the Run drawer sits after Sync, with no header button), and a toggle with no panel available draws nothing', () => {
-        expect(PANELS.map((p) => p.id)).toEqual(['sync', 'run', 'coverage', 'patterns', 'api', 'resolve', 'simulate']);
+    it('holds the six drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
+        expect(PANELS.map((p) => p.id)).toEqual(['run', 'coverage', 'patterns', 'api', 'resolve', 'simulate']);
         const { container } = render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={[]} />);
         expect(container.innerHTML).toBe('');
     });
 
-    it('the header shows Coverage, Patterns, API, Sync in that order; Resolve and Simulate have no button', () => {
+    it('the header shows Coverage, Patterns, API in that order; Resolve and Simulate have no button', () => {
         const all = PANELS.map((p) => ({ ...p, available: () => true }));
         render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={all} />);
         const names = within(screen.getByRole('group', { name: L.surface.panelsLabel })).getAllByRole('button').map((b) => b.textContent);
-        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelSync]);
+        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi]);
     });
 
     it('draws a button and a controlled drawer (with its subtitle) for each available panel row', () => {
         const Body = () => <p>panel body</p>;
         const panels: PanelDef[] = [
-            { id: 'sync', labelKey: 'viewList', component: Body, available: () => true },
+            { id: 'coverage', labelKey: 'viewList', component: Body, available: () => true },
             { id: 'hidden', labelKey: 'viewGraph', component: Body, available: () => false },
         ];
         function Harness() {
             const [panel, setPanel] = useState<string | null>(null);
             return (
                 <>
-                    <PanelToggle graph={graph} env={env} labels={L} panel={panel} onPanel={setPanel} panels={panels} ids={['sync', 'hidden']} />
+                    <PanelToggle graph={graph} env={env} labels={L} panel={panel} onPanel={setPanel} panels={panels} ids={['coverage', 'hidden']} />
                     <PanelDrawer graph={graph} env={env} labels={L} surface={{} as never} panel={panel} onPanel={setPanel} onShow={vi.fn()} panels={panels} />
                 </>
             );
@@ -274,7 +274,7 @@ describe('registries', () => {
         fireEvent.click(screen.getByRole('button', { name: L.viewList }));
         expect(screen.getByText('panel body')).toBeTruthy();
         expect(screen.getByRole('dialog')).toBeTruthy();
-        expect(screen.getByText(L.surface.drawerSubtitle.sync)).toBeTruthy();
+        expect(screen.getByText(L.surface.drawerSubtitle.coverage)).toBeTruthy();
         // Pressing the open panel's button closes the drawer again.
         fireEvent.click(screen.getByRole('button', { name: L.viewList }));
         expect(screen.queryByRole('dialog')).toBeNull();

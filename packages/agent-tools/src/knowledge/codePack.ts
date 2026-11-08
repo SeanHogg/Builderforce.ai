@@ -80,7 +80,6 @@ export function codeParser(symbolsOf: SymbolSource = extractSymbols): KnowledgeP
                 badges: {
                     [CODE_BADGES.language]: codeLanguageOf(path) ?? '',
                     [CODE_BADGES.symbols]: symbols.length,
-                    [CODE_BADGES.exports]: exported.length,
                     ...contentBadges(path, text, symbols),
                 },
             });

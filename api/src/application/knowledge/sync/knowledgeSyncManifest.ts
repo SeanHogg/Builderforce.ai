@@ -82,7 +82,8 @@ export async function bucketIdsOf(body: Uint8Array): Promise<{ rootId: string; b
 /**
  * POST have: a BFKP frame whose `stale` rows are the `(sourceRef, hash)` pairs asked about. The answer is a bitmap over
  * those rows in the codec's decoded order (sorted by `sourceRef`): bit i of byte i>>3 (least significant first) is 1 when
- * the stored body of that hash has an entry for that sourceRef — a hash held only under another root answers 0, so just
+ * the stored body of that hash has a real ENTRY for that sourceRef (a source declared entry-less never answers 1, so a body that
+ * is only "not extracted yet" is still asked for) — a hash held only under another root answers 0, so just
  * this root's entry is uploaded. ONE indexed query.
  */
 export async function haveBitmap(deps: Pick<ManifestDeps, 'sync'>, body: Uint8Array): Promise<Uint8Array> {

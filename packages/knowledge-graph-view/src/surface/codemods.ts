@@ -20,7 +20,7 @@ export const CODEMODS: readonly CodemodRow[] = [
     { kind: 'unused-export', labelKey: 'unusedExport', builtin: true },
     { kind: 'unused-file', labelKey: 'unusedFile', builtin: true },
     { kind: 'unused-dependency', labelKey: 'unusedDependency', builtin: false },
-    { kind: 'god-file', labelKey: 'splitByCommand', builtin: false },
+    { kind: 'god-module', labelKey: 'splitByCommand', builtin: false },
     { kind: 'clone-group', labelKey: 'extractClone', builtin: false },
 ];
 

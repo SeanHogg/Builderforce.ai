@@ -14,7 +14,8 @@ export type CountedWord =
     | 'sectionUnjudged' | 'fixBatch' | 'findingCollapsed' | 'topNodes' | 'modelCalls' | 'endpointsCapped' | 'commitsCapped'
     | 'moreChecks' | 'fileEndpoints' | 'filesPlotted' | 'applyV8' | 'applyV8Request' | 'entryPointsOmitted' | 'interchange'
     | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'moreStations' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'moreStops' | 'antiTip'
-    | 'replicaQueued' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep' | 'awaitingJudge';
+    | 'replicaQueued' | 'replicaAwaitingReview' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep' | 'awaitingJudge'
+    | 'link' | 'group' | 'kind' | 'antiPattern' | 'groupSelected' | 'previewFix' | 'applyFixes' | 'applyFailed';
 
 export interface MapLabels {
     /** `{files}`, `{layer}`. */
@@ -131,6 +132,7 @@ export const MAP_DEFAULTS: MapLabels = {
         fileTooLargeOne: '{count} file was too large to store.', fileTooLargeOther: '{count} files were too large to store.',
         fileNotStoredOne: '{count} file not stored', fileNotStoredOther: '{count} files not stored',
         replicaQueuedOne: '{count} change waiting to send', replicaQueuedOther: '{count} changes waiting to send',
+        replicaAwaitingReviewOne: '{count} file waits for a review', replicaAwaitingReviewOther: '{count} files wait for a review',
         replicaFailedOne: '{count} change could not be sent', replicaFailedOther: '{count} changes could not be sent',
         runFailureOne: '{count} file failed', runFailureOther: '{count} files failed',
         runRetryAllOne: 'Retry {count} file', runRetryAllOther: 'Retry all {count} files',
@@ -172,6 +174,14 @@ export const MAP_DEFAULTS: MapLabels = {
         commitRowAuthorOne: '{sha} · {author} · {count} file · {when}', commitRowAuthorOther: '{sha} · {author} · {count} files · {when}',
         moreStopsOne: '+{count} more stop', moreStopsOther: '+{count} more stops',
         antiTipOne: 'from {count} warning', antiTipOther: 'from {count} warnings',
+        linkOne: '{count} link', linkOther: '{count} links',
+        groupOne: '{count} group', groupOther: '{count} groups',
+        kindOne: '{count} kind', kindOther: '{count} kinds',
+        antiPatternOne: '{count} anti-pattern', antiPatternOther: '{count} anti-patterns',
+        groupSelectedOne: '{count} group selected', groupSelectedOther: '{count} groups selected',
+        previewFixOne: 'Preview {count} fix', previewFixOther: 'Preview {count} fixes',
+        applyFixesOne: 'Apply {count} fix', applyFixesOther: 'Apply {count} fixes',
+        applyFailedOne: '{count} fix could not be applied', applyFailedOther: '{count} fixes could not be applied',
     },
     heat: {
         description: 'Heat grid: {layers}, {components}. Select a cell for its details.',

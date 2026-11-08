@@ -10,7 +10,7 @@ import { stationOfRef, type StationModel } from './stations';
 
 /** Findings that need a model's judgement or a guess from names are heuristic. */
 const HEURISTIC_KINDS: ReadonlySet<string> = new Set([
-    'near-duplicate', 'possible-same', 'contradiction', 'unlayered', 'unpartitioned', 'pattern', 'anti-pattern',
+    'near-duplicate', 'possible-same', 'contradiction', 'unlayered', 'unpartitioned', 'pattern', 'anti-pattern', 'god-module',
 ]);
 const RUNTIME_KINDS: ReadonlySet<string> = new Set(['untested', 'coverage-gap', 'slow']);
 

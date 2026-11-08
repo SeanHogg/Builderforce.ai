@@ -255,6 +255,22 @@ export async function startReplicaPump(source: PumpSource): Promise<void> {
   return running;
 }
 
+/**
+ * Retry upload (the Reviews panel's Server tab): forgets the root's recorded failures and drains its queue now, through the pump's
+ * own entry (`startReplicaPump`), not on the live-edit schedule. The queue keeps what failed, so nothing is lost; a pump already
+ * running is left to finish (it is retrying already). Never throws. RETURNS ONCE THE PUMP HAS STARTED, never when it ends: an upload can outlast any request timeout, so the caller follows it through the sync status (the view polls it while the replica sends).
+ */
+export function retryReplica(source: PumpSource): void {
+  const held = entryOf(source.rootId, source.files);
+  if (held.timer) { clearTimeout(held.timer); held.timer = undefined; }
+  if (!held.running) {
+    const { paused: _paused, pausedStatus: _pausedStatus, waitingUntil: _waitingUntil, waitingFor: _waitingFor, ...rest } = held.state;
+    held.state = { ...rest, failed: [] };
+    for (const cb of [...listeners]) { try { cb(source.rootId, held.state); } catch { /* a listener never stops the pump */ } }
+  }
+  void startReplicaPump(source);
+}
+
 /** The person signed in again: every pump that paused on auth (401/403) resumes with its queue intact. */
 export async function resumeAuthPaused(): Promise<void> {
   await Promise.all([...entries.values()]

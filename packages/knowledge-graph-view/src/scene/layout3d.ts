@@ -1,6 +1,7 @@
 /**
  * The 3D layout — PURE and DETERMINISTIC (PRD 38 §4.6): equal input gives equal
- * coordinates, byte for byte, on every host.
+ * coordinates, byte for byte, on every host. The relaxation can run in chunks ({@link layoutTask}); chunking
+ * never changes the result.
  *
  *   partition → a horizontal plane (y). Planes are ordered by flow: a partition that
  *               mostly USES others sits above the ones it uses (presentation over
@@ -14,7 +15,10 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import { cmp, round } from '../order';
+import { cmp, importanceOf, round } from '../order';
+import { canonicalEdges } from './canonicalEdges';
+import { layoutSprings } from './layoutSprings';
+import { createRelaxation, type Relaxation } from './layoutRelax';
 
 export interface Layout3D {
     /** ref → [x, y, z] */
@@ -30,6 +34,9 @@ export interface LayoutOptions {
 }
 
 export const PLANE_GAP = 6;
+
+/** What a host draws when a layout failed: nothing placed. */
+export const EMPTY_LAYOUT_3D: Layout3D = { positions: new Map(), planes: [] };
 
 /**
  * A tower's height from the size channel's level (1 to 5): taller for worse. A node with no
@@ -93,22 +100,27 @@ export function planeOrder(nodes: readonly KNode[], edges: readonly KEdge[], exp
     });
 }
 
-export function layout3d(
+/** A layout in progress: call `step()` (one relaxation pass) until it returns true, then read `result()`. */
+export interface LayoutTask {
+    step(): boolean;
+    result(): Layout3D;
+}
+
+export function layoutTask(
     rootId: string,
     nodesIn: readonly KNode[],
     edgesIn: readonly KEdge[],
     opts: LayoutOptions = {},
-): Layout3D {
+): LayoutTask {
     const nodes = [...nodesIn].sort((a, b) => cmp(a.ref, b.ref));
-    const edges = [...edgesIn].sort((a, b) => cmp(a.from, b.from) || cmp(a.to, b.to) || cmp(a.kind, b.kind));
-    const order = planeOrder(nodes, edges, opts.partitionOrder);
+    const order = planeOrder(nodes, edgesIn, opts.partitionOrder);
     const planeY = new Map(order.map((p, i) => [p, round((order.length - 1 - i) * PLANE_GAP)] as const));
     const random = rng(hash32(rootId));
 
     // Areas: the node's area, else its partition plane as one area.
     const areaKey = (n: KNode): string => `${n.partition ?? NONE}\u0000${n.area ?? n.partition ?? NONE}`;
     const areaWeight = new Map<string, number>();
-    for (const n of nodes) areaWeight.set(areaKey(n), (areaWeight.get(areaKey(n)) ?? 0) + n.importance);
+    for (const n of nodes) areaWeight.set(areaKey(n), (areaWeight.get(areaKey(n)) ?? 0) + importanceOf(n));
     const byPlane = new Map<string, string[]>();
     for (const key of [...areaWeight.keys()].sort(cmp)) {
         const plane = key.slice(0, key.indexOf('\u0000'));
@@ -136,45 +148,43 @@ export function layout3d(
 
     const members = new Map<string, number[]>();
     nodes.forEach((n, i) => (members.get(areaKey(n)) ?? members.set(areaKey(n), []).get(areaKey(n))!).push(i));
-    const springs = edges
-        .map((e) => [index.get(e.from), index.get(e.to)] as const)
-        .filter((p): p is readonly [number, number] => p[0] !== undefined && p[1] !== undefined && p[0] !== p[1]);
+    // The edge work is staged: sorting 150k edges is its own step, so no single step holds the thread for long.
+    let sorted: KEdge[] = [];
+    let relax: Relaxation | null = null;
+    const stages: Array<() => void> = [
+        // Nodes are indexed in ref order, so `index` is the rank the canonical edge order needs.
+        () => { sorted = canonicalEdges(edgesIn, index); },
+        () => {
+            relax = createRelaxation({
+                x, z, home, groups: [...members.values()], springs: layoutSprings(sorted, index), iterations: opts.iterations ?? LAYOUT_ITERATIONS,
+            });
+        },
+    ];
 
-    const iterations = opts.iterations ?? LAYOUT_ITERATIONS;
-    for (let step = 0; step < iterations; step++) {
-        const cool = 1 - step / iterations;
-        const dx = new Float64Array(nodes.length);
-        const dz = new Float64Array(nodes.length);
-        for (const group of members.values()) {
-            for (let a = 0; a < group.length; a++) {
-                for (let b = a + 1; b < group.length; b++) {
-                    const i = group[a]!, j = group[b]!;
-                    const ddx = x[i]! - x[j]!, ddz = z[i]! - z[j]!;
-                    const d2 = Math.max(ddx * ddx + ddz * ddz, 0.01);
-                    const f = 0.6 / d2;
-                    dx[i]! += ddx * f; dz[i]! += ddz * f;
-                    dx[j]! -= ddx * f; dz[j]! -= ddz * f;
-                }
+    let built: Layout3D | null = null;
+    let finished = false;
+    return {
+        step() {
+            const stage = stages.shift();
+            if (stage) { stage(); return false; }
+            finished = relax!.step();
+            return finished;
+        },
+        result() {
+            if (!finished) throw new Error('layout3d: result() read before step() returned true');
+            if (!built) {
+                const positions = new Map<string, readonly [number, number, number]>();
+                nodes.forEach((n, i) => positions.set(n.ref, [round(x[i]!), planeY.get(n.partition ?? NONE) ?? 0, round(z[i]!)]));
+                built = { positions, planes: order.map((partition) => ({ partition, y: planeY.get(partition) ?? 0 })) };
             }
-        }
-        for (const [i, j] of springs) {
-            const ddx = x[j]! - x[i]!, ddz = z[j]! - z[i]!;
-            dx[i]! += ddx * 0.02; dz[i]! += ddz * 0.02;
-            dx[j]! -= ddx * 0.02; dz[j]! -= ddz * 0.02;
-        }
-        for (let i = 0; i < nodes.length; i++) {
-            const [hx, hz] = home[i]!;
-            dx[i]! += (hx - x[i]!) * 0.05;
-            dz[i]! += (hz - z[i]!) * 0.05;
-            const len = Math.hypot(dx[i]!, dz[i]!);
-            const cap = 0.8 * cool + 0.05;
-            const s = len > cap ? cap / len : 1;
-            x[i] = x[i]! + dx[i]! * s;
-            z[i] = z[i]! + dz[i]! * s;
-        }
-    }
+            return built;
+        },
+    };
+}
 
-    const positions = new Map<string, readonly [number, number, number]>();
-    nodes.forEach((n, i) => positions.set(n.ref, [round(x[i]!), planeY.get(n.partition ?? NONE) ?? 0, round(z[i]!)]));
-    return { positions, planes: order.map((partition) => ({ partition, y: planeY.get(partition) ?? 0 })) };
+/** The whole layout in one go (tests, and hosts with no idle loop). */
+export function layout3d(rootId: string, nodes: readonly KNode[], edges: readonly KEdge[], opts: LayoutOptions = {}): Layout3D {
+    const task = layoutTask(rootId, nodes, edges, opts);
+    while (!task.step());
+    return task.result();
 }

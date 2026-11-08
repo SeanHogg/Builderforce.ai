@@ -47,6 +47,7 @@
   --kg-edge: #7b8698;
   --kg-violation: #f87171;
   --kg-cycle: #fb923c;
+  --kg-partner: #f5b53d;
   --kg-duplicate: #facc15;
   --kg-contradicts: #fb7185;
   --kg-agrees: #34d399;
@@ -128,6 +129,7 @@
   --kg-edge: #7c8799;
   --kg-violation: #b91c1c;
   --kg-cycle: #c2410c;
+  --kg-partner: #b45309;
   --kg-duplicate: #a16207;
   --kg-contradicts: #be123c;
   --kg-agrees: #047857;
@@ -183,3 +185,8 @@ svg [data-id][role="button"]:focus-visible {
   outline: 2px solid var(--kg-accent);
   outline-offset: 2px;
 }
+
+/* The status chip's spinner (counting, reviewing, stopping). Still under reduced motion: the ring then reads as a plain marker. */
+@keyframes kg-spin { to { transform: rotate(360deg); } }
+:where(.kg-spin) { animation: kg-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { :where(.kg-spin) { animation: none; } }

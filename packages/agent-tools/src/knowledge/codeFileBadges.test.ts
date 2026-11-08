@@ -26,8 +26,25 @@ describe('contentBadges', () => {
     expect(badges['maxComplexity']).toBe(2);
   });
 
-  it('adds no badge a file has no evidence for', () => {
-    expect(contentBadges('src/x.ts', 'export const x = 1;', extractSymbols('src/x.ts', 'export const x = 1;'))).toEqual({});
+  it('adds no pattern, route or complexity badge a file has no evidence for (only its size counts)', () => {
+    expect(contentBadges('src/x.ts', 'export const x = 1;', extractSymbols('src/x.ts', 'export const x = 1;'))).toEqual({ lines: 1, exports: 1 });
+  });
+
+  it('does not count a trailing newline as a line: 1000 lines is not a god module, 1001 is', () => {
+    const body = (n: number) => Array.from({ length: n }, (_, i) => `const v${i} = ${i};`).join('\n') + '\n';
+    const ok = contentBadges('src/a.ts', body(1000), extractSymbols('src/a.ts', body(1000)));
+    expect(ok['lines']).toBe(1000);
+    expect(String(ok['patterns'] ?? '').split(',')).not.toContain('god-module');
+    const big = contentBadges('src/b.ts', body(1001), extractSymbols('src/b.ts', body(1001)));
+    expect(big['lines']).toBe(1001);
+    expect(String(big['patterns']).split(',')).toContain('god-module');
+  });
+
+  it('stores the counts the god-module detector uses, so the finding can show what tripped it', () => {
+    const text = Array.from({ length: 1001 }, (_, i) => `export const v${i} = ${i};`).join('\n');
+    const badges = contentBadges('src/big.ts', text, extractSymbols('src/big.ts', text));
+    expect(badges).toMatchObject({ lines: 1001, exports: 1001 });
+    expect(String(badges['patterns']).split(',')).toContain('god-module');
   });
 });
 

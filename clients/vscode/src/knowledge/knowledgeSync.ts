@@ -17,7 +17,7 @@ import { graphCounts } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import type { KnowledgeSyncStatus } from "./knowledgeProtocol";
-import { replicaStatusOf } from "./knowledgeReplica";
+import { replicaStatusOf, retryReplica } from "./knowledgeReplica";
 import type { KnowledgeRoot } from "./knowledgeRoots";
 import { loadGraph, log, openRoot } from "./knowledgeService";
 import { buildSyncStatus, reviewRecords } from "./knowledgeSyncStatus";
@@ -52,4 +52,11 @@ export async function rootSyncStatus(secrets: vscode.SecretStorage, root: Knowle
     reviewed: !!record || !!graph || !!server,
     hasHistory: (await gitHistoryPort(root.rootPath, { onWarn: (m) => log("history", m) })) !== undefined,
   });
+}
+
+/** Retry upload: clears the root's recorded upload failures and drains its replica queue now; resolves once the pump has started (not when it ends). A root that is not linked has nothing to send. */
+export function retryRootSync(secrets: vscode.SecretStorage, root: KnowledgeRoot): Promise<void> {
+  const open = openRoot(secrets, root);
+  if (open.pump) retryReplica(open.pump);
+  return Promise.resolve();
 }

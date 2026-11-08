@@ -4,17 +4,19 @@
  * `ViewMode`; `ViewSurface` and the switcher read this array and know no camera by name.
  */
 
-import { lazy, Suspense, useCallback, useMemo, type ComponentType } from 'react';
+import { lazy, Suspense, useCallback, useMemo, type ComponentType, type ReactNode } from 'react';
 import { fillTemplate } from '../labels';
 import { counted } from './plural';
 import { Graph2D } from '../graph2d/Graph2D';
 import { ListFallback } from '../ListFallback';
 import { MindMap } from '../map/MindMap';
 import { MAX_PIPES, nodeChannels, pipeWidthOf } from '../scene/channels';
+import { edgeCaption } from '../scene/edgeBudget';
 import { cssVar } from '../scene/themeColors';
 import { makeOverlay } from './overlays';
 import { litStations, questionDef } from './questions';
 import type { CameraDef, SceneProps } from './registry';
+import { stationRolesOf } from './towerHighlight';
 import type { Station } from './stations';
 import { TYPE } from './ui/type';
 import { HeatGrid } from './HeatGrid';
@@ -37,12 +39,41 @@ function scaled(Camera: ComponentType<SceneProps>): ComponentType<SceneProps> {
 
 const GraphScene = lazy(() => import('../scene/GraphScene'));
 
-function GraphCamera({ graph, drawn, lens, labels, selected, onSelect }: SceneProps) {
+/** "Showing 15,000 of 113,975 links": said whenever the link budget leaves some out, so fewer lines are never a silent change. */
+export function CapNote({ testId, children }: { testId: string; children: ReactNode }) {
+    return (
+        <p data-testid={testId} style={{ position: 'absolute', insetInlineStart: 8, bottom: 8, margin: 0, padding: '2px 8px', borderRadius: 6, ...TYPE.meta, background: cssVar('panel') }}>
+            {children}
+        </p>
+    );
+}
+
+export function EdgesCapped({ total, labels }: { total: number; labels: SceneProps['labels'] }) {
+    const note = edgeCaption(total);
+    if (!note.capped) return null;
+    return (
+        <CapNote testId="kg-edges-capped">
+            {fillTemplate(labels.surface.scene.edgesCapped, { shown: note.shown.toLocaleString(), total: note.total.toLocaleString() })}
+        </CapNote>
+    );
+}
+
+/** The SVG graph alone: what the 3D view shows while its chunk loads (it carries no caption, the 3D camera has its own). */
+function GraphView({ graph, drawn, lens, labels, selected, onSelect }: SceneProps) {
     return (
         <Graph2D
             rootId={graph.scope.rootId} nodes={drawn.nodes} edges={drawn.edges} lens={lens} selected={selected}
             onSelect={onSelect} planeLabel={(partition) => partition || labels.partitionNone} labels={labels} label={labels.regionLabel}
         />
+    );
+}
+
+function GraphCamera(p: SceneProps) {
+    return (
+        <>
+            <GraphView {...p} />
+            <EdgesCapped total={p.drawn.edges.length} labels={p.labels} />
+        </>
     );
 }
 
@@ -58,26 +89,26 @@ function Scene3DCamera(p: SceneProps) {
     const capped = channels.pipeWidth !== undefined && drawn.edges.length > MAX_PIPES;
     return (
         <>
-            <Suspense fallback={<GraphCamera {...p} />}>
+            <Suspense fallback={<GraphView {...p} />}>
                 <GraphScene
                     rootId={graph.scope.rootId} nodes={drawn.nodes} edges={drawn.edges} lens={lens} selected={selected}
                     focus={p.focus} onSelect={p.onSelect} label={labels.regionLabel} planeLabel={(partition) => partition || labels.partitionNone}
-                    reducedMotion={p.reducedMotion} channels={channels}
+                    reducedMotion={p.reducedMotion} channels={channels} roles={surface.highlight?.roles}
                 />
             </Suspense>
-            {capped && (
-                <p data-testid="kg-pipes-capped" style={{ position: 'absolute', insetInlineStart: 8, bottom: 8, margin: 0, padding: '2px 8px', borderRadius: 6, ...TYPE.meta, background: cssVar('panel') }}>
-                    {counted(labels, 'pipesCapped', MAX_PIPES)}
-                </p>
-            )}
+            {/* Lines past the edge budget are not drawn either (pipes have their own cap above). */}
+            {channels.pipeWidth === undefined && <EdgesCapped total={drawn.edges.length} labels={labels} />}
+            {capped && <CapNote testId="kg-pipes-capped">{counted(labels, 'pipesCapped', MAX_PIPES)}</CapNote>}
         </>
     );
 }
 
-function MindCamera({ drawn, graph, labels, rootTitle, selected, onSelect, onShow }: SceneProps) {
+function MindCamera({ graph, labels, rootTitle, selected, focus, onSelect, onShow }: SceneProps) {
+    // The map counts and lists the folders of the WHOLE reviewed graph, not the capped set the node views draw (2,000, or 60 on a phone).
+    const files = useMemo(() => graph.nodes.filter((n) => n.kind === 'file'), [graph.nodes]);
     return (
         <MindMap
-            nodes={drawn.nodes} findings={graph.findings} rootTitle={rootTitle} selected={selected}
+            nodes={files} findings={graph.findings} rootTitle={rootTitle} selected={selected} focus={focus}
             onSelect={onSelect} onShow={onShow} labels={labels} label={labels.regionLabel}
         />
     );
@@ -117,8 +148,13 @@ function TransitScene({ surface, labels, reducedMotion, graph, variant }: SceneP
         return fillTemplate(labels.surface.notes[note.key], { value });
     }, [lit, q, labels]);
     const levelNote = drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
+    const highlight = variant === 'tower' ? surface.highlight : null;
+    const stationModel = view?.stations ?? surface.stations;
+    const roles = useMemo(() => (highlight ? stationRolesOf(highlight.roles, stationModel) : undefined), [highlight, stationModel]);
     return (
+        <>
         <TransitMap
+            roles={roles}
             stations={view?.stations ?? surface.stations} lines={view?.lines ?? surface.lines} overlay={overlay} labels={labels} lit={lit}
             lineId={view ? view.lines.lines[0]?.id ?? null : surface.line?.id ?? null} selectedStation={stationId}
             pins={view ? NO_PINS : surface.pins} noteOf={noteOf} reducedMotion={reducedMotion}
@@ -126,6 +162,7 @@ function TransitScene({ surface, labels, reducedMotion, graph, variant }: SceneP
             graph={graph} order={view?.order} leaves={view?.leaves} levelNote={levelNote} question={surface.question} loading={drill.loading}
             canEnter={drill.canEnter} onEnter={drill.enter} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} variant={variant}
         />
+        </>
     );
 }
 

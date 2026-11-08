@@ -7,7 +7,7 @@
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from '../lenses';
-import { cmp } from '../order';
+import { cmp, importanceOf } from '../order';
 import type { Layout3D } from './layout3d';
 import type { ThemeTone } from './themeColors';
 
@@ -33,15 +33,16 @@ const MIN_SCALE = 0.18;
 const MAX_SCALE = 0.75;
 
 export function nodeInstances(nodes: readonly KNode[], layout: Layout3D, lens: LensDef): NodeInstances {
+    // A layout may be older than `nodes` (a new node lands before the next layout does): only nodes it placed are drawn.
     const placed = nodes.filter((n) => layout.positions.has(n.ref));
     const positions = new Float32Array(placed.length * 3);
     const scales = new Float32Array(placed.length);
     const tones: ThemeTone[] = [];
     const dim: boolean[] = [];
     placed.forEach((n, i) => {
-        const [x, y, z] = layout.positions.get(n.ref)!;
+        const [x, y, z] = layout.positions.get(n.ref) ?? [0, 0, 0];
         positions.set([x, y, z], i * 3);
-        scales[i] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * Math.sqrt(Math.max(0, Math.min(1, n.importance)));
+        scales[i] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * Math.sqrt(Math.max(0, Math.min(1, importanceOf(n))));
         const style = lens.nodeStyle(n);
         tones.push(style.tone);
         dim.push(style.emphasis === 'dim');

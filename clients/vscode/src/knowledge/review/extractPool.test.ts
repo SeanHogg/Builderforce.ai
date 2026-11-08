@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ExtractJob, ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { ExtractFailed, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 import { createExtractPool, defaultExtractPoolSize, type PoolWorker } from "./extractPool";
 
 class FakeWorker implements PoolWorker {
@@ -54,6 +54,24 @@ describe("createExtractPool", () => {
     expect(workers).toHaveLength(1);
     workers[0]!.reply(1, done("y"));
     await expect(next).resolves.toEqual(done("y"));
+  });
+
+  it("regression: only a worker reply marked final (a parser or extractor error) rejects as ExtractFailed; every other rejection stays a plain, transient Error", async () => {
+    const { pool, workers } = rig(1);
+    const parser = pool(jobOf("p"));
+    workers[0]!.emit("message", { id: workers[0]!.posted[0]!.id, error: "parser blew up", final: true });
+    await expect(parser).rejects.toBeInstanceOf(ExtractFailed);
+
+    const read = pool(jobOf("r"));
+    workers[0]!.emit("message", { id: workers[0]!.posted[1]!.id, error: "EBUSY: file locked" }); // a read error: no `final`
+    const readError = await read.catch((e: unknown) => e);
+    expect(readError).toBeInstanceOf(Error);
+    expect(readError).not.toBeInstanceOf(ExtractFailed);
+
+    const crashed = pool(jobOf("c"));
+    workers[0]!.emit("error", new Error("segfault")); // a crashed worker: transient
+    const crash = await crashed.catch((e: unknown) => e);
+    expect(crash).not.toBeInstanceOf(ExtractFailed);
   });
 
   it("terminates the worker of an aborted running job and respawns for the next job", async () => {

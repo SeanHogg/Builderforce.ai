@@ -27,9 +27,10 @@ export interface KnowledgeSyncPort {
    * Which `(hash, sourceRef)` pairs the project already holds (by position): the stored body of `hash`, under ANY root,
    * has an entry for `sourceRef`. A hash held only under another root answers false, so just this root's entry is
    * uploaded. ONE indexed query for any number of pairs. No object is read or probed: the sweep is the only deleter of
-   * bundles and it deletes only bundles no index row names, so an index row always has its object.
+   * bundles and it deletes only bundles no index row names, so an index row always has its object. With `opts.entryless`, a
+   * source a client declared to carry no extracted output (a binary file) counts as held too (`verifyBodies`); the have-answer never does.
    */
-  heldEntries(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>, ledger?: KnowledgeLedgerPort): Promise<Set<number>>;
+  heldEntries(pairs: ReadonlyArray<{ hash: string; sourceRef: string }>, ledger?: KnowledgeLedgerPort, opts?: { entryless?: boolean }): Promise<Set<number>>;
   /** Writes a pack's bodies as ONE content-addressed bundle object (the pack's only body write). */
   putBundle(bundle: Bundle): Promise<void>;
   /** Records a review's source list as the immutable snapshot of `digest` (written once per digest). */

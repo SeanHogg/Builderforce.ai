@@ -5,17 +5,18 @@
  *     server lacks, or a diff that does not fit it (positions out of order or range), is `409 prior_missing`, so the
  *     client falls back to sending the body whole;
  *   - an entry is sanitised and clamped exactly as `putExtracted` does (one line per label, no ref past the bound);
- *   - a hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (`mergeBodies`).
+ *   - a hash's stored body is the UNION by `sourceRef` of what is stored and what arrived (`mergeBody`).
  *
  * The merge is a read-modify-write, so it is only valid while nothing else changed those hashes: `basisOf` records the
  * bundle each hash was read from, and the pack's transaction (under the project lock) refuses to commit if any moved.
  */
 import { applyEntryDiffs, type PackExtr } from '@seanhogg/builderforce-memory/knowledge/pack';
-import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
+import { srcRef, type Extracted } from '@seanhogg/builderforce-memory/knowledge';
 import type { ExtractedCachePort } from '../knowledgePorts';
-import { mergeBodies } from '../knowledgeBundles';
+import { mergeBody } from '../knowledgeBundles';
 import type { KnowledgeLedgerPort } from '../knowledgeLedger';
 import { clampExtracted, sanitizeExtracted } from '../knowledgePrivacy';
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { KnowledgeSyncError } from './knowledgeSyncPorts';
 
 /** The stored bodies of `hashes`: one call when the cache can, else one read each. */
@@ -34,18 +35,21 @@ function storable(hash: string, entries: readonly Extracted[]): Extracted[] {
 }
 
 export interface PackBodies {
-  bodies: Array<{ hash: string; entries: Extracted[] }>;
+  /** `entryless`: sources declared to carry no extracted output (see `mergeBody`). */
+  bodies: Array<{ hash: string; entries: Extracted[]; entryless: string[] }>;
   /** The bundle key each body's merge started from (null = the hash had no index row). Read BEFORE the bodies. */
   basis: Map<string, string | null>;
 }
 
 export async function buildBodies(
-  extracted: ExtractedCachePort, ledger: Pick<KnowledgeLedgerPort, 'index'>, packExtr: readonly PackExtr[],
+  extracted: ExtractedCachePort, ledger: Pick<KnowledgeLedgerPort, 'index'>, packExtr: readonly PackExtr[], files: ReadonlyArray<{ path: string; hash: string }>, rootId: string,
 ): Promise<PackBodies> {
   if (packExtr.length === 0) return { bodies: [], basis: new Map() };
   const wanted = [...new Set(packExtr.flatMap((x) => (x.kind === 'diff' ? [x.hash, x.prior] : [x.hash])))];
   // The basis is read FIRST: if the index moves between this read and the bodies', the check at commit only ever errs towards a retry.
-  const located = new Map((await ledger.index.locate(wanted)).map((l) => [l.hash, l.bundleKey] as const));
+  const locations = await ledger.index.locate(wanted);
+  const located = new Map(locations.map((l) => [l.hash, l.bundleKey] as const));
+  const locOf = new Map(locations.map((l) => [l.hash, l] as const));
   const basis = new Map(packExtr.map((x) => [x.hash, located.get(x.hash) ?? null] as const));
   const stored = await storedBodies(extracted, wanted);
   const bodies = packExtr.map((x) => {
@@ -60,7 +64,18 @@ export async function buildBodies(
         throw new KnowledgeSyncError(409, 'prior_missing', error instanceof Error ? error.message : 'the prior extraction does not fit', { prior: x.prior });
       }
     }
-    return { hash: x.hash, entries: mergeBodies(stored.get(x.hash), storable(x.hash, entries)) };
+    // An EXPLICIT empty body is the client saying nothing was extracted for these files (binary): recorded apart from real entries.
+    // An index row whose stored body cannot be read (a missing object or range) is HEALED, not wedged on: the arrival is written on its own,
+    // with an index row naming only its sources. Other roots' pairs for this hash then answer "not held" and re-upload on their next pass.
+    const unreadable = locOf.has(x.hash) && !stored.has(x.hash);
+    if (unreadable) {
+      reportCaughtError(new Error(`knowledge: the stored body of ${x.hash} could not be read; rewritten from the pack`), {
+        source: 'application/knowledge/sync/packBodies.ts', operation: 'healUnreadableBody', level: 'warning', context: { hash: x.hash },
+      });
+    }
+    const declared = x.kind === 'full' && x.entries.length === 0 ? files.filter((f) => f.hash === x.hash).map((f) => srcRef(rootId, f.path)) : [];
+    const merged = mergeBody(unreadable ? undefined : locOf.get(x.hash), stored.get(x.hash), storable(x.hash, entries), declared);
+    return { hash: x.hash, ...merged };
   });
   return { bodies: bodies.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0)), basis };
 }

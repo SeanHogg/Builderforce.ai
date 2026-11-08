@@ -10,7 +10,7 @@ import { labelFor } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { SurfaceLayout } from '../layout';
 import type { LensDef } from '../lenses';
-import type { LensId, SyncStatus, ViewMode } from '../types';
+import type { LensId, ViewMode } from '../types';
 import type { KnowledgeGraphState } from '../useKnowledgeGraph';
 import { buildSpine, withLineCrumb, withSystemCrumb, type SpineItem } from './path';
 import { isMultiSystem, systemName } from './systems';
@@ -19,7 +19,6 @@ import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
 import type { SceneOverlayProps } from './SceneOverlay';
 import type { MapCap } from './ScaleLine';
-import { syncGap } from './drawers/syncModel';
 import { stationOfRef } from './stations';
 import type { SurfaceModel } from './useSurface';
 import type { ZoomApi } from './zoom';
@@ -44,7 +43,6 @@ export interface SurfaceChromeInput {
     visibleNodes: number;
     showAll: boolean;
     setShowAll(on: boolean): void;
-    sync: SyncStatus | null;
 }
 
 export function useSurfaceChrome(i: SurfaceChromeInput) {
@@ -78,7 +76,6 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     const source = surface.coverage?.source;
     const mapCap: MapCap | undefined = source?.kind === 'cut' ? { shown: source.files, total: source.sources, cut: true } : surface.stations.capped;
 
-    const gap = syncGap(i.sync); // ONE reading: the banner's two numbers cannot disagree
     const drilled = surface.drill.canOut && i.mode === 'transit';
     const overlayProps: SceneOverlayProps = {
         labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, zoom: i.zoom, narrow: layout.phone,
@@ -89,7 +86,6 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
         stations: surface.stations.stations, question: surface.question, onQuestion: i.pickQuestion, lenses: kg.lenses, lens: i.lens.id, onLens: i.pickLens,
         family: surface.family, onClearFamily: () => surface.setFamily(null),
         stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
-        missingFiles: gap.missing, tooLarge: gap.tooLarge, onDiagnose: () => surface.openPanel('sync'),
     };
     return { layout, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
 }

@@ -49,3 +49,12 @@ describe('the editor knowledge source - review ports', () => {
     await expect(source.applyFix!({ ...FINDING, nodes: ['fact:1'] })).rejects.toThrow();
   });
 });
+
+describe('the editor knowledge source - Retry upload', () => {
+  it('asks the host to retry the root\'s upload, by root, and answers when the host has', async () => {
+    const { t, calls } = transport({ retrySync: null });
+    const source = createHostKnowledgeGraphSource(t);
+    await expect(source.retrySync!('ws')).resolves.toBeUndefined();
+    expect(calls).toEqual([{ op: 'retrySync', rootId: 'ws' }]);
+  });
+});

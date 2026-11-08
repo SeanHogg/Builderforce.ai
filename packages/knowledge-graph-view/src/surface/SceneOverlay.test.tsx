@@ -7,7 +7,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { CAMERAS } from './cameras';
 import { counted } from './plural';
 import { SCENE_TOP_VAR, SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
-import { missingFilesOf } from './drawers/syncModel';
+import { syncGap } from './drawers/syncModel';
 import { lenses, model } from './testFixtures';
 import { useZoomHost, ZoomProvider, type ZoomApi } from './zoom';
 
@@ -96,21 +96,10 @@ describe('SceneOverlay', () => {
         expect(screen.getByTestId('kg-map-capped').textContent).toBe(fillTemplate(L.surface.scaleSummary, { stations: counted(L, 'station', model.stations.length, { count: model.stations.length.toLocaleString() }), files: '16,000 files', nodes: '100' }));
     });
 
-    it('draws the sync error banner with Diagnose only when files are missing', () => {
-        const onDiagnose = vi.fn();
-        const { rerender } = render(<SceneOverlay {...overlayProps({ missingFiles: 0 })} />);
+    it('draws no sync banner: the files not stored and the upload queue live in the Reviews panel', () => {
+        render(<SceneOverlay {...overlayProps()} />);
         expect(screen.queryByTestId('kg-sync-banner')).toBeNull();
-        rerender(<SceneOverlay {...overlayProps({ missingFiles: 23, onDiagnose })} />);
-        expect(within(screen.getByTestId('kg-sync-banner')).getByText(counted(L, 'fileMissing', 23))).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: L.surface.overlay.diagnose }));
-        expect(onDiagnose).toHaveBeenCalled();
-    });
-
-    it('names the files too large to store with the real count, ahead of the missing files', () => {
-        render(<SceneOverlay {...overlayProps({ missingFiles: 23, tooLarge: 2 })} />);
-        const banner = screen.getByTestId('kg-sync-banner');
-        expect(within(banner).getByText(counted(L, 'fileTooLarge', 2))).toBeTruthy();
-        expect(banner.textContent).toContain(counted(L, 'fileMissing', 23));
+        expect(screen.queryByRole('button', { name: L.surface.overlay.diagnose })).toBeNull();
     });
 
     it('stacks in flow on a phone', () => {
@@ -130,16 +119,15 @@ describe('the scene top', () => {
         const { container } = render(<SceneOverlay {...overlayProps()} />);
         const host = container; // the overlay's parent: the scene's box
         expect(host.style.getPropertyValue(SCENE_TOP_VAR)).toBe('96px');
-        stubHeight(131.4); // a banner appeared
+        stubHeight(131.4); // a bar was added
         resize();
         expect(host.style.getPropertyValue(SCENE_TOP_VAR)).toBe('132px');
     });
 
-    it('measures the block holding the bars and the banner, not the whole overlay', () => {
+    it('measures the block holding the bars, not the whole overlay', () => {
         stubHeight(40);
-        render(<SceneOverlay {...overlayProps({ missingFiles: 3 })} />);
+        render(<SceneOverlay {...overlayProps()} />);
         const controls = screen.getByTestId('kg-scene-controls');
-        expect(within(controls).getByTestId('kg-sync-banner')).toBeTruthy();
         expect(within(controls).getByRole('radiogroup', { name: L.viewModesLabel })).toBeTruthy();
         expect(within(controls).queryByTestId('kg-scale-note')).toBeNull(); // the scale note floats at the bottom, over the scene
     });
@@ -166,14 +154,14 @@ describe('the scene top', () => {
     });
 });
 
-describe('missingFilesOf', () => {
+describe('syncGap (the files the server lacks)', () => {
     const base = { local: { files: 10, docs: 0 }, sources: [] };
     it('counts the skipped list, else the gap to the server, else nothing', () => {
-        expect(missingFilesOf(null)).toBe(0);
-        expect(missingFilesOf({ ...base, server: { files: 8, docs: 0 } })).toBe(2);
-        expect(missingFilesOf({ ...base, server: { files: 8, docs: 0 }, skipped: [{ path: 'a', reason: 'x' }] })).toBe(1);
-        expect(missingFilesOf({ ...base, skipped: [] })).toBe(0);
+        expect(syncGap(null).missing).toBe(0);
+        expect(syncGap({ ...base, server: { files: 8, docs: 0 } }).missing).toBe(2);
+        expect(syncGap({ ...base, server: { files: 8, docs: 0 }, skipped: [{ path: 'a', reason: 'x' }] }).missing).toBe(1);
+        expect(syncGap({ ...base, skipped: [] }).missing).toBe(0);
         // A folder the walk never reads shares the list but is not a missing file.
-        expect(missingFilesOf({ ...base, server: { files: 10, docs: 0 }, skipped: [{ path: 'v', reason: 'nested-checkout' }] })).toBe(0);
+        expect(syncGap({ ...base, server: { files: 10, docs: 0 }, skipped: [{ path: 'v', reason: 'nested-checkout' }] }).missing).toBe(0);
     });
 });

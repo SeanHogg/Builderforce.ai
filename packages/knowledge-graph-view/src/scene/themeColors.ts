@@ -31,6 +31,8 @@ export const KG_TOKENS = {
     edge: ['--kg-edge', '--bf-border-strong'],
     violation: ['--kg-violation', '--bf-danger'],
     cycle: ['--kg-cycle', '--bf-warning'],
+    // The file an anti-pattern's offender reaches into (the Tower highlight's amber).
+    partner: ['--kg-partner', '--bf-warning'],
     duplicate: ['--kg-duplicate', '--bf-warning'],
     contradicts: ['--kg-contradicts', '--bf-danger'],
     agrees: ['--kg-agrees', '--bf-success'],

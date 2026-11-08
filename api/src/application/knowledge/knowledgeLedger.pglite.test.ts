@@ -15,7 +15,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bucketOf, manifestTree, parseRelationLeafKey, relationLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Db } from '../../infrastructure/database/connection';
-import { drizzleLedger, rowsOf, type ExtractedLoc, type KnowledgeLedgerPort } from './knowledgeLedger';
+import { drizzleLedger, entrylessRef, rowsOf, type ExtractedLoc, type KnowledgeLedgerPort } from './knowledgeLedger';
 import { ensureBuckets, recomputeBuckets } from './knowledgeBuckets';
 
 // PGlite boots a WASM Postgres and applies three migrations: slower than the default 10 s hook / 5 s test budgets.
@@ -121,6 +121,13 @@ describe('extracted index (the conditional upsert)', () => {
   it('holds() answers per (hash, sourceRef): a hash held under another root is NOT held for this root\'s ref', async () => {
     await ledger.index.upsert([loc('h1', 'b1', ['src:ws:a::x.ts'])]);
     expect([...await ledger.index.holds([{ hash: 'h1', sourceRef: 'src:ws:a::x.ts' }, { hash: 'h1', sourceRef: 'src:ws:b::x.ts' }, { hash: 'h2', sourceRef: 'src:ws:a::x.ts' }])]).toEqual([0]);
+  });
+
+  it('holds() counts an entry-less source (a binary file) only with { entryless: true }, never as a have-answer', async () => {
+    await ledger.index.upsert([loc('h1', 'b1', ['src:ws:a::real.ts', entrylessRef('src:ws:a::bin.png')])]);
+    const pairs = [{ hash: 'h1', sourceRef: 'src:ws:a::real.ts' }, { hash: 'h1', sourceRef: 'src:ws:a::bin.png' }, { hash: 'h1', sourceRef: 'src:ws:a::other.png' }];
+    expect([...await ledger.index.holds(pairs)]).toEqual([0]);
+    expect([...await ledger.index.holds(pairs, { entryless: true })].sort()).toEqual([0, 1]);
   });
 });
 

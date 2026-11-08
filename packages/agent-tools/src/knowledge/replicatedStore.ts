@@ -104,6 +104,8 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
         return [fileKey(pathOfRef(rootId ?? '', ref), hash)];
     };
 
+    /** File keys staled but not yet given their output: the ones a pump may have held back. */
+    const staled = new Set<string>();
     let humanSeeded = false;
     /** Seeds the local cache from the server for hashes the local store lacks. Never throws. */
     const seed = async (hashes: readonly string[]): Promise<void> => {
@@ -125,7 +127,7 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
             await through.preloadExtracted?.(missing);
             for (const h of missing) {
                 const hit = await through.getExtracted(h);
-                if (hit && hit.length > 0) await local.putExtracted(h, hit);
+                if (hit) await local.putExtracted(h, hit); // an explicit [] (nothing extracted) is kept distinct from absent
             }
         } catch (error) {
             args.onError?.(error); // offline or rate-limited: the review extracts what it still lacks
@@ -154,7 +156,10 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
         },
         async markStale(scope, sourceRef: NodeRef, currentHash) {
             await local.markStale(scope, sourceRef, currentHash);
-            await mark(await fileChanged(sourceRef, scope.rootId, currentHash));
+            const keys = await fileChanged(sourceRef, scope.rootId, currentHash);
+            // Remember only a file staled with no output yet (a live edit): its output is still to come.
+            if (keys.length > 0 && currentHash !== '' && (await local.getExtracted?.(currentHash)) === undefined) for (const k of keys) staled.add(k);
+            await mark(keys);
         },
         async preloadExtracted(hashes) {
             await seed(hashes);
@@ -174,12 +179,28 @@ export function replicatedKnowledgeStore(args: ReplicatedStoreArgs): KnowledgeSt
         },
     };
     if (local.getExtracted) store.getExtracted = (hash) => local.getExtracted!(hash);
+    // The re-check channel is the local store's: the pump asks, the next review answers (no replica traffic of its own).
+    if (local.markRecheck) store.markRecheck = (hashes) => local.markRecheck!(hashes);
+    if (local.recheckHashes) store.recheckHashes = () => local.recheckHashes!();
+    if (local.clearRecheck) store.clearRecheck = (hashes) => local.clearRecheck!(hashes);
+    if (local.hasRecheck) store.hasRecheck = (hash) => local.hasRecheck!(hash);
     if (local.putExtracted) {
         store.putExtracted = async (hash, extracted) => {
+            // What this hash held before: a body that was `[]` (nothing extracted) or lacked a source now gets an entry for it, which replaces
+            // the project's entry-less marker. The file's hash is unchanged, so nothing else would send it.
+            const before = await local.getExtracted?.(hash);
             await local.putExtracted!(hash, extracted);
             const keys: string[] = [];
-            for (const e of extracted) keys.push(...(await fileChanged(e.sourceRef, args.rootId, hash)));
+            for (const e of extracted) {
+                keys.push(...(await fileChanged(e.sourceRef, args.rootId, hash)));
+                if (before && replica && !before.some((b) => b.sourceRef === e.sourceRef)) keys.push(fileKey(pathOfRef(args.rootId ?? '', e.sourceRef), hash));
+            }
             await mark(keys);
+            // A file staled before its output was stored (a live edit) may already have been held back by a pump that ran in between: the same
+            // hash is not a change, so nothing re-kicked it. Kick the pump when this output is one that was waited for. Debounced by the host.
+            const waited = extracted.some((e) => staled.delete(fileKey(pathOfRef(args.rootId ?? '', e.sourceRef), hash)))
+                || (await local.hasRecheck?.(hash)) === true; // an answer of [] (nothing extracted) is as much an answer as a body
+            if (waited) args.onQueued?.();
         };
     }
     return store;

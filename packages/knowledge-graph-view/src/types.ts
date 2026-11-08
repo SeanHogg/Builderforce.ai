@@ -65,6 +65,8 @@ export type ReplicaState = {
     waitingUntil?: number;
     /** Why it waits: `429`, `network`, or a server status. */
     waitingFor?: string;
+    /** Files held back from the packs because their extracted output is not there yet: they wait for a review, the rest was sent. */
+    awaitingReview?: number;
     /** Why it stopped with work left: signed out, the server unreachable, or the queue moved to another project. */
     paused?: 'auth' | 'unreachable' | 'project';
     pausedStatus?: number;
@@ -87,6 +89,10 @@ export type StoredReviewRun = Omit<MemoryReviewRun, 'outcome' | 'failures'> & {
     replica?: ReplicaState;
     /** Why parallel extraction was unavailable (the run extracted on one thread). */
     poolDown?: string;
+    /** Event-loop stall of the host during the run (ms); absent on older records. */
+    hostLag?: { maxMs: number; p99Ms: number; meanMs: number };
+    /** The slowest save of the run record to disk (ms). */
+    saveMsMax?: number;
     /** On a live event `failures` holds only the latest; this is how many there are in all (`runs.get` returns every one). */
     failureCount?: number;
     /** Files owed judgement when the map was completed (the host sets it at `mapped`); a live run record carries no other owed total. */
@@ -239,6 +245,8 @@ export interface KnowledgeGraphSource {
     folders?: { exclude(rootId: string, path: string): Promise<void> };
     /** Local against server counts, skipped files and data sources. Absent ⇒ no Sync panel. */
     syncStatus?(rootId: string): Promise<SyncStatus>;
+    /** Retry upload: forget the root's recorded upload failures and send its queue now. Present only on a host that has a replica to pump (an editor); absent ⇒ no Retry. */
+    retrySync?(rootId: string): Promise<void>;
     /** Where this host builds the graph it hands `load`: its own store (`local`, an editor: PRD 41 A7) or the platform (`server`). Named in the copied diagnostics; a server map in an editor is a defect they flag. Absent ⇒ not said. */
     mapSource?: 'local' | 'server';
     /** A deterministic codemod for a finding (unused-export, unused-file). Absent ⇒ Resolve prompts the agent. */

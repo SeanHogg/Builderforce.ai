@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GOD_MODULE_LIMITS } from '@seanhogg/builderforce-memory/knowledge';
 import { detectPatterns, importSpecifiers, patternsBadge, type PatternFacts } from './codePatterns.js';
 
 const facts = (over: Partial<PatternFacts>): PatternFacts => ({
@@ -39,6 +40,13 @@ describe('detectPatterns', () => {
     expect(detectPatterns(facts({ lines: 1000 }))).toEqual([]);
     expect(detectPatterns(facts({ exported: Array.from({ length: 41 }, (_, i) => ({ name: `f${i}`, kind: 'function' as const })) }))).toEqual(['god-module']);
     expect(detectPatterns(facts({ maxComplexity: 61 }))).toEqual(['god-module']);
+  });
+
+  it('holds files to the limits memory owns (the finding shows the same numbers)', () => {
+    expect(detectPatterns(facts({ lines: GOD_MODULE_LIMITS.lines + 1 }))).toEqual(['god-module']);
+    expect(detectPatterns(facts({ lines: GOD_MODULE_LIMITS.lines }))).toEqual([]);
+    expect(detectPatterns(facts({ maxComplexity: GOD_MODULE_LIMITS.complexity + 1 }))).toEqual(['god-module']);
+    expect(detectPatterns(facts({ maxComplexity: GOD_MODULE_LIMITS.complexity }))).toEqual([]);
   });
 
   it('has no badge when nothing matches', () => {

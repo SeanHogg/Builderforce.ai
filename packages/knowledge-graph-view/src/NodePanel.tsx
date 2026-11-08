@@ -7,7 +7,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { AntiPatternBlock } from './AntiPatternBlock';
+import type { TowerHighlight } from './surface/towerHighlight';
 import type { KnowledgeGraphLabels } from './labels';
 import { knowledgeAbout, nodeIndex } from './graphModel';
 import { kindLabel, packLabel } from './names';
@@ -27,6 +29,10 @@ export interface NodePanelProps {
     onChanged(): void;
     /** Shows the files of a partition (the Partition row's picker). Absent ⇒ the row is plain text. */
     onShow?: ((refs: string[]) => void) | undefined;
+    /** Opens the Resolve flow on a finding (the anti-pattern block's Fix). Absent ⇒ Fix is disabled. */
+    onResolve?: ((finding: Finding) => void) | undefined;
+    /** Lights an anti-pattern's files in the Tower (the block's Show in Tower). Absent ⇒ it is disabled. */
+    onShowInTower?: ((highlight: TowerHighlight, refs: string[]) => void) | undefined;
 }
 
 function Row({ name, value }: { name: string; value: string }) {
@@ -57,7 +63,7 @@ function KnowledgeList({ title, nodes, labels, onSelect }: { title: string; node
     );
 }
 
-export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, onSelect, onChanged, onShow }: NodePanelProps) {
+export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, onSelect, onChanged, onShow, onResolve, onShowInTower }: NodePanelProps) {
     const node = useMemo(() => nodeIndex(graph).get(nodeRef), [graph, nodeRef]);
     const about = useMemo(() => knowledgeAbout(graph, nodeRef), [graph, nodeRef]);
     const [draft, setDraft] = useState('');
@@ -138,6 +144,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
         <div style={{ display: 'grid', gap: 14, color: cssVar('text') }}>
             <strong style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{node.label}</strong>
             {node.stale && <p role="status" style={{ margin: 0, fontSize: 12, color: cssVar('violation') }}>{labels.staleMark}</p>}
+            <AntiPatternBlock graph={graph} nodeRef={nodeRef} labels={labels} onResolve={onResolve} onShowInTower={onShowInTower} />
             <dl style={{ margin: 0, display: 'grid', gap: 4 }}>
                 <Row name={labels.nodeKind} value={kindLabel(labels, node.kind)} />
                 <Row name={labels.nodePack} value={packLabel(labels, node.pack)} />

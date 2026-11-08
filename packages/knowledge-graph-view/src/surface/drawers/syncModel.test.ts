@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SyncStatus } from '../../types';
-import { parityNote, syncGap } from './syncModel';
+import { syncGap } from './syncModel';
 
 const base: SyncStatus = { local: { files: 10, docs: 0 }, sources: [] };
 
@@ -18,14 +18,5 @@ describe('syncGap', () => {
     });
     it('is empty without a status', () => {
         expect(syncGap(null)).toEqual({ missing: 0, tooLarge: 0 });
-    });
-});
-
-describe('parityNote', () => {
-    it('says the server has all of it, or how many are not there yet, or nothing when unread', () => {
-        expect(parityNote(10, 10)).toEqual({ kind: 'all' });
-        expect(parityNote(10, 7)).toEqual({ kind: 'missing', count: 3 });
-        expect(parityNote(10, undefined)).toBeNull();
-        expect(parityNote(undefined, 3)).toBeNull();
     });
 });

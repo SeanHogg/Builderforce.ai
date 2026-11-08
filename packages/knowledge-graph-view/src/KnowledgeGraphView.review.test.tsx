@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { FIXTURE_PLAN, FIXTURE_REPORT, docsFixture, fixtureSource, openList } from './testing';
-import { pressMore } from './testMenu';
+import { openReviews } from './testReviews';
 import type { KnowledgeReviewEvent, ReviewControl, ReviewEstimate, ReviewRequest } from './types';
 
 
@@ -44,7 +44,8 @@ function scripted(opts: ScriptOptions = {}) {
 async function startReview(source: ReturnType<typeof scripted>['source']) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
   await openList({ screen, fireEvent });
-  await pressMore({ screen, fireEvent }, L.reviewFolder); // "Review a folder" lives in the header's ⋯ menu
+  await openReviews({ screen, fireEvent }); // the strip's action button opens the Reviews panel, which counts the files at once
+  await screen.findByTestId('kg-review-start');
 }
 
 describe('review confirm chip', () => {
@@ -58,23 +59,30 @@ describe('review confirm chip', () => {
   it('shows ≈ calls and the localized "cost shown after routing" note when the host did not price the pass', async () => {
     const { source } = scripted({ estimate: { modelCalls: 4 } });
     await startReview(source);
-    expect(await screen.findByText('≈ 4 model calls')).toBeTruthy();
-    expect(screen.getByText(L.reviewPlanCostPending)).toBeTruthy();
+    expect(await screen.findByText(/^≈ 4 model calls · /)).toBeTruthy();
+    expect(screen.getByText(new RegExp(L.reviewPlanCostPending))).toBeTruthy();
   });
 
   it('shows ≈ calls and the local note, no price, when the pass runs on the person’s local model', async () => {
     const { source } = scripted({ estimate: { modelCalls: 4, costUsd: 0, local: true } });
     await startReview(source);
-    expect(await screen.findByText('≈ 4 model calls')).toBeTruthy();
-    expect(screen.getByText(L.reviewPlanCostLocal)).toBeTruthy();
+    expect(await screen.findByText(/^≈ 4 model calls · /)).toBeTruthy();
+    expect(screen.getByText(new RegExp(L.reviewPlanCostLocal))).toBeTruthy();
     expect(screen.queryByText(L.reviewPlanCostPending)).toBeNull();
   });
 
-  it('names packs in words, not ids', async () => {
+  it('shows what was counted as three tiles and offers what changed or everything again, with what changed chosen', async () => {
     const { source } = scripted();
     await startReview(source);
-    expect(await screen.findByText('Documents: 3 files')).toBeTruthy();
-    expect(screen.queryByText('docs: 3 files')).toBeNull();
+    const r = L.surface.run.review;
+    const start = await screen.findByTestId('kg-review-start');
+    expect(within(start).getByText(r.tileUnchanged)).toBeTruthy();
+    expect(within(start).getByText(r.tileLeftOut)).toBeTruthy();
+    const [changed, everything] = within(start).getAllByRole('radio');
+    expect(changed!.getAttribute('aria-checked')).toBe('true');
+    expect(everything!.getAttribute('aria-checked')).toBe('false');
+    expect(within(changed!).getByText('3 files')).toBeTruthy();
+    expect(within(everything!).getByText('4 files')).toBeTruthy();
   });
 });
 
@@ -82,24 +90,24 @@ describe('review run', () => {
   it('shows phase, n of m, a bar and the file while running, and Stop aborts the run', async () => {
     const { source, run } = scripted();
     await startReview(source);
-    fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
+    fireEvent.click(await screen.findByTestId('kg-footer-action'));
 
     expect(await screen.findByText('Judging · 2 of 5')).toBeTruthy();
-    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('40');
+    expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('40');
     // The file also lists as a node in the graph behind the chip, so look inside the chip's own region.
-    expect(within(screen.getByRole('region', { name: L.reviewFolder })).getByText('policy/termination.md')).toBeTruthy();
+    expect(within(screen.getByTestId('kg-review-progress')).getByText('policy/termination.md')).toBeTruthy();
     expect(run.signal!.aborted).toBe(false);
 
-    fireEvent.click(screen.getByRole('button', { name: L.reviewStop }));
+    fireEvent.click(screen.getByTestId('kg-footer-action'));
     expect(run.signal!.aborted).toBe(true);
     expect(await screen.findByText(L.reviewAborted)).toBeTruthy();
-    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByRole('meter')).toBeNull();
   });
 
   it('ends on Done with what was written, and offers no Continue when nothing is left', async () => {
     const { source, run } = scripted({ unjudged: 0 });
     await startReview(source);
-    fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
+    fireEvent.click(await screen.findByTestId('kg-footer-action'));
     await screen.findByText('Judging · 2 of 5');
     run.finish();
     expect(await screen.findByText(L.reviewDoneTitle)).toBeTruthy();
@@ -110,7 +118,7 @@ describe('review run', () => {
   it('offers Continue when sections were left unjudged, and Continue reviews the same root again', async () => {
     const { source, run } = scripted({ unjudged: 3 });
     await startReview(source);
-    fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
+    fireEvent.click(await screen.findByTestId('kg-footer-action'));
     await screen.findByText('Judging · 2 of 5');
     run.finish();
     expect(await screen.findByText('3 sections were left for later by the budget.')).toBeTruthy();
@@ -142,7 +150,7 @@ describe('Live after a review', () => {
     await waitFor(() => expect(subscribeLive).toHaveBeenCalledTimes(1));
     expect(subscribeLive.mock.calls[0]![0]).toBe('docs');
 
-    fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
+    fireEvent.click(await screen.findByTestId('kg-footer-action'));
     await screen.findByText('Judging · 2 of 5');
     run.finish();
     await screen.findByText(L.reviewDoneTitle);

@@ -2,17 +2,15 @@
 /** The drawers (Resolve and Simulate are in resolveSimulate.drawers.test.tsx), each through the real surface state: what they show, what they send, and how they degrade. */
 import type { ComponentType } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../../labels';
 import { surfaceFixture } from '../../testing';
-import type { KnowledgeGraphSource, SyncStatus } from '../../types';
 import type { PanelProps } from '../registry';
 import { useSurface, type SurfaceModel } from '../useSurface';
 import { ApiPanel } from './ApiPanel';
 import { CoveragePanel } from './CoveragePanel';
 import { PatternsPanel } from './PatternsPanel';
-import { SyncPanel } from './SyncPanel';
 
 const graph = surfaceFixture();
 const noCoverage: KnowledgeGraph = { ...graph, nodes: graph.nodes.map(({ badges, ...n }) => (badges ? { ...n, badges: Object.fromEntries(Object.entries(badges).filter(([k]) => k !== 'coverage')) } : n)) };
@@ -28,97 +26,6 @@ function mount(Panel: ComponentType<PanelProps>, over: Partial<PanelProps> & { g
     render(<Harness />);
     return props;
 }
-
-describe('SyncPanel', () => {
-    const counts = { files: 10, edges: 20, docs: 2 };
-    const full: SyncStatus = {
-        local: counts, server: { ...counts, files: 8 }, skipped: [{ path: 'big.bin', bytes: 3 * 1024 * 1024, reason: 'too large' }],
-        sources: [{ id: 'code', state: 'collected' }, { id: 'coverage', state: 'absent', note: 'no lcov' }],
-    };
-    // The drawer fetches nothing: the root's ONE read (`useSyncStatus`) is handed in as `sync`.
-    const source = (over: Partial<KnowledgeGraphSource> = {}): KnowledgeGraphSource => ({ scopes: async () => [], load: async () => null, syncStatus: async () => full, ...over });
-    const withSync = (status: SyncStatus | null, over: Partial<PanelProps> = {}) => mount(SyncPanel, { source: source(), rootId: 'sys', sync: status, ...over });
-
-    it('draws nothing when the source cannot report its status', () => {
-        mount(SyncPanel, { source: { scopes: async () => [], load: async () => null }, rootId: 'sys' });
-        expect(screen.queryByTestId('kg-sync')).toBeNull();
-    });
-
-    it('shows the pipeline, local against server, the skipped files with reasons, and the sources with their state', async () => {
-        withSync(full, { diagnosticsText: () => 'DIAG' });
-        await screen.findByTestId('kg-sync');
-        expect(document.querySelector('[data-step="match"]')!.getAttribute('data-state')).toBe('attention');
-        expect(document.querySelectorAll('[data-step]')).toHaveLength(6);
-        expect(screen.getByTestId('kg-sync-skipped').textContent).toContain('big.bin · 3.0 MB · too large');
-        expect(document.querySelector('[data-source="coverage"]')!.textContent).toContain(L.surface.sourceStates.absent);
-        expect(screen.getByText('no lcov')).toBeTruthy();
-        // A review that recorded no excluded folder says so; the static categories are no longer listed.
-        expect(screen.getByText(L.surface.sync.excludedNone)).toBeTruthy();
-        expect(screen.getByRole('meter', { name: fillTemplate(L.surface.sync.barAria, { label: 'Files', local: 10, server: 8 }) })).toBeTruthy();
-    });
-
-    it('says when nothing is uploaded yet, and when the read fails', async () => {
-        withSync({ local: counts, skipped: [], sources: [] });
-        await screen.findByText(L.surface.sync.notUploaded);
-        expect(screen.getByText(L.surface.sync.skippedNone)).toBeTruthy();
-    });
-
-    it('says "not measured" for edges a linked folder never counted, and draws no bar for them', async () => {
-        withSync({ local: { files: 4, docs: 1 }, skipped: [], sources: [] });
-        await screen.findByTestId('kg-sync');
-        const edges = document.querySelector('[data-count="edges"]')!;
-        expect(edges.getAttribute('data-measured')).toBe('false');
-        expect(edges.textContent).toContain(L.surface.sync.edgesNotMeasured);
-        expect(edges.querySelector('[role="meter"]')).toBeNull();
-    });
-
-    it('says "unknown" when no review recorded the skipped files, never "nothing skipped"', async () => {
-        withSync({ local: counts, sources: [] });
-        expect((await screen.findByTestId('kg-sync-skipped-unknown')).textContent).toBe(L.surface.sync.skippedUnknown);
-        expect(screen.queryByText(L.surface.sync.skippedNone)).toBeNull();
-    });
-
-    it('lists a skipped file with its reason in words, and no size when none was measured', async () => {
-        const skipped = [{ path: 'huge.sql', reason: 'too-large' }, { path: 'a.bin', bytes: 2048, reason: 'unreadable' }];
-        withSync({ local: counts, skipped, sources: [] });
-        const list = await screen.findByTestId('kg-sync-skipped');
-        expect(list.textContent).toContain(`huge.sql · ${L.surface.skipReasons.tooLarge}`);
-        expect(list.textContent).not.toContain('0 B');
-        expect(list.textContent).toContain(`a.bin · 2.0 KB · ${L.surface.skipReasons.unreadable}`);
-    });
-
-    it('notes a truncated graph', async () => {
-        withSync({ local: { ...counts, truncated: true }, skipped: [], sources: [] });
-        expect((await screen.findByTestId('kg-sync-truncated')).textContent).toBe(L.surface.sync.truncatedNote);
-    });
-
-    it('reports a failed read, and is loading until the root\'s read arrives', async () => {
-        withSync(null, { syncFailed: true });
-        expect((await screen.findByRole('alert')).textContent).toBe(L.surface.sync.failed);
-    });
-
-    it('says it is loading while the root\'s read is on the way, and fetches nothing itself', () => {
-        const read = vi.fn(async () => full);
-        mount(SyncPanel, { source: source({ syncStatus: read }), rootId: 'sys', sync: null });
-        expect(screen.getByRole('status').textContent).toBe(L.surface.sync.loading);
-        expect(read).not.toHaveBeenCalled();
-    });
-
-    it('refreshes through the root\'s hook', () => {
-        const onRefreshSync = vi.fn();
-        withSync(full, { onRefreshSync });
-        fireEvent.click(screen.getByRole('button', { name: L.surface.sync.refresh }));
-        expect(onRefreshSync).toHaveBeenCalled();
-    });
-
-    it('copies the diagnostics text it was given', async () => {
-        const writeText = vi.fn().mockResolvedValue(undefined);
-        Object.assign(navigator, { clipboard: { writeText } });
-        withSync(full, { diagnosticsText: () => 'DIAG' });
-        fireEvent.click(await screen.findByRole('button', { name: L.copyDiagnostics }));
-        await waitFor(() => expect(writeText).toHaveBeenCalledWith('DIAG'));
-    });
-});
 
 describe('CoveragePanel', () => {
     it('says "not set up" when no file reports coverage, never a zero', () => {
@@ -155,20 +62,28 @@ describe('PatternsPanel', () => {
         expect(screen.getByTestId('kg-patterns-lit').textContent).toBe('repository lights 1 station');
     });
 
-    it('lists the anti-patterns with Resolve (opens the drawer) and Show in Tower (only with a Tower)', () => {
+    it('lists the anti-patterns as groups with Show in Tower (only with a Tower), which lights them', () => {
         const props = mount(PatternsPanel, { cameras: ['3d'] });
         const row = document.querySelector('[data-anti]')!;
-        fireEvent.click(row.querySelectorAll('button')[1]!);
+        fireEvent.click(within(row as HTMLElement).getByRole('button', { name: L.surface.patterns.showInTower }));
         expect(props.onShow).toHaveBeenCalled();
         expect(props.onCamera).toHaveBeenCalledWith('3d');
-        fireEvent.click(row.querySelectorAll('button')[0]!);
-        expect(seen.surface!.panel).toBe('resolve');
-        expect(seen.surface!.resolving).not.toBeNull();
+        expect(seen.surface!.highlight).not.toBeNull();
     });
 
-    it('disables Show in Tower where there is no WebGL', () => {
+    it('shows in the SVG Tower where there is no WebGL, and disables Show in Tower only where neither camera exists', () => {
+        const props = mount(PatternsPanel, { cameras: ['transit', 'tower'] });
+        const row = document.querySelector('[data-anti]') as HTMLElement;
+        const button = within(row).getByRole('button', { name: L.surface.patterns.showInTower }) as HTMLButtonElement;
+        expect(button.disabled).toBe(false);
+        fireEvent.click(button);
+        expect(props.onCamera).toHaveBeenCalledWith('tower');
+    });
+
+    it('disables Show in Tower with neither the 3D nor the Tower camera', () => {
         mount(PatternsPanel, { cameras: ['transit'] });
-        expect((document.querySelector('[data-anti] button:nth-of-type(2)') as HTMLButtonElement).disabled).toBe(true);
+        const row = document.querySelector('[data-anti]') as HTMLElement;
+        expect((within(row).getByRole('button', { name: L.surface.patterns.showInTower }) as HTMLButtonElement).disabled).toBe(true);
     });
 });
 

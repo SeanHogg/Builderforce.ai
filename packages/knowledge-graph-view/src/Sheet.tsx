@@ -19,11 +19,13 @@ export interface SheetProps {
     children: ReactNode;
     /** A muted line beside the title (a drawer says what it is for). */
     subtitle?: string | undefined;
+    /** The panel owns its scrolling and pinned footer: the body is a flush, non-scrolling column the content fills (the Reviews panel). */
+    fill?: boolean | undefined;
     /** The docked width in px (default 380); never wider than the container. */
     width?: number | undefined;
 }
 
-export function Sheet({ open, title, closeLabel, onClose, compact, children, subtitle, width = 380 }: SheetProps) {
+export function Sheet({ open, title, closeLabel, onClose, compact, children, subtitle, width = 380, fill = false }: SheetProps) {
     if (!open) return null;
     return (
         <aside
@@ -49,7 +51,7 @@ export function Sheet({ open, title, closeLabel, onClose, compact, children, sub
                     <span aria-hidden="true">×</span>
                 </button>
             </header>
-            <div style={{ overflow: 'auto', padding: 16, display: 'grid', gap: 16, alignContent: 'start' }}>{children}</div>
+            <div style={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : { flex: 1, minHeight: 0, overflow: 'auto', padding: 16, display: 'grid', gap: 16, alignContent: 'start' }}>{children}</div>
         </aside>
     );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { layout3d } from '../scene/layout3d';
 import { codeFixture, mixedFixture } from '../testing';
-import { fitView, layout2d, nodeRadius } from './layout2d';
+import { fitView, layout2d, layout2dTask, nodeRadius } from './layout2d';
 
 const entries = (l: ReturnType<typeof layout2d>) => [...l.positions.entries()];
 
@@ -67,5 +67,18 @@ describe('fitView', () => {
         const v = fitView(l, 0, 0);
         expect(v.w).toBeGreaterThan(0);
         expect(v.h).toBeGreaterThan(0);
+    });
+});
+
+describe('layout2d with a large edge set', () => {
+    it('is deterministic with far more edges than springs, and the task equals the one-shot layout', () => {
+        const nodes = Array.from({ length: 200 }, (_, i) => ({ ref: `src:r::n${i}.ts` as ReturnType<typeof codeFixture>['nodes'][number]['ref'], kind: 'file' as const, label: `n${i}`, pack: 'code', importance: 0.5, origin: 'extracted' as const }));
+        const edges: ReturnType<typeof codeFixture>['edges'] = [];
+        for (let i = 0; edges.length < 40_000; i++) edges.push({ from: nodes[i % 200]!.ref as never, to: nodes[(i * 11 + 1) % 200]!.ref as never, kind: 'references', weight: 1, origin: 'extracted' });
+        const a = layout2d('big', nodes, edges, { iterations: 3 });
+        expect(entries(layout2d('big', nodes, edges, { iterations: 3 }))).toEqual(entries(a));
+        const task = layout2dTask('big', nodes, edges, { iterations: 3 });
+        while (!task.step());
+        expect(entries(task.result())).toEqual(entries(a));
     });
 });

@@ -43,18 +43,14 @@ export interface HeaderLabels {
     pinpointProvenance: Record<'vision' | 'exact' | 'catalog' | 'import', string>;
     /** `{title}`, `{at}`, `{count}`. */
     time: Record<'label' | 'aria' | 'now' | 'commitAria', string>;
-    /** The header: the status strip (`{time}`, `{progress}`, `{count}`, `{local}`, `{server}`), the overflow menu (`{title}`) and the overlay sentence. */
-    header: Record<
-        'statusLabel' | 'syncedAt' | 'synced' | 'notSynced' | 'updateFailed' | 'reviewing' | 'reviewPlan' | 'reviewFailed'
-        | 'parityDiffers' | 'moreActions' | 'reReview' | 'overlaysNote' | 'rootsLabel',
-        string
-    >;
+    /** The header: the strip's failure words, the parity line (`{local}`, `{server}`) and the overlay sentence. */
+    header: Record<'statusLabel' | 'updateFailed' | 'reviewFailed' | 'parityDiffers' | 'overlaysNote' | 'rootsLabel', string>;
     /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
     askSentence: Record<QuestionId, string>;
     /** The ask bar's note per question: how it is answered. */
     answerMode: Record<QuestionId, string>;
     /** A drawer's subtitle, by panel id. */
-    drawerSubtitle: Record<'sync' | 'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate', string>;
+    drawerSubtitle: Record<'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate', string>;
 }
 
 export const HEADER_DEFAULTS: HeaderLabels = {
@@ -125,16 +121,9 @@ export const HEADER_DEFAULTS: HeaderLabels = {
     },
     header: {
         statusLabel: 'Sync status',
-        syncedAt: 'Synced {time}',
-        synced: 'Synced',
-        notSynced: 'Not synced',
         updateFailed: 'Couldn’t update',
-        reviewing: 'Reviewing · {progress}',
-        reviewPlan: 'Review plan ready',
         reviewFailed: 'Review failed',
         parityDiffers: '{local} here · {server} on the server',
-        moreActions: 'More actions',
-        reReview: 'Re-review this folder',
         overlaysNote: 'Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.',
         rootsLabel: 'Reviewed folders',
     },
@@ -149,7 +138,7 @@ export const HEADER_DEFAULTS: HeaderLabels = {
         claims: 'answered as claims', layers: 'answered as layers', knowledge: 'answered as facts',
     },
     drawerSubtitle: {
-        sync: 'local first, small batches, merged by file hash', run: 'every phase, every worker, every failure', coverage: 'tests, reach and gaps across the system',
+        run: 'every phase, every worker, every failure', coverage: 'tests, reach and gaps across the system',
         patterns: 'design, enterprise and anti-patterns by layer', api: 'what the routes promise, what is tested, try it',
         resolve: 'a deterministic fix or a prompt, then verify', simulate: 'run the path with real values',
     },

@@ -105,8 +105,9 @@ function group(m: RegExpExecArray, n: number): string {
  * Walk a file's lines, handing each to `visit` with its 1-based number, until the file
  * ends or the per-file cap is reached. The one loop every extractor shares.
  */
+let symbolCap = MAX_SYMBOLS_PER_FILE;
 function eachLine(lines: readonly string[], out: CodeSymbol[], visit: (line: string, lineNo: number) => void): void {
-  for (let i = 0; i < lines.length && out.length < MAX_SYMBOLS_PER_FILE; i += 1) {
+  for (let i = 0; i < lines.length && out.length < symbolCap; i += 1) {
     visit(lines[i] ?? "", i + 1);
   }
 }
@@ -316,13 +317,16 @@ const EXTRACTORS: Record<Language, (lines: string[], out: CodeSymbol[]) => void>
 
 /**
  * The definitions in one file, in line order. Empty for a language this does not
- * understand (see {@link isSymbolIndexable}). Capped at {@link MAX_SYMBOLS_PER_FILE}.
+ * understand (see {@link isSymbolIndexable}). Capped at {@link MAX_SYMBOLS_PER_FILE} unless a larger `cap` is given.
  */
-export function extractSymbols(path: string, content: string): CodeSymbol[] {
+export function extractSymbols(path: string, content: string, cap: number = MAX_SYMBOLS_PER_FILE): CodeSymbol[] {
   const language = languageOf(path);
   if (!language) return [];
   const out: CodeSymbol[] = [];
-  EXTRACTORS[language](content.split(/\r?\n/), out);
+  // The cap bounds the symbol INDEX; a caller that needs the true count (the god-module badges) passes a larger one. Synchronous, so the swap cannot interleave.
+  const outer = symbolCap;
+  symbolCap = cap;
+  try { EXTRACTORS[language](content.split(/\r?\n/), out); } finally { symbolCap = outer; }
   return out;
 }
 

@@ -15,11 +15,15 @@ import { Html, OrbitControls } from '@react-three/drei';
 import { Color, DoubleSide, InstancedMesh, Matrix4, Vector3 } from 'three';
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import type { LensDef } from '../lenses';
-import { layout3d, type Layout3D } from './layout3d';
-import { useIdleValue } from '../useIdleValue';
+import { EMPTY_LAYOUT_3D, layoutTask, type Layout3D } from './layout3d';
+import { useDeferredWhen } from '../useDeferredWhen';
+import { useIdleSteps } from '../useIdleSteps';
+import { DEFER_EDGES_ABOVE, pickEdges } from './edgeBudget';
+import { useRankedEdges } from './useRankedEdges';
 import { edgeBuffers, nodeInstances } from './buffers';
 import { towerBodies, type SceneChannels } from './channels';
 import { Pipes, Towers } from './Towers';
+import { applyRoles, type TowerRole } from './highlightRoles';
 import { cssVar, useThemeColors, type ThemeColors } from './themeColors';
 
 export interface GraphSceneProps {
@@ -37,6 +41,8 @@ export interface GraphSceneProps {
     reducedMotion?: boolean;
     /** The overlay channels (height, fill band, shell, pipe width). Absent ⇒ the plain spheres and lines. */
     channels?: SceneChannels | undefined;
+    /** An anti-pattern highlight: offenders and partners are lit, every other tower is dimmed. */
+    roles?: ReadonlyMap<string, TowerRole> | undefined;
 }
 
 type OrbitHandle = { target: Vector3; update(): void };
@@ -79,11 +85,12 @@ function Nodes({ layout, nodes, lens, colors, selected, onSelect }: {
     );
 }
 
+/** The edge buffers are built in a deferred step AFTER the nodes are on screen, so 15,000 segments never hold up the first paint. */
 function Edges({ layout, edges, colors }: { layout: Layout3D; edges: readonly KEdge[]; colors: ThemeColors }) {
-    const buffers = useMemo(() => edgeBuffers(edges, layout), [edges, layout]);
+    const buffers = useDeferredWhen(() => edgeBuffers(edges, layout), [edges, layout], edges.length > DEFER_EDGES_ABOVE, []);
     return (
         <>
-            {buffers.map((b) => (
+            {(buffers ?? []).map((b) => (
                 <lineSegments key={b.bucket}>
                     <bufferGeometry>
                         <bufferAttribute attach="attributes-position" args={[b.positions, 3]} />
@@ -132,11 +139,16 @@ function RepaintOnShow() {
     return null;
 }
 
-export default function GraphScene({ rootId, nodes, edges, lens, selected, focus, onSelect, planeLabel, label, reducedMotion = false, channels }: GraphSceneProps) {
+export default function GraphScene({ rootId, nodes, edges, lens, selected, focus, onSelect, planeLabel, label, reducedMotion = false, channels, roles }: GraphSceneProps) {
     const [host, setHost] = useState<HTMLDivElement | null>(null);
     const colors = useThemeColors(host);
-    const layout = useIdleValue(() => layout3d(rootId, nodes, edges), [rootId, nodes, edges]);
-    const bodies = useMemo(() => (channels && layout ? towerBodies(nodeInstances(nodes, layout, lens), channels.nodes) : null), [channels, layout, nodes, lens]);
+    const layout = useIdleSteps(() => layoutTask(rootId, nodes, edges), [rootId, nodes, edges], EMPTY_LAYOUT_3D);
+    // At most MAX_DRAWN_EDGES links are drawn (the camera says so); the ranking is per graph, the pick per selection.
+    // Ranking 100k+ edges is not render-path work: it runs on idle, and not at all while pipes (which have their own cap) replace the lines.
+    const pipes = !!channels?.pipeWidth;
+    const ranked = useRankedEdges(edges, nodes, !pipes);
+    const drawnEdges = useMemo(() => (ranked ? pickEdges(ranked, selected) : null), [ranked, selected]);
+    const bodies = useMemo(() => (channels && layout ? applyRoles(towerBodies(nodeInstances(nodes, layout, lens), channels.nodes), roles) : null), [channels, layout, nodes, lens, roles]);
     const controls = useRef<OrbitHandle | null>(null);
     const target = useMemo(() => {
         const ref = selected ?? focus[0];
@@ -165,11 +177,11 @@ export default function GraphScene({ rootId, nodes, edges, lens, selected, focus
                     {channels && bodies ? (
                         <>
                             <Towers bodies={bodies} colors={colors} selected={selected} onSelect={onSelect} />
-                            {channels.pipeWidth ? <Pipes edges={edges} bodies={bodies} channels={channels} colors={colors} /> : <Edges layout={layout} edges={edges} colors={colors} />}
+                            {channels.pipeWidth ? <Pipes edges={edges} bodies={bodies} channels={channels} colors={colors} /> : drawnEdges && <Edges layout={layout} edges={drawnEdges} colors={colors} />}
                         </>
                     ) : (
                         <>
-                            <Edges layout={layout} edges={edges} colors={colors} />
+                            {drawnEdges && <Edges layout={layout} edges={drawnEdges} colors={colors} />}
                             <Nodes layout={layout} nodes={nodes} lens={lens} colors={colors} selected={selected} onSelect={onSelect} />
                         </>
                     )}

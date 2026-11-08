@@ -5,10 +5,10 @@
  * root and its folders are Tab stops, arrow keys walk the rest.
  */
 
-import { memo, useCallback, useMemo, useRef, type KeyboardEvent, type MouseEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { LayingOut } from '../surface/LayingOut';
 import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
-import { counted } from '../surface/plural';
 import { useContainerSize } from '../environment';
 import { fitView } from '../graph2d/layout2d';
 import { useIdleValue } from '../useIdleValue';
@@ -17,13 +17,11 @@ import { useRoving } from '../useRoving';
 import { HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
 import { usePanZoomRegistration } from '../surface/zoom';
-import { kindLabel } from '../names';
 import { cssVar } from '../scene/themeColors';
-import { mindMap, type MindMap as MindMapModel, type PlacedBranch } from './mindMapModel';
-
-const MAX_LABEL = 24;
-const RADIUS = { root: 1.8, folder: 1.2, file: 0.7, more: 0.7 } as const;
-const clip = (s: string): string => (s.length > MAX_LABEL ? `${s.slice(0, MAX_LABEL - 1)}…` : s);
+import { TYPE } from '../surface/ui/type';
+import { Branches, RADIUS } from './MindBranches';
+import { EMPTY_MIND_MAP, focusFolder, mindMap, type PlacedBranch } from './mindMapModel';
+import { outTarget } from './mindOut';
 
 export interface MindMapProps {
     nodes: readonly KNode[];
@@ -31,72 +29,34 @@ export interface MindMapProps {
     /** The reviewed folder's name: the root's caption. */
     rootTitle: string;
     selected: string | null;
+    /** The refs the view is focused on: the folder they share is the one the map expands. */
+    focus?: readonly string[] | undefined;
     onSelect(ref: string): void;
     onShow(refs: string[]): void;
     labels: KnowledgeGraphLabels;
     label: string;
 }
 
-interface LayerProps {
-    map: MindMapModel;
-    rootTitle: string;
-    kinds: ReadonlyMap<string, string>;
-    selected: string | null;
-    perPx: number;
-    font: number;
-    labels: KnowledgeGraphLabels;
-    onActivate(b: PlacedBranch): void;
-    onArrow(e: KeyboardEvent<SVGElement>): void;
-}
+const sameRefs = (a: readonly string[], b: readonly string[]): boolean => a === b || (a.length === b.length && a.every((r, i) => r === b[i]));
 
-function wording(b: PlacedBranch, p: Pick<LayerProps, 'rootTitle' | 'kinds' | 'labels'>): { text: string; aria: string } {
-    const { labels } = p;
-    if (b.kind === 'root') return { text: clip(p.rootTitle), aria: counted(labels, 'branchFiles', b.count, { name: p.rootTitle }) };
-    if (b.kind === 'more') { const t = fillTemplate(labels.mapMore, { count: b.count }); return { text: t, aria: t }; }
-    if (b.kind === 'file') return { text: clip(b.name), aria: fillTemplate(labels.nodeAria, { label: b.name, kind: kindLabel(labels, p.kinds.get(b.ref ?? '') ?? 'file') }) };
-    return { text: `${clip(b.name)} (${b.count})`, aria: counted(labels, 'branchFiles', b.count, { name: b.name }) };
-}
-
-const Branches = memo(function Branches(p: LayerProps) {
-    const { map, selected, perPx, font, onActivate, onArrow } = p;
-    return (
-        <g>
-            {map.branches.map((b) => {
-                const w = wording(b, p);
-                const left = Math.cos(b.angle) < -0.01;
-                const root = b.kind === 'root';
-                const r = Math.max(RADIUS[b.kind], 3 * perPx);
-                const active = b.ref !== undefined && b.ref === selected;
-                return (
-                    <g
-                        key={b.id} data-id={b.id} data-branch={b.kind} data-severity={b.severity} role="button" aria-label={w.aria}
-                        aria-pressed={b.kind === 'file' ? active : undefined} tabIndex={b.depth <= 1 || active ? 0 : -1} data-keep={b.depth <= 1 || active ? '1' : undefined}
-                        style={{ cursor: 'pointer' }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(b); } else onArrow(e); }}
-                    >
-                        <circle
-                            cx={b.x} cy={b.y} r={r} pointerEvents="none" fill={b.kind === 'more' ? cssVar('bg') : cssVar(b.tone)}
-                            stroke={cssVar(b.tone)} strokeWidth={1.5} vectorEffect="non-scaling-stroke"
-                        />
-                        {active && <circle data-selected="true" cx={b.x} cy={b.y} r={r + 4 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={3 * perPx} pointerEvents="none" />}
-                        <text
-                            aria-hidden="true" pointerEvents="none" fontSize={font} fill={cssVar('text')} fontWeight={root || b.kind === 'folder' || active ? 700 : 400}
-                            x={root ? b.x : b.x + (left ? -1 : 1) * (r + font * 0.5)} y={root ? b.y - r - font * 0.6 : b.y + font * 0.35}
-                            textAnchor={root ? 'middle' : left ? 'end' : 'start'} stroke={cssVar('bg')} strokeWidth={font * 0.3} paintOrder="stroke"
-                        >
-                            {w.text}
-                        </text>
-                    </g>
-                );
-            })}
-        </g>
-    );
-});
-
-export function MindMap({ nodes, findings, rootTitle, selected, onSelect, onShow, labels, label }: MindMapProps) {
+export function MindMap({ nodes, findings, rootTitle, selected, focus, onSelect, onShow, labels, label }: MindMapProps) {
     const host = useRef<HTMLDivElement>(null);
     const size = useContainerSize(host);
-    const map = useIdleValue(() => mindMap(nodes, findings), [nodes, findings]);
+    // The expanded folder is the one the user chose (a click, or Out), carried with the refs it focused; when the focus came
+    // from elsewhere (a search, the host) it is the folder those refs share. The refs alone cannot name it: a parent whose only
+    // child is the folder we left holds the same files.
+    const [picked, setPicked] = useState<{ folder: string | null; refs: readonly string[] } | null>(null);
+    const [paged, setPaged] = useState<{ folder: string | null; parent: string; start: number } | null>(null);
+    const shared = useMemo(() => (focus && focus.length ? focusFolder(focus) : null), [focus]);
+    const folder = picked && sameRefs(picked.refs, focus ?? []) ? picked.folder : shared;
+    const [filesPaged, setFilesPaged] = useState<{ folder: string | null; start: number } | null>(null);
+    const paging = useMemo(() => (paged && paged.folder === folder ? { parent: paged.parent, start: paged.start } : null), [paged, folder]);
+    const filesPage = useMemo(() => (filesPaged && folder !== null && filesPaged.folder === folder ? { folder, start: filesPaged.start } : null), [filesPaged, folder]);
+    const map = useIdleValue(() => mindMap(nodes, findings, { focus: folder, window: paging, files: filesPage }), [nodes, findings, folder, paging, filesPage], EMPTY_MIND_MAP);
+    const [hover, setHover] = useState<string | null>(null);
+    // On touch the first tap on a branch shows its label and only the second one acts: a finger cannot hover.
+    const [tapped, setTapped] = useState<string | null>(null);
+    const pointerKind = useRef<string>('mouse');
     const base = useMemo(() => (map ? fitView(map, size.width, size.height) : null), [map, size.width, size.height]);
     const pan = usePanZoom(base, map);
     usePanZoomRegistration(pan); // the scene overlay's +, − and Fit drive this view
@@ -112,10 +72,23 @@ export function MindMap({ nodes, findings, rootTitle, selected, onSelect, onShow
     const { wasDrag } = pan;
     const handlers = useRef({ onSelect, onShow });
     handlers.current = { onSelect, onShow };
+    /** Focus `refs` and expand `to` (null = the top level): ONE way to move the map, so Out and a click agree. */
+    const expand = useCallback((to: string | null, refs: string[]) => {
+        setPicked({ folder: to, refs });
+        setPaged(null);
+        setFilesPaged(null);
+        setTapped(null);
+        handlers.current.onShow(refs);
+    }, []);
     const activate = useCallback((b: PlacedBranch) => {
         if (wasDrag()) return;
-        if (b.kind === 'file' && b.ref) handlers.current.onSelect(b.ref); else handlers.current.onShow(b.refs);
-    }, [wasDrag]);
+        if (pointerKind.current === 'touch' && tapped !== b.id) { setTapped(b.id); return; }
+        setTapped(null);
+        if (b.kind === 'file' && b.ref) handlers.current.onSelect(b.ref);
+        else if (b.page?.of === 'files') setFilesPaged({ folder, start: b.page.next }); // "+N more": the next page of this folder's files
+        else if (b.page) setPaged({ folder, parent: b.page.parent, start: b.page.next }); // "+N folders": the next page of that parent's folders
+        else expand(b.kind === 'root' ? '' : b.id, b.refs);
+    }, [wasDrag, folder, expand, tapped]);
     const spots = useMemo(() => (map?.branches ?? []).map((b) => ({ id: b.id, x: b.x, y: b.y, importance: b.count })), [map]);
     // ONE pointer handler for every branch: the nearest centre wins, so overlapping hit areas never steal a click.
     const onSvgClick = (e: MouseEvent<SVGSVGElement>) => {
@@ -125,14 +98,32 @@ export function MindMap({ nodes, findings, rootTitle, selected, onSelect, onShow
         if (b) activate(b);
     };
     const ringAt = roving.ring ? byId.get(roving.ring) : undefined;
+    const out = useMemo(() => (folder === null ? null : outTarget(nodes, folder, rootTitle)), [nodes, folder, rootTitle]);
+
+    // Escape and Backspace go Out, from anywhere in the map.
+    const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+        pointerKind.current = 'key';
+        if (out && (e.key === 'Escape' || e.key === 'Backspace')) { e.preventDefault(); expand(out.folder, out.refs); }
+    };
 
     return (
-        <div ref={host} data-testid="kg-map" aria-busy={!map} style={{ position: 'absolute', inset: 0, color: cssVar('text'), background: cssVar('bg'), touchAction: 'none' }}>
+        <div ref={host} data-testid="kg-map" aria-busy={!map} onKeyDown={onKeyDown} style={{ position: 'absolute', inset: 0, color: cssVar('text'), background: cssVar('bg'), touchAction: 'none' }}>
+            {!map && <LayingOut labels={labels} />}
             {map && pan.viewBox && (
                 <>
+                    {/* Before the SVG, so it is the first thing a keyboard or screen reader reaches. */}
+                    {out && (
+                        <button
+                            type="button" data-testid="kg-map-out" onClick={() => expand(out.folder, out.refs)} title={fillTemplate(labels.surface.overlay.outTo, { name: out.name })}
+                            style={{ position: 'absolute', zIndex: 1, insetBlockStart: 8, insetInlineStart: 8, maxWidth: 'calc(100% - 16px)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 6, border: `1px solid ${cssVar('edge')}`, background: cssVar('panel'), color: cssVar('text'), cursor: 'pointer', ...TYPE.meta }}
+                        >
+                            {fillTemplate(labels.surface.overlay.outTo, { name: out.name })}
+                        </button>
+                    )}
                     <svg
                         ref={pan.svgRef} role="group" aria-label={label} viewBox={pan.viewBox} preserveAspectRatio="xMidYMid meet"
                         width="100%" height="100%" style={{ display: 'block', cursor: 'grab', userSelect: 'none' }} {...pan.bind}
+                        onPointerDownCapture={(e) => { pointerKind.current = e.pointerType; }}
                         onFocus={roving.onFocus} onBlur={roving.onBlur} onClick={onSvgClick}
                     >
                         <title>{label}</title>
@@ -140,7 +131,7 @@ export function MindMap({ nodes, findings, rootTitle, selected, onSelect, onShow
                         <path d={links} fill="none" stroke={cssVar('edge')} vectorEffect="non-scaling-stroke" strokeWidth={1} opacity={0.6} aria-hidden="true" />
                         <Branches
                             map={map} rootTitle={rootTitle} kinds={kinds} selected={selected} perPx={perPx} font={font}
-                            labels={labels} onActivate={activate} onArrow={roving.onArrow}
+                            labels={labels} reveal={hover ?? tapped ?? roving.ring ?? null} onActivate={activate} onArrow={roving.onArrow} onHover={setHover}
                         />
                         {ringAt && <circle data-focus="true" cx={ringAt.x} cy={ringAt.y} r={RADIUS[ringAt.kind] + 8 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray="4 3" pointerEvents="none" />}
                     </svg>

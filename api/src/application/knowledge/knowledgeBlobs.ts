@@ -32,7 +32,7 @@ import { fileLeafKey } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { Env } from '../../env';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import type { AnalysisSnapshotPort, ExtractedCachePort } from './knowledgePorts';
-import { buildBundle, mergeBodies, readBundled } from './knowledgeBundles';
+import { buildBundle, mergeBody, readBundled } from './knowledgeBundles';
 import type { KnowledgeLedgerPort } from './knowledgeLedger';
 import { KnowledgeSyncError } from './sync/knowledgeSyncPorts';
 
@@ -204,7 +204,7 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
     },
 
     /**
-     * The legacy per-hash upload. With a ledger it MERGES by `sourceRef` with the stored body (the same `mergeBodies` as a
+     * The legacy per-hash upload. With a ledger it MERGES by `sourceRef` with the stored body (the same `mergeBody` as a
      * pack) under the project's sync lock, and stores the result as a one-body bundle + index row, so a pack's
      * read-merge-write sees the change (its basis key moves) and neither evicts the other's entries. Without a ledger
      * (a store with no database) it replaces the per-hash object, as before.
@@ -215,9 +215,13 @@ export function r2ExtractedCache(env: Pick<Env, 'UPLOADS'>, tenantId: number, pr
         // CONDITIONAL index write. A body that moved meanwhile (a pack, another upload) is merged again, a few times.
         let written = 0;
         for (let attempt = 0; attempt < PUT_ATTEMPTS && written === 0; attempt++) {
-          const prior = (await ledger.index.locate([hash]))[0]?.bundleKey ?? null;
+          const loc = (await ledger.index.locate([hash]))[0];
+          const prior = loc?.bundleKey ?? null;
           const current = (await bodiesOf(bucket(), [hash])).get(hash);
-          const bundle = buildBundle(tenantId, [{ hash, entries: mergeBodies(current, extracted) }]);
+          // An index row whose stored body cannot be read is healed (the upload is written on its own, the index naming only its sources), never wedged on.
+          const unreadable = !!loc && !current;
+          if (unreadable) reportCaughtError(new Error(`knowledge: the stored body of ${hash} could not be read; rewritten from the upload`), { source: SOURCE, operation: 'healUnreadableBody', level: 'warning', context: { hash } });
+          const bundle = buildBundle(tenantId, [{ hash, ...mergeBody(unreadable ? undefined : loc, current, extracted) }]);
           await bucket().put(bundle.key, bundle.bytes, { httpMetadata: { contentType: 'application/json' } });
           written = await ledger.exclusive((locked) => locked.index.upsert(bundle.locs, new Map([[hash, prior]])));
         }

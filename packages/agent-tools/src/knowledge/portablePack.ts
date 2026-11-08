@@ -30,7 +30,8 @@ import {
  * now (memory's `extractedLog`), so the snapshot type makes `extracted` optional; a pack file still embeds its extracted map (the format is
  * unchanged), and a pack is built from `store.extractedEntries()`, never from a snapshot's own key.
  */
-export type PackSnapshot = Required<KnowledgeSnapshot>;
+/** `recheck` is a host-local channel between a replica and the review, never part of a portable pack. */
+export type PackSnapshot = Required<Omit<KnowledgeSnapshot, 'recheck'>>;
 
 /** One portable knowledge pack — the payload of a `.bfpack` file. */
 export interface PortableKnowledgePack {

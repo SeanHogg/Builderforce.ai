@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.140",
+  "version": "2026.10.141",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -909,7 +909,9 @@
         "builderforce.knowledge.devOrigins": {
           "type": "array",
           "scope": "application",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "markdownDescription": "%config.knowledgeDevOrigins.desc%"
         },
@@ -946,8 +948,14 @@
         },
         "builderforce.pipeline.routing": {
           "type": "string",
-          "enum": ["auto", "always"],
-          "enumDescriptions": ["%config.pipeline.routing.auto%", "%config.pipeline.routing.always%"],
+          "enum": [
+            "auto",
+            "always"
+          ],
+          "enumDescriptions": [
+            "%config.pipeline.routing.auto%",
+            "%config.pipeline.routing.always%"
+          ],
           "default": "auto",
           "markdownDescription": "%config.pipeline.routing.desc%"
         },
@@ -1177,9 +1185,9 @@
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.10.48",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.48",
-    "@seanhogg/builderforce-memory-mcp": "^2026.10.43",
+    "@seanhogg/builderforce-memory": "^2026.10.54",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.54",
+    "@seanhogg/builderforce-memory-mcp": "^2026.10.54",
     "@seanhogg/builderforce-studio": "link:../../studio",
     "@seanhogg/builderforce-voice": "link:../../voice",
     "@types/mocha": "^10.0.10",
@@ -1211,7 +1219,6 @@
     "vitest": "^4.0.3",
     "xlsx": "^0.18.5"
   },
-  "dependencies": {},
   "pnpm": {
     "overrides": {
       "sharp": "0.35.4",

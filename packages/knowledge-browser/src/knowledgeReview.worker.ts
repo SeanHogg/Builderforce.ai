@@ -42,6 +42,10 @@ function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPo
     markStale: (s, ref, hash) => call('store', 'markStale', [s, ref, hash]),
     getExtracted: (hash) => call('store', 'getExtracted', [hash]),
     putExtracted: (hash, extracted) => call('store', 'putExtracted', [hash, extracted]),
+    markRecheck: (hashes) => call('store', 'markRecheck', [hashes]),
+    recheckHashes: () => call('store', 'recheckHashes'),
+    clearRecheck: (hashes) => call('store', 'clearRecheck', [hashes]),
+    hasRecheck: (hash) => call('store', 'hasRecheck', [hash]),
   };
   const judgement: JudgementPort = { judge: ({ kind, items }) => call('judgement', 'judge', [{ kind, items }]) };
   const manifest: IngestManifest = {

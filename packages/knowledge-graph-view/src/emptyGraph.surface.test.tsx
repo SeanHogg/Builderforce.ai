@@ -43,7 +43,7 @@ describe('the surface over no graph', () => {
     it('opens every panel of the dock over an empty graph', () => {
         function Harness() {
             const surface = useSurface(EMPTY_GRAPH, null);
-            const env = { webgl: false, reducedMotion: true, hasLines: true, compact: false, hasSync: true };
+            const env = { webgl: false, reducedMotion: true, hasLines: true, compact: false, hasRun: true };
             const panels = PANELS.map((p) => ({ ...p, available: () => true }));
             return (
                 <>

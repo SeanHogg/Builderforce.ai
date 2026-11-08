@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { CodeSymbol } from "@builderforce/agent-tools";
 import { CODE_BADGES, indexedSymbolLookup, indexedSymbolSource, reviewPacks } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, extractJob, sha256Hex, type ExtractJob } from "@seanhogg/builderforce-memory/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, sha256Hex, type ExtractJob } from "@seanhogg/builderforce-memory/knowledge";
 import { handleExtractJob, type HostExtractJob } from "./extractJobHandler";
 import { withIndexSymbols } from "./extractPoolHost";
 
@@ -82,6 +82,23 @@ describe("a worker that reads its own file (PRD 41 A10)", () => {
     await expect(handleExtractJob({ ...stub("edited.md"), readFrom, sectionsOnly: true })).rejects.toThrow("changed since plan");
   });
 
+  it("regression: a malformed job (a readByPool job with nothing to read) is a plain configuration error, never ExtractFailed", async () => {
+    const malformed = { rootId: "ws", path: "a.md", hash: "h", knownKeys: [], readByPool: { path: "a.md", hash: "h" } } as unknown as HostExtractJob;
+    const error = await handleExtractJob(malformed).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("carries no document");
+    expect(error).not.toBeInstanceOf(ExtractFailed);
+  });
+
+  it("regression: a read failure (changed since plan, a missing file) is a plain transient error, never ExtractFailed", async () => {
+    const planned = await sha256Hex(Buffer.from("# Old\n"));
+    writeFileSync(join(dir, "edited2.md"), "# New\n");
+    const changed = await handleExtractJob({ ...stub("edited2.md"), readFrom: { rootPath: dir, path: "edited2.md", hash: planned } }).catch((e: unknown) => e);
+    expect(changed).toBeInstanceOf(Error);
+    expect(changed).not.toBeInstanceOf(ExtractFailed);
+    const missing = await handleExtractJob({ ...stub("gone.md"), readFrom: { rootPath: dir, path: "gone.md", hash: planned } }).catch((e: unknown) => e);
+    expect(missing).not.toBeInstanceOf(ExtractFailed);
+  });
   it("returns {binary: true} for a binary file and extracts nothing", async () => {
     const binary = Buffer.from([1, 0, 2, 0, 0, 255, 0, 3]);
     writeFileSync(join(dir, "b.dat"), binary);

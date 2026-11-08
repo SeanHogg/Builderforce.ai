@@ -21,7 +21,7 @@
 
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { blobDataUrl, checkPinpointImage, rootIdOfSourceRef } from '@builderforce/agent-tools/knowledge';
-import { FixStepError, HOST_CHECK_IDS, ReviewFailure } from '@builderforce/knowledge-graph-view';
+import { ABORT_GRACE_MS, FixStepError, HOST_CHECK_IDS, ReviewFailure } from '@builderforce/knowledge-graph-view';
 import type { FixCheckResult } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, NotReviewedHere, PinpointResult,
@@ -45,8 +45,9 @@ export interface HostKnowledgeSourceOptions {
   onReviewActive?(active: boolean): void;
 }
 
-/** How long, after Stop, the review waits for the host's terminal event before letting go. */
-export const ABORT_GRACE_MS = 30_000;
+
+/** How long, after Stop, the review waits for the host's terminal event; one module with the panel's Force stop delay (`reviewTimings.ts` in the view package). */
+export { ABORT_GRACE_MS };
 
 /** The live-review count after one review starts (`active`) or ends: overlapping reviews hold the flag until the LAST ends. */
 export const reviewCount = (count: number, active: boolean): number => Math.max(0, count + (active ? 1 : -1));
@@ -220,6 +221,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         return { commits: out.commits.map((c) => ({ sha: c.sha, title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
     },
     syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
+    // Retry upload: the extension clears the root's recorded failures and drains its replica queue now.
+    retrySync: async (rootId: string) => { await t.call({ op: 'retrySync', rootId }); },
     // Exclude from review (PRD 41 A9): the host appends the folder to the root's `.builderforce/ignore`; the view then runs its normal Re-review.
     folders: { exclude: async (rootId: string, path: string) => { await t.call({ op: 'excludeFromReview', rootId, path }); } },
     // The extension builds every graph from the local store, linked or not (PRD 41 A7).

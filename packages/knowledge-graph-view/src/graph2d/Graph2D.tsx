@@ -14,16 +14,20 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { LensDef } from '../lenses';
 import { useContainerSize } from '../environment';
 import { byImportance } from '../graphModel';
-import { useIdleValue } from '../useIdleValue';
+import { useDeferredWhen } from '../useDeferredWhen';
+import { useIdleSteps } from '../useIdleSteps';
+import { DEFER_EDGES_ABOVE, incidentOf, pickEdges } from '../scene/edgeBudget';
+import { useRankedEdges } from '../scene/useRankedEdges';
+import { LayingOut } from '../surface/LayingOut';
 import { usePanZoom } from '../usePanZoom';
 import { useRoving } from '../useRoving';
 import { HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
 import { usePanZoomRegistration } from '../surface/zoom';
 import { kindLabel } from '../names';
-import { groupEdges } from '../scene/buffers';
-import { cssVar } from '../scene/themeColors';
-import { fitView, layout2d, nodeRadius, type Layout2D } from './layout2d';
+import { groupEdges, type EdgeGroup } from '../scene/buffers';
+import { cssVar, type ThemeTone } from '../scene/themeColors';
+import { EMPTY_LAYOUT_2D, fitView, layout2dTask, nodeRadius, type Layout2D } from './layout2d';
 
 /** Nodes labelled by default (besides the selection and its neighbours), and nodes that are Tab stops. */
 export const LABELLED_NODES = 25;
@@ -58,20 +62,25 @@ const Bands = memo(function Bands({ layout, font, planeLabel }: { layout: Layout
     );
 });
 
-const Edges = memo(function Edges({ edges, layout, selected }: { edges: readonly KEdge[]; layout: Layout2D; selected: string | null }) {
-    const groups = useMemo(() => groupEdges(edges, (ref) => layout.positions.get(ref)), [edges, layout]);
-    const incident = useMemo(
-        () => (selected ? groupEdges(edges.filter((e) => e.from === selected || e.to === selected), (ref) => layout.positions.get(ref)) : []),
-        [edges, layout, selected],
-    );
+/** Path data per tone bucket, built once per set of groups (not on every render of a selection). */
+const pathsOf = (groups: Array<EdgeGroup<readonly [number, number]>>) => groups.map((g) => ({ bucket: g.bucket, tone: g.tone, d: segments(g.pairs) }));
+
+const Edges = memo(function Edges({ edges, nodes, layout, selected }: { edges: readonly KEdge[]; nodes: readonly KNode[]; layout: Layout2D; selected: string | null }) {
+    // At most MAX_DRAWN_EDGES are drawn (the camera says so). The BASE layer does not depend on the selection, so a click
+    // rebuilds only the incident overlay, which holds the selected node's links complete.
+    const ranked = useRankedEdges(edges, nodes);
+    const drawn = useMemo(() => (ranked ? pickEdges(ranked, null) : []), [ranked]);
+    const at = useCallback((ref: string) => layout.positions.get(ref), [layout]);
+    const groups = useDeferredWhen(() => pathsOf(groupEdges(drawn, at)), [drawn, at], drawn.length > DEFER_EDGES_ABOVE, []) ?? [];
+    const incident = useMemo(() => (ranked ? pathsOf(groupEdges(incidentOf(ranked, selected), at)) : []), [ranked, at, selected]);
     return (
         <g fill="none" aria-hidden="true">
             {groups.map((g) => {
                 const loud = g.bucket === 'violation' || g.bucket === 'cycle';
-                return <path key={g.bucket} data-edge={g.bucket} d={segments(g.pairs)} stroke={cssVar(g.tone)} vectorEffect="non-scaling-stroke" strokeWidth={loud ? 1.6 : 1} opacity={selected ? 0.25 : loud ? 0.9 : 0.5} />;
+                return <path key={g.bucket} data-edge={g.bucket} d={g.d} stroke={cssVar(g.tone)} vectorEffect="non-scaling-stroke" strokeWidth={loud ? 1.6 : 1} opacity={selected ? 0.25 : loud ? 0.9 : 0.5} />;
             })}
             {incident.map((g) => (
-                <path key={g.bucket} data-incident={g.bucket} d={segments(g.pairs)} stroke={cssVar('accent')} vectorEffect="non-scaling-stroke" strokeWidth={2} />
+                <path key={g.bucket} data-incident={g.bucket} d={g.d} stroke={cssVar('accent')} vectorEffect="non-scaling-stroke" strokeWidth={2} />
             ))}
         </g>
     );
@@ -89,25 +98,48 @@ interface NodeLayerProps {
     onArrow(e: KeyboardEvent<SVGElement>): void;
 }
 
+interface NodeDotProps {
+    n: KNode;
+    at: readonly [number, number];
+    tone: ThemeTone;
+    dim: boolean;
+    r: number;
+    tab: boolean;
+    pressed: boolean;
+    labels: KnowledgeGraphLabels;
+    onActivate(ref: string): void;
+    onArrow(e: KeyboardEvent<SVGElement>): void;
+}
+
+/** ONE node. Memoised on primitives and stable objects, so a click re-renders the two nodes whose state changed, not all of them. */
+const NodeDot = memo(function NodeDot({ n, at, tone, dim, r, tab, pressed, labels, onActivate, onArrow }: NodeDotProps) {
+    return (
+        <g
+            data-id={n.ref} role="button" aria-pressed={pressed} style={{ cursor: 'pointer' }}
+            tabIndex={tab ? 0 : -1} data-keep={tab ? '1' : undefined}
+            aria-label={fillTemplate(labels.nodeAria, { label: n.label, kind: kindLabel(labels, n.kind) })}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(n.ref); } else onArrow(e);
+            }}
+        >
+            <circle cx={at[0]} cy={at[1]} r={r} fill={cssVar(tone)} opacity={dim ? 0.35 : 1} stroke={cssVar('bg')} strokeWidth={0.1} data-dot="true" pointerEvents="none" />
+        </g>
+    );
+});
+
 const NodeLayer = memo(function NodeLayer({ ordered, layout, lens, selected, stops, perPx, labels, onActivate, onArrow }: NodeLayerProps) {
+    const styles = useMemo(() => ordered.map((n) => lens.nodeStyle(n)), [ordered, lens]);
     return (
         <g>
-            {ordered.map((n) => {
-                const p = layout.positions.get(n.ref);
-                if (!p) return null;
-                const style = lens.nodeStyle(n);
-                const r = Math.max(nodeRadius(n.importance), 3 * perPx);
+            {ordered.map((n, i) => {
+                const at = layout.positions.get(n.ref);
+                if (!at) return null;
+                const style = styles[i]!;
                 return (
-                    <g
-                        key={n.ref} data-id={n.ref} role="button" aria-pressed={n.ref === selected} style={{ cursor: 'pointer' }}
-                        tabIndex={stops.has(n.ref) || n.ref === selected ? 0 : -1} data-keep={stops.has(n.ref) || n.ref === selected ? '1' : undefined}
-                        aria-label={fillTemplate(labels.nodeAria, { label: n.label, kind: kindLabel(labels, n.kind) })}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(n.ref); } else onArrow(e);
-                        }}
-                    >
-                        <circle cx={p[0]} cy={p[1]} r={r} fill={cssVar(style.tone)} opacity={style.emphasis === 'dim' ? 0.35 : 1} stroke={cssVar('bg')} strokeWidth={0.1} data-dot="true" pointerEvents="none" />
-                    </g>
+                    <NodeDot
+                        key={n.ref} n={n} at={at} tone={style.tone} dim={style.emphasis === 'dim'} r={Math.max(nodeRadius(n.importance), 3 * perPx)}
+                        tab={stops.has(n.ref) || n.ref === selected} pressed={n.ref === selected} labels={labels} onActivate={onActivate} onArrow={onArrow}
+                    />
                 );
             })}
         </g>
@@ -119,7 +151,8 @@ const Captions = memo(function Captions({ ordered, layout, named, selected, font
     return (
         <g aria-hidden="true" pointerEvents="none" fontSize={font} fill={cssVar('text')}>
             {shown.map((n) => {
-                const p = layout.positions.get(n.ref)!;
+                const p = layout.positions.get(n.ref);
+                if (!p) return null;
                 return (
                     <text key={n.ref} x={p[0] + nodeRadius(n.importance) + font * 0.4} y={p[1] + font * 0.35} fontWeight={n.ref === selected ? 700 : 400} stroke={cssVar('bg')} strokeWidth={font * 0.3} paintOrder="stroke">
                         {n.label}
@@ -133,7 +166,7 @@ const Captions = memo(function Captions({ ordered, layout, named, selected, font
 export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeLabel, labels, label }: Graph2DProps) {
     const host = useRef<HTMLDivElement>(null);
     const size = useContainerSize(host);
-    const layout = useIdleValue(() => layout2d(rootId, nodes, edges), [rootId, nodes, edges]);
+    const layout = useIdleSteps(() => layout2dTask(rootId, nodes, edges), [rootId, nodes, edges], EMPTY_LAYOUT_2D);
     const base = useMemo(() => (layout ? fitView(layout, size.width, size.height) : null), [layout, size.width, size.height]);
     const pan = usePanZoom(base, layout);
     usePanZoomRegistration(pan); // the scene overlay's +, − and Fit drive this view
@@ -141,14 +174,21 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
     const { perPx, font } = useSvgScale(pan.view, size);
     const ordered = useMemo(() => [...nodes].sort(byImportance), [nodes]);
     const stops = useMemo(() => new Set<string>(ordered.slice(0, TAB_STOPS).map((n) => n.ref)), [ordered]);
+    // ref → the refs it links to, built once per edge set: a click reads one entry instead of scanning every edge.
+    const neighbours = useMemo(() => {
+        const out = new Map<string, string[]>();
+        const add = (a: string, b: string): void => { const l = out.get(a); if (l) l.push(b); else out.set(a, [b]); };
+        for (const e of edges) { add(e.from, e.to); add(e.to, e.from); }
+        return out;
+    }, [edges]);
     const named = useMemo(() => {
         const refs = new Set<string>(ordered.slice(0, LABELLED_NODES).map((n) => n.ref));
         if (selected) {
             refs.add(selected);
-            for (const e of edges) { if (e.from === selected) refs.add(e.to); else if (e.to === selected) refs.add(e.from); }
+            for (const other of neighbours.get(selected) ?? []) refs.add(other);
         }
         return refs;
-    }, [ordered, edges, selected]);
+    }, [ordered, neighbours, selected]);
 
     const at = selected ? layout?.positions.get(selected) : undefined;
     const { reveal, wasDrag } = pan;
@@ -170,6 +210,7 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
 
     return (
         <div ref={host} data-testid="kg-graph2d" aria-busy={!layout} style={{ position: 'absolute', inset: 0, color: cssVar('text'), background: cssVar('bg'), touchAction: 'none' }}>
+            {!layout && <LayingOut labels={labels} />}
             {layout && pan.viewBox && (
                 <>
                     <svg
@@ -180,7 +221,7 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
                         <title>{label}</title>
                         <desc>{labels.graphHint}</desc>
                         <Bands layout={layout} font={font} planeLabel={planeLabel} />
-                        <Edges edges={edges} layout={layout} selected={selected} />
+                        <Edges edges={edges} nodes={nodes} layout={layout} selected={selected} />
                         <NodeLayer
                             ordered={ordered} layout={layout} lens={lens} selected={selected} stops={stops}
                             perPx={perPx} labels={labels} onActivate={activate} onArrow={roving.onArrow}
