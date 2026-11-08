@@ -24,6 +24,8 @@ import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
 import type { ConnectorSoap } from './soapEnvelope';
 import type { ConnectorAction, ConnectorParam } from './connectorManifest';
 import {
+  ACTION_KEY_RE,
+  isPlainObject,
   validateApplicantMapping,
   validateBoardJobMapping,
   validateResponseMapping,
@@ -53,14 +55,8 @@ export type ConnectorParamLocation = (typeof CONNECTOR_PARAM_LOCATIONS)[number];
 export const CONNECTOR_PARAM_TYPES = ['string', 'number', 'integer', 'boolean', 'object', 'array'] as const;
 export type ConnectorParamType = (typeof CONNECTOR_PARAM_TYPES)[number];
 
-export const ACTION_KEY_RE = /^[a-z0-9][a-z0-9_]{0,62}$/;
-
 /** `{{auth.field}}` references in a template string. */
 export const TEMPLATE_RE = /\{\{\s*auth\.([a-zA-Z0-9_]+)\s*\}\}/g;
-
-export function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
 
 /** How strictly a stored manifest is read — see the header. */
 export interface ActionValidationOptions {

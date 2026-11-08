@@ -19,7 +19,7 @@ import { firstOf } from '../connectors/connectorResponseMapping';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { saveBoardFilterId, type PostedDistribution } from './postingDistributionSweepStore';
 
-export type FilterIdResult = { ok: true; id: string; lookedUp: boolean } | { ok: false; error: string };
+export type FilterIdResult = { ok: true; id: string } | { ok: false; error: string };
 
 export async function resolveFilterId(
   db: Db,
@@ -30,8 +30,8 @@ export async function resolveFilterId(
   actorKind: 'user' | 'system',
 ): Promise<FilterIdResult> {
   const lookup = mapping.filterIdFrom;
-  if (!lookup) return { ok: true, id: row.externalId, lookedUp: false };
-  if (row.boardFilterId) return { ok: true, id: row.boardFilterId, lookedUp: false };
+  if (!lookup) return { ok: true, id: row.externalId };
+  if (row.boardFilterId) return { ok: true, id: row.boardFilterId };
 
   const result = await execute({
     db, env,
@@ -52,5 +52,5 @@ export async function resolveFilterId(
     // Not fatal: this run proceeds with the id it has, and the next run looks it up again.
     reportCaughtError(error, { source: 'application/hiring/importFilterId.ts', operation: 'saveBoardFilterId', level: 'warning' });
   }
-  return { ok: true, id, lookedUp: true };
+  return { ok: true, id };
 }

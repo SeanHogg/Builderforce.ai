@@ -79,6 +79,18 @@ export function nextTokenOf(mapping: ConnectorApplicantMapping, bodyFields: Reco
   return null;
 }
 
+/** The body paths a token-paged call must capture: the token, and the end-of-list flag if declared. */
+export function tokenCapturePaths(mapping: ConnectorApplicantMapping): string[] {
+  const spec = mapping.nextToken;
+  return spec ? [...spec.select, ...(spec.done ? [spec.done.select] : [])] : [];
+}
+
+/** True when the board says THIS page is the last one (`nextToken.done`), however full it is. */
+export function tokenListDone(mapping: ConnectorApplicantMapping, bodyFields: Record<string, string> | undefined): boolean {
+  const done = mapping.nextToken?.done;
+  return Boolean(done) && bodyFields?.[done!.select] === done!.equals;
+}
+
 /**
  * Whether an item belongs to this publication's job. An item that names a DIFFERENT job
  * does not; one that names none cannot contradict the filter and is kept. A selector with
@@ -176,6 +188,11 @@ export function decodePending(stored: string | null): { newest: number | null; p
  * run whose position is before `cursorPos` can no longer be fetched, so their count can
  * never matter again); then, if still over, keep the most recent: people seen this run,
  * newest first, then the rest by how often they failed.
+ *
+ * `mustKeep` are the people who failed in THIS run. They are never dropped, even past the
+ * cap (a run is itself bounded, so the record stays bounded): the cursor is pinned on them
+ * and the next run needs their counts to quarantine them. The cap only ever makes room
+ * from the OLDER entries.
  */
 export function pruneFailures(
   mapping: ConnectorApplicantMapping,
@@ -183,21 +200,24 @@ export function pruneFailures(
   seen: readonly Positioned[],
   cursorPos: number | null,
   max: number = MAX_TRACKED_FAILURES,
+  mustKeep: ReadonlySet<string> = new Set(),
 ): ImportFailures {
   const all = Object.entries(failures);
   if (all.length <= max) return failures; // nothing to make room for: keep every count as is
   const position = new Map<string, number | null>(seen.map((entry) => [entry.externalId, positionOf(mapping, entry)]));
   const live = all.filter(([id]) => {
     const at = position.get(id);
-    return !(cursorPos !== null && at !== undefined && at !== null && at < cursorPos);
+    return mustKeep.has(id) || !(cursorPos !== null && at !== undefined && at !== null && at < cursorPos);
   });
   if (live.length <= max) return Object.fromEntries(live);
   const rank = ([id, count]: [string, number]): [number, number] => {
     const at = position.get(id);
     return [at === undefined || at === null ? Number.NEGATIVE_INFINITY : at, count];
   };
-  live.sort((a, b) => { const [pa, ca] = rank(a); const [pb, cb] = rank(b); return pb - pa || cb - ca; });
-  return Object.fromEntries(live.slice(0, max));
+  const pinned = live.filter(([id]) => mustKeep.has(id));
+  const rest = live.filter(([id]) => !mustKeep.has(id));
+  rest.sort((a, b) => { const [pa, ca] = rank(a); const [pb, cb] = rank(b); return pb - pa || cb - ca; });
+  return Object.fromEntries([...pinned, ...rest.slice(0, Math.max(0, max - pinned.length))]);
 }
 
 /** What one run's walk proved — the input of {@link planImportState}. */
@@ -209,6 +229,12 @@ export interface WalkOutcome {
   /** The walk reached the end of the board's list (a short page, or no next token). */
   exhausted: boolean;
   errored: boolean;
+  /**
+   * The run STARTED from a saved resume point (page or token) and its very first page
+   * failed. A dead token (expired, revoked) would otherwise be re-sent forever: the walk is
+   * dropped instead, and the next run starts over (imports are idempotent).
+   */
+  resumePointFailed?: boolean;
   /** The page a resume re-reads (page-numbered boards). */
   nextPage: number;
   /** The token a resume re-reads from (token-paged boards); null = the first page. */
@@ -262,7 +288,7 @@ export function planImportState(
     if (next !== null && (stored === null || cursorPosition(mapping, next)! > stored)) {
       cursor = next;
     } else if (run.errored) {
-      keepWalk();
+      if (!run.resumePointFailed) keepWalk();
     } else if (!run.exhausted && run.seen.length > 0 && run.failedNow.length === 0) {
       if (resumable) {
         resumeHere();
@@ -289,12 +315,15 @@ export function planImportState(
       resumeHere();
       pendingCursor = encodePending(newest, pin);
     } else if (run.errored) {
-      keepWalk(); // an error keeps the walk where it was
+      if (!run.resumePointFailed) keepWalk(); // an error keeps the walk where it was — unless its resume point is what failed
     } // else: nothing to resume from — the next run starts over, and nothing is carried.
   }
 
   const cursorAfter = cursor !== undefined ? cursorPosition(mapping, cursor) : stored;
-  const failures = pruneFailures(mapping, run.failures, run.seen, cursorAfter);
+  // Whoever failed in THIS run (their count went up) is never pruned: the cursor is pinned
+  // on them, and a pin on someone untracked would be lost with the next run's record.
+  const failedThisRun = new Set(Object.keys(run.failures).filter((id) => run.failures[id]! > (row.importFailures[id] ?? 0)));
+  const failures = pruneFailures(mapping, run.failures, run.seen, cursorAfter, MAX_TRACKED_FAILURES, failedThisRun);
   const unchanged = cursor === undefined
     && resumePage === row.importResumePage
     && resumeToken === (row.importResumeToken ?? null)

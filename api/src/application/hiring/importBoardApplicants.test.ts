@@ -17,6 +17,7 @@ const saveImportState = vi.fn();
 const touchPostedDistribution = vi.fn();
 const listPostedDistributionsForSweep = vi.fn();
 const readPostedDistributions = vi.fn();
+const readPostedDistribution = vi.fn();
 const resolveDistributionUrl = vi.fn();
 
 /** A newest-first board WITH a page number: Greenhouse's shape, declared descending. */
@@ -48,6 +49,7 @@ vi.mock('./postingDistributionSweepStore', () => ({
   listPostedDistributionsForSweep: (...args: unknown[]) => listPostedDistributionsForSweep(...args),
   listTenantBoardKeys: vi.fn(async () => []),
   readPostedDistributions: (...args: unknown[]) => readPostedDistributions(...args),
+  readPostedDistribution: (...args: unknown[]) => readPostedDistribution(...args),
   saveImportState: (...args: unknown[]) => saveImportState(...args),
   touchPostedDistribution: (...args: unknown[]) => { calls.push('touch'); return touchPostedDistribution(...args); },
 }));
@@ -58,16 +60,14 @@ vi.mock('./resolveBoardUrls', () => ({
 vi.mock('./postingDistributionSupport', () => ({ requirePosting: vi.fn(async () => ({ id: 'p1' })) }));
 
 import {
-  IMPORTABLE_BOARD_KEYS,
   MANUAL_APPLICANT_BUDGET,
   MAX_APPLICANTS_PER_BOARD,
   MAX_MANUAL_URL_RESOLUTIONS,
-  MAX_PAGES_PER_BOARD,
-  importAction,
   importBoardApplicants,
-  importFromDistribution,
   runApplicantImportSweep,
 } from './importBoardApplicants';
+import { MAX_PAGES_PER_BOARD, importFromDistribution } from './importDistribution';
+import { IMPORTABLE_BOARD_KEYS, importAction } from './importWorklist';
 import {
   belongsToPosting,
   cursorValue,
@@ -118,10 +118,12 @@ beforeEach(() => {
   calls.length = 0;
   recordApplication.mockReset().mockResolvedValue({ created: true, applicationId: 1 });
   admitBoardCandidate.mockReset().mockImplementation(async (_db: unknown, input: { applicationId: string }) => ({ admitted: true, candidateRef: `ref-${input.applicationId}` }));
-  saveImportState.mockReset().mockResolvedValue(undefined);
-  touchPostedDistribution.mockReset().mockResolvedValue(undefined);
+  saveImportState.mockReset().mockResolvedValue(true);
+  // The touch returns the FRESH row it wrote, with the lease the import saves under.
+  touchPostedDistribution.mockReset().mockImplementation(async (_db: unknown, r: PostedDistribution) => ({ ...r, importLease: 'L' }));
   listPostedDistributionsForSweep.mockReset().mockResolvedValue([]);
   readPostedDistributions.mockReset().mockResolvedValue([]);
+  readPostedDistribution.mockReset().mockResolvedValue(null);
   resolveDistributionUrl.mockReset().mockResolvedValue('unresolved');
 });
 

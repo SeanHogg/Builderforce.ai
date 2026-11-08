@@ -46,7 +46,18 @@ export interface ConnectorApplicantMapping {
    * choose where a credentialled call goes); `param` is the request param that carries it
    * back. A newest-first walk stores it to resume across runs.
    */
-  nextToken?: { select: string[]; param: string; fromQuery?: string };
+  nextToken?: {
+    select: string[];
+    param: string;
+    fromQuery?: string;
+    /**
+     * An end-of-list flag beside the token: a body field (`select`, a dotted path) whose
+     * text equals `equals` (`"false"` for Lever's `hasNext: false`) means THIS page is the
+     * last, even when it is full. Without it a full page with no token is "ended" only
+     * if the board has handed out a token before in the walk.
+     */
+    done?: { select: string; equals: string };
+  };
   /** The board's id for the application/candidate — the dedupe key. Required. */
   externalId: string[];
   /** The PERSON's id on the board (Greenhouse `candidate_id`, Lever `contact`, Ashby

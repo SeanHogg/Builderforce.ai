@@ -19,17 +19,15 @@
  * applications themselves are idempotent, so the dropped run's work is not lost.)
  */
 
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { jobPostingDistributions, jobPostings } from '../../infrastructure/database/schema/hiring';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { MAX_TRACKED_FAILURES } from './importBudget';
 
 type DistributionRow = typeof jobPostingDistributions.$inferSelect;
 
-/** Failures counted per board application id; capped so the column stays small. */
+/** Failures counted per board application id; bounded by `pruneFailures` (`importCursor.ts`). */
 export type ImportFailures = Record<string, number>;
-export { MAX_TRACKED_FAILURES };
 
 /** A confirmed publication, as the applicant import and link-finding need it. */
 export interface PostedDistribution {
@@ -63,8 +61,9 @@ const toFailures = (value: unknown): ImportFailures => {
   ) as ImportFailures;
 };
 
-const toPosted = (row: DistributionRow): PostedDistribution[] => row.externalId
+const toPosted = (row: DistributionRow, importLease?: string | null): PostedDistribution[] => row.externalId
   ? [{
+    ...(importLease !== undefined ? { importLease } : {}),
     tenantId: row.tenantId,
     postingId: row.jobPostingId,
     connectorKey: row.connectorKey,
@@ -99,7 +98,21 @@ export async function readPostedDistributions(db: Db, tenantId: number, postingI
       eq(jobPostingDistributions.status, 'posted'),
     ))
     .orderBy(asc(jobPostingDistributions.connectorKey));
-  return rows.flatMap(toPosted);
+  return rows.flatMap((row) => toPosted(row));
+}
+
+/**
+ * ONE confirmed publication as it stands NOW — the re-read after something changed it
+ * (a resolved link replaces `external_id` and clears `board_filter_id`). No lease: the
+ * caller keeps the one it already took.
+ */
+export async function readPostedDistribution(db: Db, row: PostedDistribution): Promise<PostedDistribution | null> {
+  const [fresh] = await db
+    .select()
+    .from(jobPostingDistributions)
+    .where(and(rowOf(row), eq(jobPostingDistributions.status, 'posted')))
+    .limit(1);
+  return fresh ? toPosted(fresh)[0] ?? null : null;
 }
 
 /** A tenant-authored (or installed) board a posting is confirmed live on. */
@@ -157,7 +170,10 @@ export async function listPostedDistributionsForSweep(
         : undefined,
       boards,
     ))
-    .orderBy(sql`${jobPostingDistributions.importCheckedAt} asc nulls first`)
+    // The link-finding pass rotates on ITS key (`resolve_retry_at`), the import on its own.
+    .orderBy(opts.missingUrlOnly
+      ? sql`${jobPostingDistributions.resolveRetryAt} asc nulls first`
+      : sql`${jobPostingDistributions.importCheckedAt} asc nulls first`)
     .limit(limit);
   return rows.flatMap((row) => toPosted(row.distribution));
 }
@@ -166,10 +182,15 @@ export async function listPostedDistributionsForSweep(
  * The distinct (tenant, board key) pairs of confirmed publications on open postings whose
  * key is NOT one of `excludeKeys` (the built-ins) — i.e. boards a tenant authored or
  * installed, which the sweep can only judge importable by reading that tenant's catalog.
+ *
+ * ROTATES. Grouped by (tenant, key) and ordered by the OLDEST `import_checked_at` in each
+ * group (a never-checked row counts as the epoch, so it sorts first), THEN limited: an
+ * unordered `LIMIT` over a distinct set kept returning the same first tenants and starved
+ * the rest of the worklist.
  */
 export async function listTenantBoardKeys(db: Db, excludeKeys: readonly string[], limit: number): Promise<TenantBoard[]> {
   const rows = await db
-    .selectDistinct({ tenantId: jobPostingDistributions.tenantId, connectorKey: jobPostingDistributions.connectorKey })
+    .select({ tenantId: jobPostingDistributions.tenantId, connectorKey: jobPostingDistributions.connectorKey })
     .from(jobPostingDistributions)
     .innerJoin(jobPostings, sql`${jobPostings.id} = ${jobPostingDistributions.jobPostingId} and ${jobPostings.tenantId} = ${jobPostingDistributions.tenantId}`)
     .where(acrossTenants(
@@ -179,8 +200,27 @@ export async function listTenantBoardKeys(db: Db, excludeKeys: readonly string[]
       eq(jobPostings.status, 'open'),
       excludeKeys.length ? sql`${jobPostingDistributions.connectorKey} not in (${sql.join(excludeKeys.map((key) => sql`${key}`), sql`, `)})` : undefined,
     ))
+    .groupBy(jobPostingDistributions.tenantId, jobPostingDistributions.connectorKey)
+    .orderBy(sql`min(coalesce(${jobPostingDistributions.importCheckedAt}, 'epoch'::timestamp)) asc nulls first`)
     .limit(limit);
   return rows;
+}
+
+/**
+ * Rotate a (tenant, board key) group the sweep judged NOT importable to the back of
+ * {@link listTenantBoardKeys}. The import never touches such a board, so without this its
+ * `import_checked_at` stays null and the group sorts first on every sweep, holding a LIMIT slot.
+ */
+export async function touchNonImportableBoard(db: Db, board: TenantBoard): Promise<void> {
+  await db
+    .update(jobPostingDistributions)
+    .set({ importCheckedAt: sql`date_trunc('milliseconds', now())` })
+    .where(scopedToTenant(
+      jobPostingDistributions,
+      board.tenantId,
+      eq(jobPostingDistributions.connectorKey, board.connectorKey),
+      eq(jobPostingDistributions.status, 'posted'),
+    ));
 }
 
 /**
@@ -191,13 +231,31 @@ export async function listTenantBoardKeys(db: Db, excludeKeys: readonly string[]
  * as text, so neither the driver's Date handling nor the session time zone can make a
  * row's own value fail to match itself.
  */
-export async function touchPostedDistribution(db: Db, row: PostedDistribution): Promise<string | null> {
+export async function touchPostedDistribution(db: Db, row: PostedDistribution): Promise<PostedDistribution | null> {
   const [touched] = await db
     .update(jobPostingDistributions)
     .set({ importCheckedAt: sql`date_trunc('milliseconds', now())` })
     .where(rowOf(row))
-    .returning({ lease: sql<string>`${jobPostingDistributions.importCheckedAt}::text` });
-  return touched?.lease ?? null;
+    .returning({ ...getTableColumns(jobPostingDistributions), lease: sql<string>`${jobPostingDistributions.importCheckedAt}::text` });
+  if (!touched) return null;
+  const { lease, ...fresh } = touched;
+  return toPosted(fresh, lease)[0] ?? null;
+}
+
+/** How long a row whose link could not be found is left alone before the pass tries again. */
+const RESOLVE_ATTEMPT_BACKOFF = '1 hour';
+
+/**
+ * Rotate the LINK-FINDING pass: push the row's `resolve_retry_at` out so a row that cannot
+ * resolve (or crashes the pass) does not sit at the front. Its own key — `import_checked_at`
+ * is the applicant import's rotation and lease, and a link pass that moved it would delay
+ * that row's import and invalidate a lease an import is holding.
+ */
+export async function touchResolveAttempt(db: Db, row: PostedDistribution): Promise<void> {
+  await db
+    .update(jobPostingDistributions)
+    .set({ resolveRetryAt: sql`now() + ${RESOLVE_ATTEMPT_BACKOFF}::interval` })
+    .where(rowOf(row));
 }
 
 /** What the applicant import remembers about a board between runs. */
@@ -216,7 +274,6 @@ export interface ImportStateWrite {
  * state, and this write is dropped.
  */
 export async function saveImportState(db: Db, row: PostedDistribution, state: ImportStateWrite): Promise<boolean> {
-  const failures = Object.fromEntries(Object.entries(state.failures).slice(0, MAX_TRACKED_FAILURES));
   const saved = await db
     .update(jobPostingDistributions)
     .set({
@@ -226,7 +283,7 @@ export async function saveImportState(db: Db, row: PostedDistribution, state: Im
       // (idempotent) rather than failing the whole state write.
       importResumeToken: state.resumeToken && state.resumeToken.length <= 512 ? state.resumeToken : null,
       importPendingCursor: state.pendingCursor ? state.pendingCursor.slice(0, 64) : null,
-      importFailures: failures,
+      importFailures: state.failures, // already bounded by `pruneFailures`; never cut again here
     })
     .where(and(
       rowOf(row),
@@ -259,7 +316,8 @@ export async function recordResolvedLink(
 ): Promise<void> {
   // The id is replaced only TOGETHER with the link that proves it resolved.
   if (!found.url) return;
-  const set: Record<string, unknown> = { updatedAt: sql`now()`, url: found.url };
+  // A link found is the answer to any earlier conflict or miss: clear its error and back-off.
+  const set: Record<string, unknown> = { updatedAt: sql`now()`, url: found.url, lastError: null, resolveRetryAt: null };
   if (found.externalId) { set.externalId = found.externalId.slice(0, 255); set.boardFilterId = null; }
   await db
     .update(jobPostingDistributions)

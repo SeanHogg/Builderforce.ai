@@ -23,7 +23,8 @@ import {
   type ConnectorManifest,
 } from './connectorManifest';
 import { BUILTIN_CONNECTOR_LIST, RESERVED_CONNECTOR_KEYS, validateBuiltinCatalog } from './defaults';
-import { buildConnectorRequest, setDeep, getDeep, toFormBody, redactSecrets } from './connectorRuntime';
+import { buildConnectorRequest, setDeep, getDeep, redactSecrets } from './connectorRuntime';
+import { toFormBody } from './connectorRuntimeQuery';
 import { connectorToolName, encodeConnectorTool, decodeConnectorTool } from './connectorTools';
 import { manifestFromOpenApi } from './openapiImport';
 

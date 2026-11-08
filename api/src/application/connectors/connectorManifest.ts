@@ -38,10 +38,10 @@ import {
   type ConnectorBoardJobMapping,
   type ConnectorUrlResolution,
 } from './connectorApplicantManifest';
-import { publicAuthFieldKeys } from './connectorMappingValidators';
+import { checkApplicantLookupTargets } from './connectorLookupTargets';
+import { isPlainObject, publicAuthFieldKeys } from './connectorMappingValidators';
 import {
   TEMPLATE_RE,
-  isPlainObject,
   validateAction,
   type ActionValidationOptions,
   type ConnectorMethod,
@@ -500,15 +500,17 @@ export function parseConnectorManifest(raw: unknown, opts: ActionValidationOptio
   if (rawActions.length > MAX_ACTIONS_PER_CONNECTOR) {
     errors.push(`actions: at most ${MAX_ACTIONS_PER_CONNECTOR} actions per connector`);
   }
-  const actions: ConnectorAction[] = [];
+  const parsedActions: ConnectorAction[] = [];
   const seen = new Set<string>();
   for (const [i, a] of rawActions.slice(0, MAX_ACTIONS_PER_CONNECTOR).entries()) {
     const action = validateAction(a, i, publicFields, errors, opts);
     if (!action) continue;
     if (seen.has(action.key)) { errors.push(`actions[${i}].key: duplicate "${action.key}"`); continue; }
     seen.add(action.key);
-    actions.push(action);
+    parsedActions.push(action);
   }
+  // Checked across actions, so only once they are all parsed (strict ⇒ errors; lenient ⇒ disabled).
+  const actions = checkApplicantLookupTargets(parsedActions, errors, opts);
 
   const auth: ConnectorAuth = {
     kind: authKind,

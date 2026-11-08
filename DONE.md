@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-11-08: a posting links to every board it lands on, applicants come home with their source, and Workable is a connector (Hiring)
+
+- **Public board URLs.** `resolveBoardUrls.ts` builds the public link from each board's posting id: Greenhouse, LinkedIn (Rest.li `ids=List(...)`), Ashby (job-id filter), Lever and Workable. A failed lookup retries on `resolve_retry_at` alone, and a success clears the error. Indeed has no public URL by design, so it shows as link-less instead of broken.
+- **Applicants are imported, with source attribution.**
+  - **Import:** `importBoardApplicants.ts` pages each board's applicants. The supporting code is split into `importCursor.ts`, `importWorklist.ts`, `importFilterId.ts`, `importBudget.ts` and `importDistribution.ts`.
+  - **Resuming:** the import keeps its cursor, sort order, resume page and resume token, so it picks up where it stopped. A run whose saved token fails on its first page clears that token and starts over. Lever's `hasNext` ends paging through `nextToken.done`.
+  - **Overlap and budget:** the sweep takes a lease on `import_checked_at`, so two runs never import the same distribution. Both entry points stay under the per-request query limit: the sweep budget is 700 queries and a manual import is 900.
+  - **Fair queue:** tenants are worked oldest-check-first, five catalogs at a time. A board that can't be imported is stamped as checked, so it doesn't stay at the front of the queue.
+  - **Resume after failures:** a 429, a 5xx or a network failure keeps the saved resume point. Only a 400, 404, 410 or 422 on the first resumed page clears it. A board that echoes its own paging token ends the walk.
+  - **Matching:** applicants are matched against the board's posting ids, not exact-match source strings.
+  - **Candidate refs:** each ref is an HMAC under a per-tenant salt in `hiring_ref_salts` (migrations 1332 and 1334). The salt is deleted when its tenant is deleted.
+- **Workable connector.** Workable is a link-only hiring connector, listed with the other boards in `connectorBoardAliases.ts`.
+- **Connector manifest hardening.**
+  - **Parsing:** a stored manifest parses leniently on read (`connectorStoredManifest.ts`) and strictly on write (`connectorActionValidation.ts`).
+  - **Paging and filter params:** the paging-token and filter-id params may only go in the query string or the request body. A filter-id lookup must be a sibling action that changes nothing. The posting param that receives the board-returned id must be a query, body or path param, so a board response can never choose the request URL.
+  - **Request code split:** query building moved out of `connectorRuntime.ts` into `connectorRuntimeQuery.ts` and `connectorLookupTargets.ts`.
+- **Still open in the roadmap:** the LinkedIn and Ashby request shapes come from the vendors' docs and haven't been checked against the live APIs. Blocker: a tenant's credentials for those two boards.
+
 ## ✅ RESOLVED 2026-11-08: cloud and IDE agent runs: sandbox capacity wait, early draft PR, draft Stop isolation, journal compaction backoff, offline closure (PRD 41 WS1), PRD 38 spec residuals (Cloud and IDE agent runs)
 
 - **Sandbox capacity (da85500b5).** A run refused for sandbox capacity waits, with jittered backoff (`sandboxOpenWait.ts`, `sandboxCapacity.ts`), instead of falling back at once; previews share the same `max_instances`.

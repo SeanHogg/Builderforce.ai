@@ -39,6 +39,7 @@ import {
   type ConnectorManifest,
 } from './connectorManifest';
 import { findAction, resolveConnector, type ResolvedConnector } from './connectorRegistry';
+import { joinQuery, rawQueryPair, readBodyFields, toFormBody } from './connectorRuntimeQuery';
 import { buildSoapEnvelope, parseXml, soapBodyOf, soapContentType, soapFaultOf } from './soapEnvelope';
 
 /** How often a connection's `last_used_at` freshness marker is rewritten. */
@@ -122,28 +123,6 @@ export function getDeep(source: unknown, path: string): unknown {
   }, source);
 }
 
-/** Flatten a JSON value into `application/x-www-form-urlencoded` (Stripe-style
- *  bracket notation for nested objects and arrays). */
-export function toFormBody(body: Record<string, unknown>): string {
-  const params = new URLSearchParams();
-  const walk = (prefix: string, value: unknown): void => {
-    if (value == null) return;
-    if (Array.isArray(value)) {
-      value.forEach((v, i) => walk(`${prefix}[${i}]`, v));
-    } else if (typeof value === 'object') {
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) walk(`${prefix}[${k}]`, v);
-    } else {
-      params.append(prefix, String(value));
-    }
-  };
-  for (const [k, v] of Object.entries(body)) {
-    if (v == null) continue;
-    if (typeof v === 'object') walk(k, v);
-    else params.append(k, String(v));
-  }
-  return params.toString();
-}
-
 /**
  * Remove credential values from any string heading for a log, an error, or the
  * caller. Upstream 401 bodies very often quote the rejected header back verbatim.
@@ -152,26 +131,6 @@ export function redactSecrets(text: string, secrets: string[]): string {
   let out = text;
   for (const s of secrets) {
     if (s && s.length >= 6) out = out.split(s).join('«redacted»');
-  }
-  return out;
-}
-
-/**
- * Whether a value may be appended to the query string AS IS (`ConnectorParam.raw`): URL
- * unreserved characters, the sub-delims Rest.li keys use (`( ) , : ! * '`), and
- * percent-escapes that are well formed. Anything else — `&`, `#`, `=`, `+`, a space, a
- * stray `%` — could end the value or start another param, so such a value is encoded
- * normally by the caller instead.
- */
-const isWireSafe = (value: string): boolean => /^[A-Za-z0-9._~()!*',:%-]*$/.test(value) && !/%(?![0-9A-Fa-f]{2})/.test(value);
-
-/** Scalars (string / finite number, at most 2000 chars) at `paths` in a parsed body, as text. */
-function readBodyFields(body: unknown, paths: readonly string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const path of paths) {
-    const value = getDeep(body, path);
-    if (typeof value === 'string' && value.trim()) out[path] = value.trim().slice(0, 2000);
-    else if (typeof value === 'number' && Number.isFinite(value)) out[path] = String(value);
   }
   return out;
 }
@@ -244,12 +203,10 @@ export function buildConnectorRequest(args: {
           for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
             if (v != null) query.append(k, String(v));
           }
-        } else if (param.raw && isWireSafe(String(value))) {
-          // Already in wire form (see ConnectorParam.raw): appended AFTER the encoded
-          // params, never re-encoded.
-          rawQuery.push(`${encodeURIComponent(wire)}=${String(value)}`);
         } else {
-          query.append(wire, typeof value === 'object' ? JSON.stringify(value) : String(value));
+          const pair = param.raw ? rawQueryPair(wire, value) : null; // already in wire form
+          if (pair) rawQuery.push(pair);
+          else query.append(wire, typeof value === 'object' ? JSON.stringify(value) : String(value));
         }
         break;
       case 'header':
@@ -324,7 +281,7 @@ export function buildConnectorRequest(args: {
     payload = action.bodyFormat === 'form' ? toFormBody(body) : JSON.stringify(body);
   }
 
-  const qs = [query.toString(), ...rawQuery].filter(Boolean).join('&');
+  const qs = joinQuery(query, rawQuery);
   const url = urlOverride
     ? `${urlOverride}${qs ? `${urlOverride.includes('?') ? '&' : '?'}${qs}` : ''}`
     : `${fillTemplate(base, auth)}${fillTemplate(path, auth)}${qs ? `?${qs}` : ''}`;
@@ -578,7 +535,7 @@ export async function executeConnectorAction(args: {
       // A SOAP fault arrives as 200. Trusting the status code here would record a
       // refused write as a success, cache it as one, and report it upward as one.
       ok = res.ok && !faultText;
-      if (ok && args.captureBodyPaths?.length) bodyFields = readBodyFields(parsed, args.captureBodyPaths);
+      if (ok && args.captureBodyPaths?.length) bodyFields = readBodyFields(parsed, args.captureBodyPaths, getDeep);
       if (faultText) {
         data = parsed;
         errorText = redactSecrets(faultText.slice(0, 600), secrets);

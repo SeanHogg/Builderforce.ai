@@ -50,7 +50,7 @@ export const leverPostings: ConnectorManifest = {
         email: ['emails.0'],
         appliedAt: ['createdAt'],
         limit: { param: 'limit', size: 100 },
-        nextToken: { select: ['next'], param: 'offset' },
+        nextToken: { select: ['next'], param: 'offset', done: { select: 'hasNext', equals: 'false' } },
         order: 'desc',
         cursorParam: 'updated_at_start', cursorFrom: 'appliedAt', cursorFormat: 'epochMs',
       },

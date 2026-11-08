@@ -17,10 +17,12 @@ import type { ConnectorAction, ConnectorApplicantMapping } from '../connectors/c
 import { BUILTIN_CONNECTORS } from '../connectors/defaults';
 import { HIRING_CONNECTORS } from '../connectors/defaults/hiring';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { mapWithConcurrency } from '../runtime/boundedPool';
 import { LIST_APPLICANTS_ACTIONS } from './postingActionKeys';
 import {
   listPostedDistributionsForSweep,
   listTenantBoardKeys,
+  touchNonImportableBoard,
   type PostedDistribution,
   type TenantBoard,
 } from './postingDistributionSweepStore';
@@ -43,6 +45,8 @@ export const IMPORTABLE_BOARD_KEYS: readonly string[] = HIRING_CONNECTORS
 
 /** Pairs read per sweep before they are narrowed to the importable ones. */
 const MAX_TENANT_BOARD_PAIRS = 100;
+/** Tenant catalogs resolved at once. */
+export const WORKLIST_CATALOG_CONCURRENCY = 5;
 
 /** The tenant-authored / installed boards that are importable: one catalog read per tenant. */
 async function importableTenantBoards(db: Db, env: Env): Promise<TenantBoard[]> {
@@ -50,21 +54,30 @@ async function importableTenantBoards(db: Db, env: Env): Promise<TenantBoard[]> 
   const byTenant = new Map<number, Set<string>>();
   for (const pair of pairs) byTenant.set(pair.tenantId, (byTenant.get(pair.tenantId) ?? new Set()).add(pair.connectorKey));
 
-  const importable: TenantBoard[] = [];
-  for (const [tenantId, keys] of [...byTenant].slice(0, MAX_WORKLIST_TENANTS)) {
+  // Up to MAX_WORKLIST_TENANTS catalogs, a few at a time: read one after another they would
+  // hold the sweep for the sum of their latencies. Results keep the tenants' order.
+  const perTenant = await mapWithConcurrency([...byTenant].slice(0, MAX_WORKLIST_TENANTS), WORKLIST_CATALOG_CONCURRENCY, async ([tenantId, keys]) => {
+    const boards: TenantBoard[] = [];
     try {
       const catalog = await listConnectorsForTenant(db, tenantId, env); // cached per tenant
       for (const entry of catalog) {
         if (keys.has(entry.manifest.key) && entry.status === 'published' && importAction(entry.manifest.actions)) {
-          importable.push({ tenantId, connectorKey: entry.manifest.key });
+          boards.push({ tenantId, connectorKey: entry.manifest.key });
         }
+      }
+      // A key that is not importable is never imported, so nothing else would rotate it:
+      // stamp it so it stops sorting first in `listTenantBoardKeys` and starving real work.
+      const importable = new Set(boards.map((board) => board.connectorKey));
+      for (const key of keys) {
+        if (!importable.has(key)) await touchNonImportableBoard(db, { tenantId, connectorKey: key });
       }
     } catch (error) {
       // One tenant's unreadable catalog must not take the sweep down.
       reportCaughtError(error, { source: 'application/hiring/importWorklist.ts', operation: 'importableTenantBoards', context: { tenantId } });
     }
-  }
-  return importable;
+    return boards;
+  });
+  return perTenant.flat();
 }
 
 /** The sweep's next batch: built-in importable boards plus the tenants' own importable ones. */

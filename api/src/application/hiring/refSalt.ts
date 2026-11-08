@@ -14,8 +14,8 @@
  * Cached per isolate — a salt never changes, so a cached copy cannot go stale.
  */
 
-import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hiringRefSalts } from '../../infrastructure/database/schema/hiring';
 import { bytesToHex } from '../../domain/shared/bytes';
 
@@ -30,7 +30,7 @@ export async function loadRefSalt(db: Db, tenantId: number): Promise<string> {
   const read = async (): Promise<string | undefined> => (await db
     .select({ salt: hiringRefSalts.salt })
     .from(hiringRefSalts)
-    .where(eq(hiringRefSalts.tenantId, tenantId))
+    .where(scopedToTenant(hiringRefSalts, tenantId))
     .limit(1))[0]?.salt;
 
   let salt = await read();

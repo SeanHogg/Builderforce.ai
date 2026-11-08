@@ -52,7 +52,8 @@ vi.mock('./resolveBoardUrls', () => ({
 }));
 vi.mock('./postingDistributionSupport', () => ({ requirePosting: vi.fn(async () => ({ id: 'p1' })) }));
 
-import { importFromDistribution, runApplicantImportSweep } from './importBoardApplicants';
+import { runApplicantImportSweep } from './importBoardApplicants';
+import { importFromDistribution } from './importDistribution';
 import { pruneFailures, planImportState, belongsToPosting, nextTokenOf } from './importCursor';
 import { QUERIES_PER_APPLICANT, QUERIES_PER_PAGE, QUERIES_PER_ROW } from './importBudget';
 import { importAction } from './importWorklist';
@@ -85,7 +86,7 @@ beforeEach(() => {
   admitBoardCandidate.mockReset().mockImplementation(async (_db: unknown, input: { applicationId: string }) => ({ admitted: true, candidateRef: `ref-${input.applicationId}` }));
   saveImportState.mockReset().mockResolvedValue(true);
   saveBoardFilterId.mockReset().mockResolvedValue(undefined);
-  touchPostedDistribution.mockReset().mockResolvedValue(null);
+  touchPostedDistribution.mockReset().mockImplementation(async (_db: unknown, r: PostedDistribution) => ({ ...r, importLease: 'L' }));
   listPostedDistributionsForSweep.mockReset().mockResolvedValue([]);
   listTenantBoardKeys.mockReset().mockResolvedValue([]);
   listConnectorsForTenant.mockReset().mockResolvedValue([]);
@@ -272,7 +273,7 @@ describe('regression: the Worker subrequest budget stops a run cleanly', () => {
 
 describe('regression: two imports of one row cannot clobber each other', () => {
   it('the sweep takes the lease on touch and saves its state under it', async () => {
-    touchPostedDistribution.mockResolvedValue('2026-11-08 10:00:00.123');
+    touchPostedDistribution.mockImplementation(async (_db: unknown, r: PostedDistribution) => ({ ...r, importLease: '2026-11-08 10:00:00.123' }));
     listPostedDistributionsForSweep.mockResolvedValueOnce([row({ boardFilterId: 'JOB' })]);
     const execute = vi.fn(async () => ({ ok: true, status: 200, durationMs: 1, data: ashbyApps(2, 'JOB') }));
     await runApplicantImportSweep(DB, ENV, { execute: execute as never });

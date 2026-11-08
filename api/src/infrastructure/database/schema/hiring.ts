@@ -836,6 +836,8 @@ export const jobPostingDistributions = pgTable('job_posting_distributions', {
 /** The per-tenant random salt a board candidate's email ref is an HMAC under (1332) —
  *  stored, so it survives a rotation of any deployment secret. */
 export const hiringRefSalts = pgTable('hiring_ref_salts', {
+  // Tenant-owned. The tenant FK + ON DELETE CASCADE (so tenant deletion, the erasure path, takes
+  // the salt with it) is declared in migration 1334, not here: a cross-domain ref is a plain column.
   tenantId:  integer('tenant_id').primaryKey(),
   salt:      varchar('salt', { length: 64 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),

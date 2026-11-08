@@ -11,6 +11,7 @@ const calls: string[] = [];
 const recordResolvedLink = vi.fn();
 const markResolveConflict = vi.fn();
 const touchPostedDistribution = vi.fn();
+const touchResolveAttempt = vi.fn();
 const listPostedDistributionsForSweep = vi.fn();
 
 vi.mock('../connectors/connectorRegistry', () => ({
@@ -23,7 +24,9 @@ vi.mock('./postingDistributionSweepStore', () => ({
   listPostedDistributionsForSweep: (...args: unknown[]) => listPostedDistributionsForSweep(...args),
   recordResolvedLink: (...args: unknown[]) => recordResolvedLink(...args),
   markResolveConflict: (...args: unknown[]) => markResolveConflict(...args),
-  touchPostedDistribution: (...args: unknown[]) => { calls.push('touch'); return touchPostedDistribution(...args); },
+  touchResolveAttempt: (...args: unknown[]) => { calls.push('touch'); return touchResolveAttempt(...args); },
+  // The link pass must never take the import's rotation key / lease.
+  touchPostedDistribution: (...args: unknown[]) => touchPostedDistribution(...args),
 }));
 
 import { RESOLVABLE_BOARD_KEYS, resolveDistributionUrl, runUrlResolutionPass } from './resolveBoardUrls';
@@ -59,6 +62,7 @@ beforeEach(() => {
   recordResolvedLink.mockReset().mockResolvedValue(undefined);
   markResolveConflict.mockReset().mockResolvedValue(undefined);
   touchPostedDistribution.mockReset().mockResolvedValue(undefined);
+  touchResolveAttempt.mockReset().mockResolvedValue(undefined);
   listPostedDistributionsForSweep.mockReset();
 });
 
@@ -148,7 +152,8 @@ describe('the link-finding pass', () => {
     const d = deps({ results: {} });
     const result = await runUrlResolutionPass(DB, ENV, d);
     expect(calls.filter((c) => c === 'touch' || c === 'execute').slice(0, 2)).toEqual(['touch', 'execute']);
-    expect(touchPostedDistribution).toHaveBeenCalledTimes(2);
+    expect(touchResolveAttempt).toHaveBeenCalledTimes(2);
+    expect(touchPostedDistribution).not.toHaveBeenCalled(); // the import's key is not the link pass's
     expect(result).toEqual({ checked: 2, linked: 0 });
   });
 });

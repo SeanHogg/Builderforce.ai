@@ -190,8 +190,6 @@ export async function readPostingDistribution(
   return { distributions: byPosting.get(postingId) ?? [], boards };
 }
 
-export { postingInputFor };
-
 const clip = (message: string): string => message.slice(0, 600);
 
 /**

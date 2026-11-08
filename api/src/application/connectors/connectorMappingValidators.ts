@@ -20,9 +20,12 @@ import type {
   ConnectorUrlResolution,
 } from './connectorManifest';
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
+export function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
+
+/** What an action key may be — one rule for the action itself and for every reference to one. */
+export const ACTION_KEY_RE = /^[a-z0-9][a-z0-9_]{0,62}$/;
 
 /** A body path (`a.b.0.c`) or a `header:<name>` selector. Deliberately narrow: no
  *  wildcards, no filters — a selector is a location, never a query language. */
@@ -245,7 +248,7 @@ function validateApplicantLookups(
   if (raw.filterIdFrom !== undefined) {
     const f = raw.filterIdFrom;
     const select = isPlainObject(f) ? validateSelectorList(f.select, `${where}.applicants.filterIdFrom.select`, errors) : null;
-    if (!isPlainObject(f) || typeof f.action !== 'string' || !/^[a-z0-9][a-z0-9_]{0,62}$/.test(f.action) || typeof f.idParam !== 'string' || !/^[A-Za-z0-9_]{1,64}$/.test(f.idParam)) {
+    if (!isPlainObject(f) || typeof f.action !== 'string' || !ACTION_KEY_RE.test(f.action) || typeof f.idParam !== 'string' || !/^[A-Za-z0-9_]{1,64}$/.test(f.idParam)) {
       errors.push(`${where}.applicants.filterIdFrom: must be { action, idParam, select }`);
     } else if (select) {
       out.filterIdFrom = { action: f.action, idParam: f.idParam, select };
@@ -259,8 +262,13 @@ function validateApplicantLookups(
       errors.push(`${where}.applicants.nextToken: param must be a declared param`);
     } else if (fromQuery !== undefined && (typeof fromQuery !== 'string' || !/^[A-Za-z0-9_.-]{1,64}$/.test(fromQuery))) {
       errors.push(`${where}.applicants.nextToken.fromQuery: must be a query param name`);
+    } else if (t.done !== undefined && !(isPlainObject(t.done) && typeof t.done.select === 'string'
+      && RESPONSE_SELECTOR_RE.test(t.done.select) && !t.done.select.startsWith('header:')
+      && typeof t.done.equals === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(t.done.equals))) {
+      errors.push(`${where}.applicants.nextToken.done: must be { select: <dotted body path>, equals: <short text> }`);
     } else if (select) {
-      out.nextToken = { select, param: t.param, ...(typeof fromQuery === 'string' ? { fromQuery } : {}) };
+      const done = isPlainObject(t.done) ? { select: String(t.done.select), equals: String(t.done.equals) } : undefined;
+      out.nextToken = { select, param: t.param, ...(typeof fromQuery === 'string' ? { fromQuery } : {}), ...(done ? { done } : {}) };
     }
   }
 }

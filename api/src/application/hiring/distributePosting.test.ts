@@ -33,8 +33,8 @@ import { readPostingDistributions, recordPostingDistribution } from './postingDi
 import {
   distributableAction,
   distributePosting,
-  postingInputFor,
 } from './distributePosting';
+import { postingInputFor } from './postingInput';
 import {
   connectionBackedInput,
   missingConnectionParams,

@@ -40,7 +40,7 @@ import {
   listPostedDistributionsForSweep,
   markResolveConflict,
   recordResolvedLink,
-  touchPostedDistribution,
+  touchResolveAttempt,
   type PostedDistribution,
 } from './postingDistributionSweepStore';
 
@@ -146,8 +146,9 @@ export async function runUrlResolutionPass(
     connectorKeys: RESOLVABLE_BOARD_KEYS,
   });
   for (const row of rows) {
-    // Rotate FIRST, so a row that cannot resolve (or crashes the pass) does not starve the rest.
-    await touchPostedDistribution(db, row);
+    // Rotate FIRST, so a row that cannot resolve (or crashes the pass) does not starve the
+    // rest. On the pass's OWN key (`resolve_retry_at`): `import_checked_at` belongs to the import.
+    await touchResolveAttempt(db, row);
     const outcome = await resolveDistributionUrl(db, env, row, deps, 'system');
     result.checked += 1;
     if (outcome === 'linked') result.linked += 1;

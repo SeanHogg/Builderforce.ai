@@ -75,6 +75,10 @@ function builtinResolved(manifest: ConnectorManifest): ResolvedConnector {
   return { manifest, origin: 'builtin', id: null, status: 'published', version: 1 };
 }
 
+/** `id@version` of the stored manifests whose degraded-mapping warning was already sent (per isolate):
+ *  the catalog is re-read on every cache miss, and the same stale mapping must not warn each time. */
+const reportedDegraded = new Set<string>();
+
 /**
  * Tenant-authored connectors, validated on read.
  *
@@ -93,7 +97,8 @@ async function loadTenantConnectors(db: Db, tenantId: number): Promise<ResolvedC
   for (const row of rows) {
     try {
       const manifest = parseStoredConnectorManifest(row.manifest);
-      if (manifest.degraded?.length) {
+      if (manifest.degraded?.length && !reportedDegraded.has(`${row.id}@${row.version}`)) {
+        reportedDegraded.add(`${row.id}@${row.version}`); // once per manifest version, not on every cache miss
         reportCaughtError(new Error(manifest.degraded.join('; ')), {
           source: 'application/connectors/connectorRegistry.ts',
           operation: `loadTenantConnectors:degraded:${row.connectorKey}`,
