@@ -37569,6 +37569,15 @@
     "surface": {
       "spineLabel": "Où vous êtes",
       "panelsLabel": "Panneaux",
+      "panelToggles": {
+        "label": "Panneaux affichés",
+        "showLeft": "Afficher le panneau des lignes",
+        "hideLeft": "Masquer le panneau des lignes",
+        "showBottom": "Afficher la bande des parcours",
+        "hideBottom": "Masquer la bande des parcours",
+        "showRight": "Afficher le panneau d'action",
+        "hideRight": "Masquer le panneau d'action"
+      },
       "overlaysButton": "Calques",
       "overlaysTitle": "Ce que montre la carte",
       "presetLabel": "Calques {preset}",

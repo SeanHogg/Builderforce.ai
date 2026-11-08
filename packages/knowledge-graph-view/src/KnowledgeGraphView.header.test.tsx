@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The header: the status strip (status chip, action button, scrubber), the ask bar, the Panels group, Risk overlays, and the narrow layout. */
+/** The header: the review action (status chip, action button), the scrubber in the question row, the ask bar, the Panels group, Risk overlays, and the narrow layout. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';

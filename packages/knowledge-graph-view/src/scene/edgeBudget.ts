@@ -24,7 +24,10 @@ export const MAX_DRAWN_EDGES = 15_000;
 /** At or under this many links the ranking and the drawn paths are built in the same render; above it, on idle, after the nodes are on screen. */
 export const DEFER_EDGES_ABOVE = 2000;
 
-/** The edges ranked once per graph: `breaking` and `rest` each in priority order, plus every ref's links. */
+/** What the ranking needs of ref → links: a `Map` satisfies it, and so does the lazy view over a worker reply. */
+export type IncidentIndex = Pick<ReadonlyMap<string, KEdge[]>, 'get' | 'has' | 'size' | 'keys'>;
+
+/** The edges ranked once per graph:`breaking` and `rest` each in priority order, plus every ref's links. */
 export interface RankedEdges {
     /** The links that can be drawn (both ends are nodes): what the caption counts. */
     total: number;

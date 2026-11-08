@@ -11,10 +11,11 @@ import type { ReadThrough } from './replicatedStore.js';
 
 /** What the "use the server's copy" seed reads from the client beyond the pump's own calls (a `KnowledgeClient` satisfies it). */
 export interface SeedPort {
-    facts(rootId: string): Promise<{ facts?: readonly StoredFact[] } | undefined>;
+    /** `null` when the root is unknown to the server (the client's own answer). */
+    facts(rootId: string): Promise<{ facts?: readonly StoredFact[] } | null | undefined>;
     store: {
         relations(q: { rootId: string }): Promise<readonly StoredRelation[]>;
-        preloadExtracted?(hashes: string[]): Promise<unknown>;
+        preloadExtracted?(hashes: readonly string[]): Promise<unknown>;
         getExtracted?(hash: string): Promise<Extracted[] | undefined>;
     };
 }
@@ -37,8 +38,8 @@ export function persistenceOf(files: KnowledgeFiles, name: string): ReplicaPersi
 /** The server's copy as the seed reads it: extracted output by hash, and the root's human-authored facts. */
 export function readThroughOf(client: SeedPort, rootId: string): ReadThrough {
     return {
-        preloadExtracted: async (hashes) => { await client.store.preloadExtracted?.([...hashes]); },
-        getExtracted: (hash) => client.store.getExtracted?.(hash) ?? Promise.resolve(undefined),
+        preloadExtracted: async (hashes: readonly string[]) => { await client.store.preloadExtracted?.([...hashes]); },
+        getExtracted: (hash: string) => client.store.getExtracted?.(hash) ?? Promise.resolve(undefined),
         async humanKnowledge() {
             const [facts, relations] = await Promise.all([client.facts(rootId), client.store.relations({ rootId })]);
             return {

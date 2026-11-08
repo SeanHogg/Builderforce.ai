@@ -122,6 +122,26 @@ describe('healing a lost body shared by two roots', () => {
     expect(await haveOf(ROOT, 'src/a.ts', SHARED)).toBe(false);
   });
 
+  it("regression: a '#' in a path is part of the path, and a root id ending in ':' (a cloud root) is healed too", async () => {
+    const CLOUD = 'cloud:7:';
+    const refs = [refOf(ROOT, 'src/C#/a.cs'), refOf(ROOT, 'src/C#/old.cs'), `src:${CLOUD}::docs/x.md`];
+    w.index.set(SHARED, { hash: SHARED, bundleKey: 'knowledge/1/2/bundles/gone', byteOffset: 0, byteLength: 10, sourceRefs: refs });
+    w.leaves.set(ROOT, new Map([['f:src/C#/a.cs', SHARED], ['f:src/C#/old.cs', SHARED]]));
+    w.leaves.set(CLOUD, new Map([['f:docs/x.md', SHARED]]));
+    w.roots.set(ROOT, { generation: 1, digest: 'da' });
+    w.roots.set(CLOUD, { generation: 1, digest: 'dc' });
+
+    await apply({
+      rootId: ROOT, baseGeneration: 1, files: [{ path: 'src/C#/a.cs', hash: SHARED, bytes: 1 }],
+      extracted: [{ kind: 'full', hash: SHARED, entries: [extraction(ROOT, 'src/C#/a.cs', SHARED)] }], targetDigest: ZERO_DIGEST,
+    });
+
+    expect(w.leaves.get(ROOT)!.get('f:src/C#/old.cs')).toBe(HEALED_LEAF_DIGEST);
+    expect(w.leaves.get(ROOT)!.get('f:src/C#/a.cs')).toBe(SHARED);
+    expect(w.leaves.get(CLOUD)!.get('f:docs/x.md')).toBe(HEALED_LEAF_DIGEST);
+    expect(w.roots.get(CLOUD)!.generation).toBe(2);
+  });
+
   it('a pack that heals nothing does not ask for a reconcile', async () => {
     const res = await apply(packOf(rowsOf('src/a.ts', SHARED)));
     expect(res).not.toHaveProperty('reconcile');

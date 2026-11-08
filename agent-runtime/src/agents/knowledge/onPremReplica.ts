@@ -9,11 +9,13 @@
  * source, and the adoption of a root that was reviewed against the server before this path existed.
  */
 
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  createReplicaHost, forgetRootPorts, migratingRootFiles, rootManifest, rootStore, shouldStayAdditive,
+  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, rootManifest, rootStore, shouldStayAdditive,
   type KnowledgeFiles, type PumpSource, type ReplicaHost,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -118,6 +120,35 @@ export function onPremPumpSource(rootId: string, ports: OnPremRootPorts, linked:
 export async function markAdditiveUntilReviewed(rootId: string, ports: OnPremRootPorts): Promise<void> {
   await ports.migrated; // the legacy import must have run before the local store is judged
   if (await shouldStayAdditive(ports.local, rootId)) await onPremReplicaHost().markAdditive(rootId, ports.files);
+}
+
+/**
+ * Resumes the pending upload of EVERY root of the workspace that has a queue (`*.dirty.json`), not just the base one. A queue file
+ * name is a lossy stem of its root id, so the ids are the base root plus the roots the local store holds a scope for; each is
+ * matched by `dirtyFileName`. Every failure is logged, never thrown.
+ */
+export async function resumeQueuedReplicas(
+  workspaceRoot: string, baseRootId: string, baseLegacyId: string | undefined, linked: { client: KnowledgeClient; projectId: number },
+): Promise<void> {
+  const resume = async (rootId: string, ports: OnPremRootPorts): Promise<void> => {
+    await markAdditiveUntilReviewed(rootId, ports);
+    await onPremReplicaHost().resumeReplica(onPremPumpSource(rootId, ports, linked));
+  };
+  const base = onPremRootPorts(workspaceRoot, baseRootId, baseLegacyId);
+  const failed = loggedFallback("replica resume", undefined);
+  await resume(baseRootId, base).catch(failed);
+  try {
+    const queued = new Set(await readdir(join(workspaceRoot, ".builderforce", "knowledge")).catch(() => [] as string[]));
+    if (![...queued].some((name) => name.endsWith(".dirty.json"))) return;
+    await base.migrated;
+    const ids = new Set((await base.local.scopes()).map((s) => s.rootId));
+    for (const rootId of ids) {
+      if (rootId === baseRootId || !queued.has(dirtyFileName(rootId))) continue;
+      await resume(rootId, onPremRootPorts(workspaceRoot, rootId, undefined)).catch(failed);
+    }
+  } catch (error) {
+    failed(error);
+  }
 }
 
 /** Waits (bounded) for the root's upload to drain; logs when it is still sending. Never throws, never hangs. */

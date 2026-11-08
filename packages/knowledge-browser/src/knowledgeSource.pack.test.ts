@@ -53,7 +53,7 @@ function fakeClient() {
     syncGeneration: vi.fn(async () => ({ generation: 0, digest: '' })),
     syncLeaves: vi.fn(async () => ({ generation: 0, leaves: [] })),
     syncHave: vi.fn(async () => []),
-    writeRows: vi.fn(async () => undefined),
+    writeRows: vi.fn(async (_rootId: string, _rows: unknown) => undefined),
     putExtracted: vi.fn(),
     store: { write: vi.fn(), putExtracted: vi.fn(), getExtracted: vi.fn(async () => undefined), preloadExtracted: vi.fn(), relations: vi.fn(async () => []) },
   };

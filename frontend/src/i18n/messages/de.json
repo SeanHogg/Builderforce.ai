@@ -37569,6 +37569,15 @@
     "surface": {
       "spineLabel": "Wo Sie sind",
       "panelsLabel": "Bereiche",
+      "panelToggles": {
+        "label": "Angezeigte Bereiche",
+        "showLeft": "Linienbereich anzeigen",
+        "hideLeft": "Linienbereich ausblenden",
+        "showBottom": "Pfadleiste anzeigen",
+        "hideBottom": "Pfadleiste ausblenden",
+        "showRight": "Aktionsbereich anzeigen",
+        "hideRight": "Aktionsbereich ausblenden"
+      },
       "overlaysButton": "Überlagerungen",
       "overlaysTitle": "Was die Karte zeigt",
       "presetLabel": "{preset}-Überlagerungen",

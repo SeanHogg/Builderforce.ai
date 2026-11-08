@@ -57,13 +57,31 @@ describe("the on-prem review uploads ONE pack", () => {
     expect(await onPremReplicaHost().replicaQueueFor(session.rootId, ports.files).additive()).toBe(true);
   });
 
-  it("leaves a fresh root (no manifest entries) subtractive", async () => {
+  it("marks a fresh root (no local review yet) additive too", async () => {
     const root = await workspace();
     const { client } = packClient();
     const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked: { client, projectId: 7 } });
     const session = (await host.openReview("docs"))!;
     const ports = onPremRootPorts(root, session.rootId, undefined);
     await session.plan(new AbortController().signal);
-    expect(await onPremReplicaHost().replicaQueueFor(session.rootId, ports.files).additive()).toBe(false);
+    expect(await onPremReplicaHost().replicaQueueFor(session.rootId, ports.files).additive()).toBe(true);
+  });
+
+  it("an aborted first review on a root the server already holds deletes nothing", async () => {
+    const root = await workspace();
+    const { client, server } = packClient();
+    server.s.leaves.set("f:old.md", "d1"); // the server already holds a leaf the empty local store lacks
+    const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked: { client, projectId: 7 } });
+    const session = (await host.openReview("docs"))!;
+    const plan = await session.plan(new AbortController().signal);
+    const abort = new AbortController();
+    abort.abort();
+    await session.review(plan, abort.signal).catch(() => undefined);
+    await onPremReplicaHost().disposeReplicas();
+    for (const sync of server.syncs()) {
+      const deletes = (sync as { pack?: { deletes?: { files?: string[]; facts?: unknown[]; relations?: unknown[] } } }).pack?.deletes;
+      expect((deletes?.files?.length ?? 0) + (deletes?.facts?.length ?? 0) + (deletes?.relations?.length ?? 0)).toBe(0);
+    }
+    expect(server.s.leaves.has("f:old.md")).toBe(true);
   });
 });

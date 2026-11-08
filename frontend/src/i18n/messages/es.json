@@ -37569,6 +37569,15 @@
     "surface": {
       "spineLabel": "Dónde estás",
       "panelsLabel": "Paneles",
+      "panelToggles": {
+        "label": "Paneles visibles",
+        "showLeft": "Mostrar el panel de líneas",
+        "hideLeft": "Ocultar el panel de líneas",
+        "showBottom": "Mostrar la barra de rutas",
+        "hideBottom": "Ocultar la barra de rutas",
+        "showRight": "Mostrar el panel de acciones",
+        "hideRight": "Ocultar el panel de acciones"
+      },
       "overlaysButton": "Capas",
       "overlaysTitle": "Qué muestra el mapa",
       "presetLabel": "Capas de {preset}",

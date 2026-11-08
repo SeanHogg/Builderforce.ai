@@ -37569,6 +37569,15 @@
     "surface": {
       "spineLabel": "Where you are",
       "panelsLabel": "Panels",
+      "panelToggles": {
+        "label": "Panels shown",
+        "showLeft": "Show lines panel",
+        "hideLeft": "Hide lines panel",
+        "showBottom": "Show path strip",
+        "hideBottom": "Hide path strip",
+        "showRight": "Show act panel",
+        "hideRight": "Hide act panel"
+      },
       "overlaysButton": "Overlays",
       "overlaysTitle": "What the map shows",
       "presetLabel": "{preset} overlays",

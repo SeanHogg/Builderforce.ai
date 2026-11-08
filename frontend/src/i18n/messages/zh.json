@@ -37569,6 +37569,15 @@
     "surface": {
       "spineLabel": "当前位置",
       "panelsLabel": "面板",
+      "panelToggles": {
+        "label": "显示的面板",
+        "showLeft": "显示线路面板",
+        "hideLeft": "隐藏线路面板",
+        "showBottom": "显示路径栏",
+        "hideBottom": "隐藏路径栏",
+        "showRight": "显示操作面板",
+        "hideRight": "隐藏操作面板"
+      },
       "overlaysButton": "叠加层",
       "overlaysTitle": "地图显示的内容",
       "presetLabel": "{preset}叠加层",

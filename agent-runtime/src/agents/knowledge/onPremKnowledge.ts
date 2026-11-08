@@ -41,7 +41,7 @@ import { onPremSymbolIndex } from "../on-prem-symbol-index.js";
 import { containerKnowledgeFs } from "./containerKnowledgeFs.js";
 import { loggedFallback } from "./loggedFallback.js";
 import {
-  adoptServerReviewedRoot, closeOnPremManifests, drainAfterReview, onPremPumpSource, onPremReplicaHost, onPremRootPorts,
+  closeOnPremManifests, drainAfterReview, markAdditiveUntilReviewed, onPremPumpSource, onPremReplicaHost, onPremRootPorts, resumeQueuedReplicas,
 } from "./onPremReplica.js";
 import { getHostKnowledgeIndex, onPremLegacyRootId, onPremRootId } from "./index/onPremKnowledgeIndex.js";
 
@@ -173,9 +173,9 @@ async function reviewPorts(
   // replicates to the linked project through the shared host. A root reviewed under its old,
   // name-based id keeps its manifest: migrated on first read.
   const root = onPremRootPorts(workspaceRoot, rootId, onPremLegacyRootId(workspaceRoot, rel));
-  await adoptServerReviewedRoot(rootId, root);
+  await markAdditiveUntilReviewed(rootId, root);
   const pump = onPremPumpSource(rootId, root, linked);
-  const shared = { store: onPremReplicaHost().replicatedStoreOf(rootId, root.files, root.local, pump, false), manifest: root.manifest };
+  const shared = { store: onPremReplicaHost().replicatedStoreOf(rootId, root.files, root.local, pump, true), manifest: root.manifest };
   const ports: KnowledgeReviewPorts = {
     source: createFsDirectorySource({
       fs: containerKnowledgeFs, rootPath, rootId, title,
@@ -208,10 +208,9 @@ async function reviewPorts(
 export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRowsHost {
   const root = resolve(deps.workspaceRoot);
   const base = onPremRootId(root);
-  // A queue already bound to this project resumes its pending upload; an unbound root is untouched (no pump before its first local review).
-  const baseRoot = onPremRootPorts(root, base, onPremLegacyRootId(root, ""));
+  // Every root whose queue is already bound to this project resumes its pending upload; an unbound root is untouched (no pump before its first local review).
   const replicaHost = onPremReplicaHost();
-  void replicaHost.resumeReplica(onPremPumpSource(base, baseRoot, deps.linked)).catch(loggedFallback("replica resume", undefined));
+  void resumeQueuedReplicas(root, base, onPremLegacyRootId(root, ""), deps.linked).catch(loggedFallback("replica resume", undefined));
   return {
     async openReview(dir) {
       const target = resolve(root, dir || ".");

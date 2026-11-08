@@ -30,21 +30,17 @@ export function webLocksReplicaLock(locks: LockManagerLike | undefined = (global
   // The Web Lock per root is requested ONCE; every in-tab holder (pump or review) counts, and the lock is released only when the
   // last one lets go, so a pump that stops mid-review cannot free the root for another tab.
   const holders = new Map<string, { count: number; end: () => void }>();
-  const enter = (rootId: string, end: () => void): void => { holders.set(rootId, { count: 1, end }); };
-  const join = (rootId: string): (() => void) | undefined => {
-    const entry = holders.get(rootId);
-    if (!entry) return undefined;
-    entry.count += 1;
+  /** Registers one holder on a root's entry; the returned leave is idempotent and ends the Web Lock with the last holder. */
+  const leaver = (rootId: string, entry: { count: number; end: () => void }): (() => void) => {
     let left = false;
-    return () => leave(rootId, entry, () => { left = true; }, () => left);
-  };
-  const leave = (rootId: string, entry: { count: number; end: () => void }, mark: () => void, isLeft: () => boolean): void => {
-    if (isLeft()) return;
-    mark();
-    entry.count -= 1;
-    if (entry.count > 0) return;
-    if (holders.get(rootId) === entry) holders.delete(rootId);
-    entry.end();
+    return () => {
+      if (left) return;
+      left = true;
+      entry.count -= 1;
+      if (entry.count > 0) return;
+      if (holders.get(rootId) === entry) holders.delete(rootId);
+      entry.end();
+    };
   };
   return {
     acquire(_files, rootId) {
@@ -53,30 +49,31 @@ export function webLocksReplicaLock(locks: LockManagerLike | undefined = (global
         if (holders.has(rootId)) { resolve(undefined); return; }
         locks.request(replicaLockName(rootId), { ifAvailable: true }, (lock) => {
           if (!lock) { resolve(undefined); return; }
-          return new Promise<void>((held) => {
-            const entry = { count: 1, end: held };
+          return new Promise<void>((end) => {
+            const entry = { count: 1, end };
             holders.set(rootId, entry);
-            let left = false;
-            resolve({
-              async release() { leave(rootId, entry, () => { left = true; }, () => left); },
-            });
+            const leave = leaver(rootId, entry);
+            resolve({ async release() { leave(); } });
           });
         }).catch(reject);
       });
     },
     async exclusive(rootId, run) {
-      const leaveJoined = join(rootId);
-      if (leaveJoined) {
-        try { return await run(); } finally { leaveJoined(); }
+      const entry = holders.get(rootId);
+      let leave: () => void;
+      if (entry) {
+        entry.count += 1;
+        leave = leaver(rootId, entry);
+      } else {
+        leave = await new Promise<() => void>((got, fail) => {
+          locks.request(replicaLockName(rootId), () => new Promise<void>((end) => {
+            const fresh = { count: 1, end };
+            holders.set(rootId, fresh);
+            got(leaver(rootId, fresh));
+          })).catch(fail);
+        });
       }
-      return locks.request(replicaLockName(rootId), async () => {
-        let ended!: () => void;
-        const held = new Promise<void>((resolve) => { ended = resolve; });
-        enter(rootId, ended);
-        const entry = holders.get(rootId)!;
-        let left = false;
-        try { return await run(); } finally { leave(rootId, entry, () => { left = true; }, () => left); await held; }
-      }) as Promise<Awaited<ReturnType<typeof run>>>;
+      try { return await run(); } finally { leave(); }
     },
   };
 }
