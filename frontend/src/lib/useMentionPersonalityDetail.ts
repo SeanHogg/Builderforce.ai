@@ -13,6 +13,7 @@ import { loadAssigneeProfileMap } from '@/lib/assigneeProfilesCache';
 import { loadPsychometricCatalog } from '@/lib/usePsychometricCatalog';
 import type { PsychometricCatalog } from '@/lib/psychometric';
 import { personalityOneLiner, type OneLinerPhrases } from '@/lib/personalityOneLiner';
+import { recordedFailure } from '@/lib/reportError';
 
 /** Select-value the profile map is keyed by: `u:<userId>` humans, `c:<agentRef>` cloud agents. */
 const selectValueOf = (r: DirectedRecipient): string => `${r.kind === 'human' ? 'u' : 'c'}:${r.ref}`;
@@ -28,8 +29,12 @@ export function useMentionPersonalityDetail(enabled: boolean): (r: DirectedRecip
     if (!enabled) return;
     let live = true;
     // Best-effort: a failure leaves the dropdown exactly as it was.
-    void loadAssigneeProfileMap(String(tenantKey)).then((m) => { if (live) setProfiles(m); }).catch(() => undefined);
-    void loadPsychometricCatalog(String(tenantKey)).then((c) => { if (live) setCatalog(c); }).catch(() => undefined);
+    void loadAssigneeProfileMap(String(tenantKey))
+      .then((m) => { if (live) setProfiles(m); })
+      .catch(recordedFailure('Reading the assignee profiles for @-mentions', undefined));
+    void loadPsychometricCatalog(String(tenantKey))
+      .then((c) => { if (live) setCatalog(c); })
+      .catch(recordedFailure('Reading the psychometric catalog for @-mentions', undefined));
     return () => { live = false; };
   }, [enabled, tenantKey]);
 
