@@ -323,7 +323,7 @@ describe('runCreationCanvasAi', () => {
       prompt: 'Improve my website and provide an SEO and visual appeal guide.',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [
-        { name: 'builtin_web_search', description: 'Search', parameters: { type: 'object' }, run: search },
+        { name: 'builtin_web_search', description: 'Search', parameters: { type: 'object' }, mutates: false, run: search },
         { name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: add },
       ],
       onModelDisabled: disabled,
@@ -536,8 +536,8 @@ describe('runCreationCanvasAi', () => {
       canvasSnapshot: '{"objects":[{"kind":"chat","title":"Brain"}]}',
       persistence: 'server',
       canvasActions: [
-        { name: 'builtin_web_fetch', description: 'Fetch', parameters: { type: 'object' }, run: fetch },
-        { name: 'builtin_web_search', description: 'Search', parameters: { type: 'object' }, run: search },
+        { name: 'builtin_web_fetch', description: 'Fetch', parameters: { type: 'object' }, mutates: false, run: fetch },
+        { name: 'builtin_web_search', description: 'Search', parameters: { type: 'object' }, mutates: false, run: search },
         { name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: addObject },
       ],
     });
@@ -1043,10 +1043,10 @@ describe('runCreationCanvasAi', () => {
     it('advertises at most CANVAS_TOOL_LIMIT tools per completion, always including the ones the prompt names', async () => {
       mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'ok', toolCalls: [], finishReason: 'stop' });
       const filler = Array.from({ length: 150 }, (_, index) => ({
-        name: `canvas_filler_tool_${index}`, description: 'Unrelated to anything the user said', parameters: { type: 'object' }, run: () => ({ ok: true }),
+        name: `canvas_filler_tool_${index}`, description: 'Unrelated to anything the user said', parameters: { type: 'object' }, mutates: false, run: () => ({ ok: true }),
       }));
       const named = ['canvas_add_object', 'canvas_read_object', 'canvas_read_snapshot'].map((name) => ({
-        name, description: 'Named by the system prompt', parameters: { type: 'object' }, run: () => ({ ok: true }),
+        name, description: 'Named by the system prompt', parameters: { type: 'object' }, mutates: name === 'canvas_add_object', run: () => ({ ok: true }),
       }));
       const onCompletion = vi.fn();
 

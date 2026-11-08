@@ -217,8 +217,8 @@ function AcceptRiskSection({ open }: { open: boolean }) {
 const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 };
 const label: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' };
 const hint: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' };
-const input: React.CSSProperties = { fontSize: 13, padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', width: '100%', maxWidth: 420 };
-const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const input: React.CSSProperties = { fontSize: 'var(--font-size-small)', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', width: '100%', maxWidth: 420 };
+const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 const bar: React.CSSProperties = { padding: '8px 12px', border: '1px solid', borderRadius: 'var(--radius-sm)' };
 const th: React.CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontWeight: 600 };
 const td: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' };

@@ -17,6 +17,7 @@ import {
   systemFeatures,
   uptimeChecks,
   uptimeMonitors,
+  voiceClipProvenance,
 } from '../../../infrastructure/database/schema/platform';
 import { defineDomainEntities, entity } from '../entityDefinition';
 
@@ -32,4 +33,7 @@ export const PLATFORM_ENTITIES = defineDomainEntities('platform', [
   entity(queueJobToResume, { readOnly: true }),
   /** The pricing publisher owns draft/published promotion as one transaction. */
   entity(platformPricingConfiguration, { readOnly: true }),
+  /** Signed provenance of a synthesized voice clip (1329). The manifest is what the
+   *  signature covers, so any edit would break the proof; the signature itself is redacted. */
+  entity(voiceClipProvenance, { readOnly: true }),
 ]);

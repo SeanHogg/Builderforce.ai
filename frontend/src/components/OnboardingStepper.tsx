@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
 import { profileApi, type OnboardingProgress } from '@/lib/auth/session';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
-import { KanbanRosterCard } from './kanban/KanbanRosterCard';
 import { WizardTicketingStep } from './onboarding/WizardTicketingStep';
 import { WizardReposStep } from './onboarding/WizardReposStep';
 import { WizardAuditStep } from './onboarding/WizardAuditStep';
@@ -16,6 +16,14 @@ import {
   WizardFindWorkStep,
 } from './onboarding/HiredWizardSteps';
 import { useIsFreelancer } from '@/lib/rbac';
+
+// The roster step renders only on its own wizard step, and the stepper sits in the
+// app shell (TopBar → OnboardingProgressPill), so a static import would put the roster
+// card and its template-checkout/listing clients on every route's first paint.
+const KanbanRosterCard = dynamic(
+  () => import('./kanban/KanbanRosterCard').then((module) => module.KanbanRosterCard),
+  { ssr: false },
+);
 
 // ---------------------------------------------------------------------------
 // Types

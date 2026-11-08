@@ -6,7 +6,7 @@
  * pin the security-relevant lines of the workflow and prove the runner parses.
  */
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   AGENT_WORKFLOW_PATH,
@@ -81,13 +81,15 @@ describe('renderAgentWorkflow', () => {
   });
 
   it('is what the committed template carries', () => {
-    const template = readFileSync(fileURLToPath(new URL('../../../../.github/workflows/builderforce-agent.yml', import.meta.url)), 'utf8');
+    // A path, not `new URL(…, import.meta.url)`: the Workers-typed global URL is not Node's URL to the type checker.
+    const template = readFileSync(resolve(__dirname, '../../../../.github/workflows/builderforce-agent.yml'), 'utf8');
     const step = (s: string) => s.slice(s.indexOf('# Runs even when the job is cancelled'));
     expect(step(template)).toBe(step(workflow));
   });
 
   it('carries no secret of ours', () => {
-    expect(workflow).not.toMatch(/secrets\./);
+    // A `secrets.<NAME>` reference, not the word "secrets." ending a sentence in a comment.
+    expect(workflow).not.toMatch(/secrets\.[A-Za-z_]/);
   });
 
   it('lands where the writer expects it', () => {

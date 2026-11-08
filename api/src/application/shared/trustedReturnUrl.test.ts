@@ -12,7 +12,9 @@ describe('trustedReturnUrl', () => {
 
   it('accepts the web origin, its studio sibling and local dev', () => {
     expect(trustedReturnUrl(env, 'https://app.example.com/workforce?x=1').origin).toBe('https://app.example.com');
-    expect(trustedReturnUrl(env, 'https://studio.app.example.com/x').origin).toBe('https://studio.app.example.com');
+    // `studio.` is derived from a two-label APEX only (appOrigins; cors.test.ts pins that rule).
+    const apex = { CORS_ORIGINS: 'https://example.com', APP_URL: 'https://example.com' };
+    expect(trustedReturnUrl(apex, 'https://studio.example.com/x').origin).toBe('https://studio.example.com');
     expect(trustedReturnUrl({ ...env, ENVIRONMENT: 'development' }, 'http://localhost:3000/x').origin).toBe('http://localhost:3000');
   });
 

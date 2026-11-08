@@ -4,7 +4,7 @@ import type React from 'react';
 
 export const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   color: 'var(--text-secondary)',
   marginBottom: 6,
@@ -14,7 +14,7 @@ export const inputStyle: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   padding: '8px 10px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   borderRadius: 'var(--radius-md)',
   background: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
@@ -31,7 +31,7 @@ export const optionStyle: React.CSSProperties = {
 
 export const primaryButton: React.CSSProperties = {
   padding: '8px 14px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   borderRadius: 'var(--radius-md)',
   border: '1px solid transparent',

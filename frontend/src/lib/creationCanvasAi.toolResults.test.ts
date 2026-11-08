@@ -54,7 +54,7 @@ function scriptOneRead(name: string, args = '{}') {
 function run(actions: Array<{ name: string; run: () => unknown }>) {
   return runCreationCanvasAi({
     prompt: 'What is on the board?', canvasSnapshot: '{"objects":[]}', persistence: 'local', notices: NOTICES,
-    canvasActions: actions.map((action) => ({ ...action, description: action.name, parameters: { type: 'object' } })),
+    canvasActions: actions.map((action) => ({ ...action, description: action.name, parameters: { type: 'object' }, mutates: false })),
   });
 }
 

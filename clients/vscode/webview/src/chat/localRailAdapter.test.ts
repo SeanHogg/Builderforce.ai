@@ -47,11 +47,13 @@ describe('local rail adapter', () => {
     expect(refreshes(h.calls)).toBe(3);
   });
 
-  it('never refreshes for a read a host push caused, nor while disconnected', async () => {
+  it('a host push in the store does not suppress the next refresh; disconnected never refreshes', async () => {
     const h = harness();
-    h.store.push(snapshot(7));
+    // A push lands in the store; pushes no longer trigger a listTickets, so the read after it is a
+    // real one and still takes the platform's copy.
+    h.store.set(snapshot(7));
     await h.adapter.listTickets(7);
-    expect(refreshes(h.calls)).toBe(0);
+    expect(refreshes(h.calls)).toBe(1);
     const offline = harness({ connected: false });
     await offline.adapter.listTickets(7);
     expect(refreshes(offline.calls)).toBe(0);

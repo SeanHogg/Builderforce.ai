@@ -34,7 +34,7 @@ import { sql } from 'drizzle-orm';
 import { approvalStatusEnum, privacyRequestStatusEnum, privacyRequestTypeEnum, sourceControlProviderEnum } from './kernel';
 import { segments, tenants, users } from './identity';
 import { agentHosts, toolRuns, executions } from './agents';
-import { boards, initiatives, projects, tasks } from './delivery';
+import { boards, initiatives, projects, securityIncidents, tasks } from './delivery';
 import type { AnswerMap, DevexSegments, SurveyQuestion } from '../../../domain/devex/surveys';
 
 export const systemAuditRuns = pgTable('system_audit_runs', {

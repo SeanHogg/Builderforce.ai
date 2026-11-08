@@ -87,7 +87,9 @@ export const websitePagesVersionKey = (tenantId: number | null): string => `web:
  *  apart is what lets a campaign report say why a page stopped. */
 export type LandingPageStatus = 'draft' | 'live' | 'ended' | 'archived';
 
-const LIVE: LandingPageStatus = 'live';
+/** The one published status, shared by landing pages and website pages. Typed as the
+ *  literal so it is assignable to both status unions. */
+const LIVE = 'live' satisfies LandingPageStatus;
 
 export type LandingPageInput = {
   slug: string;
@@ -679,7 +681,7 @@ export async function publishWebsitePage(
   actor: ActorIdentity,
   id: number,
 ) {
-  return setWebsitePageStatus(db, env, tenantId, actor, id, 'live');
+  return setWebsitePageStatus(db, env, tenantId, actor, id, LIVE);
 }
 
 /** Back to `draft`: the page leaves the public read and the sitemap. */

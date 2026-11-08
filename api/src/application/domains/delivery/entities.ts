@@ -20,6 +20,7 @@ import {
   listItems,
   portfolioCompanies,
   portfolioItems,
+  prSecurityOverrides,
   realizations,
   releaseNoteBetaEnrollments,
   signOffs,
@@ -29,6 +30,7 @@ import {
   taskEffortEstimates,
   taskRepoBindings,
   taskTimeEntries,
+  ticketDispositions,
 } from '../../../infrastructure/database/schema/delivery';
 import { customerInterviews, researchNotes } from '../../../infrastructure/database/schema/discovery';
 import { defineDomainEntities, entity } from '../entityDefinition';
@@ -74,4 +76,11 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
    *  rather than `readOnly`. */
   customerInterviews,
   researchNotes,
+  /** A ticket's recovery disposition (1312): decided and applied by the backlog
+   *  disposition pass, so a hand-edited `applied_at` would claim an apply nobody ran. */
+  entity(ticketDispositions, { readOnly: true }),
+  /** A manager's risk acceptance for ONE pull request at ONE head commit (1322). The
+   *  merge gate honours it per `head_sha`, so it is written only by the override action
+   *  that records who accepted the risk — never by a generic write. */
+  entity(prSecurityOverrides, { readOnly: true }),
 ]);

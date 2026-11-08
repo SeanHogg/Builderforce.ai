@@ -94,7 +94,7 @@ export function useTicketRail({ init, apiReq, serverChatId, chatClientId, chats,
   const railChatRef = useRef(railChatId);
   useEffect(() => { railChatRef.current = railChatId; }, [railChatId]);
   useEffect(() => onHostMessage<ChatRailFrame>('local.chatRail', (frame) => {
-    if (isFrameFor(frame, railChatRef.current)) railStore.push(frame.rail);
+    if (isFrameFor(frame, railChatRef.current)) railStore.set(frame.rail);
   }), [railStore]);
 
   // The composer's #-ticket typeahead: the chat's linked tickets, from the local rail copy.

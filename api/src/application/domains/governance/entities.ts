@@ -7,6 +7,11 @@
  * and escalation invariants cannot be bypassed by generic writes.
  */
 import {
+  governanceAuditGaps,
+  governanceAuditRuns,
+  governanceFindings,
+  governancePolicyPacks,
+  governanceRules,
   legalDocumentAcceptances,
   stakeholderAlignmentResponses,
   stakeholderAlignmentReviews,
@@ -29,4 +34,15 @@ export const GOVERNANCE_ENTITIES = defineDomainEntities('governance', [
   entity(stakeholderAlignmentReviews, { readOnly: true }),
   entity(stakeholderAlignmentResponses, { readOnly: true }),
   entity(stakeholderEscalations, { readOnly: true }),
+  /** Open questions the governance-auditor sweep raises (1322): opened and resolved by
+   *  that sweep, so a hand-resolved gap would be an answer nobody checked. */
+  entity(governanceAuditGaps, { readOnly: true }),
+  /** The governance-auditor's rule packs, rules, runs and findings (1336). Read-only:
+   *  packs and rules are authored through the governance service that validates each
+   *  `check` matcher, and a run and its findings are a record of an audit — a hand-edited
+   *  `gate_result` or finding `status` would claim a review nothing performed. */
+  entity(governancePolicyPacks, { readOnly: true }),
+  entity(governanceRules, { readOnly: true }),
+  entity(governanceAuditRuns, { readOnly: true }),
+  entity(governanceFindings, { readOnly: true }),
 ]);

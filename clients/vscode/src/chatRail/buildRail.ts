@@ -31,6 +31,8 @@ export interface RailRead {
   links: RailLink[];
   runHistory: RailRunHistory;
   freshness: RailFreshness;
+  /** The local record ids of the runs read (host-side only: the watch's scope, not sent to the webview). */
+  runClientIds: string[];
 }
 
 const RUNNABLE = new Set(["task", "epic", "gap"]);
@@ -59,7 +61,7 @@ const newest = (values: ReadonlyArray<string | undefined>): string | undefined =
 export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?: string): RailRead {
   const chatClientId = chatClientIdOf(facts, ref);
   if (!chatClientId) {
-    return { found: false, tickets: [], links: [], runHistory: EMPTY_HISTORY, freshness: { source: "device" } };
+    return { found: false, tickets: [], links: [], runHistory: EMPTY_HISTORY, freshness: { source: "device" }, runClientIds: [] };
   }
 
   const serverIds = new Map<string, string>();
@@ -144,5 +146,6 @@ export function readRailFromFacts(facts: RailFacts, ref: ChatRef, lastRefreshAt?
       ...(lastIngestedAt !== undefined ? { lastIngestedAt } : {}),
       source: bound || lastIngestedAt !== undefined ? "server-observed" : "device",
     },
+    runClientIds: runRecords.map((row) => row.id),
   };
 }

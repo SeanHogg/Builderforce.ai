@@ -30,6 +30,7 @@ import { requirementApplies } from '../kanban/types';
 import { hasNonDraftPr, loadTaskPrSignal } from '../kanban/taskPrSignal';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { isReviewRole } from '../kanban/roleCatalog';
+import { loadRoleRoster, humanIsRoleCapable } from '../kanban/roleCapability';
 import { publishSignoffToPr } from '../validation/publishReviewToPr';
 import { authoredPrdRoleSections, findTaskPrimarySpec } from '../prd/taskPrd';
 
@@ -189,7 +190,7 @@ export class TicketAuditService {
       }
     }
 
-    const signals = await this.gatherSignals(taskId);
+    const signals = await this.gatherSignals(env, tenantId, task.projectId, taskId, reqs.map((r) => r.ref));
     const coverage = computeCoverage(reqs, signals);
 
     // Prior verdict, read BEFORE the upsert overwrites it — the flag journal below
@@ -322,10 +323,27 @@ export class TicketAuditService {
     return projectId ? all.filter((r) => r.projectId === projectId) : all;
   }
 
-  private async gatherSignals(taskId: number): Promise<AuditSignals> {
+  /**
+   * Build the audit's evidence signals for one ticket. Beyond the coarse role-key
+   * sets, this resolves PER-ROLE verification inputs (PRD §5.6/§5.9):
+   *  - `signedOffRoles` — which member refs actually signed off as each role (from the
+   *    ledger), so the engine can re-check capability at read time, not only at write;
+   *  - `roleCapableRefs` — which agents + humans are role-capable of each required role
+   *    on this project, so a gap records who COULD have signed, and a backfilled or
+   *    bug-written ledger row by a non-capable member does not satisfy the requirement.
+   * Both are best-effort: a roster load failure degrades to the legacy membership-only
+   * behaviour rather than failing the audit.
+   */
+  private async gatherSignals(
+    env: Env,
+    tenantId: number,
+    projectId: number,
+    taskId: number,
+    requiredRoleKeys: string[],
+  ): Promise<AuditSignals> {
     const [signoffs, diagnostics, prdRow] = await Promise.all([
       this.db
-        .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
+        .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, memberKind: ticketRoleSignoffs.memberKind, memberRef: ticketRoleSignoffs.memberRef, createdAt: ticketRoleSignoffs.createdAt })
         .from(ticketRoleSignoffs)
         .where(eq(ticketRoleSignoffs.taskId, taskId))
         .orderBy(asc(ticketRoleSignoffs.createdAt)),
@@ -344,9 +362,19 @@ export class TicketAuditService {
     // earlier changes-requested and vice-versa).
     const latest = new Map<string, string>();
     const performed = new Set<string>();
+    // Per-role signer refs (PRD §5.9 Who): roleKey → the member refs that signed as it.
+    // Drives the engine's capability re-check — a backfilled or bug-written ledger row
+    // by a non-role-capable member must not satisfy the requirement.
+    const signedOffRoles = new Map<string, Set<string>>();
     for (const s of signoffs) {
       latest.set(s.roleKey, s.verdict);
       performed.add(s.roleKey);
+      const ref = s.memberRef?.trim();
+      if (ref) {
+        const set = signedOffRoles.get(s.roleKey) ?? new Set<string>();
+        set.add(ref);
+        signedOffRoles.set(s.roleKey, set);
+      }
     }
     const approvedRoles = new Set<string>();
     const changesRequestedRoles = new Set<string>();
@@ -373,6 +401,34 @@ export class TicketAuditService {
       if (score != null && score < DIAGNOSTIC_PASS_THRESHOLD) failedDiagnostics.add(toolId);
     }
 
+    // Per-role capability map (PRD §5.9): roleKey → the member refs (agents + humans)
+    // role-capable of acting AS that role on this project. Lets the engine re-check a
+    // signer's capability at READ time and lets a gap record who COULD have signed.
+    // Agent refs come from the one capability oracle; humans are checked per pin /
+    // discipline. Best-effort: a failure here degrades to the legacy membership-only
+    // rule (the maps stay empty ⇒ `hasCapableSigner` returns true).
+    const roleCapableRefs = new Map<string, Set<string>>();
+    if (requiredRoleKeys.length) {
+      try {
+        const roster = await loadRoleRoster(env, this.db, tenantId, projectId);
+        const humanRefs = new Set<string>();
+        for (const set of signedOffRoles.values()) for (const r of set) humanRefs.add(r);
+        for (const roleKey of new Set(requiredRoleKeys)) {
+          const capable = new Set<string>();
+          for (const c of roster.candidates(roleKey)) capable.add(c.ref);
+          // A human signer counts as capable when pinned or discipline-matched — checked
+          // per human ref that actually signed (bounded by the ledger, not the user table).
+          for (const ref of humanRefs) {
+            if (capable.has(ref)) continue;
+            if (await humanIsRoleCapable(this.db, tenantId, ref, roleKey, projectId)) capable.add(ref);
+          }
+          if (capable.size) roleCapableRefs.set(roleKey, capable);
+        }
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/audit/ticketAuditService.ts', operation: 'gatherSignals.roleCapableRefs' });
+      }
+    }
+
     return {
       approvedRoles,
       changesRequestedRoles,
@@ -380,6 +436,8 @@ export class TicketAuditService {
       failedDiagnostics,
       sectionAuthoredRoles: new Set(authoredPrdRoleSections(prdRow?.prd ?? null)),
       performedRoles: performed,
+      signedOffRoles,
+      roleCapableRefs,
     };
   }
 }

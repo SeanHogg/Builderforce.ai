@@ -296,8 +296,15 @@ const BASELINE = {
    * the insightsOps admin forms, ReplayEffectChip) had taken the tree to 3393 and
    * turned the deploy red. All thirty-six literals name roles now (12/13 = small,
    * 14 = body, 15 = card-title); the net is lower because other surfaces shrank too.
+   *
+   * 3253 → 3241 (2026-11-08): the governance policy-pack and compliance surfaces
+   * (`Soc2AutomationPanel` 5, `PolicyGateEditor` 4, `policyPanelStyles` 3,
+   * `RunScanPanel` 2, `DsrExecutePanel` 1) had taken the tree to 3256 and turned the
+   * Release run red. All fifteen name roles now on the same mapping (11 = eyebrow,
+   * 12/13 = small, 14 = body). `PersonasClient` +21 against `personas/page` −21 is the
+   * page-split move again, not work.
    */
-  offScaleFontSizes: 3253,
+  offScaleFontSizes: 3241,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

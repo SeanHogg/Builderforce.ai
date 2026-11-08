@@ -34,6 +34,7 @@ import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 import { awardForCompletedTask } from "../points/taskEarning";
 import { earnBoardBudget } from '../delivery/boardBudget';
 import { loadLaneOrdinals, type OrdinalMap } from '../swimlane/laneOrdinals';
+import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
 
 /**
  * Lane keys whose work is JUDGING work someone else already did.
@@ -345,6 +346,13 @@ export async function completeTaskOnMerge(
   const ordinals = await loadLaneOrdinals(env, db, t.projectId);
   if (isDoneClass(t.status, ordinals)) return; // already complete — nothing to do
   await db.update(tasks).set({ status: TaskStatus.DONE, updatedAt: new Date() }).where(eq(tasks.id, input.taskId));
+
+  // ONE NOTIFIER: this is a status write on the terminal-close path (merge / green-CI /
+  // post-deploy) that — correctly — does NOT re-enter the lane trigger (a Done lane must
+  // not auto-start an agent). But the write still lands a ticket in a new lane, so it
+  // must reach the live surfaces the way the REST PATCH path does; otherwise the board
+  // stays stale until the next unrelated push.
+  await publishProjectStaffingChanged(env, input.tenantId, t.projectId);
 
   // WHO FINISHED IT. The caller names an actor when one is identifiable — a user id for
   // the in-product "Approve & Merge", or a designated agent manager. It frequently is

@@ -4,8 +4,8 @@
  *
  *   - `listTickets` / `listRuns` answer from the host's local store (so they work with the platform
  *     denied). When the platform is connected, a read also asks the host to refresh that copy in the
- *     background, at most once per `REFRESH_EVERY_MS` per chat and never for a read that a host push
- *     caused (a push is the store already changing; refreshing on it would loop).
+ *     background, at most once per `REFRESH_EVERY_MS` per chat. A host push only lands in the store
+ *     (the panel repaints from it without a read), so it never drives a refresh.
  *   - `linkTicket` / `unlinkTicket` write local link records through the host.
  *   - `listQuestions` filters the platform's pending approvals by the LOCAL copy's links
  *     (`chatQuestionsReader`), so nothing in this webview reads a chat's links from the platform.
@@ -36,14 +36,10 @@ export interface LocalRailHost {
 
 export const REFRESH_EVERY_MS = 30_000;
 
-/** The latest snapshot per chat, and which chats' next read follows a host push. */
+/** The latest snapshot per chat: a read's answer or a host push. */
 export interface RailStore {
   get(chatId: ChatRef): RailSnapshot | undefined;
   set(rail: RailSnapshot): void;
-  /** A host push: store it, and mark the next read as push-caused. */
-  push(rail: RailSnapshot): void;
-  /** True once after a push for this chat. */
-  takePushed(chatId: ChatRef): boolean;
   subscribe(listener: () => void): () => void;
 }
 
@@ -56,14 +52,11 @@ export function isFrameFor(frame: { chatId: ChatRef }, railChatId: ChatRef | nul
 
 export function createRailStore(): RailStore {
   const snapshots = new Map<string, RailSnapshot>();
-  const pushed = new Set<string>();
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of [...listeners]) listener(); };
   return {
     get: (chatId) => snapshots.get(railKeyOf(chatId)),
     set(rail) { snapshots.set(railKeyOf(rail.chatId), rail); notify(); },
-    push(rail) { pushed.add(railKeyOf(rail.chatId)); snapshots.set(railKeyOf(rail.chatId), rail); notify(); },
-    takePushed: (chatId) => pushed.delete(railKeyOf(chatId)),
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   };
 }
@@ -101,7 +94,7 @@ export function createLocalRailAdapter(remote: RemoteChatTicketsAdapter, host: L
 
   /** Ask the host to take the platform's copy, in the background; the answer lands in the store. */
   const refreshSoon = (chatId: ChatRef): void => {
-    if (store.takePushed(chatId) || !host.connected()) return;
+    if (!host.connected()) return;
     const key = railKeyOf(chatId);
     const at = now();
     if (at - (lastRefresh.get(key) ?? -Infinity) < REFRESH_EVERY_MS) return;

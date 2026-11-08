@@ -19,7 +19,7 @@ import type { LocalFirstView } from "../localFirstView";
 import type { LocalWorkRepository } from "../localWorkRepository";
 import { presentRecordSyncStatus, type PresentedSyncStatus } from "../syncStatusPresenter";
 
-export type LocalWorkFacts = Pick<LocalFirstView, "records" | "events" | "receipts" | "conflicts">;
+export type LocalWorkFacts = Pick<LocalFirstView, "records" | "events" | "receipts" | "conflicts" | "mappings">;
 
 /** A ticket with no local project shows under "Unfiled" only when it is this device's work. */
 export function isUnfiledWork(ticket: Readonly<LocalRecord<TicketValue>>): boolean {

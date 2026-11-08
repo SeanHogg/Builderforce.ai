@@ -31,6 +31,20 @@ describe("local work tree model (platform denied: nothing here reaches a network
     for (const ticket of tickets) expect(ticket.sync).toBe("syncing");
   });
 
+  it("regression: a mapped ticket synced before receipts named their record presents synced, not pending", async () => {
+    const { store, repo, model } = harness();
+    const project = await repo.createProject({ name: "Alpha" });
+    const ticket = await repo.createTicket({ projectId: project.id, title: "Old" });
+    await store.transact(async (tx) => {
+      // The server accepted it: the event is acknowledged (gone) and its receipt carries no entity fields.
+      const pending = await tx.pending();
+      await tx.acknowledge(pending.map((event) => event.eventId));
+      await tx.putMapping({ destination: ticket.destination, entityType: "ticket", clientEntityId: ticket.id, serverId: "41", serverVersion: 1 });
+    });
+    const [node] = await model.children((await model.roots())[0]!);
+    expect(node).toMatchObject({ id: ticket.id, sync: "synced" });
+  });
+
   it("hides archived tickets and puts tickets of an unknown project under one unfiled node", async () => {
     const { store, repo, model } = harness();
     const project = await repo.createProject({ name: "Alpha" });

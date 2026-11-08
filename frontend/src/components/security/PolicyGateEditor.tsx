@@ -51,7 +51,7 @@ export default function PolicyGateEditor({ saving, onAdd }: Props) {
 
   return (
     <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('addGateTitle')}</div>
+      <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{t('addGateTitle')}</div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 150px', minWidth: 0 }}>
@@ -75,7 +75,7 @@ export default function PolicyGateEditor({ saving, onAdd }: Props) {
           />
         </div>
       </div>
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('toolHelp')}</p>
+      <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: 0 }}>{t('toolHelp')}</p>
 
       <div>
         <label style={labelStyle} htmlFor="policy-gate-side-effect">{t('fieldAppliesTo')}</label>
@@ -90,7 +90,7 @@ export default function PolicyGateEditor({ saving, onAdd }: Props) {
             <option key={se} value={se} style={optionStyle}>{t(`sideEffect.${se}`)}</option>
           ))}
         </select>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('appliesToHelp')}</p>
+        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('appliesToHelp')}</p>
       </div>
 
       <div>
@@ -105,7 +105,7 @@ export default function PolicyGateEditor({ saving, onAdd }: Props) {
             <option key={eff} value={eff} style={optionStyle}>{t(`effect.${eff}`)}</option>
           ))}
         </select>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>
           {t(`effectHelp.${draft.effect}`)}
         </p>
       </div>

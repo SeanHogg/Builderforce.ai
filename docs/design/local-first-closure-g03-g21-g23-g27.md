@@ -227,7 +227,7 @@ the replica-stack migration and are untouched here.
 
 - `readRail(chatId: string | number)` answers from the store only:
   - tickets, links, runs;
-  - each ticket's `presentSurfaceSyncStatus`;
+  - each ticket's `presentRecordSyncStatus` (with `mapped` from the store's mappings);
   - `freshness: { lastIngestedAt?: string; source: 'device' | 'server-observed' }`.
 - `refreshRail` runs the gated reads and ingests the results.
 - A store subscription re-posts when a commit touches the chat, its links or its tickets.

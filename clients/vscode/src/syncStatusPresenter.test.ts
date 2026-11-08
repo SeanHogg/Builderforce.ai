@@ -7,14 +7,11 @@ import {
   PRESENTED_SYNC_PRECEDENCE,
   PRESENTED_SYNC_STATUSES,
   presentDerivedSyncStatus,
-  presentStoreSyncStatus,
-  presentSurfaceSyncStatus,
   presentSyncStatus,
   presentRecordSyncStatus,
   presentedSyncShownAsDone,
   preferPresentedSyncStatus,
   type PresentedSyncStatus,
-  type SyncStatusSurface,
 } from "./syncStatusPresenter";
 
 function record(entityType: LocalRecord["entityType"], id: string, payload: unknown = { title: id }): LocalRecord {
@@ -201,13 +198,13 @@ describe("presentSyncStatus", () => {
   });
 
   it("does not show a denied sync as done on chat, ticket, audit, or run", () => {
-    const surfaces: Array<[SyncStatusSurface, LocalRecord["entityType"], string]> = [
-      ["chat", "chat", "chat-denied"],
-      ["ticket", "ticket", "ticket-denied"],
-      ["audit", "audit-run", "audit-denied"],
-      ["run", "execution", "run-denied"],
+    const surfaces: Array<[LocalRecord["entityType"], string]> = [
+      ["chat", "chat-denied"],
+      ["ticket", "ticket-denied"],
+      ["audit-run", "audit-denied"],
+      ["execution", "run-denied"],
     ];
-    for (const [surface, entityType, id] of surfaces) {
+    for (const [entityType, id] of surfaces) {
       const row = record(entityType, id);
       const pending = [event({ eventId: `${id}-e1`, clientEntityId: id, entityType })];
       const deniedWhilePending = presentSyncStatus({
@@ -233,9 +230,9 @@ describe("presentSyncStatus", () => {
         events: pending,
         receipts: [receipt(`${id}-e1`, "rejected")],
       });
-      const fromStore = presentSurfaceSyncStatus(stored, surface, id);
+      const fromStore = presentRecordSyncStatus(stored, row);
       expect(fromStore).toBe("syncing");
-      expect(presentedSyncShownAsDone(row, fromStore!)).toBe(false);
+      expect(presentedSyncShownAsDone(row, fromStore)).toBe(false);
     }
   });
 
@@ -256,37 +253,6 @@ describe("presentSyncStatus", () => {
     expect(presentedSyncShownAsDone(completed, "syncing")).toBe(true);
     expect(presentedSyncShownAsDone(completed, "conflict")).toBe(false);
     expect(presentedSyncShownAsDone(completed, "dead-letter")).toBe(false);
-  });
-});
-
-describe("presentStoreSyncStatus", () => {
-  it("reads one entity from a store snapshot and does not invent a status for a missing row", () => {
-    const stored = snapshot({
-      records: [record("chat", "chat-1"), record("ticket", "ticket-1")],
-      events: [event({ eventId: "e1", clientEntityId: "ticket-1", entityType: "ticket" })],
-    });
-    expect(presentStoreSyncStatus(stored, { entityType: "chat", id: "chat-1" })).toBe("pending");
-    expect(presentStoreSyncStatus(stored, { entityType: "ticket", id: "ticket-1" })).toBe("syncing");
-    expect(presentStoreSyncStatus(stored, { entityType: "execution", id: "run-missing" })).toBeUndefined();
-  });
-
-  it("presents chat, ticket, audit, and run from the same snapshot", () => {
-    const surfaces: Array<[SyncStatusSurface, LocalRecord["entityType"], string]> = [
-      ["chat", "chat", "chat-1"],
-      ["ticket", "ticket", "ticket-1"],
-      ["audit", "audit-run", "audit-1"],
-      ["run", "execution", "run-1"],
-    ];
-    const stored = snapshot({
-      records: surfaces.map(([, entityType, id]) => record(entityType, id)),
-      receipts: [receipt("run-accepted", "accepted")],
-      events: [event({ eventId: "run-accepted", clientEntityId: "run-1", entityType: "execution" })],
-    });
-    expect(presentSurfaceSyncStatus(stored, "chat", "chat-1")).toBe("pending");
-    expect(presentSurfaceSyncStatus(stored, "ticket", "ticket-1")).toBe("pending");
-    expect(presentSurfaceSyncStatus(stored, "audit", "audit-1")).toBe("pending");
-    expect(presentSurfaceSyncStatus(stored, "run", "run-1")).toBe("synced");
-    expect(presentSurfaceSyncStatus(stored, "audit", "audit-finding-1")).toBeUndefined();
   });
 });
 
@@ -313,8 +279,29 @@ describe("presentRecordSyncStatus (regression: orphan receipts)", () => {
       events: [],
       receipts: [receipt("other-e1", "accepted", other), receipt("other-e2", "conflict", other), receipt("orphan", "accepted")],
       conflicts: [],
+      mappings: [],
     };
     expect(presentRecordSyncStatus(facts, mine)).toBe("pending");
     expect(presentRecordSyncStatus(facts, other)).toBe("conflict");
+  });
+});
+
+describe("presentRecordSyncStatus (regression: receipts written before they named their record)", () => {
+  const mapping = (row: LocalRecord) => ({
+    destination: UNBOUND_DESTINATION, entityType: row.entityType, clientEntityId: row.id, serverId: "41", serverVersion: 1,
+  });
+
+  it("a mapped device-authored record whose old receipt outlived its event is synced, not pending", () => {
+    const mine = record("ticket", "ticket-1");
+    // The old receipt shape: no entityType / clientEntityId. Its event was acknowledged and deleted.
+    const facts = { events: [], receipts: [receipt("e1", "accepted")], conflicts: [], mappings: [mapping(mine)] };
+    expect(presentRecordSyncStatus(facts, mine)).toBe("synced");
+  });
+
+  it("an unmapped device record with no events stays pending", () => {
+    const mine = record("ticket", "ticket-1");
+    const other = record("ticket", "ticket-2");
+    const facts = { events: [], receipts: [receipt("e1", "accepted")], conflicts: [], mappings: [mapping(other)] };
+    expect(presentRecordSyncStatus(facts, mine)).toBe("pending");
   });
 });

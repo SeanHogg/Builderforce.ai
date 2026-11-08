@@ -7,6 +7,7 @@ import {
   assertStatusFresh,
   deriveRecordSyncStatus,
   deriveSyncStatus,
+  hasServerMapping,
   isLocalAuditComplete,
   localAuditCompletionRequiresReceipt,
   localWorkComplete,
@@ -345,6 +346,35 @@ describe('receipts are scoped to their record (C7)', () => {
   it('an old receipt without entity fields still counts while its event is the record\'s own', () => {
     const pending = [event({ eventId: 'a-e1', clientEntityId: a.id, entityType: a.entityType })];
     expect(deriveRecordSyncStatus({ record: a, events: pending, receipts: [receipt('a-e1', 'accepted')] })).toBe('synced');
+  });
+
+  it('regression: a mapped record whose old receipt (no entity fields) outlived its event is synced, not pending', () => {
+    // Synced before receipts named their record: the event was acknowledged and deleted, and the
+    // receipt left behind ties to nothing. The server mapping is what proves the server holds it.
+    const oldReceipt = receipt('a-e1', 'accepted');
+    expect(oldReceipt.entityType).toBeUndefined();
+    expect(oldReceipt.clientEntityId).toBeUndefined();
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [oldReceipt], mapped: true })).toBe('synced');
+  });
+
+  it('an unmapped device record with no events and no receipts of its own stays local', () => {
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('a-e1', 'accepted')], mapped: false })).toBe('local');
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [] })).toBe('local');
+  });
+
+  it('a mapping never hides a pending edit, a dead letter or a rejection of the record\'s own', () => {
+    const pending = [event({ eventId: 'a-e2', clientEntityId: a.id, entityType: a.entityType })];
+    expect(deriveRecordSyncStatus({ record: a, events: pending, mapped: true })).toBe('syncing');
+    expect(deriveRecordSyncStatus({ record: a, events: [], receipts: [receipt('a-e2', 'rejected', a)], mapped: true })).toBe('dead-letter');
+  });
+
+  it('hasServerMapping counts only an imported mapping of this record', () => {
+    const mapping = (clientEntityId: string, serverVersion: number) => ({
+      destination: { kind: 'unbound' } as const, entityType: 'ticket' as const, clientEntityId, serverId: '9', serverVersion,
+    });
+    expect(hasServerMapping(a, [mapping(a.id, 1)])).toBe(true);
+    expect(hasServerMapping(a, [mapping(b.id, 1)])).toBe(false);
+    expect(hasServerMapping(a, [mapping(a.id, 0)])).toBe(false);
   });
 
   it('receiptsFor keeps only the record\'s receipts', () => {

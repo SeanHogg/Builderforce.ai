@@ -23,6 +23,7 @@ import {
   agentBenchmarkCases,
   agentBenchmarkResults,
   agentRunPrincipals,
+  deferredDispatches,
   enrichmentCache,
   executionClaimEvidence,
   executionClaims,
@@ -110,4 +111,8 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  the regression series IS these rows, and a hand-written score is a result nobody
    *  ran — it would move the quality trend the insights hub plots. */
   entity(agentBenchmarkResults, { readOnly: true }),
+  /** The deferred one-shot dispatch queue (1333). Work in flight: the sweep claims,
+   *  retries and settles each row under a lease, so a hand-moved `state` is a dispatch
+   *  that runs twice or never. */
+  entity(deferredDispatches, { readOnly: true }),
 ]);

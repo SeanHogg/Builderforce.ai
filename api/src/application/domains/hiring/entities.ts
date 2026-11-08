@@ -6,6 +6,7 @@
  * list; the rest are their satellites and are reached through them.
  */
 import {
+  hiringRefSalts,
   candidateDemographics,
   candidateInteractions,
   candidateResumes,
@@ -78,4 +79,8 @@ export const HIRING_ENTITIES = defineDomainEntities('hiring', [
   entity(jobPostingDistributions, { readOnly: true }),
   rampTimes,
   cohortRetention,
+  /** The per-tenant HMAC salt for board candidate refs (1332). Restricted: the row
+   *  exists only to hold the salt, which is a secret, so the generic reader has
+   *  nothing to serve. */
+  entity(hiringRefSalts, { restricted: true }),
 ]);

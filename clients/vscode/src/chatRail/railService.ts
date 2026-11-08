@@ -18,7 +18,7 @@ import type {
   ChatRailMutationOutcome, ChatRailRefreshOutcome, ChatRef, RailLinkType, RailSnapshot, RailTicketRef,
 } from "./railProtocol";
 import { railReadMark, refreshRail, type RailRefreshPorts } from "./refreshRail";
-import { watchRail } from "./railWatch";
+import { watchRail, type RailScope } from "./railWatch";
 import type { SyncSummary } from "../sync/syncSummary";
 
 export interface ChatRailDeps {
@@ -41,7 +41,8 @@ export interface ChatRailService {
 }
 
 export function createChatRailService(deps: ChatRailDeps): ChatRailService {
-  async function read(ref: ChatRef): Promise<RailSnapshot> {
+  /** The snapshot the webview gets, and the ids it drew (the watch's scope). */
+  async function readScoped(ref: ChatRef): Promise<{ rail: RailSnapshot; scope: RailScope }> {
     const [facts, summary] = await Promise.all([deps.facts(), deps.summary()]);
     const clientId = chatClientIdOf(facts, ref);
     // When the rail was last taken from the platform: the store's read mark, which a refresh that
@@ -53,17 +54,22 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
     // chat; the webview falls back to the server / keep-all then.
     const changed = await readLocalChatChangedFiles(deps.store, ref);
     return {
-      chatId: ref,
-      found: rail.found,
-      ...(rail.chatClientId ? { chatClientId: rail.chatClientId } : {}),
-      tickets: rail.tickets,
-      links: rail.links,
-      runHistory: rail.runHistory,
-      freshness: rail.freshness,
-      summary,
-      ...(changed.found ? { chatChangedFiles: changed.files } : {}),
+      rail: {
+        chatId: ref,
+        found: rail.found,
+        ...(rail.chatClientId ? { chatClientId: rail.chatClientId } : {}),
+        tickets: rail.tickets,
+        links: rail.links,
+        runHistory: rail.runHistory,
+        freshness: rail.freshness,
+        summary,
+        ...(changed.found ? { chatChangedFiles: changed.files } : {}),
+      },
+      scope: { ticketIds: new Set(rail.tickets.map((tk) => tk.clientId)), runIds: new Set(rail.runClientIds) },
     };
   }
+
+  const read = async (ref: ChatRef): Promise<RailSnapshot> => (await readScoped(ref)).rail;
 
   return {
     read,
@@ -74,10 +80,14 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
     link: (ref, ticket, linkType) => linkRailTicket(deps.store, deps, ref, ticket, linkType),
     unlink: (ref, ticket) => unlinkRailTicket(deps.store, deps, ref, ticket),
     watch(ref, post) {
+      // The ids the last posted rail drew: a run commit outside them does not repost (local checkpoints).
+      let scope: RailScope | undefined;
       const repost = () => {
-        void read(ref).then(post).catch(() => { /* a failed local read leaves the last posted rail standing */ });
+        void readScoped(ref)
+          .then((read) => { scope = read.scope; post(read.rail); })
+          .catch(() => { /* a failed local read leaves the last posted rail standing */ });
       };
-      return watchRail(deps.store, repost);
+      return watchRail(deps.store, repost, { scope: () => scope });
     },
   };
 }

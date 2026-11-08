@@ -133,6 +133,6 @@ export function DsrExecutePanel({ requestId, open, onClose, onDone }: DsrExecute
   );
 }
 
-const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const btn: React.CSSProperties = { padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 const btnGhost: React.CSSProperties = { ...btn, background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' };
 const bar: React.CSSProperties = { padding: '8px 12px', border: '1px solid', borderRadius: 'var(--radius-sm)' };

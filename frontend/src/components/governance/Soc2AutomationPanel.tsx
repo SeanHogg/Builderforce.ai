@@ -38,7 +38,7 @@ export function Soc2AutomationPanel() {
     <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 24 }}>
       <section aria-labelledby="soc2-evidence-title">
         <div style={heading}>
-          <div id="soc2-evidence-title" style={{ fontSize: 14, fontWeight: 600 }}>{t('evidenceTitle')}</div>
+          <div id="soc2-evidence-title" style={{ fontSize: 'var(--font-size-body)', fontWeight: 600 }}>{t('evidenceTitle')}</div>
           <div style={muted}>{t('evidenceSummary', { automated, total: evidence.length })}</div>
         </div>
         {evidence.length === 0 ? (
@@ -63,7 +63,7 @@ export function Soc2AutomationPanel() {
                       {e.url ? <a href={e.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>{e.title}</a> : e.title}
                     </td>
                     <td style={td}>{t(`type.${e.evidenceType === AUTOMATED ? 'automated' : e.evidenceType === 'override' ? 'override' : 'manual'}`)}</td>
-                    <td style={{ ...td, fontSize: 12, color: 'var(--text-secondary)' }} title={e.sourceRef ?? undefined}>
+                    <td style={{ ...td, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }} title={e.sourceRef ?? undefined}>
                       {[sourceKind(e.sourceRef), e.note].filter(Boolean).join(' · ') || '—'}
                     </td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmt.date(e.createdAt)}</td>
@@ -77,7 +77,7 @@ export function Soc2AutomationPanel() {
 
       <section aria-labelledby="soc2-gaps-title">
         <div style={heading}>
-          <div id="soc2-gaps-title" style={{ fontSize: 14, fontWeight: 600 }}>{t('gapsTitle')}</div>
+          <div id="soc2-gaps-title" style={{ fontSize: 'var(--font-size-body)', fontWeight: 600 }}>{t('gapsTitle')}</div>
           <div style={muted}>{t('gapsSummary', { n: gaps.length })}</div>
         </div>
         {gaps.length === 0 ? (
@@ -110,7 +110,7 @@ export function Soc2AutomationPanel() {
 }
 
 const heading: React.CSSProperties = { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 };
-const muted: React.CSSProperties = { fontSize: 13, color: 'var(--text-secondary)' };
-const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 };
+const muted: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' };
+const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-small)' };
 const th: React.CSSProperties = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontWeight: 600 };
 const td: React.CSSProperties = { padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', verticalAlign: 'top' };

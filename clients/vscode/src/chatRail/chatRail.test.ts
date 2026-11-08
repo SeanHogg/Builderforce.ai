@@ -8,7 +8,7 @@ import {
 import { buildSyncSummary } from "../sync/syncSummary";
 import { refreshRail } from "./refreshRail";
 import { createChatRailService } from "./railService";
-import { touchesRail } from "./railWatch";
+import { touchesRail, watchRail } from "./railWatch";
 import { watchRailFor } from "./railWebviewWatch";
 
 const DEST: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "tenant-1" };
@@ -144,18 +144,91 @@ describe("refreshRail", () => {
   });
 });
 
+const railChange = (types: string[], extra: { events?: boolean; syncState?: boolean; ids?: string[] } = {}) => ({
+  records: new Map(types.map((type) => [type, new Set(extra.ids ?? ["x"])])) as never,
+  events: extra.events ?? false,
+  syncState: extra.syncState ?? false,
+});
+
 describe("touchesRail", () => {
-  const change = (types: string[], extra: { events?: boolean; syncState?: boolean } = {}) => ({
-    records: new Map(types.map((type) => [type, new Set(["x"])])) as never,
-    events: extra.events ?? false,
-    syncState: extra.syncState ?? false,
-  });
-  it("reacts only to links, tickets and runs, never to the queue or the sync state", () => {
-    expect(touchesRail(change(["chat-ticket-link"]))).toBe(true);
-    expect(touchesRail(change(["ticket"]))).toBe(true);
-    expect(touchesRail(change(["execution"]))).toBe(true);
-    expect(touchesRail(change(["message", "chat"], { events: true, syncState: true }))).toBe(false);
+  const scope = { ticketIds: new Set(["t1"]), runIds: new Set(["r1"]) };
+  it("reposts at once for links, tickets and runs, never for the queue or the sync state alone", () => {
+    expect(touchesRail(railChange(["chat-ticket-link"]))).toBe(true);
+    expect(touchesRail(railChange(["ticket"]))).toBe(true);
+    expect(touchesRail(railChange(["execution"]))).toBe(true);
+    expect(touchesRail(railChange(["message", "chat"], { events: true, syncState: true }))).toBe(false);
     expect(touchesRail(undefined)).toBe(true);
+  });
+
+  it("a run reposts only when the last posted rail shows it (its run or ticket ids), or any link changed", () => {
+    expect(touchesRail(railChange(["execution"], { ids: ["r1"] }), scope)).toBe(true);
+    expect(touchesRail(railChange(["execution"], { ids: ["t1"] }), scope)).toBe(true);
+    // Another chat's (or no chat's) local run checkpoint.
+    expect(touchesRail(railChange(["execution"], { ids: ["r9"] }), scope)).toBe(false);
+    expect(touchesRail(railChange(["execution", "chat-ticket-link"], { ids: ["r9"] }), scope)).toBe(true);
+    // Before the first post nothing is known: any run counts.
+    expect(touchesRail(railChange(["execution"], { ids: ["r9"] }), undefined)).toBe(true);
+  });
+});
+
+describe("watchRail", () => {
+  function harness(scope?: () => { ticketIds: Set<string>; runIds: Set<string> } | undefined) {
+    let listener: ((change?: unknown) => void) | undefined;
+    const store = { subscribe: (fn: (change?: unknown) => void) => { listener = fn; return () => { listener = undefined; }; } };
+    const repost = vi.fn();
+    const stop = watchRail(store as never, repost, { debounceMs: 100, syncDebounceMs: 1_000, ...(scope ? { scope } : {}) });
+    return { emit: (change: unknown) => listener?.(change), repost, stop };
+  }
+
+  it("reposts once per sync pass, after a 1 s trailing quiet period, and never for the queue alone", () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness();
+      h.emit(railChange(["message"], { events: true }));
+      vi.advanceTimersByTime(2_000);
+      expect(h.repost).not.toHaveBeenCalled();
+      // One sync pass: many commits, each moving receipts / mappings.
+      for (let i = 0; i < 5; i += 1) {
+        h.emit(railChange([], { events: true, syncState: true }));
+        vi.advanceTimersByTime(300);
+      }
+      expect(h.repost).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1_000);
+      expect(h.repost).toHaveBeenCalledTimes(1);
+      h.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an immediate repost folds in a waiting sync repost", () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness();
+      h.emit(railChange([], { syncState: true }));
+      h.emit(railChange(["ticket"]));
+      vi.advanceTimersByTime(2_000);
+      expect(h.repost).toHaveBeenCalledTimes(1);
+      h.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a run checkpoint outside the posted rail does not repost; one it shows does", () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness(() => ({ ticketIds: new Set(["t1"]), runIds: new Set(["r1"]) }));
+      h.emit(railChange(["execution"], { ids: ["r9"] }));
+      vi.advanceTimersByTime(500);
+      expect(h.repost).not.toHaveBeenCalled();
+      h.emit(railChange(["execution"], { ids: ["r1"] }));
+      vi.advanceTimersByTime(500);
+      expect(h.repost).toHaveBeenCalledTimes(1);
+      h.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

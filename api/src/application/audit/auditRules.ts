@@ -53,6 +53,20 @@ export interface AuditSignals {
    * would reopen exactly the rubber-stamp hole `no_contribution` closes.
    */
   sectionAuthoredRoles: Set<string>;
+  /**
+   * Per-role → the member refs that signed off AS that role (`memberRef` values from the
+   * ledger, keyed by `roleKey`). The audit's capability re-check reads this: a sign-off
+   * by a member that is NOT role-capable does not satisfy the requirement (default-deny
+   * inside the engine, mirroring the HTTP/MCP write path). Populated by
+   * {@link ticketAuditService.gatherSignals}; absent ⇒ capability is not re-checked.
+   */
+  signedOffRoles?: Map<string, Set<string>>;
+  /**
+   * Per-role → the member refs (agents + humans) role-capable of acting AS that role on
+   * this ticket's project. Lets a gap answer \"who COULD have signed\" — the evidence
+   * half of per-role verification. Populated by the audit caller.
+   */
+  roleCapableRefs?: Map<string, Set<string>>;
 }
 
 export interface UnmetRequirement {
@@ -98,6 +112,24 @@ export interface CoverageResult {
   missing: UnmetRequirement[];
 }
 
+/**
+ * Per-role capability re-check (PRD §5.9/FR-9, default-deny inside the engine).
+ *
+ * The HTTP + MCP write paths already refuse a sign-off by a non-role-capable member,
+ * but rows can reach the ledger from a migration backfill or an older bug — and the
+ * audit engine must not let such a row satisfy a requirement just because it exists.
+ * When the caller supplied per-role signer + capability maps, an approval counts only
+ * if at least one signer is role-capable. When the maps are absent (pure-rule callers,
+ * legacy tests) the engine keeps its membership-only behaviour, so this is additive.
+ */
+function hasCapableSigner(roleKey: string, signals: AuditSignals): boolean {
+  const capable = signals.roleCapableRefs?.get(roleKey);
+  const signed = signals.signedOffRoles?.get(roleKey);
+  if (!capable || !signed) return true;
+  for (const ref of signed) if (capable.has(ref)) return true;
+  return false;
+}
+
 /** Is a single requirement satisfied by the observed signals? Returns the unmet
  *  reason when not, or null when satisfied. */
 export function requirementUnmetReason(
@@ -110,25 +142,53 @@ export function requirementUnmetReason(
     if (signals.failedDiagnostics.has(req.ref)) return 'missing';
     return signals.ranDiagnostics.has(req.ref) ? null : 'missing';
   }
-  // review, or a role acting as a reviewer → needs an approved sign-off.
+  // review, or a role acting as a reviewer → needs an approved sign-off by a
+  // ROLE-CAPABLE member (the capability re-check, not just any ledger row).
   const isReviewer = req.kind === 'review' || req.responsibility === 'reviewer';
   if (isReviewer) {
     if (signals.changesRequestedRoles.has(req.ref)) return 'changes_requested';
-    return signals.approvedRoles.has(req.ref) ? null : 'missing';
+    return signals.approvedRoles.has(req.ref) && hasCapableSigner(req.ref, signals) ? null : 'missing';
   }
-  // role owner / contributor → satisfied if that role performed work, signed off, OR
-  // authored its anchored PRD section (for a spec role, that section IS the deliverable
-  // — see {@link AuditSignals.sectionAuthoredRoles}).
+  // role owner / contributor → satisfied if that role performed work, signed off (as a
+  // role-capable member), OR authored its anchored PRD section (for a spec role, that
+  // section IS the deliverable — see {@link AuditSignals.sectionAuthoredRoles}).
+  const signedOff = signals.approvedRoles.has(req.ref) && hasCapableSigner(req.ref, signals);
   const performed = signals.performedRoles.has(req.ref)
-    || signals.approvedRoles.has(req.ref)
+    || signedOff
     || signals.sectionAuthoredRoles.has(req.ref);
   return performed ? null : 'missing';
 }
 
-const asUnmet = (req: RequirementInput, reason: 'missing' | 'changes_requested'): UnmetRequirement => ({
+const asUnmet = (
+  req: RequirementInput,
+  reason: 'missing' | 'changes_requested',
+  evidence?: UnmetRequirement['evidence'],
+): UnmetRequirement => ({
   laneKey: req.laneKey, laneName: req.laneName, kind: req.kind, ref: req.ref,
   responsibility: req.responsibility, reason, description: req.description,
+  ...(evidence ? { evidence } : {}),
 });
+
+/**
+ * Per-role evidence snapshot for a gap (PRD §5.6/§10): which members signed off as
+ * this role, which are role-capable of it, and which performed / authored it. Pure —
+ * reads only the coarse `AuditSignals` sets, so a gap reads WHY it is unmet (the
+ * signer was not role-capable, or nobody signed though capable members exist), not
+ * just THAT it is unmet. Empty arrays are dropped from the stored JSON.
+ */
+function evidenceFor(req: RequirementInput, signals: AuditSignals): UnmetRequirement['evidence'] {
+  const arr = (s: Set<string> | undefined): string[] => (s ? [...s].sort() : []);
+  const signed = arr(signals.signedOffRoles?.get(req.ref));
+  const evidence: UnmetRequirement['evidence'] = {
+    signedOffBy: signed,
+    capableOfRole: arr(signals.roleCapableRefs?.get(req.ref)),
+    performedBy: arr(signals.performedRoles).filter((r) => r === req.ref),
+    sectionAuthoredBy: arr(signals.sectionAuthoredRoles).filter((r) => r === req.ref),
+  };
+  return (signed.length || evidence.capableOfRole.length || evidence.performedBy.length || evidence.sectionAuthoredBy.length)
+    ? evidence
+    : undefined;
+}
 
 /** Compute overall coverage; only `isRequired` requirements can flag a ticket.
  *  Reviewer requirements at a lane form a QUORUM set: with quorum N, N approvals
@@ -143,7 +203,7 @@ export function computeCoverage(reqs: RequirementInput[], signals: AuditSignals)
   for (const req of required.filter((r) => !isReviewerReq(r))) {
     requiredCount += 1;
     const reason = requirementUnmetReason(req, signals);
-    if (reason == null) satisfied += 1; else missing.push(asUnmet(req, reason));
+    if (reason == null) satisfied += 1; else missing.push(asUnmet(req, reason, evidenceFor(req, signals)));
   }
 
   // Reviewer requirements — grouped by lane into quorum sets.
@@ -170,7 +230,7 @@ export function computeCoverage(reqs: RequirementInput[], signals: AuditSignals)
         ...unapproved.filter((r) => !signals.changesRequestedRoles.has(r.ref)),
       ];
       for (const req of ordered.slice(0, quorum - metInSet)) {
-        missing.push(asUnmet(req, signals.changesRequestedRoles.has(req.ref) ? 'changes_requested' : 'missing'));
+        missing.push(asUnmet(req, signals.changesRequestedRoles.has(req.ref) ? 'changes_requested' : 'missing', evidenceFor(req, signals)));
       }
     }
   }

@@ -24,7 +24,8 @@
  * A cached previous status is never an input and is never retained.
  */
 
-import type { JournalEvent, LocalRecord, SyncConflict, SyncReceipt } from './records.js';
+import { isImported } from './journalRules.js';
+import type { JournalEvent, LocalRecord, ServerMapping, SyncConflict, SyncReceipt } from './records.js';
 
 export const SYNC_STATUSES = ['local', 'syncing', 'synced', 'conflict', 'dead-letter'] as const;
 
@@ -52,6 +53,19 @@ export interface SyncStatusInput {
 
 function sameRecord(entityType: LocalRecord['entityType'], id: string, record: LocalRecord): boolean {
   return entityType === record.entityType && id === record.id;
+}
+
+/**
+ * The `mapped` input: whether `mappings` (typically the store's whole set) hold an IMPORTED server
+ * mapping for `record`. A bound-only mapping (a server chat whose history was never imported) is not one.
+ */
+export function hasServerMapping(
+  record: Pick<LocalRecord, 'entityType' | 'id'>,
+  mappings: readonly ServerMapping[],
+): boolean {
+  return mappings.some(
+    (mapping) => mapping.entityType === record.entityType && mapping.clientEntityId === record.id && isImported(mapping),
+  );
 }
 
 /**

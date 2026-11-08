@@ -12,7 +12,10 @@ import type { Model3dState } from '@/lib/creation/model3d/model3dState';
 
 /** A card that CAN edit: the board's `edit` action is the spy. */
 function withEdit(edit: (patch: Partial<CreationNodeData>) => void) {
-  return ({ children }: { children: ReactNode }) => createElement(CreationNodeActionsContext.Provider, { value: { edit } }, children);
+  function EditableCard({ children }: { children: ReactNode }) {
+    return createElement(CreationNodeActionsContext.Provider, { value: { edit } }, children);
+  }
+  return EditableCard;
 }
 
 describe('useAnimationEditor', () => {

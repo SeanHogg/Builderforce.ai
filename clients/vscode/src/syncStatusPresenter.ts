@@ -12,9 +12,10 @@
  * conflict-over-dead-letter rule:
  * dead-letter, then conflict, then syncing, then pending, then synced.
  */
-import type { LocalEntityType, LocalFirstSnapshot, LocalRecord } from "@builderforce/local-first";
+import type { LocalRecord } from "@builderforce/local-first";
 import {
   deriveRecordSyncStatus,
+  hasServerMapping,
   syncShownAsDone,
   type SyncStatus,
   type SyncStatusInput,
@@ -33,17 +34,6 @@ export const PRESENTED_SYNC_PRECEDENCE = [
   "pending",
   "synced",
 ] as const satisfies readonly PresentedSyncStatus[];
-
-export const SYNC_STATUS_SURFACES = ["chat", "ticket", "audit", "run"] as const;
-
-export type SyncStatusSurface = (typeof SYNC_STATUS_SURFACES)[number];
-
-const SURFACE_ENTITY: Record<SyncStatusSurface, LocalEntityType> = {
-  chat: "chat",
-  ticket: "ticket",
-  audit: "audit-run",
-  run: "execution",
-};
 
 function precedenceRank(status: PresentedSyncStatus): number {
   const rank = PRESENTED_SYNC_PRECEDENCE.indexOf(status);
@@ -80,6 +70,7 @@ function deadLetterAsideFromConflict(input: SyncStatusInput): boolean {
       events: input.events,
       receipts: (input.receipts ?? []).filter((receipt) => receipt.status !== "conflict"),
       conflicts: [],
+      mapped: input.mapped,
     }) === "dead-letter"
   );
 }
@@ -96,39 +87,23 @@ export function presentSyncStatus(input: SyncStatusInput): PresentedSyncStatus {
 }
 
 /** The journal facts a record's status is read from: the whole store's, never pre-narrowed. */
-export type SyncStatusFacts = Pick<LocalFirstView, "events" | "receipts" | "conflicts">;
+export type SyncStatusFacts = Pick<LocalFirstView, "events" | "receipts" | "conflicts" | "mappings">;
 
 /**
  * The ONE way a row's status is read from the store's facts, given the record itself (no scan).
  * Every event, receipt and conflict goes in: the store model keeps only this record's
  * (`receiptsFor` in local-first), so a receipt for another record never moves this one (C7).
+ * The store's mappings decide `mapped`: a record the server holds whose events (and any receipt
+ * that predates the entity fields) are gone is still synced.
  */
 export function presentRecordSyncStatus(facts: SyncStatusFacts, record: Readonly<LocalRecord>): PresentedSyncStatus {
-  return presentSyncStatus({ record, events: facts.events, receipts: facts.receipts, conflicts: facts.conflicts });
-}
-
-/** Every receipt in the snapshot is taken as the record's: for a snapshot a caller already narrowed. */
-export function presentStoreSyncStatus(
-  snapshot: Pick<LocalFirstSnapshot, "records" | "events" | "receipts" | "conflicts">,
-  entity: { readonly entityType: LocalEntityType; readonly id: string },
-): PresentedSyncStatus | undefined {
-  const record = snapshot.records.find((row) => row.entityType === entity.entityType && row.id === entity.id);
-  if (!record) return undefined;
   return presentSyncStatus({
     record,
-    events: snapshot.events,
-    receipts: snapshot.receipts,
-    conflicts: snapshot.conflicts,
+    events: facts.events,
+    receipts: facts.receipts,
+    conflicts: facts.conflicts,
+    mapped: hasServerMapping(record, facts.mappings),
   });
-}
-
-/** Chat, ticket, audit (`audit-run`), or run (`execution`). Missing records are not invented as pending. */
-export function presentSurfaceSyncStatus(
-  snapshot: Pick<LocalFirstSnapshot, "records" | "events" | "receipts" | "conflicts">,
-  surface: SyncStatusSurface,
-  id: string,
-): PresentedSyncStatus | undefined {
-  return presentStoreSyncStatus(snapshot, { entityType: SURFACE_ENTITY[surface], id });
 }
 
 function toStoreStatus(status: PresentedSyncStatus): SyncStatus {

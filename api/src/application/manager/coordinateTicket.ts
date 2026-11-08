@@ -20,6 +20,8 @@ import { routeLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { blocksCompletion } from '../kanban/participantStates';
 import { isParkedLane } from '../swimlane/nextLane';
+import { publishProjectStaffingChanged } from '../swimlane/boardChangePublisher';
+import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { gateAutomaticClose, recordManagerReviewClose, type ReviewGateVerdict } from './reviewGateAuthority';
 
 export interface CoordinateResult {
@@ -37,6 +39,19 @@ export interface CoordinateCompletionResult {
   outstanding: string[];
   /** A billable run was started on entry to the destination lane. */
   dispatched: boolean;
+}
+
+/**
+ * The role names of the manifest slots at a stage — the "to" half of a hand-off's
+ * metadata, so the audit trail reads "handed off to Developer/QA" rather than only a
+ * lane key. Pure; a stage with no required slots yields null.
+ */
+function nextRoleName(
+  manifest: Array<{ stageKey: string | null; roleName: string; required: boolean }>,
+  stageKey: string,
+): string | null {
+  const names = manifest.filter((p) => p.required && p.stageKey === stageKey).map((p) => p.roleName);
+  return names.length ? names.join('/') : null;
 }
 
 export function decideCoordinatedAdvance(
@@ -116,6 +131,28 @@ export async function coordinateCompletedStage(
   const changed = await db.update(tasks).set({ status: next.key, updatedAt: new Date() })
     .where(and(eq(tasks.id, args.taskId), eq(tasks.status, args.fromStatus))).returning({ id: tasks.id });
   if (!changed.length) return unchanged(true);
+  // ONE NOTIFIER (PRD §5.5/FR-5): the Coordinator is the single writer of stage
+  // advancement, so a status change it lands MUST reach the live surfaces the way the
+  // REST PATCH path does — the board room and the ceremony room. Previously only the
+  // (optional) destination dispatch notified (via the execution board sink), so a
+  // terminal close or a `dispatch:false` advance left every open surface stale until
+  // the next unrelated push.
+  await publishProjectStaffingChanged(env, args.tenantId, args.projectId);
+  // The structured HAND-OFF event (PRD §5.8): from → to lane/role, the one place the
+  // pair is known. `requestRoleRun` stamps `ticket.role.dispatched` for the incoming
+  // role; this row is the matching "handed off FROM" edge, so the audit trail shows the
+  // full sequence dispatch → handoff → completed for a managed stage.
+  await recordActivity(env, db, {
+    tenantId: args.tenantId,
+    projectId: args.projectId,
+    actor: SYSTEM_ACTOR,
+    verb: 'ticket.handoff',
+    targetType: 'task',
+    targetId: String(args.taskId),
+    targetLabel: `#${args.taskId}`,
+    summary: `Ticket #${args.taskId} handed off from '${args.fromStatus}' to '${next.key}'`.slice(0, 300),
+    metadata: { fromLane: args.fromStatus, toLane: next.key, toRole: nextRoleName(manifest, next.key), terminal: next.isTerminal },
+  }).catch(() => { /* best-effort: the audit trail must never fail the advance */ });
   if (closeVerdict === 'manager_authorized') {
     await recordManagerReviewClose(env, db, {
       tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
@@ -216,6 +253,9 @@ export async function coordinateTicket(
       const moved = await db.update(tasks).set({ status: earliest.stageKey, updatedAt: new Date() })
         .where(and(eq(tasks.id, args.taskId), eq(tasks.status, task.status))).returning({ id: tasks.id });
       if (moved.length) {
+        // ONE NOTIFIER on the rewind too: this is a status write by the Coordinator,
+        // so it must reach the live surfaces exactly as an advance does.
+        await publishProjectStaffingChanged(env, args.tenantId, task.projectId);
         const dispatched = mayDispatch
           ? await routeLaneEntry(env, db, runtimeService, {
             tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId,

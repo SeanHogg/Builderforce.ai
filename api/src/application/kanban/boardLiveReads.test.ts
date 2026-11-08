@@ -23,7 +23,11 @@ function fakeDb(results: unknown[][]) {
 }
 
 describe('board live reads', () => {
-  beforeEach(() => mocks.readBoardLive.mockClear());
+  // A block body on purpose: Vitest calls a function RETURNED from `beforeEach` as that
+  // test's teardown, and `mockClear()` returns the mock — which then ran with no arguments.
+  beforeEach(() => {
+    mocks.readBoardLive.mockClear();
+  });
 
   it('caches ticket owners per board under the project token', async () => {
     const { db } = fakeDb([[{ projectId: 9 }], []]);
