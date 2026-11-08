@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 /**
  * Regression guard for the `_OrtGetInputOutputMetadata is not a function` bug:
@@ -29,6 +29,13 @@ const hfEnv = {
 vi.mock('@huggingface/transformers', () => ({ env: hfEnv }));
 
 describe('configureOnnxRuntime', () => {
+  // The first import pays the one-off cold transform of the module graph (and the
+  // mock factories); under a loaded runner that alone can exceed a test's 5 s. Pay it
+  // once here, in a hook with its own budget, so no test carries the cold-start cost.
+  beforeAll(async () => {
+    await import('./onnx-runtime-config');
+  }, 30_000);
+
   beforeEach(() => {
     // Fresh module each test so the idempotent `configured` guard resets.
     vi.resetModules();

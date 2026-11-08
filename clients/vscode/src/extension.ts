@@ -74,6 +74,8 @@ import { editorAccounts } from "./providerConnect";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 import { bindLocalSuccessStorage } from "./localSuccessStorage";
 import { registerDeadLetterExport } from "./deadLetterExport";
+import { registerSyncSummary } from "./sync/registerSyncSummary";
+import { registerLocalWork } from "./localWork/registerLocalWork";
 import { bindOutboxSendPermissionAtActivation } from "./sendPermissionActivation";
 import { installAuditClose } from "./installAuditClose";
 import { bootVsixHost } from "./bootVsixHost";
@@ -83,6 +85,7 @@ import { bootVsixHost } from "./bootVsixHost";
 import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
 import { registerKnowledgeCommands } from "./knowledge/knowledgeCommands";
+import { shutdownKnowledge } from "./knowledge/folderKnowledge";
 import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
 import { runNetworkDenialSelfCheck } from "./networkDenialSelfCheck";
 import { localBrainApplication } from "./localFirstStore";
@@ -479,6 +482,8 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(initActivity());
 
   registerDeadLetterExport(context, localFirst.store);
+  registerSyncSummary(context, localFirst.durableStore);
+  registerLocalWork(context);
 
   context.subscriptions.push(
     participant,
@@ -1295,6 +1300,8 @@ let auditExecution: AuditExecution | undefined;
 export async function deactivate(): Promise<void> {
   // No run outlives the editor: every background shell job (a dev server, a watcher) dies here.
   await Promise.all([auditExecution?.flushClose(), killAllJobs()]);
+  // Flush and close the knowledge SQLite handles before the host exits (the same shared shutdown the subscription starts: every caller awaits the one real close).
+  await shutdownKnowledge();
 }
 
 /** Re-push every auth-gated surface after sign-in/out. Evermind and the Brain

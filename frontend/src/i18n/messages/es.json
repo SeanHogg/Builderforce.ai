@@ -26806,7 +26806,9 @@
       "jobStateArchived": "Archivada",
       "jobStateClosed": "Cerrada",
       "importMore": "Hay más candidatos pendientes: vuelve a ejecutarlo.",
-      "importPartial": "{count, plural, one {No se pudo importar # candidato.} other {No se pudieron importar # candidatos.}}"
+      "importPartial": "{count, plural, one {No se pudo importar # candidato.} other {No se pudieron importar # candidatos.}}",
+      "importMismatched": "{count, plural, one {# candidato pertenecía a otra oferta en el portal y se omitió.} other {# candidatos pertenecían a otra oferta en el portal y se omitieron.}}",
+      "importQuarantined": "{count, plural, one {# candidato falla al importarse repetidamente y se está omitiendo.} other {# candidatos fallan al importarse repetidamente y se están omitiendo.}}"
     },
     "notice": {
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",

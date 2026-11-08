@@ -19,7 +19,10 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  */
 
 vi.mock('./laneRequirementGate', () => ({ enforceLaneRequirements: vi.fn() }));
-vi.mock('./evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
+vi.mock('./evaluateAutoRun', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./evaluateAutoRun')>()),
+  evaluateTaskAutoRun: vi.fn(),
+}));
 vi.mock('./laneCoordinatorEntry', () => ({ tryCoordinatorLaneEntry: vi.fn() }));
 vi.mock('./canonicalBoard', () => ({ findCanonicalBoard: vi.fn() }));
 vi.mock('../runtime/cronWorkSignal', () => ({ signalPendingWork: vi.fn().mockResolvedValue(undefined) }));

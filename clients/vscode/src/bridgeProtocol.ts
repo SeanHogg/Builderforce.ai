@@ -42,6 +42,14 @@ export const SHARED_HOST_MESSAGES = [
    * chat has no server id to read links from. Request/response.
    */
   'local.tickets',
+  /**
+   * The chat rail's LOCAL copy (G21, `src/chatRail/`). Request/response with a typed body
+   * (`ChatRailRequest` in `chatRail/railProtocol.ts`): `read` answers from the local store only,
+   * `refresh` reads the platform when allowed and ingests it, `link` / `unlink` write local
+   * `chat-ticket-link` records. The host also PUSHES a `local.chatRail` frame
+   * (`ChatRailFrame`) to a webview that read a chat, whenever a commit touches that rail.
+   */
+  'local.chatRail',
   /** Run the sign-in command (the webview cannot execute commands). */
   'signin',
   /** A non-2xx API answer the webview received, for the output channel — see

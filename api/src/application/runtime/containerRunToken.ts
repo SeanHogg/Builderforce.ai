@@ -26,11 +26,10 @@ export async function verifyContainerRunToken(secret: string, executionId: numbe
   return timingSafeEqual(await hmacHex(secret, `container-run:${executionId}`), presented);
 }
 
-/** Git smart-HTTP URL whose only credential is the execution HMAC. The upstream
- * provider credential remains in the Worker-side proxy. */
-export function containerGitCloneUrl(internalBaseUrl: string, executionId: number, runToken: string): string {
-  const url = new URL(`/api/runtime/internal/container-git/${executionId}.git`, internalBaseUrl.endsWith('/') ? internalBaseUrl : `${internalBaseUrl}/`);
-  url.username = 'x-access-token';
-  url.password = runToken;
-  return url.toString();
+/** The container-git proxy's smart-HTTP URL for one execution — CREDENTIAL-FREE. The run token is supplied per git
+ * command by the sandbox (`runGit` in container/sandboxCore.mjs: an `http.<url>.extraHeader` for that one process),
+ * so it is never in a URL, in `.git/config` (`origin`), or in the model shell's environ. The upstream provider
+ * credential remains in the Worker-side proxy. */
+export function containerGitUrl(internalBaseUrl: string, executionId: number): string {
+  return new URL(`/api/runtime/internal/container-git/${executionId}.git`, internalBaseUrl.endsWith('/') ? internalBaseUrl : `${internalBaseUrl}/`).toString();
 }

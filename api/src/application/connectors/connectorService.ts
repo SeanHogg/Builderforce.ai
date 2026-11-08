@@ -18,19 +18,17 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { credentialSecret, encryptCredentials, decryptCredentials } from '../integrations/credentialCrypto';
 import {
   authFieldsFor,
-  parseConnectorManifest,
   ConnectorManifestError,
   type ConnectorManifest,
 } from './connectorManifest';
 import {
   invalidateConnectorCatalog,
   isReservedConnectorKey,
-  listConnectorsForTenant,
   resolveConnector,
   type ConnectorOrigin,
   type ResolvedConnector,
 } from './connectorRegistry';
-import { sourceAliasConflicts } from '../hiring/applicantSource';
+import { parseManifestAgainstBoards } from './connectorBoardAliases';
 import { invalidateConnectedConnectors } from './connectorTools';
 import { executeConnectorAction, type ConnectorCallResult } from './connectorRuntime';
 
@@ -110,23 +108,10 @@ export async function connectionCountsByConnector(db: Db, tenantId: number): Pro
   return counts;
 }
 
-/**
- * Parse a manifest and, for a hiring board that declares source aliases, check them
- * against EVERY board this tenant already has — the built-ins, its own and installed ones
- * (the catalog read the connector list uses) — so an alias can never silently take
- * applicants from a board that already owns that spelling.
- */
+/** The write gate: strict parse plus the board-alias check, as a 400 with every error. */
 async function validateWithBoards(db: Db, tenantId: number, raw: unknown): Promise<ConnectorManifest> {
   try {
-    const manifest = parseConnectorManifest(raw);
-    if (manifest.sourceAliases?.length) {
-      const boards = (await listConnectorsForTenant(db, tenantId))
-        .filter((entry) => entry.manifest.category === 'hiring')
-        .map((entry) => ({ key: entry.manifest.key, aliases: entry.manifest.sourceAliases ?? [] }));
-      const conflicts = sourceAliasConflicts(manifest, boards);
-      if (conflicts.length) throw new ConnectorManifestError(conflicts);
-    }
-    return manifest;
+    return await parseManifestAgainstBoards(db, tenantId, raw);
   } catch (e) {
     if (e instanceof ConnectorManifestError) {
       throw new ConnectorServiceError('The connector manifest is not valid', 400, e.errors);

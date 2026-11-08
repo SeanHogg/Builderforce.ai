@@ -22,6 +22,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { managerActions } from '../../infrastructure/database/schema';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { CONDUCT_MARKER_ACTION, recordManagerAction } from '../manager/managerActionJournal';
 
 export { CONDUCT_MARKER_ACTION };
@@ -50,8 +51,12 @@ export async function loadConductMarkers(
       ))
       .groupBy(managerActions.taskId);
     for (const r of rows) if (r.taskId != null && r.at) out.set(r.taskId, new Date(r.at as unknown as string));
-  } catch {
-    /* unreadable marker ⇒ "not recently conducted", the safe side: triage keeps its remedy */
+  } catch (error) {
+    // Unreadable marker => "not recently conducted", the safe side: triage keeps its remedy.
+    reportCaughtError(error, {
+      source: 'application/repos/conductMarker.ts', operation: 'loadConductMarkers',
+      level: 'warning', context: { tenantId: args.tenantId, projectId: args.projectId },
+    });
   }
   return out;
 }

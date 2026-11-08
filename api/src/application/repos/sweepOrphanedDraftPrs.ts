@@ -127,9 +127,11 @@ export async function sweepOrphanedDraftPullRequests(env: Env, db: Db, now: Date
     .orderBy(asc(tasks.prOpeningAt))
     .limit(ORPHAN_DRAFT_BATCH);
   for (const t of held) {
+    const heldTenantId = t.tenantId;
+    if (heldTenantId === null) continue; // a task with no tenant has no credential to settle against
     try {
-      const repo = await resolveDefaultRepoForTask(db, t.tenantId, t.id);
-      const resolved = repo ? await resolveRepoCredential(db, secret, t.tenantId, repo.repoId) : null;
+      const repo = await resolveDefaultRepoForTask(db, heldTenantId, t.id);
+      const resolved = repo ? await resolveRepoCredential(db, secret, heldTenantId, repo.repoId) : null;
       if (!resolved || isResolveError(resolved)) continue;
       const branch = ticketBranchName(t.id);
       const base = resolved.repo.defaultBranch ?? 'main';
@@ -138,7 +140,7 @@ export async function sweepOrphanedDraftPullRequests(env: Env, db: Db, now: Date
         token: resolved.token, head: branch, base, title: '', body: '',
       });
       if (!found || found.draft !== true || !isDraftPullRequestBody(found.body, t.id)) continue;
-      await run({ tenantId: t.tenantId, taskId: t.id, taskTitle: t.title, repoId: repo!.repoId, number: found.number, url: found.url, branch, base });
+      await run({ tenantId: heldTenantId, taskId: t.id, taskTitle: t.title, repoId: repo!.repoId, number: found.number, url: found.url, branch, base });
     } catch (error) {
       reportCaughtError(error, { source: SOURCE, operation: 'sweepUnrecordedDrafts' });
     }

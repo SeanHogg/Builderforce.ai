@@ -814,6 +814,13 @@ export const jobPostingDistributions = pgTable('job_posting_distributions', {
   /** When the scheduled work last looked at this row — the sweep's rotation key, never
    *  shown to a person (`updated_at` is) (1328). */
   importCheckedAt: timestamp('import_checked_at'),
+  /** The board's own token for the next page of a newest-first walk that stopped at a cap (1332). */
+  importResumeToken: varchar('import_resume_token', { length: 512 }),
+  /** The id the board's applicant list is filtered by when it differs from `external_id` (1332). */
+  boardFilterId: varchar('board_filter_id', { length: 255 }),
+  /** When a link that collided with another posting's may be retried — kept apart from the
+   *  import rotation key (1332). */
+  resolveRetryAt: timestamp('resolve_retry_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
@@ -822,7 +829,17 @@ export const jobPostingDistributions = pgTable('job_posting_distributions', {
   uniqueIndex('uq_job_posting_distributions_board_job').on(t.tenantId, t.connectorKey, t.externalId).where(sql`${t.status} = 'posted'`),
   // The sweep's worklist: confirmed rows, least recently checked first (1328).
   index('idx_job_posting_distributions_sweep').on(t.importCheckedAt).where(sql`${t.status} = 'posted'`),
+  // The link-finding pass skips rows still inside their retry window (1332).
+  index('idx_job_posting_distributions_resolve_retry').on(t.resolveRetryAt).where(sql`${t.status} = 'posted' and ${t.url} is null`),
 ]);
+
+/** The per-tenant random salt a board candidate's email ref is an HMAC under (1332) —
+ *  stored, so it survives a rotation of any deployment secret. */
+export const hiringRefSalts = pgTable('hiring_ref_salts', {
+  tenantId:  integer('tenant_id').primaryKey(),
+  salt:      varchar('salt', { length: 64 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
 
 /** How long a cohort of hires took to reach productivity. A measured number with
  *  a stable definition — kept as its own table rather than a `metric_fact`

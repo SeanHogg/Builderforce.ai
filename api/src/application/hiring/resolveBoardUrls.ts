@@ -45,8 +45,10 @@ import {
 } from './postingDistributionSweepStore';
 
 export const RESOLVE_URL_ACTION = 'resolve_url';
-/** Rows one sweep tries to link. Each is at most one upstream call. */
-export const MAX_URL_RESOLUTIONS_PER_SWEEP = 40;
+/** Rows one sweep tries to link. Each is at most one upstream call (≈ 6 subrequests with
+ *  its connection lookup, audit row and write) — 20 × 6 = 120 of the invocation's 1000;
+ *  `importBudget.ts` has the whole sum. */
+export const MAX_URL_RESOLUTIONS_PER_SWEEP = 20;
 
 /**
  * The built-in boards that HAVE a `resolve_url` action — the sweep's worklist filter, so a

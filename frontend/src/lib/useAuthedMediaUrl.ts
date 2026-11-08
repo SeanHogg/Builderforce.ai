@@ -26,11 +26,11 @@ export function useAuthedMediaUrl(source: string | null | undefined): AuthedMedi
     if (!source || !needsFetch) return undefined;
     let cancelled = false;
     let objectUrl: string | null = null;
-    setFailed(null);
     fetchCanvasMediaBlob(source)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
+        setFailed(null);
         setFetched({ source, url: objectUrl });
       })
       .catch(() => { if (!cancelled) setFailed(source); });

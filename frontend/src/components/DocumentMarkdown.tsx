@@ -1,6 +1,27 @@
+import dynamic from 'next/dynamic';
+import { Children, isValidElement, type ComponentProps, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
-import { MARKDOWN_DRAWING_COMPONENTS } from '@/components/drawing/MarkdownDrawing';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
+
+const DRAWING_LANGUAGE = 'language-bf-drawing';
+
+/** The JSON body of a `bf-drawing` fenced block, or `null` for any other `<pre>`. */
+function drawingFenceJson(children: ReactNode): string | null {
+  const code = Children.toArray(children).find(isValidElement) as { props?: { className?: string; children?: ReactNode } } | undefined;
+  if (!code?.props?.className?.split(/\s+/).includes(DRAWING_LANGUAGE)) return null;
+  return Children.toArray(code.props.children).map((child) => (typeof child === 'string' ? child : '')).join('').trim();
+}
+
+/** Loaded only when a page holds a drawing, so the drawing model stays out of every first paint. */
+const ReadOnlyDrawing = dynamic(() => import('@/components/drawing/MarkdownDrawing').then((m) => m.ReadOnlyDrawing));
+
+/** Code fences render as `<pre>`, except a `bf-drawing` fence, which renders as the picture. */
+const DRAWING_AWARE_COMPONENTS: Components = {
+  pre({ children, node: _node, ...rest }: ComponentProps<'pre'> & { node?: unknown }) {
+    const json = drawingFenceJson(children);
+    return json === null ? <pre {...rest}>{children}</pre> : <ReadOnlyDrawing json={json} />;
+  },
+};
 
 export interface DocumentMarkdownProps {
   /** Document body (Markdown / GFM). */
@@ -24,7 +45,7 @@ export interface DocumentMarkdownProps {
 export function DocumentMarkdown({ content, className, components }: DocumentMarkdownProps) {
   return (
     <div className={className ? `markdown-body ${className}` : 'markdown-body'}>
-      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={components ? { ...MARKDOWN_DRAWING_COMPONENTS, ...components } : MARKDOWN_DRAWING_COMPONENTS}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={components ? { ...DRAWING_AWARE_COMPONENTS, ...components } : DRAWING_AWARE_COMPONENTS}>{content}</ReactMarkdown>
     </div>
   );
 }

@@ -70,6 +70,8 @@ export interface ConnectorCallResult {
    * so without this the publisher could never record what it published.
    */
   headers?: Record<string, string>;
+  /** Scalar values at the paths `captureBodyPaths` named, as text, by path. Opt-in. */
+  bodyFields?: Record<string, string>;
 }
 
 export class ConnectorCallError extends Error {
@@ -154,6 +156,26 @@ export function redactSecrets(text: string, secrets: string[]): string {
   return out;
 }
 
+/**
+ * Whether a value may be appended to the query string AS IS (`ConnectorParam.raw`): URL
+ * unreserved characters, the sub-delims Rest.li keys use (`( ) , : ! * '`), and
+ * percent-escapes that are well formed. Anything else — `&`, `#`, `=`, `+`, a space, a
+ * stray `%` — could end the value or start another param, so such a value is encoded
+ * normally by the caller instead.
+ */
+const isWireSafe = (value: string): boolean => /^[A-Za-z0-9._~()!*',:%-]*$/.test(value) && !/%(?![0-9A-Fa-f]{2})/.test(value);
+
+/** Scalars (string / finite number, at most 2000 chars) at `paths` in a parsed body, as text. */
+function readBodyFields(body: unknown, paths: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const path of paths) {
+    const value = getDeep(body, path);
+    if (typeof value === 'string' && value.trim()) out[path] = value.trim().slice(0, 2000);
+    else if (typeof value === 'number' && Number.isFinite(value)) out[path] = String(value);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Request assembly
 // ---------------------------------------------------------------------------
@@ -185,6 +207,8 @@ export function buildConnectorRequest(args: {
   const base = (args.baseUrlOverride?.trim() || action.baseUrl || manifest.baseUrl).replace(/\/$/, '');
   let path = action.path;
   const query = new URLSearchParams();
+  /** `name=value` pairs whose value is already percent-encoded (`ConnectorParam.raw`). */
+  const rawQuery: string[] = [];
   const headers: Record<string, string> = { Accept: 'application/json', ...(manifest.defaultHeaders ?? {}), ...(action.headers ?? {}) };
   let body: Record<string, unknown> = action.bodyTemplate
     ? (JSON.parse(JSON.stringify(action.bodyTemplate)) as Record<string, unknown>)
@@ -220,6 +244,10 @@ export function buildConnectorRequest(args: {
           for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
             if (v != null) query.append(k, String(v));
           }
+        } else if (param.raw && isWireSafe(String(value))) {
+          // Already in wire form (see ConnectorParam.raw): appended AFTER the encoded
+          // params, never re-encoded.
+          rawQuery.push(`${encodeURIComponent(wire)}=${String(value)}`);
         } else {
           query.append(wire, typeof value === 'object' ? JSON.stringify(value) : String(value));
         }
@@ -296,7 +324,7 @@ export function buildConnectorRequest(args: {
     payload = action.bodyFormat === 'form' ? toFormBody(body) : JSON.stringify(body);
   }
 
-  const qs = query.toString();
+  const qs = [query.toString(), ...rawQuery].filter(Boolean).join('&');
   const url = urlOverride
     ? `${urlOverride}${qs ? `${urlOverride.includes('?') ? '&' : '?'}${qs}` : ''}`
     : `${fillTemplate(base, auth)}${fillTemplate(path, auth)}${qs ? `?${qs}` : ''}`;
@@ -422,6 +450,10 @@ export async function executeConnectorAction(args: {
   resolvedOverride?: ResolvedConnector | null;
   /** Response headers to return, by lowercase name. See {@link ConnectorCallResult.headers}. */
   captureHeaders?: readonly string[];
+  /** Dot paths into the FULL response body (before `resultPath`) to return as
+   *  {@link ConnectorCallResult.bodyFields} — a list action's paging token lives beside
+   *  its `resultPath` array, not inside it. */
+  captureBodyPaths?: readonly string[];
 }): Promise<ConnectorCallResult> {
   const {
     db, env, tenantId, connectorKey, actionKey,
@@ -489,6 +521,7 @@ export async function executeConnectorAction(args: {
   let errorText: string | undefined;
   let truncated = false;
   let captured: Record<string, string> | undefined;
+  let bodyFields: Record<string, string> | undefined;
 
   try {
     const res = await fetchPublic(safeUrl, {
@@ -545,6 +578,7 @@ export async function executeConnectorAction(args: {
       // A SOAP fault arrives as 200. Trusting the status code here would record a
       // refused write as a success, cache it as one, and report it upward as one.
       ok = res.ok && !faultText;
+      if (ok && args.captureBodyPaths?.length) bodyFields = readBodyFields(parsed, args.captureBodyPaths);
       if (faultText) {
         data = parsed;
         errorText = redactSecrets(faultText.slice(0, 600), secrets);
@@ -601,5 +635,6 @@ export async function executeConnectorAction(args: {
     ...(errorText ? { error: errorText } : {}),
     ...(truncated ? { truncated } : {}),
     ...(captured && Object.keys(captured).length ? { headers: captured } : {}),
+    ...(bodyFields && Object.keys(bodyFields).length ? { bodyFields } : {}),
   };
 }

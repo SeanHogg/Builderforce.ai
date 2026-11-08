@@ -29,7 +29,6 @@ import {
   type AuthStepResult,
 } from './auth/credentials';
 import { profileApi } from './auth/session';
-import './voiceEmbeddingStore'; // registers its per-user cache wipe on sign-out
 import { signInWithPasskey } from './passkeys';
 
 // ---------------------------------------------------------------------------
@@ -120,6 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // The voice-embedding cache registers its per-user wipe on sign-out when it loads. Loaded
+  // once at mount (lazily, so the voice stack stays out of the root closure) so a sign-out
+  // anywhere in this tab clears the persisted biometric cache even if no voice screen opened.
+  useEffect(() => {
+    void import('./voiceEmbeddingStore');
   }, []);
 
   // The platform policy's inference mode defaults on whether a session is present

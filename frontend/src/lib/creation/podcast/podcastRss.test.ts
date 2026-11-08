@@ -104,7 +104,7 @@ describe('buildPodcastFeed', () => {
   });
 
   it('uses the export time when no publication date is set', () => {
-    const result = buildPodcastFeed({ ...complete, podcastEpisode: {} }, 'g', now);
+    const result = buildPodcastFeed({ ...complete, podcastEpisode: {} }, 'g', now, { enclosureBytes: 2048 });
     expect(result.ok && result.xml).toContain('Sun, 08 Nov 2026 00:00:00 GMT');
   });
 

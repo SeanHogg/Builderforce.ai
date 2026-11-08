@@ -35,6 +35,17 @@ export const ashbyPostings: ConnectorManifest = {
       params: { listed_only: bb('Only postings currently listed publicly') },
     },
     {
+      // The stored publication id is a job-POSTING id (`jobPosting.create` / `.list`), but
+      // `application.list` filters on the JOB id. `applicants.filterIdFrom` below calls this
+      // action once to turn one into the other.
+      // UNVERIFIED against the live Ashby API (no credentials available when this was
+      // written): the `jobPosting.info` request/response shape, `results.jobId`, is from
+      // Ashby's public reference.
+      key: 'get_posting', label: 'Read posting', description: 'Read one job posting, including the job it belongs to.',
+      method: 'POST', path: '/jobPosting.info', mutates: false, resultPath: 'results',
+      params: { jobPostingId: b('The job posting id the create call returned') },
+    },
+    {
       // Ashby's RPC bodies are camelCase: `jobId` and `createdAfter` (epoch ms).
       key: 'list_applications', label: 'List applications', description: 'Read applications received.',
       method: 'POST', path: '/application.list', mutates: false, resultPath: 'results',
@@ -45,6 +56,7 @@ export const ashbyPostings: ConnectorManifest = {
       // a backlog is worked off across runs.
       applicants: {
         postingParam: 'jobId',
+        filterIdFrom: { action: 'get_posting', idParam: 'jobPostingId', select: ['jobId'] },
         postingIdField: ['job.id'],
         externalId: ['id'],
         candidateId: ['candidate.id'],

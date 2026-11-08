@@ -73,6 +73,33 @@ export function firstOf(result: Pick<ConnectorCallResult, 'data' | 'headers'>, s
   return null;
 }
 
+/** Every node a path reaches, where a `*` segment fans out over an array's elements. */
+function nodesAt(node: unknown, segments: readonly string[]): unknown[] {
+  if (segments.length === 0) return [node];
+  if (node === null || typeof node !== 'object') return [];
+  const [head, ...rest] = segments as [string, ...string[]];
+  if (head === '*') return (Array.isArray(node) ? node : Object.values(node)).flatMap((child) => nodesAt(child, rest));
+  const child = Array.isArray(node) ? node[Number(head)] : (node as Record<string, unknown>)[head];
+  return nodesAt(child, rest);
+}
+
+/**
+ * The scalars (as text) the FIRST selector that reaches any yields, where a `*` segment
+ * means "any element". The membership sibling of {@link firstOf}: `postingIdField`
+ * asks "is this posting among the item's jobs", which a single location cannot say.
+ */
+export function allOf(item: unknown, selectors: readonly string[] | undefined): string[] {
+  for (const selector of selectors ?? []) {
+    const hits = nodesAt(item, selector.split('.')).flatMap((node) => {
+      if (typeof node === 'string') return node.trim() ? [node.trim()] : [];
+      if (typeof node === 'number' && Number.isFinite(node)) return [String(node)];
+      return [];
+    });
+    if (hits.length) return hits;
+  }
+  return [];
+}
+
 /**
  * Render a mapping's `urlTemplate`, or null.
  *

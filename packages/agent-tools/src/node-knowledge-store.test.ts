@@ -6,6 +6,7 @@ import { canonicalDump, type Extracted, type ScopeRecord, type StoredFact, type 
 import { localSqliteAvailable } from './node-local-sqlite.js';
 import { knowledgeDbPath, nodeIngestManifest, nodeKnowledgeStore, type NodeKnowledgeStore } from './node-knowledge-store.js';
 import { moveAside } from './node-knowledge/openKnowledgeDb.js';
+import { writeManifestEntries } from './node-knowledge/manifestBuffer.js';
 
 // A hook to make the opener fail the way a read-only or failing disk does (the real opener is used otherwise).
 const hook = vi.hoisted(() => ({ failOpenWith: undefined as Error | undefined }));
@@ -271,7 +272,7 @@ describe.skipIf(!localSqliteAvailable())('nodeKnowledgeStore', () => {
         const siblings = readdirSync(join(dir, '.builderforce', 'cache', 'knowledge'));
         expect(siblings.some((n) => n.includes('.corrupt-'))).toBe(false);
         expect(siblings).toContain('index.sqlite');
-        expect(nodeKnowledgeStore(dir).recoveredFrom).toBeUndefined();
+        expect(opened(dir).recoveredFrom).toBeUndefined();
     });
 
     it('moveAside is all-or-nothing: when the main file cannot be moved, the sidecars are put back', () => {
@@ -313,5 +314,43 @@ describe.skipIf(!localSqliteAvailable())('nodeKnowledgeStore', () => {
         expect(await a.persistence.changedElsewhere()).toBe(true);
         await a.persistence.apply(changeOf('k1')); // no generation mismatch: no reload, but data_version is read in the transaction
         expect(await a.persistence.changedElsewhere()).toBe(false);
+    });
+
+    it('regression: two manifest commits for the same key in one transaction leave the last value, with no constraint error', async () => {
+        const a = opened(folder());
+        const db = a.persistence.db;
+        db.exec('BEGIN IMMEDIATE');
+        writeManifestEntries(db, new Map([['k', [{ id: 'a', hash: '1' }]]]));
+        writeManifestEntries(db, new Map([['k', [{ id: 'a', hash: '2' }]], ['gone', null]]));
+        writeManifestEntries(db, new Map([['k', [{ id: 'b', hash: '3' }]]]));
+        db.exec('COMMIT');
+        expect(await a.manifest.get('k')).toEqual([{ id: 'b', hash: '3' }]);
+        // Through the buffer too: a second set of the key before its commit leaves the last value.
+        await a.manifest.set('k2', [{ id: 'x', hash: '1' }]);
+        await a.manifest.set('k2', [{ id: 'x', hash: '2' }]);
+        expect(await a.manifest.get('k2')).toEqual([{ id: 'x', hash: '2' }]);
+    });
+
+    it('regression: a file of a newer format refuses EVERY write path (apply, manifest-only, transaction, setMeta) and is not touched on open', async () => {
+        const dir = folder();
+        const first = opened(dir);
+        await first.store.write({ scope: SCOPE, facts: [fact('claim:1', 'x')], relations: [] });
+        first.persistence.setMeta('format', '99');
+        first.persistence.db.exec('DROP TABLE recheck'); // a table a newer BuilderForce no longer has: an open that "creates the schema" would bring it back
+        first.close();
+        const newer = opened(dir);
+        const refused = /knowledge_index_format_newer/;
+        expect(newer.journalMode).toBe('unchanged'); // no WAL request: that pragma writes the header
+        expect(newer.persistence.db.prepare("SELECT name FROM sqlite_master WHERE name = 'recheck'").all()).toEqual([]);
+        await expect(newer.persistence.apply(changeOf('k'))).rejects.toThrow(refused);
+        await expect(newer.persistence.commitBuffered()).rejects.toThrow(refused);
+        await expect(newer.manifest.set('m', [{ id: 'a', hash: '1' }])).rejects.toThrow(refused);
+        expect(await newer.manifest.get('m')).toBeUndefined(); // a refused write is not buffered: nothing is read back that was never written
+        await expect(newer.manifest.delete('m')).rejects.toThrow(refused);
+        expect(await newer.manifest.get('m')).toBeUndefined();
+        await expect(newer.persistence.transaction((w) => { w.setMeta('x', '1'); })).rejects.toThrow(refused);
+        expect(() => newer.persistence.setMeta('x', '1')).toThrow(refused);
+        expect(newer.persistence.getMeta('x')).toBeUndefined();
+        expect(newer.persistence.getMeta('format')).toBe('99');
     });
 });

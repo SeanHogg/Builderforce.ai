@@ -26806,7 +26806,9 @@
       "jobStateArchived": "已归档",
       "jobStateClosed": "已关闭",
       "importMore": "还有更多申请人待导入，请再次运行。",
-      "importPartial": "{count, plural, other {有 # 位申请人未能导入。}}"
+      "importPartial": "{count, plural, other {有 # 位申请人未能导入。}}",
+      "importMismatched": "{count, plural, other {有 # 位申请人在招聘网站上属于其他职位，已跳过。}}",
+      "importQuarantined": "{count, plural, other {有 # 位申请人多次导入失败，现已跳过。}}"
     },
     "notice": {
       "addedToCanvas": "我已将所需内容添加到画布上。",

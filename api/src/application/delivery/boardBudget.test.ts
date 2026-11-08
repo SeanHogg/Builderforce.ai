@@ -15,6 +15,7 @@ vi.mock('../../infrastructure/cache/readThroughCache', () => ({
 }));
 
 import { earnBoardBudget } from './boardBudget';
+import { boardBudgetCacheKey } from './boardBudgetKeys';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 const env = {} as Env;
@@ -78,6 +79,9 @@ describe('regression: reopen then re-close earns once', () => {
     // Both attempts used the SAME idempotency key, so the ledger can dedupe them.
     const refs = db.calls.filter((c) => c.kind === 'insert').map((c) => (c.payload as { reference: string }).reference);
     expect(refs).toEqual(['board-earn:50', 'board-earn:50']);
-    expect(invalidateCached).toHaveBeenCalledTimes(1);
+    // ONE credit invalidates exactly two keys (the ledger balance + the board budget view);
+    // the duplicate attempt invalidates nothing.
+    const keys = vi.mocked(invalidateCached).mock.calls.map((c) => c[1]);
+    expect(keys).toEqual(['board-points:balance:7:board:board-1', boardBudgetCacheKey(7, 'board-1')]);
   });
 });

@@ -30,36 +30,50 @@ interface LoadedImage { element: HTMLImageElement; width: number; height: number
 export function useImageEditor(data: CreationNodeData, onEdit?: (patch: Partial<CreationNodeData>) => void, annotating = false) {
   const baseUrl = typeof data.outputUrl === 'string' && isDisplayableImageUrl(data.outputUrl) ? data.outputUrl.trim() : '';
   const edit = useMemo(() => imageEditFrom(data.imageEdit), [data.imageEdit]);
-  const [loaded, setLoaded] = useState<LoadedImage | null>(null);
-  const [problem, setProblem] = useState<ImageEditorProblem | null>(null);
+  // The decode result is kept WITH the url it belongs to, so a url change reads as "not loaded"
+  // by derivation instead of by resetting state inside the effect.
+  const [decoded, setDecoded] = useState<{ url: string; image: LoadedImage | null } | null>(null);
+  const [importProblem, setImportProblem] = useState(false);
   const [importing, setImporting] = useState(false);
-  const previewRef = useRef<HTMLCanvasElement | null>(null);
+  const canvas = useRef<HTMLCanvasElement | null>(null);
+  /** The preview canvas's callback ref (handed out as a function, so callers never hold a ref object). */
+  const bindPreview = useCallback((element: HTMLCanvasElement | null) => { canvas.current = element; }, []);
+  const decodedNow = decoded?.url === baseUrl ? decoded : null;
+  const loaded = decodedNow?.image ?? null;
 
   useEffect(() => {
-    setLoaded(null);
     if (!baseUrl) return undefined;
     let current = true;
     // A private upload is fetched with the bearer token and decoded from a same-origin blob; a
     // remote one is loaded with CORS, or the canvas is tainted and the export refuses to encode it.
     loadAuthedImage(baseUrl).then(
-      (element) => { if (current) { setLoaded({ element, width: element.naturalWidth, height: element.naturalHeight }); setProblem(null); } },
-      () => { if (current) setProblem('load'); },
+      (element) => { if (current) setDecoded({ url: baseUrl, image: { element, width: element.naturalWidth, height: element.naturalHeight } }); },
+      () => { if (current) setDecoded({ url: baseUrl, image: null }); },
     );
     return () => { current = false; };
   }, [baseUrl]);
 
-  useEffect(() => {
-    const target = previewRef.current;
-    if (!loaded || !target) return;
+  // While the pen is up, the annotation surface draws the marks live; leaving them out of the
+  // picture underneath keeps them from being painted twice.
+  const rendered = useMemo(() => {
+    if (!loaded) return null;
     try {
-      // While the pen is up, the annotation surface draws the marks live; leaving them
-      // out of the picture underneath keeps them from being painted twice.
-      const rendered = renderImageEdit(loaded.element, loaded, annotating ? { ...edit, strokes: [] } : edit, PREVIEW_EDGE);
-      target.width = rendered.width;
-      target.height = rendered.height;
-      target.getContext('2d')?.drawImage(rendered, 0, 0);
-    } catch { setProblem('load'); }
+      return renderImageEdit(loaded.element, loaded, annotating ? { ...edit, strokes: [] } : edit, PREVIEW_EDGE);
+    } catch {
+      return 'failed' as const;
+    }
   }, [loaded, edit, annotating]);
+
+  useEffect(() => {
+    const target = canvas.current;
+    if (!rendered || rendered === 'failed' || !target) return;
+    target.width = rendered.width;
+    target.height = rendered.height;
+    target.getContext('2d')?.drawImage(rendered, 0, 0);
+  }, [rendered]);
+
+  const problem: ImageEditorProblem | null =
+    importProblem ? 'import' : decodedNow && !decodedNow.image ? 'load' : rendered === 'failed' ? 'load' : null;
 
   const output = loaded ? imageOutputSize(loaded.width, loaded.height, edit) : null;
 
@@ -69,14 +83,14 @@ export function useImageEditor(data: CreationNodeData, onEdit?: (patch: Partial<
     setImporting(true);
     try {
       const source = await storeCanvasMedia(file, 'import');
-      if (source.kind !== 'image') { setProblem('import'); return; }
+      if (source.kind !== 'image') { setImportProblem(true); return; }
       onEdit?.({
         outputUrl: source.url, thumbnailUrl: source.url, outputFormat: 'Image', outputMimeType: source.mimeType, outputFileName: source.fileName,
         ...(source.width ? { imageWidth: source.width, imageHeight: source.height } : {}),
         imageEdit: defaultImageEdit(),
       } as Partial<CreationNodeData>);
-      setProblem(null);
-    } catch { setProblem('import'); } finally { setImporting(false); }
+      setImportProblem(false);
+    } catch { setImportProblem(true); } finally { setImporting(false); }
   }, [onEdit]);
 
   // The one export path: render, record on the object, download. The base (`outputUrl`) is
@@ -104,6 +118,6 @@ export function useImageEditor(data: CreationNodeData, onEdit?: (patch: Partial<
   });
   const exportAs = exporter.run;
 
-  return { editable: !!onEdit, baseUrl, edit, update, reset: () => update(defaultImageEdit()), loaded: !!loaded, output, previewRef, problem: exporter.status === 'failed' ? 'export' : problem, busy: importing || exporter.status === 'busy', exportStatus: exporter.status, importFile, exportAs };
+  return { editable: !!onEdit, baseUrl, edit, update, reset: () => update(defaultImageEdit()), loaded: !!loaded, output, bindPreview, problem: exporter.status === 'failed' ? ('export' as const) : problem, busy: importing || exporter.status === 'busy', exportStatus: exporter.status, importFile, exportAs };
 }
 

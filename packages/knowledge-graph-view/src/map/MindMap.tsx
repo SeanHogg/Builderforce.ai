@@ -11,7 +11,7 @@ import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { useContainerSize } from '../environment';
 import { fitView } from '../graph2d/layout2d';
-import { useIdleValue } from '../useIdleValue';
+import { useComputed } from '../compute/useComputed';
 import { usePanZoom } from '../usePanZoom';
 import { useRoving } from '../useRoving';
 import { HIT_PX, useSvgScale } from '../useSvgScale';
@@ -20,7 +20,7 @@ import { usePanZoomRegistration } from '../surface/zoom';
 import { cssVar } from '../scene/themeColors';
 import { TYPE } from '../surface/ui/type';
 import { Branches, RADIUS } from './MindBranches';
-import { EMPTY_MIND_MAP, focusFolder, mindMap, type PlacedBranch } from './mindMapModel';
+import { EMPTY_MIND_MAP, focusFolder, type PlacedBranch } from './mindMapModel';
 import { outTarget } from './mindOut';
 
 export interface MindMapProps {
@@ -52,7 +52,7 @@ export function MindMap({ nodes, findings, rootTitle, selected, focus, onSelect,
     const [filesPaged, setFilesPaged] = useState<{ folder: string | null; start: number } | null>(null);
     const paging = useMemo(() => (paged && paged.folder === folder ? { parent: paged.parent, start: paged.start } : null), [paged, folder]);
     const filesPage = useMemo(() => (filesPaged && folder !== null && filesPaged.folder === folder ? { folder, start: filesPaged.start } : null), [filesPaged, folder]);
-    const map = useIdleValue(() => mindMap(nodes, findings, { focus: folder, window: paging, files: filesPage }), [nodes, findings, folder, paging, filesPage], EMPTY_MIND_MAP);
+    const map = useComputed('mindMap', { nodes, findings, opts: { focus: folder, window: paging, files: filesPage } }, [nodes, findings, folder, paging, filesPage], null, { failed: EMPTY_MIND_MAP }).value;
     const [hover, setHover] = useState<string | null>(null);
     // On touch the first tap on a branch shows its label and only the second one acts: a finger cannot hover.
     const [tapped, setTapped] = useState<string | null>(null);

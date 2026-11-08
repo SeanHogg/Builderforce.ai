@@ -11,6 +11,7 @@ vi.mock('@/lib/auth', () => ({ AUTH_API_URL: 'https://api.example.com' }));
 import { measureRemoteBytes } from './podcastAudioSize';
 import { CHAPTERS_MIME, uploadPodcastChapters } from './podcastChaptersUpload';
 import { podcastEnclosureBytes } from './podcastEpisode';
+import { withPublishedEnclosure } from './podcastPublish';
 import { buildPodcastFeed } from './podcastRss';
 
 const timeline = { version: 1, fps: 30, width: 1920, height: 1080, clips: [

@@ -36,8 +36,9 @@ function app() {
 
 describe('GET /verify', () => {
   it('400s without a valid lookup key', async () => {
-    expect((await app().request('/verify?watermarkId=nothex')).status).toBe(400);
-    expect((await app().request('/verify')).status).toBe(400);
+    // A real request always carries a Worker env; `{}` = no rate-limiter bound, which fails open.
+    expect((await app().request('/verify?watermarkId=nothex', {}, {})).status).toBe(400);
+    expect((await app().request('/verify', {}, {})).status).toBe(400);
   });
 
   it('404s an unknown clip and 200s a registered one', async () => {

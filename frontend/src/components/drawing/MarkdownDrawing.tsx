@@ -1,20 +1,20 @@
-import { Children, isValidElement, type ComponentProps, type ReactNode } from 'react';
-import type { Components } from 'react-markdown';
 import { useTranslations } from 'next-intl';
 import { DRAWING_BLOCK_HEIGHT, DRAWING_BLOCK_WIDTH, parseDrawingPayload } from '@/domains/collab/domain/blockDocument';
 import { StrokeShapes } from './StrokeShapes';
 
-const DRAWING_LANGUAGE = 'language-bf-drawing';
-
-/** The text of a node react-markdown renders a code block's body as. */
-function textOf(node: ReactNode): string {
-  return Children.toArray(node).map((child) => (typeof child === 'string' ? child : '')).join('');
-}
-
-function ReadOnlyDrawing({ json }: { json: string }) {
+/**
+ * A `bf-drawing` fenced block, drawn. The page editor stores a drawing as that fence
+ * (see `blockDocument.ts`); a read-only viewer — the preview, a shared page — should see
+ * the picture, not a line of JSON. A fence we cannot read falls through to a plain
+ * `<pre>` so no content is hidden.
+ *
+ * Loaded lazily by `DocumentMarkdown` (only when a page actually holds a drawing), so the
+ * drawing model and its renderer stay out of every first paint.
+ */
+export function ReadOnlyDrawing({ json }: { json: string }) {
   const t = useTranslations('knowledge.blocks.drawing');
   const drawing = parseDrawingPayload(json);
-  if (!drawing) return null;
+  if (!drawing) return <pre><code>{json}</code></pre>;
   const width = drawing.width ?? DRAWING_BLOCK_WIDTH;
   const height = drawing.height ?? DRAWING_BLOCK_HEIGHT;
   const strokes = drawing.strokes ?? [];
@@ -24,20 +24,3 @@ function ReadOnlyDrawing({ json }: { json: string }) {
     </svg>
   );
 }
-
-/**
- * A `bf-drawing` fenced block, drawn. The page editor stores a drawing as that fence
- * (see `blockDocument.ts`); a read-only viewer — the preview, a shared page — should see
- * the picture, not a line of JSON. Anything else (including a fence we cannot read) falls
- * through to the ordinary `<pre>` so no content is hidden.
- */
-export const MARKDOWN_DRAWING_COMPONENTS: Components = {
-  pre({ children, node: _node, ...rest }: ComponentProps<'pre'> & { node?: unknown }) {
-    const code = Children.toArray(children).find(isValidElement) as { props?: { className?: string; children?: ReactNode } } | undefined;
-    if (code?.props?.className?.split(/\s+/).includes(DRAWING_LANGUAGE)) {
-      const json = textOf(code.props.children).trim();
-      if (parseDrawingPayload(json)) return <ReadOnlyDrawing json={json} />;
-    }
-    return <pre {...rest}>{children}</pre>;
-  },
-};

@@ -11,6 +11,8 @@ export interface IdbKeyValue<T> {
   delete(key: string): Promise<void>;
   /** Remove every entry (memory and the persisted store). */
   clear(): Promise<void>;
+  /** False once a write could not reach IndexedDB: the entries then live in this tab's memory only. */
+  isPersistent(): boolean;
 }
 
 export function createIdbKeyValue<T>(dbName: string, storeName: string): IdbKeyValue<T> {
@@ -44,6 +46,18 @@ export function createIdbKeyValue<T>(dbName: string, storeName: string): IdbKeyV
     }
   }
 
+  /** Set once a write to IndexedDB failed: from then on the in-memory copy is the only store. */
+  let persistFailed = false;
+
+  /** A write to the persisted store; its failure is recorded (see `isPersistent`), never thrown. */
+  async function persist<R>(op: (s: IDBObjectStore) => IDBRequest<R>): Promise<void> {
+    try {
+      await run('readwrite', op);
+    } catch {
+      persistFailed = true;
+    }
+  }
+
   return {
     async get(key) {
       if (memory.has(key)) return memory.get(key);
@@ -57,15 +71,16 @@ export function createIdbKeyValue<T>(dbName: string, storeName: string): IdbKeyV
     },
     async put(key, value) {
       memory.set(key, value);
-      try { await run('readwrite', (s) => s.put(value as unknown, key)); } catch { /* memory copy stands */ }
+      await persist((s) => s.put(value as unknown, key));
     },
     async delete(key) {
       memory.delete(key);
-      try { await run('readwrite', (s) => s.delete(key)); } catch { /* ignore */ }
+      await persist((s) => s.delete(key));
     },
     async clear() {
       memory.clear();
-      try { await run('readwrite', (s) => s.clear()); } catch { /* ignore */ }
+      await persist((s) => s.clear());
     },
+    isPersistent: () => !persistFailed,
   };
 }

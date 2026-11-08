@@ -121,7 +121,7 @@ describe('findOrCreateBoard', () => {
     expect((stamp?.values as { primaryBoardId: string } | undefined)?.primaryBoardId).toBe(res.board.id);
   });
 
-  it('drops the project's cached routing / ordinal maps for its tenant once a board is created and re-pinned', async () => {
+  it("drops the project's cached routing / ordinal maps for its tenant once a board is created and re-pinned", async () => {
     invalidateSwimlaneOrdinals.mockClear();
     const { db } = makeFakeDb([]);
     const env = {} as Env;

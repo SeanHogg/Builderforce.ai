@@ -5581,39 +5581,6 @@ export const pmoApi = {
   },
 };
 
-// ── Discovery (customer interviews / research notes; /api/discovery/*) ───────
-// The two artifacts of Read/Prove, before there is a company to run.
-export interface CustomerInterview {
-  id: string; title: string; participantName: string | null; notes: string | null;
-  projectId: number | null; createdBy: string | null; createdAt: string; updatedAt: string;
-}
-export interface ResearchNote {
-  id: string; title: string; sourceUrl: string | null; body: string | null;
-  projectId: number | null; createdBy: string | null; createdAt: string; updatedAt: string;
-}
-
-const customerInterviewTracker = segmentTrackerClient('/api/discovery/interviews');
-const researchNoteTracker = segmentTrackerClient('/api/discovery/research-notes');
-
-export const discoveryApi = {
-  interviews: {
-    list: (projectId?: number) => customerInterviewTracker.list(projectId) as unknown as Promise<CustomerInterview[]>,
-    create: (body: Partial<Omit<CustomerInterview, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>>) =>
-      customerInterviewTracker.create(body) as unknown as Promise<CustomerInterview>,
-    update: (id: string, body: Partial<Omit<CustomerInterview, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>>) =>
-      customerInterviewTracker.update(id, body) as unknown as Promise<CustomerInterview>,
-    remove: (id: string) => customerInterviewTracker.remove(id),
-  },
-  researchNotes: {
-    list: (projectId?: number) => researchNoteTracker.list(projectId) as unknown as Promise<ResearchNote[]>,
-    create: (body: Partial<Omit<ResearchNote, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>>) =>
-      researchNoteTracker.create(body) as unknown as Promise<ResearchNote>,
-    update: (id: string, body: Partial<Omit<ResearchNote, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>>) =>
-      researchNoteTracker.update(id, body) as unknown as Promise<ResearchNote>,
-    remove: (id: string) => researchNoteTracker.remove(id),
-  },
-};
-
 // ── Time tracking (real logged effort; /api/time/*) ───────────────────────────
 export interface DailyHoursBucket { date: string; hours: number }
 export interface MemberTimeEntry {
@@ -7712,18 +7679,6 @@ export interface SwimlaneAgent {
   createdAt: string;
 }
 
-/**
- * An agent host that OWNS open tickets in a lane (`tasks.assigned_agent_host_id`) —
- * a different fact from lane staffing ({@link SwimlaneAgent}). `via: 'ticket'` is what
- * tells the board to render it as an owner, not a staffed agent.
- */
-export interface BoardTicketOwner {
-  hostId: number;
-  name: string;
-  ticketCount: number;
-  via: 'ticket';
-}
-
 /** A live per-agent dispatch status across a board's tickets. */
 export interface BoardDispatch {
   id: string;
@@ -7814,14 +7769,6 @@ export const boardsApi = {
     adopt: (boardId: string, into: string): Promise<{ ok: boolean; movedTo: string | null; movedCount: number }> =>
       request(`/api/boards/${boardId}/orphaned-tasks/adopt`, { method: 'POST', body: JSON.stringify({ into }) }),
   },
-
-  /** Hosts owning open tickets on the board, keyed by swimlane id (one batched query). */
-  ticketOwners: (boardId: string): Promise<Record<string, BoardTicketOwner[]>> =>
-    request<{ ownersByLane: Record<string, BoardTicketOwner[]> }>(`/api/boards/${boardId}/ticket-owners`).then((r) => r.ownersByLane ?? {}),
-
-  /** Every lane's staffed agents, keyed by swimlane id, in one request. */
-  laneAgents: (boardId: string): Promise<Record<string, SwimlaneAgent[]>> =>
-    request<{ agentsByLane: Record<string, SwimlaneAgent[]> }>(`/api/boards/${boardId}/lane-agents`).then((r) => r.agentsByLane ?? {}),
 
   agents: {
     create: (boardId: string, laneId: string, body: { agentKind: 'workforce' | 'registered'; agentRef: string; name?: string | null; role?: string | null; model?: string | null; position?: number }): Promise<SwimlaneAgent> =>

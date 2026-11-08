@@ -103,6 +103,8 @@ function base64Utf8(text: string): string {
 export interface AnalyzeCodebaseOptions {
   /** Layer registry whose disallowed pairs become dependency-cruiser `forbidden` rules. */
   partitions?: PartitionRegistry;
+  /** Told each time one analyzer tool has settled (complete, failed or not measured), in order: the run's progress. */
+  onToolSettled?(): void;
 }
 
 export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}): ToolDefinition {
@@ -120,7 +122,11 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs: unknown[] = [];
       const entries = bundledAnalyzers();
+      // Every analyzer leaves exactly one entry in `tools` (many paths `continue`), so a settled one is seen as the next starts and after the loop.
+      let settledTold = 0;
+      const tellSettled = () => { while (settledTold < tools.length) { settledTold++; options.onToolSettled?.(); } };
       for (const analyzer of ANALYZERS) {
+        tellSettled();
         const entry = entries?.[analyzer.name];
         // A host that bundles its analyzers never downloads one: a missing entry is "not measured", never zero findings.
         if (entries && !entry) {
@@ -176,6 +182,7 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
           outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'failed', error: String(error).slice(0, 1000) });
         }
       }
+      tellSettled();
       const { commit, branch, dirty, dirtyHash } = await workspaceFingerprint(ctx);
       const remote = (await gitText(ctx, `${GIT} remote get-url origin`))?.trim().replace(/^git@github.com:/, 'https://github.com/').replace(/\.git$/, '');
       const repository = remote && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(remote) ? remote : undefined;

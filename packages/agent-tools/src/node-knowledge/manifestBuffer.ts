@@ -52,6 +52,8 @@ export function writeManifestEntries(db: LocalSqliteDb, entries: PendingManifest
 }
 
 export interface ManifestSink {
+    /** THROWS when the file may not be written (a newer format): checked BEFORE an entry is buffered, so a refused write never lingers in the buffer. */
+    assertWritable(): void;
     /** The committed value of a source (no buffer). */
     readCommitted(sourceId: string): Promise<ChunkFingerprint[] | undefined>;
     /** Commits what is buffered (all, or only these source ids), on its own. The entries are taken when this is CALLED. */
@@ -74,10 +76,12 @@ export function bufferedManifest(buffer: ManifestBuffer, sink: ManifestSink, per
             return await sink.readCommitted(sourceId);
         },
         async set(sourceId, fingerprints) {
+            sink.assertWritable();
             buffer.set(sourceId, fingerprints.map((f) => ({ id: f.id, hash: f.hash })));
             await settle(sourceId);
         },
         async delete(sourceId) {
+            sink.assertWritable();
             buffer.set(sourceId, null);
             await settle(sourceId);
         },

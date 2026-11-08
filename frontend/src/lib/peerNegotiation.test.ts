@@ -126,6 +126,6 @@ describe('perfect negotiation', () => {
 
   it('drops a stale answer instead of throwing', async () => {
     const a = end('p1', 'p2');
-    await expect(onAnswer(a.pc, { type: 'answer', sdp: 'late' })).resolves.toBeUndefined();
+    await expect(onAnswer(a.pc, { type: 'answer', sdp: 'late' })).resolves.toBe(false);
   });
 });

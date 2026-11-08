@@ -16,6 +16,7 @@ vi.mock('../../integrations/integrationCredentialSecret', () => ({ integrationCr
 vi.mock('../cloudAgent/runContext', () => ({ isExecutionCancelled: h.cancelled }));
 
 import { handleSandboxCallback } from './sandboxCallbacks';
+import { mintContainerRunToken } from '../containerRunToken';
 
 const ctx = { tenantId: 1, taskId: 5, projectId: 2, cloudAgentRef: 'a1' };
 
@@ -31,6 +32,8 @@ function runnerEnv(reply: unknown = { request: { id: 'r1', path: '/sandbox/fs', 
   const calls: Array<{ url: string; body: unknown }> = [];
   const env = {
     COST_LEVERS_ALL: 'off',
+    JWT_SECRET: 'test-jwt-secret',
+    INTERNAL_API_BASE_URL: 'https://api.example.test',
     CLOUD_RUNNER: {
       idFromName: (n: string) => n,
       get: () => ({
@@ -64,7 +67,12 @@ describe('handleSandboxCallback', () => {
     const { env } = runnerEnv();
     const r = await handleSandboxCallback(env, dbWithStatus('running'), ctx, 77, 'spec', {});
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ executionId: 77, toolOutputPolicy: false, postEditChecks: false, repo: { baseBranch: 'main', headBranch: 'bf/5' } });
+    expect(r.body).toEqual({
+      executionId: 77, toolOutputPolicy: false, postEditChecks: false,
+      // Credential-free clone URL + the run token, supplied per git command by the runner (never embedded).
+      repo: { baseBranch: 'main', headBranch: 'bf/5', cloneUrl: 'https://api.example.test/api/runtime/internal/container-git/77.git' },
+      token: await mintContainerRunToken('test-jwt-secret', 77),
+    });
   });
 
   it('refuses a spec to a runner that started after its run was cancelled', async () => {

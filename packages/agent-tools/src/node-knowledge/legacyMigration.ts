@@ -6,8 +6,9 @@
  * under its new one. The snapshot and the log are read by memory's own parsers (a read-only `localSnapshotStore` over the
  * text), never by a copy of them.
  *
- * One transaction holds every row and `meta.format` plus the root's marker; the import goes in chunks of at most
- * {@link CHUNK_ROWS} rows and yields with `setImmediate` between them. After the commit the three files are renamed to
+ * One transaction holds every row and `meta.format` plus the root's marker; the rows are built first (yielding to the
+ * event loop with `setImmediate` while they are built, before the transaction opens) and then written in chunks of at most
+ * {@link CHUNK_ROWS} rows WITHOUT yielding, so the write lock is held only for the writes. After the commit the three files are renamed to
  * `*.migrated`; a later open that finds the marker and the files still there (a crash between commit and rename) renames
  * them again without importing. A snapshot that does not parse is kept as `.corrupt`, and the store starts empty for that
  * root. A window that meets SQLITE_BUSY waits and retries; once the marker is set it only renames.
@@ -49,6 +50,8 @@ const emptyChange = (): RowChange => ({
     deletes: { scopes: [], facts: [], relations: [], extracted: [], recheck: [] },
 });
 
+const changeRows = (c: RowChange): number => Object.values(c.upserts).reduce((n, rows) => n + rows.length, 0) + Object.values(c.deletes).reduce((n, rows) => n + rows.length, 0);
+
 /** The rows of a legacy snapshot and log, read through memory's own store over the text. */
 async function readLegacy(snapshotText: string | undefined, logText: string | undefined): Promise<{ change: RowChange[]; rows: number; corrupt: boolean }> {
     let corrupt = false;
@@ -73,7 +76,7 @@ async function readLegacy(snapshotText: string | undefined, logText: string | un
     }
     for (const h of await legacy.recheckHashes()) room().upserts.recheck.push(h);
     for (const [h, e] of Object.entries(await legacy.extractedEntries())) room().upserts.extracted.push([h, e]);
-    for (const c of chunks) rows += c.upserts.scopes.length + c.upserts.facts.length + c.upserts.relations.length + c.upserts.extracted.length + c.upserts.recheck.length;
+    for (const c of chunks) rows += changeRows(c);
     return { change: chunks, rows, corrupt };
 }
 
@@ -130,7 +133,8 @@ async function migrate(files: KnowledgeFiles, db: SqliteKnowledgeDb, rootId: str
                 // A root a review has already written (an earlier import failed and the session went on) is NEVER imported over:
                 // the legacy rows are older than what is there. Mark it migrated and only rename the files.
                 if (w.hasRows(rootId)) { w.setMeta(marker, '1'); return false; }
-                for (const c of change) w.upsert(c);
+                // An empty chunk writes no row, so it must not count as a write (the generation moves only for real rows).
+                for (const c of change) if (changeRows(c) > 0) w.upsert(c);
                 for (let i = 0; i < manifestIds.length; i += CHUNK_ROWS) {
                     w.upsertManifest(Object.fromEntries(manifestIds.slice(i, i + CHUNK_ROWS).map((id) => [id, manifest[id]!])));
                 }

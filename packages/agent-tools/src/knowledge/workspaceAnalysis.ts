@@ -19,9 +19,10 @@
  */
 
 import { hashText } from '@seanhogg/builderforce-memory/ingest';
-import type { PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import type { AnalyzerProgress, PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CapabilityProvider } from '../capabilities.js';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
+import { createAnalysisProgress, type AnalysisProgress } from './analysisProgress.js';
 import { runCodeAnalysis } from './codeAnalyzers.js';
 import type { SerializedRepoGraphShape } from './codeExtracted.js';
 import { isSkippedPath } from './fsDirectorySource.js';
@@ -62,6 +63,11 @@ export interface WorkspaceAnalysisDeps {
     onWarn?(message: string): void;
     /** Told which files the repo graph read and left out (by reason), root-relative: the systems record assigns them to systems. */
     onReads?(reads: GraphFileReads): void;
+    /**
+     * Progress of the run THIS call starts: repo-graph file reads plus one unit per analyzer tool. A call that
+     * joins a run already in flight (see the cache) gets none.
+     */
+    onProgress?(progress: AnalyzerProgress): void;
 }
 
 export interface WorkspaceAnalysis {
@@ -73,15 +79,15 @@ export interface WorkspaceAnalysis {
 
 /** The repo map's file graph over `path`, read through `repoRead`; null when it cannot list files. A truncated listing gives a partial graph, said so via `onWarn`. */
 export async function readRepoGraph(
-    deps: Pick<WorkspaceAnalysisDeps, 'caps' | 'path' | 'repoGraph' | 'onWarn' | 'onReads'>,
+    deps: Pick<WorkspaceAnalysisDeps, 'caps' | 'path' | 'repoGraph' | 'onWarn' | 'onReads'> & { progress?: AnalysisProgress },
     signal?: AbortSignal,
 ): Promise<SerializedRepoGraphShape | null> {
     const read = deps.caps.repoRead;
     const port = deps.repoGraph;
-    if (!read || !port) return null;
+    if (!read || !port) { deps.progress?.plan(0); return null; }
     // Every file: the graph streams the list, so it is not held to the model-facing listing's cap.
     const listed = await read.listFiles(deps.path || undefined, ALL_FILES_GLOB, { unbounded: true }).catch(() => undefined);
-    if (!listed?.ok || !listed.paths) return null;
+    if (!listed?.ok || !listed.paths) { deps.progress?.plan(0); return null; }
     if (listed.truncated) deps.onWarn?.(`The file listing was truncated at ${listed.paths.length} files: the repo graph is partial.`);
     const prefix = folderPrefix(deps.path);
     const rootRel = (p: string): string => underFolder(p, prefix) ?? p;
@@ -93,6 +99,7 @@ export async function readRepoGraph(
     // No file-count cap: files are read in bounded concurrent batches and fed to the builder as they arrive,
     // which keeps only what it parsed (imports, symbols), so memory follows the graph, not the source.
     const builder = port.create();
+    deps.progress?.plan(paths.length);
     for (let i = 0; i < paths.length; i += READ_BATCH) {
         if (signal?.aborted) return null;
         const batch = await Promise.all(paths.slice(i, i + READ_BATCH).map((p) => read.readFile(p).catch(() => undefined)));
@@ -104,6 +111,7 @@ export async function readRepoGraph(
             else if (builder.addFile(paths[i + j]!, file.content)) tally.read(path);
             else tally.skip(path, 'unsupported');
         });
+        deps.progress?.filesRead(batch.length, rootRel(paths[i + batch.length - 1]!));
     }
     // Which system a file is in is the systems record's to say (it detects them once); files the listing never reached it counts as unlisted.
     deps.onReads?.(tally.result((p) => !isSkippedPath(p) && port.accepts(p, 0)));
@@ -151,10 +159,16 @@ export async function analyseWorkspace(deps: WorkspaceAnalysisDeps, signal?: Abo
     const held = await cache.getOrRun(key, async (shared) => {
         const ctx = { caps: deps.caps, ...(shared ? { signal: shared } : {}) };
         let graphReads: GraphFileReads | undefined;
+        const progress = createAnalysisProgress(deps.onProgress);
         const [snapshot, repoGraph] = await Promise.all([
-            runCodeAnalysis(ctx, { ...(deps.path ? { path: deps.path } : {}), ...(deps.partitions ? { partitions: deps.partitions } : {}) }),
-            readRepoGraph({ ...deps, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),
+            runCodeAnalysis(ctx, {
+                ...(deps.path ? { path: deps.path } : {}),
+                ...(deps.partitions ? { partitions: deps.partitions } : {}),
+                onToolSettled: () => progress.toolSettled(),
+            }),
+            readRepoGraph({ ...deps, progress, onReads: (reads) => { graphReads = reads; deps.onReads?.(reads); } }, shared),
         ]);
+        progress.finish();
         // A run every asker stopped is nothing: neither part is trustworthy, and none is kept.
         if (shared?.aborted) return { analysis: { snapshot: null, repoGraph: null }, retainMs: 0 };
         if (snapshot === null) return { analysis: { snapshot, repoGraph, ...(graphReads ? { graphReads } : {}) }, retainMs: 0 };

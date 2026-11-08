@@ -23,9 +23,9 @@ import {
   type Approval,
   type Execution,
   type SwimlaneAgent,
-  type BoardTicketOwner,
   type BoardDispatch, type MemberKind,
 } from '@/lib/builderforceApi';
+import type { BoardTicketOwner } from '@/lib/boardRostersApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -44,7 +44,7 @@ import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
 import { MemberProfileEditor } from './workforce/MemberProfileEditor';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
-import { TicketOwnerChips } from './board/TicketOwnerChips';
+import { LaneRosterChips } from './board/LaneRosterChips';
 import { hasActiveExecution } from './board/taskDeleteGuard';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -1589,27 +1589,12 @@ export function TaskMgmtContent({
                       <span>{tasksForStatus.length}</span>
                     </span>
                   </div>
-                  {(column.agents.length > 0 || (column.owners?.length ?? 0) > 0) && (
-                    <div
-                      style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
-                      title={tTask('swimlaneAgentsTitle')}
-                    >
-                      {column.agents.map((a) => {
-                        const disp = latestDispatchByAssignment.get(a.id);
-                        const label = a.name ?? a.role;
-                        return (
-                          <AgentChip
-                            key={a.id}
-                            label={label}
-                            status={disp?.status}
-                            meta={a.model ?? a.runtime}
-                            title={`${label} · ${a.runtime}${a.model ? ` · ${a.model}` : ''}${disp ? ` — ${disp.status}` : ''}`}
-                          />
-                        );
-                      })}
-                      <TicketOwnerChips owners={column.owners ?? []} />
-                    </div>
-                  )}
+                  <LaneRosterChips
+                    agents={column.agents}
+                    owners={column.owners ?? []}
+                    dispatchByAssignment={latestDispatchByAssignment}
+                    title={tTask('swimlaneAgentsTitle')}
+                  />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   {tasksForStatus.map((task) => renderTaskCard(task))}

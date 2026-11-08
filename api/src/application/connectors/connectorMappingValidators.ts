@@ -27,6 +27,10 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 /** A body path (`a.b.0.c`) or a `header:<name>` selector. Deliberately narrow: no
  *  wildcards, no filters — a selector is a location, never a query language. */
 export const RESPONSE_SELECTOR_RE = /^(?:header:[A-Za-z0-9-]{1,64}|[A-Za-z0-9_$-]{1,64}(?:\.[A-Za-z0-9_$-]{1,64}){0,11})$/;
+/** Like {@link RESPONSE_SELECTOR_RE}, but a segment may be `*` — "any element of this
+ *  array". Allowed ONLY where a manifest asks "does ANY of these equal X"
+ *  (`applicants.postingIdField`); a value read for storage must name one location. */
+export const MEMBERSHIP_SELECTOR_RE = /^[A-Za-z0-9_$-]{1,64}(?:\.(?:[A-Za-z0-9_$-]{1,64}|\*)){0,11}$/;
 /** Fallbacks per field. More than this is a manifest guessing, not declaring. */
 export const MAX_RESPONSE_SELECTORS = 6;
 
@@ -66,14 +70,15 @@ export function validateSelectorList(
   value: unknown,
   label: string,
   errors: string[],
-  opts: { allowHeader?: boolean } = {},
+  opts: { allowHeader?: boolean; allowWildcard?: boolean } = {},
 ): string[] | null {
   const list = typeof value === 'string' ? [value] : Array.isArray(value) ? value.map(String) : [];
-  const ok = list.length > 0
-    && list.length <= MAX_RESPONSE_SELECTORS
-    && list.every((selector) => RESPONSE_SELECTOR_RE.test(selector) && (opts.allowHeader || !selector.startsWith('header:')));
+  const shapeOk = (selector: string): boolean => (opts.allowWildcard
+    ? MEMBERSHIP_SELECTOR_RE.test(selector)
+    : RESPONSE_SELECTOR_RE.test(selector) && (opts.allowHeader || !selector.startsWith('header:')));
+  const ok = list.length > 0 && list.length <= MAX_RESPONSE_SELECTORS && list.every(shapeOk);
   if (!ok) {
-    errors.push(`${label}: must be 1–${MAX_RESPONSE_SELECTORS} ${opts.allowHeader ? 'dotted body paths or header:<name> selectors' : 'dotted body paths'}`);
+    errors.push(`${label}: must be 1–${MAX_RESPONSE_SELECTORS} ${opts.allowHeader ? 'dotted body paths or header:<name> selectors' : opts.allowWildcard ? 'dotted body paths (a segment may be *)' : 'dotted body paths'}`);
     return null;
   }
   return list;
@@ -140,10 +145,16 @@ export function validatePattern(value: unknown, label: string, errors: string[])
   return source;
 }
 
-/** Run a declared pattern the way every consumer must: anchored, on a bounded input. */
+/**
+ * Run a declared pattern the way every consumer must: anchored, on a bounded input.
+ *
+ * `.` in the grammar's literal text is a LITERAL dot (`urn.li.job` must not match
+ * `urnxlixjob`): the grammar allows it only as literal text, so every dot in the source is
+ * escaped here — the character classes it can sit beside contain none.
+ */
 export function matchesPattern(pattern: string, input: string): RegExpExecArray | null {
   if (input.length > MAX_PATTERN_INPUT) return null;
-  try { return new RegExp(`^(?:${pattern})$`).exec(input); } catch { return null; }
+  try { return new RegExp(`^(?:${pattern.replace(/\./g, '\\.')})$`).exec(input); } catch { return null; }
 }
 
 /** The `secret: false` auth field keys — what `{connection.<field>}` may name. */
@@ -161,7 +172,7 @@ function selectorFields(
 ): void {
   for (const field of fields) {
     if (raw[field] === undefined) continue;
-    const list = validateSelectorList(raw[field], `${labelPrefix}.${field}`, errors);
+    const list = validateSelectorList(raw[field], `${labelPrefix}.${field}`, errors, { allowWildcard: field === 'postingIdField' });
     if (list) out[field] = list;
   }
 }
@@ -188,7 +199,10 @@ export function validateUrlResolution(
   }
   if (raw.idEncoding !== undefined) {
     if (raw.idEncoding !== 'restli-list') errors.push(`${where}.resolve.idEncoding: must be "restli-list"`);
-    else out.idEncoding = 'restli-list';
+    else if (!out.idParam || params[out.idParam]?.in !== 'query' || params[out.idParam]?.raw !== true) {
+      // An encoded key run through the query encoder is encoded twice.
+      errors.push(`${where}.resolve.idEncoding: the idParam must be a query param declared raw: true`);
+    } else out.idEncoding = 'restli-list';
   }
   if (raw.equals !== undefined) {
     if (typeof raw.equals !== 'string' || raw.equals.length > 200) errors.push(`${where}.resolve.equals: must be a string of at most 200 characters`);
@@ -220,6 +234,37 @@ export function validateBoardJobMapping(raw: unknown, where: string, errors: str
   return out as unknown as ConnectorBoardJobMapping;
 }
 
+/** `filterIdFrom` and `nextToken` of an applicant mapping (see their declarations). */
+function validateApplicantLookups(
+  raw: Record<string, unknown>,
+  params: Record<string, ConnectorParam>,
+  where: string,
+  errors: string[],
+  out: Record<string, unknown>,
+): void {
+  if (raw.filterIdFrom !== undefined) {
+    const f = raw.filterIdFrom;
+    const select = isPlainObject(f) ? validateSelectorList(f.select, `${where}.applicants.filterIdFrom.select`, errors) : null;
+    if (!isPlainObject(f) || typeof f.action !== 'string' || !/^[a-z0-9][a-z0-9_]{0,62}$/.test(f.action) || typeof f.idParam !== 'string' || !/^[A-Za-z0-9_]{1,64}$/.test(f.idParam)) {
+      errors.push(`${where}.applicants.filterIdFrom: must be { action, idParam, select }`);
+    } else if (select) {
+      out.filterIdFrom = { action: f.action, idParam: f.idParam, select };
+    }
+  }
+  if (raw.nextToken !== undefined) {
+    const t = raw.nextToken;
+    const select = isPlainObject(t) ? validateSelectorList(t.select, `${where}.applicants.nextToken.select`, errors) : null;
+    const fromQuery = isPlainObject(t) ? t.fromQuery : undefined;
+    if (!isPlainObject(t) || typeof t.param !== 'string' || !params[t.param]) {
+      errors.push(`${where}.applicants.nextToken: param must be a declared param`);
+    } else if (fromQuery !== undefined && (typeof fromQuery !== 'string' || !/^[A-Za-z0-9_.-]{1,64}$/.test(fromQuery))) {
+      errors.push(`${where}.applicants.nextToken.fromQuery: must be a query param name`);
+    } else if (select) {
+      out.nextToken = { select, param: t.param, ...(typeof fromQuery === 'string' ? { fromQuery } : {}) };
+    }
+  }
+}
+
 /**
  * Validate an applicant mapping: every selector list is a body path, the param that
  * carries the board's posting id is a declared param, and a cursor (when declared)
@@ -230,6 +275,7 @@ export function validateApplicantMapping(
   params: Record<string, ConnectorParam>,
   where: string,
   errors: string[],
+  opts: { lenient?: boolean } = {},
 ): ConnectorApplicantMapping | null {
   if (raw === undefined || raw === null) return null;
   if (!isPlainObject(raw)) { errors.push(`${where}.applicants: must be an object`); return null; }
@@ -238,6 +284,10 @@ export function validateApplicantMapping(
   const out: Record<string, unknown> = { postingParam };
   selectorFields(raw, CONNECTOR_APPLICANT_FIELDS, `${where}.applicants`, errors, out);
   if (!out.externalId) errors.push(`${where}.applicants.externalId: required — it is the dedupe key`);
+  validateApplicantLookups(raw, params, where, errors, out);
+  // A stored mapping written before `order` was required: `desc` is the safe reading
+  // (it re-reads rather than skips), so a lenient READ supplies it; a WRITE still must say.
+  const order = raw.order ?? (opts.lenient && raw.cursorParam !== undefined ? 'desc' : undefined);
   if (isPlainObject(raw.page)) {
     const pageParam = String(raw.page.param ?? '');
     const sizeParam = raw.page.sizeParam === undefined ? undefined : String(raw.page.sizeParam);
@@ -256,16 +306,16 @@ export function validateApplicantMapping(
       out.limit = { param: limit.param, size: limit.size };
     }
   }
-  if (raw.order !== undefined) {
-    if (raw.order !== 'asc' && raw.order !== 'desc') errors.push(`${where}.applicants.order: must be "asc" or "desc"`);
-    else out.order = raw.order;
+  if (order !== undefined) {
+    if (order !== 'asc' && order !== 'desc') errors.push(`${where}.applicants.order: must be "asc" or "desc"`);
+    else out.order = order;
   }
   if (raw.cursorParam !== undefined) {
     const from = raw.cursorFrom;
     const format = raw.cursorFormat ?? 'iso';
     if (typeof raw.cursorParam !== 'string' || !params[raw.cursorParam]) {
       errors.push(`${where}.applicants.cursorParam: must be a declared param`);
-    } else if (raw.order !== 'asc' && raw.order !== 'desc') {
+    } else if (order !== 'asc' && order !== 'desc') {
       errors.push(`${where}.applicants: a cursor needs "order" ("asc" or "desc") — it decides what a capped run has proven`);
     } else if ((from !== 'appliedAt' && from !== 'id') || (format !== 'iso' && format !== 'epochMs')) {
       errors.push(`${where}.applicants: cursorFrom must be "appliedAt" or "id", and cursorFormat "iso" or "epochMs"`);

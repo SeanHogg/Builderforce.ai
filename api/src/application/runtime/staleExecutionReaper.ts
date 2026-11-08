@@ -27,8 +27,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { executionPauseState, executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { executionPauseState, executions, pullRequests, tasks } from '../../infrastructure/database/schema';
+import { insertToolAudit } from '../audit/toolAuditWrite';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { runFailureEventRow } from './recordRunFailureEvent';
@@ -272,7 +272,7 @@ export async function reapStaleExecutions(
   for (let i = 0; i < reaped.length; i += REAP_BATCH_LIMIT) {
     const chunk = reaped.slice(i, i + REAP_BATCH_LIMIT);
     try {
-      await runTelemetryDatabase(db).insert(toolAuditEvents).values(chunk.map(({ row: r, toolName }) => ({
+      await insertToolAudit(db, chunk.map(({ row: r, toolName }) => ({
         ...runFailureEventRow({ tenantId: r.tenant_id, agentHostId: r.agent_host_id, payload: r.payload, executionId: r.id, errorMessage: r.error_message }, toolName),
         ts: sql`now()`,
       })));
@@ -422,7 +422,7 @@ async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promis
   // Surface the self-heal on the Observability timeline so the gap (a run that
   // looked dead) is explained rather than silently resurrected.
   try {
-    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+    await insertToolAudit(db, {
       tenantId: row.tenant_id,
       agentHostId: null,
       cloudAgentRef: row.cloud_agent_ref,

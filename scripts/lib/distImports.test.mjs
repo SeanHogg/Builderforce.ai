@@ -34,3 +34,10 @@ test('declared dependencies and peers pass; a leaked private package fails', () 
 test('an explicit allowlist admits a named package', () => {
   assert.deepEqual(undeclaredImports('import "left-pad";', pkg, ['left-pad']), []);
 });
+
+test('a quoted import in a doc comment, or code after a bare from/import token, is not a package import', () => {
+  const doc = '/**\n *   import { x } from \'@self/pkg/server\';\n */\nexport declare const y: number;';
+  assert.deepEqual([...bareImports(doc)], []);
+  const minified = 'var a={from:"x"};function f(){return import"a"+g(e,{checkoutEveryNms:r,blockClass:s=".x"})}';
+  assert.deepEqual([...bareImports(minified)].sort(), ['a']);
+});

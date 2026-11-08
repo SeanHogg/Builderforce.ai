@@ -56,6 +56,7 @@ export async function recordCloudToolEvent(
   const ts = new Date();
   // Tool output and arguments can carry secrets (an `env` dump, a bearer header). `insertToolAudit` redacts the
   // row structurally; `result` is also redacted here BEFORE the cap, and is what the live stream carries.
+  // `redactThenCap` redacts JSON text structurally (the result is often a stringified object), then cuts.
   const result = args.result != null ? redactThenCap(args.result, args.resultCap ?? Number.MAX_SAFE_INTEGER) : null;
   try {
     const [row] = await insertToolAudit(db, {

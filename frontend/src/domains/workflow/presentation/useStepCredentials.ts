@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
 import { useConnectableCatalog, type ConnectableProvider } from '@/lib/connectableCatalog';
@@ -26,31 +26,36 @@ export interface UseStepCredentials {
   create: (draft: CredentialDraft, fallbackError: string) => Promise<IntegrationCredential | null>;
 }
 
+interface Settled {
+  /** The provider and reload count this answer belongs to; an answer for any other is not current. */
+  provider: string;
+  attempt: number;
+  credentials: IntegrationCredential[];
+  failed: boolean;
+}
+
 export function useStepCredentials(provider: string): UseStepCredentials {
   const { byId, loading: catalogLoading, failed: catalogFailed } = useConnectableCatalog();
-  const [credentials, setCredentials] = useState<IntegrationCredential[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [settled, setSettled] = useState<Settled | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // The provider whose response may still land. A slow answer for the PREVIOUS
-  // provider must not overwrite the list the author is now looking at.
-  const current = useRef(provider);
-  current.current = provider;
 
-  const load = useCallback(() => {
-    const asked = provider;
-    const live = () => current.current === asked;
-    setLoading(true);
-    setLoadFailed(false);
-    return integrationsApi
+  useEffect(() => {
+    // A slow answer for the PREVIOUS provider must not overwrite the list the author is now looking at.
+    let live = true;
+    integrationsApi
       .list()
-      .then((rows) => { if (live()) setCredentials(rows.filter((r) => r.provider === asked && r.isEnabled)); })
-      .catch(() => { if (live()) setLoadFailed(true); })
-      .finally(() => { if (live()) setLoading(false); });
-  }, [provider]);
+      .then(
+        (rows) => ({ credentials: rows.filter((r) => r.provider === provider && r.isEnabled), failed: false }),
+        () => ({ credentials: [] as IntegrationCredential[], failed: true }),
+      )
+      .then((outcome) => { if (live) setSettled({ provider, attempt, ...outcome }); });
+    return () => { live = false; };
+  }, [provider, attempt]);
 
-  useEffect(() => { void load(); }, [load]);
+  const current = settled?.provider === provider && settled.attempt === attempt ? settled : null;
+  const forProvider = settled?.provider === provider ? settled : null;
 
   const descriptor = byId.get(provider) ?? null;
   const runnable = catalogLoading || catalogFailed ? null : isRunnableProvider(descriptor);
@@ -67,7 +72,7 @@ export function useStepCredentials(provider: string): UseStepCredentials {
         projectId: null,
         credentials: credentialsPayload(descriptor, draft),
       });
-      await load();
+      setAttempt((count) => count + 1); // re-read the list so the new credential appears
       return created;
     } catch (e) {
       setSaveError(faultMessage(e, fallbackError));
@@ -75,7 +80,16 @@ export function useStepCredentials(provider: string): UseStepCredentials {
     } finally {
       setSaving(false);
     }
-  }, [descriptor, load]);
+  }, [descriptor]);
 
-  return { credentials, loading, loadFailed, descriptor, runnable, saving, saveError, create };
+  return {
+    credentials: forProvider?.credentials ?? [],
+    loading: current === null,
+    loadFailed: current?.failed ?? false,
+    descriptor,
+    runnable,
+    saving,
+    saveError,
+    create,
+  };
 }

@@ -8,13 +8,16 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { fixFlowReducer, initialFlow, type FixFlowAction, type FixFlowState } from './fix/fixFlow';
-import { buildLines, type Line, type LinesModel } from './lines';
+import type { Line, LinesModel } from './lines';
 import { dataCoverage, type DataCoverage } from './dataCoverage';
 import { makeOverlay, PRESETS, presetOf, setChannel, type Bindings, type ChannelId, type MetricId, type OverlayModel, type PresetId } from './overlays';
-import { mapEdges } from './outlineGraph';
-import { pathOfLine, pathOfStations, type PathModel } from './path';
+import { EMPTY_PATH, pathOfLine, type PathModel } from './path';
 import { litStations, type QuestionContext, type QuestionId } from './questions';
-import { buildStations, changedRefs, stationOfRef, type Station, type StationModel } from './stations';
+import { changedRefs, stationOfRef, type Station, type StationModel } from './stations';
+import { EMPTY_GRAPH } from '../emptyGraph';
+import { useComputed } from '../compute/useComputed';
+import type { SurfaceResult } from '../compute/kinds';
+import { isSmall } from '../compute/size';
 import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
 import type { TowerHighlight } from './towerHighlight';
 
@@ -103,16 +106,13 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     const historyChanged = opts.changed;
 
     const repoConfigName = opts.repoConfigName;
-    const stations = useMemo<StationModel>(
-        () => (graph
-            ? buildStations(graph, { changed: new Set([...changedRefs(graph, baseline), ...(historyChanged ?? [])]), ...(repoConfigName ? { repoConfigName } : {}) })
-            : { stations: [], byId: new Map(), stationOf: new Map() }),
-        [graph, baseline, historyChanged, repoConfigName],
-    );
-    const lines = useMemo<LinesModel>(
-        () => (graph ? buildLines(graph, stations) : { lines: [], interchanges: new Map(), omitted: 0 }),
-        [graph, stations],
-    );
+    // The stations and the lines drawn over them are built in the compute worker (a big graph takes a second or more), in the
+    // same render when the graph is small. The previous model stays until the new one lands.
+    const changed = useMemo(() => (graph ? [...new Set([...changedRefs(graph, baseline), ...(historyChanged ?? [])])] : []), [graph, baseline, historyChanged]);
+    const inline = !graph || isSmall(graph);
+    const { stations, lines } = useComputed(
+        'surface', { graph: graph ?? EMPTY_GRAPH, changed, repoConfigName }, [graph, changed, repoConfigName], EMPTY_SURFACE, { enabled: graph !== null, inline },
+    ).value ?? EMPTY_SURFACE;
     const coverage = useMemo(() => (graph ? dataCoverage(graph) : null), [graph]);
     const overlay = useMemo(() => makeOverlay(bindings, stations.stations), [bindings, stations]);
     const drill = useDrill(graph, stations, opts.symbols);
@@ -126,10 +126,9 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
         const shown = new Set((focus ?? []).flatMap((ref) => stationOfRef(stations, ref) ?? []));
         return shown.size > 0 ? shown : litStations(question, stations.stations, context);
     }, [question, stations, context, focus]);
-    const path = useMemo(
-        () => (pinned ? pathOfStations(pinned, stations, graph ? mapEdges(graph) : []) : pathOfLine(line, stations.byId)),
-        [pinned, line, stations, graph],
-    );
+    // A pinned path scans every outline link per hop (over a second on a big graph): the compute worker builds it.
+    const pinnedPath = useComputed('path', { graph: graph ?? EMPTY_GRAPH, refs: pinned ?? [], stations }, [pinned, stations, graph], EMPTY_PATH, { enabled: !!pinned && graph !== null, inline }).value ?? EMPTY_PATH;
+    const path = useMemo(() => (pinned ? pinnedPath : pathOfLine(line, stations.byId)), [pinned, pinnedPath, line, stations]);
 
     const pins = useMemo<Pin[]>(() => {
         if (bindings.pins !== 'on') return [];

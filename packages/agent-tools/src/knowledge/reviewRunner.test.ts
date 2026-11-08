@@ -228,6 +228,21 @@ describe("the code pack's analyzers over a workspace", () => {
         expect(uploads).toEqual([hexHead('abc')]);
     });
 
+    it('reports progress while it reads the files and runs the tools: done only grows, and ends at total', async () => {
+        forgetWorkspaceAnalyses();
+        const paths = Array.from({ length: 40 }, (_, i) => `src/p${i}.ts`);
+        const seen: Array<{ done: number; total: number; path?: string }> = [];
+        await workspaceCodeAnalyzers({ caps: caps('progress', { listing: { paths } }), repoGraph }).analyse('root', undefined, (p) => seen.push(p));
+        expect(seen.length).toBeGreaterThan(1);
+        // 40 files + the three analyzer tools, known as soon as the listing is.
+        expect(seen.every((p) => p.total === 43)).toBe(true);
+        for (let i = 1; i < seen.length; i++) expect(seen[i]!.done).toBeGreaterThanOrEqual(seen[i - 1]!.done);
+        expect(seen.every((p) => p.done <= p.total)).toBe(true);
+        expect(seen.at(-1)!.done).toBe(seen.at(-1)!.total);
+        // A read batch names the last file it read.
+        expect(seen.some((p) => p.path === 'src/p15.ts')).toBe(true);
+    });
+
     it('runs the analyzers once per sha across reviews', async () => {
         forgetWorkspaceAnalyses();
         let depcruiseRuns = 0;

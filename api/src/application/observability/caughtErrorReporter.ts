@@ -45,7 +45,13 @@ function sanitizeContext(context: Record<string, unknown> | undefined): Record<s
  */
 function redactedError(error: unknown): unknown {
   if (!(error instanceof Error)) return redactDeep(error, CONTEXT_LIMITS);
-  const clone = new Error(redactSecrets(error.message), error.cause !== undefined ? { cause: redactDeep(error.cause, CONTEXT_LIMITS) } : undefined);
+  // The clone keeps the original's prototype, so a sink's `instanceof` / `error.constructor` checks still see the same class.
+  const clone = Object.create(Object.getPrototypeOf(error) as object | null) as Error;
+  Object.defineProperty(clone, 'message', { value: redactSecrets(error.message), writable: true, configurable: true, enumerable: false });
+  if (error.cause !== undefined) Object.defineProperty(clone, 'cause', { value: redactDeep(error.cause, CONTEXT_LIMITS), writable: true, configurable: true, enumerable: false });
+  if (Array.isArray((error as { errors?: unknown }).errors)) {
+    Object.defineProperty(clone, 'errors', { value: redactDeep((error as { errors: unknown[] }).errors, CONTEXT_LIMITS), writable: true, configurable: true, enumerable: false });
+  }
   Object.assign(clone, redactDeep({ ...error }, CONTEXT_LIMITS));
   clone.name = error.name;
   clone.stack = error.stack ? redactSecrets(error.stack) : undefined;

@@ -24,8 +24,10 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API_ROOT = resolve(HERE, '..');
 const CONTAINER = join(API_ROOT, 'container');
-/** In dependency order: the core imports the three before it. */
-const MODULES = ['toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxJobs.mjs', 'sandboxCore.mjs'];
+/** In dependency order: the core imports the five before it. */
+const MODULES = ['toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxJobs.mjs', 'workspaceClient.mjs', 'sandboxGit.mjs', 'sandboxCore.mjs'];
+/** The workspace helper is NOT inlined: it is its own process (run as the shell user), so the runner writes it to a file. */
+const HELPER = 'workspaceAgent.mjs';
 const OUT = join(API_ROOT, 'src', 'application', 'runtime', 'generated', 'sandboxCoreSource.ts');
 
 /**
@@ -59,7 +61,7 @@ function builtinImports(sources) {
     .join('\n');
 }
 
-function render(sources) {
+function render(sources, helper) {
   const imports = builtinImports(sources);
   const inline = MODULES.map((name, i) => toInline(name, sources[i])).join('\n');
   return `/**
@@ -78,11 +80,15 @@ function render(sources) {
 export const SANDBOX_CORE_IMPORTS = ${JSON.stringify(imports)};
 
 export const SANDBOX_CORE_INLINE = ${JSON.stringify(inline)};
+
+/** \`workspaceAgent.mjs\` verbatim: the runner writes it to a file and the server spawns it as the shell user. */
+export const WORKSPACE_AGENT_SOURCE = ${JSON.stringify(helper)};
 `;
 }
 
 const sources = await Promise.all(MODULES.map((m) => readFile(join(CONTAINER, m), 'utf8')));
-const expected = render(sources);
+const helperSource = (await readFile(join(CONTAINER, HELPER), 'utf8')).replace(/\r\n/g, '\n');
+const expected = render(sources, helperSource);
 
 if (process.argv.includes('--check')) {
   let actual = null;

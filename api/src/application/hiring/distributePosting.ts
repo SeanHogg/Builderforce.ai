@@ -42,6 +42,7 @@ import { loadConnection } from '../connectors/connectorRuntime';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { AtsError } from './atsError';
 import { BOARD_JOB_UNIQUE_INDEX, PUBLISH_POSTING_ACTION } from './postingActionKeys';
+import { postingInputFor } from './postingInput';
 import {
   DEFAULT_DISTRIBUTE_DEPS,
   connectionBackedInput,
@@ -49,7 +50,6 @@ import {
   missingConnectionParams,
   pinnedPublicUrl,
   requirePosting,
-  type DistributablePosting,
   type DistributeDeps,
 } from './postingDistributionSupport';
 import {
@@ -190,42 +190,7 @@ export async function readPostingDistribution(
   return { distributions: byPosting.get(postingId) ?? [], boards };
 }
 
-const text = (value: string | null | undefined): string | undefined => {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  return trimmed || undefined;
-};
-
-/**
- * The shared posting body every board's `create_posting` takes (`POSTING_PARAMS` in
- * `hiring.ts`), filled from the record and the card.
- *
- * The RECORD supplies what it owns: the title, the body (summary plus the acceptance
- * bar — a board listing with no requirements is an advert with no job in it), the
- * seniority, and the posting id as `external_id`, which every board echoes back on
- * the applications it delivers. The CARD supplies what the record has no column for.
- * No salary is sent: `job_postings` holds a per-unit rate band whose meaning depends
- * on the engagement shape, and a published band nobody stated is the worst thing a
- * pay-transparency jurisdiction can find on a posting.
- *
- * Exported so the mapping is asserted directly.
- */
-export function postingInputFor(posting: DistributablePosting, listing: DistributionListing = {}): Record<string, unknown> {
-  const description = [text(posting.description), text(posting.requirements)].filter(Boolean).join('\n\n');
-  const input: Record<string, unknown> = {
-    title: posting.title,
-    description: description || posting.title,
-    external_id: posting.id,
-  };
-  const optional: Record<string, string | undefined> = {
-    location: text(listing.location),
-    employment_type: text(listing.employmentType),
-    seniority: text(listing.seniority) ?? text(posting.experienceLevel),
-    apply_url: text(listing.applyUrl),
-  };
-  for (const [key, value] of Object.entries(optional)) if (value) input[key] = value;
-  if (typeof listing.remote === 'boolean') input.remote = listing.remote;
-  return input;
-}
+export { postingInputFor };
 
 const clip = (message: string): string => message.slice(0, 600);
 

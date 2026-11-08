@@ -12,17 +12,19 @@
  * imported from both sides of the boundary.
  */
 
-/** The store, or `null` where there is none (server, private mode, sandbox). */
-export function localStore(): Storage | null {
+type StoreKind = 'localStorage' | 'sessionStorage';
+
+/** A store, or `null` where there is none (server, private mode, sandbox). */
+function webStore(kind: StoreKind): Storage | null {
   try {
-    return typeof window === 'undefined' ? null : window.localStorage;
+    return typeof window === 'undefined' ? null : window[kind];
   } catch {
     return null;
   }
 }
 
-export function readLocal(key: string): string | null {
-  const store = localStore();
+function readFrom(kind: StoreKind, key: string): string | null {
+  const store = webStore(kind);
   if (!store) return null;
   try {
     return store.getItem(key);
@@ -31,9 +33,8 @@ export function readLocal(key: string): string | null {
   }
 }
 
-/** `true` when the value is now stored; `false` on quota, private mode or the server. */
-export function writeLocal(key: string, value: string): boolean {
-  const store = localStore();
+function writeTo(kind: StoreKind, key: string, value: string): boolean {
+  const store = webStore(kind);
   if (!store) return false;
   try {
     store.setItem(key, value);
@@ -43,8 +44,8 @@ export function writeLocal(key: string, value: string): boolean {
   }
 }
 
-export function removeLocal(key: string): void {
-  const store = localStore();
+function removeFrom(kind: StoreKind, key: string): void {
+  const store = webStore(kind);
   if (!store) return;
   try {
     store.removeItem(key);
@@ -52,6 +53,21 @@ export function removeLocal(key: string): void {
     /* a failed remove leaves nothing worse than what was there */
   }
 }
+
+/** The store, or `null` where there is none (server, private mode, sandbox). */
+export const localStore = (): Storage | null => webStore('localStorage');
+
+export const readLocal = (key: string): string | null => readFrom('localStorage', key);
+
+/** `true` when the value is now stored; `false` on quota, private mode or the server. */
+export const writeLocal = (key: string, value: string): boolean => writeTo('localStorage', key, value);
+
+export const removeLocal = (key: string): void => removeFrom('localStorage', key);
+
+/** Per-tab twins of the above (`sessionStorage`), with the same never-throws contract. */
+export const readSession = (key: string): string | null => readFrom('sessionStorage', key);
+export const writeSession = (key: string, value: string): boolean => writeTo('sessionStorage', key, value);
+export const removeSession = (key: string): void => removeFrom('sessionStorage', key);
 
 /** A JSON value, or `null` for absent, unparseable or unavailable. */
 export function readLocalJson<T>(key: string): T | null {

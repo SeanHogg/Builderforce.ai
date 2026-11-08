@@ -23,7 +23,10 @@ import type { RuntimeService } from '../runtime/RuntimeService';
  */
 
 vi.mock('./laneRequirementGate', () => ({ enforceLaneRequirements: vi.fn() }));
-vi.mock('./evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
+vi.mock('./evaluateAutoRun', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./evaluateAutoRun')>()),
+  evaluateTaskAutoRun: vi.fn(),
+}));
 vi.mock('../audit/ticketAuditService', () => ({ TicketAuditService: class {} }));
 vi.mock('../kanban/ticketParticipants', () => ({ TicketParticipantsService: class {} }));
 vi.mock('../kanban/requestRoleRun', async (orig) => ({

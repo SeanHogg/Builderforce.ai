@@ -1,6 +1,7 @@
 import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import { uploadCanvasFile } from '@/lib/canvasMediaStore';
 import { getStoredTenantToken } from '@/lib/auth';
+import { bytesToBase64 } from '@/lib/base64Bytes';
 import { withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
 
 /**
@@ -14,13 +15,9 @@ import { withCreationDeliverable, type CreationDeliverable } from '@/lib/creatio
  */
 
 /** A blob as a `data:` URL — the form a guest's export is kept in. */
-export function blobDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('unreadable')));
-    reader.onerror = () => reject(reader.error ?? new Error('unreadable'));
-    reader.readAsDataURL(blob);
-  });
+export async function blobDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return `data:${blob.type || 'application/octet-stream'};base64,${bytesToBase64(bytes)}`;
 }
 
 /** The most a guest's file may weigh to be kept inside the object as a data URL. */

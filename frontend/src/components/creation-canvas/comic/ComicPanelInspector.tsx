@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from '../styles/creativeEditors.module.css';
 import type { ComicBubble, ComicBubbleKind, ComicPanel } from '@/lib/creation/comic/comicState';
@@ -66,11 +66,12 @@ type BubbleDraft = Pick<ComicBubble, 'text' | 'x' | 'y'>;
  */
 function BubbleEditor({ bubble, index, onUpdate, onRemove }: BubbleEditorProps) {
   const t = useTranslations('canvas.kinds.comic');
-  const [draft, setDraft] = useState<BubbleDraft>({ text: bubble.text, x: bubble.x, y: bubble.y });
-  const { schedule, flush, isPending } = useDebouncedPatch<Partial<BubbleDraft>>((patch) => onUpdate(bubble.id, patch));
-  // Follow the stored lettering when it changes from elsewhere (undo, a Brain edit), but never mid-edit.
-  useEffect(() => { if (!isPending()) setDraft({ text: bubble.text, x: bubble.x, y: bubble.y }); }, [bubble.text, bubble.x, bubble.y, isPending]);
-  const edit = (patch: Partial<BubbleDraft>) => { setDraft((current) => ({ ...current, ...patch })); schedule(patch); };
+  // Only what the person has changed and not yet written; everything else follows the stored
+  // lettering (undo, a Brain edit), so there is nothing to re-sync.
+  const [unsaved, setUnsaved] = useState<Partial<BubbleDraft>>({});
+  const { schedule, flush } = useDebouncedPatch<Partial<BubbleDraft>>((patch) => { onUpdate(bubble.id, patch); setUnsaved({}); });
+  const draft: BubbleDraft = { text: unsaved.text ?? bubble.text, x: unsaved.x ?? bubble.x, y: unsaved.y ?? bubble.y };
+  const edit = (patch: Partial<BubbleDraft>) => { setUnsaved((current) => ({ ...current, ...patch })); schedule(patch); };
 
   return <div className={styles.bubbleEditor}>
     <div className={styles.row}>

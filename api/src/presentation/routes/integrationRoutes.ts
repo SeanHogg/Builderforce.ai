@@ -36,6 +36,7 @@ import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
+import { maskTail } from '../../infrastructure/security/redactSecrets';
 
 /** POST / — the provider is checked against the live registry below, not a static enum. */
 const CreateCredentialBody = z.object({
@@ -66,12 +67,6 @@ const PatchCredentialBody = z.object({
  * their own OAuth / board-sync flows.
  */
 type CredentialProvider = string;
-
-/** Mask a credential value for display (show last 4 chars). */
-function maskToken(token: string): string {
-  if (token.length <= 4) return '****';
-  return '****' + token.slice(-4);
-}
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -220,7 +215,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     const maskedCreds: Record<string, string> = {};
     if (creds) {
       for (const [k, v] of Object.entries(creds)) {
-        maskedCreds[k] = maskToken(String(v));
+        maskedCreds[k] = maskTail(String(v));
       }
     }
 

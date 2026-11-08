@@ -379,7 +379,7 @@ export interface WorkspaceAnalyzersDeps {
 /** The code pack's analyzers over this host's shell and repo map (cached per sha), uploading the snapshot when asked. */
 export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPort {
     return codeAnalyzers({
-        async run(rootId, signal) {
+        async run(rootId, signal, onProgress) {
             const { snapshot, repoGraph, graphReads } = await analyseWorkspace(
                 {
                     caps: deps.caps,
@@ -388,6 +388,7 @@ export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPo
                     ...(deps.path ? { path: deps.path } : {}),
                     ...(deps.partitions ? { partitions: deps.partitions } : {}),
                     ...(deps.repoGraph ? { repoGraph: deps.repoGraph } : {}),
+                    ...(onProgress ? { onProgress } : {}),
                 },
                 signal,
             );

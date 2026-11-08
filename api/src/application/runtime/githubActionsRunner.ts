@@ -135,7 +135,18 @@ function cancelWatch(kill) {
   return () => clearInterval(timer);
 }
 
+/** The unprivileged user every model-run shell runs as (no sudo; shares the checkout through the runner's group). */
+const SHELL_USER = 'bfagent';
+
 async function serve() {
+  // BEFORE any request is served. (1) A checkout made by an older tenant workflow (no \`persist-credentials: false\`)
+  // holds the job's GITHUB_TOKEN in .git/config: remove it. (2) The model's shell must not share this process's uid
+  // (it would read /proc/<pid>/environ — BUILDERFORCE_TOKEN and the OIDC request token — or /proc/<pid>/mem), so
+  // create the sudo-less shell user and open the checkout to its group. Both fail CLOSED.
+  const scrubbed = await scrubCheckoutCredentials(WORKDIR);
+  if (!scrubbed.ok) throw new Error('could not remove the persisted checkout credential: ' + String(scrubbed.output || '').trim().slice(0, 300));
+  provisionShellUser({ user: SHELL_USER, workdir: WORKDIR });
+  process.env.BUILDERFORCE_SHELL_USER = SHELL_USER;
   const spec = await op('spec', {});
   if (!spec || spec.error) throw new Error('could not load the sandbox spec: ' + ((spec && spec.error) || 'unknown'));
   const box = createSandboxBox({

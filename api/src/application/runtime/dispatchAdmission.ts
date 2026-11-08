@@ -175,7 +175,7 @@ export async function admitCloudRun(
     if (args.cloudBound) {
       await db.update(executions)
         .set({ cloudAdmittedSeq: sql<number>`nextval('executions_cloud_admitted_seq')` })
-        .where(eq(executions.id, args.executionId));
+        .where(and(eq(executions.tenantId, args.tenantId), eq(executions.id, args.executionId)));
     }
     const cap = args.cloudBound
       ? await resolveConcurrentRunLimit(db, args.tenantId, env, { actingUserId: args.actingUserId })
@@ -193,17 +193,17 @@ export async function admitCloudRun(
   }
   if (!refusal) return null;
 
-  await settleRefusedRun(db, runtimeService, args.executionId);
+  await settleRefusedRun(db, runtimeService, args.tenantId, args.executionId);
   await recordCloudToolEvent(db, {
     tenantId: args.tenantId, cloudAgentRef: args.cloudAgentRef, executionId: args.executionId,
     toolName: 'runtime.route', category: 'planning',
     detail: { reason: refusal.code, taskId: args.taskId },
     result: refusal.message,
   }).catch((error) => reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'admitCloudRun', context: { logMessage: '[dispatch-admission] timeline event failed', details: { executionId: args.executionId, error } } }));
-  const settled = await runtimeService.getExecution(args.executionId).then((e) => e.toPlain()).catch(() => ({ id: args.executionId, status: 'cancelled' }));
+  const settled: { status: string } = await runtimeService.getExecution(args.executionId).then((e) => e.toPlain()).catch(() => ({ id: args.executionId, status: 'cancelled' }));
   notifyExecutionSubscribers(args.executionId, {
-    type: 'done', executionId: args.executionId, status: (settled as { status: never }).status,
-    execution: settled as never, ts: new Date().toISOString(),
+    type: 'done', executionId: args.executionId, status: settled.status,
+    execution: settled, ts: new Date().toISOString(),
   });
   return withAdmissionRefusal(settled, refusal);
 }
@@ -223,7 +223,7 @@ export async function admitResumedRun(
     if (!cap.allowed) return capRefusal(cap.limit, cap.used, String(cap.effectivePlan));
     await db.update(executions)
       .set({ cloudAdmittedSeq: sql<number>`nextval('executions_cloud_admitted_seq')` })
-      .where(eq(executions.id, args.executionId));
+      .where(and(eq(executions.tenantId, args.tenantId), eq(executions.id, args.executionId)));
     return null;
   } catch (error) {
     reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'admitResumedRun' });
@@ -235,7 +235,7 @@ export async function admitResumedRun(
  * Cancel a refused run so it never starts and never counts. If the cancel fails twice, the
  * row must at least stop holding a slot: clear its admission stamp.
  */
-async function settleRefusedRun(db: Db, runtimeService: RuntimeService, executionId: number): Promise<void> {
+async function settleRefusedRun(db: Db, runtimeService: RuntimeService, tenantId: number, executionId: number): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       await runtimeService.cancel(executionId, 'system:admission');
@@ -244,7 +244,8 @@ async function settleRefusedRun(db: Db, runtimeService: RuntimeService, executio
       if (attempt === 1) reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'settleRefusedRun', level: 'warning', context: { logMessage: '[dispatch-admission] could not cancel a refused run; releasing its slot', details: { executionId } } });
     }
   }
-  await db.update(executions).set({ cloudAdmittedSeq: null }).where(eq(executions.id, executionId))
+  await db.update(executions).set({ cloudAdmittedSeq: null })
+    .where(and(eq(executions.tenantId, tenantId), eq(executions.id, executionId)))
     .catch((error) => reportCaughtError(error, { source: 'application/runtime/dispatchAdmission.ts', operation: 'settleRefusedRun', context: { logMessage: '[dispatch-admission] could not release a refused run\'s slot', details: { executionId, error } } }));
 }
 

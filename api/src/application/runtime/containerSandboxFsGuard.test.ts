@@ -87,6 +87,19 @@ describe.skipIf(!posix)('sandbox fs path guard', () => {
     expect(existsSync(join(outside, 'later.txt'))).toBe(false);
   });
 
+  it('refuses .git reached through an in-clone symlink alias (ln -s .git g)', async () => {
+    await mkdir(join(workdir, '.git'));
+    await writeFile(join(workdir, '.git', 'config'), '[core]\n');
+    await symlink('.git', join(workdir, 'g'));
+    await symlink('.git/config', join(workdir, 'gc'));
+    expect((await fs({ op: 'read', path: 'g/config' })).ok).toBe(false);
+    expect((await fs({ op: 'read', path: 'gc' })).ok).toBe(false);
+    expect((await fs({ op: 'write', path: 'g/hooks/pre-commit', content: '#!/bin/sh' })).ok).toBe(false);
+    expect((await fs({ op: 'delete', path: 'g/config' })).ok).toBe(false);
+    expect(await readFile(join(workdir, '.git', 'config'), 'utf8')).toBe('[core]\n');
+    expect(existsSync(join(workdir, '.git', 'hooks'))).toBe(false);
+  });
+
   it('refuses a write and a delete whose PARENT directory is a symlink to outside', async () => {
     await writeFile(join(outside, 'victim.txt'), 'keep');
     await symlink(outside, join(workdir, 'parent-link'));

@@ -71,7 +71,8 @@ export const greenhouseJobBoard: ConnectorManifest = {
       // the jobs it is for, which is what the import's guard compares.
       applicants: {
         postingParam: 'job_id',
-        postingIdField: ['jobs.0.id'],
+        // ANY of the application's jobs (a prospect can be on several), not just the first.
+        postingIdField: ['jobs.*.id'],
         externalId: ['id'],
         candidateId: ['candidate_id', 'candidate.id'],
         firstName: ['candidate.first_name'],

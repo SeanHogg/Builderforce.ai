@@ -25,19 +25,19 @@ export function BoardBudgetControl({ boardId, buttonStyle }: { boardId: string; 
   const t = useTranslations('boardBudget');
   const format = useFormatter();
   const [open, setOpen] = useState(false);
-  const [budget, setBudget] = useState<BoardBudget | null>(null);
-  const [error, setError] = useState<unknown>(null);
-
-  // A different board must never show the previous board's numbers while it loads.
-  useEffect(() => { setBudget(null); setError(null); }, [boardId]);
+  // Results are tagged with the board they belong to, so a different board never shows the
+  // previous board's numbers while it loads - derived at render, no reset effect.
+  const [loaded, setLoaded] = useState<{ boardId: string; budget: BoardBudget | null; error: unknown } | null>(null);
+  const current = loaded?.boardId === boardId ? loaded : null;
+  const budget = current?.budget ?? null;
+  const error = current?.error ?? null;
 
   useEffect(() => {
     if (!open) return;
     let live = true;
-    setError(null);
     boardBudgetApi.get(boardId)
-      .then((b) => { if (live) setBudget(b); })
-      .catch((e) => { if (live) setError(e); });
+      .then((b) => { if (live) setLoaded({ boardId, budget: b, error: null }); })
+      .catch((e) => { if (live) setLoaded({ boardId, budget: null, error: e }); });
     return () => { live = false; };
   }, [open, boardId]);
 

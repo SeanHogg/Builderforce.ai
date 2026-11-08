@@ -25,8 +25,16 @@ const NOTHING: ResolvedUrl = { url: null, resolvedId: null };
 /**
  * The stored id as the `resolve_url` call must carry it in `idParam`: Rest.li 2.0 batch
  * keys are `List(<url-encoded id>)` (LinkedIn's task URN contains `:`), everything else
- * goes as is. The caller's own query encoding then applies on top, which is correct —
- * the server decodes the transport once and Rest.li decodes the element once more.
+ * goes as is.
+ *
+ * The result is ALREADY the wire form of the value: the param that carries it must be
+ * declared `raw: true`, so the runtime appends it verbatim. Run through URLSearchParams
+ * the key would be encoded twice (`List%28urn%253A…`), which Rest.li would decode once
+ * and read as a different key.
+ *
+ * UNVERIFIED against the live LinkedIn API: no credentials were available here. The
+ * encoding follows the Rest.li 2.0 protocol document and is asserted only as the exact
+ * URL string the runtime builds (`connectorUrlResolution.test.ts`).
  */
 export function encodeResolveId(resolve: ConnectorUrlResolution, externalId: string): string {
   return resolve.idEncoding === 'restli-list' ? `List(${encodeURIComponent(externalId)})` : externalId;

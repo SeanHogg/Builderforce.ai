@@ -51,14 +51,14 @@ export default function PersonProfileClient({ userId }: { userId: string }) {
                 style={{
                   width: 64, height: 64, borderRadius: 'var(--radius-full)', flexShrink: 0,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--surface-2)', color: 'var(--text-strong)', fontSize: 24, fontWeight: 700,
+                  background: 'var(--surface-2)', color: 'var(--text-strong)', fontSize: 'var(--font-size-section)', fontWeight: 700,
                 }}
               >
                 {person.displayName.slice(0, 1).toUpperCase()}
               </span>
             )}
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
+              <h1 style={{ margin: 0, fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
                 {person.displayName}
               </h1>
               <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)' }}>

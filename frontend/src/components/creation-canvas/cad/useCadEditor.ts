@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CreationNodeData } from '../types';
 import { useCreationNodeActions } from '../bodies/nodeActions';
 import { buildCadExport, type CadExportFormat } from '@/lib/creation/cad/cadExport';
@@ -33,7 +33,8 @@ export function useCadEditor(data: CreationNodeData) {
   );
   const [selection, setSelection] = useState<readonly string[]>([]);
   const latest = useRef({ state, data });
-  latest.current = { state, data };
+  // Edits made in the same tick advance `latest` themselves (see `change`).
+  useEffect(() => { latest.current = { state, data }; }, [state, data]);
   const editable = !!onEdit;
 
   const commit = useCallback((next: CadState) => { onEdit?.({ cadState: next } as Partial<CreationNodeData>); }, [onEdit]);

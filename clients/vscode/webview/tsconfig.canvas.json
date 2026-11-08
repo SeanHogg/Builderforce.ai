@@ -139,6 +139,9 @@
     // and reach it through `@/*`, so they are checked under the options that source
     // is written against — the same reason `src/canvas` is here.
     "src/WorkspaceApp.tsx",
+    // The Voice marketplace host: it mounts the frontend's `<VoiceMarketplace>` through `@/*`
+    // and the canvas providers, so it is checked with the canvas (the strict project excludes it).
+    "src/VoiceMarketplaceScreen.tsx",
     // The Knowledge view's host side: it mounts the shared `@builderforce/knowledge-graph-view`
     // (frontend-shaped source and peers), so it is checked with the canvas, not the strict project.
     "src/knowledgeGraph",

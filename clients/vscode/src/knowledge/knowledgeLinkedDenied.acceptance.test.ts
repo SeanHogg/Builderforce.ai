@@ -70,6 +70,7 @@ vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => ({
 }));
 
 import { forgetRootPorts } from "@builderforce/agent-tools/knowledge";
+import { closeFolderKnowledge } from "./folderKnowledge";
 import { loadGraph, reviewRoot } from "./knowledgeService";
 import { rootForPath } from "./knowledgeRoots";
 import { disposeReplicas, replicaStatusOf } from "./knowledgeReplica";
@@ -103,6 +104,10 @@ async function reviewAndDraw(linked: boolean): Promise<{ graph: KnowledgeGraph |
   // The SAME folder for both runs: a root id is the folder's (its git remote, else a hash of its URI), never the
   // link state's, so the digests compare like with like. Only the stored snapshot is cleared between runs.
   mocks.files.clear();
+  // The review's local store is the folder's SQLite file (G03), not `mocks.files`: close it and delete it, or the second run
+  // finds the first run's manifest, has nothing to change, and queues nothing for the replica.
+  await closeFolderKnowledge();
+  fs.rmSync(path.join(mocks.folder, ".builderforce", "cache"), { recursive: true, force: true });
   forgetRootPorts();
   const root = rootForPath(mocks.folder, [{ path: mocks.folder }])!;
   const review = reviewRoot({} as never, root);
@@ -116,7 +121,7 @@ beforeEach(() => {
   mocks.fixture = generatedFixture();
   mocks.folder = fs.mkdtempSync(path.join(os.tmpdir(), "bf-acceptance-"));
 });
-afterEach(async () => { await disposeReplicas(); });
+afterEach(async () => { await disposeReplicas(); await closeFolderKnowledge(); });
 
 describe.skipIf(!localSqliteAvailable())("a linked root whose server answers 429 to every request", () => {
   it("finishes the review and draws the same model as the unlinked run", async () => {

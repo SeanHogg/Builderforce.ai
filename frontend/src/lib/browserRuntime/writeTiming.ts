@@ -144,6 +144,7 @@ let slowBuffer: Pending[] = [];
 let baselineSlot: Pending | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let pagehideBound = false;
+let droppedReports = 0;
 
 /** Send what the window collected as ONE array POST. Safe to call with nothing buffered. */
 export function flushWriteReports(): void {
@@ -158,10 +159,15 @@ export function flushWriteReports(): void {
   const spans = pending.map((p) => writeSpan(p.report, p.sample, p.target));
   try {
     // Telemetry must never disturb a write: a sync throw or a rejection is dropped.
-    void Promise.resolve(reporter(spans)).catch(() => undefined);
+    void Promise.resolve(reporter(spans)).catch(() => { droppedReports += spans.length; });
   } catch {
-    /* dropped */
+    droppedReports += spans.length;
   }
+}
+
+/** Reports lost to a throwing reporter this tab: telemetry never disturbs a write, but the loss is countable. */
+export function droppedWriteReportCount(): number {
+  return droppedReports;
 }
 
 function enqueue(item: Pending): void {

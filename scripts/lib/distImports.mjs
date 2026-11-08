@@ -12,7 +12,24 @@ import { builtinModules } from 'node:module';
 const BUILTINS = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 
 /** `from "x"`, side-effect `import "x"`, `import("x")`, `require("x")`, `export * from "x"`. */
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)(["'])([^"'\n]+)\1/g;
+const SPECIFIER_HEAD = String.raw`(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*|\brequire\s*\(\s*)`;
+
+/**
+ * A quoted npm package specifier: an optional `@scope/`, a lowercase name, then optional subpath
+ * segments. Anything else between the quotes is not a package import - in minified output a
+ * `from`/`import` token followed by a quote can otherwise swallow a whole run of code up to the
+ * next quote. Relative, absolute, `node:` and `data:` specifiers fail this shape and are skipped,
+ * which is the same outcome the not-a-package filter below gives them.
+ */
+const PACKAGE_SPECIFIER = String.raw`((?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:\/[\w.@-]+)*)`;
+
+const SPECIFIER = new RegExp(`${SPECIFIER_HEAD}(["'])${PACKAGE_SPECIFIER}\\1`, 'g');
+
+/** Lines that are only a comment (JSDoc examples in declaration files quote imports that are not imports). */
+const COMMENT_LINE = /^\s*(?:\*|\/\/|\/\*)/;
+
+const withoutCommentLines = (source) =>
+  source.split('\n').filter((line) => !COMMENT_LINE.test(line)).join('\n');
 
 /** The package name of a specifier: `a/b` -> `a`, `@s/p/x` -> `@s/p`. */
 export function packageNameOf(specifier) {
@@ -40,7 +57,7 @@ function isNotAPackage(specifier) {
  */
 export function bareImports(source) {
   const found = new Set();
-  for (const match of source.matchAll(SPECIFIER)) {
+  for (const match of withoutCommentLines(source).matchAll(SPECIFIER)) {
     const specifier = match[2];
     if (!isNotAPackage(specifier)) found.add(packageNameOf(specifier));
   }

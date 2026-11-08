@@ -13,6 +13,7 @@
 
 import { getStoredUser, onSessionCleared } from './auth';
 import { createIdbKeyValue, type IdbKeyValue } from './idbKeyValue';
+import { localStore, readLocal, removeLocal } from './storage';
 import { fetchCloneEmbedding, uploadCloneEmbedding } from './voiceClones';
 
 type Embedding = import('./voiceEngine').SpeakerEmbedding;
@@ -27,7 +28,7 @@ const SHARED_LEGACY_DB = 'builderforce-voice';
  * never read (or inherit) another's. Signing out wipes every cache this tab opened plus
  * the signed-out user's persisted one.
  */
-const caches = new Map<string, IdbKeyValue<Embedding>>();
+const storesByUser = new Map<string, IdbKeyValue<Embedding>>();
 /** Clone ids the server already told us have no embedding for this user (licensed / none) —
  *  skip the round-trip for the rest of the tab. Keyed `${userId}:${cloneId}`. */
 const knownAbsent = new Set<string>();
@@ -38,17 +39,19 @@ function dropSharedLegacyDb(): void {
   legacyDbDropped = true;
   try {
     if (typeof indexedDB !== 'undefined') indexedDB.deleteDatabase(SHARED_LEGACY_DB);
-  } catch { /* best effort */ }
+  } catch {
+    legacyDbDropped = false; // not dropped: the next cache open tries again
+  }
 }
 
 function cacheFor(userId: string): IdbKeyValue<Embedding> {
   dropSharedLegacyDb();
-  let cache = caches.get(userId);
-  if (!cache) {
-    cache = createIdbKeyValue<Embedding>(`${SHARED_LEGACY_DB}:${userId}`, 'embeddings');
-    caches.set(userId, cache);
+  let store = storesByUser.get(userId);
+  if (!store) {
+    store = createIdbKeyValue<Embedding>(`${SHARED_LEGACY_DB}:${userId}`, 'embeddings');
+    storesByUser.set(userId, store);
   }
-  return cache;
+  return store;
 }
 
 function currentUserId(): string | null {
@@ -101,10 +104,10 @@ export async function deleteEmbedding(cloneId: number): Promise<void> {
 /** Sign-out: wipe the in-memory copies and the persisted cache of every user this tab touched, including the one leaving. */
 export function clearEmbeddingCaches(): void {
   const leaving = currentUserId();
-  const toClear = new Set<string>(caches.keys());
+  const toClear = new Set<string>(storesByUser.keys());
   if (leaving) toClear.add(leaving);
   for (const userId of toClear) void cacheFor(userId).clear();
-  caches.clear();
+  storesByUser.clear();
   knownAbsent.clear();
   migrating = null;
 }
@@ -122,19 +125,22 @@ export function migrateLegacyEmbeddings(): Promise<void> {
 async function migrate(): Promise<void> {
   const userId = currentUserId();
   if (!userId) return;
+  const store = localStore();
+  if (!store) return;
   let keys: string[];
   try {
-    keys = Object.keys(localStorage).filter((k) => k.startsWith(LEGACY_PREFIX));
+    keys = Object.keys(store).filter((k) => k.startsWith(LEGACY_PREFIX));
   } catch {
     return;
   }
+  let incomplete = false;
   for (const key of keys) {
     const cloneId = Number(key.slice(LEGACY_PREFIX.length));
     try {
-      const raw = localStorage.getItem(key);
+      const raw = readLocal(key);
       const embedding = raw ? (JSON.parse(raw) as Embedding) : null;
       if (!embedding || !Array.isArray(embedding.data) || !Number.isInteger(cloneId)) {
-        localStorage.removeItem(key);
+        removeLocal(key);
         continue;
       }
       const outcome = await uploadCloneEmbedding(cloneId, embedding.data, embedding.sampleRate ?? null);
@@ -142,7 +148,10 @@ async function migrate(): Promise<void> {
       // account's only copy. Either way keep the key. Only a 404 ('refused') drops it.
       if (outcome === 'retry' || outcome === 'forbidden') continue;
       if (outcome === 'done') await cacheFor(userId).put(String(cloneId), embedding);
-      localStorage.removeItem(key);
-    } catch { /* leave the key; try again next load */ }
+      removeLocal(key);
+    } catch {
+      incomplete = true; // leave the key; a later call to migrateLegacyEmbeddings runs again
+    }
   }
+  if (incomplete) migrating = null;
 }

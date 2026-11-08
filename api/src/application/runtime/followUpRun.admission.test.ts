@@ -19,6 +19,17 @@ vi.mock('./dispatchAdmission', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./dispatchAdmission')>();
   return { ...actual, preAdmitRun: (...a: unknown[]) => preAdmitRun(...a) };
 });
+// The real dispatchAdmission (kept for its pure helpers) pulls these in; stub them so the
+// import graph does not reach the cloud engine.
+vi.mock('./autoRunSkipLedger', () => ({ recordAutoRunSkip: async () => undefined }));
+vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: async () => undefined }));
+vi.mock('./executionEvents', () => ({ notifyExecutionSubscribers: () => undefined }));
+vi.mock('./deferredDispatch', () => ({ parkDeferredDispatch: async () => undefined }));
+vi.mock('./concurrentRunCap', () => ({
+  enforceConcurrentRunCap: async () => ({ allowed: true }),
+  liveCloudExecutionIds: async () => [],
+  resolveConcurrentRunLimit: async () => ({ limit: null }),
+}));
 vi.mock('./executionSteering', () => ({ enqueueExecutionMessage: async () => 1 }));
 vi.mock('./cloudAgent/prd', () => ({ recordPrdDirective: async () => undefined }));
 vi.mock('../swimlane/evaluateAutoRun', () => ({ AUTO_RUN_REASON_TEXT: { cloud_run_limit: 'x' } }));

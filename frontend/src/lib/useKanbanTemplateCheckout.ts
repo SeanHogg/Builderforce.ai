@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { creationListingApi } from './creationListings';
 import { isPurchaseRequiredError } from './planLimitError';
+import { readSession, removeSession, writeSession } from './storage';
 
 /**
  * A priced kanban template is a marketplace listing, so installing / applying one the
@@ -24,14 +25,11 @@ const PENDING_PREFIX = 'bf.kanbanTemplateCheckout:';
 /** One pending entry PER consumer, so only the surface that started the checkout resumes it. */
 const pendingKey = (consumer: string): string => `${PENDING_PREFIX}${consumer}`;
 
-function readPending(consumer: string): string | null {
-  try { return window.sessionStorage.getItem(pendingKey(consumer)); } catch { return null; }
-}
+const readPending = (consumer: string): string | null => readSession(pendingKey(consumer));
+// A failed write is fine: the webhook still grants the licence.
 function writePending(consumer: string, templateId: string | null): void {
-  try {
-    if (templateId) window.sessionStorage.setItem(pendingKey(consumer), templateId);
-    else window.sessionStorage.removeItem(pendingKey(consumer));
-  } catch { /* storage unavailable: the webhook still grants the licence */ }
+  if (templateId) writeSession(pendingKey(consumer), templateId);
+  else removeSession(pendingKey(consumer));
 }
 
 /** This page's path + query, so the `?checkout=` return lands on the same view. */

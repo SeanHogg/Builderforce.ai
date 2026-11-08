@@ -10,7 +10,7 @@
  * Pure: the shell is reached only through the injected {@link ToolContext}. Worker-safe.
  */
 
-import type { AnalyzerPort, Extracted, PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import type { AnalyzerPort, AnalyzerProgress, Extracted, PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { createAnalyzeCodebaseTool } from '../codeAnalysisTool.js';
 import type { ToolContext } from '../tool.js';
@@ -23,13 +23,13 @@ export interface CodeAnalysisRun {
 }
 
 export interface CodeAnalyzersDeps {
-    run(rootId: string, signal?: AbortSignal): Promise<CodeAnalysisRun>;
+    run(rootId: string, signal?: AbortSignal, onProgress?: (p: AnalyzerProgress) => void): Promise<CodeAnalysisRun>;
 }
 
 export function codeAnalyzers(deps: CodeAnalyzersDeps): AnalyzerPort {
     return {
-        async analyse(rootId: string, signal?: AbortSignal): Promise<Extracted[]> {
-            const run = await deps.run(rootId, signal);
+        async analyse(rootId: string, signal?: AbortSignal, onProgress?: (p: AnalyzerProgress) => void): Promise<Extracted[]> {
+            const run = await deps.run(rootId, signal, onProgress);
             return [
                 ...(run.repoGraph ? repoGraphToExtracted(run.repoGraph, rootId) : []),
                 ...(run.analysis ? analysisToExtracted(run.analysis, rootId) : []),
@@ -45,9 +45,12 @@ export function codeAnalyzers(deps: CodeAnalyzersDeps): AnalyzerPort {
  */
 export async function runCodeAnalysis(
     ctx: ToolContext,
-    opts: { path?: string; partitions?: PartitionRegistry } = {},
+    opts: { path?: string; partitions?: PartitionRegistry; onToolSettled?(): void } = {},
 ): Promise<CodeAnalysisSnapshot | null> {
-    const tool = createAnalyzeCodebaseTool(opts.partitions ? { partitions: opts.partitions } : {});
+    const tool = createAnalyzeCodebaseTool({
+        ...(opts.partitions ? { partitions: opts.partitions } : {}),
+        ...(opts.onToolSettled ? { onToolSettled: opts.onToolSettled } : {}),
+    });
     const result = await tool.execute(opts.path ? { path: opts.path } : {}, ctx);
     const snapshot = result.data['snapshot'];
     return snapshot && typeof snapshot === 'object' ? (snapshot as CodeAnalysisSnapshot) : null;

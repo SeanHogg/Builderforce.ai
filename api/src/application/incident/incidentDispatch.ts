@@ -28,6 +28,14 @@ export async function findTenantIncidentManagerRef(db: Db, tenantId: number): Pr
 }
 
 /**
+ * A triage dispatch that ended without a run. Shared by the direct path and the deferred-dispatch
+ * sweep's `incident` handler (a parked triage that is finally refused or abandoned).
+ */
+export function reportIncidentTriageRefused(incidentId: string, refusal: { reason?: string; message?: string } | null | undefined): void {
+  reportCaughtError(new Error(`incident triage dispatch refused: ${refusal?.message ?? 'no reason given'}`), { source: "application/incident/incidentDispatch.ts", operation: "dispatchIncidentTriage", context: { logMessage: '[incident] triage dispatch refused', details: { incidentId, reason: refusal?.reason ?? null } } });
+}
+
+/**
  * Dispatch the Incident Manager to triage one incident. Best-effort: returns false
  * when the tenant has no Incident Manager, the incident has no board task to anchor
  * on, or dispatch fails — the incident + its initial page stand regardless.
@@ -65,7 +73,7 @@ export async function dispatchIncidentTriage(
       payload,
       submittedBy: composeDispatcherLabel('incident', incidentRef),
       // One-shot: nothing re-sweeps an incident, so a deferred admission is parked and retried.
-      parkIfDeferred: true,
+      parkIfDeferred: { kind: 'incident', meta: { incidentId: params.incidentId } },
     });
     await Promise.allSettled(deferred);
     // Deferred = parked for the `deferred-dispatch` sweep, which starts it when a slot frees.
@@ -73,7 +81,7 @@ export async function dispatchIncidentTriage(
     // A refusal is not a triage. Reporting `true` for one told the incident feed an
     // agent had picked the incident up when the dispatcher had declined it.
     if (executionId == null) {
-      reportCaughtError(new Error(`incident triage dispatch refused: ${refusal?.message ?? 'no reason given'}`), { source: "application/incident/incidentDispatch.ts", operation: "dispatchIncidentTriage", context: { logMessage: '[incident] triage dispatch refused', details: { incidentId: params.incidentId, reason: refusal?.reason ?? null } } });
+      reportIncidentTriageRefused(params.incidentId, refusal);
       return false;
     }
     return true;

@@ -28,12 +28,19 @@ const args = { tenantId: 1, actor: 'superadmin:u' };
 
 describe('applyDispositions', () => {
   it('closes as CANCELLED (never done) with the evidence quoted, and stamps applied', async () => {
-    const h = harness([row(1, 'close', { supersededBy: 9, evidence: { rule: 'superseded' } })], [snap(1)]);
+    const h = harness([row(1, 'close', { supersededBy: 9, evidence: { rule: 'superseded' } })], [snap(1), snap(9)]);
     const r = await applyDispositions(db, args, h.deps);
     expect(r.applied).toBe(1);
     expect(h.tasks.get(1)!.status).toBe('cancelled');
     expect(h.tasks.get(1)!.description).toContain('Superseded by #9');
     expect(h.stamped).toEqual([1]);
+  });
+
+  it('does not quote a superseded_by target outside the tenant snapshot (cross-tenant id)', async () => {
+    const h = harness([row(1, 'close', { supersededBy: 9, evidence: { rule: 'superseded' } })], [snap(1)]);
+    await applyDispositions(db, args, h.deps);
+    expect(h.tasks.get(1)!.status).toBe('cancelled');
+    expect(h.tasks.get(1)!.description).not.toContain('#9');
   });
 
   it('consolidates: absorbs the duplicate into the canonical ticket FIRST, then cancels it', async () => {

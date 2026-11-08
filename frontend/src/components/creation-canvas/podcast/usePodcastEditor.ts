@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useLatestRef } from '../hooks/useLatestRef';
 import { slugify, type CanvasVideoSource, type CanvasVideoTimeline } from '@builderforce/creation-canvas-contract';
 import type { CreationNodeData } from '../types';
 import { storeCanvasMedia } from '@/lib/canvasMediaStore';
@@ -62,8 +63,7 @@ export function usePodcastEditor(data: CreationNodeData, id: string, onEdit: ((p
   const [busy, setBusy] = useState(false);
   const [importProblem, setProblem] = useState<Exclude<PodcastEditorProblem, 'export'> | null>(null);
   const [feedProblems, setFeedProblems] = useState<PodcastFeedProblem[]>([]);
-  const dataRef = useRef(data);
-  dataRef.current = data;
+  const dataRef = useLatestRef(data);
 
   /** `addedBytes` records the stored size of sources added in this write, by source id (the enclosure `length`). */
   const write = useCallback((nextTimeline: CanvasVideoTimeline, nextSources: CanvasVideoSource[] = sources, addedBytes?: Record<string, number>) => {
@@ -111,7 +111,7 @@ export function usePodcastEditor(data: CreationNodeData, id: string, onEdit: ((p
       setFeedProblems((current) => current.filter((problem) => problem !== 'noEnclosureLength'));
       onEdit?.({ podcastEpisode: { ...latest, audioBytes: bytes } } as Partial<CreationNodeData>);
     });
-  }, [episode, onEdit]);
+  }, [episode, onEdit, dataRef]);
   const patchShow = useCallback((patch: Partial<PodcastShowMeta>) => onEdit?.({ podcastShow: { ...show, ...patch } } as Partial<CreationNodeData>), [onEdit, show]);
 
   const stem = slugify(String(data.title ?? ''), { maxLength: 60, fallback: 'episode' });
@@ -147,7 +147,7 @@ export function usePodcastEditor(data: CreationNodeData, id: string, onEdit: ((p
     if (!result.ok) { setFeedProblems(result.problems); return; }
     setFeedProblems([]);
     void run('rss');
-  }, [run, id]);
+  }, [run, id, dataRef]);
 
   const exportShowNotes = useCallback(() => { void run('notes'); }, [run]);
   const problem: PodcastEditorProblem | null = exporter.status === 'failed' ? 'export' : importProblem;

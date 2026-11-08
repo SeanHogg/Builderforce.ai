@@ -41,8 +41,7 @@ import { connect as netConnect } from 'node:net';
 // The web-scan TLS stage exists precisely because a Cloudflare Worker has no socket:
 // `node:tls` is what lets this process read the peer certificate the Worker cannot.
 import { connect as tlsConnect } from 'node:tls';
-import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzip } from 'node:zlib';
@@ -51,7 +50,7 @@ import { promisify } from 'node:util';
 // GitHub Actions runner inlines, so both transports serve one implementation.
 // Side-effect import, FIRST among our modules: spawned git/npm/pip must trust the egress CA.
 import './egressTrust.mjs';
-import { bootJobIdPrefix, closeSandboxBox, createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
+import { bootJobIdPrefix, closeSandboxBox, createSandboxBox, gitAuthOf, runGit, runShell, serveSandbox, shellUser, spawnShell } from './sandboxCore.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -224,10 +223,11 @@ async function startPreviewDevServer(spec, workdir) {
   //    the agent's own shell commands. `proc.current` is deliberately NOT set.
   let child;
   try {
-    child = spawn('bash', ['-lc', chosen.command], {
+    // Through THE shell spawn: the dev server runs as the unprivileged shell user with the filtered env
+    // (never this process's own), plus the Worker's preview plan env (project secrets, by design).
+    child = spawnShell(chosen.command, {
       cwd: workdir,
-      env: { ...process.env, ...(step.env && typeof step.env === 'object' ? step.env : {}) },
-      detached: true,
+      extraEnv: step.env && typeof step.env === 'object' ? step.env : {},
       stdio: 'ignore',
     });
     child.unref();
@@ -280,16 +280,21 @@ const opening = new Map();
 
 /** Clone the ticket's HEAD branch (prior runs' WIP), falling back to base on run #1. */
 async function cloneInto(spec, workdir) {
-  const { cloneUrl, headBranch, baseBranch } = spec.repo;
+  const { headBranch, baseBranch } = spec.repo;
+  // The clone URL carries NO credential and the run token is supplied for this command only (see runGit), so
+  // neither `origin` in .git/config nor the model shell's environ ever holds it. The shell user shares the
+  // tree through the group: group-writable worktree files (umask) and a group-shared repository.
+  if (shellUser()) process.umask(0o002);
+  const auth = gitAuthOf(spec);
+  const cloneArgs = ['clone', '-c', 'core.sharedRepository=group'];
   // FULL clone (no `--depth`): a shallow clone hid earlier passes and had no merge-base
   // with the base branch, so `git_sync_latest` / `git diff main` could not work.
   let clone = headBranch
-    ? await runShell(`git clone -b "${headBranch}" "${cloneUrl}" .`, workdir, null)
+    ? await runGit([...cloneArgs, '-b', headBranch, auth.url, '.'], workdir, auth)
     : { exitCode: 1, output: 'no head branch' };
   let checkedOut = clone.exitCode === 0 ? headBranch : null;
   if (clone.exitCode !== 0) {
-    const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
-    clone = await runShell(`git clone ${baseArg} "${cloneUrl}" .`, workdir, null);
+    clone = await runGit([...cloneArgs, ...(baseBranch ? ['-b', baseBranch] : []), auth.url, '.'], workdir, auth);
     if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
   }
   return { ok: clone.exitCode === 0, branch: checkedOut, output: clone.output };
@@ -300,6 +305,8 @@ async function openSandbox(spec) {
   if (existing) return { ok: true, branch: existing.branch, reused: true };
   if (!spec.repo || typeof spec.repo.cloneUrl !== 'string') return { ok: false, error: 'no repository to clone' };
   const workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
+  // mkdtemp makes 0700: open the clone to the shell user's group (setgid so new entries keep it).
+  await chmod(workdir, 0o2775);
   const cloned = await cloneInto(spec, workdir);
   if (!cloned.ok) {
     await rm(workdir, { recursive: true, force: true }).catch(() => {});
@@ -310,7 +317,7 @@ async function openSandbox(spec) {
   box.previewStarted = false;
   sandboxes.set(spec.executionId, box);
   localServiceEvent(spec, 'runtime.clone', { branch: cloned.branch, requestedHead: spec.repo.headBranch ?? null, base: spec.repo.baseBranch ?? null },
-    `cloned ${spec.repo.cloneUrl.replace(/\/\/[^@]*@/, '//')} on branch ${cloned.branch}`);
+    `cloned ${spec.repo.cloneUrl} on branch ${cloned.branch}`);
   // The dev server comes up beside the run, never in front of it: fire-and-forget, and a
   // preview that never answers must not delay or fail the run.
   if (spec.preview) {

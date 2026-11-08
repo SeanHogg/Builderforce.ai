@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { connectorsApi, type ConnectorConnection } from '@/lib/connectorsApi';
 
 /**
@@ -13,27 +13,39 @@ export interface UseStepConnections {
   reload: () => void;
 }
 
+interface Settled {
+  /** The connector and reload count this answer belongs to; an answer for any other is not current. */
+  key: string;
+  attempt: number;
+  connections: ConnectorConnection[];
+  failed: boolean;
+}
+
 export function useStepConnections(connectorKey: string): UseStepConnections {
-  const [connections, setConnections] = useState<ConnectorConnection[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
-  // Same stale-response guard as `useStepCredentials`.
-  const current = useRef(connectorKey);
-  current.current = connectorKey;
+  const [attempt, setAttempt] = useState(0);
+  const [settled, setSettled] = useState<Settled | null>(null);
 
-  const reload = useCallback(() => {
-    const asked = connectorKey;
-    const live = () => current.current === asked;
-    setLoading(true);
-    setLoadFailed(false);
+  useEffect(() => {
+    // A slow answer for the PREVIOUS connector (or reload) must not overwrite what is shown now.
+    let live = true;
     connectorsApi
-      .listConnections(asked)
-      .then((rows) => { if (live()) setConnections(rows.filter((r) => r.enabled)); })
-      .catch(() => { if (live()) setLoadFailed(true); })
-      .finally(() => { if (live()) setLoading(false); });
-  }, [connectorKey]);
+      .listConnections(connectorKey)
+      .then(
+        (rows) => ({ connections: rows.filter((r) => r.enabled), failed: false }),
+        () => ({ connections: [] as ConnectorConnection[], failed: true }),
+      )
+      .then((outcome) => { if (live) setSettled({ key: connectorKey, attempt, ...outcome }); });
+    return () => { live = false; };
+  }, [connectorKey, attempt]);
 
-  useEffect(() => { reload(); }, [reload]);
+  const reload = useCallback(() => setAttempt((count) => count + 1), []);
 
-  return { connections, loading, loadFailed, reload };
+  const current = settled?.key === connectorKey && settled.attempt === attempt ? settled : null;
+  const forConnector = settled?.key === connectorKey ? settled : null;
+  return {
+    connections: forConnector?.connections ?? [],
+    loading: current === null,
+    loadFailed: current?.failed ?? false,
+    reload,
+  };
 }

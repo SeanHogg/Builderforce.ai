@@ -21,6 +21,8 @@ import { resolveTicketRepoContext } from '../../repos/commitFileAsPendingChange'
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { cloudRunnerStub } from '../cloudRunnerStub';
 import { sandboxLevers } from '../costLoop/runLevers';
+import { containerGitUrl, mintContainerRunToken } from '../containerRunToken';
+import { internalApiBaseUrl } from './egressAllowlist';
 import { isExecutionCancelled, type SandboxRunContext } from '../cloudAgent/runContext';
 
 export interface SandboxCallbackResult {
@@ -55,9 +57,13 @@ async function runnerSpec(env: Env, db: Db, ctx: SandboxRunContext, executionId:
     body: {
       executionId,
       ...sandboxLevers(env, ctx.tenantId),
-      // No clone URL: actions/checkout already cloned, and the workflow's GITHUB_TOKEN is
-      // what authorises a fetch or push — no credential of ours reaches the runner.
-      repo: repo.ok ? { baseBranch: repo.ctx.base, headBranch: repo.ctx.branch } : null,
+      // actions/checkout already cloned (with `persist-credentials: false`, so the checkout holds no credential and
+      // its GITHUB_TOKEN is not what fetches). The runner fetches an engine commit through the Worker's container-git
+      // proxy, like the container does: this credential-free URL plus the run's token, which the runner holds in
+      // memory and supplies to ONE git command at a time (never in a URL, `.git/config` or the shell's environ).
+      // The provider credential stays in the Worker's proxy.
+      repo: repo.ok ? { baseBranch: repo.ctx.base, headBranch: repo.ctx.branch, cloneUrl: containerGitUrl(internalApiBaseUrl(env), executionId) } : null,
+      token: await mintContainerRunToken(env.JWT_SECRET, executionId),
     },
   };
 }

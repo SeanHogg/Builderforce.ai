@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   boardsApi,
   type Board,
-  type BoardTicketOwner,
   type CloudRunAllowance,
   type Swimlane,
   type SwimlaneAgent,
 } from '@/lib/builderforceApi';
+import { boardRostersApi, type BoardTicketOwner } from '@/lib/boardRostersApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface BoardConfig {
   board: Board | null;
@@ -69,10 +69,8 @@ export function useBoardConfig(
       if (mine) {
         const [laneRows, byLane, owners] = await Promise.all([
           boardsApi.swimlanes.list(mine.id),
-          boardsApi.laneAgents(mine.id),
-          // Ticket owners are a different fact from staffing; a failure here must not
-          // blank the staffed chips.
-          boardsApi.ticketOwners(mine.id).catch(() => ({} as Record<string, BoardTicketOwner[]>)),
+          boardRostersApi.laneAgents(mine.id),
+          boardRostersApi.ticketOwnersOrEmpty(mine.id),
         ]);
         boardIdRef.current = mine.id;
         setLanes([...laneRows].sort((a, b) => a.position - b.position));
@@ -96,8 +94,8 @@ export function useBoardConfig(
     if (!boardId) return;
     try {
       const [byLane, owners] = await Promise.all([
-        boardsApi.laneAgents(boardId),
-        boardsApi.ticketOwners(boardId).catch(() => ({} as Record<string, BoardTicketOwner[]>)),
+        boardRostersApi.laneAgents(boardId),
+        boardRostersApi.ticketOwnersOrEmpty(boardId),
       ]);
       setAgentsByLane(byLane);
       setOwnersByLane(owners);

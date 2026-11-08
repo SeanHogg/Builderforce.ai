@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import type { BoardTicketOwner } from '@/lib/builderforceApi';
+import type { BoardTicketOwner } from '@/lib/boardRostersApi';
 import { AgentChip } from './AgentChip';
 
 /**

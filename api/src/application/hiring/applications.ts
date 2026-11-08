@@ -194,11 +194,19 @@ export async function recordApplication(
     coverLetter: input.coverLetter?.slice(0, 20_000) ?? null,
     resumeRef: input.resumeRef ?? null,
   };
+  const refreshedCoverLetter = sql`coalesce(${excluded(jobApplications.coverLetter)}, ${jobApplications.coverLetter})`;
+  const refreshedResumeRef = sql`coalesce(${excluded(jobApplications.resumeRef)}, ${jobApplications.resumeRef})`;
+  const refreshedExternalId = sql`coalesce(${jobApplications.externalId}, ${excluded(jobApplications.externalId)})`;
   const refresh = {
-    coverLetter: sql`coalesce(${excluded(jobApplications.coverLetter)}, ${jobApplications.coverLetter})`,
-    resumeRef: sql`coalesce(${excluded(jobApplications.resumeRef)}, ${jobApplications.resumeRef})`,
-    externalId: sql`coalesce(${jobApplications.externalId}, ${excluded(jobApplications.externalId)})`,
-    updatedAt: sql`now()`,
+    coverLetter: refreshedCoverLetter,
+    resumeRef: refreshedResumeRef,
+    externalId: refreshedExternalId,
+    // A re-read applicant (the board import re-delivers everyone on every walk) must not
+    // look freshly edited: `updated_at` moves only when a refreshed field actually changed.
+    updatedAt: sql`case when ${refreshedCoverLetter} is distinct from ${jobApplications.coverLetter}
+      or ${refreshedResumeRef} is distinct from ${jobApplications.resumeRef}
+      or ${refreshedExternalId} is distinct from ${jobApplications.externalId}
+      then now() else ${jobApplications.updatedAt} end`,
   };
   const returning = { id: jobApplications.id, appliedAt: jobApplications.appliedAt };
 

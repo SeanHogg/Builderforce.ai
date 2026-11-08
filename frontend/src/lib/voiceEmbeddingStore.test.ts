@@ -8,7 +8,7 @@ vi.mock('./voiceClones', () => ({
 }));
 
 let currentUser: { id: string } | null = { id: 'user-a' };
-const clearHooks: Array<() => void> = [];
+const { clearHooks } = vi.hoisted(() => ({ clearHooks: [] as Array<() => void> }));
 vi.mock('./auth', () => ({
   getStoredUser: () => currentUser,
   onSessionCleared: (fn: () => void) => { clearHooks.push(fn); return () => {}; },
@@ -26,6 +26,7 @@ function installLocalStorage(initial: Record<string, string>) {
   // `Object.keys(localStorage)` must list the entries.
   const proxy = new Proxy(ls, { ownKeys: () => [...data.keys()], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
   vi.stubGlobal('localStorage', proxy);
+  vi.stubGlobal('window', { localStorage: proxy }); // `lib/storage` reaches the store through `window`
   return data;
 }
 
@@ -71,7 +72,7 @@ describe('voiceEmbeddingStore', () => {
     vi.unstubAllGlobals();
   });
 
-  it('user A's cache is invisible to user B', async () => {
+  it("user A's cache is invisible to user B", async () => {
     fetchCloneEmbedding.mockResolvedValue({ embedding: [9, 9], sampleRate: 16000 });
     await loadEmbedding(301);
     expect(await hasCachedEmbedding(301)).toBe(true);

@@ -74,5 +74,5 @@
   // against `frontend/tsconfig.json`'s options, and checking them here reported this
   // project's lint preferences as errors in files this package does not own.
   "include": ["src"],
-  "exclude": ["src/canvas", "src/shims", "src/WorkspaceApp.tsx", "src/main.tsx", "src/knowledgeGraph"]
+  "exclude": ["src/canvas", "src/shims", "src/WorkspaceApp.tsx", "src/VoiceMarketplaceScreen.tsx", "src/main.tsx", "src/knowledgeGraph"]
 }

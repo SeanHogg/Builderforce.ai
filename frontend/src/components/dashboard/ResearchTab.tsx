@@ -1,4 +1,4 @@
-import { discoveryApi, type ResearchNote } from '@/lib/builderforceApi';
+import { discoveryApi, type ResearchNote } from '@/lib/discoveryApi';
 import { KnowledgeListTab, type KnowledgeListVariant } from './KnowledgeListTab';
 
 const VARIANT: KnowledgeListVariant<ResearchNote> = {

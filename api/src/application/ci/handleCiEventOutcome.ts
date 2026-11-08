@@ -19,7 +19,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Best-effort: never throws (a webhook must always 200 to stop provider retries).
  */
 import { signalMergeQueueOnCiResult } from './ciMergeQueueSignal';
-import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_REFUSED_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
+import { ingestRepoCiEvent, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
+import { recordAutofixDispatched, recordAutofixRefused, type AutofixAuditFacts } from './autofixDispatchRecord';
+import type { DeferredParkRequest } from '../runtime/deferredDispatch';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { insertToolAudit } from '../audit/toolAuditWrite';
@@ -32,7 +34,7 @@ export type DispatchRunFn = (params: {
   payload: string;
   submittedBy: string;
   /** One-shot dispatch: a deferred admission is parked and retried by the `deferred-dispatch` sweep. */
-  parkIfDeferred?: boolean;
+  parkIfDeferred?: DeferredParkRequest;
 }) => Promise<{ executionId: number | null; refusal?: { reason: string; message: string }; deferred?: true }>;
 
 export interface CiOutcomeDeps {
@@ -75,43 +77,21 @@ export async function handleCiEventOutcome(
 
   if (res.autoFix) {
     const intent = res.autoFix;
+    const facts: AutofixAuditFacts = { taskId: intent.taskId, tenantId: intent.tenantId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null };
     deps.waitUntil((async () => {
       try {
         const { executionId, refusal, deferred } = await deps.dispatchRun({
           taskId: intent.taskId, tenantId: intent.tenantId,
           payload: intent.payload, submittedBy: 'system:autofix',
-          parkIfDeferred: true, // the webhook will not fire again: park a deferred auto-fix for retry
+          // The webhook will not fire again: park a deferred auto-fix for retry. `meta` is what the
+          // sweep's `ci_autofix` handler needs to write the SAME audit rows this path writes.
+          parkIfDeferred: { kind: 'ci_autofix', meta: facts },
         });
-        if (executionId == null) {
-          // A refused auto-fix used to vanish: the webhook had already answered
-          // `autoFixDispatched: true` (the dispatch is deferred past the response, so
-          // that flag can only ever mean "queued"), and the refusal itself was a bare
-          // null nobody recorded. The reason now lands on the same audit stream, under
-          // its OWN name -- `AUTOFIX_REFUSED_EVENT`, never the dispatch name the
-          // loop-guard counts, so a refusal cannot spend the build's fix budget.
-          await insertToolAudit(db, {
-            tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
-            executionId: null, sessionKey: `task:${intent.taskId}`,
-            toolName: AUTOFIX_REFUSED_EVENT, category: 'ci',
-            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null, reason: refusal?.reason ?? null }),
-            result: redactThenCap(`auto-fix run ${deferred ? 'DEFERRED (parked, retried automatically)' : 'REFUSED'}: ${refusal?.message ?? 'the dispatcher declined without a reason'}`, 300),
-            ts: new Date(),
-          }).catch((error) => {
-            reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
-          });
-        } else {
-          await insertToolAudit(db, {
-            tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
-            executionId, sessionKey: `exec:${executionId}`,
-            toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
-            // `sha` is load-bearing, not just telemetry: the per-build de-duplication
-            // in `ingestRepoCiEvent` reads it back off these rows.
-            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null }),
-            result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
-          }).catch((error) => { /* telemetry best-effort */ 
-            reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
-          });
-        }
+        // The audit rows are shared with the deferred-dispatch sweep (`autofixDispatchRecord`): a
+        // refused auto-fix used to vanish, and a deferred one that later starts must still spend
+        // the build's attempt and be de-duplicated by sha.
+        if (executionId == null) await recordAutofixRefused(db, facts, { deferred: deferred === true, reason: refusal?.reason, message: refusal?.message });
+        else await recordAutofixDispatched(db, facts, executionId);
       } catch (error) { /* webhook stays 200 — never let a dispatch failure retry the hook */ 
         reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
       }

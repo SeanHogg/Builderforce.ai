@@ -44,9 +44,12 @@ export const workable: ConnectorManifest = {
       key: 'list_applications', label: 'List candidates', description: 'Read the candidates who applied to a job.',
       method: 'GET', path: '/candidates', mutates: false, resultPath: 'candidates',
       params: { shortcode: q('The job shortcode'), limit: qn('Page size (default 50, max 100)'), since_id: qn('Only candidates with an id at or after this'), created_after: q('ISO instant — only candidates created after this') },
-      // Workable pages by a `paging.next` URL, not a page number, so a run reads ONE page
-      // of `limit` candidates, newest first; a full page means more are waiting, and with
-      // no page to resume from the cursor only moves when a run reaches the end. A Workable
+      // Workable pages by a `paging.next` URL, not a page number, newest first. The URL is
+      // never requested (a board must not choose where a credentialled call goes): the
+      // `since_id` it carries is taken out and fed back as the `since_id` param, and a walk
+      // that stops at a cap stores it (`import_resume_token`) and resumes there. The cursor
+      // only moves when a walk reaches the end. UNVERIFIED against a live account: that
+      // `paging.next` carries `since_id` is from Workable's public reference. A Workable
       // candidate is one person per job, so its id is both the application's and the person's.
       applicants: {
         postingParam: 'shortcode',
@@ -59,6 +62,7 @@ export const workable: ConnectorManifest = {
         email: ['email'],
         appliedAt: ['created_at'],
         limit: { param: 'limit', size: 100 },
+        nextToken: { select: ['paging.next'], fromQuery: 'since_id', param: 'since_id' },
         order: 'desc',
         cursorParam: 'created_after', cursorFrom: 'appliedAt', cursorFormat: 'iso',
       },

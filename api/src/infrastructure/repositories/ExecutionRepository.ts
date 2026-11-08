@@ -9,7 +9,7 @@ import {
 import { executions as executionsTable } from '../database/schema';
 import type { Db } from '../database/connection';
 import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
-import { redactSecrets } from '../security/redactSecrets';
+import { redactJsonText, redactSecrets } from '../security/redactSecrets';
 
 /** A run the reaper failed, as its fan-out reads it (snake_case: the shape the read-path repair also speaks). */
 export interface ReapedExecutionRow {
@@ -33,7 +33,8 @@ const { result: _resultBlob, ...SLIM_COLUMNS } = getTableColumns(executionsTable
 
 /** A free-text column that can echo a command line or a provider error: redacted where it is written, so a secret never reaches storage. */
 function scrub<T>(value: T | null | undefined): T | undefined {
-  return typeof value === 'string' ? (redactSecrets(value) as T) : (value ?? undefined);
+  // `result` holds JSON text: redact it structurally (text redaction over JSON corrupts it and misses escaped secrets).
+  return typeof value === 'string' ? (redactJsonText(value) as T) : (value ?? undefined);
 }
 
 export class ExecutionRepository implements IExecutionRepository {

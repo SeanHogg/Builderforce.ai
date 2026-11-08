@@ -26806,7 +26806,9 @@
       "jobStateArchived": "Archiviert",
       "jobStateClosed": "Geschlossen",
       "importMore": "Weitere Bewerber stehen aus – starten Sie den Import erneut.",
-      "importPartial": "{count, plural, one {# Bewerber konnte nicht importiert werden.} other {# Bewerber konnten nicht importiert werden.}}"
+      "importPartial": "{count, plural, one {# Bewerber konnte nicht importiert werden.} other {# Bewerber konnten nicht importiert werden.}}",
+      "importMismatched": "{count, plural, one {# Bewerber gehörte beim Anbieter zu einer anderen Stelle und wurde übersprungen.} other {# Bewerber gehörten beim Anbieter zu einer anderen Stelle und wurden übersprungen.}}",
+      "importQuarantined": "{count, plural, one {# Bewerber lässt sich wiederholt nicht importieren und wird übersprungen.} other {# Bewerber lassen sich wiederholt nicht importieren und werden übersprungen.}}"
     },
     "notice": {
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",

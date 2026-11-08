@@ -46,6 +46,7 @@ vi.mock('./boardCandidate', () => ({
 vi.mock('./postingDistributionStore', () => ({ readPostingBoardCatalog: vi.fn(async () => []) }));
 vi.mock('./postingDistributionSweepStore', () => ({
   listPostedDistributionsForSweep: (...args: unknown[]) => listPostedDistributionsForSweep(...args),
+  listTenantBoardKeys: vi.fn(async () => []),
   readPostedDistributions: (...args: unknown[]) => readPostedDistributions(...args),
   saveImportState: (...args: unknown[]) => saveImportState(...args),
   touchPostedDistribution: (...args: unknown[]) => { calls.push('touch'); return touchPostedDistribution(...args); },
@@ -86,7 +87,9 @@ const ISO = (second: number) => new Date(Date.UTC(2026, 9, 1, 0, 0, second)).toI
 
 const row = (over: Partial<PostedDistribution> = {}): PostedDistribution => ({
   tenantId: 1, postingId: 'p1', connectorKey: 'ashby-postings', connectionId: 'c1', externalId: 'JOB', url: null,
-  importCursor: null, importResumePage: null, importPendingCursor: null, importFailures: {}, ...over,
+  importCursor: null, importResumePage: null, importResumeToken: null, importPendingCursor: null, importFailures: {},
+  // Ashby filters by the JOB id, resolved once and cached on the row (importFilterId.ts).
+  boardFilterId: 'JOB', ...over,
 });
 
 /** Ashby-shaped applications for job `job`, `count` of them from second `from`. */

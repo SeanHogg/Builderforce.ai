@@ -33,10 +33,8 @@ import { connectors } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { installedConnectorManifests } from '../developer/extensionInstalls';
-import {
-  parseConnectorManifest,
-  type ConnectorManifest,
-} from './connectorManifest';
+import type { ConnectorManifest } from './connectorManifest';
+import { parseStoredConnectorManifest } from './connectorStoredManifest';
 import { BUILTIN_CONNECTORS, BUILTIN_CONNECTOR_LIST } from './defaults';
 
 /** Where a manifest came from — drives "Built-in" / "Custom" / "Marketplace" in the catalog UI. */
@@ -82,17 +80,28 @@ function builtinResolved(manifest: ConnectorManifest): ResolvedConnector {
  *
  * A stored manifest was validated on write, but a row can outlive a contract
  * change (a field we later made required, a param location we later dropped).
- * Re-parsing here means a stale row is SKIPPED rather than handed to the runtime
- * half-understood — the connector disappears from the catalog, which is visible,
- * instead of failing mid-call with a confusing upstream error.
+ * Re-parsing here means a row that cannot run is SKIPPED rather than handed to the
+ * runtime half-understood — the connector disappears from the catalog, which is visible,
+ * instead of failing mid-call with a confusing upstream error. A row that is only
+ * stale in a DATA MAPPING (a pattern or cursor that predates a stricter rule) is kept
+ * with that one mapping disabled and the reason on `manifest.degraded` — see
+ * `parseStoredConnectorManifest`.
  */
 async function loadTenantConnectors(db: Db, tenantId: number): Promise<ResolvedConnector[]> {
   const rows = await db.select().from(connectors).where(eq(connectors.tenantId, tenantId));
   const out: ResolvedConnector[] = [];
   for (const row of rows) {
     try {
+      const manifest = parseStoredConnectorManifest(row.manifest);
+      if (manifest.degraded?.length) {
+        reportCaughtError(new Error(manifest.degraded.join('; ')), {
+          source: 'application/connectors/connectorRegistry.ts',
+          operation: `loadTenantConnectors:degraded:${row.connectorKey}`,
+          level: 'warning',
+        });
+      }
       out.push({
-        manifest: parseConnectorManifest(row.manifest),
+        manifest,
         origin: 'tenant',
         id: row.id,
         status: row.status === 'published' ? 'published' : 'draft',
@@ -201,7 +210,7 @@ export async function resolveConnector(
 
   try {
     return {
-      manifest: parseConnectorManifest(row.manifest),
+      manifest: parseStoredConnectorManifest(row.manifest),
       origin: 'tenant',
       id: row.id,
       status: row.status === 'published' ? 'published' : 'draft',

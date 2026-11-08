@@ -8,7 +8,7 @@ import { chatSwitcherLabel } from './chatSwitcherLabel';
 import type { ChatOptionVM, ChatTicketsLabels } from './types';
 
 export function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
-  chatId: number; chatList: ChatOptionVM[]; labels: ChatTicketsLabels;
+  chatId: string | number; chatList: ChatOptionVM[]; labels: ChatTicketsLabels;
   onMerge: (ids: number[]) => Promise<void>; busy: boolean;
 }) {
   const [selected, setSelected] = useState<number[]>([]);

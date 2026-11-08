@@ -3152,3 +3152,32 @@ export const llmBatchJobs = pgTable('llm_batch_jobs', {
   index('idx_llm_batch_jobs_provider_batch').on(t.providerBatchId),
   index('idx_llm_batch_jobs_tenant').on(t.tenantId, t.createdAt),
 ]);
+
+/**
+ * The durable queue of deferred one-shot dispatches (migration 1333): CI auto-fix, incident
+ * triage, security audit and validation review runs that admission deferred. One PENDING row per
+ * tenant + ticket + kind; the `deferred-dispatch` sweep claims, retries and settles them.
+ */
+export const deferredDispatches = pgTable('deferred_dispatches', {
+  id:            bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:        integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  /** The dispatcher: `ci_autofix` | `incident` | `security` | `validation`. */
+  kind:          text('kind').notNull(),
+  /** `{ dispatchPayload, meta }` - the dispatch params and what the kind's after-start bookkeeping needs. */
+  payload:       jsonb('payload').$type<{ dispatchPayload: string | null; meta: Record<string, unknown> }>().notNull(),
+  submittedBy:   text('submitted_by'),
+  agentHostId:   text('agent_host_id'),
+  attempts:      integer('attempts').notNull().default(0),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+  /** A lease: a claim older than the sweep's lease is retakeable. */
+  claimedAt:     timestamp('claimed_at', { withTimezone: true }),
+  /** `pending` | `done` | `abandoned`. */
+  state:         text('state').notNull().default('pending'),
+  lastError:     text('last_error'),
+  createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_deferred_dispatches_pending').on(t.tenantId, t.taskId, t.kind).where(sql`state = 'pending'`),
+  index('idx_deferred_dispatches_due').on(t.nextAttemptAt).where(sql`state = 'pending'`),
+]);

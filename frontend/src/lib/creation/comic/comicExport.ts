@@ -9,6 +9,7 @@
 import { resolveExportPalette } from '../exportColors';
 import { zipFiles } from '@/lib/zipFiles';
 import { loadAuthedImage } from '@/lib/loadAuthedImage';
+import { recordedFailure } from '@/lib/reportError';
 import { buildPdf, rgbaToRgb } from './comicPdf';
 import { paintComicPage, type ComicColors, type ComicImageSource } from './comicPaint';
 import type { ComicState } from './comicState';
@@ -61,7 +62,7 @@ export interface ComicRenderResult {
 
 function loadImage(url: string): Promise<ComicImageSource | null> {
   // A private upload is fetched with the bearer token and drawn from a same-origin blob.
-  return loadAuthedImage(url).catch(() => null);
+  return loadAuthedImage(url).catch(recordedFailure('Loading a comic panel image', null));
 }
 
 async function loadPanelImages(state: ComicState): Promise<Map<string, ComicImageSource>> {

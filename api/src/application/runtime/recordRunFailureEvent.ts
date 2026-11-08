@@ -1,10 +1,8 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Execution } from '../../domain/execution/Execution';
-import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { insertToolAudit } from '../audit/toolAuditWrite';
 import { parseCloudAgentRef } from './cloudDispatch';
-import { redactAuditRow } from '../../infrastructure/security/redactSecrets';
 
 /** The failed run as the trace event reads it (an `Execution`, or a set-based UPDATE's RETURNING row). */
 export interface FailedRunEventSource {
@@ -47,14 +45,13 @@ export function runFailureEventRow(r: FailedRunEventSource, toolName = 'run.fail
  */
 export async function recordRunFailureEvent(db: Db, e: Execution): Promise<void> {
   try {
-    // Allowed direct insert (check:tool-audit-writes): the row comes from `runFailureEventRow`, which will redact itself; until then `redactAuditRow` covers it.
-    await runTelemetryDatabase(db).insert(toolAuditEvents).values(redactAuditRow({
+    await insertToolAudit(db, {
       ...runFailureEventRow({
         tenantId: Number(e.tenantId), agentHostId: e.agentHostId != null ? Number(e.agentHostId) : null,
         payload: e.payload, executionId: Number(e.id), errorMessage: e.errorMessage,
       }),
       ts: new Date(),
-    }));
+    });
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/recordRunFailureEvent.ts", operation: "recordRunFailureEvent", context: { logMessage: '[run-failure-event] telemetry append failed', details: {
       tenantId: Number(e.tenantId),

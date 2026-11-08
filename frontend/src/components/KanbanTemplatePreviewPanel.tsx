@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import type { KanbanTemplatePreview } from '@/lib/kanban';
@@ -22,18 +20,18 @@ export function KanbanTemplatePreviewPanel({ template, onUnlock, onClose }: {
       padding: 16, display: 'flex', flexDirection: 'column', gap: 12,
     }}>
       <div>
-        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{template.name}</h2>
+        <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{template.name}</h2>
         {template.description && (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{template.description}</p>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '4px 0 0' }}>{template.description}</p>
         )}
       </div>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('previewLockedNotice')}</p>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('previewLockedNotice')}</p>
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('previewLanes')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('previewLanes')}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {lanes.map((l) => (
             <span key={l.key} style={{
-              fontSize: 12, padding: '2px 10px', borderRadius: 'var(--radius-full)',
+              fontSize: 'var(--font-size-small)', padding: '2px 10px', borderRadius: 'var(--radius-full)',
               background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)',
             }}>{l.name}</span>
           ))}
@@ -41,11 +39,11 @@ export function KanbanTemplatePreviewPanel({ template, onUnlock, onClose }: {
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => onUnlock(template.id)} style={{
-          fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
+          fontSize: 'var(--font-size-small)', padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
           background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none',
         }}>{t('previewUnlock', { price: formatCents(template.priceCents) })}</button>
         <button type="button" onClick={onClose} style={{
-          fontSize: 12, padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
+          fontSize: 'var(--font-size-small)', padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
           background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)',
         }}>{t('previewBack')}</button>
       </div>

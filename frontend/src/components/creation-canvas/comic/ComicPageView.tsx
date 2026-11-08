@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from '../styles/creativeEditors.module.css';
 import type { ComicPage, ComicState } from '@/lib/creation/comic/comicState';
@@ -18,10 +18,11 @@ interface ComicPageViewProps {
 /** A panel's art, or — when what was stored is unusable or fails to load — the localized "image missing" state rather than a silent grey. */
 function PanelArt({ url, missing }: { url: string | null; missing: boolean }) {
   const t = useTranslations('canvas.kinds.comic');
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [url]);
+  // The url that failed to render; a different url reads as not failed, without resetting state.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = failedUrl !== null && failedUrl === url;
   const authed = useAuthedMediaUrl(url);
-  if (authed.url && !failed) return <img src={authed.url} alt="" draggable={false} onError={() => setFailed(true)} />;
+  if (authed.url && !failed) return <img src={authed.url} alt="" draggable={false} onError={() => setFailedUrl(url)} />;
   if (authed.loading) return null;
   return missing || failed || authed.error ?<span className={styles.imageMissing} role="img" aria-label={t('imageMissing')}>{t('imageMissing')}</span> : null;
 }

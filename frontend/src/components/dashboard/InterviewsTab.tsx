@@ -1,4 +1,4 @@
-import { discoveryApi, type CustomerInterview } from '@/lib/builderforceApi';
+import { discoveryApi, type CustomerInterview } from '@/lib/discoveryApi';
 import { KnowledgeListTab, type KnowledgeListVariant } from './KnowledgeListTab';
 
 const VARIANT: KnowledgeListVariant<CustomerInterview> = {

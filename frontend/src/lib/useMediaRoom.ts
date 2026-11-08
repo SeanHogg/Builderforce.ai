@@ -4,8 +4,23 @@ import { apiSocketUrl } from './apiSocket';
 import { createReconnector, openSocket, type Reconnector } from './polling/reconnectPolicy';
 import { meetingsApi } from './builderforceApi';
 import { acquireUserMedia, stopStream } from './mediaCapture';
-import { newNegotiation, offerTo, onAnswer, onCandidate, onOffer, type PeerNegotiation } from './peerNegotiation';
+import type { PeerNegotiation } from './peerNegotiation';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+
+/**
+ * The perfect-negotiation module, loaded on the first frame of a room (this hook is in the
+ * root closure through the live-session provider; the negotiation code is only needed once
+ * a call exists). Every frame handler awaits it before touching a peer.
+ */
+let negotiationModule: typeof import('./peerNegotiation') | null = null;
+async function loadNegotiation(): Promise<typeof import('./peerNegotiation')> {
+  negotiationModule ??= await import('./peerNegotiation');
+  return negotiationModule;
+}
+function negotiationApi(): typeof import('./peerNegotiation') {
+  if (!negotiationModule) throw new Error('peer negotiation used before a room frame arrived');
+  return negotiationModule;
+}
 /**
  * useMediaRoom — mesh-P2P WebRTC for a live meeting / ceremony.
  *
@@ -244,7 +259,7 @@ export function useMediaRoom(
     const stream = new MediaStream();
     // The relay stamps the authenticated seat as `u:<userId>`; every consumer of a tile's
     // ref (roster merge, captions, speaking ring) keys on the bare user id.
-    const state: PeerState = { pc, negotiation: newNegotiation(myIdRef.current, peer.id), name: peer.name || 'Guest', ref: (peer.ref ?? '').replace(/^u:/, ''), stream, camOn: true, micOn: true, sharing: false };
+    const state: PeerState = { pc, negotiation: negotiationApi().newNegotiation(myIdRef.current, peer.id), name: peer.name || 'Guest', ref: (peer.ref ?? '').replace(/^u:/, ''), stream, camOn: true, micOn: true, sharing: false };
     peersRef.current.set(peer.id, state);
 
     // Publish my local tracks to this peer. Someone joining WHILE I am sharing
@@ -294,13 +309,15 @@ export function useMediaRoom(
 
   const makeOffer = useCallback(async (peer: RoomPeer) => {
     const { pc, negotiation } = ensurePeer(peer);
-    await offerTo(pc, negotiation, peer.id, send);
+    await (await loadNegotiation()).offerTo(pc, negotiation, peer.id, send);
   }, [ensurePeer, send]);
 
   // Deterministic offerer: greater id initiates.
   const shouldOffer = useCallback((peerId: string) => myIdRef.current > peerId, []);
 
   const handleFrame = useCallback(async (msg: Record<string, unknown>) => {
+    // Only waits the first time; frames that queue behind the load resume in arrival order.
+    if (!negotiationModule) await loadNegotiation();
     const type = msg.type as string;
     const from = msg.from as string | undefined;
 
@@ -343,13 +360,13 @@ export function useMediaRoom(
 
     if (type === 'rtc-offer') {
       const state = ensurePeer({ id: from, name: String(msg.name ?? ''), kind: 'human', ref: String(msg.ref ?? '') });
-      await onOffer(state.pc, state.negotiation, from, msg.sdp as RTCSessionDescriptionInit, send);
+      await negotiationApi().onOffer(state.pc, state.negotiation, from, msg.sdp as RTCSessionDescriptionInit, send);
     } else if (type === 'rtc-answer') {
       const p = peersRef.current.get(from);
-      if (p) await onAnswer(p.pc, msg.sdp as RTCSessionDescriptionInit);
+      if (p) await negotiationApi().onAnswer(p.pc, msg.sdp as RTCSessionDescriptionInit);
     } else if (type === 'rtc-ice') {
       const p = peersRef.current.get(from);
-      if (p && msg.candidate) await onCandidate(p.pc, p.negotiation, msg.candidate as RTCIceCandidateInit);
+      if (p && msg.candidate) await negotiationApi().onCandidate(p.pc, p.negotiation, msg.candidate as RTCIceCandidateInit);
     } else if (type === 'm-state') {
       const p = peersRef.current.get(from);
       if (p) { p.camOn = !!msg.camOn; p.micOn = !!msg.micOn; syncTiles(); }

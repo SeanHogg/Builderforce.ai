@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useFormat } from '@/i18n/useFormat';
-import { getPendingInvestorMilestones, type PendingInvestorMilestones } from '@/lib/founderOpsApi';
+import { getPendingInvestorMilestones, type PendingInvestorMilestones } from '@/lib/investorMilestonesApi';
 import styles from '../styles/inspector.module.css';
 
 /**

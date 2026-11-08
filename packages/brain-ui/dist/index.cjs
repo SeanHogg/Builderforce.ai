@@ -6143,7 +6143,7 @@ var import_jsx_runtime55 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest, railHeader, ticketBadge }) {
   const [tickets, setTickets] = (0, import_react45.useState)([]);
   const [agents, setAgents] = (0, import_react45.useState)([]);
   const [members, setMembers] = (0, import_react45.useState)([]);
@@ -6235,6 +6235,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   };
   return /* @__PURE__ */ (0, import_jsx_runtime55.jsxs)("div", { style: S2.root, children: [
     /* @__PURE__ */ (0, import_jsx_runtime55.jsx)(OriginalRequest, { text: originalRequest, labels }),
+    railHeader,
     tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime55.jsxs)("div", { style: S2.headerRow, children: [
       /* @__PURE__ */ (0, import_jsx_runtime55.jsxs)(
         "button",
@@ -6304,7 +6305,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               openTitle: labels.open,
               onOpen: onOpenTicket && parentTk ? () => onOpenTicket(parentTk) : void 0
             }
-          )
+          ),
+          ticketBadge?.(tk)
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime55.jsxs)("div", { style: { display: "flex", gap: 2 }, children: [
           onOpenTicket && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime55.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S2.icon, children: "\u2197" }),

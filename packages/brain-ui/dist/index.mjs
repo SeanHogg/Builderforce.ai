@@ -5951,7 +5951,7 @@ import { jsx as jsx55, jsxs as jsxs52 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest, railHeader, ticketBadge }) {
   const [tickets, setTickets] = useState27([]);
   const [agents, setAgents] = useState27([]);
   const [members, setMembers] = useState27([]);
@@ -6043,6 +6043,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   };
   return /* @__PURE__ */ jsxs52("div", { style: S2.root, children: [
     /* @__PURE__ */ jsx55(OriginalRequest, { text: originalRequest, labels }),
+    railHeader,
     tickets.length > 0 && /* @__PURE__ */ jsxs52("div", { style: S2.headerRow, children: [
       /* @__PURE__ */ jsxs52(
         "button",
@@ -6112,7 +6113,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               openTitle: labels.open,
               onOpen: onOpenTicket && parentTk ? () => onOpenTicket(parentTk) : void 0
             }
-          )
+          ),
+          ticketBadge?.(tk)
         ] }),
         /* @__PURE__ */ jsxs52("div", { style: { display: "flex", gap: 2 }, children: [
           onOpenTicket && tk.exists && /* @__PURE__ */ jsx55("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S2.icon, children: "\u2197" }),

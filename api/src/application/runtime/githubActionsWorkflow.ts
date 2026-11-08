@@ -39,10 +39,11 @@ export const AGENT_WORKFLOW_PATH = '.github/workflows/builderforce-agent.yml';
  * what lets `agentWorkflowRefresh` re-commit exactly the repos that are behind —
  * and lets a future bump be a one-line migration rather than another backfill.
  *
- * `r1` is the first revision that carries `run-name`. NULL in the database means
+ * `r1` is the first revision that carries `run-name`; `r2` cuts the job permissions to `contents: read` +
+ * `id-token: write` (a repo still on r1 grants the job token write access it no longer needs). NULL in the database means
  * "committed before revisions existed", i.e. possibly older than r1.
  */
-export const AGENT_WORKFLOW_REVISION = 'r1';
+export const AGENT_WORKFLOW_REVISION = 'r2';
 
 /**
  * The audience an agent workflow must request — DELIBERATELY DISTINCT from the
@@ -165,12 +166,12 @@ jobs:
     # past a healthy run and still bounds a wedged one.
     timeout-minutes: 60
     permissions:
-      # The agent commits its work and pushes the ticket branch.
-      contents: write
+      # Read-only: actions/checkout needs only this. The agent's commits, pushes and pull
+      # request all go through Builderforce (with the repo's own integration credential),
+      # never through this job's GITHUB_TOKEN — so that token is given nothing to write.
+      contents: read
       # Required: mints the OIDC token used to authenticate back to Builderforce.
       id-token: write
-      # The agent opens a pull request when it finishes.
-      pull-requests: write
     steps:
       # fetch-depth: 0 — a shallow clone has no merge-base with the base branch,
       # so \`git merge-base\`, \`git diff main\`, and syncing the latest base all

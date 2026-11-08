@@ -86,6 +86,10 @@ export type ExecutionEventSink = (event: ExecutionSubscriberEvent) => void;
 
 let executionEventSinks: ExecutionEventSink[] = [];
 
+/** A live frame is bounded: a runaway string or list cannot make the walk, or a socket frame, unbounded. Far above any real
+ *  `execution` row (`payload`/`result` JSON included - the UI reads `payload` for the run's agent/model/retry, so it is kept). */
+const EVENT_LIMITS = { maxString: 100_000, maxEntries: 500 } as const;
+
 /** Replace (never append to) the isolate's sink list — re-running the composition
  *  root must not multiply deliveries. Call with no arguments to clear (tests). */
 export function setExecutionEventSinks(...sinks: ExecutionEventSink[]): void {
@@ -99,7 +103,7 @@ export function setExecutionEventSinks(...sinks: ExecutionEventSink[]): void {
  *  model's question, a PRD, `execution.toPlain()`'s `errorMessage` / `result`) is redacted ONCE here and
  *  no call site has to remember. A secret never leaves the process unredacted, to storage or to the stream. */
 export function notifyExecutionSubscribers(executionId: number, event: ExecutionSubscriberEvent): void {
-  const safe = redactDeep(event);
+  const safe = redactDeep(event, EVENT_LIMITS);
   for (const sink of executionEventSinks) {
     try {
       sink(safe);

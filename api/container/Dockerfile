@@ -8,7 +8,7 @@ FROM node:24-bookworm-slim
 
 # git for cloning the ticket repo; ca-certificates for HTTPS to GitHub and package registries.
 RUN apt-get update \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates bash \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates bash sudo \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -34,8 +34,19 @@ ENV PORT=8080
 ENV NODE_EXTRA_CA_CERTS=/etc/cloudflare/certs/cloudflare-containers-ca.crt
 EXPOSE 8080
 
-# Run as the unprivileged node user (image ships uid 1000) to shrink the blast radius
-# of arbitrary build commands the agent may run.
+# THE uid split. The server (user `node`, uid 1000) holds the run token in its memory and environ;
+# every shell the model can influence (run_command, background jobs, the preview dev server) runs as a
+# DIFFERENT unprivileged user, `bfagent`, so it can read neither /proc/<server pid>/environ nor
+# /proc/<server pid>/mem. `bfagent` has `node` as its primary group (the clone is group-writable, setgid) and
+# no sudo rights; `node` may sudo to `bfagent` and to nothing else (no root). sandboxJobs.mjs builds the
+# `sudo -n -u bfagent env -i … bash -lc …` spawn; `!use_pty` keeps the shell in a process group the kill can reach.
+RUN useradd --create-home --shell /bin/bash --gid node --no-user-group bfagent \
+  && printf 'node ALL=(bfagent) NOPASSWD: ALL\nDefaults:node !use_pty\n' > /etc/sudoers.d/zz-bf-agent \
+  && chmod 0440 /etc/sudoers.d/zz-bf-agent \
+  && visudo -cf /etc/sudoers.d/zz-bf-agent
+ENV BUILDERFORCE_SHELL_USER=bfagent
+
+# The server itself still runs as the unprivileged node user (never root).
 USER node
 
 CMD ["node", "server.mjs"]

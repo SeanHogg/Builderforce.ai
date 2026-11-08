@@ -1,8 +1,8 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CanvasStroke, DrawingPen } from '@/lib/canvasDrawing';
 import { annotationSpace, isImageEditIdentity, undoImageStroke, IMAGE_EXPORT_FORMATS, type ImageExportFormat } from '@/lib/creation/image/imageEdit';
-import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences } from '../drawingPreferences';
+import { readDrawingPreferences, writeDrawingPreferences } from '../drawingPreferences';
 import type { CreationBodyProps } from '../bodies/types';
 import { useCreationNodeActions } from '../bodies/nodeActions';
 import { ImageAnnotateLayer } from './ImageAnnotateLayer';
@@ -16,6 +16,11 @@ type Mode = 'adjust' | 'annotate';
 const MODES: readonly Mode[] = ['adjust', 'annotate'];
 const FORMATS = Object.keys(IMAGE_EXPORT_FORMATS) as ImageExportFormat[];
 
+/** The live preview canvas. Its callback ref arrives as a plain prop, so the editor's state stays separate from the DOM handle. */
+function PreviewCanvas({ bind, label }: { bind: (element: HTMLCanvasElement | null) => void; label: string }) {
+  return <canvas ref={bind} className={styles.preview} role="img" aria-label={label} />;
+}
+
 /**
  * The `image` card: the picture, edited non-destructively in place. The container owns
  * the mode and the pen; `useImageEditor` owns the edit stack and the export; the layers
@@ -26,10 +31,10 @@ export function ImageEditorBody({ data }: CreationBodyProps) {
   const t = useTranslations('canvas.kinds.image');
   const [mode, setMode] = useState<Mode>('adjust');
   const editor = useImageEditor(data, onEdit, mode === 'annotate');
-  const [pen, setPen] = useState<DrawingPen>(DEFAULT_DRAWING_PREFERENCES);
+  // The remembered pen is browser storage (the server render reads the default); it only shows
+  // once the annotate tray is open, which is never part of the server render.
+  const [pen, setPen] = useState<DrawingPen>(readDrawingPreferences);
   const [textAt, setTextAt] = useState<{ x: number; y: number } | null>(null);
-  // Read after mount: the remembered pen is browser storage, which the server render cannot see.
-  useEffect(() => { setPen(readDrawingPreferences()); }, []);
   const choose = (patch: Partial<DrawingPen>) => setPen((current) => { const next = { ...current, ...patch }; writeDrawingPreferences(next); return next; });
 
   const { edit, output } = editor;
@@ -52,7 +57,7 @@ export function ImageEditorBody({ data }: CreationBodyProps) {
 
   return <div className={`${styles.editor} nodrag`}>
     {editor.baseUrl ? <div className={styles.stage}>
-      <canvas ref={editor.previewRef} className={styles.preview} role="img" aria-label={t('previewAlt', { title: data.title })} />
+      <PreviewCanvas bind={editor.bindPreview} label={t('previewAlt', { title: data.title })} />
       {editor.editable && mode === 'annotate' && space && <ImageAnnotateLayer
         space={space}
         strokes={edit.strokes}

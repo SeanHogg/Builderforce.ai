@@ -14,9 +14,8 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { LensDef } from '../lenses';
 import { useContainerSize } from '../environment';
 import { byImportance } from '../graphModel';
-import { useDeferredWhen } from '../useDeferredWhen';
-import { useIdleSteps } from '../useIdleSteps';
-import { DEFER_EDGES_ABOVE, incidentOf, pickEdges } from '../scene/edgeBudget';
+import { useComputed } from '../compute/useComputed';
+import { DEFER_EDGES_ABOVE, incidentOf } from '../scene/edgeBudget';
 import { useRankedEdges } from '../scene/useRankedEdges';
 import { LayingOut } from '../surface/LayingOut';
 import { usePanZoom } from '../usePanZoom';
@@ -25,9 +24,10 @@ import { HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
 import { usePanZoomRegistration } from '../surface/zoom';
 import { kindLabel } from '../names';
-import { groupEdges, type EdgeGroup } from '../scene/buffers';
+import { groupEdges } from '../scene/buffers';
 import { cssVar, type ThemeTone } from '../scene/themeColors';
-import { EMPTY_LAYOUT_2D, fitView, layout2dTask, nodeRadius, type Layout2D } from './layout2d';
+import { pathsOf } from './edgePaths';
+import { EMPTY_LAYOUT_2D, fitView, nodeRadius, type Layout2D } from './layout2d';
 
 /** Nodes labelled by default (besides the selection and its neighbours), and nodes that are Tab stops. */
 export const LABELLED_NODES = 25;
@@ -46,9 +46,6 @@ export interface Graph2DProps {
     label: string;
 }
 
-const segments = (pairs: ReadonlyArray<readonly [readonly [number, number], readonly [number, number]]>): string =>
-    pairs.map(([a, b]) => `M${a[0]} ${a[1]}L${b[0]} ${b[1]}`).join('');
-
 const Bands = memo(function Bands({ layout, font, planeLabel }: { layout: Layout2D; font: number; planeLabel(p: string): string }) {
     return (
         <>
@@ -62,16 +59,13 @@ const Bands = memo(function Bands({ layout, font, planeLabel }: { layout: Layout
     );
 });
 
-/** Path data per tone bucket, built once per set of groups (not on every render of a selection). */
-const pathsOf = (groups: Array<EdgeGroup<readonly [number, number]>>) => groups.map((g) => ({ bucket: g.bucket, tone: g.tone, d: segments(g.pairs) }));
-
 const Edges = memo(function Edges({ edges, nodes, layout, selected }: { edges: readonly KEdge[]; nodes: readonly KNode[]; layout: Layout2D; selected: string | null }) {
     // At most MAX_DRAWN_EDGES are drawn (the camera says so). The BASE layer does not depend on the selection, so a click
-    // rebuilds only the incident overlay, which holds the selected node's links complete.
+    // rebuilds only the incident overlay, which holds the selected node's links complete. The base layer's picking and path
+    // data are built in the compute worker (which holds the ranking), the small incident overlay here.
     const ranked = useRankedEdges(edges, nodes);
-    const drawn = useMemo(() => (ranked ? pickEdges(ranked, null) : []), [ranked]);
     const at = useCallback((ref: string) => layout.positions.get(ref), [layout]);
-    const groups = useDeferredWhen(() => pathsOf(groupEdges(drawn, at)), [drawn, at], drawn.length > DEFER_EDGES_ABOVE, []) ?? [];
+    const groups = useComputed('edgePaths', { nodes, edges, layout }, [nodes, edges, layout], [], { enabled: ranked !== null, inline: edges.length <= DEFER_EDGES_ABOVE }).value ?? [];
     const incident = useMemo(() => (ranked ? pathsOf(groupEdges(incidentOf(ranked, selected), at)) : []), [ranked, at, selected]);
     return (
         <g fill="none" aria-hidden="true">
@@ -166,7 +160,7 @@ const Captions = memo(function Captions({ ordered, layout, named, selected, font
 export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeLabel, labels, label }: Graph2DProps) {
     const host = useRef<HTMLDivElement>(null);
     const size = useContainerSize(host);
-    const layout = useIdleSteps(() => layout2dTask(rootId, nodes, edges), [rootId, nodes, edges], EMPTY_LAYOUT_2D);
+    const layout = useComputed('layout2d', { rootId, nodes, edges }, [rootId, nodes, edges], null, { failed: EMPTY_LAYOUT_2D }).value;
     const base = useMemo(() => (layout ? fitView(layout, size.width, size.height) : null), [layout, size.width, size.height]);
     const pan = usePanZoom(base, layout);
     usePanZoomRegistration(pan); // the scene overlay's +, − and Fit drive this view

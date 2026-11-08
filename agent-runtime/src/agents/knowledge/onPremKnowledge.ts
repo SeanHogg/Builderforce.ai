@@ -23,7 +23,7 @@ import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history.js";
 import { migrateLegacyKnowledge, nodeIngestManifest } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  claimSimilarity, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail,
+  claimSimilarity, forgetRootPorts, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail,
   reviewIndexPort, reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import {
@@ -160,6 +160,7 @@ let closeManifestsAtExit = false;
 export function closeOnPremManifests(): void {
   for (const manifest of onPremManifests.values()) manifest.close();
   onPremManifests.clear();
+  forgetRootPorts(); // the per-root manifest cache holds the closed handles
 }
 
 /**

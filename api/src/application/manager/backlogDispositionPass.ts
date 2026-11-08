@@ -10,7 +10,7 @@
  * Re-running the pass refreshes still-pending proposals (the evidence moves) but NEVER
  * overwrites a row that has been applied: an applied disposition is a record of what was done.
  */
-import { and, count, eq, inArray, isNull, notExists, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { pullRequests, taskSpecs, tasks, ticketDispositions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -176,7 +176,7 @@ export async function getDispositionReport(db: Db, scope: PassScope, limit = 100
       .groupBy(ticketDispositions.disposition, sql`${ticketDispositions.appliedAt} is not null`),
     db.select({ n: count() }).from(tasks).where(scopedToTenant(
       tasks, scope.tenantId, inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), ...projectFilter,
-      notExists(db.select({ one: sql`1` }).from(ticketDispositions).where(eq(ticketDispositions.taskId, tasks.id))),
+      sql`not exists (select 1 from ${ticketDispositions} where ${ticketDispositions.taskId} = ${tasks.id})`,
     )),
   ]);
 

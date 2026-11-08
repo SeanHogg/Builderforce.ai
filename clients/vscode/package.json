@@ -100,6 +100,10 @@
           "when": "builderforce.signedIn"
         },
         {
+          "id": "builderforce.localWork",
+          "name": "%view.localWork%"
+        },
+        {
           "id": "builderforce.inbox",
           "name": "%view.inbox%",
           "when": "builderforce.signedIn"
@@ -489,6 +493,36 @@
         "icon": "$(export)"
       },
       {
+        "command": "builderforce.showSyncSummary",
+        "title": "%command.showSyncSummary%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.localWork.createTicket",
+        "title": "%command.localWork.createTicket%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.localWork.setStatus",
+        "title": "%command.localWork.setStatus%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "builderforce.localWork.archive",
+        "title": "%command.localWork.archive%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "builderforce.localWork.openChat",
+        "title": "%command.localWork.openChat%",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "builderforce.localWork.refresh",
+        "title": "%command.localWork.refresh%",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "builderforce.openPullRequest",
         "title": "%command.openPullRequest%",
         "icon": "$(git-commit)"
@@ -564,6 +598,16 @@
         }
       ],
       "view/title": [
+        {
+          "command": "builderforce.localWork.createTicket",
+          "when": "view == builderforce.localWork",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.localWork.refresh",
+          "when": "view == builderforce.localWork",
+          "group": "navigation@2"
+        },
         {
           "command": "builderforce.newSession",
           "when": "view == builderforce.work",
@@ -712,6 +756,26 @@
       ],
       "view/item/context": [
         {
+          "command": "builderforce.localWork.createTicket",
+          "when": "view == builderforce.localWork && viewItem == localWork.project",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.localWork.openChat",
+          "when": "view == builderforce.localWork && viewItem == localWork.ticket",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.localWork.setStatus",
+          "when": "view == builderforce.localWork && viewItem == localWork.ticket",
+          "group": "inline@2"
+        },
+        {
+          "command": "builderforce.localWork.archive",
+          "when": "view == builderforce.localWork && viewItem == localWork.ticket",
+          "group": "inline@3"
+        },
+        {
           "command": "builderforce.newSession",
           "when": "view == builderforce.work && viewItem == bfSection.sessions",
           "group": "inline@1"
@@ -818,6 +882,18 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "builderforce.localWork.setStatus",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.localWork.archive",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.localWork.openChat",
+          "when": "false"
+        },
         {
           "command": "builderforce.openSession",
           "when": "false"

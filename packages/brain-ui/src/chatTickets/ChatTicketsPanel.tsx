@@ -13,7 +13,7 @@
  * strings come from an injected {@link ChatTicketsLabels} bundle. Native <select>s
  * keep it dependency-free so both hosts render it identically.
  */
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HealthRing } from '../HealthRing';
 import { resolveRunGate } from './runGate';
 import { rollupChatTicketHealth } from '@builderforce/agent-loop';
@@ -41,7 +41,8 @@ import {
 } from './types';
 
 export interface ChatTicketsPanelProps {
-  chatId: number;
+  /** The adapter's chat id: a server id (number) or a local chat's client id (string). */
+  chatId: string | number;
   projectId: number | null;
   /** Other chats (for the merge picker). */
   chatList: ChatOptionVM[];
@@ -88,6 +89,12 @@ export interface ChatTicketsPanelProps {
    * simply has nothing to show.
    */
   originalRequest?: string | null;
+  /** A host's own header row under the original request (the local-first sync summary and the
+   *  freshness line). Omit and nothing is drawn: the web app passes none. */
+  railHeader?: ReactNode;
+  /** A host's per-ticket marker drawn under each ticket's meta line (the sync-status badge).
+   *  Omit and nothing is drawn: the web app passes none. */
+  ticketBadge?: (tk: TicketLinkVM) => ReactNode;
 }
 
 /** The action-row drawers the panel ships with; extension keys must not collide. */
@@ -102,7 +109,7 @@ const COLLAPSE_THRESHOLD = 8;
 
 const NO_SUBAGENTS: readonly ChatSubagentVM[] = [];
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale, originalRequest }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale, originalRequest, railHeader, ticketBadge }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -214,6 +221,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           and the auto-title is only a ~60-char derivation of it. Hidden when absent so
           a pre-1245 chat renders exactly as before. */}
       <OriginalRequest text={originalRequest} labels={labels} />
+      {railHeader}
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
       {tickets.length > 0 && (
@@ -283,6 +291,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
                   openTitle={labels.open}
                   onOpen={onOpenTicket && parentTk ? () => onOpenTicket(parentTk) : undefined}
                 />
+                {ticketBadge?.(tk)}
               </div>
               <div style={{ display: 'flex', gap: 2 }}>
                 {onOpenTicket && tk.exists && (

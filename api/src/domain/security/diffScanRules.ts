@@ -12,6 +12,7 @@
  * incident rule need no translation. A committed live credential is CRITICAL; a code pattern that is
  * only dangerous in context is MEDIUM (informs, never holds a merge).
  */
+import { DEFAULT_SECRET_PATTERNS, redactText } from '@builderforce/secret-redaction';
 import type { FindingSeverity, NormalizedFinding } from './scanReportParsers';
 
 export type DiffScanKind = 'secret' | 'sast';
@@ -172,13 +173,8 @@ export function isScannablePath(path: string): boolean {
  * path: a credential in a test fixture is still a credential. PURE.
  */
 export function redactSecrets(text: string): string {
-  let out = text;
-  for (const rule of DIFF_SCAN_RULES) {
-    if (rule.kind !== 'secret') continue;
-    const flags = rule.pattern.flags.includes('g') ? rule.pattern.flags : `${rule.pattern.flags}g`;
-    out = out.replace(new RegExp(rule.pattern.source, flags), `[REDACTED:${rule.id}]`);
-  }
-  return out;
+  // The patterns are the shared set (`@builderforce/secret-redaction`), a superset of this file's secret rules; only the label is ours.
+  return redactText(text, DEFAULT_SECRET_PATTERNS, 'strict', (id) => `[REDACTED:secret.${id}]`);
 }
 
 /** Run the rules of the given kinds over one file's content. One finding per rule per line. */

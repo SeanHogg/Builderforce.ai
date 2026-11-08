@@ -3,6 +3,8 @@
  * PERSON collides on the candidate index instead, and the source fold on write.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 
 const enterPipeline = vi.fn();
@@ -95,6 +97,19 @@ describe('the board-id arbiter', () => {
     const result = await recordApplication(db, ENV, { ...base, source: 'LinkedIn', boards: BUILTIN_BOARD_SOURCES });
     expect(result.created).toBe(false);
     expect(enterPipeline.mock.calls[0]![2]).toMatchObject({ source: 'linkedin-jobs' });
+  });
+});
+
+describe('regression: a re-read applicant does not look freshly edited', () => {
+  it('moves updated_at only when a refreshed field actually changes', async () => {
+    const { db, attempts } = fakeDb();
+    await recordApplication(db, ENV, { ...base, source: 'workable', externalId: 'ext-9', boards: BUILTIN_BOARD_SOURCES });
+    const set = (attempts[0]!.config as unknown as { set: { updatedAt: SQL } }).set;
+    const { sql: text } = new PgDialect().sqlToQuery(set.updatedAt);
+    expect(text).toMatch(/case when/i);
+    expect(text).toMatch(/is distinct from/i);
+    expect(text).toMatch(/else "job_applications"\."updated_at" end/);
+    expect(text).not.toBe('now()'); // the old unconditional bump
   });
 });
 

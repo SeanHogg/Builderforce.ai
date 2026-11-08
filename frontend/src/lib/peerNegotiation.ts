@@ -49,17 +49,26 @@ export function newNegotiation(myId: string, peerId: string): PeerNegotiation {
   return { polite: isPolite(myId, peerId), makingOffer: false, ignoreOffer: false };
 }
 
-/** Create and send an offer to `peerId`. Safe to call at any time; never throws. */
-export async function offerTo(pc: NegotiationPc, state: PeerNegotiation, peerId: string, send: SendFrame): Promise<void> {
+/**
+ * Every step below resolves to whether it took effect (`false`: ignored as stale or
+ * colliding, or the browser refused it — a superseded offer, a stale answer, a bad ICE
+ * candidate, all non-fatal for a mesh and retried by the next negotiation). None throws.
+ */
+
+/** Create and send an offer to `peerId`. Safe to call at any time. */
+export async function offerTo(pc: NegotiationPc, state: PeerNegotiation, peerId: string, send: SendFrame): Promise<boolean> {
   try {
     state.makingOffer = true;
     const offer = await pc.createOffer();
     // A remote offer was applied while ours was being created: ours is stale. The peer's
     // offer is being answered; the next change renegotiates again.
-    if (pc.signalingState !== 'stable') return;
+    if (pc.signalingState !== 'stable') return false;
     await pc.setLocalDescription(offer);
     send({ type: 'rtc-offer', to: peerId, sdp: pc.localDescription });
-  } catch { /* the next negotiation retries */ } finally {
+    return true;
+  } catch {
+    return false;
+  } finally {
     state.makingOffer = false;
   }
 }
@@ -67,27 +76,40 @@ export async function offerTo(pc: NegotiationPc, state: PeerNegotiation, peerId:
 /** Apply an incoming offer: yield (polite), ignore (impolite collision) or just answer. */
 export async function onOffer(
   pc: NegotiationPc, state: PeerNegotiation, peerId: string, sdp: RTCSessionDescriptionInit, send: SendFrame,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const collision = state.makingOffer || pc.signalingState !== 'stable';
     state.ignoreOffer = !state.polite && collision;
-    if (state.ignoreOffer) return;
+    if (state.ignoreOffer) return false;
     // For the polite end this also rolls its own pending offer back.
     await pc.setRemoteDescription(sdp);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     send({ type: 'rtc-answer', to: peerId, sdp: pc.localDescription });
-  } catch { /* malformed or superseded offer */ }
+    return true;
+  } catch {
+    return false; // malformed or superseded offer
+  }
 }
 
 /** Apply an answer — only to an offer we are actually waiting on. */
-export async function onAnswer(pc: NegotiationPc, sdp: RTCSessionDescriptionInit): Promise<void> {
-  if (pc.signalingState !== 'have-local-offer') return;
-  try { await pc.setRemoteDescription(sdp); } catch { /* stale answer */ }
+export async function onAnswer(pc: NegotiationPc, sdp: RTCSessionDescriptionInit): Promise<boolean> {
+  if (pc.signalingState !== 'have-local-offer') return false;
+  try {
+    await pc.setRemoteDescription(sdp);
+    return true;
+  } catch {
+    return false; // stale answer
+  }
 }
 
 /** Apply an ICE candidate, unless it belongs to an offer we ignored. */
-export async function onCandidate(pc: NegotiationPc, state: PeerNegotiation, candidate: RTCIceCandidateInit): Promise<void> {
-  if (state.ignoreOffer) return;
-  try { await pc.addIceCandidate(candidate); } catch { /* a bad candidate is non-fatal for mesh */ }
+export async function onCandidate(pc: NegotiationPc, state: PeerNegotiation, candidate: RTCIceCandidateInit): Promise<boolean> {
+  if (state.ignoreOffer) return false;
+  try {
+    await pc.addIceCandidate(candidate);
+    return true;
+  } catch {
+    return false;
+  }
 }

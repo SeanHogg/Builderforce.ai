@@ -325,7 +325,15 @@ export function kickReplicaPump(rootId: string, files: KnowledgeFiles, resolve: 
   held.timer = setTimeout(() => {
     held.timer = undefined;
     if (held.reviewing > 0) return;
-    const source = resolve(); // resolved NOW: the project may have changed since the key was marked
+    // Resolved NOW: the project may have changed since the key was marked. After shutdown the store refuses to open
+    // (`knowledge_shutting_down`): that is reported, never thrown out of a timer into the extension host.
+    let source: PumpSource | undefined;
+    try {
+      source = resolve();
+    } catch (error) {
+      report("replica pump", error);
+      return;
+    }
     if (source) void startReplicaPump(source);
   }, wait);
 }

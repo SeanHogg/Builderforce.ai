@@ -59,11 +59,15 @@ export const linkedinJobs: ConnectorManifest = {
       // processed the job, `jobPosting: "urn:li:jobPosting:<id>"` — the numeric id the
       // public page (/jobs/view/<id>) is addressed by. The stored task urn is then
       // REPLACED by that id, so later closes and updates target the job, not the task.
-      // Rest.li 2.0 takes a batch key as `ids=List(<urlencoded urn>)`, not a bare urn.
+      // Rest.li 2.0 takes a batch key as `ids=List(<urlencoded urn>)`, not a bare urn. The
+      // key is encoded ONCE, by `encodeResolveId`, and the param is `raw` so the runtime
+      // appends it as is (the parentheses stay literal).
+      // UNVERIFIED against the live LinkedIn API (no credentials available when this was
+      // written): the List(...) encoding follows the Rest.li 2.0 protocol document.
       key: 'resolve_url', label: 'Find public link', description: 'Read a publish task\'s status and the job it produced.',
       method: 'GET', path: '/simpleJobPostingTasks', mutates: false,
       headers: { 'LinkedIn-Version': '202604', 'X-Restli-Protocol-Version': '2.0.0' },
-      params: { ids: q('The task urn the create call returned') },
+      params: { ids: q('The task urn the create call returned', { raw: true }) },
       resolve: {
         idParam: 'ids',
         idEncoding: 'restli-list',

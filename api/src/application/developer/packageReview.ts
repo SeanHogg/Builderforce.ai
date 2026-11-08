@@ -28,6 +28,7 @@ import {
   type PublisherState,
   type ExtensionKind,
 } from './extensionContract';
+import { findSecretShapes } from '@builderforce/secret-redaction';
 import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
 import { isReservedConnectorKey } from '../connectors/defaults';
 import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
@@ -69,23 +70,12 @@ const fail = (check: string, message: string): ReviewFinding => ({ check, severi
  * is either a publisher leaking their own secret into a public listing or an
  * attempt to ship a hard-coded key, and both are refusals.
  */
-const SECRET_PATTERNS: ReadonlyArray<{ label: string; re: RegExp }> = [
-  { label: 'AWS access key id',      re: /\bAKIA[0-9A-Z]{16}\b/ },
-  { label: 'GitHub token',           re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/ },
-  { label: 'Slack token',            re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
-  { label: 'Stripe secret key',      re: /\bsk_(live|test)_[A-Za-z0-9]{16,}\b/ },
-  { label: 'OpenAI-style key',       re: /\bsk-[A-Za-z0-9]{32,}\b/ },
-  { label: 'Google API key',         re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
-  { label: 'private key block',      re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { label: 'BuilderForce API key',   re: /\bbf(k|ai)_[A-Za-z0-9]{16,}\b/ },
-];
-
+// The credential shapes are the shared list (`@builderforce/secret-redaction` SECRET_SHAPES): a prefix added there is refused here too.
 function scanForSecrets(spec: unknown): ReviewFinding {
   const serialized = JSON.stringify(spec ?? {});
-  for (const { label, re } of SECRET_PATTERNS) {
-    if (re.test(serialized)) {
-      return fail('secret_scan', `spec contains what looks like a ${label} — credentials are supplied at install time, never in a manifest`);
-    }
+  const [hit] = findSecretShapes(serialized);
+  if (hit) {
+    return fail('secret_scan', `spec contains what looks like a ${hit.label} — credentials are supplied at install time, never in a manifest`);
   }
   return pass('secret_scan', 'no credential-shaped literals in the spec');
 }

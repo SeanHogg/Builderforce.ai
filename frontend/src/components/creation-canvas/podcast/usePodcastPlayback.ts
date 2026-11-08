@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PodcastSegment } from '@/lib/creation/podcast/podcastEpisode';
 import { useAuthedMediaUrl } from '@/lib/useAuthedMediaUrl';
 
 /**
  * Plays the episode's segments back to back through ONE `<audio>` element, honouring
- * each segment's trim window. The element is the caller's to render (`audioRef`, `src`,
+ * each segment's trim window. The element is the caller's to render (`bindAudio`, `src`,
  * `onLoadedMetadata`, `onTimeUpdate`) so the markup stays in the presentational layer.
  */
 export function usePodcastPlayback(segments: readonly PodcastSegment[]) {
   const playable = useMemo(() => segments.filter((segment) => !!segment.source), [segments]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  /** The `<audio>` element's callback ref, handed out as a function so callers never hold a ref object. */
+  const bindAudio = useCallback((element: HTMLAudioElement | null) => { audio.current = element; }, []);
   const [index, setIndex] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -24,7 +26,7 @@ export function usePodcastPlayback(segments: readonly PodcastSegment[]) {
   const currentClipId = current?.clip.id ?? null;
 
   useEffect(() => {
-    const element = audioRef.current;
+    const element = audio.current;
     if (!element || currentClipId === null) return;
     if (!playing) { element.pause(); return; }
     // A new source is positioned by `onLoadedMetadata`; a source already loaded (the
@@ -36,7 +38,7 @@ export function usePodcastPlayback(segments: readonly PodcastSegment[]) {
   }, [currentClipId, trimStart, playing]);
 
   return {
-    audioRef,
+    bindAudio,
     src: authed.url ?? '',
     playing,
     currentClipId,
@@ -52,13 +54,13 @@ export function usePodcastPlayback(segments: readonly PodcastSegment[]) {
     },
     stop,
     onLoadedMetadata: () => {
-      const element = audioRef.current;
+      const element = audio.current;
       if (!element || !current) return;
       element.currentTime = trimStart;
       if (playing) void element.play().catch(() => setPlaying(false));
     },
     onTimeUpdate: () => {
-      const element = audioRef.current;
+      const element = audio.current;
       if (!element || !current) return;
       setElapsed(current.clip.startSeconds + Math.max(0, element.currentTime - trimStart));
       if (element.currentTime >= windowEnd - 0.05) {

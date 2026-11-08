@@ -1,6 +1,7 @@
 import { request } from '@/lib/builderforceApi';
 import { apiRequestStream } from '@/lib/apiClient';
 import { AUTH_API_URL } from '@/lib/auth';
+import { fetchWithTransportReport } from '@/lib/errors/transportFailure';
 import { BRAIN_UPLOAD_PATH } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasVideoCaptureKind, CanvasVideoSource, CanvasVideoSourceKind } from '@builderforce/creation-canvas-contract';
 
@@ -132,7 +133,7 @@ export async function fetchCanvasMediaBlob(url: string): Promise<Blob> {
   const uploadPath = authenticatedUploadPath(url);
   const response = uploadPath
     ? await apiRequestStream(uploadPath)
-    : await fetch(url, { mode: 'cors', credentials: 'omit' });
+    : await fetchWithTransportReport(url, { mode: 'cors', credentials: 'omit' }, { silent: true });
   if (!response.ok) throw new Error(`media fetch failed: ${response.status}`);
   return response.blob();
 }

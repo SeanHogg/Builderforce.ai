@@ -16,7 +16,7 @@ describe("resolveExternalTarget", () => {
     expect(resolveExternalTarget("//evil.com", WEB)).toBeNull();
     expect(resolveExternalTarget("@evil.com", WEB)).toBeNull();
     expect(resolveExternalTarget("/@evil.com", WEB)).toBe("https://builderforce.ai/@evil.com");
-    expect(resolveExternalTarget("/\evil.com", WEB)).toBeNull();
+    expect(resolveExternalTarget("/\\evil.com", WEB)).toBeNull();
     expect(resolveExternalTarget("https://builderforce.ai@evil.com/", WEB)).toBeNull();
     expect(resolveExternalTarget("https://checkout.stripe.com.evil.com/", WEB)).toBeNull();
     expect(resolveExternalTarget("http://checkout.stripe.com/", WEB)).toBeNull();

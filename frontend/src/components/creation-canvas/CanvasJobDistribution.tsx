@@ -112,11 +112,16 @@ export function CanvasJobDistribution({ data, onEdit }: {
       setErrors(result.boards
         .filter((board) => board.error)
         .map((board) => t('importBoardFailed', { board: boardName(board.connectorKey), detail: board.error ?? '' })));
-      const skipped = result.boards.reduce((sum, board) => sum + board.failedApplicants, 0);
+      const total = (pick: (board: (typeof result.boards)[number]) => number) => result.boards.reduce((sum, board) => sum + pick(board), 0);
+      const skipped = total((board) => board.failedApplicants);
+      const mismatched = total((board) => board.mismatched);
+      const quarantined = total((board) => board.quarantined);
       setImportNote([
         t('importDone', { count: result.imported }),
         result.more ? t('importMore') : '',
         skipped > 0 ? t('importPartial', { count: skipped }) : '',
+        mismatched > 0 ? t('importMismatched', { count: mismatched }) : '',
+        quarantined > 0 ? t('importQuarantined', { count: quarantined }) : '',
       ].filter(Boolean).join(' '));
       // The per-board applicant counts moved; redraw from the same read the card uses.
       const read = await atsApi.postings.distributions(postingId);

@@ -10,6 +10,7 @@ import { setInferenceMode } from "./inferenceModeSetting";
 import { DOWNLOAD_LOCAL_MODEL_COMMAND } from "./noLocalModelPrompt";
 import { callLocalPersistence } from "./localPersistenceDispatch";
 import { createLocalWorkRepository } from "./localWorkRepository";
+import { handleChatRailRequest } from "./chatRail/chatRailHost";
 import { signInToAccountProvider } from "./providerConnect";
 
 /**
@@ -227,6 +228,13 @@ export async function handleSharedHostMessage(
         logLine(`[webview] local.tickets failed: ${error instanceof Error ? error.message : String(error)}`);
         respondToWebview(webview, msg.id, true, []);
       }
+      return true;
+    }
+    // The rail's local copy and its local link writes (G21).
+    case "local.chatRail": {
+      const answer = await handleChatRailRequest(ctx, webview, owner, msg);
+      if (answer.ok) respondToWebview(webview, msg.id, true, answer.result);
+      else respondToWebview(webview, msg.id, false, undefined, answer.error);
       return true;
     }
     case "signin":

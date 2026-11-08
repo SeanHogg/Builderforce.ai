@@ -54,12 +54,13 @@ export function useModel3dEditor(data: CreationNodeData, onEdit?: (patch: Partia
     patch: (id: string, patch: Partial<Model3dEntity>) => change((current) => updateEntity(current, id, patch)),
     move: (id: string, translate: V3) => change((current) => updateEntity(current, id, { translate })),
     group: (op: BooleanOperation, ids: readonly string[]) => {
-      try {
-        const grouped = addBooleanOp(latest.current.state, op, ids);
-        latest.current = { ...latest.current, state: grouped.state };
-        commit(grouped.state);
-        setSelection([grouped.id]);
-      } catch { /* fewer than two parts: the control that calls this is disabled, so this is a stale click */ }
+      // Fewer than two existing parts: the control that calls this is disabled, so this is a stale click.
+      const existing = new Set(ids.filter((id) => latest.current.state.entities.some((entity) => entity.id === id)));
+      if (existing.size < 2) return;
+      const grouped = addBooleanOp(latest.current.state, op, ids);
+      latest.current = { ...latest.current, state: grouped.state };
+      commit(grouped.state);
+      setSelection([grouped.id]);
     },
   }), [change, commit]);
 

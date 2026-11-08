@@ -9303,7 +9303,15 @@ function createAnalyzeCodebaseTool(options = {}) {
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs = [];
       const entries = bundledAnalyzers();
+      let settledTold = 0;
+      const tellSettled = () => {
+        while (settledTold < tools.length) {
+          settledTold++;
+          options.onToolSettled?.();
+        }
+      };
       for (const analyzer of ANALYZERS) {
+        tellSettled();
         const entry = entries?.[analyzer.name];
         if (entries && !entry) {
           outputs.push(null);
@@ -9358,6 +9366,7 @@ function createAnalyzeCodebaseTool(options = {}) {
           tools.push({ name: analyzer.name, version: analyzer.version, status: "failed", error: String(error).slice(0, 1e3) });
         }
       }
+      tellSettled();
       const { commit, branch, dirty, dirtyHash } = await workspaceFingerprint(ctx);
       const remote = (await gitText(ctx, `${GIT} remote get-url origin`))?.trim().replace(/^git@github.com:/, "https://github.com/").replace(/\.git$/, "");
       const repository = remote && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(remote) ? remote : void 0;

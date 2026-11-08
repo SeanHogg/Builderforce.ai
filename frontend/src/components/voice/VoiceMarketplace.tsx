@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/Button';
 import { SectionEmpty, SectionLoading } from '@/components/ui/SectionState';
 import { Surface } from '@/components/ui/Surface';
 import { canvasNavigate, canvasWebOrigin } from '@/lib/canvasHost';
+import { recordedFailure } from '@/lib/reportError';
 import { formatMillicents } from '@/lib/canvasMoney';
 import {
   acquireMarketplaceVoice,
@@ -42,9 +43,9 @@ export function VoiceMarketplace() {
   const [actionError, setActionError] = useState(false);
 
   const load = useCallback(async () => {
-    setFailed(false);
     try {
-      const [listed, owned] = await Promise.all([listMarketplaceVoices(), listVoiceClones().catch(() => [])]);
+      const [listed, owned] = await Promise.all([listMarketplaceVoices(), listVoiceClones().catch(recordedFailure('Reading my voice clones', [] as Awaited<ReturnType<typeof listVoiceClones>>))]);
+      setFailed(false);
       setVoices(listed);
       setMine(new Set(owned.map((c) => c.id)));
     } catch {
@@ -61,22 +62,23 @@ export function VoiceMarketplace() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const checkout = params.get('checkout');
-    if (!checkout) { void load(); return; }
     const voiceId = Number(params.get('voice'));
-    // Clear first so a refresh cannot re-run a completed purchase.
-    const clean = new URL(window.location.href);
-    clean.searchParams.delete('checkout');
-    clean.searchParams.delete('voice');
-    window.history.replaceState({}, '', clean.toString());
-    if (checkout === 'cancelled' || !Number.isInteger(voiceId)) {
-      setNotice(t('checkoutCancelled'));
-      void load();
-      return;
+    let outcome: Promise<string | null> = Promise.resolve(null);
+    if (checkout) {
+      // Clear first so a refresh cannot re-run a completed purchase.
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete('checkout');
+      clean.searchParams.delete('voice');
+      window.history.replaceState({}, '', clean.toString());
+      outcome = checkout === 'cancelled' || !Number.isInteger(voiceId)
+        ? Promise.resolve(t('checkoutCancelled'))
+        : completeMarketplaceVoiceCheckout(voiceId, checkout).then(
+          (out) => t(out.status === 'revoked' ? 'licenseRevoked' : 'checkoutDone'),
+          () => t('checkoutFailed'),
+        );
     }
-    completeMarketplaceVoiceCheckout(voiceId, checkout)
-      .then((out) => setNotice(t(out.status === 'revoked' ? 'licenseRevoked' : 'checkoutDone')))
-      .catch(() => setNotice(t('checkoutFailed')))
-      .finally(() => void load());
+    // Everything that sets state runs after the answer, never synchronously in the effect.
+    void outcome.then((message) => { if (message) setNotice(message); }).finally(() => void load());
   }, [load, t]);
 
   const q = search.trim().toLowerCase();

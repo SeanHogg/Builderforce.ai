@@ -21,7 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmTraces } from '../../infrastructure/database/schema';
-import { redactDeep, redactSecrets } from '../../infrastructure/security/redactSecrets';
+import { redactDeep, redactJsonText, redactSecrets } from '../../infrastructure/security/redactSecrets';
 import type { ImageProxyResult } from './ImageProxyService';
 import type { HonoEnv } from '../../env';
 import { requestCarriesImages } from './vendors/capabilityGate';
@@ -100,7 +100,7 @@ function jsonOrNull(v: unknown): string | null {
   if (v == null) return null;
   try {
     // Redact the VALUE (never the stringified blob: escaping hides quoted secrets), then serialize, then cap.
-    return cap(typeof v === 'string' ? redactSecrets(v) : JSON.stringify(redactDeep(v)));
+    return cap(typeof v === 'string' ? redactJsonText(v) : JSON.stringify(redactDeep(v)));
   } catch {
     return null;
   }

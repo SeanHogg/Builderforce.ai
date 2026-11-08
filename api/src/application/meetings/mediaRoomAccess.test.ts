@@ -33,7 +33,7 @@ function fakeDb() {
     from: () => chain(),
     where: () => chain(),
     limit: async () => {
-      const tenantArg = eq.mock.calls.findLast(([col]) => col === 'tenantId')?.[1];
+      const tenantArg = [...eq.mock.calls].reverse().find((call: unknown[]) => call[0] === 'tenantId')?.[1];
       return meetingRow && tenantArg === meetingRow.tenantId ? [meetingRow] : [];
     },
     then: (resolve: (v: unknown) => void) => resolve(attendees),

@@ -27,7 +27,8 @@ import {
 } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
+import type { ConnectorManifest } from '../connectors/connectorManifest';
+import { parseStoredConnectorManifest } from '../connectors/connectorStoredManifest';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { PublisherError } from './publishers';
 import {
@@ -418,7 +419,7 @@ export async function installedConnectorManifests(
     if (install.subscriptionState !== 'none' && !subscriptionEntitles(install.subscriptionState)) continue;
     try {
       out.push({
-        manifest: parseConnectorManifest(version.spec),
+        manifest: parseStoredConnectorManifest(version.spec),
         installId: install.id,
         packageSlug: pkg.slug,
         version: version.semver,

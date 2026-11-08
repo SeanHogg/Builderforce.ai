@@ -16,15 +16,15 @@
  * policy, the post-edit checks, the background-job table), so the Actions runner can inline
  * it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
  */
-import { spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { access, lstat, mkdir, open as openFile, readFile, readdir, readlink, realpath, rm, stat } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { join, dirname, relative, resolve as resolvePath, sep } from 'node:path';
 import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
-import { bootJobIdPrefix, createJobTable, killTree, shellEnv } from './sandboxJobs.mjs';
+import { bootJobIdPrefix, createJobTable, killTree, provisionShellUser, shellEnv, shellInvocation, shellUser, spawnShell } from './sandboxJobs.mjs';
 
-export { shellEnv };
+export { provisionShellUser, shellEnv, shellInvocation, shellUser, spawnShell };
 
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
@@ -53,7 +53,7 @@ const SHELL_SETTLE_MS = 2_000;
  *  `/sandbox/run` request (the engine's cancel) can stop it. */
 function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', command], { cwd, env: shellEnv(), detached: true });
+    const child = spawnShell(command, { cwd });
     let out = '';
     const cap = (chunk) => { out = keepTail(out + chunk, SHELL_CAPTURE_CHARS.container); };
     child.stdout.on('data', cap);
@@ -244,70 +244,146 @@ function lexicallyInside(root, abs) {
 const MAX_LINK_HOPS = 16;
 
 /**
- * Whether `p` (absolute) resolves inside `realRoot` once every symlink on its path is followed.
- * `realpath` throws ENOENT for a path that does not exist yet (a file about to be created) AND
- * for a dangling symlink, so on ENOENT the probe is `lstat`ed: a dangling link is resolved by
- * hand (`readlink`, against the real parent) and re-checked, up to a hop limit; a genuinely
- * missing component walks up to the nearest ancestor that exists.
+ * The real path `p` (absolute) resolves to once every symlink on its path is followed, or null when
+ * that is outside `realRoot`. `realpath` throws ENOENT for a path that does not exist yet (a file
+ * about to be created) AND for a dangling symlink, so on ENOENT the probe is `lstat`ed: a dangling
+ * link is resolved by hand (`readlink`, against the real parent) and re-checked, up to a hop limit;
+ * a genuinely missing component walks up to the nearest ancestor that exists, and the components
+ * that do not exist yet are appended to its real path.
  */
-async function resolvesInside(realRoot, p, hops = 0) {
+async function resolveInside(realRoot, p, hops = 0) {
   let probe = p;
+  const rest = [];
+  const inside = (real) => (lexicallyInside(realRoot, real) ? real : null);
   for (;;) {
     try {
-      return lexicallyInside(realRoot, await realpath(probe));
+      return inside(join(await realpath(probe), ...rest));
     } catch (e) {
-      if (!e || e.code !== 'ENOENT') return false;
+      if (!e || e.code !== 'ENOENT') return null;
     }
     let link = null;
     try {
       const st = await lstat(probe);
       if (st.isSymbolicLink()) link = await readlink(probe);
     } catch (e) {
-      if (!e || e.code !== 'ENOENT') return false;
+      if (!e || e.code !== 'ENOENT') return null;
     }
     if (link !== null) {
-      if (hops >= MAX_LINK_HOPS) return false;
+      if (hops >= MAX_LINK_HOPS) return null;
       let parentReal;
-      try { parentReal = await realpath(dirname(probe)); } catch { return false; }
-      return resolvesInside(realRoot, resolvePath(parentReal, link), hops + 1);
+      try { parentReal = await realpath(dirname(probe)); } catch { return null; }
+      const target = await resolveInside(realRoot, resolvePath(parentReal, link), hops + 1);
+      return target === null ? null : inside(join(target, ...rest));
     }
     const parent = dirname(probe);
-    if (parent === probe) return false;
+    if (parent === probe) return null;
+    rest.unshift(probe.slice(parent.length).replace(/^[\\/]+/, ''));
     probe = parent;
   }
+}
+
+/** Whether a path (relative to the clone root) passes through the clone's own `.git` control directory. */
+function touchesGitDir(relPath) {
+  return relPath.split(sep).includes('.git');
 }
 
 /**
  * A repo-relative path inside the clone, or null when it would escape it — lexically
  * (`../`, a leading `/` is treated as clone-relative) AND through symlinks, including a
- * dangling link whose target is outside (see {@link resolvesInside}). This is defence in
- * depth: the shell is unrestricted inside the container (the non-root user + egress allowlist
- * are the boundary). Accepted residuals: a TOCTOU between this check and the open, and hard
- * links to files outside the clone.
+ * dangling link whose target is outside (see {@link resolveInside}). This is defence in
+ * depth: the model's shell is a different, unprivileged uid (`shellUser`), but it shares the
+ * tree with this process, so the guard is what keeps an fs op from being steered by a symlink
+ * the shell planted into the server's own files (or into `.git`, reached through an alias such
+ * as `ln -s .git g`: the `.git` check is applied to the RESOLVED path too). Accepted residuals:
+ * a TOCTOU between this check and the open (node has no `openat`/O_DIRECTORY-relative open; the
+ * writer narrows it by re-verifying the parent's realpath after `mkdir` and refusing a symlink
+ * at the final component with O_NOFOLLOW), and hard links to files outside the clone.
  */
 async function insideClone(workdir, path) {
   if (typeof path !== 'string' || !path.trim()) return null;
   const abs = resolvePath(workdir, path.replace(/^\/+/, ''));
   if (!lexicallyInside(workdir, abs)) return null;
   // `.git` is the clone's own control directory (hooks run as code, config can point at anything): never reachable through an fs op or a cwd.
-  if (relative(workdir, abs).split(sep).includes('.git')) return null;
+  if (touchesGitDir(relative(workdir, abs))) return null;
   let realRoot;
   try { realRoot = await realpath(workdir); } catch { return null; }
-  return (await resolvesInside(realRoot, abs)) ? abs : null;
+  const real = await resolveInside(realRoot, abs);
+  if (real === null || touchesGitDir(relative(realRoot, real))) return null;
+  return abs;
 }
 
-/** Write `content` to `abs` without following a symlink at the final component (where the platform has O_NOFOLLOW). */
+/** The directory is a real one inside the clone and not `.git`: the check that is re-run right after `mkdir`, when the tree may have changed under the guard. */
+async function parentStillInside(workdir, abs) {
+  const realRoot = await realpath(workdir);
+  const parent = await realpath(dirname(abs));
+  return lexicallyInside(realRoot, parent) && !touchesGitDir(relative(realRoot, parent));
+}
+
+/** Write `content` to `abs` without following a symlink at the final component (where the platform has O_NOFOLLOW).
+ *  Mode 0664: the shell user (same group, other uid) reads and rewrites what this process writes. */
 async function writeNoFollow(workdir, abs, content) {
   const real = await realpath(abs).catch(() => abs); // an in-clone alias is resolved by the guard; write its real file
   // Recheck the RESOLVED path (the guard ran before this realpath, and the tree may have changed since).
-  if (real !== abs && !lexicallyInside(await realpath(workdir), real)) throw new Error('path resolves outside the repository');
-  const fh = await openFile(real, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | (fsConstants.O_NOFOLLOW ?? 0), 0o644);
+  if (real !== abs) {
+    const realRoot = await realpath(workdir);
+    if (!lexicallyInside(realRoot, real) || touchesGitDir(relative(realRoot, real))) throw new Error('path resolves outside the repository');
+  }
+  const fh = await openFile(real, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | (fsConstants.O_NOFOLLOW ?? 0), 0o664);
   try { await fh.writeFile(content); } finally { await fh.close(); }
 }
 
 /** A git-safe ref name, or null. */
 function safeRef(v) {
   return typeof v === 'string' && /^[\w./@-]+$/.test(v) ? v : null;
+}
+
+/**
+ * Where, and as whom, THIS process talks git to the Worker's container-git proxy: the credential-free
+ * `spec.repo.cloneUrl` and the run's token (`spec.token`). No clone URL on the spec ⇒ the local `origin`
+ * (tests, hand-run). The token is never put in a URL, in `.git/config`, or in the model shell's environ.
+ */
+export function gitAuthOf(spec) {
+  const url = spec && spec.repo && typeof spec.repo.cloneUrl === 'string' ? spec.repo.cloneUrl : null;
+  if (!url) return { url: 'origin', token: null };
+  return { url, token: typeof spec.token === 'string' && spec.token ? spec.token : null };
+}
+
+/**
+ * Run `git <args>` as THIS process (never as the shell user, never through the model's shell), with the run
+ * credential supplied for this one command only: an `http.<url>.extraHeader` through git's command-line config
+ * environment (GIT_CONFIG_*), which lives in this child's environ and nowhere on disk or in argv (`/proc/<pid>/cmdline`
+ * is world-readable). Used for the clone, and the fetch that absorbs an engine commit.
+ */
+export function runGit(args, cwd, auth = null) {
+  const config = [['safe.directory', '*']];
+  if (auth && auth.token && /^https?:\/\//.test(auth.url)) {
+    const basic = Buffer.from(`x-access-token:${auth.token}`).toString('base64');
+    config.push([`http.${auth.url}.extraHeader`, `Authorization: Basic ${basic}`]);
+  }
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_COUNT: String(config.length) };
+  config.forEach(([key, value], i) => { env[`GIT_CONFIG_KEY_${i}`] = key; env[`GIT_CONFIG_VALUE_${i}`] = value; });
+  return new Promise((resolve) => {
+    execFile('git', args, { cwd, env, timeout: 120_000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+      const code = error ? (typeof error.code === 'number' ? error.code : -1) : 0;
+      // The output is shown to the model/timeline: never echo the credential back out of git's own diagnostics.
+      const output = `${stdout}${stderr}`.split(auth && auth.token ? auth.token : '\0').join('***');
+      resolve({ exitCode: code, output });
+    });
+  });
+}
+
+/** `git config --unset-all` answers 5 for "that key is not set": the expected state, not a failure. */
+const GIT_CONFIG_KEY_NOT_SET = 5;
+
+/**
+ * Remove the credential `actions/checkout` persists into `.git/config` (`http.https://github.com/.extraheader`) from
+ * a checkout made by an OLDER tenant workflow that lacks `persist-credentials: false`, before any request is
+ * served — the model's shell must never find the repo's GITHUB_TOKEN there. `{ ok: false, output }` when git
+ * could not even run the command (not a repository, git missing); an absent key is the normal case.
+ */
+export async function scrubCheckoutCredentials(workdir) {
+  const r = await runGit(['config', '--local', '--unset-all', 'http.https://github.com/.extraheader'], workdir);
+  return r.exitCode === 0 || r.exitCode === GIT_CONFIG_KEY_NOT_SET ? { ok: true } : { ok: false, output: r.output };
 }
 
 /**
@@ -323,11 +399,15 @@ function safeRef(v) {
 async function absorbCommit(box, abs, content) {
   const head = safeRef(box.spec.repo && box.spec.repo.headBranch);
   if (!head) return false;
-  const r = await runShell([
-    `git fetch -q origin "${head}"`,
-    `if [ "$(git rev-parse --abbrev-ref HEAD)" = "${head}" ]; then git merge -q --ff-only FETCH_HEAD; else git checkout -q -B "${head}" FETCH_HEAD; fi`,
-  ].join(' && '), box.workdir, null, 60_000);
-  if (r.exitCode !== 0) return false;
+  const auth = gitAuthOf(box.spec);
+  if (!auth) return false;
+  const fetched = await runGit(['fetch', '-q', auth.url, head], box.workdir, auth);
+  if (fetched.exitCode !== 0) return false;
+  const current = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], box.workdir);
+  const moved = current.exitCode === 0 && current.output.trim() === head
+    ? await runGit(['merge', '-q', '--ff-only', 'FETCH_HEAD'], box.workdir)
+    : await runGit(['checkout', '-q', '-B', head, 'FETCH_HEAD'], box.workdir);
+  if (moved.exitCode !== 0) return false;
   try {
     return content === null ? !(await access(abs).then(() => true, () => false)) : (await readFile(abs, 'utf8')) === content;
   } catch {
@@ -358,7 +438,9 @@ async function sandboxFs(box, body) {
     if (typeof body.content !== 'string') return { ok: false, error: 'content is required' };
     if (!(body.committed === true && await absorbCommit(box, abs, body.content))) {
       try {
-        await mkdir(dirname(abs), { recursive: true });
+        await mkdir(dirname(abs), { recursive: true, mode: 0o775 });
+        // The shell shares this tree: re-verify the parent now that it exists, not only as the guard saw it.
+        if (!(await parentStillInside(workdir, abs))) throw new Error('path resolves outside the repository');
         await writeNoFollow(workdir, abs, body.content);
       } catch (e) { return { ok: false, error: `write failed: ${e.message}` }; }
     }
@@ -427,6 +509,8 @@ async function sandboxChecks(box) {
  * service's event to the run's timeline (each transport posts it its own way).
  */
 export function createSandboxBox({ spec, workdir, branch = null, emit = () => {}, jobIdPrefix = '' }) {
+  // The model's shell is another uid in this process's group: what this process creates (files, git objects) must be group-writable for it.
+  if (shellUser()) process.umask(0o002);
   const box = { spec, workdir, branch, emit, checks: null, jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS, idPrefix: jobIdPrefix }) };
   if (spec.postEditChecks === true) box.checks = startPostEditChecks(box);
   return box;

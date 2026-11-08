@@ -76,6 +76,12 @@ export interface DurableLocalFirstStore extends LocalFirstStore {
   readonly snapshotFile: string;
   readonly journalFile: string;
   /**
+   * The committed state WITHOUT cloning its rows (`export` clones every row, megabytes once a store
+   * holds a whole chat history). Read-only and valid until the next commit: derive from it, never
+   * mutate or retain a row. What the rail and the sync summary read their statuses from.
+   */
+  view(): Promise<LocalFirstSnapshot>;
+  /**
    * Only snapshot eligible to be uploaded or logged.
    * Rule: `VSIX_LOCAL_FIRST_REDACTION_RULE`, which is `INDEXEDDB_REDACTION_RULE`.
    */
@@ -376,6 +382,10 @@ export function createDurableLocalFirstStore(
     async export() {
       await refreshForRead();
       return memory.export();
+    },
+    async view() {
+      await refreshForRead();
+      return memory.view();
     },
     /** Upload/log boundary. The rule is VSIX_LOCAL_FIRST_REDACTION_RULE. */
     async exportForUploadOrLog() {

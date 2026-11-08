@@ -9,6 +9,19 @@ import { listBoardMilestonesSince } from './boardMilestones';
 
 const since = new Date('2026-11-01T00:00:00Z');
 
+/**
+ * Date-valued bind parameters in a drizzle condition. A drizzle SQL tree is circular (columns point
+ * at their tables), so it cannot be JSON-stringified; walk `queryChunks` / `Param.value` only.
+ */
+function dateParams(node: unknown): number {
+  if (node instanceof Date) return 1;
+  if (!node || typeof node !== 'object') return 0;
+  const n = node as { queryChunks?: unknown[]; value?: unknown; constructor?: { name?: string } };
+  if (Array.isArray(n.queryChunks)) return n.queryChunks.reduce<number>((sum, c) => sum + dateParams(c), 0);
+  if (n.constructor?.name === 'Param') return dateParams(n.value);
+  return 0;
+}
+
 describe('listBoardMilestonesSince', () => {
   it('returns nothing, in two reads, when no epic or release landed', async () => {
     const db = fakeDb([[], []]);
@@ -66,7 +79,7 @@ describe('listBoardMilestonesSince', () => {
     expect(bounded.calls).toHaveLength(2);
     // Each source carries one more predicate (< until) than the open-ended read, and is ordered + limited in SQL.
     for (const i of [0, 1]) {
-      expect(JSON.stringify(bounded.calls[i]!.where).length).toBeGreaterThan(JSON.stringify(open.calls[i]!.where).length);
+      expect(dateParams(bounded.calls[i]!.where)).toBe(dateParams(open.calls[i]!.where) + 1);
       expect(bounded.calls[i]!.chain).toEqual(expect.arrayContaining(['orderBy', 'limit']));
     }
   });

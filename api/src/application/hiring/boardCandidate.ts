@@ -40,11 +40,10 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import type { Env } from '../../env';
 import { partyRoles } from '../../infrastructure/database/schema';
 import { hmacHex } from '../../infrastructure/crypto/hmac';
 import { sha256Hex } from '../../domain/shared/hash';
-import { credentialSecret } from '../integrations/credentialCrypto';
+import { loadRefSalt } from './refSalt';
 
 /** The role of an alias row: another ref of a person whose role is under `attrs.primary`. */
 export const ALIAS_ROLE = 'candidate-ref';
@@ -57,9 +56,12 @@ export async function fitPartyRef(raw: string): Promise<string> {
   return REF_RE.test(raw) ? raw : sha256Hex(raw);
 }
 
-/** The per-tenant key the email ref is an HMAC under. */
-export function candidateRefKey(env: Env, tenantId: number): string {
-  return `${credentialSecret(env)}:candidate-ref:${tenantId}`;
+/**
+ * The per-tenant key the email ref is an HMAC under: a stored random salt (`refSalt.ts`),
+ * NOT a derivation of the credential secret — rotating that secret must not change refs.
+ */
+export async function candidateRefKey(db: Db, tenantId: number): Promise<string> {
+  return `candidate-ref:v1:${tenantId}:${await loadRefSalt(db, tenantId)}`;
 }
 
 export interface BoardPersonIds {

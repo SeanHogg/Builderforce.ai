@@ -15,6 +15,17 @@ import styles from './PodcastEditor.module.css';
 type Tab = 'segments' | 'details';
 const TABS: readonly Tab[] = ['segments', 'details'];
 
+/** The one `<audio>` element. Its callback ref arrives as a plain prop, so the playback state stays separate from the DOM handle. */
+function PlaybackAudio({ bind, src, onLoadedMetadata, onTimeUpdate, onEnded }: {
+  bind: (element: HTMLAudioElement | null) => void;
+  src: string;
+  onLoadedMetadata: () => void;
+  onTimeUpdate: () => void;
+  onEnded: () => void;
+}) {
+  return <audio ref={bind} src={src || undefined} preload="metadata" onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate} onEnded={onEnded} />;
+}
+
 /**
  * The `podcast` card: an episode authored from audio segments — ordered, trimmed,
  * chaptered — with show notes and an RSS 2.0 export. The container wires the editor
@@ -48,7 +59,7 @@ export function PodcastEditorBody({ id, data }: CreationBodyProps) {
   };
 
   return <div className={`${styles.editor} nodrag`}>
-    <audio ref={playback.audioRef} src={playback.src || undefined} preload="metadata" onLoadedMetadata={playback.onLoadedMetadata} onTimeUpdate={playback.onTimeUpdate} onEnded={playback.stop} />
+    <PlaybackAudio bind={playback.bindAudio} src={playback.src} onLoadedMetadata={playback.onLoadedMetadata} onTimeUpdate={playback.onTimeUpdate} onEnded={playback.stop} />
     <div className={styles.transport}>
       <button type="button" className={styles.button} disabled={!editor.segments.length} onClick={playback.toggle} aria-label={playback.playing ? t('pause') : t('play')}>{playback.playing ? '⏸' : '▶'}</button>
       <time className={styles.time}>{clockTime(playback.elapsed)} / {clockTime(podcastDuration(editor.timeline))}</time>

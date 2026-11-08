@@ -16,12 +16,13 @@ import { renderAgentRunnerScript } from './githubActionsRunner';
 const workflow = renderAgentWorkflow({ apiOrigin: 'https://api.builderforce.ai' });
 
 describe('renderAgentWorkflow', () => {
-  it('grants exactly the three permissions the agent needs', () => {
-    // contents: write to push the ticket branch, id-token to authenticate at all,
-    // pull-requests to open the PR. Anything less breaks a run mid-flight.
-    expect(workflow).toContain('contents: write');
+  it('grants only contents: read and id-token: write', () => {
+    // checkout needs contents: read; id-token authenticates at all. Pushes, commits and the PR go
+    // through Builderforce's own integration credential, so the job token is given no write scope.
+    expect(workflow).toContain('contents: read');
     expect(workflow).toContain('id-token: write');
-    expect(workflow).toContain('pull-requests: write');
+    expect(workflow).not.toContain('contents: write');
+    expect(workflow).not.toContain('pull-requests');
   });
 
   it('requests the agent audience, never the deploy one', () => {
@@ -72,6 +73,21 @@ describe('renderAgentWorkflow', () => {
 
 describe('renderAgentRunnerScript', () => {
   const script = renderAgentRunnerScript();
+
+  it('neutralises a persisted checkout credential and isolates the shell user BEFORE it asks for the spec', () => {
+    const serve = script.slice(script.indexOf('async function serve()'));
+    const scrub = serve.indexOf('scrubCheckoutCredentials(WORKDIR)');
+    const provision = serve.indexOf('provisionShellUser(');
+    const exportUser = serve.indexOf('process.env.BUILDERFORCE_SHELL_USER');
+    const spec = serve.indexOf("op('spec'");
+    expect(scrub).toBeGreaterThan(-1);
+    expect(provision).toBeGreaterThan(scrub);
+    expect(exportUser).toBeGreaterThan(provision);
+    expect(spec).toBeGreaterThan(exportUser);
+    // The inlined core carries the one spawn helper and the unset of the old extraheader.
+    expect(script).toContain('function spawnShell(');
+    expect(script).toContain('http.https://github.com/.extraheader');
+  });
 
   it('serves THE sandbox core — the same primitives the container serves — inlined', () => {
     expect(script).toContain('function createSandboxBox(');

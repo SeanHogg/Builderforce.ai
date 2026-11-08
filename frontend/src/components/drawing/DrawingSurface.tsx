@@ -35,7 +35,8 @@ export function DrawingSurface({ strokes, pen, width, height, onStrokeAdded, onS
   const pathRef = useRef<Array<{ x: number; y: number }>>([]);
   const activePointer = useRef<number | null>(null);
   const frame = useRef<number | null>(null);
-  const [, setTick] = useState(0);
+  // The in-progress stroke as of the last animation frame (the ref above is what the handlers append to).
+  const [live, setLive] = useState<Array<{ x: number; y: number }>>([]);
   // How much the viewBox is shrunk on screen (a 640-wide drawing on a 360px phone is ~0.5).
   const [scale, setScale] = useState(1);
   useEffect(() => {
@@ -50,7 +51,7 @@ export function DrawingSurface({ strokes, pen, width, height, onStrokeAdded, onS
 
   const repaint = useCallback(() => {
     if (frame.current !== null) return;
-    frame.current = requestAnimationFrame(() => { frame.current = null; setTick((tick) => tick + 1); });
+    frame.current = requestAnimationFrame(() => { frame.current = null; setLive(pathRef.current.slice()); });
   }, []);
   useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
 
@@ -104,7 +105,6 @@ export function DrawingSurface({ strokes, pen, width, height, onStrokeAdded, onS
     repaint();
   };
 
-  const live = pathRef.current;
   const preview = pen.tool === 'eraser' || !live.length ? null : strokeFromPath(pen, live);
 
   return (

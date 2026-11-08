@@ -9,6 +9,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { prodIncidents } from '../../infrastructure/database/schema';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { resolveStakeholderVoice } from '../kanban/stakeholderVoice';
 
 /** `incident_events.actor_ref` is varchar(128); a long composed label must not fail the write. */
@@ -26,7 +27,13 @@ export async function resolveIncidentVoice(
       .where(and(eq(prodIncidents.id, args.incidentId), eq(prodIncidents.tenantId, args.tenantId)))
       .limit(1);
     boardTaskId = row?.boardTaskId ?? null;
-  } catch { /* best-effort: an unreadable incident keeps the acting label */ }
+  } catch (error) {
+    // Best-effort: an unreadable incident keeps the acting label.
+    reportCaughtError(error, {
+      source: 'application/incident/incidentVoice.ts', operation: 'resolveIncidentVoice',
+      level: 'warning', context: { tenantId: args.tenantId, incidentId: args.incidentId },
+    });
+  }
   const voiced = await resolveStakeholderVoice(db, { tenantId: args.tenantId, taskId: boardTaskId, actingLabel: args.actingLabel });
   return voiced.slice(0, ACTOR_REF_MAX);
 }

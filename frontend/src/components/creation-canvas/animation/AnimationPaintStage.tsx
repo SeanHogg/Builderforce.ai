@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { beginStrokePath, endStrokePath, extendStrokePath } from '@/lib/canvasDrawing';
 import { decodeFrame } from '@/lib/creation/animation/frameDecode';
 import { storeCreationFile } from '@/lib/creation/exportArtifact';
+import { recordedFailure } from '@/lib/reportError';
 import { useDebouncedPatch } from '../creative/useDebouncedPatch';
 import { useTranslations } from 'next-intl';
 import styles from '../styles/creativeEditors.module.css';
@@ -74,7 +75,7 @@ export function AnimationPaintStage({ state, activeId, tool, brush, paintable, o
       if (url) layers.push({ url, alpha: Math.max(0.08, 0.5 / (activeIndex - i)) });
     }
     ctx.clearRect(0, 0, width, height);
-    void Promise.all(layers.map((layer) => decodeFrame(layer.url).catch(() => null))).then((images) => {
+    void Promise.all(layers.map((layer) => decodeFrame(layer.url).catch(recordedFailure('Decoding an onion-skin frame', null)))).then((images) => {
       if (!current) return;
       ctx.clearRect(0, 0, width, height);
       images.forEach((image, i) => {

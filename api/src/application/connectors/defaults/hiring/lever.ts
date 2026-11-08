@@ -31,11 +31,16 @@ export const leverPostings: ConnectorManifest = {
     {
       key: 'list_opportunities', label: 'List applicants', description: 'Read the people who applied.',
       method: 'GET', path: '/opportunities', mutates: false, resultPath: 'data',
-      params: { posting_id: q('Restrict to one posting'), updated_at_start: q('Epoch ms — only records changed since'), limit: qn('Page size (default 100)') },
-      // Lever pages by an opaque `next` offset, not a page number, so a run reads ONE
-      // page of `limit` opportunities, newest first; a full page therefore means more are
-      // waiting. Newest-first with no page to resume from, the cursor can only move when a
-      // run reaches the end, so a backlog bigger than one page is not worked off here.
+      params: {
+        posting_id: q('Restrict to one posting'), updated_at_start: q('Epoch ms — only records changed since'), limit: qn('Page size (default 100)'),
+        offset: q('Opaque paging token — the `next` of the previous page'),
+      },
+      // Lever pages by an opaque `next` offset (returned beside `data`, with `hasNext`),
+      // newest first. `nextToken` feeds it back as `offset`, and a walk that stops at a
+      // cap stores it on the publication (`import_resume_token`) and resumes there, so a
+      // backlog bigger than one run is worked off across runs. The cursor only moves once
+      // a walk reaches the end. Lever's `next`/`offset` contract is from its public
+      // reference; it has not been exercised against a live account.
       applicants: {
         postingParam: 'posting_id',
         postingIdField: ['posting', 'applications.0.posting'],
@@ -45,6 +50,7 @@ export const leverPostings: ConnectorManifest = {
         email: ['emails.0'],
         appliedAt: ['createdAt'],
         limit: { param: 'limit', size: 100 },
+        nextToken: { select: ['next'], param: 'offset' },
         order: 'desc',
         cursorParam: 'updated_at_start', cursorFrom: 'appliedAt', cursorFormat: 'epochMs',
       },

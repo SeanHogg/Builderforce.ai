@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openLocalSqlite, type OpenedLocalSqlite } from '../node-local-sqlite.js';
 import { ManifestBuffer } from './manifestBuffer.js';
-import { SqliteKnowledgeDb } from './sqliteRows.js';
+import { FORMAT_VERSION, SqliteKnowledgeDb, readFormat } from './sqliteRows.js';
 
 /** How long a statement waits on another window's write lock. */
 export const KNOWLEDGE_BUSY_TIMEOUT_MS = 5_000;
@@ -27,7 +27,26 @@ export interface OpenKnowledgeDb {
 }
 
 /** What the knowledge store asks of the opener: the corruption check and WAL are on here (and only here). */
-const knowledgeOpen = (busyTimeoutMs: number) => ({ busyTimeoutMs, check: true, wal: true });
+const knowledgeOpen = (busyTimeoutMs: number, wal = true) => ({ busyTimeoutMs, check: true, wal });
+
+/**
+ * The `format` a file already on disk was written with, read through a READ-ONLY connection (0 when there is no file, no `meta`
+ * table, or anything else is wrong: the real open then classifies the file). It lets the open skip `PRAGMA journal_mode = WAL`
+ * on a file of a newer format, since that pragma writes the file header and a newer file must not be touched.
+ */
+function peekFormat(path: string, busyTimeoutMs: number): number {
+    if (!existsSync(path)) return 0;
+    try {
+        const { db } = openLocalSqlite(path, { readOnly: true, busyTimeoutMs });
+        try {
+            return readFormat(db);
+        } finally {
+            db.close();
+        }
+    } catch {
+        return 0;
+    }
+}
 
 /**
  * Moves a corrupt file (and its -wal / -shm) aside as `<path>.corrupt-<timestamp>`; the bytes are kept for recovery. ALL OR
@@ -63,7 +82,7 @@ export function openKnowledgeDb(folderDir: string, busyTimeoutMs = KNOWLEDGE_BUS
     let recoveredFrom: string | undefined;
     let opened: OpenedLocalSqlite;
     try {
-        opened = openLocalSqlite(path, knowledgeOpen(busyTimeoutMs));
+        opened = openLocalSqlite(path, knowledgeOpen(busyTimeoutMs, !(peekFormat(path, busyTimeoutMs) > Number(FORMAT_VERSION))));
     } catch (err) {
         // A corrupt file must not block the root forever: keep its bytes aside, start empty, and the next review re-indexes. The
         // opener says `local_record_store_corrupt` only for SQLITE_CORRUPT / NOTADB / a failed quick_check; READONLY, IOERR, FULL,
@@ -77,5 +96,12 @@ export function openKnowledgeDb(folderDir: string, busyTimeoutMs = KNOWLEDGE_BUS
         opened = openLocalSqlite(path, knowledgeOpen(busyTimeoutMs));
     }
     const buffer = new ManifestBuffer();
-    return { persistence: new SqliteKnowledgeDb(opened.db, buffer), buffer, journalMode: opened.journalMode, ...(recoveredFrom ? { recoveredFrom } : {}) };
+    let persistence: SqliteKnowledgeDb;
+    try {
+        persistence = new SqliteKnowledgeDb(opened.db, buffer); // can throw (e.g. SQLITE_BUSY reading the format): never leak the handle
+    } catch (err) {
+        try { opened.db.close(); } catch { /* already unusable */ }
+        throw err;
+    }
+    return { persistence, buffer, journalMode: opened.journalMode, ...(recoveredFrom ? { recoveredFrom } : {}) };
 }

@@ -19,7 +19,9 @@
  * address or a token is replaced before it can reach a prompt.
  */
 
-export type ImprovementAudience = 'composer' | 'coding_agent' | 'site_builder';
+import { DEFAULT_SECRET_PATTERNS, redactText } from '@builderforce/secret-redaction';
+
+export type ImprovementAudience ='composer' | 'coding_agent' | 'site_builder';
 
 export const IMPROVEMENT_AUDIENCES: readonly ImprovementAudience[] = ['composer', 'coding_agent', 'site_builder'];
 
@@ -47,12 +49,9 @@ export const IMPROVEMENT_PROMPT_SECTIONS = ['Page and goal', 'Evidence', 'Change
 const FIELD_MAX = 400;
 const CHANGES_MAX = 25;
 
-const SECRET_SHAPES: readonly RegExp[] = [
-  /\b(?:sk|pk|rk)[-_][A-Za-z0-9_-]{12,}/g,
-  /\bbf[a-z]?_[A-Za-z0-9_-]{8,}/g,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+// Credentials come from the ONE redactor (@builderforce/secret-redaction); only the non-credential identifiers
+// a prompt must not carry (long hex ids, email addresses) are listed here.
+const IDENTIFIER_SHAPES: readonly RegExp[] = [
   /\b[0-9a-f]{32,}\b/gi,
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
 ];
@@ -60,7 +59,8 @@ const SECRET_SHAPES: readonly RegExp[] = [
 /** Single-line, bounded, with anything secret-shaped replaced. */
 export function scrubPromptText(raw: unknown, max: number = FIELD_MAX): string {
   let text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
-  for (const shape of SECRET_SHAPES) text = text.replace(shape, '[redacted]');
+  text = redactText(text, DEFAULT_SECRET_PATTERNS, 'strict', () => '[redacted]');
+  for (const shape of IDENTIFIER_SHAPES) text = text.replace(shape, '[redacted]');
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 

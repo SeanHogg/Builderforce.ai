@@ -11,8 +11,9 @@
  *     is idempotent;
  *   - the manifest buffer is drained in the same transaction (a manifest never runs ahead of its facts), and put back if
  *     the transaction fails.
- * A migration holds a transaction across event-loop turns ({@link SqliteKnowledgeDb.transaction}); every apply and load
- * waits behind it on one gate.
+ * A migration's import ({@link SqliteKnowledgeDb.transaction}) is ONE transaction of pre-built rows, written without yielding
+ * to the event loop, so the write lock is held only for the writes themselves. Every apply and load runs on one gate, behind
+ * whatever transaction is running. A file of a NEWER format is read, never written: every write path throws.
  */
 
 import { filesManifestKey, type Extracted, type ScopeRecord, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
@@ -32,6 +33,18 @@ CREATE TABLE IF NOT EXISTS recheck(hash TEXT PRIMARY KEY) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS extracted(hash TEXT PRIMARY KEY, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS manifest(source_id TEXT PRIMARY KEY, json TEXT NOT NULL);
 `;
+
+/** The format a file was written with (0 for a new file with no `meta` table yet; any other failure, e.g. SQLITE_BUSY, is rethrown). The ONE reader. */
+export function readFormat(db: LocalSqliteDb): number {
+    try {
+        const row = db.prepare("SELECT v FROM meta WHERE k = 'format'").get() as { v: string } | undefined;
+        return Number(row?.v ?? 0);
+    } catch (err) {
+        // Only "no meta table yet" means a new file; a busy or failing file is not a new file.
+        if (/no such table: meta/i.test(err instanceof Error ? err.message : String(err))) return 0;
+        throw err;
+    }
+}
 
 /** Creates the tables (idempotent). */
 export function ensureSchema(db: LocalSqliteDb): void { db.exec(SCHEMA); }
@@ -59,13 +72,14 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
     readonly formatNewer: boolean;
 
     constructor(readonly db: LocalSqliteDb, private readonly buffer: ManifestBuffer) {
-        ensureSchema(db);
+        // A newer file is checked BEFORE the schema statements: opening it must not write to it at all.
+        this.formatNewer = readFormat(db) > Number(FORMAT_VERSION);
+        if (!this.formatNewer) ensureSchema(db);
         this.seen = this.generation();
         this.dataVersion = this.readDataVersion();
-        this.formatNewer = Number(this.getMeta('format') ?? 0) > Number(FORMAT_VERSION);
     }
 
-    private assertWritable(): void {
+    assertWritable(): void {
         if (this.formatNewer) throw new Error(`knowledge_index_format_newer: this file was written by a newer BuilderForce (format ${this.getMeta('format')}); it is read-only here`);
     }
 
@@ -92,6 +106,7 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
     }
 
     setMeta(k: string, v: string): void {
+        this.assertWritable(); // every write path, public or not, refuses on a file of a newer format
         this.db.prepare('INSERT INTO meta(k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run(k, v);
     }
 
@@ -169,6 +184,8 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
      * delta and waits for the next one. A failure at any step puts the entries back.
      */
     apply(change: RowChange): Promise<{ generation: number; reloaded?: KnowledgeSnapshot }> {
+        // Refuse BEFORE taking: a refused apply must not cycle the buffer's entries through take and restore.
+        try { this.assertWritable(); } catch (err) { return Promise.reject(err); }
         const taken = this.buffer.take();
         return this.settled()
             .then(() => this.serial(() => this.applyTaken(change, taken)))
@@ -228,6 +245,7 @@ export class SqliteKnowledgeDb implements RowPersistence, ManifestSink {
      * generation stays. The entries are taken when this is CALLED, so an entry set later waits for its own facts.
      */
     commitBuffered(only?: readonly string[]): Promise<void> {
+        try { this.assertWritable(); } catch (err) { return Promise.reject(err); } // before taking, as in apply
         const taken = this.buffer.take(only);
         if (taken.size === 0) return Promise.resolve();
         return this.serial(() => {

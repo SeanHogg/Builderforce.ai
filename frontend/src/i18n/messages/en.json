@@ -26806,7 +26806,9 @@
       "jobStateArchived": "Archived",
       "jobStateClosed": "Closed",
       "importMore": "More applicants are pending — run it again.",
-      "importPartial": "{count, plural, one {# applicant could not be imported.} other {# applicants could not be imported.}}"
+      "importPartial": "{count, plural, one {# applicant could not be imported.} other {# applicants could not be imported.}}",
+      "importMismatched": "{count, plural, one {# applicant belonged to a different job on the board and was skipped.} other {# applicants belonged to a different job on the board and were skipped.}}",
+      "importQuarantined": "{count, plural, one {# applicant keeps failing to import and is being skipped.} other {# applicants keep failing to import and are being skipped.}}"
     },
     "notice": {
       "addedToCanvas": "I added the requested content to the canvas.",

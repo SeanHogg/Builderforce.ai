@@ -39,6 +39,7 @@
  * keyed by the run identity (runId, or the run URL for Bitbucket).
  */
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { resolveRepoApiTarget } from '../repos/repoApiTarget';
 import type { Env } from '../../env';
 
@@ -95,6 +96,10 @@ function summarize(lines: string[], runUrl: string | null, logs: LogTail[] = [])
   ].filter(Boolean).join('\n').slice(0, 4000 + LOG_TAIL_CHARS * MAX_LOG_JOBS);
 }
 
+/** A best-effort provider read: reported at warning level, then the caller degrades to its null path. */
+const degraded = (operation: string) =>
+  reportedFallback(null, { source: 'application/ci/fetchBuildError.ts', operation });
+
 /** The trailing slice of one failed job's log. */
 interface LogTail { jobName: string; tail: string }
 
@@ -104,9 +109,9 @@ interface LogTail { jobName: string; tail: string }
  * already pruned. Every caller degrades to the step-name summary it produced before.
  */
 async function getLogTail(url: string, headers: Record<string, string>): Promise<string | null> {
-  const res = await fetch(url, { headers, redirect: 'follow' }).catch(() => null);
+  const res = await fetch(url, { headers, redirect: 'follow' }).catch(degraded('getLogTail.fetch'));
   if (!res || !res.ok) return null;
-  const text = await res.text().catch(() => null);
+  const text = await res.text().catch(degraded('getLogTail.read'));
   if (!text) return null;
   const trimmed = text.trimEnd();
   if (trimmed.length === 0) return null;
@@ -115,9 +120,9 @@ async function getLogTail(url: string, headers: Record<string, string>): Promise
 
 /** GET + parse JSON; null on any network/HTTP/parse failure (callers degrade). */
 async function getJson<T>(url: string, headers: Record<string, string>): Promise<T | null> {
-  const res = await fetch(url, { headers }).catch(() => null);
+  const res = await fetch(url, { headers }).catch(degraded('getJson.fetch'));
   if (!res || !res.ok) return null;
-  return (await res.json().catch(() => null)) as T | null;
+  return (await res.json().catch(degraded('getJson.parse'))) as T | null;
 }
 
 /** Bitbucket's build number as posted in a commit-status URL (`…/pipelines/results/123`). */

@@ -1,4 +1,5 @@
 import { isSafeStrokeColor, DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, DRAWING_TOOLS, type CanvasDrawingTool } from '@/lib/canvasDrawing';
+import { readLocalJson, writeLocalJson } from '@/lib/storage';
 
 /**
  * Which pen you picked up, remembered.
@@ -26,22 +27,16 @@ export const DEFAULT_DRAWING_PREFERENCES: DrawingPreferences = {
 const STORAGE_KEY = 'builderforce.canvas.drawing';
 
 export function readDrawingPreferences(): DrawingPreferences {
-  if (typeof window === 'undefined') return DEFAULT_DRAWING_PREFERENCES;
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return DEFAULT_DRAWING_PREFERENCES;
-    const parsed = JSON.parse(stored) as Partial<DrawingPreferences>;
-    return {
-      tool: DRAWING_TOOLS.includes(parsed.tool as CanvasDrawingTool) ? parsed.tool as CanvasDrawingTool : DEFAULT_DRAWING_PREFERENCES.tool,
-      color: isSafeStrokeColor(parsed.color) ? parsed.color : DEFAULT_DRAWING_PREFERENCES.color,
-      width: typeof parsed.width === 'number' && parsed.width >= 1 && parsed.width <= 24 ? parsed.width : DEFAULT_DRAWING_PREFERENCES.width,
-    };
-  } catch {
-    return DEFAULT_DRAWING_PREFERENCES;
-  }
+  const parsed = readLocalJson<Partial<DrawingPreferences>>(STORAGE_KEY);
+  if (!parsed || typeof parsed !== 'object') return DEFAULT_DRAWING_PREFERENCES;
+  return {
+    tool: DRAWING_TOOLS.includes(parsed.tool as CanvasDrawingTool) ? parsed.tool as CanvasDrawingTool : DEFAULT_DRAWING_PREFERENCES.tool,
+    color: isSafeStrokeColor(parsed.color) ? parsed.color : DEFAULT_DRAWING_PREFERENCES.color,
+    width: typeof parsed.width === 'number' && parsed.width >= 1 && parsed.width <= 24 ? parsed.width : DEFAULT_DRAWING_PREFERENCES.width,
+  };
 }
 
+/** A failed write (private mode, quota) is fine: the session still draws. */
 export function writeDrawingPreferences(preferences: DrawingPreferences): void {
-  if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)); } catch { /* private mode: the session still draws */ }
+  writeLocalJson(STORAGE_KEY, preferences);
 }

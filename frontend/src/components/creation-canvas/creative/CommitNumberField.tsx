@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import styles from '../styles/creativeEditors.module.css';
 
 export interface CommitNumberFieldProps {
@@ -21,7 +21,10 @@ export interface CommitNumberFieldProps {
 export function CommitNumberField({ label, value, disabled, min, step, onCommit }: CommitNumberFieldProps) {
   const id = useId();
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  // Follow the stored value when it changes from elsewhere (undo, a Brain edit): adjust during
+  // render, the way React documents it, rather than in an effect.
+  const [shown, setShown] = useState(value);
+  if (shown !== value) { setShown(value); setDraft(String(value)); }
 
   const commit = () => {
     const next = Number(draft);

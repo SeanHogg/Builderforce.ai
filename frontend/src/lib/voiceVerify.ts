@@ -81,7 +81,7 @@ async function detectViaAudioContext(bytes: ArrayBuffer): Promise<{ id: string |
       const found = detectWatermark(buffer.getChannelData(0), buffer.sampleRate);
       if (found) return { id: found.id, decoded };
     } catch {
-      /* this codec/rate did not decode — try the next */
+      continue; // this codec/rate did not decode — try the next
     } finally {
       void ctx.close();
     }

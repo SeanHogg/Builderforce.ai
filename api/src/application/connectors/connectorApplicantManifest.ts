@@ -29,6 +29,24 @@ export interface ConnectorApplicantMapping {
    * that names no job at all cannot contradict the filter and is kept.
    */
   postingIdField?: string[];
+  /**
+   * The id the board's list is FILTERED by, when the stored publication id is not it
+   * (Ashby: `jobPosting.create` yields a job-POSTING id, `application.list` filters on the
+   * JOB id). `action` is a sibling action of the same connector that takes the stored id
+   * in `idParam`; `select` reads the filter id out of its answer. Resolved once and cached
+   * on the distribution row (`board_filter_id`), then used for `postingParam` and for the
+   * `postingIdField` comparison. Absent ⇒ the stored id is the filter id.
+   */
+  filterIdFrom?: { action: string; idParam: string; select: string[] };
+  /**
+   * The board's OWN paging token, for a board that pages by token rather than page number
+   * (Lever `next`, Workable `paging.next`). `select` reads it from the FULL response body
+   * (before `resultPath`); `fromQuery`, when the token is a URL the board built, names the
+   * query param of that URL to take (the URL itself is never requested — a board must not
+   * choose where a credentialled call goes); `param` is the request param that carries it
+   * back. A newest-first walk stores it to resume across runs.
+   */
+  nextToken?: { select: string[]; param: string; fromQuery?: string };
   /** The board's id for the application/candidate — the dedupe key. Required. */
   externalId: string[];
   /** The PERSON's id on the board (Greenhouse `candidate_id`, Lever `contact`, Ashby
@@ -95,7 +113,9 @@ export interface ConnectorUrlResolution {
   /** The action param that carries the stored `externalId`, when the call needs it. */
   idParam?: string;
   /** How the id is written into `idParam`: `restli-list` is Rest.li 2.0's
-   *  `List(<url-encoded id>)` batch key. Absent ⇒ the id as is. */
+   *  `List(<url-encoded id>)` batch key. Absent ⇒ the id as is. The param must be declared
+   *  `raw: true` so the runtime appends the already-encoded key verbatim instead of
+   *  encoding it a second time. */
   idEncoding?: 'restli-list';
   listPath?: string;
   matchField?: string;

@@ -1,5 +1,5 @@
 /**
- * What the run sandbox is handed to open: the tokened clone URL for the ticket branch
+ * What the run sandbox is handed to open: the credential-free clone URL for the ticket branch
  * (base on run #1), the per-run callback token its preview and timeline events use, the
  * cost-lever flags it obeys, and the live-preview plan.
  *
@@ -13,7 +13,7 @@
  */
 import { integrationCredentialSecret } from '../../integrations/integrationCredentialSecret';
 import { resolveTicketRepoContext, type TicketRepoContext } from '../../repos/commitFileAsPendingChange';
-import { containerGitCloneUrl, mintContainerRunToken } from '../containerRunToken';
+import { containerGitUrl, mintContainerRunToken } from '../containerRunToken';
 import { sandboxLevers } from '../costLoop/runLevers';
 import { previewStepForRun, type PreviewDevServerStep } from '../previewDevServer';
 import { internalApiBaseUrl } from './egressAllowlist';
@@ -53,7 +53,7 @@ export async function buildSandboxOpenSpec(
     token,
     // Clone the ticket's HEAD branch (where prior runs commit their work), falling back to
     // base on run #1 before the branch exists.
-    repo: { cloneUrl: containerGitCloneUrl(internalBaseUrl, run.executionId, token), baseBranch: repo.ctx.base, headBranch: repo.ctx.branch },
+    repo: { cloneUrl: containerGitUrl(internalBaseUrl, run.executionId), baseBranch: repo.ctx.base, headBranch: repo.ctx.branch },
     ...sandboxLevers(env, run.tenantId),
     ...(preview ? { preview } : {}),
   };

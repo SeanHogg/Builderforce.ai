@@ -119,6 +119,9 @@ const options = integration
       // this package's `node_modules` at runtime: bundling Mocha inlines its
       // `require.resolve` worker paths, which only resolve as real files on disk.
       external: ["vscode", "mocha", "@vscode/test-electron"],
+      // The suite imports source that does `createRequire(import.meta.url)` (`node-local-sqlite`): without the shim
+      // it throws inside the CJS bundle and `node:sqlite` is reported "not available" in a host that has it.
+      ...importMetaUrlShim,
       sourcemap: true,
       logLevel: "warning",
     }

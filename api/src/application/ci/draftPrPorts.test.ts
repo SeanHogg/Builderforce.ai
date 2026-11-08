@@ -71,10 +71,12 @@ describe('draftPrPorts.openDraft', () => {
 
   it('regression: Minor 2 - a pre-existing PR for the branch that we did not create is not adopted; the claim is released', async () => {
     const p = ports();
-    h.open.mockResolvedValueOnce({ ...created, existing: true, draft: false });
+    const at = new Date();
+    h.open.mockImplementationOnce(opens({ ...created, existing: true, draft: false }, { retook: false, at }));
     expect(await p.openDraft()).toMatchObject({ ok: false, exists: true });
     expect(h.record).not.toHaveBeenCalled();
     expect(h.release).toHaveBeenCalledOnce();
+    expect(h.release).toHaveBeenCalledWith(expect.anything(), 1, 3, at); // owner-scoped: only the claim THIS call wrote
     // ...and the run does not try again on every finish attempt.
     h.list.mockResolvedValue({ ok: true, paths: [] });
     expect(await p.hasPullRequestWorkflow()).toBe(false);

@@ -18,7 +18,7 @@ import type { ChatOptionVM } from './types';
  * reads the old value cannot start a refetch loop.
  */
 export function useChatProgressSync(
-  chatId: number,
+  chatId: string | number,
   chatList: readonly ChatOptionVM[],
   onStale: (() => void) | undefined,
 ): (tickets: readonly ChatTicketHealthInput[]) => void {
