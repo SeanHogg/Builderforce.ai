@@ -16,9 +16,7 @@
  * (the next task of a chain) get their turn.
  */
 
-import { createElement, Profiler } from 'react';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { vi } from 'vitest';
+import { createElement, Profiler, type ReactElement } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { setWorkerFactory } from '../../compute/workerFactory';
 import { setComputeProbe } from '../../compute/sharedClient';
@@ -29,6 +27,18 @@ import { LoopbackWorker, type TaskRun } from './loopbackWorker';
 import { WorkMeter } from './meter';
 import { ProbeLog } from './probeLog';
 import type { WireEntry, WireSummary } from './wireLedger';
+
+/** What the probe needs from the test runner (see the file comment). */
+export interface ViewHost {
+    /** Mounts `element` (synchronously, inside `act`) and returns its container. */
+    render(element: ReactElement): HTMLElement;
+    act(work: () => Promise<void>): Promise<void>;
+    click(element: Element): void;
+    /** Unmounts everything. */
+    cleanup(): void;
+    /** Makes jsdom claim WebGL, reduced motion and a 1280x720 box; returns the function that undoes it. */
+    environment(): () => void;
+}
 
 export interface ViewRecord {
     /** `boot` is the first mount (the graph load and the default view); the rest are camera ids. */
@@ -57,14 +67,12 @@ export interface RenderReport {
 export const VIEW_ORDER = ['system', 'graph', 'map', 'tower', '3d', 'heat', 'list', 'transit'] as const;
 const MAX_ROUNDS = 400;
 
-export async function probeViews(graph: KnowledgeGraph): Promise<RenderReport> {
+export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise<RenderReport> {
     const main = new WorkMeter('main');
     const loop = new LoopbackWorker({ main, worker: new WorkMeter('worker') });
     const probe = new ProbeLog();
     let commits = 0;
-    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 1280, bottom: 720, width: 1280, height: 720, toJSON: () => ({}) });
-    const webgl = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({})) as never);
-    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    const restore = host.environment();
     setWorkerFactory(() => loop);
     setComputeProbe(probe);
     try {
@@ -81,7 +89,7 @@ export async function probeViews(graph: KnowledgeGraph): Promise<RenderReport> {
             for (let round = 0; calm < 3; round++) {
                 if (round > MAX_ROUNDS) throw new Error('render probe: the page did not settle');
                 let delivered = 0;
-                await act(async () => { delivered = await loop.settle(); });
+                await host.act(async () => { delivered = await loop.settle(); });
                 const now = fingerprint();
                 calm = delivered === 0 && now === last ? calm + 1 : 0;
                 last = now;
