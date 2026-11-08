@@ -32,6 +32,6 @@ describe('the replica row reads the pack (PRD 41 A11 rule 6)', () => {
         expect(replicaPhase({ ...base, dirty: 3 })).toEqual({ kind: 'queued' });
         const sync = { local: { files: 5 }, server: { files: 5 }, replica: { ...base, dirty: 2, sending: true, parts: { sent: 0, total: 3 } } } as never;
         const pill = syncPill({ labels: L, review: { status: 'idle' } as never, stale: false, refreshFailed: false, sync });
-        expect(pill).toEqual({ state: 'syncing', text: 'Sending part 1 of 3 (2 left).' });
+        expect(pill).toEqual({ kind: 'uploading', state: 'syncing', text: 'Sending part 1 of 3 (2 left).', tab: 'server' });
     });
 });
