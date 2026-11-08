@@ -31,6 +31,9 @@
 
 - **Slow typing in the VS Code chat is gone (confirmed by the user on 2026.10.141, 2026-11-08).** The leading suspect, `GraphScene`'s always-on render loop, was removed in 2026.10.122, and the Graph now builds its edges on idle. The test-collection worry in the old entry does not apply: `clients/vscode/webview/src` has no `*.test.tsx` files, so nothing goes uncollected by `vitest.config.ts:43`.
 
+- **Memory 2026.10.55 is what every consumer runs.** It shipped as builderforce-memory 2026.10.55 (48582d0, tag v2026.10.55) and covers the Opus review of 2026.10.54: a final extract failure stays final until the file changes (no re-read every review); `ExtractorState.failures` is optional; the `ExtractFailed` type contract is live again; it adds the missing LOW-2, LOW-3 and count-reset tests and an `error.name` fallback. All 12 consumers declare `^2026.10.55`, and every pnpm lockfile resolves 2026.10.55 and installs frozen.
+- **No lockfile records an old memory version any more.** `clients/vscode` and `packages/brain-ui` held stale importer blocks for the linked brain-embedded, agent-run and agent-tools packages at `^2026.10.43`; `pnpm update`, `--force` and `--fix-lockfile` never rewrite those. The blocks were removed and the lockfiles re-installed, pnpm did not re-add them, and both install frozen.
+
 ## ✅ RESOLVED 2026-11-07 — One folder reads as many systems, a review maps in minutes, and sync is one compact pack (PRD 41 A9 + A10 + A11 · WS25 + WS26 · builderforce-memory 2026.10.46–48 · VS Code 2026.10.140)
 
 - **A9: a folder of many systems reads as many systems.**
