@@ -16,7 +16,7 @@
 import { isVcsMetadataName, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
 import {
   byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleContentHash, textDocument,
-  withDocumentText, type ContentHashedSource,
+  type ByteReadableSource, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -25,7 +25,7 @@ export interface FsFileLike {
   size: number;
   lastModified: number;
   text(): Promise<string>;
-  /** The file's bytes: a pdf/office file is read through them (`withDocumentText`). */
+  /** The file's bytes: a pdf/office file's text is extracted from them by the review. */
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 
@@ -74,7 +74,7 @@ export function createFsAccessDirectorySource(
   handle: FsDirectoryHandleLike,
   host: string,
   limits = FS_WALK_LIMITS,
-): ContentHashedSource & { skippedFolders(): SkippedFolder[] } {
+): ContentHashedSource & ByteReadableSource & { skippedFolders(): SkippedFolder[] } {
   const rootId = hostRootId(host, 'folder', handle.name);
   const files = new Map<string, FsFileHandleLike>();
   const skipped: SkippedFolder[] = [];
@@ -111,7 +111,7 @@ export function createFsAccessDirectorySource(
     return walked;
   };
 
-  const source: ContentHashedSource & { skippedFolders(): SkippedFolder[] } = {
+  const source: ContentHashedSource & ByteReadableSource & { skippedFolders(): SkippedFolder[] } = {
     rootId,
     title: handle.name,
     skippedFolders: () => [...skipped],
@@ -133,12 +133,14 @@ export function createFsAccessDirectorySource(
       const entry = files.get(path);
       return textDocument(rootId, path, entry ? await (await entry.getFile()).text() : '');
     },
+    // A pdf/office file's text is extracted by the review (in its worker) from these bytes, never here.
+    async readBytes(path) {
+      await walk();
+      const entry = files.get(path);
+      return entry ? new Uint8Array(await (await entry.getFile()).arrayBuffer()) : new Uint8Array();
+    },
   };
-  return withDocumentText(source, async (path) => {
-    await walk();
-    const entry = files.get(path);
-    return entry ? new Uint8Array(await (await entry.getFile()).arrayBuffer()) : new Uint8Array();
-  });
+  return source;
 }
 
 /** The File System Access review target ("Review a folder" → the picker). Re-reviewing a

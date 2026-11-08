@@ -34,7 +34,7 @@ export interface RankedEdges {
     breaking: KEdge[];
     rest: KEdge[];
     /** ref → its links, in priority order. */
-    incident: Map<string, KEdge[]>;
+    incident: IncidentIndex;
 }
 
 /**

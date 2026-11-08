@@ -65,12 +65,6 @@ export function reviewRecordStore(persistence?: RecordPersistence): ReviewRecord
     };
 }
 
-/**
- * Retired: the knowledge client no longer lists skipped uploads (every host uploads through the ONE pack, whose refusals
- * are typed errors, never silent skips). Kept only so hosts still passing `client` compile; it is ignored.
- */
-export type SkippedUploads = unknown;
-
 export interface ReviewRecorder {
     /** The plan: its skipped files and the per-pack counts. */
     planned(plan: Pick<ReviewPlan, 'skipped' | 'byPack'>): void;
@@ -78,7 +72,7 @@ export interface ReviewRecorder {
     signals(skipped: readonly { path: string; reason: string }[]): void;
     /** The repo map's edge count, when this review built the map (a cached analysis builds none). */
     edges(count: number): void;
-    /** A review starts: uploads skipped from here on belong to it. */
+    /** A review starts: signal skips from here on belong to it. */
     begin(): void;
     /** A review ended: record counts and skips. */
     finish(): void;
@@ -87,8 +81,6 @@ export interface ReviewRecorder {
 export function createReviewRecorder(args: {
     rootId: string;
     store: ReviewRecordStore;
-    /** Ignored (see {@link SkippedUploads}). */
-    client?: SkippedUploads;
     folders?(): readonly { path: string; reason: string }[];
     now?(): string;
 }): ReviewRecorder {

@@ -1,4 +1,4 @@
-import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import type { RankedEdges } from '../../scene/edgeBudget';
 import { packPlaced } from '../placed';
 import { mapBack, type Codec } from './codec';

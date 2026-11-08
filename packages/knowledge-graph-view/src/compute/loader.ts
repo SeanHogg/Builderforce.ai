@@ -3,8 +3,8 @@
 import type { LoadField, WorkerIn } from './protocol';
 import type { GraphHandle } from './residency';
 
-/** Objects per slice: structured-cloning one costs ~20-30 µs, so 1,000 keeps each clone near 25 ms (the perf harness measures it). */
-export const UPLOAD_SLICE = 1000;
+/** Objects per slice: structured-cloning one costs ~20-30 µs, so 500 keeps each clone near 12 ms (the perf harness measures it). */
+export const UPLOAD_SLICE = 500;
 /** Links per slice: four numbers each, sent as a transferred typed array, so a slice costs next to nothing. */
 export const LINK_SLICE = 8000;
 

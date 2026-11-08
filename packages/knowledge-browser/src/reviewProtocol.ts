@@ -39,3 +39,8 @@ export type FromReviewWorker =
 
 /** `source.list()` is an async iterable; across the boundary it is one array. */
 export const LIST_ALL = 'listAll';
+/**
+ * `source.readBytes(path)` across the boundary: the reply value is a transferable `ArrayBuffer`, so the worker (not the page)
+ * extracts a pdf/office file's text. A source with no `readBytes` answers an empty buffer.
+ */
+export const READ_BYTES = 'readBytes';

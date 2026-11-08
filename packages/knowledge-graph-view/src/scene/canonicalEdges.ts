@@ -16,7 +16,7 @@ import { cmp } from '../order';
 import { chunkedSort, type SortTask } from './chunkedSort';
 
 /** Links handled per step by the canonical order and the ranking (each step stays under ~15 ms at 150k links). */
-export const EDGE_SLICE = 10_000;
+export const EDGE_SLICE = 5_000;
 
 export interface CanonicalTask {
     /** Does one slice of the work; true when the order is ready. Safe to call again once done. */

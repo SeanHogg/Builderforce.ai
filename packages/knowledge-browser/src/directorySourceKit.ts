@@ -21,6 +21,16 @@ import { rootIdFor } from '@builderforce/agent-tools/knowledge';
  */
 export type ContentHashedSource = DirectorySource & { readonly hashKind: 'content' };
 
+/**
+ * A page source that can hand out a file's RAW BYTES. Text extraction of a pdf/office file is NOT done by the source: the review
+ * worker reads the bytes through the proxy (`READ_BYTES`) and runs `withDocumentText` itself, off the UI thread. A review that
+ * runs in-thread (no Worker) wraps the source once, in `runReview`. So no page source applies `withDocumentText`.
+ */
+export type ByteReadableSource = DirectorySource & { readBytes(path: string, signal?: AbortSignal): Promise<Uint8Array> };
+
+export const isByteReadable = (source: DirectorySource): source is ByteReadableSource =>
+  typeof (source as { readBytes?: unknown }).readBytes === 'function';
+
 /** Whether `source` declares content hashes (and can re-hash the text it read). */
 export const isContentHashed = (source: DirectorySource): boolean =>
   (source as { hashKind?: unknown }).hashKind === 'content' && typeof source.hashOf === 'function';

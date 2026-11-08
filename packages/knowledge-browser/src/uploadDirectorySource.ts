@@ -7,7 +7,7 @@
  */
 
 import {
-  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument, withDocumentText, type ContentHashedSource,
+  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument, type ByteReadableSource, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -34,7 +34,7 @@ function splitRoot(file: File): { folder: string; path: string } {
 }
 
 /** `host` prefixes the root id (`web:upload:<folder>`, `rovr:upload:<folder>`). */
-export function createUploadDirectorySource(files: readonly File[], host: string): ContentHashedSource {
+export function createUploadDirectorySource(files: readonly File[], host: string): ContentHashedSource & ByteReadableSource {
   const picked = new Map<string, File>();
   let folder = '';
   for (const file of files) {
@@ -45,7 +45,7 @@ export function createUploadDirectorySource(files: readonly File[], host: string
   const title = folder || 'folder';
   const rootId = hostRootId(host, 'upload', title);
 
-  const source: ContentHashedSource = {
+  const source: ContentHashedSource & ByteReadableSource = {
     rootId,
     title,
     // list() hashes a text file with contentHash(file.text()); the review re-hashes the text read() returns.
@@ -63,11 +63,13 @@ export function createUploadDirectorySource(files: readonly File[], host: string
       const file = picked.get(path);
       return textDocument(rootId, path, file ? await file.text() : '');
     },
+    // A pdf/office file's text is extracted by the review (in its worker) from these bytes, never here.
+    async readBytes(path) {
+      const file = picked.get(path);
+      return file ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array();
+    },
   };
-  return withDocumentText(source, async (path) => {
-    const file = picked.get(path);
-    return file ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array();
-  });
+  return source;
 }
 
 /** The folder-upload review target. An upload cannot be re-read without a new pick. */

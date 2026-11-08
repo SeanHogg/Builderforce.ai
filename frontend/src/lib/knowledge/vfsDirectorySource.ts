@@ -4,6 +4,7 @@
  * in memory, so every listed file is hashed by content; `watch` feeds the Live lens.
  */
 
+import { isDocumentPath } from '@seanhogg/builderforce-memory/knowledge';
 import { byteLength, contentHash, isSkippedPath, normalizePath, textDocument, type ContentHashedSource } from '@builderforce/knowledge-browser';
 
 /** The slice of `VirtualFileSystem` this adapter reads (structural, so tests need no runtime). */
@@ -40,7 +41,8 @@ export function createVfsDirectorySource({ fs, rootId, title, under = '' }: VfsD
     async *list() {
       for (const vfsPath of fs.list()) {
         const path = relative(vfsPath);
-        if (!path || isSkippedPath(path)) continue;
+        // The VFS stores TEXT only: a pdf/office file in it is not its document, so it is not reviewed (never read as raw UTF-8).
+        if (!path || isSkippedPath(path) || isDocumentPath(path)) continue;
         const text = fs.readText(vfsPath);
         if (text === undefined) continue;
         real.set(path, vfsPath);

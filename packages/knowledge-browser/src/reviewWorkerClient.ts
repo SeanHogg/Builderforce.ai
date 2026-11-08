@@ -12,8 +12,8 @@
 
 import type { ReviewPlan, ReviewProgress, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
-import { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
-import { isContentHashed } from './directorySourceKit';
+import { LIST_ALL, READ_BYTES, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
+import { isByteReadable, isContentHashed, withDocumentText } from './directorySourceKit';
 import { createReviewWorker } from './workerFactory';
 
 export type WorkerFactory = () => Worker | null;
@@ -34,9 +34,19 @@ async function answer(ports: ReviewPorts, port: ReviewPortName, method: string, 
     for await (const entry of ports.source.list()) out.push(entry);
     return out;
   }
+  if (port === 'source' && method === READ_BYTES) {
+    const bytes = isByteReadable(ports.source) ? await ports.source.readBytes(String(args[0])) : new Uint8Array();
+    // Own the buffer: a view can window a larger one, and the reply transfers it.
+    return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer;
+  }
   const target = ports[port] as unknown as Record<string, ((...a: unknown[]) => unknown) | undefined> | undefined;
   const fn = target?.[method];
   return fn ? fn.apply(target, args) : undefined;
+}
+
+function inThread(ports: ReviewPorts): ReviewPorts {
+  const { source } = ports;
+  return isByteReadable(source) ? { ...ports, source: withDocumentText(source, (path, signal) => source.readBytes(path, signal)) } : ports;
 }
 
 export interface RunReviewOptions {
@@ -49,9 +59,10 @@ export function runReview(job: ReviewJob & { mode: 'plan' }, ports: ReviewPorts,
 export function runReview(job: ReviewJob & { mode: 'review' }, ports: ReviewPorts, opts?: RunReviewOptions): Promise<ReviewReport>;
 export function runReview(job: ReviewJob, ports: ReviewPorts, opts: RunReviewOptions = {}): Promise<ReviewPlan | ReviewReport> {
   const worker = (opts.createWorker ?? defaultWorker)();
-  if (!worker) return runReviewJob(job, ports, opts.onProgress, opts.signal);
+  // No Worker: the extraction runs in-thread, wrapped here — the ONE place a page source's bytes become document text.
+  if (!worker) return runReviewJob(job, inThread(ports), opts.onProgress, opts.signal);
   return new Promise((resolve, reject) => {
-    const post = (m: ToReviewWorker) => worker.postMessage(m);
+    const post = (m: ToReviewWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
     const finish = () => { worker.terminate(); opts.signal?.removeEventListener('abort', onAbort); };
     const onAbort = () => post({ type: 'abort' });
     opts.signal?.addEventListener('abort', onAbort);
@@ -59,7 +70,7 @@ export function runReview(job: ReviewJob, ports: ReviewPorts, opts: RunReviewOpt
       const msg = event.data;
       if (msg.type === 'call') {
         answer(ports, msg.port, msg.method, msg.args)
-          .then((value) => post({ type: 'reply', id: msg.id, ok: true, value }))
+          .then((value) => post({ type: 'reply', id: msg.id, ok: true, value }, value instanceof ArrayBuffer ? [value] : []))
           .catch((err: unknown) => post({ type: 'reply', id: msg.id, ok: false, error: err instanceof Error ? err.message : String(err) }));
       } else if (msg.type === 'progress') {
         opts.onProgress?.(msg.progress);

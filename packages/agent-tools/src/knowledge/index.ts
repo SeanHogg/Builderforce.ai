@@ -89,7 +89,7 @@ export { blobDataUrl } from './blobDataUrl.js';
 export { gatewayErrorMessage } from './gatewayError.js';
 export {
     createReviewRecorder, graphCounts, repoGraphEdgeCount, reviewRecordStore,
-    type GraphCounts, type RecordPersistence, type ReviewRecord, type ReviewRecorder, type ReviewRecordStore, type SkippedEntry, type SkippedUploads,
+    type GraphCounts, type RecordPersistence, type ReviewRecord, type ReviewRecorder, type ReviewRecordStore, type SkippedEntry,
 } from './reviewRecord.js';
 export {
     MAX_PINPOINT_IMAGE_BYTES, MAX_PINPOINT_MATCHES, MAX_PINPOINT_TEXTS, PINPOINT_VISION_MAX_TOKENS, PINPOINT_VISION_SYSTEM,

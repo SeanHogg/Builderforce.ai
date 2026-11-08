@@ -8,9 +8,9 @@
 
 import type { DirectorySource, JudgementPort, KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
-import { contentHash, withDocumentHashes } from './directorySourceKit';
+import { contentHash, withDocumentText } from './directorySourceKit';
 import { runReviewJob, type ReviewPorts } from './reviewJob';
-import { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
+import { LIST_ALL, READ_BYTES, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
 
 const scope = self as unknown as { postMessage(m: FromReviewWorker): void; onmessage: ((e: MessageEvent<ToReviewWorker>) => void) | null };
 const pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
@@ -26,16 +26,18 @@ function call<T>(port: ReviewPortName, method: string, args: unknown[] = []): Pr
 }
 
 function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPorts {
-  // `read` already answers a pdf/office file's extracted text page-side; the listing hash stays the file's, so map the text back to it.
-  const proxied: DirectorySource = {
+  // The page answers a file's BYTES (`READ_BYTES`, a transferred buffer); the pdf/office text extraction runs HERE, off the UI thread.
+  const proxied: DirectorySource & { readBytes(path: string): Promise<Uint8Array> } = {
     rootId: start.source.rootId,
     title: start.source.title,
     async *list() { for (const entry of await call<Array<{ path: string; hash: string; size: number }>>('source', LIST_ALL)) yield entry; },
     read: (path) => call('source', 'read', [path]),
+    readBytes: async (path: string) => new Uint8Array(await call<ArrayBuffer>('source', READ_BYTES, [path])),
     // Only a source whose hashes ARE contentHash of the text (the page said so) can check the text it reads against the plan.
     ...(start.hashesAreContentHash ? { hashOf: contentHash } : {}),
   };
-  const source = withDocumentHashes(proxied);
+  // `withDocumentText` also maps the extracted text back to the listing hash (`withDocumentHashes`), which stays the file's.
+  const source = withDocumentText(proxied, proxied.readBytes);
   const store: KnowledgeStore = {
     scopes: () => call('store', 'scopes'),
     facts: (s) => call('store', 'facts', [s]),

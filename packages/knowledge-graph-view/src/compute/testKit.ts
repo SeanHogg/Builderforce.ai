@@ -39,5 +39,7 @@ export class FakeWorker implements WorkerLike {
     done(run: { id: number; graph: GraphId }, raw: unknown): void { this.reply({ type: 'done', id: run.id, graph: run.graph, raw }); }
 }
 
-/** Lets the client's microtasks and zero-delay timers (the load stream) run. */
-export const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** Lets the client's microtasks and zero-delay timers run: the load stream yields once per slice, so wait out a generous run of them. */
+export const flush = async (): Promise<void> => { for (let i = 0; i < 25; i++) await tick(); };

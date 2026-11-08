@@ -4,19 +4,12 @@
  * Every host (web, VS Code, Rovr, on-prem) passes its own authenticated `fetch`; this
  * module owns only paths, payload shapes, bounds and error mapping.
  *
- * KnowledgeStore over the API:
+ * The knowledge API:
  *   scopes()          GET  …/knowledge/scopes
- *   facts(scope)      GET  …/knowledge/facts?root=  → the root's stored facts, with author
+ *   facts(root)       GET  …/knowledge/facts?root=  → the root's stored facts, with author
  *                     (`createdBy`) and origin, read in one cached store query
- *   relations(scope)  GET  …/knowledge-graph?root=  → the stored relations it joined
- *   write(batch)      POST …/knowledge/write, chunked into ≤ 500 rows per call; the scope
- *                     row (and its digest) rides on the LAST chunk only, so a failed
- *                     upload never records a digest for a half-written review
- *   markStale(…)      POST …/knowledge/write { stale: [{ sourceRef, currentHash }] } —
- *                     server-side, in the single writer: model relations judged from another
- *                     hash get `stale_at`, and the source's own object records its current hash
- *                     ('' = removed). Model FACTS are not marked: their staleness is derived
- *                     at graph build from the anchor hash vs the source's current hash.
+ *   store.relations   GET  …/knowledge-graph?root=  → the stored relations it joined
+ *   writeRows(…)      POST …/knowledge/write of rows only; every other write is a pack
  *   judgeEstimate()   GET  …/knowledge/judge/estimate → ≈ USD of one judged section (+ local)
  *   getExtracted      GET  …/knowledge/extracted/:hash (404 → undefined)
  *   preloadExtracted  POST …/knowledge/extracted/bulk in chunks of PRELOAD_CHUNK hashes —
@@ -25,8 +18,6 @@
  *                     per-file getExtracted stays the fallback
  *   sync*             POST …/knowledge/sync (one BFKP pack or one part), GET/POST …/sync/manifest, POST …/sync/have
  *                     — the replica pump's ONLY upload path (PRD 41 A11); 409/413/422 are typed errors
- *   batched(work)     identity — the server is the single writer and `write()` already puts
- *                     the scope on the last chunk, so there is nothing to flush locally
  *
  * `relations` are read back from the server-built graph (edges whose origin is stored),
  * since the server is the only reader of the tables — what a re-review needs to re-anchor
@@ -42,11 +33,7 @@ import type {
   JudgementRequest,
   JudgementResult,
   KnowledgeGraph,
-  KnowledgeStore,
-  NodeRef,
   Scope,
-  ScopeRecord,
-  StoredFact,
   StoredRelation,
 } from '@seanhogg/builderforce-memory/knowledge';
 import { errorOf } from './httpError.js';
@@ -58,12 +45,11 @@ import {
   type JudgeEstimate,
   type KnowledgeFacts,
   type KnowledgeClient,
+  type KnowledgeClientStore,
   type KnowledgeClientOptions,
   type KnowledgeScopeRecord,
 } from './types.js';
 
-/** Rows (facts + relations + stale marks) one write call carries — the server's bound. */
-export const MAX_WRITE_ROWS = 500;
 /** The tenant-JWT door; on-prem passes the agent-host door instead. */
 export const DEFAULT_KNOWLEDGE_BASE_PATH = '/api/projects';
 /** The widest graph the server builds; `relations` read it. */
@@ -85,10 +71,6 @@ function retryAfterMs(res: Response): number | null {
   if (!Number.isFinite(seconds) || seconds < 0) return null;
   return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
 }
-
-type Row =
-  | { t: 'fact'; v: StoredFact }
-  | { t: 'relation'; v: StoredRelation };
 
 export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeClient {
   const base = `${(opts.basePath ?? DEFAULT_KNOWLEDGE_BASE_PATH).replace(/\/+$/, '')}/${opts.projectId}`;
@@ -156,28 +138,6 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
     return out?.graph ?? null;
   };
 
-  const write = async (batch: { scope?: ScopeRecord; facts?: readonly StoredFact[]; relations?: readonly StoredRelation[] }): Promise<void> => {
-    const rows: Row[] = [
-      ...(batch.facts ?? []).map((v): Row => ({ t: 'fact', v })),
-      ...(batch.relations ?? []).map((v): Row => ({ t: 'relation', v })),
-    ];
-    const chunks: Row[][] = [];
-    for (let i = 0; i < rows.length; i += MAX_WRITE_ROWS) chunks.push(rows.slice(i, i + MAX_WRITE_ROWS));
-    if (chunks.length === 0) chunks.push([]);
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!;
-      const last = i === chunks.length - 1;
-      await call('/knowledge/write', send('POST', {
-        // The root rides EVERY chunk (the scope only the last): it is what a pack upload is
-        // stamped and fenced by on the server.
-        ...(batch.scope ? { root: batch.scope.rootId } : {}),
-        ...(last && batch.scope ? { scope: batch.scope } : {}),
-        facts: chunk.filter((r) => r.t === 'fact').map((r) => r.v),
-        relations: chunk.filter((r) => r.t === 'relation').map((r) => r.v),
-      }));
-    }
-  };
-
   /** The stored relations of a root's graph. */
   const relationsOf = async (scope: Scope): Promise<StoredRelation[]> => {
     const g = await graph(scope.rootId, { maxNodes: STORE_READ_MAX_NODES });
@@ -218,18 +178,9 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
   // ---------------------------------------------------------------------------
   const extractedCache = new Map<string, Extracted[] | undefined>();
 
-  // The client store exposes KnowledgeStore plus the extracted read-through hint (not part of the interface).
-  const store: KnowledgeStore & {
-    readonly preloadExtracted: (hashes: readonly string[]) => Promise<void>;
-    batched: <T>(work: (flush: () => Promise<void>) => Promise<T>) => Promise<T>;
-  } = {
-    scopes,
-      facts: async (scope) => (await facts(scope.rootId))?.facts ?? [],
+  // The client store is the READ-THROUGH only (relations + the extracted cache); every write goes through a pack or `writeRows`.
+  const store: KnowledgeClientStore = {
       relations: relationsOf,
-      write: (batch) => write(batch),
-      markStale: async (_scope: Scope, sourceRef: NodeRef, currentHash: string) => {
-        await call('/knowledge/write', send('POST', { facts: [], relations: [], stale: [{ sourceRef, currentHash }] }));
-      },
       getExtracted: async (hash) => {
         if (extractedCache.has(hash)) return extractedCache.get(hash);
         const out = await orNull(jsonCallRetried<{ extracted: Extracted[] }>(`/knowledge/extracted/${encodeURIComponent(hash)}`));
@@ -258,11 +209,6 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
           // Best-effort by contract: a failed preload must not abort the review.
         }
       },
-      /**
-       * Identity: the server is the single writer and `write()` already rides the scope on the
-       * last chunk, so there is nothing to flush or bound locally — `work` runs as-is.
-       */
-      batched: async <T>(work: (flush: () => Promise<void>) => Promise<T>): Promise<T> => work(async () => {}),
   };
 
   return {

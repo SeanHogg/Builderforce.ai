@@ -11,7 +11,7 @@
 
 import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import { driveApi, type DriveConnection, type DriveItem } from '@/lib/driveApi';
-import { byPath, metadataHash, normalizePath, textDocument, withDocumentText } from '@builderforce/knowledge-browser';
+import { byPath, metadataHash, normalizePath, textDocument, type ByteReadableSource } from '@builderforce/knowledge-browser';
 import { webRootId } from './webHost';
 
 /** Files walked at most, and how deep — a drive is arbitrarily large. */
@@ -26,7 +26,7 @@ export function createDriveDirectorySource(
   connection: Pick<DriveConnection, 'id' | 'displayName' | 'accountEmail'>,
   folder: DriveFolderRef | null = null,
   limits = DRIVE_WALK_LIMITS,
-): DirectorySource {
+): DirectorySource & ByteReadableSource {
   const rootId = webRootId('drive', connection.id, folder?.id ?? 'root');
   const title = folder?.name ?? (connection.displayName || connection.accountEmail);
   const items = new Map<string, DriveItem>();
@@ -55,7 +55,7 @@ export function createDriveDirectorySource(
     return walked;
   };
 
-  const source: DirectorySource = {
+  const source: DirectorySource & ByteReadableSource = {
     rootId,
     title,
     async *list() {
@@ -71,10 +71,12 @@ export function createDriveDirectorySource(
       const file = await driveApi.fetchFile(connection.id, item);
       return textDocument(rootId, path, await file.text());
     },
+    // A pdf/office file's text is extracted by the review (in its worker) from these bytes, never here.
+    async readBytes(path) {
+      await walk();
+      const item = items.get(path);
+      return item ? new Uint8Array(await (await driveApi.fetchFile(connection.id, item)).arrayBuffer()) : new Uint8Array();
+    },
   };
-  return withDocumentText(source, async (path: string) => {
-    await walk();
-    const item = items.get(path);
-    return item ? new Uint8Array(await (await driveApi.fetchFile(connection.id, item)).arrayBuffer()) : new Uint8Array();
-  });
+  return source;
 }
