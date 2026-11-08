@@ -119,7 +119,11 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
 
 - **G27: no packaged acceptance suite runs with the network denied.** `deniedNetworkAcceptance.test.ts` mocks `vscode`. Assert zero platform requests and local-only completion in the packaged VSIX, Rovr and Web. Unblocks claiming offline behaviour.
-- **G21 + G23: bound-chat rail and sync status.** The rail is live reads with no local copy, and `syncStatusPresenter.ts` has no caller. Both need a local record list UI (G05; `localWorkRepository.ts` serves agent tools only) and a chat-ticket link importer (G15–G18).
+- **G21 + G23: bound-chat rail and sync status (in progress 2026-11-08).**
+  - Done: the chat-ticket link entity, its API importer and the server-record ingestion all shipped with the sync residuals (see DONE.md).
+  - On main but unfinished: the VS Code host side, consisting of `clients/vscode/src/chatRail/*`, the `builderforce.localWork` tree (`localWork/*`), `sync/syncSummary.ts`, the brain-ui `chatTickets/localRail` components, and the extension and bridge registration.
+  - Still to do: the webview adapter split (`useTicketRail` / `VsCodeChatRail` read `local.chatRail`, link/unlink write local records), the rail-header sync summary, and nls/l10n strings in every locale. Also the required tests: idempotent ingest, a failed read ingests nothing, imported records present as synced, the offline rail and tree, and syncSummary counts. Then verify and review.
+  - Design: `docs/design/local-first-closure-g03-g21-g23-g27.md` §2.
 - **Three hosts still upload per file, beside the ONE pack (in progress 2026-11-08).** Web and Rovr (`packages/knowledge-browser/src/knowledgeSource.ts:153`, `knowledgeReview.worker.ts`) and on-prem (`agent-runtime/src/agents/knowledge/onPremKnowledge.ts` `reviewPorts`) review straight against `knowledge-client` `client.store`, so each extraction goes up as `PUT …/knowledge/extracted/:hash` (`knowledgePerception.putExtracted`). That breaks the one-upload-path rule. VS Code alone uses the replica stack (`localSnapshotStore` + `replicatedKnowledgeStore` + persisted `ReplicaQueue` + `pumpReplica`). Fix: move the editor's replica stack out of `clients/vscode/src/knowledge/knowledgeStores.ts` into `packages/agent-tools` behind a host `KnowledgeFiles` port (IndexedDB in the browser, the container filesystem on-prem), run all three hosts through it, then delete the PUT route, `client.putExtracted` and `knowledgePerception.putExtracted`. The end-state design goes first.
 - **Knowledge review looks frozen after the last write (in progress 2026-11-08).** After the per-file writes, memory `review()` runs the code pack's analyzers (`workspaceAnalysis.ts`: lists and re-reads every file for the repo graph, then runs dependency-cruiser/jscpd/knip) with no progress event, so a 6285-file root shows `write 6284/6285` for minutes. The Reviews panel also only opens at `confirm`/`running`, not while counting, and Copy diagnostics is repeated in three places. Fix: memory `analyse` phase + `AnalyzerPort` `onProgress`, agent-tools reports reads and tools, the panel opens on `planning` with a bar, a "Map the code" step, ONE Copy diagnostics in the Diagnostics tab.
 - **Kimi Code `k3` sends no response headers for 240s on large prompts.** Seen four times: 2026-11-04 in chat #46121, and twice on 2026-11-06 in chat #46169. Each time the editor called `api.kimi.ai/coding/v1` directly with a prompt of about 75K tokens, and the request was dropped at the header deadline in `streamChatCompletion.ts`. One failure was step 0 of a fresh run with a fresh token. The 2026-11-06 pass makes the failure diagnosable (destination, phase, request size and credential state on the failed step, plus an output-channel line) and offers "Choose another model". A live probe on 2026-11-06 with the CLI token found the following. Kimi holds response headers until the first token, so time-to-headers equals queue plus prefill time. A ~75K-token `k3` prompt with 67 tools and `max_tokens: 4096` answered in 11–27s. So prompt size and tool count do not reproduce the stall. Still open are the workspace-connection token (which the failing runs used), the real multi-turn tool history, and a transient Kimi-side stall. **Blocker:** the original request bodies were not recorded, so there is nothing to replay. The new failure detail records request bytes, message and tool counts, and credential state. The next occurrence will narrow the cause down, then replay it against both tokens.
@@ -128,6 +132,28 @@ Source: [offline-first review](./docs/design/vsix-offline-first-architecture-rev
 
 Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs failed. The manager's census tracks this.
 
+- **Release health: main is still red after the 3a2c752db sweep.** Part 1 is in DONE.md, but the fixes are not committed yet. A Haiku re-run on 2026-11-08 found these still failing.
+  - **From the autonomous-delivery pass:**
+    - `boardLiveReads.test.ts`: 5 tests fail with "load is not a function" (mock at line 4).
+    - `censusRecordedRefusals.test.ts`: "db down" propagates.
+    - api typecheck fails in `kanbanRoutes.templateGet.test.ts`, `kanbanTemplateService.guards.test.ts`, `kanbanTemplateService.ts`, `personProfile.test.ts`, `boardBudgetRoutes.test.ts`, `onReviewerVerdict.test.ts`, `prConductSweep.ts` and `reaperChatNarration.test.ts`.
+    - frontend `root-closure`: `useKanbanTemplateCheckout.ts` and `creationListings.ts` are now reachable from the root layout.
+    - frontend `react-hooks`: `PersonProfileClient.tsx` and `useKanbanTemplateCheckout.ts`.
+  - **From cloud admission, which has no owner:**
+    - `dispatchAdmission.test.ts`: the regression "rank by admission, not by id" fails (got [11,5]).
+    - `dispatchCloudRun.admission.test.ts`: the mock is missing `resolveDefaultRepoForProject`.
+    - `handleCiEventOutcome.test.ts`: the call now carries `parkIfDeferred: true`.
+  - **Owned by other sessions, in flight:**
+    - the voice/studio tenant-scope, layering and unvalidated-body checks;
+    - `hiring_ref_salts` table adoption;
+    - the `connectorManifest` typecheck;
+    - the agent-tools `@seanhogg/builderforce-memory` subpaths `/working`, `/ingest` and `AnalyzerProgress`, which break the api, frontend and VS Code typechecks;
+    - the frontend `creationCanvasAi` and `InvestorUpdateMilestonesPreview` tests;
+    - the `KnowledgeAnalyzePanel` `'use client'` check;
+    - design-scale in PersonasClient and the security and governance panels;
+    - the silent-catch ratchets.
+  - **Canvas webview has no CI typecheck.** `VoiceMarketplaceScreen.tsx` is now only in `webview/tsconfig.canvas.json`, and that project is not in `clients/vscode` `type-check`. Adding it is a one-line change, but today it fails with 14 errors in `packages/knowledge-graph-view/src/surface/useSurface.ts`, `packages/interaction-contract/src/improvementPrompt.ts` and agent-tools knowledge.
+  - *Blocker: the user stopped this pass on 2026-11-08 before the remaining fixes and the commit, and the shared packages above are mid-change in other sessions.*
 - **PRD 23 dispositions and canary are built but not live** ([PRD 23](./docs/specs/23-prd-manager-pr-ticket-recovery.md)). Turn on the Manager canary for a project and apply a reviewed disposition batch; done when the census shows the backlog shrinking. *Blocker: operator decision to go live (the operator chose build + dry-run for this pass).*
 
 ### Ceremonies and meetings `[delivery]`
