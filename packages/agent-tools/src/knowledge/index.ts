@@ -112,5 +112,3 @@ export {
     type PumpSource, type ReplicaHost, type ReplicaHostOptions, type UploadMarks,
 } from './replicaHost.js';
 export { type ReplicaHostClient, type SeedPort } from './replicaHostParts.js';
-export { shouldStayAdditive } from './replicaAdoption.js';
-export { additivePlan } from './replicaReconcile.js';

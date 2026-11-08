@@ -35,7 +35,7 @@ import { buildPack, type PackQueries, type ReplicaSource } from './replicaPack.j
 import type { ReplicaQueue } from './replicaQueue.js';
 import { generationCheckDue, readServerGeneration, type GenerationReader } from './replicaGenerationCheck.js';
 export { GENERATION_CHECK_INTERVAL_MS } from './replicaGenerationCheck.js';
-import { additivePlan, planReconcile, type ReconcileQueries } from './replicaReconcile.js';
+import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 
 /** The knowledge client's sync calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
 export interface ReplicaClient extends PackQueries, ReconcileQueries, Partial<Pick<GenerationReader, 'syncGeneration'>> {
@@ -262,12 +262,11 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
             await emit();
             try {
                 const sources = await args.sources();
-                const additive = await queue.additive();
                 let baseGeneration = snap.ack?.generation ?? 0;
                 let mode: ReplicaPackStats['mode'] = 'delta';
                 if (!snap.ack) {
-                    const whole = await planReconcile({ rootId, local, sources, client: guarded, dirty: snap.keys });
-                    const plan = additive ? additivePlan(whole, snap.keys) : whole;
+                    // Deletes only what the dirty set names: a server-only leaf another host holds is never this store's to drop.
+                    const plan = await planReconcile({ rootId, local, sources, client: guarded, dirty: snap.keys });
                     if (plan.kind === 'equal') {
                         await queue.settle(snap, plan.ack);
                         state.lastSyncAt = new Date(now()).toISOString();
@@ -291,7 +290,6 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 const built = await buildPack({
                     rootId, local, sources, client: guarded, touched: snap.keys, baseGeneration, analysis: snap.analysis,
                     ...(maxFiles !== undefined ? { maxFiles } : {}), noDiff, ...(force ? { forceBodies: force } : {}), ...(owned ? { ownedKeys: owned } : {}),
-                    ...(additive ? { additive } : {}),
                 });
                 lastFiles = built.files;
                 if (built.waiting > 0) {

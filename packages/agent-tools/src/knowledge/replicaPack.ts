@@ -11,18 +11,20 @@
  *                agent's fact, a model row with no leaf) is returned as `sideRows` for its own writer.
  *   tombstones   a touched key that is no longer a leaf of the tree, and that the server holds as a leaf of THIS
  *                root (asked of `syncLeaves`, or already known to be, from a reconcile): the server refuses any other
- *   scope        the root's scope record (last, with the digest the server must reach)
+ *   scope        the root's scope record (last; its review digest only when no file is held back)
  *   analysis     the pending snapshot
+ *
+ * A pack NEVER asserts a root digest (`targetDigest` is always ZERO_DIGEST): the server may hold leaves of other hosts
+ * sharing the root, and a deletion only ever comes from a tombstone the dirty set named.
  *
  * Bodies come through `KnowledgeStore.getExtracted`, never from a snapshot file. A pack that would carry more than
  * `maxFiles` files, or whose DECODED size or row count would pass what the server inflates, is cut: only part of
- * the file keys go, the rest stay dirty, and the pack asserts no digest (only the LAST slice carries the rows, the
- * scope and the `targetDigest`).
+ * the file keys go, the rest stay dirty (only the LAST slice carries the rows and the scope).
  */
 
 import { srcRef, type Extracted, type KnowledgeStore, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import {
-    bucketOf, diffEntries, encodePack, jsonBytesOf, parseRelationLeafKey, rootLeaves, rootDigestOf, ZERO_DIGEST, fileLeafKey,
+    bucketOf, diffEntries, encodePack, jsonBytesOf, parseRelationLeafKey, rootLeaves, ZERO_DIGEST, fileLeafKey,
     type Pack, type PackExtr,
 } from '@seanhogg/builderforce-memory/knowledge/pack';
 import { isCleanKey, isCleanText } from './packKeyGuard.js';
@@ -60,8 +62,6 @@ export interface BuildArgs {
     forceBodies?: ReadonlySet<string>;
     /** Keys already known to be leaves of the root on the server (a reconcile's removals): no lookup needed. */
     ownedKeys?: ReadonlySet<string>;
-    /** ADDITIVE root: the server holds leaves this store lacks, so the pack never asserts the root digest (it would be the local tree's alone). */
-    additive?: boolean;
     /** The pack is cut before its DECODED body passes this (default 48 MB of the server's 64 MB). */
     maxDecodedBytes?: number;
     /** The pack is cut before it holds more rows than this (default 600,000 of the server's 1,000,000). */
@@ -75,7 +75,7 @@ export interface BuiltPack {
     files: number;
     /** The touched keys this pack settles. */
     sentKeys: string[];
-    /** The pack was not cut: it carried every touched key but the held-back files (and so the rows, scope and analysis; the digest only when nothing is held). */
+    /** The pack was not cut: it carried every touched key but the held-back files (and so the rows, scope and analysis; the scope's review digest only when nothing is held). */
     final: boolean;
     analysisSent: boolean;
     /** Rows left out because their path or key holds a control character; their keys are in `sentKeys` (settled, never retried). */
@@ -180,10 +180,10 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     const rowKeys = args.touched.filter((k) => !k.startsWith('f:'));
     const cut = limit !== undefined && fileKeys.length > limit;
     const sentFileKeys = cut ? fileKeys.slice(0, limit) : fileKeys;
-    // A pack that is not cut carries the rows, scope, analysis and side rows, held files or not. It asserts the root digest only when nothing is held back.
+    // A pack that is not cut carries the rows, scope, analysis and side rows, held files or not. It never asserts a root digest:
+    // the server may hold leaves of other hosts sharing the root, which this pack neither carries nor deletes.
     const final = !cut;
     const complete = final && holdKeys.size === 0;
-    const asserts = complete && !args.additive;
     // The local state, as the tree sees it: which keys are leaves, which rows exist.
     let allFacts: StoredFact[] = [], allRels: StoredRelation[] = [];
     let treeKeys = new Set<string>();
@@ -289,11 +289,8 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
         }
         const scope = (await local.scopes()).find((s) => s.rootId === rootId);
         // While a file is held back the review digest is not the server's state: the scope goes without it (the immutable review snapshot is keyed by it).
-        // An ADDITIVE root still records its review (baseline, snapshot): only the pack's `targetDigest` is not asserted.
         if (scope) { const { lastDigest: _held, ...rest } = scope; pack.scope = complete ? scope : rest; }
         if (args.analysis) pack.analysis = { sha: args.analysis.sha, snapshot: args.analysis.snapshot };
-        const current = sources.map((s) => ({ path: pathOfRef(rootId, s.ref), hash: s.hash }));
-        if (asserts) pack.targetDigest = rootDigestOf(rootId, { files: current, facts: allFacts, relations: allRels });
     }
     if (tombstones.files.length + tombstones.facts.length + tombstones.relations.length > 0) pack.deletes = tombstones;
 

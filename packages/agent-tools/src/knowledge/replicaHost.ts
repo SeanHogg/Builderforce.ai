@@ -71,11 +71,8 @@ export interface ReplicaHost {
         rootId: string, files: KnowledgeFiles, local: KnowledgeStore, pump: PumpSource | undefined, readThrough: boolean,
         resolve?: () => PumpSource | undefined,
     ): KnowledgeStore;
-    /**
-     * `opts.full`: the review covered the WHOLE tree (forced, or a first review with nothing unchanged or skipped). When it also was
-     * not aborted and read every file, it ends additive mode before the pump starts; any other review leaves the flag as it was.
-     */
-    duringReview<T>(rootId: string, files: KnowledgeFiles, pump: PumpSource | undefined, run: () => Promise<T>, opts?: { full?: boolean }): Promise<T>;
+    /** Holds the root as reviewing around `run`, then starts the pump (when one is given). */
+    duringReview<T>(rootId: string, files: KnowledgeFiles, pump: PumpSource | undefined, run: () => Promise<T>): Promise<T>;
     setRootReviewing(rootId: string, files: KnowledgeFiles, active: boolean): void;
     isRootReviewing(rootId: string): boolean;
     replicaDrained(rootId: string): Promise<void>;
@@ -88,8 +85,6 @@ export interface ReplicaHost {
     kickReplicaPump(rootId: string, files: KnowledgeFiles, resolve: () => PumpSource | undefined): void;
     resumeReplica(source: PumpSource): Promise<void>;
     queueFirstSyncOnce(args: PumpSource & { manifest: IngestManifest; marks: UploadMarks }): Promise<boolean>;
-    /** The root was reviewed straight against the server before: its pump never deletes a server leaf the local store lacks. */
-    markAdditive(rootId: string, files: KnowledgeFiles, projectId: number): Promise<void>;
     disposeReplicas(): Promise<void>;
 }
 
@@ -118,20 +113,6 @@ interface Entry {
     /** Runs once the queue has drained for `projectId` (marks the first sync done). */
     pendingMark?: { projectId: number; run: () => Promise<void> };
 }
-
-/** A review report that says it was aborted (memory's `ReviewReport.aborted`); a thrown review never gets here. */
-const wasAborted = (result: unknown): boolean => typeof result === 'object' && result !== null && (result as { aborted?: unknown }).aborted === true;
-/**
- * A report that left work undone: a file that could not be read or extracted is missing from the local tree, and judging that
- * stopped or is still owed leaves the tree short of what the server may hold. Such a review is not complete.
- */
-const leftWorkUndone = (result: unknown): boolean => {
-    const r = (typeof result === 'object' && result !== null ? result : {}) as Record<string, unknown>;
-    const positive = (v: unknown): boolean => typeof v === 'number' && v > 0;
-    return positive(r.readErrors) || positive(r.extractErrors) || positive(r.unjudged) || positive(r.awaitingJudgeCount)
-        || (Array.isArray(r.awaitingJudge) && r.awaitingJudge.length > 0)
-        || (typeof r.judgeStopped === 'string' && r.judgeStopped !== '');
-};
 
 export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
     const lock = opts.lock ?? fileReplicaLock();
@@ -208,17 +189,12 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             });
         },
 
-        async duringReview(rootId, files, pump, run, reviewOpts) {
+        async duringReview(rootId, files, pump, run) {
             host.setRootReviewing(rootId, files, true);
-            let complete = false;
             try {
-                const result = await run();
-                complete = reviewOpts?.full === true && !wasAborted(result) && !leftWorkUndone(result);
-                return result;
+                return await run();
             } finally {
                 host.setRootReviewing(rootId, files, false);
-                // A complete review re-derived every leaf: from here the local tree is the whole truth, so the pump may delete again.
-                if (complete) await entryOf(rootId, files).queue.setAdditive(false).catch((error) => report('replica additive', error));
                 if (pump) void host.startReplicaPump(pump);
             }
         },
@@ -363,14 +339,6 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             held.pendingMark = { projectId, run: () => marks.set(rootId, projectId) };
             void host.startReplicaPump(args);
             return true;
-        },
-
-        async markAdditive(rootId, files, projectId) {
-            const queue = entryOf(rootId, files).queue;
-            // Bind to the project FIRST: adopting another project resets the flag, and the review's first write would otherwise do that after this.
-            await queue.adopt(projectId);
-            await queue.setAdditive(true);
-            await queue.flush();
         },
 
         async disposeReplicas() {
