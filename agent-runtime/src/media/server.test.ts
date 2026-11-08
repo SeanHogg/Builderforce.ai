@@ -19,14 +19,17 @@ vi.mock("./store.js", async (importOriginal) => {
 const { startMediaServer } = await import("./server.js");
 const { MEDIA_MAX_BYTES } = await import("./store.js");
 
-async function waitForFileRemoval(filePath: string, maxTicks = 1000) {
-  for (let tick = 0; tick < maxTicks; tick += 1) {
+// A wall-clock deadline, not a tick count: on a loaded CI runner the response's
+// `finish` event and the async rm can take far more than 1000 event-loop turns.
+async function waitForFileRemoval(filePath: string, deadlineMs = 5_000) {
+  const deadline = Date.now() + deadlineMs;
+  while (Date.now() < deadline) {
     try {
       await fs.stat(filePath);
     } catch {
       return;
     }
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`timed out waiting for ${filePath} removal`);
 }
