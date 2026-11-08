@@ -25,6 +25,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Type } from "@sinclair/typebox";
 import { readSharedEnvVar } from "../../infra/env-file.js";
+import { logWarn } from "../../logger.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringArrayParam, readStringParam } from "./common.js";
 
@@ -494,8 +495,9 @@ export async function runPrefilters(root: string, ruleset: ResolvedRuleset): Pro
         default:
           break; // unknown kind — treat as LLM-only
       }
-    } catch {
-      // A single rule's matcher must never abort the whole pre-filter pass.
+    } catch (error) {
+      // A single rule's matcher must never abort the whole pre-filter pass — but its failure is recorded.
+      logWarn(`[governance_audit] pre-filter for ${rule.ruleRef} failed: ${String(error)}`);
     }
   }
   return hits;

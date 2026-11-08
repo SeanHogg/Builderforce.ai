@@ -10,7 +10,10 @@
  * implemented; other providers return a typed `unsupported` result so callers
  * degrade to "branch pushed, open PR manually" rather than crashing.
  */
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { resolveRepoApiTarget } from './repoApiTarget';
+
+const SOURCE = 'application/repos/createPullRequest.ts';
 
 export interface OpenPrInput {
   provider: string;
@@ -216,14 +219,14 @@ export async function markReadyForReview(input: Omit<OpenPrInput, 'head' | 'base
     if (input.provider !== 'github' && input.provider !== 'gitlab') return { ok: false, reason: `ready-for-review not implemented for provider '${input.provider}'` };
     const api = resolveRepoApiTarget(input);
     const headers = prRequestHeaders(input.token);
-    const current = await fetch(api.pullRequest(input.number), { headers }).catch(() => null);
+    const current = await fetch(api.pullRequest(input.number), { headers }).catch(reportedFallback(null, { source: SOURCE, operation: 'markReady.readPr', context: { provider: input.provider, number: input.number } }));
     if (!current?.ok) return { ok: false, reason: `could not read PR #${input.number}${current ? ` (${current.status})` : ''}` };
-    const pr = (await current.json().catch(() => null)) as { node_id?: string; title?: string; draft?: boolean } | null;
+    const pr = (await current.json().catch(reportedFallback(null, { source: SOURCE, operation: 'markReady.parsePr', context: { provider: input.provider, number: input.number } }))) as { node_id?: string; title?: string; draft?: boolean } | null;
     if (api.flavor === 'gitlab') {
       const title = pr?.title ?? '';
       if (!GITLAB_DRAFT_PREFIX.test(title) && !input.text) return { ok: true };
       const update = { title: input.text?.title ?? title.replace(GITLAB_DRAFT_PREFIX, ''), ...(input.text ? { description: input.text.body } : {}) };
-      const res = await fetch(api.pullRequest(input.number), { method: 'PUT', headers, body: JSON.stringify(update) }).catch(() => null);
+      const res = await fetch(api.pullRequest(input.number), { method: 'PUT', headers, body: JSON.stringify(update) }).catch(reportedFallback(null, { source: SOURCE, operation: 'markReady.gitlabUndraft', context: { provider: input.provider, number: input.number } }));
       return res?.ok ? { ok: true } : { ok: false, reason: `gitlab ${res?.status ?? 'network'}: could not take the merge request out of draft` };
     }
     // Already ready (a human got there first): nothing to undo, and the mutation would be refused.
@@ -235,12 +238,12 @@ export async function markReadyForReview(input: Omit<OpenPrInput, 'head' | 'base
           query: 'mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } } }',
           variables: { id: pr.node_id },
         }),
-      }).catch(() => null);
-      const body = (await res?.json().catch(() => null)) as { errors?: Array<{ message?: string }> } | null;
+      }).catch(reportedFallback(null, { source: SOURCE, operation: 'markReady.githubGraphql', context: { provider: input.provider, number: input.number } }));
+      const body = (await res?.json().catch(reportedFallback(null, { source: SOURCE, operation: 'markReady.parseGraphql', context: { provider: input.provider, number: input.number } }))) as { errors?: Array<{ message?: string }> } | null;
       if (!res?.ok || body?.errors?.length) return { ok: false, reason: `github ${res?.status ?? 'network'}: ${body?.errors?.[0]?.message ?? 'mark ready failed'}`.slice(0, 300) };
     }
     if (input.text) {
-      const patched = await fetch(api.pullRequest(input.number), { method: 'PATCH', headers, body: JSON.stringify({ title: input.text.title, body: input.text.body }) }).catch(() => null);
+      const patched = await fetch(api.pullRequest(input.number), { method: 'PATCH', headers, body: JSON.stringify({ title: input.text.title, body: input.text.body }) }).catch(reportedFallback(null, { source: SOURCE, operation: 'markReady.patchText', context: { provider: input.provider, number: input.number } }));
       if (!patched?.ok) return { ok: false, reason: `github ${patched?.status ?? 'network'}: could not update the PR title and body` };
     }
     return { ok: true };
@@ -256,12 +259,12 @@ async function applyBitbucketText(input: Parameters<typeof markReadyForReview>[0
   const headers = prRequestHeaders(input.token);
   const update: Record<string, unknown> = { title: input.text.title, description: input.text.body };
   if (api.flavor === 'bitbucket-server') {
-    const current = await fetch(api.pullRequest(input.number), { headers }).catch(() => null);
-    const pr = current?.ok ? (await current.json().catch(() => null)) as { version?: number; reviewers?: unknown } | null : null;
+    const current = await fetch(api.pullRequest(input.number), { headers }).catch(reportedFallback(null, { source: SOURCE, operation: 'bitbucketText.readPr', context: { provider: input.provider, number: input.number } }));
+    const pr = current?.ok ? (await current.json().catch(reportedFallback(null, { source: SOURCE, operation: 'bitbucketText.parsePr', context: { provider: input.provider, number: input.number } }))) as { version?: number; reviewers?: unknown } | null : null;
     if (typeof pr?.version !== 'number') return { ok: false, reason: `could not read PR #${input.number} to update it` };
     update.version = pr.version;
     if (pr.reviewers) update.reviewers = pr.reviewers; // Server drops reviewers a PUT leaves out
   }
-  const res = await fetch(api.pullRequest(input.number), { method: 'PUT', headers, body: JSON.stringify(update) }).catch(() => null);
+  const res = await fetch(api.pullRequest(input.number), { method: 'PUT', headers, body: JSON.stringify(update) }).catch(reportedFallback(null, { source: SOURCE, operation: 'bitbucketText.put', context: { provider: input.provider, number: input.number } }));
   return res?.ok ? { ok: true } : { ok: false, reason: `bitbucket ${res?.status ?? 'network'}: could not update the PR title and description` };
 }

@@ -41,6 +41,7 @@
  */
 
 import { Hono } from 'hono';
+import { reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -401,7 +402,7 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
     const verdict = await checkSlidingWindow(
       c.env as Env, `seo-impression:${ip}`, SEO_IMPRESSION_RPM,
-    ).catch(() => null); // fail open, like every other caller of the limiter
+    ).catch(reportedFallback(null, { source: 'presentation/routes/webSurfaceRoutes.ts', operation: 'seoImpressionLimiter' })); // fail open, like every other caller of the limiter
     if (!verdict || verdict.allowed) {
       await recordSeoImpression(c.env as Env, db, ownerParam(c.req.param('tenantId')), body.path);
     }

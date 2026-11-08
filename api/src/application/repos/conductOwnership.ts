@@ -8,6 +8,7 @@
  */
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { cronSweepEnabled, readCronControls } from '../runtime/cronControls';
 import { loadRecentlyConducted } from './conductMarker';
 
@@ -16,7 +17,7 @@ export async function loadSweepOwnedTickets(
   args: { tenantId: number; projectId: number; taskIds: readonly number[]; now: number },
 ): Promise<Set<number>> {
   if (!args.taskIds.length) return new Set();
-  const controls = await readCronControls(env).catch(() => null);
+  const controls = await readCronControls(env).catch(reportedFallback(null, { source: 'application/repos/conductOwnership.ts', operation: 'readCronControls', context: { tenantId: args.tenantId } }));
   // An unreadable control state is treated as ON: the marker alone still has to vouch for
   // the ticket, so this can never claim a ticket the sweep did not recently examine.
   if (controls && !cronSweepEnabled(controls, 'pr-ticket-reconciler')) return new Set();

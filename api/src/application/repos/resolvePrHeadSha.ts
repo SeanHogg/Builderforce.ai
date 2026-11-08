@@ -13,6 +13,7 @@
  * URL shapes come from `repoApiTarget` (the one place that knows each dialect), so this module holds
  * only the per-dialect RESPONSE mapping, which is pure and unit-tested. Never throws.
  */
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { resolveRepoApiTarget, type RepoApiCoords } from './repoApiTarget';
 import type { GitApiFlavor } from './gitProxy';
 import { resolveRepoCommitSha } from './readRepoContents';
@@ -48,10 +49,10 @@ export async function resolvePrHeadSha(input: PrHeadCoords, fetchFn: typeof fetc
       Accept: target.flavor === 'github' ? 'application/vnd.github+json' : 'application/json',
       'User-Agent': 'BuilderForce-PR-Head/1.0',
     },
-  }).catch(() => null);
+  }).catch(reportedFallback(null, { source: 'application/repos/resolvePrHeadSha.ts', operation: 'fetchPrHead', context: { provider: input.provider, number: input.number } }));
   if (!res) return { ok: false, reason: 'head lookup failed (network)' };
   if (!res.ok) return { ok: false, reason: `${input.provider} ${res.status} reading the pull request head` };
-  const sha = parsePrHeadSha(target.flavor, await res.json().catch(() => null));
+  const sha = parsePrHeadSha(target.flavor, await res.json().catch(reportedFallback(null, { source: 'application/repos/resolvePrHeadSha.ts', operation: 'parsePrHead', context: { provider: input.provider, number: input.number } })));
   return sha ? { ok: true, sha } : { ok: false, reason: `${input.provider} returned no head commit for the pull request` };
 }
 

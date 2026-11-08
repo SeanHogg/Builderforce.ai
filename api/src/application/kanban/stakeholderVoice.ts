@@ -14,6 +14,7 @@
  * ticket, lookup error) keeps the caller's own label, so a message is never lost to this.
  */
 import type { Db } from '../../infrastructure/database/connection';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { coordinatorVoice, resolveTicketCoordinator } from './ticketCoordinator';
 
 export interface StakeholderVoiceInput {
@@ -27,6 +28,6 @@ export interface StakeholderVoiceInput {
 /** The label a ticket-scoped stakeholder message should carry. */
 export async function resolveStakeholderVoice(db: Db, input: StakeholderVoiceInput): Promise<string> {
   if (input.taskId == null || !Number.isInteger(input.taskId) || input.taskId <= 0) return input.actingLabel;
-  const coordinator = await resolveTicketCoordinator(db, input.tenantId, input.taskId).catch(() => null);
+  const coordinator = await resolveTicketCoordinator(db, input.tenantId, input.taskId).catch(reportedFallback(null, { source: 'application/kanban/stakeholderVoice.ts', operation: 'resolveTicketCoordinator', context: { taskId: input.taskId } }));
   return coordinatorVoice(coordinator, input.actingLabel);
 }

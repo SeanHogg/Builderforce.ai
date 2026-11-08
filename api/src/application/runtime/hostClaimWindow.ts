@@ -16,6 +16,8 @@
  * This bounds the HOST leg only. It is not the dispatch -> CloudRunnerDO start timeout.
  */
 
+import { reportedFallback } from '../observability/caughtErrorReporter';
+
 /** Milliseconds the pinned host has to acknowledge a dispatch before the cloud executor takes over. */
 export const HOST_CLAIM_WINDOW_MS = 10_000;
 
@@ -34,7 +36,7 @@ export interface ClaimWindowOptions {
 
 /** Start the withdraw and never let it block: background it, or wait at most a short bound. */
 async function withdrawWithoutBlocking(opts: ClaimWindowOptions): Promise<void> {
-  const withdraw = (async () => opts.onTimeout?.())().catch(() => undefined);
+  const withdraw = (async () => opts.onTimeout?.())().catch(reportedFallback(undefined, { source: 'application/runtime/hostClaimWindow.ts', operation: 'withdrawFromHost' }));
   if (opts.waitUntil) {
     opts.waitUntil(withdraw);
     return;
@@ -64,7 +66,7 @@ export async function deliverWithinClaimWindow(
     timer = setTimeout(() => resolve('timeout'), windowMs);
   });
   try {
-    const outcome = await Promise.race([deliver().catch(() => false), timeout]);
+    const outcome = await Promise.race([deliver().catch(reportedFallback(false, { source: 'application/runtime/hostClaimWindow.ts', operation: 'deliverToHost' })), timeout]);
     if (outcome === 'timeout') {
       await withdrawWithoutBlocking(opts);
       return false;

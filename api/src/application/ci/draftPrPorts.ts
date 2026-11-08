@@ -9,7 +9,7 @@
  * ours, or GitHub refuses drafts on its plan) is remembered so no later finish attempt retries the provider.
  */
 import type { Db } from '../../infrastructure/database/connection';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { openClaimedPullRequest, releaseTaskPrClaim } from '../repos/openTaskPullRequest';
 import { recordTaskPullRequest } from '../repos/recordTaskPullRequest';
@@ -24,11 +24,11 @@ const SOURCE = 'application/ci/draftPrPorts.ts';
 
 /** Whether a workflow definitely runs for a pull request into the run's base; null when the repository could not be read in full. */
 async function readPullRequestWorkflow(readCtx: Parameters<typeof listRepoFiles>[0], base: string): Promise<boolean | null> {
-  const listed = await listRepoFiles(readCtx, WORKFLOW_DIR).catch(() => null);
+  const listed = await listRepoFiles(readCtx, WORKFLOW_DIR).catch(reportedFallback(null, { source: SOURCE, operation: 'listWorkflows', context: { base } }));
   if (!listed?.ok) return null;
   let complete = true;
   for (const path of listed.paths.filter((p) => /\.ya?ml$/i.test(p))) {
-    const read = await readRepoFile(readCtx, path).catch(() => null);
+    const read = await readRepoFile(readCtx, path).catch(reportedFallback(null, { source: SOURCE, operation: 'readWorkflow', context: { path } }));
     if (!read?.ok) { complete = false; continue; }
     if (workflowTriggersOnPullRequest(read.content, base)) return true;
   }
@@ -48,7 +48,7 @@ export function draftPrPorts(a: {
   let unavailable = false; // the early draft cannot be had for this run: stop asking
   return {
     record: a.record,
-    draftOpen: async () => !!(await findPlatformDraftPullRequest(db, { tenantId, taskId: a.task.id, repoId: repoCtx.repoId, branch: repoCtx.branch }).catch(() => null)),
+    draftOpen: async () => !!(await findPlatformDraftPullRequest(db, { tenantId, taskId: a.task.id, repoId: repoCtx.repoId, branch: repoCtx.branch }).catch(reportedFallback(null, { source: SOURCE, operation: 'findPlatformDraft', context: { taskId: a.task.id } }))),
     hasPullRequestWorkflow: async () => {
       if (repoCtx.provider !== 'github' || unavailable) return false;
       workflow ??= (await readPullRequestWorkflow(readCtx, repoCtx.base)) ?? undefined;

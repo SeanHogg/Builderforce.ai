@@ -26,7 +26,7 @@ import {
 /** The tool sends `projectId` as a string; `repoRef` is accepted for the in-repo override seam (§3). */
 const ResolveQuery = z.object({
   projectId: zQueryInt.optional(),
-  repoRef: z.string().optional(),
+  repoRef: z.string().max(500).optional(),
 });
 
 const StartBody = z.object({
@@ -38,26 +38,46 @@ const StartBody = z.object({
   agentRunId: z.string().max(64).nullish(),
 });
 
-/** Bounds mirror migration 1336's column widths so an oversize value is a 400, not a 500. */
+const PG_INT_MAX = 2_147_483_647;
+
+/**
+ * A `ruleId` that is not a uuid cannot name a `governance_rules` row (an in-repo override rule,
+ * §3, has none), so it is DROPPED like another tenant's id — never a 400 that would lose the whole
+ * audit, and never handed to a uuid column where Postgres would refuse the cast.
+ */
+const zRuleId = z.string().max(64).nullish()
+  .transform((v) => (v && z.string().uuid().safeParse(v).success ? v : null));
+
+/**
+ * Bounds mirror migration 1336's column widths so an oversize value is a 400, not a 500; the TEXT
+ * columns are capped too so one request (up to 5 000 findings) stays a bounded write.
+ */
 const FindingBody = z.object({
-  ruleId: z.string().uuid().nullish(),
+  ruleId: zRuleId,
   ruleRef: z.string().min(1).max(80),
   severity: z.string().min(1).max(20),
   title: z.string().min(1).max(255),
-  detail: z.string().min(1),
+  detail: z.string().min(1).max(10_000),
   filePath: z.string().max(1000).nullish(),
-  line: z.number().int().nullish(),
-  evidence: z.string().nullish(),
-  remediation: z.string().nullish(),
+  line: z.number().int().min(0).max(PG_INT_MAX).nullish(),
+  evidence: z.string().max(4_000).nullish(),
+  remediation: z.string().max(10_000).nullish(),
   source: z.enum(GOVERNANCE_FINDING_SOURCES),
   confidence: z.enum(GOVERNANCE_FINDING_CONFIDENCES).nullish(),
 });
 
 const FinalizeBody = z.object({
   findings: z.array(FindingBody).max(5000),
-  summary: z.record(z.string(), z.number().int().nonnegative()),
+  summary: z.record(z.string().max(40), z.number().int().nonnegative().max(PG_INT_MAX))
+    .refine((s) => Object.keys(s).length <= 32, { message: 'summary has at most 32 keys' }),
   gateResult: z.enum(GOVERNANCE_GATE_RESULTS).nullish(),
   rulesetHash: z.string().max(64).nullish(),
+  /** What the resolve answered, echoed back so the run records exactly which packs governed it. */
+  packsApplied: z.array(z.object({
+    packId: z.string().max(64).optional(),
+    name: z.string().max(255).optional(),
+    source: z.string().max(16).optional(),
+  })).max(200).nullish(),
 });
 
 export function createGovernanceRuleAuditRoutes(db: Db): Hono<HonoEnv> {
@@ -88,6 +108,7 @@ export function createGovernanceRuleAuditRoutes(db: Db): Hono<HonoEnv> {
     const out = await finalizeGovernanceAudit(db, scope(c), runId, {
       findings: body.findings, summary: body.summary,
       gateResult: body.gateResult ?? null, rulesetHash: body.rulesetHash ?? null,
+      packsApplied: body.packsApplied ?? null,
     });
     if (!out.ok) return c.json({ error: out.error }, out.status);
     await auditGovernanceMutation(c, db, 'governance-audits', runId, 'update', null, {

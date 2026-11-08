@@ -17,7 +17,7 @@ vi.mock('../repos/openTaskPullRequest', () => ({ openClaimedPullRequest: h.open,
 vi.mock('../repos/recordTaskPullRequest', () => ({ recordTaskPullRequest: h.record }));
 vi.mock('../repos/readRepoContents', () => ({ listRepoFiles: h.list, readRepoFile: h.read }));
 vi.mock('../repos/platformDraftPullRequest', () => ({ findPlatformDraftPullRequest: h.find, PLATFORM_DRAFT_STATUS: 'draft' }));
-vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: h.report }));
+vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: h.report, reportedFallback: (fallback: unknown) => () => fallback }));
 vi.mock('../../infrastructure/database/tenantScope', () => ({ scopedToTenant: () => ({}) }));
 
 import { draftPrPorts } from './draftPrPorts';

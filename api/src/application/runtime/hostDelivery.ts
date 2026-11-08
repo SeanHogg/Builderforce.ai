@@ -4,7 +4,7 @@
  * `dispatchCloudRun` so the cloud dispatcher holds no relay mechanics.
  */
 import { and, eq } from 'drizzle-orm';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import { recordCloudToolEvent } from './cloudAgentEngine';
 import { deliverWithinClaimWindow } from './hostClaimWindow';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
@@ -59,7 +59,7 @@ export async function dispatchToAgentHost(
     body: JSON.stringify(message),
   });
   if (response.status === 400) {
-    const body = await response.json().catch(() => null) as { error?: unknown } | null;
+    const body = await response.json().catch(reportedFallback(null, { source: 'application/runtime/hostDelivery.ts', operation: 'parseDispatchRejection', context: { agentHostId } })) as { error?: unknown } | null;
     onRejected?.(typeof body?.error === 'string' ? body.error : 'frame_rejected');
   }
   return response.ok;

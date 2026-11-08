@@ -22,7 +22,7 @@ import { pullRequests, taskFileChanges } from '../../infrastructure/database/sch
 import { TaskStatus } from '../../domain/shared/types';
 import { normalizeBuildStatus, pickCurrentPr } from '../../domain/task/buildStatus';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import { recordManagerAction } from '../manager/managerActionJournal';
 import { decideTicketReadiness, type CompletionShape, type TicketPrState } from '../manager/evaluateTicketReadiness';
 import { describeReturnBlock, returnToImplementation } from '../manager/returnToImplementation';
@@ -88,7 +88,7 @@ export async function loadConductCohort(
   // NOTHING: completing past a gate whose configuration is unknown is exactly the override
   // the setting exists to govern.
   const closeContext: CloseContext = {
-    laneGates: ids.length ? await loadReviewLaneGates(db, tenantId, projectId).catch(() => null) : new Map<string, string>(),
+    laneGates: ids.length ? await loadReviewLaneGates(db, tenantId, projectId).catch(reportedFallback(null, { source: 'application/repos/prConductTicket.ts', operation: 'loadReviewLaneGates', context: { tenantId, projectId } })) : new Map<string, string>(),
     managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
   };
   const prRows = ids.length
@@ -206,7 +206,7 @@ export async function conductReviewTicket(
         () => routeLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: t.id, status: TaskStatus.IN_PROGRESS,
           submittedBy: composeDispatcherLabel('manager', 'review-return', policy.managerRef ?? 'system'),
-        }).catch(() => false),
+        }).catch(reportedFallback(false, { source: 'application/repos/prConductTicket.ts', operation: 'routeLaneEntry.reviewReturn', context: { tenantId, projectId, taskId: t.id } })),
         (v) => v === true,
       )).result === true;
       if (restarted) out.dispatched += 1;

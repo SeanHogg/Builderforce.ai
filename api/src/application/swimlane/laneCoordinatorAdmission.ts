@@ -17,6 +17,7 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { agentExecutionEnabledCached } from '../runtime/agentExecutionGate';
 import { findLiveExecution } from '../runtime/liveExecutionStatus';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { recordAutoRunSkip } from '../runtime/autoRunSkipLedger';
 import { assessRerunBackoff, resolveTenantTokenGate, type AutoRunReason, type TenantTokenVerdict } from './evaluateAutoRun';
 import { DrizzleCoordinatorStore } from './DrizzleCoordinatorStore';
@@ -136,6 +137,6 @@ export async function recordStageRefusal(
     reason: verdict.reason,
     detail: { taskId: args.taskId, lane: args.lane, reason: verdict.reason, engine: 'coordinator' },
     result: `Auto-run skipped (${verdict.reason}) for task ${args.taskId} on lane '${args.lane}': the lane's staged run was not started.`,
-  }).catch(() => false);
+  }).catch(reportedFallback(false, { source: 'application/swimlane/laneCoordinatorAdmission.ts', operation: 'recordAutoRunSkip', context: { taskId: args.taskId, lane: args.lane } }));
   args.onBlocked?.({ reason: verdict.reason, ...(verdict.cooldownRemainingMs != null ? { cooldownRemainingMs: verdict.cooldownRemainingMs } : {}) });
 }

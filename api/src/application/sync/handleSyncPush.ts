@@ -40,6 +40,7 @@
  */
 
 import { hashSyncPayload, isJournalEventId, type SyncReceipt } from '../../domain/sync/syncProtocol';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { serverNumericId, syncImporterFor } from './importers';
 import {
@@ -268,7 +269,7 @@ async function commitChunk(
       await unit.settle();
       return { receipts, effects };
     } catch (error) {
-      await unit.settle(error).catch(() => undefined);
+      await unit.settle(error).catch(reportedFallback(undefined, { source: 'application/sync/handleSyncPush.ts', operation: 'settleFailedChunk', context: { attempt } }));
       if (attempt > CHUNK_CONFLICT_RETRIES || !isTransactionConflict(error)) throw error;
       await conflictBackoff(attempt);
     }

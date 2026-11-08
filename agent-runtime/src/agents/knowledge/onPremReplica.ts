@@ -64,7 +64,7 @@ export function onPremReplicaHost(): ReplicaHost {
  */
 export function flushReplicasOnExit(proc: ExitSignals = process, flushMs = 5_000): void {
   const flush = (): Promise<void> => {
-    const done = host?.disposeReplicas().catch(() => undefined) ?? Promise.resolve();
+    const done = host?.disposeReplicas().catch(loggedFallback("replica dispose on exit", undefined)) ?? Promise.resolve();
     return Promise.race([done, new Promise<void>((resolve) => setTimeout(resolve, flushMs).unref?.())]);
   };
   proc.once("beforeExit", () => { void flush(); });
@@ -142,12 +142,12 @@ export async function resumeQueuedReplicas(
   await resume(baseRootId, base).catch(failed);
   try {
     const dir = join(workspaceRoot, ".builderforce", "knowledge");
-    const dirty = (await readdir(dir).catch(() => [] as string[])).filter((name) => name.endsWith(".dirty.json"));
+    const dirty = (await readdir(dir).catch(loggedFallback("replica queue listing", [] as string[]))).filter((name) => name.endsWith(".dirty.json"));
     if (dirty.length === 0) return;
     const ids = new Set<string>();
     const legacy = new Set<string>(); // files with no recorded root id
     for (const name of dirty) {
-      const id = queuedRootIdOf(await readFile(join(dir, name), "utf8").catch(() => ""));
+      const id = queuedRootIdOf(await readFile(join(dir, name), "utf8").catch(loggedFallback(`replica queue read ${name}`, "")));
       if (id) ids.add(id); else legacy.add(name);
     }
     if (legacy.size > 0) {

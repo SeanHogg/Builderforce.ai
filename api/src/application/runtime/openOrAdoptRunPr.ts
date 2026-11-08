@@ -11,6 +11,7 @@
  */
 import type { Db } from '../../infrastructure/database/connection';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { openClaimedPullRequest } from '../repos/openTaskPullRequest';
 import { adoptRunDraftPr } from './adoptRunDraftPr';
 
@@ -38,7 +39,7 @@ export async function openOrAdoptRunPr(db: Db, a: {
     ? await adoptRunDraftPr(db, {
       tenantId: a.tenantId, cloudAgentRef: a.cloudAgentRef, executionId: a.executionId, taskId: a.taskId, repoCtx, text: a.text,
       ...(recovered ? { recovered } : {}),
-    }).catch(() => null)
+    }).catch(reportedFallback(null, { source: 'application/runtime/openOrAdoptRunPr.ts', operation: 'adoptRunDraftPr', context: { taskId: a.taskId, executionId: a.executionId } }))
     : null;
   return { opened: ownDraft ? { ok: true, number: ownDraft.number, url: ownDraft.url } : claim, ownDraft };
 }

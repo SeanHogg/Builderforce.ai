@@ -9,13 +9,14 @@
  */
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 
 /** Read a scratch value. Never throws; null on a miss or any failure. */
 export async function peekScratch<T>(env: Env, key: string): Promise<T | null> {
-  return peekCached<T>(env, key).catch(() => null);
+  return peekCached<T>(env, key).catch(reportedFallback(null, { source: 'application/runtime/kvScratch.ts', operation: 'peekScratch', context: { key } }));
 }
 
 /** Persist a scratch value for `ttlSeconds`. Best-effort: a lost write is harmless. */
 export async function saveScratch<T>(env: Env, key: string, value: T, ttlSeconds: number): Promise<void> {
-  await setCached(env, key, value, { kvTtlSeconds: ttlSeconds }).catch(() => undefined);
+  await setCached(env, key, value, { kvTtlSeconds: ttlSeconds }).catch(reportedFallback(undefined, { source: 'application/runtime/kvScratch.ts', operation: 'saveScratch', context: { key } }));
 }

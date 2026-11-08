@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 /**
  * requestRoleRun — THE one way to ask an agent to work (or review) a ticket AS a role.
  *
@@ -114,7 +114,7 @@ export async function requestRoleRun(
     tenantId: req.tenantId,
     taskId: req.taskId,
     actingLabel: req.roleName,
-  }).catch(() => null);
+  }).catch(reportedFallback(null, { source: 'application/kanban/requestRoleRun.ts', operation: 'resolveStakeholderVoice', context: { taskId: req.taskId } }));
   const payload = buildRoleRunPayload(req, coordinatorName);
 
   const deferred: Promise<unknown>[] = [];

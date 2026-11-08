@@ -19,7 +19,7 @@ import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import {
   governanceAuditRuns, governanceFindings, governancePolicyPacks, governanceRules,
 } from '../../infrastructure/database/schema';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { sha256Hex } from '../../domain/shared/hash';
 import { projectInTenant } from '../project/projectOwnership';
 
@@ -54,7 +54,7 @@ export interface ResolvedGovernanceRuleset {
 
 export type GovernanceAuditOutcome<T> = { ok: true; value: T } | { ok: false; status: 404 | 409; error: string };
 
-const projectNotFound = { ok: false, status: 404, error: 'project not found' } as const;
+const projectNotFound = { ok: false, status: 404, error: 'project not found' };
 
 /** A caller-named project must belong to the tenant; `null` (tenant-wide) always passes. */
 async function projectAllowed(db: Db, tenantId: number, projectId: number | null): Promise<boolean> {
@@ -65,6 +65,13 @@ async function projectAllowed(db: Db, tenantId: number, projectId: number | null
  * The effective ruleset: every ACTIVE pack in scope (tenant-wide or this segment; org-wide or
  * this project) and every ENABLED rule they carry, in a stable order so the same configuration
  * always hashes to the same `rulesetHash` — the run records which ruleset governed it.
+ *
+ * Deliberately NOT read through `getOrSetCached`: the answer is audit EVIDENCE (the hash a run
+ * records as the ruleset that governed it), so a stale entry would put a wrong hash on a
+ * compliance record — and nothing in the API writes `governance_policy_packs` / `governance_rules`
+ * yet (both are read-only entities), so there is no write path to hang the invalidation on. It is
+ * read once per audit run, two indexed queries; cache it here, with invalidation in the same
+ * change, when a pack/rule writer lands.
  */
 export async function resolveGovernanceRuleset(
   db: Db, scope: GovernanceScope, projectId: number | null,
@@ -150,50 +157,65 @@ export interface FinalizeGovernanceAuditInput {
   summary: Record<string, number>;
   gateResult: (typeof GOVERNANCE_GATE_RESULTS)[number] | null;
   rulesetHash: string | null;
+  /** The `packsApplied` the resolve answered — recorded so the run names exactly which packs governed it. */
+  packsApplied?: Array<{ packId?: string; name?: string; source?: string }> | null;
 }
 
 /**
- * Close a run with its verdict, then write its findings.
+ * Rows per findings INSERT. Each row binds 14 parameters and Postgres caps one statement at
+ * 65 535, so a 5 000-finding run in one statement would be refused; 1 000 rows is 14 000.
+ */
+export const GOVERNANCE_FINDINGS_INSERT_CHUNK = 1000;
+
+/**
+ * Close a run with its verdict and write its findings — ONE transaction, so a failed findings
+ * insert rolls the close back and the caller's retry still finds the run open.
  *
- * The close is a compare-and-set on `status IN (queued, running)`, so a retried POST answers 409
- * instead of writing the findings twice. A finding's `ruleId` is kept only when it names a rule of
- * THIS tenant — the FK alone would accept another tenant's rule id — and dropped otherwise;
- * `rule_ref` is always stored, so the finding survives either way.
+ * The close is a compare-and-set on `status IN (queued, running)`, so a retried (or concurrent)
+ * POST answers 409 instead of writing the findings twice. A finding's `ruleId` is kept only when
+ * it names a rule of THIS tenant in this segment (or tenant-wide) — the FK alone would accept
+ * another tenant's rule id — and dropped otherwise; `rule_ref` is always stored, so the finding
+ * survives either way.
  */
 export async function finalizeGovernanceAudit(
   db: Db, scope: GovernanceScope, runId: string, input: FinalizeGovernanceAuditInput,
 ): Promise<GovernanceAuditOutcome<{ runId: string; findings: number }>> {
-  const runScope = and(
-    eq(governanceAuditRuns.id, runId),
-    eq(governanceAuditRuns.tenantId, scope.tenantId),
-    eq(governanceAuditRuns.segmentId, scope.segmentId),
-  );
-  const closed = await db.update(governanceAuditRuns)
-    .set({
-      status: 'completed',
-      summary: input.summary,
-      gateResult: input.gateResult,
-      ...(input.rulesetHash ? { rulesetHash: input.rulesetHash } : {}),
-      finishedAt: new Date(),
-    })
-    .where(and(runScope, inArray(governanceAuditRuns.status, ['queued', 'running'])))
-    .returning({ id: governanceAuditRuns.id });
-  if (closed.length === 0) {
-    const [exists] = await db.select({ id: governanceAuditRuns.id }).from(governanceAuditRuns).where(runScope).limit(1);
-    return exists
-      ? { ok: false, status: 409, error: 'audit run is already finalized' }
-      : { ok: false, status: 404, error: 'audit run not found' };
-  }
+  return inTransaction<GovernanceAuditOutcome<{ runId: string; findings: number }>>(db, async (tx) => {
+    const runScope = and(
+      eq(governanceAuditRuns.id, runId),
+      eq(governanceAuditRuns.tenantId, scope.tenantId),
+      eq(governanceAuditRuns.segmentId, scope.segmentId),
+    );
+    const closed = await tx.update(governanceAuditRuns)
+      .set({
+        status: 'completed',
+        summary: input.summary,
+        gateResult: input.gateResult,
+        ...(input.rulesetHash ? { rulesetHash: input.rulesetHash } : {}),
+        ...(input.packsApplied ? { packsApplied: input.packsApplied } : {}),
+        finishedAt: new Date(),
+      })
+      .where(and(runScope, inArray(governanceAuditRuns.status, ['queued', 'running'])))
+      .returning({ id: governanceAuditRuns.id });
+    if (closed.length === 0) {
+      const [exists] = await tx.select({ id: governanceAuditRuns.id }).from(governanceAuditRuns).where(runScope).limit(1);
+      return exists
+        ? { ok: false, status: 409, error: 'audit run is already finalized' }
+        : { ok: false, status: 404, error: 'audit run not found' };
+    }
 
-  const claimedRuleIds = [...new Set(input.findings.map((f) => f.ruleId).filter((id): id is string => !!id))];
-  const ownRuleIds = new Set(claimedRuleIds.length === 0 ? [] : (await db
-    .select({ id: governanceRules.id })
-    .from(governanceRules)
-    .where(and(eq(governanceRules.tenantId, scope.tenantId), inArray(governanceRules.id, claimedRuleIds)))
-  ).map((r) => r.id));
+    const claimedRuleIds = [...new Set(input.findings.map((f) => f.ruleId).filter((id): id is string => !!id))];
+    const ownRuleIds = new Set(claimedRuleIds.length === 0 ? [] : (await tx
+      .select({ id: governanceRules.id })
+      .from(governanceRules)
+      .where(and(
+        eq(governanceRules.tenantId, scope.tenantId),
+        or(isNull(governanceRules.segmentId), eq(governanceRules.segmentId, scope.segmentId)),
+        inArray(governanceRules.id, claimedRuleIds),
+      ))
+    ).map((r) => r.id));
 
-  if (input.findings.length > 0) {
-    await db.insert(governanceFindings).values(input.findings.map((f) => ({
+    const rows = input.findings.map((f) => ({
       tenantId: scope.tenantId,
       segmentId: scope.segmentId,
       runId,
@@ -208,7 +230,10 @@ export async function finalizeGovernanceAudit(
       remediation: f.remediation ?? null,
       source: f.source,
       confidence: f.confidence ?? null,
-    })));
-  }
-  return { ok: true, value: { runId, findings: input.findings.length } };
+    }));
+    for (let i = 0; i < rows.length; i += GOVERNANCE_FINDINGS_INSERT_CHUNK) {
+      await tx.insert(governanceFindings).values(rows.slice(i, i + GOVERNANCE_FINDINGS_INSERT_CHUNK));
+    }
+    return { ok: true, value: { runId, findings: rows.length } };
+  });
 }

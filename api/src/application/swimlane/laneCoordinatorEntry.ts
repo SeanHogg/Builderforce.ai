@@ -28,7 +28,7 @@ import { makeSwimlaneCoordinator } from './makeCoordinator';
 import { TicketRunNotFoundError } from './SwimlaneCoordinator';
 import { admitStageEntry, recordStageRefusal } from './laneCoordinatorAdmission';
 import type { TenantTokenVerdict } from './evaluateAutoRun';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 
 /** The lane facts the routing decision reads. */
 export interface LaneShape {
@@ -121,7 +121,7 @@ export async function tryCoordinatorLaneEntry(
 
   // The board, its lanes and their staffing come from ONE cached read per project (laneRouting.ts): a sweep routing many
   // tickets of a board reads it once, and the lane / staffing / board writers drop it.
-  const routing = await readLaneRouting(env, db, args.tenantId, args.projectId).catch(() => null);
+  const routing = await readLaneRouting(env, db, args.tenantId, args.projectId).catch(reportedFallback(null, { source: 'application/swimlane/laneCoordinatorEntry.ts', operation: 'readLaneRouting', context: { tenantId: args.tenantId, projectId: args.projectId } }));
   if (!routing) return 'not_applicable';
   // A lifecycle-managed board has its own state machine (the manager); a second one here would race it.
   if (routing.lifecycleManaged) return 'not_applicable';
@@ -155,7 +155,7 @@ export async function tryCoordinatorLaneEntry(
     if (error instanceof TicketRunNotFoundError) {
       // The cached board is gone (deleted or re-pinned since): drop the stale facts and let the one-agent engine, which reads
       // the board live, take the entry instead of reporting a refusal for a board that no longer exists.
-      await invalidateLaneRouting(env, args.tenantId, args.projectId).catch(() => undefined);
+      await invalidateLaneRouting(env, args.tenantId, args.projectId).catch(reportedFallback(undefined, { source: 'application/swimlane/laneCoordinatorEntry.ts', operation: 'invalidateLaneRouting', context: { tenantId: args.tenantId, projectId: args.projectId } }));
       return 'not_applicable';
     }
     reportCaughtError(error, {
