@@ -1,0 +1,15 @@
+{
+  "name": "@builderforce/a2a",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents A2A channel plugin — talk to Claude Code and other A2A agents",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
