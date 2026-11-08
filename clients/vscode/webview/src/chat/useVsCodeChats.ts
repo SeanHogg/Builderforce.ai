@@ -31,7 +31,7 @@ export interface VsCodeChats {
   activeChat: BrainChat | null;
   reloadChats: () => void;
   /** Name a still-untitled chat from its first user turn (the conversation's `onFirstUserTurn`). */
-  onFirstUserTurn: (id: number, firstUserText: string) => Promise<void>;
+  onFirstUserTurn: (id: number, firstUserText: string, composedText?: string) => Promise<void>;
   /** The open chat, or the one the first send creates (shared single-flight `useChatCreation`, under the send's own draft token); throws when it cannot. */
   ensureChatId: (draft?: DraftToken) => Promise<number>;
   /** The draft's binding to its creation - the turn door lands what is typed meanwhile in the chat it created (`useChatTurns({ drafts })`). */

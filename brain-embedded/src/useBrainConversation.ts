@@ -141,8 +141,14 @@ export interface UseBrainConversationOptions {
    * the seam the host uses to auto-name a still-"New chat" conversation from what it's
    * about (wired to `useBrainChats.autoTitle`). Best-effort and idempotent on the host
    * side; omit to leave chats untitled.
+   *
+   * `text` is the RAW typed text (what the user wrote — the auto-title's topic). The
+   * optional `composedText` is the first turn as composed for the transcript (typed
+   * text + a link per attachment, from `composeUserTurn`'s `displayContent`), so the
+   * ORIGINAL REQUEST capture retains the references/images/attachments the first
+   * message carried; it defaults to `text` when the turn carried no attachments.
    */
-  onFirstUserTurn?: (chatId: number, text: string) => void;
+  onFirstUserTurn?: (chatId: number, text: string, composedText?: string) => void;
   /**
    * Project-Evermind memory hooks, bound by the host to the active chat's project.
    * When set, a run recalls the project's learned memories before answering
@@ -574,9 +580,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         closePending(id);
         onActivity?.(id);
         // First user turn of this chat → let the host auto-name it from the topic
-        // (so it stops reading "New chat"). Uses the raw typed text, not the
-        // attachment-decorated display content.
-        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
+        // (so it stops reading "New chat") and capture the ORIGINAL REQUEST. Passes the
+        // RAW typed text (`trimmed`) for the title — a link per attachment would pollute
+        // the short topic derivation — and the COMPOSED first-turn text (`displayContent`,
+        // typed text + a link per attachment from `composeUserTurn`) for the request
+        // capture, so the retained ORIGINAL REQUEST keeps the references/images/attachments
+        // the first message carried. Without attachments the two are identical.
+        if (messages.length === 0) onFirstUserTurn?.(id, trimmed, displayContent);
         // Addressed to a participant, not the BRAIN: the turn is posted to the
         // chat (visible to everyone) and the BRAIN loop stays idle. The auto-reply
         // guard was already claimed above, and the effect below also skips it, so

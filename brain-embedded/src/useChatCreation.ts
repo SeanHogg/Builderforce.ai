@@ -48,6 +48,11 @@ export interface ChatCreationOptions {
    * chat linked to a ticket still shows the request that produced it — the title is a
    * ~60-char derivation and loses the origin text.
    *
+   * `text` is the composed first-turn text: what was typed PLUS a link per attachment
+   * (`composeUserTurn`'s `displayContent`), so the ORIGINAL REQUEST header retains the
+   * references/images/attachments the first message carried — not just the bare typed
+   * words. Without attachments it is the typed text itself.
+   *
    * Same contract as `autoTitle`, deliberately: it is fired from the same place, in the
    * same turn, so the two can never drift apart, and it is NOT awaited — the first user
    * turn must never wait on, or fail because of, a bookkeeping write. Because nothing
@@ -65,8 +70,18 @@ export interface ChatCreation {
    * turn door) it is the draft on screen's. Rejects when `create` throws; resolves null when it gave up.
    */
   ensureChatId: (draft?: DraftToken) => Promise<number | null>;
-  /** Fire the `autoTitle` port for a chat's first user turn; never rejects. */
-  onFirstUserTurn: (chatId: number, firstUserText: string) => Promise<void>;
+  /**
+   * Fire the `autoTitle` and `onCaptureOriginalRequest` ports for a chat's first user
+   * turn; never rejects.
+   *
+   * `firstUserText` is the RAW typed text (what the user actually wrote — a short,
+   * topic-bearing derivation for the title). `composedText` is the first turn as
+   * composed for the transcript (typed text + a link per attachment), and defaults to
+   * `firstUserText` when the turn carried no attachments — the capture port stores it
+   * as the ORIGINAL REQUEST so the references/images/attachments the first message
+   * carried are retained in the header, not just the bare typed words.
+   */
+  onFirstUserTurn: (chatId: number, firstUserText: string, composedText?: string) => Promise<void>;
   /**
    * The draft's binding to its creation (`draftBinding.ts`): the token a send from the draft is minted, the creation started for it
    * resolves or fails it. The turn door reads it (`useChatTurns({ drafts })`) so what is typed while the chat is being created
@@ -147,12 +162,16 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
     return mine;
   }, [drafts]);
 
-  const onFirstUserTurn = useCallback(async (id: number, firstUserText: string) => {
+  const onFirstUserTurn = useCallback(async (id: number, firstUserText: string, composedText?: string) => {
     // The origin-text capture is fired HERE, beside the auto-title, so it cannot drift
     // from it: every host that titles a chat from its first turn captures the request
     // from that same turn. Fired before, and not behind, `autoTitle`'s await so the
     // capture never waits on that latency or its rejection; the port owns its failure.
-    void captureRef.current?.(id, firstUserText);
+    // The capture stores the COMPOSED first-turn text (typed + a link per attachment,
+    // from `composeUserTurn`), so the ORIGINAL REQUEST retains the references/images/
+    // attachments the first message carried; the title keeps the raw typed words.
+    // No attachments → the composed text IS the typed text.
+    void captureRef.current?.(id, composedText ?? firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
 

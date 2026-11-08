@@ -149,7 +149,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     chatId,
     ensureChatId,
     drafts,
-    onFirstUserTurn: (id, text) => { void onFirstUserTurn(id, text); },
+    onFirstUserTurn: (id, text, composed) => { void onFirstUserTurn(id, text, composed); },
     // What only Rovr knows at run time: the browser tools bound to THIS chat, the
     // working tab's prompt, the chat's `/` choices (`host/rovrRunHost.ts`).
     prepareRun: services.host.prepareRun,

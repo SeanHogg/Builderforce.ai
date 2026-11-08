@@ -112,6 +112,35 @@ describe('useChatCreation — original-request capture seam', () => {
     expect(onCaptureOriginalRequest).toHaveBeenCalledWith(3, 'first prompt');
   });
 
+  it('captures the COMPOSED first-turn text (typed + attachment links) while the title keeps the raw words', async () => {
+    const autoTitle = vi.fn().mockResolvedValue(undefined);
+    const onCaptureOriginalRequest = vi.fn();
+    const { result } = renderHook(() => useChatCreation({
+      chatId: 3, create: vi.fn(), autoTitle, onCaptureOriginalRequest,
+    }));
+
+    const typed = 'what is in this screenshot?';
+    const composed = `${typed}\n\n[Attached: shot.png](https://uploads.example/shot.png)`;
+    await result.current.onFirstUserTurn(3, typed, composed);
+
+    // The ORIGINAL REQUEST retains the attachment reference…
+    expect(onCaptureOriginalRequest).toHaveBeenCalledWith(3, composed);
+    // …while the title derivation still sees the raw typed text.
+    expect(autoTitle).toHaveBeenCalledWith(3, typed);
+  });
+
+  it('falls back to the typed text when no composed text arrives (no attachments)', async () => {
+    const autoTitle = vi.fn().mockResolvedValue(undefined);
+    const onCaptureOriginalRequest = vi.fn();
+    const { result } = renderHook(() => useChatCreation({
+      chatId: 3, create: vi.fn(), autoTitle, onCaptureOriginalRequest,
+    }));
+
+    await result.current.onFirstUserTurn(3, 'first prompt');
+    expect(onCaptureOriginalRequest).toHaveBeenCalledWith(3, 'first prompt');
+    expect(autoTitle).toHaveBeenCalledWith(3, 'first prompt');
+  });
+
   it('is unaffected when a host passes no capture port (the no-op default)', async () => {
     const autoTitle = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useChatCreation({ chatId: 3, create: vi.fn(), autoTitle }));
