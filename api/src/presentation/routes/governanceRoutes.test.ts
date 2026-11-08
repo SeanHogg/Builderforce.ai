@@ -26,7 +26,8 @@ function makeDb(opts: { controls?: unknown[]; existing?: unknown[]; updateRows?:
     select: () => ({ from: () => ({ where: () => whereResult(opts.controls ?? [], opts.existing ?? []) }) }),
     insert: () => ({
       values: (v: any) => {
-        captured.insertValues = v;
+        // The first insert is the route's own write; the mutation-audit envelope inserts after it and must not replace it.
+        if (captured.insertValues === undefined) captured.insertValues = v;
         const p: any = Promise.resolve(undefined);
         p.returning = async () => opts.insertReturn ?? [];
         return p;
@@ -39,6 +40,9 @@ function makeDb(opts: { controls?: unknown[]; existing?: unknown[]; updateRows?:
       },
     }),
     delete: () => ({ where: () => ({ returning: async () => opts.deleteRows ?? [] }) }),
+    // The baseline seed runs under a transaction-scoped advisory lock (`inTransaction` hands a test double its own `transaction()`).
+    execute: async () => [],
+    transaction: async (work: (tx: unknown) => Promise<unknown>) => work(db),
   };
   return { db: db as any, captured };
 }
@@ -81,14 +85,15 @@ describe('governanceRoutes /soc2', () => {
   });
 
   it('updates a control status (scoped to tenant+segment)', async () => {
-    const { db, captured } = makeDb({ updateRows: [{ id: 'c1', status: 'ready' }] });
+    // The patch reads the control (before-image) in scope first, then updates it.
+    const { db, captured } = makeDb({ existing: [{ id: 'c1', status: 'not_started' }], updateRows: [{ id: 'c1', status: 'ready' }] });
     const res = await createGovernanceRoutes(db).request('/soc2/controls/c1', body('PATCH', { status: 'ready' }));
     expect(res.status).toBe(200);
     expect(captured.updateSet.status).toBe('ready');
   });
 
   it('404s updating a control that is not in this segment', async () => {
-    const { db } = makeDb({ updateRows: [] });
+    const { db } = makeDb({ existing: [], updateRows: [] });
     const res = await createGovernanceRoutes(db).request('/soc2/controls/cX', body('PATCH', { status: 'ready' }));
     expect(res.status).toBe(404);
   });

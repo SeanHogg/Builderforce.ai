@@ -57,6 +57,7 @@ vi.mock('../trust/trustService', () => ({ inspectOutboundContent: async () => ({
 vi.mock('./cloudAgent/auditAnalysis', () => ({ ANALYZE_CODEBASE_TOOL: 'analyze_codebase', withSavedAnalysis: async (_d: unknown, _r: unknown, data: unknown) => data }));
 vi.mock('../llm/builtinMcpService', () => ({
   callBuiltinTool: async () => ({ ok: true }),
+  builtinToolMutates: (tool: string) => (tool === 'kanban.signoff' ? true : undefined),
   cloudAgentPlatformToolSchemas: () => [{ type: 'function', function: { name: 'builtin_kanban_signoff', description: 'sign off', parameters: { type: 'object', properties: {} } } }],
   resolveCloudAgentPlatformTool: (name: string) => (name === 'builtin_kanban_signoff' ? 'kanban.signoff' : null),
 }));
