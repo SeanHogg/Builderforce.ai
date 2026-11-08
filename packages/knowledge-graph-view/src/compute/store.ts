@@ -10,11 +10,12 @@
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { mapEdges } from '../surface/outlineGraph';
 import { indexOfArray, type Element, type Field } from './fields';
+import { mapBack } from './codecs/codec';
 import { Lru } from './lru';
 import type { GraphId, LoadField, Refs, StationLookup } from './protocol';
 
 /** Graphs held at once: the one on screen, its Before/After twin and a stand-alone array set (a view mounted without a graph). */
-export const MAX_RESIDENT = 3;
+export const MAX_RESIDENT = 4;
 /** Subsets kept at once, oldest out. */
 const MAX_DERIVED = 12;
 /** Rankings kept at once: their own pool, so a burst of subsets never evicts the ranking a click is about to slice. */
@@ -96,8 +97,7 @@ export class ComputeStore {
     /** The elements at `indices` of one of a resident graph's arrays, in that order. */
     pick<T extends Element>(id: GraphId, field: Field, indices: Uint32Array | undefined): T[] {
         if (!indices) return [];
-        const source = this.graph(id)[field] as unknown as T[];
-        return Array.from(indices, (i) => source[i]!);
+        return mapBack(indices, this.graph(id)[field] as unknown as T[]);
     }
 
     /** The arrays a request names, built once per key. */

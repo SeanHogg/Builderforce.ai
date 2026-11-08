@@ -12,12 +12,24 @@ describe('Residency', () => {
         expect(evicted).not.toHaveBeenCalled(); // eviction is deferred out of the render that asked
     });
 
-    it('evicts the least recently used in a microtask', async () => {
+    it('the empty graph does not count toward residency', async () => {
         const evicted = vi.fn();
         const r = new Residency(evicted);
         const first = makeGraph();
         const id = r.graphId(first);
         for (let i = 0; i < 3; i++) r.graphId(makeGraph());
+        for (let i = 0; i < 3; i++) r.graphId(makeGraph(0));
+        await Promise.resolve();
+        expect(evicted).not.toHaveBeenCalled();
+        expect(r.isLive(id)).toBe(true);
+    });
+
+    it('evicts the least recently used in a microtask', async () => {
+        const evicted = vi.fn();
+        const r = new Residency(evicted);
+        const first = makeGraph();
+        const id = r.graphId(first);
+        for (let i = 0; i < 4; i++) r.graphId(makeGraph());
         await Promise.resolve();
         expect(evicted).toHaveBeenCalledWith(id);
         expect(r.isLive(id)).toBe(false);

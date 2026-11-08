@@ -57,10 +57,16 @@ export interface SkippedSplit {
     folders: ExcludedFolder[];
 }
 
-/** The review's one skipped list, split into skipped files and the folders it never read. */
+/** A binary file stored as an asset node is stored, not skipped: a host that still records it in the skipped list does not make it "not stored". */
+export const isAssetSkip = (s: SkippedFile): boolean => s.reason === 'asset' || s.reason === 'binary';
+
+/** The skipped list without the stored assets: what is really not stored. */
+export const notStored = (skipped: readonly SkippedFile[]): SkippedFile[] => skipped.filter((s) => !isAssetSkip(s));
+
+/** The review's one skipped list, split into skipped files and the folders it never read. Stored assets are in neither. */
 export function splitSkipped(skipped: readonly SkippedFile[]): SkippedSplit {
     const out: SkippedSplit = { files: [], folders: [] };
-    for (const s of skipped) {
+    for (const s of notStored(skipped)) {
         const kind = (FOLDER_REASONS as Record<string, FolderKind | undefined>)[s.reason];
         if (kind) out.folders.push({ path: s.path, kind }); else out.files.push(s);
     }

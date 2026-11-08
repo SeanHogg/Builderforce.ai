@@ -1529,10 +1529,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [434e-10, 28e-8],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [151e-9, 101583e-10],
+  "~moonshotai/kimi-latest": [151e-9, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1606,7 +1606,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [434e-10, 28e-8],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
@@ -1838,7 +1838,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [26e-9, 94e-9],
+  "openai/gpt-oss-120b": [19e-9, 7e-8],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -1975,14 +1975,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [341e-9, 1381e-9],
+  "z-ai/glm-5.2:batch": [314e-9, 1271e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [335e-10, 83e-9],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [341e-9, 1381e-9],
+  "z-ai/glm-5.3:batch": [314e-9, 1271e-9],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -10502,7 +10502,22 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
+import { DOCS_PACK as DOCS_PACK2 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
 import { DOCS_PACK } from "@seanhogg/builderforce-memory/knowledge";
+import { isBinaryDocumentType, plainTextParser } from "@seanhogg/builderforce-memory/ingest";
+var DOCUMENTS_PACK_ID = "documents";
+var documentsParser = {
+  ...plainTextParser,
+  id: "documents",
+  accepts: (source) => source.content.kind === "text" && isBinaryDocumentType(source.content.mediaType ?? "")
+};
+var DOCUMENTS_PACK = {
+  id: DOCUMENTS_PACK_ID,
+  parsers: [documentsParser],
+  ...DOCS_PACK.judgement ? { judgement: DOCS_PACK.judgement } : {}
+};
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
 import { CLONE_GROUP_BADGE, compareStr as compareStr5, srcRef as srcRef2 } from "@seanhogg/builderforce-memory/knowledge";

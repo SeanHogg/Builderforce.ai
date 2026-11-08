@@ -10,6 +10,8 @@
  * frozen (`devFreeze`) so a consumer that mutates one throws instead of silently corrupting every other reader.
  */
 
+import { isDevBuild } from './devBuild';
+
 export function weakMemo<A, V>(compute: (input: A) => V, anchor: (input: A) => object, tag: (input: A) => unknown = () => undefined): (input: A) => V {
     const held = new WeakMap<object, { tag: unknown; value: V }>();
     return (input) => {
@@ -22,9 +24,8 @@ export function weakMemo<A, V>(compute: (input: A) => V, anchor: (input: A) => o
     };
 }
 
-const DEV = typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
 
 /** In development only, freezes a shared result (shallowly) so a consumer that mutates it throws; returns it unchanged in production. */
 export function devFreeze<T extends object>(value: T): T {
-    return DEV ? Object.freeze(value) : value;
+    return isDevBuild() ? Object.freeze(value) : value;
 }

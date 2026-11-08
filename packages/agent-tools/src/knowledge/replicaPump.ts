@@ -291,6 +291,7 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 const built = await buildPack({
                     rootId, local, sources, client: guarded, touched: snap.keys, baseGeneration, analysis: snap.analysis,
                     ...(maxFiles !== undefined ? { maxFiles } : {}), noDiff, ...(force ? { forceBodies: force } : {}), ...(owned ? { ownedKeys: owned } : {}),
+                    ...(additive ? { additive } : {}),
                 });
                 lastFiles = built.files;
                 if (built.waiting > 0) {

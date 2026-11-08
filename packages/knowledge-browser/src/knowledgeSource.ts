@@ -200,7 +200,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     const estimate = await estimateReview(plan, opts.callPrice, onDegraded);
     // What this review leaves out is recorded per root (plan counts and skips, uploads skipped DURING it) for the sync status.
     const recorder = createReviewRecorder({
-      rootId: dir.rootId, store: reviewRecords, client,
+      rootId: dir.rootId, store: reviewRecords,
       folders: () => (dir as { skippedFolders?: () => SkippedFolder[] }).skippedFolders?.() ?? [],
     });
     recorder.planned(plan);

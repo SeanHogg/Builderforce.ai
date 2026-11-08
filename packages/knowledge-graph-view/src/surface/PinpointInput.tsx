@@ -73,7 +73,8 @@ export function PinpointInput({ source, rootId, graph, stations, labels, onMatch
     const diagnose = async (result: PinpointResult) => {
         const refs = result.matches.map((m) => m.ref);
         // The path scans every outline link per hop: the compute worker builds it.
-        const path = (await getComputeClient().once('path', { graph, refs, stations })).stops.map((s) => s.name).join(' → ');
+        let path = '';
+        try { path = (await getComputeClient().once('path', { graph, refs, stations })).stops.map((s) => s.name).join(' → '); } catch { /* diagnose without a path */ }
         const onPath = new Set(refs.flatMap((r) => stationOfRef(stations, r) ?? []));
         const findings = scopeFindings(graph.findings, stations, onPath).map((f) => findingRequest(f, labels, index)).join(' ');
         onCompose?.(fillTemplate(t.diagnoseText, { description: result.description, path: path || t.noFindings, findings: findings || t.noFindings }));

@@ -6,11 +6,11 @@
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 
-/** Same guard as `memo.ts`: safe where `process` does not exist, and folded away by a bundler's `NODE_ENV` define. */
-export const isDevBuild = (): boolean => typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+import { isDevBuild } from '../devBuild';
 
-export function freezeGraph(graph: Pick<KnowledgeGraph, 'nodes' | 'edges'>): void {
+export function freezeGraph(graph: Pick<KnowledgeGraph, 'nodes' | 'edges' | 'findings'>): void {
     if (!isDevBuild()) return;
     Object.freeze(graph.nodes);
     Object.freeze(graph.edges);
+    Object.freeze(graph.findings);
 }

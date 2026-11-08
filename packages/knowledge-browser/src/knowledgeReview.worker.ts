@@ -42,6 +42,8 @@ function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPo
     markStale: (s, ref, hash) => call('store', 'markStale', [s, ref, hash]),
     getExtracted: (hash) => call('store', 'getExtracted', [hash]),
     putExtracted: (hash, extracted) => call('store', 'putExtracted', [hash, extracted]),
+    // Without it the replicated store's read-through (the server's copy of unchanged files) never fires.
+    preloadExtracted: (hashes) => call('store', 'preloadExtracted', [hashes]),
     markRecheck: (hashes) => call('store', 'markRecheck', [hashes]),
     recheckHashes: () => call('store', 'recheckHashes'),
     clearRecheck: (hashes) => call('store', 'clearRecheck', [hashes]),

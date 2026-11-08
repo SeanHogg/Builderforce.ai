@@ -7,6 +7,7 @@
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { StoredReviewRun, SyncStatus } from '../types';
 import type { ReviewState } from '../useReviewRun';
+import { notStored } from './drawers/syncDeltaModel';
 import { replicaPartsText } from './drawers/replicaPack';
 import { counted } from './plural';
 import { spanText } from './run/runModel';
@@ -97,8 +98,9 @@ export function syncPill({ labels, review, stale, refreshFailed, sync, lastRevie
     if (refreshFailed) return make('refresh', 'error', h.updateFailed);
     if (stale) return make('refresh', 'syncing', labels.refreshing);
     // Files the review did not store: the Server tab says which.
-    if (sync?.skipped && sync.skipped.length > 0) {
-        const stored = counted(labels, 'fileNotStored', sync.skipped.length);
+    const leftOut = sync?.skipped ? notStored(sync.skipped) : [];
+    if (leftOut.length > 0) {
+        const stored = counted(labels, 'fileNotStored', leftOut.length);
         return make('notStored', 'error', date ? fillTemplate(r.chipReviewedStored, { date, stored }) : stored, 'server');
     }
     // No snapshot on this machine is not a fault: the folder was reviewed on the server only.

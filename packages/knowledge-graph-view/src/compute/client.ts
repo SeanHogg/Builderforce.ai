@@ -11,9 +11,9 @@
  * NO REQUEST IS EVER DROPPED SILENTLY. A request that cannot complete where it was sent is settled one way or another:
  *  - its graph was evicted while it was in flight (MAX_RESIDENT): it is re-encoded (which holds the graph again) and re-run,
  *    a few times, then in-process;
- *  - the worker died, could not be cloned to (a DataCloneError on a post), sent a reply that cannot be read, or was let go
- *    while idle: everything it owed runs in-process (`failOver` for a worker that is broken for good, `retire` for one that
- *    is merely let go and may be revived).
+ *  - one request (or graph) could not be cloned to the worker: just it runs in-process and the worker stays;
+ *  - the worker died, sent a reply that cannot be read, or was let go while idle: everything it owed runs in-process
+ *    (`failOver` for a worker broken for good, `retire` for one that may be revived).
  *
  * FALLBACK. With no `Worker` (jsdom, a server render), or when the worker cannot be built or dies (a host CSP that blocks
  * it), the same handlers run in-process through the idle-step scheduler: identical results, on the main thread, with ONE
@@ -30,8 +30,6 @@ import { Residency } from './residency';
 import { ComputeStore } from './store';
 import { HANDLERS } from './tasks';
 import type { Spawn, WorkerLike } from './workerFactory';
-
-export type { Spawn, WorkerLike } from './workerFactory';
 
 export interface Callbacks<R> { done(result: R): void; fail(error: unknown): void }
 
@@ -69,6 +67,8 @@ export class ComputeClient {
     private seq = 0;
     private readonly pending = new Map<number, Pending>();
     private readonly loads = new Map<GraphId, Promise<void>>();
+    /** Graphs the worker could not take (a clone error while streaming): their requests run in-process, the worker stays. */
+    private readonly localOnly = new Set<GraphId>();
 
     constructor(private readonly spawn: Spawn) {
         this.revive();
@@ -88,7 +88,6 @@ export class ComputeClient {
         this.users = Math.max(0, this.users - 1);
         if (this.users === 0 && this.worker && !this.lingering) this.lingering = setTimeout(() => this.retire(), KEEP_ALIVE_MS);
     }
-
     /** Posts `graph` to the worker ahead of the first task that needs it (a no-op in-process). */
     prefetch(graph: KnowledgeGraph): void {
         const id = this.residency.graphId(graph);
@@ -154,9 +153,10 @@ export class ComputeClient {
         // Captured now: a graph evicted before the idle callback runs is still the one this request's indices name.
         const source = this.residency.handleOf(graph)?.graph;
         const inProcess = (): void => {
-            stopLocal = runIdleTask(() => handlerOf(kind)(this.adopted(graph, source), req), hooks.deliver, hooks.fail);
+            const then = (next: (v: unknown) => void) => (v: unknown): void => { try { next(v); } finally { this.releaseLocal(graph); } };
+            stopLocal = runIdleTask(() => handlerOf(kind)(this.adopted(graph, source), req), then(hooks.deliver), then(hooks.fail));
         };
-        if (this.inProcess || !this.worker || attempt > MAX_RETRIES) { inProcess(); return () => stopLocal(); }
+        if (this.inProcess || !this.worker || attempt > MAX_RETRIES || this.localOnly.has(graph)) { inProcess(); return () => stopLocal(); }
         const id = ++this.seq;
         const entry: Pending = { graph, posted: false, receive: hooks.deliver, fail: hooks.fail, rerun: inProcess, retry: hooks.relaunch };
         this.pending.set(id, entry);
@@ -170,12 +170,16 @@ export class ComputeClient {
     private post(id: number, entry: Pending, kind: TaskKind, req: unknown): void {
         if (this.pending.get(id) !== entry) return; // cancelled, answered, or already failed over
         if (!this.worker) { this.pending.delete(id); entry.rerun(); return; }
+        if (this.localOnly.has(entry.graph)) { this.pending.delete(id); entry.rerun(); return; }
         if (!this.residency.isLive(entry.graph)) { this.pending.delete(id); this.settle(entry, entry.retry); return; }
         try {
             entry.posted = true;
             this.worker.postMessage({ type: 'run', id, graph: entry.graph, kind, req });
         } catch (error) {
-            this.failOver(error); // a request that cannot be cloned cannot go to the worker: it, and everything owed, runs here
+            // One request that cannot be cloned runs here; the worker stays for the rest.
+            this.pending.delete(id);
+            entry.rerun();
+            this.warn(error);
         }
     }
 
@@ -194,15 +198,19 @@ export class ComputeClient {
         return this.local;
     }
 
+    /** An evicted graph adopted for an in-process rerun is let go once the rerun settles (it would otherwise leak). */
+    private releaseLocal(graph: GraphId): void {
+        if (!this.residency.isLive(graph)) this.local.drop(graph);
+    }
+
     private evict(id: GraphId): void {
         this.local.drop(id);
+        this.localOnly.delete(id);
         this.loads.delete(id);
         this.send({ type: 'drop', graph: id });
     }
 
-    private send(message: Parameters<WorkerLike['postMessage']>[0]): void {
-        try { this.worker?.postMessage(message); } catch { /* a broken worker is handled where the work is posted */ }
-    }
+    private send(message: Parameters<WorkerLike['postMessage']>[0]): void { try { this.worker?.postMessage(message); } catch { /* handled where work is posted */ } }
 
     private attach(worker: WorkerLike): void {
         worker.onmessage = (event) => this.receive(event.data);
@@ -220,7 +228,7 @@ export class ComputeClient {
         else entry.fail(new Error(message.message));
     }
 
-    /** The graph in the worker: posted once, in slices, and awaited by every task that needs it. A failed post fails the worker over. */
+    /** The graph in the worker: posted once, in slices, and awaited by every task that needs it. A graph that cannot be posted runs in-process. */
     private ensureLoaded(id: GraphId): Promise<void> {
         const kept = this.loads.get(id);
         if (kept) return kept;
@@ -233,8 +241,10 @@ export class ComputeClient {
             return true;
         };
         const load: Promise<void> = streamGraph(handle, post).catch((error) => {
-            // A rejected load is never kept (it would poison the graph); the worker that could not take it is let go.
-            if (this.loads.get(id) === load) { this.loads.delete(id); this.failOver(error); }
+                if (this.loads.get(id) !== load) return;
+            this.loads.delete(id);
+            this.localOnly.add(id); // only this graph runs in-process; a dead worker is reported by onerror/onmessageerror
+            this.warn(error);
         });
         this.loads.set(id, load);
         return load;

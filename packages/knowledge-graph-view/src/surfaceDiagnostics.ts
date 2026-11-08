@@ -14,6 +14,7 @@ import type { LinesModel } from './surface/lines';
 import { stopDiagnostic, systemDiagnosticLines } from './surface/systemDiagnostics';
 import type { StationModel } from './surface/stations';
 import { replicaPhase, replicaPhaseEnglish } from './surface/drawers/replicaState';
+import { notStored } from './surface/drawers/syncDeltaModel';
 import { hasNoLocalSnapshot } from './surface/syncPill';
 import { buildTiers } from './surface/tiers';
 import type { DiagnosticSection } from './diagnosticSection';
@@ -115,7 +116,7 @@ export function surfaceDiagnosticSections(i: SurfaceDiagnosticsInput): Diagnosti
     return [
         { id: 'coverage', lines: coverage, attention: i.mapFrom === 'server' || (c?.source.kind === 'cut') },
         { id: 'lines', lines, attention: false },
-        { id: 'sync', lines: sync, attention: !!replica && replica.failed.length > 0 || (i.sync?.skipped?.length ?? 0) > 0 },
+        { id: 'sync', lines: sync, attention: !!replica && replica.failed.length > 0 || (i.sync?.skipped ? notStored(i.sync.skipped).length : 0) > 0 },
         { id: 'findings', lines: findings, attention: false },
     ];
 }

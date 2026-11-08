@@ -68,7 +68,7 @@ export class Residency {
         const handle: GraphHandle = { id: this.nextId++, graph, live: true };
         this.byGraph.set(graph, handle);
         this.held.unshift(handle);
-        if (this.held.length > MAX_RESIDENT) this.scheduleTrim();
+        if (this.countable() > MAX_RESIDENT) this.scheduleTrim();
         return handle;
     }
 
@@ -78,13 +78,22 @@ export class Residency {
         this.trimming = true;
         queueMicrotask(() => {
             this.trimming = false;
-            while (this.held.length > MAX_RESIDENT) {
-                const old = this.held.pop()!;
-                old.live = false;
-                this.onEvict(old.id);
+            while (this.countable() > MAX_RESIDENT) {
+                const at = this.held.findLastIndex(Residency.counts);
+                const [old] = this.held.splice(at, 1);
+                old!.live = false;
+                this.onEvict(old!.id);
             }
         });
     }
+
+    /** The empty graph holds nothing worth evicting for, so it does not count toward the limit. */
+    private static counts(h: GraphHandle): boolean {
+        const g = h.graph;
+        return g.nodes.length + g.edges.length + g.findings.length > 0;
+    }
+
+    private countable(): number { return this.held.filter(Residency.counts).length; }
 
     private touch(h: GraphHandle): void {
         const at = this.held.indexOf(h);

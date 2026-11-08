@@ -8,7 +8,7 @@ function setup() {
     const workers: FakeWorker[] = [];
     const client = new ComputeClient(() => { const w = new FakeWorker(); workers.push(w); return w; });
     const calls = { done: vi.fn(), fail: vi.fn() };
-    const ask = (graph = makeGraph(0)) => client.run('insights', { graph }, calls);
+    const ask = (graph = makeGraph(2)) => client.run('insights', { graph }, calls);
     return { client, workers, calls, ask, worker: () => workers[workers.length - 1]! };
 }
 
@@ -67,7 +67,7 @@ describe('ComputeClient replies', () => {
         ask();
         await flush();
         const [first] = worker().runs();
-        for (let i = 0; i < 3; i++) client.residency.graphId(makeGraph(1)); // the 4th graph evicts the first
+        for (let i = 0; i < 4; i++) client.residency.graphId(makeGraph(1)); // the 5th graph evicts the first
         await Promise.resolve();
         expect(client.residency.isLive(first!.graph)).toBe(false);
         worker().done(first!, RAW);
@@ -82,14 +82,29 @@ describe('ComputeClient replies', () => {
 });
 
 describe('ComputeClient failure', () => {
-    it('a post that throws fails the worker over and the request still settles in-process', async () => {
+    it('a clone error on one request settles it in-process and keeps the worker for the next', async () => {
         const { client, ask, worker, calls } = setup();
-        worker().throwOn = (m) => m.type === 'run';
+        let first = true;
+        worker().throwOn = (m) => { if (m.type !== 'run' || !first) return false; first = false; return true; };
         ask();
         await flush();
-        expect(client.isInProcess).toBe(true);
-        expect(worker().terminated).toBe(true);
         await settled(calls);
+        expect(client.isInProcess).toBe(false);
+        expect(worker().terminated).toBe(false);
+        ask();
+        await flush();
+        expect(worker().runs()).toHaveLength(1);
+    });
+
+    it('a post that finds its graph already evicted re-runs the request instead of dropping it', async () => {
+        const { client, ask, worker } = setup();
+        const graph = makeGraph(2);
+        ask(graph);
+        for (let i = 0; i < 4; i++) client.residency.graphId(makeGraph(1)); // evicts `graph` before the load settles and the run posts
+        await flush();
+        const runs = worker().runs();
+        expect(runs.length).toBeGreaterThan(0);
+        expect(runs.every((r) => client.residency.isLive(r.graph))).toBe(true);
     });
 
     it('a load that throws does not poison the graph or leave the request pending', async () => {
@@ -97,7 +112,7 @@ describe('ComputeClient failure', () => {
         worker().throwOn = (m) => m.type === 'load-begin';
         ask();
         await flush();
-        expect(client.isInProcess).toBe(true);
+        expect(client.isInProcess).toBe(false); // only that graph runs here; the worker stays
         await settled(calls);
     });
 

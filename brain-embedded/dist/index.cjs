@@ -3145,10 +3145,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [434e-10, 28e-8],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [151e-9, 101583e-10],
+  "~moonshotai/kimi-latest": [151e-9, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3222,7 +3222,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [434e-10, 28e-8],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
@@ -3454,7 +3454,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [26e-9, 94e-9],
+  "openai/gpt-oss-120b": [19e-9, 7e-8],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -3591,14 +3591,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
-  "z-ai/glm-5.2:batch": [341e-9, 1381e-9],
+  "z-ai/glm-5.2:batch": [314e-9, 1271e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [335e-10, 83e-9],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [341e-9, 1381e-9],
+  "z-ai/glm-5.3:batch": [314e-9, 1271e-9],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -12604,38 +12604,53 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/codeExtracted.ts
 var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/reviewRunner.ts
-var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
+// ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
+var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
+var DOCUMENTS_PACK_ID = "documents";
+var documentsParser = {
+  ...import_ingest4.plainTextParser,
+  id: "documents",
+  accepts: (source) => source.content.kind === "text" && (0, import_ingest4.isBinaryDocumentType)(source.content.mediaType ?? "")
+};
+var DOCUMENTS_PACK = {
+  id: DOCUMENTS_PACK_ID,
+  parsers: [documentsParser],
+  ...import_knowledge8.DOCS_PACK.judgement ? { judgement: import_knowledge8.DOCS_PACK.judgement } : {}
+};
 
-// ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
+// ../packages/agent-tools/src/knowledge/codeExtracted.ts
 var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/reviewRunner.ts
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/codeGraph.ts
+var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
+var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
+var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -12645,10 +12660,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_JUDGE_TEXT = 8e3;
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
@@ -12669,7 +12684,7 @@ async function judgeWith(ask2, req) {
       a: { ref: a.ref, claim: a.text.slice(0, MAX_JUDGE_TEXT) },
       b: { ref: b.ref, claim: b.text.slice(0, MAX_JUDGE_TEXT) }
     });
-    const v = (0, import_knowledge17.validateCompare)(out, a.ref, b.ref);
+    const v = (0, import_knowledge18.validateCompare)(out, a.ref, b.ref);
     return {
       compare: v.relation ? [{ a: a.ref, b: b.ref, relation: v.relation, confidence: v.confidence }] : [],
       invalid: v.invalid
@@ -12678,7 +12693,7 @@ async function judgeWith(ask2, req) {
   const result = { extract: [], invalid: 0 };
   for (const item of req.items) {
     const out = await ask2(KNOWLEDGE_EXTRACT_SYSTEM, { ref: item.ref, text: item.text.slice(0, MAX_JUDGE_TEXT) });
-    const v = (0, import_knowledge17.validateExtract)(out, item.ref);
+    const v = (0, import_knowledge18.validateExtract)(out, item.ref);
     result.invalid += v.invalid;
     result.extract.push({ ref: item.ref, claims: v.claims, entities: v.entities });
   }
@@ -12686,10 +12701,10 @@ async function judgeWith(ask2, req) {
 }
 
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/replicaQueue.ts
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
@@ -12698,7 +12713,7 @@ var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 
@@ -12717,20 +12732,20 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
-var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
+var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [

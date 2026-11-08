@@ -35,6 +35,25 @@ describe('NodePanel: what the node is', () => {
   });
 });
 
+describe('NodePanel: a stored asset', () => {
+  it('shows its media type and size, and says nothing is remembered about its contents', () => {
+    const base = docsFixture();
+    const png = { ...base.nodes[0]!, ref: 'src:docs::logo.png', label: 'logo.png', badges: { asset: 1, mediaType: 'image/png', size: 2048 } };
+    const assetGraph = { ...base, nodes: [...base.nodes, png] };
+    render(
+      <NodePanel
+        graph={assetGraph} nodeRef={png.ref} labels={L} source={fixtureSource([assetGraph])}
+        onTrace={() => undefined} onSelect={() => undefined} onChanged={() => undefined}
+      />,
+    );
+    expect(screen.getByText(L.nodeMediaType)).toBeTruthy();
+    expect(screen.getByText('image/png')).toBeTruthy();
+    expect(screen.getByText(L.nodeSize)).toBeTruthy();
+    expect(screen.getByText('2.0 KB')).toBeTruthy();
+    expect(screen.getByText(L.assetNoFacts)).toBeTruthy();
+  });
+});
+
 describe('NodePanel: add fact', () => {
   it('saves a trimmed fact anchored to the node, clears the draft and tells the host', async () => {
     const rememberFact = vi.fn(async () => undefined);

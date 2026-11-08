@@ -14,7 +14,7 @@ function systemLine(s: SystemInfo): string {
     const read = s.graphRead
         ? ` · graph read=${s.graphRead.read}${s.graphRead.skipped.length ? ` skipped=${s.graphRead.skipped.map((k) => `${k.reason}:${k.count}`).join(',')}` : ''}`
         : '';
-    return `  ${s.name || '(root)'} [${s.path || '.'}]: files=${s.files} · apps=${s.apps.length ? s.apps.join(',') : 'none'} · truncated=${s.truncated ? 'yes' : 'no'}${s.copyOf ? ` · copy-of=${s.copyOf}` : ''}${read}`;
+    return `  ${s.name || '(root)'} [${s.path || '.'}]: files=${s.files}${s.assets ? ` · assets=${s.assets}` : ''} · apps=${s.apps.length ? s.apps.join(',') : 'none'} · truncated=${s.truncated ? 'yes' : 'no'}${s.copyOf ? ` · copy-of=${s.copyOf}` : ''}${read}`;
 }
 
 export function systemDiagnosticLines(graph: KnowledgeGraph): string[] {

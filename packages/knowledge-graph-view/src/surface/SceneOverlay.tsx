@@ -60,6 +60,12 @@ export interface SceneOverlayProps {
     capped?: MapCap | undefined;
     /** A phone: stack in flow above the scene instead of floating over it. */
     narrow?: boolean | undefined;
+    /** The canvas tools (Panels, Risk overlays): `CameraBar` puts them right after the View group. */
+    tools?: ReactNode;
+    /** The panel show/hide toggles, in the camera bar's right cluster. */
+    panelToggles?: ReactNode;
+    /** The commit scrubber, at the trailing end of the question row. */
+    time?: ReactNode;
 }
 
 /** The CSS variable the scene's top edge reads: the measured height of the controls block, set on the overlay's parent (the scene's box). */

@@ -16,6 +16,8 @@ export interface SystemInfo {
     path: string;
     name: string;
     files: number;
+    /** Stored binary files (assets) of this system; they are not in `files`. */
+    assets?: number;
     apps: string[];
     /** The reference graph did not read every file of this system (see `graphRead.skipped`): a file too large, unreadable, unsupported, or never listed. There is no file-count cap. */
     truncated?: boolean;
@@ -46,7 +48,7 @@ function fromMeta(graph: KnowledgeGraph): SystemInfo[] | null {
         const s = m as Partial<SystemInfo> | null;
         if (!s || typeof s.path !== 'string') return [];
         return [{
-            path: s.path, name: s.name || tailOf(s.path), files: Number(s.files) || 0,
+            path: s.path, name: s.name || tailOf(s.path), files: Number(s.files) || 0, ...(Number(s.assets) > 0 ? { assets: Number(s.assets) } : {}),
             apps: (Array.isArray(s.apps) ? s.apps : []).map((a: unknown) => (typeof a === 'string' ? a : (a as { name?: string; path?: string }).name || (a as { path?: string }).path || '')).filter(Boolean),
             ...(s.truncated ? { truncated: true } : {}), ...(s.copyOf ? { copyOf: s.copyOf } : {}),
             ...(s.copySimilarity !== undefined ? { copySimilarity: s.copySimilarity } : {}), ...(s.copyReason ? { copyReason: s.copyReason } : {}),
@@ -56,19 +58,19 @@ function fromMeta(graph: KnowledgeGraph): SystemInfo[] | null {
 }
 
 function fromNodes(graph: KnowledgeGraph): SystemInfo[] {
-    const by = new Map<string, { files: number; apps: Set<string>; copyOf?: string }>();
+    const by = new Map<string, { files: number; assets: number; apps: Set<string>; copyOf?: string }>();
     for (const n of fileNodesOf(graph)) {
         const path = systemOfNode(n);
         if (!path) continue;
-        const row = by.get(path) ?? by.set(path, { files: 0, apps: new Set() }).get(path)!;
-        row.files += 1;
+        const row = by.get(path) ?? by.set(path, { files: 0, assets: 0, apps: new Set() }).get(path)!;
+        if (n.badges?.asset === 1) row.assets += 1; else row.files += 1;
         const app = appOfNode(n);
         if (app) row.apps.add(app);
         const copyOf = (n as Tagged).copyOf;
         if (copyOf && !row.copyOf) row.copyOf = copyOf;
     }
     return [...by].map(([path, r]) => ({
-        path, name: tailOf(path), files: r.files, apps: [...r.apps].sort(cmp), ...(r.copyOf ? { copyOf: r.copyOf } : {}),
+        path, name: tailOf(path), files: r.files, ...(r.assets > 0 ? { assets: r.assets } : {}), apps: [...r.apps].sort(cmp), ...(r.copyOf ? { copyOf: r.copyOf } : {}),
     }));
 }
 

@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-08T16:08:27.627Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-08T17:11:16.702Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -14,10 +14,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~anthropic/claude-sonnet-latest": [0.000002, 0.00001],
   "~deepseek/deepseek-flash-latest": [6e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [9.99e-8, 0.000008],
-  "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 2.8e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.51e-7, 0.0000101583],
+  "~moonshotai/kimi-latest": [1.51e-7, 0.0000093388],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -91,7 +91,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v3.2": [2.6e-7, 3.8e-7],
   "deepseek/deepseek-v3.2-exp": [2.7e-7, 4.1e-7],
   "deepseek/deepseek-v4-flash": [9.1e-8, 1.82e-7],
-  "deepseek/deepseek-v4-flash-0731": [4.34e-8, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [4.34e-8, 2.8e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [4.8e-8, 1.44e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [4.4e-7, 0.00000132],
   "deepseek/deepseek-v4-pro": [2.088e-7, 4.176e-7],
@@ -323,7 +323,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [2.6e-8, 9.4e-8],
+  "openai/gpt-oss-120b": [1.9e-8, 7e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
@@ -460,13 +460,13 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [6e-9, 0.0000068],
-  "z-ai/glm-5.2:batch": [3.41e-7, 0.000001381],
+  "z-ai/glm-5.2:batch": [3.14e-7, 0.000001271],
   "z-ai/glm-5.3": [6.99e-8, 0.0000014],
   "z-ai/glm-5.3-flash": [3.35e-8, 8.3e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],
   "z-ai/glm-5.3-flashx-legal": [3.7e-7, 0.00000125],
   "z-ai/glm-5.3-prime": [0.0000028, 0.0000088],
-  "z-ai/glm-5.3:batch": [3.41e-7, 0.000001381],
+  "z-ai/glm-5.3:batch": [3.14e-7, 0.000001271],
   "z-ai/glm-5v-turbo": [0.0000012, 0.000004],
 };

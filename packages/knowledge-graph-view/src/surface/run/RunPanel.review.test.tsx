@@ -52,6 +52,17 @@ describe('the Review tab', () => {
         await waitFor(() => expect(within(screen.getByTestId('kg-review-will')).getAllByRole('listitem')[0]!.textContent).toContain(fillTemplate(r.estimate, { duration: '10 s', rate: '10' })));
     });
 
+    it('leaves stored assets out of the read estimate and counts them in their own tile', async () => {
+        const big = finishedRun({
+            id: 'run-big', phases: [{ phase: 'extract', startedAt: RUN_AT, endedAt: RUN_AT + 60_000, done: 600, total: 600 }], endedAt: RUN_AT + 65_000, updatedAt: RUN_AT + 65_000,
+        });
+        const { port } = portOf({ list: vi.fn(async () => [summaryOf(big)]) });
+        render(<Harness port={port} review={machine({ status: 'confirm', plan: { ...FIXTURE_PLAN, files: 100, assets: 40 } })} />);
+        // 60 readable files at 10 files/s, not 100
+        await waitFor(() => expect(within(screen.getByTestId('kg-review-will')).getAllByRole('listitem')[0]!.textContent).toContain(fillTemplate(r.estimate, { duration: '6 s', rate: '10' })));
+        expect(within(screen.getByTestId('kg-review-start')).getByText(r.tileAssets)).toBeTruthy();
+    });
+
     it('Everything again re-plans with force and stays chosen while force is set; What changed goes back', () => {
         const review = machine({ status: 'confirm', plan: { ...FIXTURE_PLAN }, force: true });
         render(<Harness port={portOf().port} review={review} />);
