@@ -119,8 +119,6 @@ export class ProgressDetector {
   private quietTurns: number;
   private steer: string | undefined;
   private turnSignal: ProgressSignal | null = null;
-  /** Repo-relative paths this run wrote successfully this turn — the re-verification base. */
-  private wroteThisTurn: string[];
   /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
   private writtenPaths: Set<string>;
   /** Read-only targets seen this turn, to tell an all-written re-read turn from real work. */
@@ -137,7 +135,6 @@ export class ProgressDetector {
     this.unkeptTurns = state.unkeptTurns ?? 0;
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
-    this.wroteThisTurn = [];
     this.writtenPaths = new Set();
     this.readThisTurn = [];
   }
@@ -172,7 +169,6 @@ export class ProgressDetector {
         const path = pathArgOf(args);
         this.forgetVisitsOf(path);
         if (path) {
-          this.wroteThisTurn.push(path);
           this.writtenPaths.add(path);
         }
       }
@@ -220,7 +216,6 @@ export class ProgressDetector {
         this.raise({ kind: "reverifying", count: this.readThisTurn.length });
       }
     }
-    this.wroteThisTurn = [];
     this.readThisTurn = [];
     // New files do not excuse it: the run said it had what it needed.
     const unkeptBefore = this.claims.snapshot().unkept;
