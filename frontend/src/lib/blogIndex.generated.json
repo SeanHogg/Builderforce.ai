@@ -15,6 +15,33 @@
     "author": "Sean Hogg"
   },
   {
+    "slug": "one-agent-one-kernel",
+    "title": "One agent, one kernel — every Builderforce surface now runs the same engine",
+    "date": "2026-11-08",
+    "description": "Your chat in VS Code, the web app, Rovr and the on-prem channels used to be four runtimes that could disagree. They are now one execution core — one loop, one tool policy, one answer, wherever you work.",
+    "tags": [
+      "agents",
+      "architecture",
+      "vscode",
+      "web",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "portable-knowledge-packs",
+    "title": "Pack the knowledge your review proved — and let any agent use it",
+    "date": "2026-11-08",
+    "description": "Your team's codebase review turns a folder into facts. Now those facts pack up as a portable .bfpack you can share, version, and hand to any LLM — so the understanding your review earned travels with the work.",
+    "tags": [
+      "knowledge",
+      "agents",
+      "vscode",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "one-folder-many-systems",
     "title": "One folder, many systems — each on its own map, with stray copies called out",
     "date": "2026-11-07",

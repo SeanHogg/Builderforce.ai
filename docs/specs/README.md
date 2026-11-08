@@ -30,6 +30,8 @@ sequence is a PRD that shipped. Index last rewritten 2026-10-25.
 | 40 | [Portable knowledge packs](./40-prd-knowledge-packs.md) | Design for review | Make › Cloud and IDE agent runs |
 | 41 | [Offline understanding and the run delta](./41-prd-offline-understanding-and-run-delta.md) | Design for review | Make › Cloud and IDE agent runs; Local-first |
 
+Numbers are never reused; a gap in the sequence is a PRD that shipped. Index last rewritten 2026-11-08.
+
 Also here:
 
 - [`data-model/`](./data-model/) — the consolidation coverage map read by the `check:burnrate-parity`
