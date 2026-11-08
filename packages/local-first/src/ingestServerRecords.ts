@@ -54,6 +54,8 @@ export interface ServerRecordRow {
 export interface IngestServerRecordsOptions {
   /** The rows are the COMPLETE ticket list of this chat; links the server dropped are tombstoned. */
   completeListFor?: { chatClientId: string; total?: number };
+  /** Record this read as completed now (`setReadMark(key, now)`) in the SAME transaction as its rows. */
+  markRead?: string;
   now?: () => Date;
 }
 

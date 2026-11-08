@@ -71,15 +71,21 @@ export class WorkMeter {
         return this.elementTargets.has(this.targets.get(value) ?? value);
     }
 
+    /**
+     * The proxy's TARGET is a fresh mirror array that already holds the element proxies, never the source array: graphs are
+     * frozen by contract (`freezeGraph`), and a Proxy `get` over a frozen (non-configurable, non-writable) index must return
+     * the target's actual value. So `get` returns `Reflect.get(mirror, …)` untouched and only counts; freezing the proxy later
+     * freezes the mirror, which is equally fine. `unwrap` maps the proxy back to the ORIGINAL source array.
+     */
     private proxyArray<T>(list: readonly T[], proxyElements: boolean): readonly T[] {
         const known = this.arrays.get(list);
         if (known) return known as readonly T[];
-        const proxy = new Proxy(list as T[], {
+        const mirror = list.map((value) => (proxyElements && isPlainElement(value) ? this.proxyElement(value) : value)) as T[];
+        const proxy = new Proxy(mirror, {
             get: (target, key, receiver) => {
                 const value = Reflect.get(target, key, receiver);
-                if (typeof key !== 'string' || !isIndex(key)) return value;
-                if (!this.paused) this.count++;
-                return proxyElements && isPlainElement(value) ? this.proxyElement(value) : value;
+                if (typeof key === 'string' && isIndex(key) && !this.paused) this.count++;
+                return value;
             },
         });
         this.arrays.set(list, proxy);

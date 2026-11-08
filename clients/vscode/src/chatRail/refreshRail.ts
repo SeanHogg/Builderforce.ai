@@ -4,17 +4,18 @@
  *
  * - The reads are brain-embedded's `readChatTicketLinks` / `readChatRunHistory`, which hand back
  *   the RAW DTOs (ids, `linkType`, every listed row); nothing here caps or reshapes them.
- * - The DTOs go through `ingestServerRecords` (tickets and runs, then links as the chat's COMPLETE
- *   list, so a link the platform no longer lists is tombstoned).
- * - A failed read is a distinct outcome that ingests NOTHING: the last copy stays. An empty answer
- *   (`undefined`) is a failure, never "the chat has no tickets": taking it for an empty list would
- *   tombstone every link.
+ * - The DTOs go through ONE `ingestServerRecords` call, so one refresh is one store transaction:
+ *   tickets, then runs, then the links (as the chat's COMPLETE list, so a link the platform no
+ *   longer lists is tombstoned). A link row names its ticket by the client id that ticket's row
+ *   resolved to in the same batch.
+ * - A failed read is a distinct outcome that ingests NOTHING: the last copy stays. So is an answer
+ *   that is not the expected shape: a body without a `tickets` (or `runs`) ARRAY is a failed read,
+ *   never "the chat has no tickets" (taking it for an empty list would tombstone every link).
  * - Offline or local-only the platform is not touched at all (`skipped`).
  */
 
 import { ingestServerRecords, type LocalFirstStore } from "@builderforce/local-first";
 import { readChatRunHistory, readChatTicketLinks, type ChatStateGet } from "@seanhogg/builderforce-brain-embedded";
-import { ticketServerId } from "./railPayloads";
 import { linkRows, listedTickets, runRows, ticketRows, type WireRun, type WireTicket } from "./railRows";
 import type { ChatRailRefreshOutcome, ChatRef } from "./railProtocol";
 import { resolveChat } from "./resolveChat";
@@ -35,8 +36,11 @@ export class RailReadError extends Error {
   }
 }
 
-/** A GET whose every failure, including no answer at all, rejects. */
-function strict(get: ChatStateGet): ChatStateGet {
+/**
+ * A GET whose every failure rejects: a thrown call, no answer at all, or an answer whose `field`
+ * is not an array (the one shape each rail read is a list in).
+ */
+function expectList(get: ChatStateGet, field: "tickets" | "runs"): ChatStateGet {
   return async <T>(path: string): Promise<T | undefined> => {
     let answer: T | undefined;
     try {
@@ -44,7 +48,9 @@ function strict(get: ChatStateGet): ChatStateGet {
     } catch (error) {
       throw new RailReadError(path, error);
     }
-    if (answer === undefined || answer === null) throw new RailReadError(path);
+    if (!answer || typeof answer !== "object" || !Array.isArray((answer as Record<string, unknown>)[field])) {
+      throw new RailReadError(path);
+    }
     return answer;
   };
 }
@@ -58,36 +64,22 @@ export async function refreshRail(
   if (!chat) return { status: "error", message: "chat_not_found" };
   if (!ports.platformAllowed() || chat.serverId === undefined) return { status: "skipped" };
 
-  const get = strict(ports.get);
   let tickets: WireTicket[];
   let runs: WireRun[];
   try {
-    tickets = await readChatTicketLinks<WireTicket>(get, chat.serverId);
-    const history = await readChatRunHistory<{ runs?: WireRun[] }>(get, chat.serverId);
-    if (!history || !Array.isArray(history.runs)) throw new RailReadError(`/api/brain/chats/${chat.serverId}/runs`);
-    runs = history.runs;
+    tickets = await readChatTicketLinks<WireTicket>(expectList(ports.get, "tickets"), chat.serverId);
+    runs = (await readChatRunHistory<{ runs: WireRun[] }>(expectList(ports.get, "runs"), chat.serverId))!.runs;
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : String(error) };
   }
 
   const at = (ports.now ?? (() => new Date()))().toISOString();
   const listed = listedTickets(tickets);
-  const first = await ingestServerRecords(store, [
+  // Tickets lead the batch: link row `i` reads the client id ticket row `i` resolved to.
+  const result = await ingestServerRecords(store, [
     ...ticketRows(listed, chat.destination, at),
     ...runRows(runs, chat.clientId, chat.destination, at),
-  ], { now: ports.now });
-  // Tickets lead the batch, so the first `listed.length` ids are theirs. A ticket skipped for a
-  // pending local edit still has its client id (its mapping): its link must stay in the list.
-  const ticketIds = await Promise.all(first.clientIds.slice(0, listed.length).map(async (id, index) => {
-    if (id !== undefined) return id;
-    const tk = listed[index]!;
-    return (await store.read((tx) => tx.mappingByServerId("ticket", ticketServerId(tk.kind, tk.ref))))?.clientEntityId;
-  }));
-  const links = linkRows(listed, ticketIds, chat.clientId, chat.destination, at);
-  const total = new Set(links.map((row) => (row.payload as { ticketClientId: string }).ticketClientId)).size;
-  const second = await ingestServerRecords(store, links, {
-    completeListFor: { chatClientId: chat.clientId, total },
-    now: ports.now,
-  });
-  return { status: "ok", written: first.written + second.written, tombstoned: second.tombstoned };
+    ...linkRows(listed, chat.clientId, chat.destination, at),
+  ], { completeListFor: { chatClientId: chat.clientId }, now: ports.now });
+  return { status: "ok", written: result.written, tombstoned: result.tombstoned };
 }
