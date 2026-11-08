@@ -1,8 +1,13 @@
 /**
  * `a2a-send` — send a message to a remote A2A agent.
  *
- * The primary target is Claude Code, whose Agent SDK exposes a streaming JSON
- * surface via the CLI:
+ * The wire contract is the generic A2A envelope (see
+ * `packages/agent-tools/src/a2a.ts`), so ANY agent runtime that can POST JSON
+ * and read a JSON or SSE response can participate — Google's A2A protocol,
+ * LangGraph, Google ADK, Microsoft Agent Framework, etc.
+ *
+ * One transport target gets a dedicated local bridge: Claude Code's Agent SDK
+ * exposes a streaming JSON surface via the CLI:
  *
  *     claude -p \
  *       --output-format stream-json \
@@ -11,12 +16,12 @@
  *
  * feeding it newline-delimited JSON messages on stdin and reading
  * newline-delimited JSON events on stdout. This tool speaks that protocol over
- * HTTP: it POSTs the A2A envelope and parses the SSE/event stream that comes
- * back, so the BuilderForce agent can both SEND a message to Claude Code and
- * READ its streamed reply.
+ * stdio (no network) when target="claude-code", so the BuilderForce agent can
+ * both SEND a message to Claude Code and READ its streamed reply.
  *
- * Any other A2A-compatible endpoint (a plain JSON responder, or another SSE
- * streamer) is reached through the same call — the parser handles both.
+ * Every other A2A-compatible endpoint (a plain JSON responder, or another SSE
+ * streamer) is reached over HTTP through the same call — the parser handles
+ * both.
  */
 import { Type } from "@sinclair/typebox";
 import { spawn, spawnSync } from "node:child_process";
