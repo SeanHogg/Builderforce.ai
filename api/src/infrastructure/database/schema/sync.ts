@@ -38,7 +38,7 @@ import { tenants } from './identity';
  * exceeds 2^53, so it is carried as its DECIMAL TEXT form and compared in SQL (or as a
  * BigInt in `domain/sync/deltaWatermark`), never as a JS number.
  */
-const xid8 = customType<{ data: string }>({
+export const xid8 = customType<{ data: string }>({
   dataType() { return 'xid8'; },
 });
 
