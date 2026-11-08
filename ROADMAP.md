@@ -120,6 +120,7 @@ Source: [offline-first review](./docs/design/vsix-offline-first-architecture-rev
 ### Autonomous delivery `[delivery]`
 
 Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs failed. The manager's census tracks this.
+- **The Reviews-panel fix (3574c0d77) is not in an installed VSIX yet.** Package and install the next VSIX. *Blocker:* the shared working tree has other sessions' half-applied edits that break the webview build: `knowledge-graph-view/src/surface/StatusStrip.tsx` is deleted but `SurfaceHeader.tsx` still imports it, `Toolbar.tsx` uses undefined `panels`/`overlays`, and `perf/sceneSteps.ts` uses undefined `stepLabels`. Clears when those land.
 
 - **Release health: main is still red after the 3a2c752db sweep.** Part 1 is in DONE.md, but the fixes are not committed yet. A Haiku re-run on 2026-11-08 found these still failing.
   - **From the autonomous-delivery pass:**
