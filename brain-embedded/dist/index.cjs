@@ -3130,7 +3130,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
+  "~moonshotai/kimi-latest": [1662e-10, 101398e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -3207,11 +3207,12 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [434e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [535398e-12, 1070796e-12],
+  "deepseek/deepseek-v4-pro": [9e-7, 15e-7],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
-  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
-  "deepseek/deepseek-v4.1-flash:batch": [112e-9, 336e-9],
+  "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash-1017:batch": [11e-9, 2e-7],
+  "deepseek/deepseek-v4.1-flash:batch": [11e-9, 2e-7],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
   "fireworks/ember-1": [3e-6, 15e-6],
@@ -3279,7 +3280,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
-  "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
+  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
   "meta-llama/llama-3.3-70b-instruct": [59e-8, 79e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -3299,7 +3300,7 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m2.7": [21e-8, 84e-8],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
-  "minimax/minimax-m3.1-flash": [75e-9, 3e-7],
+  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -3330,10 +3331,12 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 35e-7],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
-  "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
+  "moonshotai/kimi-k3:batch": [1084e-9, 6e-6],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
+  "morph/morph-v3-fast:batch": [4e-7, 6e-7],
   "morph/morph-v3-large": [9e-7, 19e-7],
+  "morph/morph-v3-large:batch": [45e-8, 95e-8],
   "nex-agi/nex-n2.5-mini": [25e-9, 1e-7],
   "nex-agi/nex-n2.5-pro": [75e-9, 25e-8],
   "nousresearch/hermes-4-405b": [1e-6, 3e-6],
@@ -3436,7 +3439,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [21e-9, 76e-9],
+  "openai/gpt-oss-120b": [27e-9, 1e-7],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -3491,7 +3494,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
-  "qwen/qwen3.6-27b": [45e-8, 27e-7],
+  "qwen/qwen3.6-27b": [32e-8, 32e-7],
   "qwen/qwen3.6-35b-a3b": [1e-7, 9e-7],
   "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
   "qwen/qwen3.6-plus": [325e-9, 195e-8],
@@ -3529,10 +3532,10 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [825e-10, 33e-8],
+  "tencent/hy3": [132e-9, 528e-9],
   "tencent/hy3-preview": [18e-8, 6e-7],
   "tencent/hy4": [417e-9, 12505e-10],
-  "tencent/hy4-preview": [7506e-10, 22509e-10],
+  "tencent/hy4-preview": [834e-9, 2501e-9],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -3573,13 +3576,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
+  "z-ai/glm-5.2:batch": [37e-8, 15e-7],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
+  "z-ai/glm-5.3-flash": [335e-10, 83e-9],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
-  "z-ai/glm-5.3:batch": [45e-8, 2e-6],
+  "z-ai/glm-5.3:batch": [37e-8, 15e-7],
   "z-ai/glm-5v-turbo": [12e-7, 4e-6]
 };
 
@@ -9523,8 +9527,9 @@ function languageOf(path2) {
 function group(m, n2) {
   return m[n2] ?? "";
 }
+var symbolCap = MAX_SYMBOLS_PER_FILE;
 function eachLine(lines, out, visit) {
-  for (let i = 0; i < lines.length && out.length < MAX_SYMBOLS_PER_FILE; i += 1) {
+  for (let i = 0; i < lines.length && out.length < symbolCap; i += 1) {
     visit(lines[i] ?? "", i + 1);
   }
 }
@@ -9704,11 +9709,17 @@ var EXTRACTORS = {
   sql: extractSql,
   markdown: extractMarkdown
 };
-function extractSymbols(path2, content) {
+function extractSymbols(path2, content, cap2 = MAX_SYMBOLS_PER_FILE) {
   const language = languageOf(path2);
   if (!language) return [];
   const out = [];
-  EXTRACTORS[language](content.split(/\r?\n/), out);
+  const outer = symbolCap;
+  symbolCap = cap2;
+  try {
+    EXTRACTORS[language](content.split(/\r?\n/), out);
+  } finally {
+    symbolCap = outer;
+  }
   return out;
 }
 function formatSymbol(symbol) {
