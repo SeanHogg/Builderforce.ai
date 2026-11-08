@@ -18,9 +18,11 @@ vi.mock('../connectors/connectorRegistry', () => ({
 }));
 vi.mock('./postingDistributionStore', () => ({
   findPostingLinkedToBoardJob: (...args: unknown[]) => findPostingLinkedToBoardJob(...args),
-  readPostedDistributions: (...args: unknown[]) => readPostedDistributions(...args),
   readPostingDistributions: vi.fn(async () => new Map()),
   recordPostingDistribution: (...args: unknown[]) => recordPostingDistribution(...args),
+}));
+vi.mock('./postingDistributionSweepStore', () => ({
+  readPostedDistributions: (...args: unknown[]) => readPostedDistributions(...args),
 }));
 vi.mock('./postingDistributionSupport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./postingDistributionSupport')>()),
@@ -89,10 +91,29 @@ describe('linkBoardJob', () => {
   });
 
   it('maps the database unique violation of a concurrent link to a 409', async () => {
-    recordPostingDistribution.mockRejectedValue(Object.assign(new Error('duplicate key value'), { code: '23505' }));
+    recordPostingDistribution.mockRejectedValue(Object.assign(
+      new Error('duplicate key value violates unique constraint "uq_job_posting_distributions_board_job"'), { code: '23505' },
+    ));
     const error = await rejection(linkBoardJob(DB, ENV, input(), deps()));
     expect(error).toBeInstanceOf(AtsError);
     expect(error).toMatchObject({ status: 409 });
+  });
+
+  it('does not turn a unique violation on a DIFFERENT index into that 409', async () => {
+    recordPostingDistribution.mockRejectedValue(Object.assign(
+      new Error('duplicate key value violates unique constraint "uq_job_posting_distributions_board"'), { code: '23505' },
+    ));
+    const error = await rejection(linkBoardJob(DB, ENV, input(), deps()));
+    expect(error).not.toBeInstanceOf(AtsError);
+  });
+
+  it('takes a board-reported link only from the board’s own domain', async () => {
+    const reported = (url: string) => [{ shortcode: 'ABC', title: 'Senior Engineer', state: 'published', url }];
+    await linkBoardJob(DB, ENV, input('ABC'), deps(reported('https://apply.workable.com/acme/j/ABC/')));
+    expect(recordPostingDistribution).toHaveBeenLastCalledWith(DB, expect.objectContaining({ url: 'https://apply.workable.com/acme/j/ABC/' }));
+    // Another domain is refused; the manifest's own template link is used instead.
+    await linkBoardJob(DB, ENV, input('ABC'), deps(reported('https://evil.example/ABC')));
+    expect(recordPostingDistribution).toHaveBeenLastCalledWith(DB, expect.objectContaining({ url: 'https://apply.workable.com/acme/j/ABC/' }));
   });
 
   it('lets any other write failure through as itself', async () => {

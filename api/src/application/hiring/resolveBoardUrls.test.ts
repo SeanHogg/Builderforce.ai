@@ -9,6 +9,7 @@ import { HIRING_CONNECTORS } from '../connectors/defaults/hiring';
 
 const calls: string[] = [];
 const recordResolvedLink = vi.fn();
+const markResolveConflict = vi.fn();
 const touchPostedDistribution = vi.fn();
 const listPostedDistributionsForSweep = vi.fn();
 
@@ -18,28 +19,31 @@ vi.mock('../connectors/connectorRegistry', () => ({
     return manifest ? { manifest, status: 'published' } : null;
   }),
 }));
-vi.mock('./postingDistributionStore', () => ({
+vi.mock('./postingDistributionSweepStore', () => ({
   listPostedDistributionsForSweep: (...args: unknown[]) => listPostedDistributionsForSweep(...args),
   recordResolvedLink: (...args: unknown[]) => recordResolvedLink(...args),
+  markResolveConflict: (...args: unknown[]) => markResolveConflict(...args),
   touchPostedDistribution: (...args: unknown[]) => { calls.push('touch'); return touchPostedDistribution(...args); },
 }));
 
 import { RESOLVABLE_BOARD_KEYS, resolveDistributionUrl, runUrlResolutionPass } from './resolveBoardUrls';
-import type { PostedDistribution } from './postingDistributionStore';
+import type { PostedDistribution } from './postingDistributionSweepStore';
 
 const ENV = {} as Env;
 const DB = {} as never;
 const TASK = 'urn:li:simpleJobPostingTask:abc-123';
 
 const linkedinRow = (over: Partial<PostedDistribution> = {}): PostedDistribution => ({
-  tenantId: 1, postingId: 'p1', connectorKey: 'linkedin-jobs', connectionId: 'c1', externalId: TASK, url: null, importCursor: null, ...over,
+  tenantId: 1, postingId: 'p1', connectorKey: 'linkedin-jobs', connectionId: 'c1', externalId: TASK, url: null, importCursor: null,
+  importResumePage: null, importPendingCursor: null, importFailures: {}, ...over,
 });
 const greenhouseRow = (over: Partial<PostedDistribution> = {}): PostedDistribution => ({
-  tenantId: 1, postingId: 'p1', connectorKey: 'greenhouse-job-board', connectionId: 'c1', externalId: '4012', url: null, importCursor: null, ...over,
+  tenantId: 1, postingId: 'p1', connectorKey: 'greenhouse-job-board', connectionId: 'c1', externalId: '4012', url: null, importCursor: null,
+  importResumePage: null, importPendingCursor: null, importFailures: {}, ...over,
 });
 
 const deps = (data: unknown, auth: Record<string, string> = { token: 'x', company_id: 'urn:li:organization:1', board_token: 'acme' }) => {
-  const execute = vi.fn(async () => {
+  const execute = vi.fn(async (..._args: unknown[]) => {
     calls.push('execute');
     return { ok: true, status: 200, data, durationMs: 1 };
   });
@@ -53,6 +57,7 @@ const deps = (data: unknown, auth: Record<string, string> = { token: 'x', compan
 beforeEach(() => {
   calls.length = 0;
   recordResolvedLink.mockReset().mockResolvedValue(undefined);
+  markResolveConflict.mockReset().mockResolvedValue(undefined);
   touchPostedDistribution.mockReset().mockResolvedValue(undefined);
   listPostedDistributionsForSweep.mockReset();
 });
@@ -62,7 +67,7 @@ describe('resolveDistributionUrl', () => {
     const d = deps({ results: { [TASK]: { id: TASK, status: 'SUCCEEDED', jobPosting: 'urn:li:jobPosting:4215800322' } } });
     expect(await resolveDistributionUrl(DB, ENV, linkedinRow(), d, 'system')).toBe('linked');
     expect(recordResolvedLink).toHaveBeenCalledWith(DB, expect.anything(), { url: 'https://www.linkedin.com/jobs/view/4215800322', externalId: '4215800322' });
-    expect(d.mock.mock.calls[0]![0]).toMatchObject({ actionKey: 'resolve_url', input: { ids: TASK }, actorKind: 'system' });
+    expect(d.mock.mock.calls[0]![0]).toMatchObject({ actionKey: 'resolve_url', actorKind: 'system' });
   });
 
   it('writes NOTHING while the task is still in progress — the task urn stays the reference', async () => {
@@ -101,10 +106,31 @@ describe('resolveDistributionUrl', () => {
     expect(await resolveDistributionUrl(DB, ENV, linkedinRow({ connectorKey: 'indeed-jobs' }), deps({}))).toBe('unsupported');
   });
 
-  it('treats a unique violation on the resolved id as a miss, not a crash', async () => {
-    recordResolvedLink.mockRejectedValue(Object.assign(new Error('duplicate'), { code: '23505' }));
+  it('a resolved id another posting holds is recorded on the row and backed off — not retried every sweep', async () => {
+    recordResolvedLink.mockRejectedValue(Object.assign(
+      new Error('duplicate key value violates unique constraint "uq_job_posting_distributions_board_job"'), { code: '23505' },
+    ));
     const d = deps({ results: { [TASK]: { id: TASK, jobPosting: 'urn:li:jobPosting:55' } } });
     expect(await resolveDistributionUrl(DB, ENV, linkedinRow(), d)).toBe('unresolved');
+    expect(markResolveConflict).toHaveBeenCalledTimes(1);
+  });
+
+  it('a unique violation on some OTHER index is not mistaken for that conflict', async () => {
+    recordResolvedLink.mockRejectedValue(Object.assign(new Error('duplicate key value violates unique constraint "other_idx"'), { code: '23505' }));
+    const d = deps({ results: { [TASK]: { id: TASK, jobPosting: 'urn:li:jobPosting:55' } } });
+    expect(await resolveDistributionUrl(DB, ENV, linkedinRow(), d)).toBe('unresolved');
+    expect(markResolveConflict).not.toHaveBeenCalled();
+  });
+
+  it('encodes the LinkedIn task urn as a Rest.li List key, and takes the link only from the board’s own domain', async () => {
+    const d = deps({ results: { [TASK]: { id: TASK, jobPosting: 'urn:li:jobPosting:77' } } });
+    await resolveDistributionUrl(DB, ENV, linkedinRow(), d);
+    expect(d.mock.mock.calls[0]![0]).toMatchObject({ input: { ids: `List(${encodeURIComponent(TASK)})` } });
+
+    // A reported link on another domain is refused (Greenhouse's absolute_url can be a customer’s site).
+    const off = deps({ jobs: [{ id: 7, internal_job_id: 4012, absolute_url: 'https://careers.acme.test/job?gh_jid=7' }] });
+    expect(await resolveDistributionUrl(DB, ENV, greenhouseRow(), off)).toBe('unresolved');
+    expect(recordResolvedLink).not.toHaveBeenCalledWith(DB, expect.anything(), expect.objectContaining({ url: expect.stringContaining('acme.test') }));
   });
 });
 

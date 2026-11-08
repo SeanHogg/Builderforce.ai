@@ -7,6 +7,16 @@
 /** The action every hiring board publishes with — one key across the category. */
 export const PUBLISH_POSTING_ACTION = 'create_posting';
 
+/** Migration 1328's index: one confirmed board job belongs to one posting. A unique
+ *  violation is translated only when it names THIS index. */
+export const BOARD_JOB_UNIQUE_INDEX = 'uq_job_posting_distributions_board_job';
+
+/** Migration 1324's index: one board application is one row per (posting, source). */
+export const BOARD_APPLICATION_UNIQUE_INDEX = 'uq_job_applications_board_external';
+
+/** The table's original per-person index: one application per (posting, candidate). */
+export const CANDIDATE_APPLICATION_UNIQUE_INDEX = 'uq_job_applications_candidate';
+
 /** The actions that list the people who applied, in the order they are preferred. Lever
  *  calls its applicants "opportunities"; everyone else says "applications". */
 export const LIST_APPLICANTS_ACTIONS = ['list_applications', 'list_opportunities'] as const;

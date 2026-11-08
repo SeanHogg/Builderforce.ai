@@ -117,12 +117,12 @@ async function runKind(
   const scan = await ensurePrScan(env, db, actor, scope, scanType);
   const segmentId = scan.segmentId ?? scope.segmentId;
   if (!segmentId) {
-    await endPrScan(db, scan.id, 'failed', 'Scan row has no segment to scope its findings to.');
+    await endPrScan(db, scope.tenantId, scan.id, 'failed', 'Scan row has no segment to scope its findings to.');
     return { scanId: scan.id, scanType, status: 'failed', segmentId: null };
   }
   // Nothing could be read although something was attempted: this scan saw NOTHING.
   if (collected.sourceAttempted > 0 && collected.files.length === 0) {
-    await endPrScan(db, scan.id, 'failed', `No changed file could be read, so nothing was scanned. ${summariseFailures(collected.readFailures)}`);
+    await endPrScan(db, scope.tenantId, scan.id, 'failed', `No changed file could be read, so nothing was scanned. ${summariseFailures(collected.readFailures)}`);
     return { scanId: scan.id, scanType, status: 'failed', segmentId };
   }
   const findings: NormalizedFinding[] = collected.files.flatMap((f) => scanFileContent(f.path, f.content, [kind]));
@@ -207,7 +207,7 @@ async function runSca(
   const scan = await ensurePrScan(env, db, actor, scope, 'SCA');
   const segmentId = scan.segmentId ?? scope.segmentId;
   const done = async (status: 'completed' | 'failed', notes: string | null, truncated = false) => {
-    await endPrScan(db, scan.id, status, notes, truncated);
+    await endPrScan(db, scope.tenantId, scan.id, status, notes, truncated);
     return { scanId: scan.id, scanType: 'SCA', status, segmentId };
   };
   // "No manifest changed" is true ONLY when none was listed; a manifest we listed but could not read
@@ -247,7 +247,7 @@ export async function runPullRequestScan(
     let segmentId = scope.segmentId;
     for (const t of ['SECRET', 'SAST', 'SCA'] as const) {
       const s = await ensurePrScan(env, db, actor, scope, t);
-      await endPrScan(db, s.id, 'skipped', reason);
+      await endPrScan(db, scope.tenantId, s.id, 'skipped', reason);
       scans.push({ scanId: s.id, scanType: t, status: 'skipped' });
       segmentId = s.segmentId ?? segmentId;
     }

@@ -32,7 +32,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { dataSubjectRequests, dataSuppressionList } from '../../infrastructure/database/schema';
 import { sha256Hex } from '../../domain/shared/hash';
-import { scopedToSegment } from '../../infrastructure/database/tenantScope';
+import { scopedToSegment, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { ActorIdentity } from '../activity/activityLog';
 import type { SegmentScope } from '../shared/segmentScope';
 import { recordGovernanceMutation } from './mutationAudit';
@@ -299,7 +299,7 @@ export async function purgeStaleDsrExports(db: Db, bucket: R2Bucket | undefined,
     if (!(await deletePrivateObject(bucket, result.exportKey, row.tenantId))) continue;
     await db.update(dataSubjectRequests)
       .set({ executionResult: JSON.stringify({ ...result, exportKey: null, note: 'The undelivered export expired and was deleted.' }) })
-      .where(eq(dataSubjectRequests.id, row.id));
+      .where(scopedToTenant(dataSubjectRequests, row.tenantId, eq(dataSubjectRequests.id, row.id)));
     purged += 1;
   }
   return purged;

@@ -26,6 +26,7 @@
  */
 import type { FindingSeverity, NormalizedFinding } from '../../domain/security/scanReportParsers';
 import { normalizeSeverity } from '../../domain/security/scanReportParsers';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export const OSV_BASE = 'https://api.osv.dev';
 /** Packages per scan. A change that adds more than this is scanned for the first 500 and says so. */
@@ -307,7 +308,15 @@ export async function queryOsv(packages: readonly OsvPackage[], fetchFn: typeof 
         // A detail we cannot read still stands as a finding, at HIGH (unknown severity fails closed):
         // the package IS listed as vulnerable, so dropping it would hide it.
         if (res.ok) details.set(id, (await res.json()) as OsvVuln);
-      } catch { /* the finding is kept without detail */ }
+      } catch (error) {
+        // The finding is kept without detail; the failed lookup is recorded, not dropped.
+        reportCaughtError(error, {
+          source: 'application/security/osvScaScan.ts',
+          operation: 'fetchOsvVulnDetail',
+          context: { vulnId: id },
+          level: 'warning',
+        });
+      }
     }));
   }
   return {

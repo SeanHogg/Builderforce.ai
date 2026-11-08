@@ -323,7 +323,8 @@ export async function createPolicyGate(
   input: PolicyGateInput,
 ): Promise<PolicyGateRow | { error: string }> {
   const invalid = validateNewGateInput(input);
-  if (invalid) return { error: invalid };
+  const effect = input.effect;
+  if (invalid || effect === undefined) return { error: invalid ?? 'effect is required' };
   const gateKey = input.gateKey!.trim();
 
   const [pack] = await db
@@ -341,7 +342,7 @@ export async function createPolicyGate(
       gateKey,
       tool: input.tool?.trim() || null,
       sideEffect: input.sideEffect || null,
-      effect: input.effect,
+      effect,
       directive: input.directive ?? null,
       reason: input.reason ?? null,
       position: input.position ?? 0,

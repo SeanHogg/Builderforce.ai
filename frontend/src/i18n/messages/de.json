@@ -26800,6 +26800,11 @@
       "linkFailed": "Die Stelle konnte nicht verknüpft werden. Versuchen Sie es erneut.",
       "boardJobsFailed": "Die Stellen der Jobbörse konnten nicht gelesen werden. Versuchen Sie es erneut.",
       "linkJobLabel": "Stelle in dieser Jobbörse",
+      "linkJobOption": "{title} ({state})",
+      "jobStatePublished": "Veröffentlicht",
+      "jobStateDraft": "Entwurf",
+      "jobStateArchived": "Archiviert",
+      "jobStateClosed": "Geschlossen",
       "importMore": "Weitere Bewerber stehen aus – starten Sie den Import erneut.",
       "importPartial": "{count, plural, one {# Bewerber konnte nicht importiert werden.} other {# Bewerber konnten nicht importiert werden.}}"
     },

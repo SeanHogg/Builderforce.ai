@@ -117,7 +117,7 @@ export async function runPullRequestSecurityReview(
   const scan = await ensurePrScan(env, db, actor, scope, 'REVIEW');
   const segmentId = scan.segmentId ?? scope.segmentId;
   const end = async (status: 'skipped' | 'failed', reason: string): Promise<PrReviewOutcome> => {
-    await endPrScan(db, scan.id, status, reason);
+    await endPrScan(db, scope.tenantId, scan.id, status, reason);
     return { scanId: scan.id, status, findings: 0, segmentId, truncated: false };
   };
 
@@ -133,7 +133,7 @@ export async function runPullRequestSecurityReview(
     // ...but an excluded EXECUTABLE (or a truncated change list) is not "nothing to review": it is unreviewed.
     const incomplete = collected.truncated || collected.excludedExecutables.length > 0;
     await endPrScan(
-      db, scan.id, 'completed',
+      db, scope.tenantId, scan.id, 'completed',
       incomplete ? `No reviewable source files; unreviewed: ${collected.excludedExecutables.slice(0, 5).join(', ') || 'part of the change list was truncated'}.` : 'No reviewable source files changed.',
       incomplete,
     );

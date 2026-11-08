@@ -25,21 +25,22 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectorConnections } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import type { ConnectorAction, ConnectorBoardJobMapping } from '../connectors/connectorManifest';
+import type { ConnectorAction, ConnectorBoardJobMapping, ConnectorManifest } from '../connectors/connectorManifest';
 import { listPublishedConnectors, resolveConnector } from '../connectors/connectorRegistry';
 import { firstOf } from '../connectors/connectorResponseMapping';
 import { AtsError } from './atsError';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
+import { BOARD_JOB_UNIQUE_INDEX } from './postingActionKeys';
 import {
   DEFAULT_DISTRIBUTE_DEPS,
   derivedUrl,
-  isUniqueViolation,
-  publicUrl,
+  pinnedPublicUrl,
   requirePosting,
   type DistributeDeps,
 } from './postingDistributionSupport';
+import { readPostedDistributions } from './postingDistributionSweepStore';
 import {
   findPostingLinkedToBoardJob,
-  readPostedDistributions,
   readPostingDistributions,
   recordPostingDistribution,
   type PostingDistributionView,
@@ -59,6 +60,7 @@ export interface BoardJob {
 
 interface LinkTarget {
   action: ConnectorAction & { boardJobs: ConnectorBoardJobMapping };
+  manifest: ConnectorManifest;
   connectionId: string;
 }
 
@@ -79,7 +81,7 @@ async function resolveTarget(db: Db, env: Env, tenantId: number, connectorKey: s
     .orderBy(asc(connectorConnections.createdAt))
     .limit(1);
   if (!connection) throw new AtsError('This job board is not connected to the workspace. Connect it under Integrations first.', 409);
-  return { action: action as LinkTarget['action'], connectionId: connection.id };
+  return { action: action as LinkTarget['action'], manifest: resolved.manifest, connectionId: connection.id };
 }
 
 /** Read the board's jobs through its declared mapping. Throws `AtsError` on a board failure. */
@@ -110,7 +112,8 @@ async function fetchBoardJobs(
       externalId: externalId.slice(0, 255),
       title: title.slice(0, 200),
       state: firstOf(view, mapping.state),
-      url: publicUrl(firstOf(view, mapping.url)),
+      // A link the board REPORTS must be on the board's own domain.
+      url: pinnedPublicUrl(firstOf(view, mapping.url), target.manifest),
     });
   }
   return jobs;
@@ -194,7 +197,7 @@ export async function linkBoardJob(
   } catch (error) {
     // The two checks above are a courtesy; THIS is the arbiter (1328's unique index on a
     // confirmed board job). A concurrent link of the same job to another posting lands here.
-    if (isUniqueViolation(error)) throw new AtsError('That board job is already linked to another posting', 409);
+    if (isUniqueViolation(error, BOARD_JOB_UNIQUE_INDEX)) throw new AtsError('That board job is already linked to another posting', 409);
     throw error;
   }
   const after = await readPostingDistributions(db, input.tenantId, input.postingId, env);

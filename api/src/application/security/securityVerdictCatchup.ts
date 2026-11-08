@@ -22,6 +22,7 @@ import { mergeOnGreen } from '../ci/mergeOnGreen';
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { createPassBudget, type PassBudget } from '../manager/passBudget';
+import { taskHasLiveRun } from '../runtime/liveExecutionStatus';
 import { cloudMergeOnGreenCi } from '../repos/mergeBranchToBase';
 import { pollPrCiHead } from '../repos/pollPrCiStatus';
 import { INLINE_STEP_MIN_REMAINING_MS, securityVerdictEnsuringScan } from './ensurePrSecurityVerdict';
@@ -65,6 +66,8 @@ export async function runSecurityVerdictCatchup(
     if (!budget.canAfford(INLINE_STEP_MIN_REMAINING_MS)) { result.stoppedForBudget = true; break; }
     if (pr.taskId == null) continue;
     try {
+      // A task with a live run is still being written: no scan or merge for it yet.
+      if (await taskHasLiveRun(db, pr.tenantId, pr.taskId)) continue;
       // Scans the latest head if (and only if) it has no complete verdict or only a stale `running` one.
       const verdict = await securityVerdictEnsuringScan(db, env, pr.tenantId, pr.id, { mode: 'inline' });
       result.considered += 1;

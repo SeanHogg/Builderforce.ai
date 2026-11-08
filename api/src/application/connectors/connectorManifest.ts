@@ -686,6 +686,7 @@ export function parseConnectorManifest(raw: unknown): ConnectorManifest {
   // `{connection.<field>}` in a URL template may name only these (declared secret:false).
   const publicFields = publicAuthFieldKeys(fields);
   const sourceAliases = validateSourceAliases(raw.sourceAliases, errors);
+  const linkHosts = validateLinkHosts(raw.linkHosts, errors);
 
   const rawActions = Array.isArray(raw.actions) ? raw.actions : [];
   if (rawActions.length === 0) errors.push('actions: at least one action is required');
@@ -736,43 +737,10 @@ export function parseConnectorManifest(raw: unknown): ConnectorManifest {
       : {}),
     actions,
     ...(sourceAliases.length ? { sourceAliases } : {}),
+    ...(linkHosts.length ? { linkHosts } : {}),
   };
 }
 
-/**
- * Source spellings that mean something on their own across the hiring pipeline. A board
- * may never claim one as an alias: an applicant who really came from a referral would be
- * credited to a job board. Compared after the same normalisation the resolver applies.
- */
-export const RESERVED_APPLICANT_SOURCES: readonly string[] = [
-  'direct', 'referral', 'careers', 'careers-site', 'career site', 'careers site', 'website', 'marketplace',
-  'agent', 'email', 'social', 'organic', 'manual', 'import', 'imported', 'unknown', 'other', 'sourced', 'inbound', 'outbound',
-];
-
-/** Normalise an alias exactly as the resolver does: trimmed, lower-cased, spacing collapsed. */
-const aliasToken = (alias: string): string => alias.trim().toLowerCase().replace(/[\s_]+/g, ' ');
-
-/**
- * Validate `sourceAliases`: at most 20 distinct, non-reserved, non-empty strings of at
- * most 100 characters. (A collision with ANOTHER board's key or alias is checked where the
- * catalog is known — see `sourceAliasConflicts` in `hiring/applicantSource.ts`.)
- */
-function validateSourceAliases(raw: unknown, errors: string[]): string[] {
-  if (raw === undefined || raw === null) return [];
-  if (!Array.isArray(raw)) { errors.push('sourceAliases: must be a list of strings'); return []; }
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const entry of raw.slice(0, 20)) {
-    const alias = String(entry).trim();
-    const token = aliasToken(alias);
-    if (!alias || alias.length > 100) { errors.push('sourceAliases: each alias must be 1–100 characters'); continue; }
-    if (RESERVED_APPLICANT_SOURCES.includes(token)) { errors.push(`sourceAliases: "${alias}" is a reserved source and cannot name a job board`); continue; }
-    if (seen.has(token)) continue;
-    seen.add(token);
-    out.push(alias);
-  }
-  return out;
-}
 
 /** Non-throwing variant for callers that render an error list (the builder form). */
 export function validateConnectorManifest(

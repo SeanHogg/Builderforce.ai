@@ -51,8 +51,10 @@ import {
   type JobPostingDraft,
 } from '../marketplace/jobPostings';
 import { AtsError } from './atsError';
-import { BUILTIN_BOARD_SOURCES, foldSourceCounts, type BoardSourceCatalog } from './applicantSource';
 import { readPostingDistributions, type PostingDistributionView } from './postingDistributionStore';
+import { attributeSources, readPostingSources, type PostingSource } from './postingSources';
+
+export type { PostingSource };
 
 /** How many postings one projection read returns. A workspace with more requisitions
  *  than this has a reporting question rather than a board question, and the seat's own
@@ -105,14 +107,6 @@ export interface CanvasPostingProjection {
   lastApplicationAt: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-/** One source-of-application line. `board` is present when the source IS a job board
- *  this posting was distributed to. */
-export interface PostingSource {
-  source: string;
-  count: number;
-  board?: string;
 }
 
 /** One row of the aggregate read, before it is shaped. */
@@ -200,92 +194,10 @@ async function readPostingCounts(
   return rows as unknown as PostingCountRow[];
 }
 
-/**
- * Source-of-application, per posting.
- *
- * A second grouped read rather than a nested aggregate inside the first: that one is
- * already a four-way `filter` and adding a second grouping level to it produces a
- * statement nobody can read six months later. Both are indexed reads over the same two
- * tables and they run in parallel at every call site.
- */
-async function readPostingSources(
-  db: Db,
-  tenantId: number,
-  postingId?: string,
-): Promise<Map<string, Array<{ source: string; count: number }>>> {
-  const rows = await db
-    .select({
-      postingId: jobApplications.jobPostingId,
-      source: jobApplications.source,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(jobApplications)
-    .where(scopedToTenant(
-      jobApplications,
-      tenantId,
-      postingId
-        ? eq(jobApplications.jobPostingId, postingId)
-        : sql`${jobApplications.jobPostingId} is not null`,
-    ))
-    .groupBy(jobApplications.jobPostingId, jobApplications.source)
-    .orderBy(desc(sql`count(*)`));
-
-  const byPosting = new Map<string, Array<{ source: string; count: number }>>();
-  for (const row of rows) {
-    if (!row.postingId) continue;
-    const list = byPosting.get(row.postingId) ?? [];
-    list.push({ source: row.source, count: Number(row.count ?? 0) });
-    byPosting.set(row.postingId, list);
-  }
-  return byPosting;
-}
-
-/**
- * Applicant volume, attributed to the boards a posting went out on.
- *
- * The join is the board's catalog key: an application recorded as coming from a board
- * carries that key in `job_applications.source` (the value `POST /api/ats/applications`
- * takes as `source`, and the posting's id travels to every board as `external_id` so
- * the board can name it back), and a distribution row is keyed on the same value. An EXACT match on a
- * controlled key, not a fuzzy one — a free-text source like "LinkedIn" is left as the
- * plain source it is rather than guessed onto `linkedin-jobs` — UNLESS the board's manifest
- * declares that spelling in `sourceAliases`, in which case `resolveApplicantSource` folds
- * it onto the key (case/whitespace/URL-host insensitive; an alias two boards claim matches
- * neither), because a misattributed applicant is a wrong answer to "which board is working".
- *
- * Exported so the attribution is asserted directly.
- */
-export function attributeSources(
-  rawSources: ReadonlyArray<{ source: string; count: number }>,
-  distributions: readonly PostingDistributionView[],
-  catalog: BoardSourceCatalog = [],
-): PostingSource[] {
-  // Distribution keys are always known boards, whatever the catalog holds — and a
-  // tenant-authored board brings the aliases its already-loaded manifest declared.
-  const known: BoardSourceCatalog = [
-    ...catalog,
-    ...distributions
-      .filter((row) => !catalog.some((b) => b.key === row.connectorKey))
-      .map((row) => ({ key: row.connectorKey, aliases: row.sourceAliases })),
-  ];
-  const sources = foldSourceCounts(rawSources, known);
-  const boards = new Map(distributions.map((row) => [row.connectorKey, row.board]));
-  const out: PostingSource[] = sources.map((entry) => {
-    const board = boards.get(entry.source);
-    return board ? { ...entry, board } : { ...entry };
-  });
-  const counted = new Set(sources.map((entry) => entry.source));
-  for (const row of distributions) {
-    if (!counted.has(row.connectorKey)) out.push({ source: row.connectorKey, count: 0, board: row.board });
-  }
-  return out;
-}
-
 function project(
   row: PostingCountRow,
   sources: Array<{ source: string; count: number }>,
   distributions: PostingDistributionView[],
-  catalog: BoardSourceCatalog,
 ): CanvasPostingProjection {
   return {
     postingId: row.postingId,
@@ -302,7 +214,7 @@ function project(
     activeApplicantCount: Number(row.activeApplicantCount ?? 0),
     unreviewedCount: Number(row.unreviewedCount ?? 0),
     rejectedCount: Number(row.rejectedCount ?? 0),
-    sources: attributeSources(sources, distributions, catalog),
+    sources: attributeSources(sources, distributions),
     distributions,
     lastApplicationAt: iso(row.lastApplicationAt),
     createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
@@ -328,11 +240,10 @@ export async function listCanvasPostings(
     readPostingSources(db, tenantId),
     readPostingDistributions(db, tenantId),
   ]);
-  const catalog = BUILTIN_BOARD_SOURCES;
   const wanted = typeof opts.status === 'string' && opts.status.trim() ? opts.status.trim() : null;
   return rows
     .filter((row) => !wanted || row.status === wanted)
-    .map((row) => project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? [], catalog));
+    .map((row) => project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? []));
 }
 
 /** One posting by id, tenant-scoped. `null` for an id this workspace does not own —
@@ -348,9 +259,8 @@ export async function readCanvasPosting(
     readPostingSources(db, tenantId, postingId),
     readPostingDistributions(db, tenantId, postingId),
   ]);
-  const catalog = BUILTIN_BOARD_SOURCES;
   const row = rows[0];
-  return row ? project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? [], catalog) : null;
+  return row ? project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? []) : null;
 }
 
 export interface SyncCanvasPostingInput {

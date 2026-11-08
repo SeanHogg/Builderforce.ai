@@ -13,6 +13,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { vulnerabilityScans } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { ActorIdentity } from '../activity/activityLog';
 import { recordGovernanceMutation } from '../governance/mutationAudit';
 
@@ -94,7 +95,7 @@ export async function ensurePrScan(
     // is never a moment with the old blockers gone and the new ones not yet written.
     await db.update(vulnerabilityScans)
       .set({ status: 'running', truncated: false, startedAt: now, finishedAt: null, notes: null, updatedAt: now })
-      .where(eq(vulnerabilityScans.id, existing.id));
+      .where(scopedToTenant(vulnerabilityScans, scope.tenantId, eq(vulnerabilityScans.id, existing.id)));
     return { id: existing.id, segmentId: existing.segmentId, reused: true };
   }
   throw new Error('unreachable: a scan row exists or was created above');
@@ -102,10 +103,10 @@ export async function ensurePrScan(
 
 /** Close a scan that produced no findings list: it was skipped or it failed, and says why. */
 export async function endPrScan(
-  db: Db, scanId: string, end: PrScanEnd | 'completed', reason: string | null, truncated = false,
+  db: Db, tenantId: number, scanId: string, end: PrScanEnd | 'completed', reason: string | null, truncated = false,
 ): Promise<void> {
   const now = new Date();
   await db.update(vulnerabilityScans)
     .set({ status: end, truncated, finishedAt: now, updatedAt: now, notes: reason ? reason.slice(0, 2_000) : null })
-    .where(eq(vulnerabilityScans.id, scanId));
+    .where(scopedToTenant(vulnerabilityScans, tenantId, eq(vulnerabilityScans.id, scanId)));
 }

@@ -41,7 +41,9 @@ export function CanvasJobDistribution({ data, onEdit }: {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  // Every message currently shown: one per failed board after an import, otherwise one.
+  const [errors, setErrors] = useState<string[]>([]);
+  const setError = (message: string) => setErrors(message ? [message] : []);
   const [linkBoards, setLinkBoards] = useState<LinkableBoard[]>([]);
   const { allowed: canManage } = usePermission('hiring.manage');
   const [importing, setImporting] = useState(false);
@@ -51,7 +53,7 @@ export function CanvasJobDistribution({ data, onEdit }: {
     if (!postingId) return undefined;
     let live = true;
     setLoading(true);
-    setError('');
+    setErrors([]);
     atsApi.postings.distributions(postingId)
       .then((read) => {
         if (!live) return;
@@ -59,7 +61,7 @@ export function CanvasJobDistribution({ data, onEdit }: {
         setBoards(read.boards);
         setLinkBoards(read.linkBoards ?? []);
       })
-      .catch((err: unknown) => { if (live) setError(faultText(err, t('readFailed'))); })
+      .catch((err: unknown) => { if (live) setErrors([faultText(err, t('readFailed'))]); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [postingId, t]);
@@ -106,8 +108,10 @@ export function CanvasJobDistribution({ data, onEdit }: {
     setImportNote('');
     try {
       const result = await atsApi.postings.importApplicants(postingId);
-      const failedBoard = result.boards.find((board) => board.error);
-      if (failedBoard) setError(t('importBoardFailed', { board: boardName(failedBoard.connectorKey), detail: failedBoard.error ?? '' }));
+      // EVERY board that failed is reported, not just the first.
+      setErrors(result.boards
+        .filter((board) => board.error)
+        .map((board) => t('importBoardFailed', { board: boardName(board.connectorKey), detail: board.error ?? '' })));
       const skipped = result.boards.reduce((sum, board) => sum + board.failedApplicants, 0);
       setImportNote([
         t('importDone', { count: result.imported }),
@@ -199,7 +203,9 @@ export function CanvasJobDistribution({ data, onEdit }: {
         </RoleGate>
       )}
       {importNote && <small role="status">{importNote}</small>}
-      {error && <p role="alert" className={styles.jobDistributionError}>{error}</p>}
+      {errors.map((message, index) => (
+        <p key={`${index}-${message}`} role="alert" className={styles.jobDistributionError}>{message}</p>
+      ))}
     </div>
   );
 }

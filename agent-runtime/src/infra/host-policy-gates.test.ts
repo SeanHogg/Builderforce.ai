@@ -62,7 +62,7 @@ describe("resolveHostPolicyGates", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]! as [string, { headers: Record<string, string> }];
-    expect(url).toBe("https://api.test/api/agent/governance/policy-gates");
+    expect(url).toBe("https://api.test/api/agent/governance/policy-gates?gates=2");
     expect(init.headers.Authorization).toBe("Bearer bfk_secret");
     expect(init.headers["X-AgentHost-Id"]).toBe("7");
   });

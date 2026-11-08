@@ -26800,6 +26800,11 @@
       "linkFailed": "The job could not be linked. Try again.",
       "boardJobsFailed": "The board's jobs could not be read. Try again.",
       "linkJobLabel": "Job on that board",
+      "linkJobOption": "{title} ({state})",
+      "jobStatePublished": "Published",
+      "jobStateDraft": "Draft",
+      "jobStateArchived": "Archived",
+      "jobStateClosed": "Closed",
       "importMore": "More applicants are pending — run it again.",
       "importPartial": "{count, plural, one {# applicant could not be imported.} other {# applicants could not be imported.}}"
     },

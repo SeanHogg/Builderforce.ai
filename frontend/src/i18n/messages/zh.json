@@ -26800,6 +26800,11 @@
       "linkFailed": "无法关联该职位，请重试。",
       "boardJobsFailed": "无法读取该平台的职位，请重试。",
       "linkJobLabel": "该平台上的职位",
+      "linkJobOption": "{title}（{state}）",
+      "jobStatePublished": "已发布",
+      "jobStateDraft": "草稿",
+      "jobStateArchived": "已归档",
+      "jobStateClosed": "已关闭",
       "importMore": "还有更多申请人待导入，请再次运行。",
       "importPartial": "{count, plural, other {有 # 位申请人未能导入。}}"
     },

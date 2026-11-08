@@ -251,6 +251,10 @@ export interface ApplicantImportResult {
     imported: number;
     /** Applicants whose own write failed; the rest of the board still imported. */
     failedApplicants: number;
+    /** Items dropped because they named a different job than this posting's. */
+    mismatched: number;
+    /** Items skipped because they have failed three times. */
+    quarantined: number;
     unsupported: boolean;
     more: boolean;
     error: string | null;

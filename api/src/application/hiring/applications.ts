@@ -30,9 +30,11 @@ import { candidateResumes, jobApplications } from '../../infrastructure/database
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { enterPipeline, moveCandidate, type PipelineEntryRef } from './pipeline';
 import { AtsError } from './atsError';
-import { resolveApplicantSource, type BoardSourceCatalog } from './applicantSource';
+import { isReservedApplicantSource } from '../connectors/connectorApplicantManifest';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
+import { BUILTIN_BOARD_SOURCES, resolveApplicantSource, type BoardSourceCatalog } from './applicantSource';
+import { CANDIDATE_APPLICATION_UNIQUE_INDEX } from './postingActionKeys';
 import { readPostingBoardCatalog } from './postingDistributionStore';
-import { isUniqueViolation } from './postingDistributionSupport';
 import { ENTRY_STAGE, REJECTED_STAGE, pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
 import type { Env } from '../../env';
 import { excluded } from '../../infrastructure/database/upsert';
@@ -175,8 +177,12 @@ export async function recordApplication(
   // The stored source IS the board key when the caller's spelling names a board, so the
   // per-board count stays an indexed exact match. See `applicantSource.ts`.
   // The posting's own boards carry their manifests' aliases (tenant-authored included).
-  const boards = input.boards ?? await readPostingBoardCatalog(db, input.tenantId, jobPostingId, env);
-  const source = resolveApplicantSource((input.source ?? 'direct').trim() || 'direct', boards).slice(0, 48);
+  // A reserved source ("direct", "marketplace", "referral"…) can never be a board's
+  // spelling, so it needs no catalog — and is the common case, so no extra read per apply.
+  const requested = (input.source ?? 'direct').trim() || 'direct';
+  const boards = input.boards
+    ?? (isReservedApplicantSource(requested) ? BUILTIN_BOARD_SOURCES : await readPostingBoardCatalog(db, input.tenantId, jobPostingId, env));
+  const source = resolveApplicantSource(requested, boards).slice(0, 48);
   const values = {
     tenantId: input.tenantId,
     jobPostingId,
@@ -213,7 +219,8 @@ export async function recordApplication(
         })
         .returning(returning);
     } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
+      // Only the PERSON collision is handled below; any other unique violation is real.
+      if (!isUniqueViolation(error, CANDIDATE_APPLICATION_UNIQUE_INDEX)) throw error;
     }
   }
   if (!row) {

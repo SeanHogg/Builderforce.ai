@@ -23,23 +23,26 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveConnector } from '../connectors/connectorRegistry';
 import { templateConnectionFields } from '../connectors/connectorMappingValidators';
-import { extractResolvedUrl } from '../connectors/connectorUrlResolution';
+import { encodeResolveId, extractResolvedUrl } from '../connectors/connectorUrlResolution';
 import { HIRING_CONNECTORS } from '../connectors/defaults/hiring';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { BOARD_JOB_UNIQUE_INDEX } from './postingActionKeys';
 import {
   DEFAULT_DISTRIBUTE_DEPS,
   connectionBackedInput,
-  isUniqueViolation,
   missingConnectionParams,
+  pinnedPublicUrl,
   publicUrl,
   type DistributeDeps,
 } from './postingDistributionSupport';
 import {
   listPostedDistributionsForSweep,
+  markResolveConflict,
   recordResolvedLink,
   touchPostedDistribution,
   type PostedDistribution,
-} from './postingDistributionStore';
+} from './postingDistributionSweepStore';
 
 export const RESOLVE_URL_ACTION = 'resolve_url';
 /** Rows one sweep tries to link. Each is at most one upstream call. */
@@ -78,7 +81,7 @@ export async function resolveDistributionUrl(
       : {};
     const input: Record<string, unknown> = { ...connectionBackedInput(action, auth) };
     if (missingConnectionParams(action, input).length) return 'unresolved';
-    if (resolve.idParam) input[resolve.idParam] = row.externalId;
+    if (resolve.idParam) input[resolve.idParam] = encodeResolveId(resolve, row.externalId);
 
     const result = await deps.execute({
       db, env,
@@ -94,7 +97,11 @@ export async function resolveDistributionUrl(
     const connection: Record<string, string> = {};
     for (const field of templateConnectionFields(resolve.urlTemplate)) connection[field] = auth[field] ?? '';
 
-    const found = extractResolvedUrl(resolve, result.data, row.externalId, connection);
+    // A link the board REPORTS must be on its own domain; one the manifest BUILDS is authored.
+    const found = extractResolvedUrl(
+      resolve, result.data, row.externalId, connection,
+      (reported) => pinnedPublicUrl(reported, resolved!.manifest),
+    );
     const url = publicUrl(found.url);
     // No valid URL ⇒ nothing is written, not even a resolved id (see the header).
     if (!url) return 'unresolved';
@@ -102,8 +109,16 @@ export async function resolveDistributionUrl(
     return 'linked';
   } catch (error) {
     // A resolved id another posting already holds (1328's unique index) is the board
-    // telling us this is not ours to link; anything else is reported.
-    if (!isUniqueViolation(error)) {
+    // telling us this is not ours to link: say so on the row and back it off, rather than
+    // retrying the same collision every sweep. Anything else is reported.
+    if (isUniqueViolation(error, BOARD_JOB_UNIQUE_INDEX)) {
+      await markResolveConflict(db, row, 'The board job this resolved to is already linked to another posting here, so its link was not recorded.')
+        .catch((markError: unknown) => reportCaughtError(markError, {
+          source: 'application/hiring/resolveBoardUrls.ts',
+          operation: 'markResolveConflict',
+          level: 'warning',
+        }));
+    } else {
       reportCaughtError(error, {
         source: 'application/hiring/resolveBoardUrls.ts',
         operation: 'resolveDistributionUrl',

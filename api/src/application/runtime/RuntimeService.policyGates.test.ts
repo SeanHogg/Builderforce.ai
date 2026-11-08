@@ -172,7 +172,7 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(getPayload()).toBe(payload);
   });
 
-  it('merges gates a deploy()-compiled spec or an inheriting child carried AFTER the tenant's, never replacing them', async () => {
+  it("merges gates a deploy()-compiled spec or an inheriting child carried AFTER the tenant's, never replacing them", async () => {
     const { svc, getPayload } = makeService(async () => [{ id: 'ambient', effect: 'block' }]);
     const payload = JSON.stringify({ policyGates: [{ id: 'from-spec', effect: 'require-approval' }] });
 
@@ -181,7 +181,7 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['ambient', 'from-spec']);
   });
 
-  it('keeps the tenant gate when a supplied gate reuses its id (a child inheriting its parent's gates adds nothing twice)', async () => {
+  it("keeps the tenant gate when a supplied gate reuses its id (a child inheriting its parent's gates adds nothing twice)", async () => {
     const tenant: PolicyGate = { id: '1:no-shell', tool: 'run_command', effect: 'block', reason: 'tenant' };
     const { svc, getPayload } = makeService(async () => [tenant]);
     const inherited = JSON.stringify({ policyGates: [{ id: '1:no-shell', effect: 'inject-directive', directive: 'weaker' }, { id: 'extra', effect: 'block' }] });
@@ -191,7 +191,7 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([tenant, { id: 'extra', effect: 'block' }]);
   });
 
-  it('a route body that carries policyGates is stripped by the route schema, so only the tenant's block gate reaches the run', async () => {
+  it("a route body that carries policyGates is stripped by the route schema, so only the tenant's block gate reaches the run", async () => {
     const tenant: PolicyGate = { id: '1:no-shell', tool: 'run_command', effect: 'block', reason: 'tenant' };
     const { svc, getPayload } = makeService(async () => [tenant]);
     // What `SubmitRunBody` / `BroadcastBody` hand `submit`: the forged gate is gone before it can ride under a tenant id.

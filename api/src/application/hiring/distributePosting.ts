@@ -39,15 +39,15 @@ import type { ConnectorAction, ConnectorManifest } from '../connectors/connector
 import { listPublishedConnectors } from '../connectors/connectorRegistry';
 import { firstOf, mapConnectorResponse, responseHeaderNames } from '../connectors/connectorResponseMapping';
 import { loadConnection } from '../connectors/connectorRuntime';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { AtsError } from './atsError';
-import { PUBLISH_POSTING_ACTION } from './postingActionKeys';
+import { BOARD_JOB_UNIQUE_INDEX, PUBLISH_POSTING_ACTION } from './postingActionKeys';
 import {
   DEFAULT_DISTRIBUTE_DEPS,
   connectionBackedInput,
   derivedUrl,
-  isUniqueViolation,
   missingConnectionParams,
-  publicUrl,
+  pinnedPublicUrl,
   requirePosting,
   type DistributablePosting,
   type DistributeDeps,
@@ -140,7 +140,7 @@ async function resolveBoards(
   db: Db,
   env: Env,
   tenantId: number,
-): Promise<Array<{ board: DistributionBoard; action: ConnectorAction }>> {
+): Promise<Array<{ board: DistributionBoard; action: ConnectorAction; manifest: ConnectorManifest }>> {
   const catalog = await listPublishedConnectors(db, tenantId, env);
   const boards = catalog.flatMap((entry) => {
     const action = distributableAction(entry.manifest);
@@ -163,6 +163,7 @@ async function resolveBoards(
     const connection = firstConnection.get(manifest.key);
     return connection ? [{
       action,
+      manifest,
       board: {
         connectorKey: manifest.key,
         name: manifest.name,
@@ -286,7 +287,7 @@ export async function distributePosting(
     }
 
     const verdict = await publishToBoard(db, env, deps, {
-      tenantId: input.tenantId, connectorKey, connectionId: target.board.connectionId, action: target.action, body,
+      tenantId: input.tenantId, connectorKey, connectionId: target.board.connectionId, action: target.action, manifest: target.manifest, body,
     });
     const write = {
       tenantId: input.tenantId,
@@ -303,7 +304,7 @@ export async function distributePosting(
         lastError: verdict.error,
       });
     } catch (error) {
-      if (!isUniqueViolation(error) || !verdict.externalId) throw error;
+      if (!isUniqueViolation(error, BOARD_JOB_UNIQUE_INDEX) || !verdict.externalId) throw error;
       // The board answered with an id another posting already holds (1328: one board job
       // belongs to one posting). Not recorded as a publication of THIS posting.
       verdict.externalId = null;
@@ -332,7 +333,7 @@ async function publishToBoard(
   db: Db,
   env: Env,
   deps: DistributeDeps,
-  args: { tenantId: number; connectorKey: string; connectionId: string; action: ConnectorAction; body: Record<string, unknown> },
+  args: { tenantId: number; connectorKey: string; connectionId: string; action: ConnectorAction; manifest: ConnectorManifest; body: Record<string, unknown> },
 ): Promise<{ externalId: string | null; url: string | null; error: string | null }> {
   const body = { ...args.body };
   const needsConnection = missingConnectionParams(args.action, body);
@@ -397,7 +398,7 @@ async function publishToBoard(
   const externalId = mapped.externalId.slice(0, 255);
   // A url the board reported wins; otherwise the manifest's template builds one.
   const postId = firstOf(result, args.action.response?.postId);
-  const url = publicUrl(mapped.url) ?? await derivedUrl(db, env, deps, args, externalId, postId);
+  const url = pinnedPublicUrl(mapped.url, args.manifest) ?? await derivedUrl(db, env, deps, args, externalId, postId);
   return { externalId, url, error: null };
 }
 

@@ -33,7 +33,7 @@ export const MAX_RESPONSE_SELECTORS = 6;
 /** The SELECTOR fields a {@link ConnectorResponseMapping} may declare — the closed list. */
 export const CONNECTOR_RESPONSE_FIELDS = ['externalId', 'url', 'error', 'postId'] as const;
 /** The selector fields of a {@link ConnectorApplicantMapping}. */
-export const CONNECTOR_APPLICANT_FIELDS = ['externalId', 'candidateId', 'name', 'firstName', 'lastName', 'email', 'appliedAt'] as const;
+export const CONNECTOR_APPLICANT_FIELDS = ['externalId', 'postingIdField', 'candidateId', 'name', 'firstName', 'lastName', 'email', 'appliedAt'] as const;
 /** The selector fields of a {@link ConnectorBoardJobMapping}. */
 export const CONNECTOR_BOARD_JOB_FIELDS = ['externalId', 'title', 'state', 'url'] as const;
 
@@ -117,17 +117,24 @@ export function validateUrlTemplate(
 }
 
 /**
- * A regex source a manifest declares. It is ALWAYS applied anchored (`^(?:…)$`) to an
- * input of at most {@link MAX_PATTERN_INPUT} characters, is capped at
- * {@link MAX_PATTERN_LENGTH}, and may not nest a quantifier inside a quantified group —
- * the three things that keep a tenant-authored pattern from being a ReDoS.
+ * THE pattern grammar. A manifest's id pattern is not a general regular expression — a
+ * "valid, short, no nested quantifier" check is a deny-list, and a deny-list is how
+ * `(a|aa)+` and `(a{1,9}){1,9}` get through. It is exactly:
+ *
+ *     <literal prefix> ( <class> | <class captured> ) <literal suffix>
+ *
+ * where the literal text is `[A-Za-z0-9:_./-]` only, and `<class>` is `\d+` or
+ * `[A-Za-z0-9_-]+` — ONE unbounded run of one character class, which cannot backtrack
+ * catastrophically. Anything else is rejected at manifest validation, so no tenant
+ * pattern reaches a `RegExp` that was not built from this grammar. It is still applied
+ * anchored (`^(?:…)$`) to an input of at most {@link MAX_PATTERN_INPUT} characters.
  */
+const PATTERN_GRAMMAR = /^[A-Za-z0-9:_./-]*(?:\((?:\\d\+|\[A-Za-z0-9_-\]\+)\)|\\d\+|\[A-Za-z0-9_-\]\+)[A-Za-z0-9:_./-]*$/;
+
 export function validatePattern(value: unknown, label: string, errors: string[]): string | null {
   const source = typeof value === 'string' ? value : '';
-  let ok = source.length > 0 && source.length <= MAX_PATTERN_LENGTH && !/\([^)]*[+*][^)]*\)[+*{]/.test(source);
-  if (ok) { try { new RegExp(`^(?:${source})$`); } catch { ok = false; } }
-  if (!ok) {
-    errors.push(`${label}: must be a valid regular expression of at most ${MAX_PATTERN_LENGTH} characters with no nested quantifiers`);
+  if (source.length === 0 || source.length > MAX_PATTERN_LENGTH || !PATTERN_GRAMMAR.test(source)) {
+    errors.push(`${label}: must be an optional literal prefix, one run of \\d+ or [A-Za-z0-9_-]+ (optionally in parentheses to capture it), and an optional literal suffix — at most ${MAX_PATTERN_LENGTH} characters`);
     return null;
   }
   return source;
@@ -178,6 +185,10 @@ export function validateUrlResolution(
   if (raw.idParam !== undefined) {
     if (typeof raw.idParam !== 'string' || !params[raw.idParam]) errors.push(`${where}.resolve.idParam: must be a declared param`);
     else out.idParam = raw.idParam;
+  }
+  if (raw.idEncoding !== undefined) {
+    if (raw.idEncoding !== 'restli-list') errors.push(`${where}.resolve.idEncoding: must be "restli-list"`);
+    else out.idEncoding = 'restli-list';
   }
   if (raw.equals !== undefined) {
     if (typeof raw.equals !== 'string' || raw.equals.length > 200) errors.push(`${where}.resolve.equals: must be a string of at most 200 characters`);
@@ -236,11 +247,26 @@ export function validateApplicantMapping(
       out.page = { param: pageParam, ...(sizeParam ? { sizeParam } : {}), ...(typeof raw.page.size === 'number' ? { size: raw.page.size } : {}) };
     }
   }
+  if (raw.limit !== undefined) {
+    const limit = raw.limit;
+    if (!isPlainObject(limit) || typeof limit.param !== 'string' || !params[limit.param]
+      || typeof limit.size !== 'number' || !Number.isInteger(limit.size) || limit.size < 1 || limit.size > 1000) {
+      errors.push(`${where}.applicants.limit: must be { param: <declared param>, size: 1–1000 }`);
+    } else {
+      out.limit = { param: limit.param, size: limit.size };
+    }
+  }
+  if (raw.order !== undefined) {
+    if (raw.order !== 'asc' && raw.order !== 'desc') errors.push(`${where}.applicants.order: must be "asc" or "desc"`);
+    else out.order = raw.order;
+  }
   if (raw.cursorParam !== undefined) {
     const from = raw.cursorFrom;
     const format = raw.cursorFormat ?? 'iso';
     if (typeof raw.cursorParam !== 'string' || !params[raw.cursorParam]) {
       errors.push(`${where}.applicants.cursorParam: must be a declared param`);
+    } else if (raw.order !== 'asc' && raw.order !== 'desc') {
+      errors.push(`${where}.applicants: a cursor needs "order" ("asc" or "desc") — it decides what a capped run has proven`);
     } else if ((from !== 'appliedAt' && from !== 'id') || (format !== 'iso' && format !== 'epochMs')) {
       errors.push(`${where}.applicants: cursorFrom must be "appliedAt" or "id", and cursorFormat "iso" or "epochMs"`);
     } else if (from === 'appliedAt' && !out.appliedAt) {

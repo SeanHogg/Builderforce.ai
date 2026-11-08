@@ -22,6 +22,16 @@ const MAX_ENTRIES = 5000;
 
 const NOTHING: ResolvedUrl = { url: null, resolvedId: null };
 
+/**
+ * The stored id as the `resolve_url` call must carry it in `idParam`: Rest.li 2.0 batch
+ * keys are `List(<url-encoded id>)` (LinkedIn's task URN contains `:`), everything else
+ * goes as is. The caller's own query encoding then applies on top, which is correct —
+ * the server decodes the transport once and Rest.li decodes the element once more.
+ */
+export function encodeResolveId(resolve: ConnectorUrlResolution, externalId: string): string {
+  return resolve.idEncoding === 'restli-list' ? `List(${encodeURIComponent(externalId)})` : externalId;
+}
+
 const scalar = (value: unknown): string | null => {
   if (typeof value === 'string') return value.trim() || null;
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -42,6 +52,8 @@ export function extractResolvedUrl(
   data: unknown,
   externalId: string,
   connection: Readonly<Record<string, string>> = {},
+  /** Filters a link the board REPORTS (not one the manifest builds): null rejects it. */
+  pinReported: (url: string) => string | null = (url) => url,
 ): ResolvedUrl {
   const wanted = resolve.equals?.split('{externalId}').join(externalId);
   const entries = entriesOf(data, resolve.listPath);
@@ -63,7 +75,8 @@ export function extractResolvedUrl(
   // the stale reference.
   if (resolve.resolvedId && !resolvedId) return NOTHING;
 
-  const own = firstOf(view, resolve.url);
+  const reported = firstOf(view, resolve.url);
+  const own = reported === null ? null : pinReported(reported);
   const url = own ?? renderUrlTemplate(resolve.urlTemplate, { externalId: resolvedId ?? externalId, connection });
   return { url, resolvedId };
 }

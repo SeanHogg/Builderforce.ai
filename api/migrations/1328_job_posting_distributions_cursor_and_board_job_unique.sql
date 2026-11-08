@@ -27,6 +27,27 @@
 ALTER TABLE job_posting_distributions
   ADD COLUMN IF NOT EXISTS import_cursor varchar(64);
 
+-- The rest of the import's memory. A board listed NEWEST FIRST cannot move its cursor
+-- until a walk reaches the old cursor, so a walk that stops at a cap must say where to
+-- resume (import_resume_page) and the newest person it has seen so far
+-- (import_pending_cursor, which becomes the cursor when the walk ends). import_failures
+-- counts, per board application id, how often the person's own write has failed, so one
+-- bad record is quarantined after three tries instead of pinning the cursor forever.
+ALTER TABLE job_posting_distributions
+  ADD COLUMN IF NOT EXISTS import_resume_page integer,
+  ADD COLUMN IF NOT EXISTS import_pending_cursor varchar(64),
+  ADD COLUMN IF NOT EXISTS import_failures jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- The sweep's rotation key. It is NOT updated_at: that is what a person sees as "last
+-- changed", and a pass that rewrote it on every visit would make every publication look
+-- freshly edited. Only the scheduled work reads or writes this one.
+ALTER TABLE job_posting_distributions
+  ADD COLUMN IF NOT EXISTS import_checked_at timestamp;
+
+CREATE INDEX IF NOT EXISTS idx_job_posting_distributions_sweep
+  ON job_posting_distributions (import_checked_at)
+  WHERE status = 'posted';
+
 WITH ranked AS (
   SELECT id,
          row_number() OVER (
@@ -46,9 +67,10 @@ UPDATE job_posting_distributions d
   FROM ranked r
  WHERE d.id = r.id AND r.rn > 1;
 
--- A plain CREATE INDEX: the runner applies each file in one transaction, where
--- CONCURRENTLY is not allowed (api/scripts/migrate.mjs). The table holds one row per
--- (posting, board), so the build is momentary.
+-- A plain CREATE UNIQUE INDEX: the runner applies each file in one transaction, where
+-- CONCURRENTLY is not allowed (api/scripts/migrate.mjs), so this takes a SHARE lock —
+-- writes to the table wait for the heap scan. The table holds one row per (posting,
+-- board), a small fraction of job_applications, so the pause is momentary.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_job_posting_distributions_board_job
   ON job_posting_distributions (tenant_id, connector_key, external_id)
   WHERE status = 'posted';

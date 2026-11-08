@@ -16,7 +16,8 @@
  * read from opposite ends. See migration 0460.
  */
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { ALIAS_ROLE, linkedCandidateRefs } from './boardCandidate';
 import type { Db } from '../../infrastructure/database/connection';
 import { candidateDemographics } from '../../infrastructure/database/schema/hiring';
 import { partyRoles } from '../../infrastructure/database/schema/kernel';
@@ -83,6 +84,10 @@ export async function eraseCandidateRecord(
   candidateRef: string,
 ): Promise<{ ok: true; erasedAt: string } | { ok: false; reason: 'no-candidate' }> {
   const now = new Date();
+  // ONE PERSON, SEVERAL REFS: a board applicant can be known under an email ref, a board
+  // person-id ref and an application ref (see `boardCandidate.ts`). Erasure marks the role
+  // AND every alias that names it, or the person comes back under the ref that was missed.
+  const refs = await linkedCandidateRefs(db, tenantId, candidateRef);
   const updated = await db.update(partyRoles).set({
     erasedAt: now,
     status: 'erased',
@@ -90,17 +95,17 @@ export async function eraseCandidateRecord(
     updatedAt: now,
   }).where(and(
     eq(partyRoles.tenantId, tenantId),
-    eq(partyRoles.partyRef, candidateRef),
-    eq(partyRoles.role, 'candidate'),
-  )).returning({ id: partyRoles.id });
+    inArray(partyRoles.partyRef, refs),
+    inArray(partyRoles.role, ['candidate', ALIAS_ROLE]),
+  )).returning({ id: partyRoles.id, role: partyRoles.role });
 
-  if (!updated.length) return { ok: false, reason: 'no-candidate' };
+  if (!updated.some((row) => row.role === 'candidate')) return { ok: false, reason: 'no-candidate' };
 
   // The segregated table is DELETED rather than marked: it exists only to be reported in
   // aggregate, so there is nothing a retained row could legitimately be used for.
   await db.delete(candidateDemographics).where(and(
     eq(candidateDemographics.tenantId, tenantId),
-    eq(candidateDemographics.candidateRef, candidateRef),
+    inArray(candidateDemographics.candidateRef, refs),
   ));
 
   return { ok: true, erasedAt: now.toISOString() };

@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
-  onGreen: vi.fn(() => true), ensure: vi.fn(), ci: vi.fn(), merge: vi.fn(async () => true), rows: [] as Array<Record<string, unknown>>,
+  live: vi.fn(async (..._a: unknown[]) => false), onGreen: vi.fn(() => true), ensure: vi.fn(), ci: vi.fn(), merge: vi.fn(async () => true), rows: [] as Array<Record<string, unknown>>,
 }));
 vi.mock('../repos/mergeBranchToBase', () => ({ cloudMergeOnGreenCi: h.onGreen }));
 vi.mock('./ensurePrSecurityVerdict', () => ({ securityVerdictEnsuringScan: h.ensure, INLINE_STEP_MIN_REMAINING_MS: 30_000 }));
 vi.mock('../repos/pollPrCiStatus', () => ({ pollPrCiHead: h.ci }));
 vi.mock('../ci/mergeOnGreen', () => ({ mergeOnGreen: h.merge }));
+vi.mock('../runtime/liveExecutionStatus', () => ({ taskHasLiveRun: h.live }));
 vi.mock('../integrations/integrationCredentialSecret', () => ({ integrationCredentialSecret: () => 'secret' }));
 vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: vi.fn() }));
 
@@ -18,7 +19,7 @@ const db = { select: () => ({ from: () => ({ where: () => ({ orderBy: () => ({ l
 const budget = { canAfford: () => true };
 
 beforeEach(() => {
-  h.onGreen.mockReturnValue(true); h.ensure.mockReset(); h.ci.mockReset(); h.merge.mockClear(); h.rows = [pr(1)];
+  h.live.mockResolvedValue(false); h.onGreen.mockReturnValue(true); h.ensure.mockReset(); h.ci.mockReset(); h.merge.mockClear(); h.rows = [pr(1)];
 });
 
 describe('security-verdict-catchup', () => {
@@ -36,6 +37,14 @@ describe('security-verdict-catchup', () => {
     expect(h.merge).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'secret',
       expect.objectContaining({ taskId: 1, eventSha: SHA, branch: 'builderforce/task-1' }), 'check');
     expect(out).toMatchObject({ considered: 1, merged: 1 });
+  });
+
+  it('regression: Minor 6 - a PR whose task still has a live run is neither scanned nor merged', async () => {
+    h.live.mockResolvedValue(true);
+    const out = await runSecurityVerdictCatchup({} as never, db, budget);
+    expect(h.ensure).not.toHaveBeenCalled();
+    expect(h.merge).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ considered: 0, merged: 0 });
   });
 
   it('does not merge when the verdict still blocks', async () => {

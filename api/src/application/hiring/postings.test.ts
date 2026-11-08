@@ -21,9 +21,9 @@ vi.mock('../marketplace/jobPostings', () => ({
 }));
 
 import { upsertJobPosting } from '../marketplace/jobPostings';
-import { attributeSources, listCanvasPostings, readCanvasPosting, syncCanvasPosting } from './postings';
+import { listCanvasPostings, readCanvasPosting, syncCanvasPosting } from './postings';
+import { attributeSources } from './postingSources';
 import type { PostingDistributionView } from './postingDistributionStore';
-import { BUILTIN_BOARD_SOURCES } from './applicantSource';
 
 const upserted = vi.mocked(upsertJobPosting);
 const ENV = {} as Env;
@@ -196,7 +196,6 @@ describe('attributing applicants to the boards a posting went out on (FO-B4)', (
     const sources = attributeSources(
       [{ source: 'LinkedIn', count: 5 }, { source: 'linkedin-jobs', count: 2 }, { source: 'https://www.linkedin.com/jobs/1', count: 1 }],
       [row('linkedin-jobs', 'LinkedIn Jobs')],
-      BUILTIN_BOARD_SOURCES,
     );
     expect(sources).toEqual([{ source: 'linkedin-jobs', count: 8, board: 'LinkedIn Jobs' }]);
   });
@@ -207,9 +206,10 @@ describe('attributing applicants to the boards a posting went out on (FO-B4)', (
     expect(sources).toEqual([{ source: 'acme-careers', count: 3, board: 'Acme Careers' }]);
   });
 
-  it('never guesses a free-text source onto a board', () => {
-    const sources = attributeSources([{ source: 'LinkedIn', count: 5 }], [row('linkedin-jobs', 'LinkedIn Jobs')]);
-    expect(sources[0]).toEqual({ source: 'LinkedIn', count: 5 });
+  it('never guesses a free-text source onto a board no manifest declares it for', () => {
+    // "Glassdoor" is nobody's alias; "LinkedIn" is (so it folds — see above).
+    const sources = attributeSources([{ source: 'Glassdoor', count: 5 }], [row('linkedin-jobs', 'LinkedIn Jobs')]);
+    expect(sources[0]).toEqual({ source: 'Glassdoor', count: 5 });
     expect(sources[1]).toEqual({ source: 'linkedin-jobs', count: 0, board: 'LinkedIn Jobs' });
   });
 

@@ -805,12 +805,23 @@ export const jobPostingDistributions = pgTable('job_posting_distributions', {
   /** Where the applicant import last read the board up to (migration 1328): an ISO
    *  instant or a numeric id, per the manifest's `applicants.cursorFrom`. Null = never. */
   importCursor: varchar('import_cursor', { length: 64 }),
+  /** A newest-first walk that stopped at a cap resumes from this page (1328). */
+  importResumePage: integer('import_resume_page'),
+  /** The newest applicant seen so far in that unfinished walk — becomes the cursor when it ends. */
+  importPendingCursor: varchar('import_pending_cursor', { length: 64 }),
+  /** Board application id → times its own write failed; at 3 it is quarantined (1328). */
+  importFailures: jsonb('import_failures').notNull().default({}),
+  /** When the scheduled work last looked at this row — the sweep's rotation key, never
+   *  shown to a person (`updated_at` is) (1328). */
+  importCheckedAt: timestamp('import_checked_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_job_posting_distributions_board').on(t.tenantId, t.jobPostingId, t.connectorKey),
   // One board job belongs to one posting (1328) — the arbiter behind linkBoardJob's 409.
   uniqueIndex('uq_job_posting_distributions_board_job').on(t.tenantId, t.connectorKey, t.externalId).where(sql`${t.status} = 'posted'`),
+  // The sweep's worklist: confirmed rows, least recently checked first (1328).
+  index('idx_job_posting_distributions_sweep').on(t.importCheckedAt).where(sql`${t.status} = 'posted'`),
 ]);
 
 /** How long a cohort of hires took to reach productivity. A measured number with

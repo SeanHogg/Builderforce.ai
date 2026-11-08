@@ -243,7 +243,7 @@ type Row = typeof tasksTable.$inferSelect;
 function toDomain(row: Row): Task {
   return Task.reconstitute({
     id:                asTaskId(row.id),
-    tenantId:          row.tenantId,
+    tenantId:          row.tenantId ?? undefined,
     projectId:         asProjectId(row.projectId),
     key:               row.key,
     title:             row.title,

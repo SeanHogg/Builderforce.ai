@@ -97,15 +97,39 @@ describe('the placeholder rule applies to TENANT manifests through the manifest 
   });
 });
 
-describe('patterns are anchored, bounded and free of nested quantifiers', () => {
-  it('validatePattern rejects an over-long, uncompilable or nested-quantifier source', () => {
+describe('patterns are a closed grammar: literal prefix, ONE class run (optionally captured), literal suffix', () => {
+  it('accepts exactly that shape', () => {
     const errors: string[] = [];
-    expect(validatePattern('\\d+', 'p', errors)).toBe('\\d+');
-    expect(validatePattern('x'.repeat(101), 'p', errors)).toBeNull();
-    expect(validatePattern('(', 'p', errors)).toBeNull();
-    expect(validatePattern('(a+)+', 'p', errors)).toBeNull();
-    expect(validatePattern('(\\d*)*', 'p', errors)).toBeNull();
-    expect(errors).toHaveLength(4);
+    for (const ok of ['\\d+', '[A-Za-z0-9_-]+', 'urn:li:jobPosting:(\\d+)', 'job-([A-Za-z0-9_-]+)-x', 'https://x.test/(\\d+)/v']) {
+      expect(validatePattern(ok, 'p', errors), ok).toBe(ok);
+    }
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects everything else — including the shapes a "no nested quantifier" check misses', () => {
+    const errors: string[] = [];
+    for (const bad of [
+      '(a|aa)+', '.*.*.*x', '(a{1,9}){1,9}', '(a+)+', '(\\d*)*', '\\d+\\d+', '(\\d+)(\\d+)', '.+', '\\d{1,99}', '[^x]+',
+      'x'.repeat(101), '(', '', 'a|b',
+    ]) {
+      expect(validatePattern(bad, 'p', errors), bad).toBeNull();
+    }
+    expect(errors).toHaveLength(14);
+  });
+
+  it('the manifest gate refuses them in a tenant manifest, in every place a pattern is accepted', () => {
+    const base = HIRING_CONNECTORS.find((m) => m.key === 'linkedin-jobs')!;
+    const withPatterns = (externalIdPattern: string, resolvedIdPattern: string) => ({
+      ...base,
+      actions: base.actions.map((a) => {
+        if (a.key === 'create_posting') return { ...a, response: { ...a.response, externalIdPattern } };
+        if (a.key === 'resolve_url') return { ...a, resolve: { ...a.resolve, resolvedIdPattern } };
+        return a;
+      }),
+    });
+    expect(() => parseConnectorManifest(withPatterns('\\d+', 'urn:li:jobPosting:(\\d+)'))).not.toThrow();
+    expect(() => parseConnectorManifest(withPatterns('(a|aa)+', 'urn:li:jobPosting:(\\d+)'))).toThrow(/externalIdPattern/);
+    expect(() => parseConnectorManifest(withPatterns('\\d+', '(a{1,9}){1,9}'))).toThrow(/resolvedIdPattern/);
   });
 
   it('matchesPattern is a FULL match on a bounded input', () => {

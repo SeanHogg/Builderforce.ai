@@ -26800,6 +26800,11 @@
       "linkFailed": "L'offre n'a pas pu être liée. Réessayez.",
       "boardJobsFailed": "Les offres du site n'ont pas pu être lues. Réessayez.",
       "linkJobLabel": "Offre sur ce site",
+      "linkJobOption": "{title} ({state})",
+      "jobStatePublished": "Publiée",
+      "jobStateDraft": "Brouillon",
+      "jobStateArchived": "Archivée",
+      "jobStateClosed": "Clôturée",
       "importMore": "D'autres candidats sont en attente : relancez l'import.",
       "importPartial": "{count, plural, one {# candidat n'a pas pu être importé.} other {# candidats n'ont pas pu être importés.}}"
     },

@@ -25,6 +25,7 @@ import {
 import {
   invalidateConnectorCatalog,
   isReservedConnectorKey,
+  listConnectorsForTenant,
   resolveConnector,
   type ConnectorOrigin,
   type ResolvedConnector,
@@ -109,12 +110,22 @@ export async function connectionCountsByConnector(db: Db, tenantId: number): Pro
   return counts;
 }
 
-function validateOrThrow(raw: unknown): ConnectorManifest {
+/**
+ * Parse a manifest and, for a hiring board that declares source aliases, check them
+ * against EVERY board this tenant already has — the built-ins, its own and installed ones
+ * (the catalog read the connector list uses) — so an alias can never silently take
+ * applicants from a board that already owns that spelling.
+ */
+async function validateWithBoards(db: Db, tenantId: number, raw: unknown): Promise<ConnectorManifest> {
   try {
     const manifest = parseConnectorManifest(raw);
-    // A hiring board's aliases may not collide with another board's key or alias.
-    const conflicts = manifest.sourceAliases ? sourceAliasConflicts(manifest) : [];
-    if (conflicts.length) throw new ConnectorManifestError(conflicts);
+    if (manifest.sourceAliases?.length) {
+      const boards = (await listConnectorsForTenant(db, tenantId))
+        .filter((entry) => entry.manifest.category === 'hiring')
+        .map((entry) => ({ key: entry.manifest.key, aliases: entry.manifest.sourceAliases ?? [] }));
+      const conflicts = sourceAliasConflicts(manifest, boards);
+      if (conflicts.length) throw new ConnectorManifestError(conflicts);
+    }
     return manifest;
   } catch (e) {
     if (e instanceof ConnectorManifestError) {
@@ -129,7 +140,7 @@ export async function createConnector(
   env: Env,
   args: { tenantId: number; manifest: unknown; userId: string | null; publish?: boolean },
 ): Promise<{ id: string; manifest: ConnectorManifest; status: 'published' | 'draft' }> {
-  const manifest = validateOrThrow(args.manifest);
+  const manifest = await validateWithBoards(db, args.tenantId, args.manifest);
   if (isReservedConnectorKey(manifest.key)) {
     throw new ConnectorServiceError(
       `"${manifest.key}" is a built-in connector key — choose a different key (e.g. "${manifest.key}-custom")`,
@@ -179,7 +190,7 @@ export async function updateConnector(
   let manifest: ConnectorManifest | null = null;
 
   if (args.manifest !== undefined) {
-    manifest = validateOrThrow(args.manifest);
+    manifest = await validateWithBoards(db, args.tenantId, args.manifest);
     // The key is the join to `connector_connections`; changing it would orphan every
     // configured connection silently. Renaming is a delete-and-recreate, on purpose.
     if (manifest.key !== existing.connectorKey) {

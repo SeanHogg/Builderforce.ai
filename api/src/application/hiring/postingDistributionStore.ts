@@ -12,11 +12,11 @@
  * pressing Distribute, and a cached answer to that question is the wrong one.
  */
 
-import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { jobApplications, jobPostingDistributions, jobPostings } from '../../infrastructure/database/schema/hiring';
-import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { jobApplications, jobPostingDistributions } from '../../infrastructure/database/schema/hiring';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveConnector } from '../connectors/connectorRegistry';
 import { manifestYieldsPublicLink } from '../connectors/connectorResponseMapping';
 import { resolveApplicantSource, withBoardSources, type BoardSourceCatalog } from './applicantSource';
@@ -218,75 +218,6 @@ export async function readPostingBoardCatalog(
   return withBoardSources([...infos].map(([key, info]) => ({ key, aliases: info.aliases })));
 }
 
-/** A confirmed publication, as the applicant import needs it. */
-export interface PostedDistribution {
-  tenantId: number;
-  postingId: string;
-  connectorKey: string;
-  connectionId: string | null;
-  externalId: string;
-  /** The recorded public link; null is what the url-resolution pass looks for. */
-  url: string | null;
-  /** How far the applicant import has read this board (see `importCursor`). */
-  importCursor: string | null;
-}
-
-/**
- * Confirmed publications of ONE posting in ONE workspace.
- */
-export async function readPostedDistributions(db: Db, tenantId: number, postingId: string): Promise<PostedDistribution[]> {
-  const rows = await db
-    .select()
-    .from(jobPostingDistributions)
-    .where(scopedToTenant(
-      jobPostingDistributions,
-      tenantId,
-      eq(jobPostingDistributions.jobPostingId, postingId),
-      eq(jobPostingDistributions.status, 'posted'),
-    ))
-    .orderBy(asc(jobPostingDistributions.connectorKey));
-  return rows.flatMap(toPosted);
-}
-
-const toPosted = (row: DistributionRow): PostedDistribution[] => row.externalId
-  ? [{ tenantId: row.tenantId, postingId: row.jobPostingId, connectorKey: row.connectorKey, connectionId: row.connectionId ?? null, externalId: row.externalId, url: row.url ?? null, importCursor: row.importCursor ?? null }]
-  : [];
-
-/**
- * The next batch of confirmed publications on OPEN postings, across workspaces, least
- * recently touched first — the scheduled applicant import's worklist. DECLARED
- * cross-tenant: the sweep is a platform obligation, and each import it runs is then
- * scoped to its own tenant. `touchPostedDistribution` moves a row to the back of the
- * queue so a bounded batch rotates through every posting instead of re-reading the same.
- */
-export async function listPostedDistributionsForSweep(
-  db: Db,
-  limit: number,
-  opts: {
-    missingUrlOnly?: boolean;
-    /** Only these boards. The link-finding pass passes the boards that HAVE a
-     *  `resolve_url` action, so boards that cannot resolve never spend its budget. */
-    connectorKeys?: readonly string[];
-  } = {},
-): Promise<PostedDistribution[]> {
-  if (opts.connectorKeys && opts.connectorKeys.length === 0) return [];
-  const rows = await db
-    .select({ distribution: jobPostingDistributions })
-    .from(jobPostingDistributions)
-    .innerJoin(jobPostings, eq(jobPostings.id, jobPostingDistributions.jobPostingId))
-    .where(acrossTenants(
-      jobPostingDistributions,
-      'scheduled_sweep',
-      eq(jobPostingDistributions.status, 'posted'),
-      eq(jobPostings.status, 'open'),
-      opts.missingUrlOnly ? isNull(jobPostingDistributions.url) : undefined,
-      opts.connectorKeys ? inArray(jobPostingDistributions.connectorKey, [...opts.connectorKeys]) : undefined,
-    ))
-    .orderBy(asc(jobPostingDistributions.updatedAt))
-    .limit(limit);
-  return rows.flatMap((row) => toPosted(row.distribution));
-}
-
 /** The posting (if any) that already holds this board job as a confirmed publication. */
 export async function findPostingLinkedToBoardJob(
   db: Db,
@@ -306,57 +237,6 @@ export async function findPostingLinkedToBoardJob(
     ))
     .limit(1);
   return row?.postingId ?? null;
-}
-
-/**
- * Record what url resolution found: the public link and, when the board gave one, its
- * REAL id (replacing a task/reference the create call returned). Only a CONFIRMED row is
- * touched, and only the fields that were found — a miss never erases what is there.
- */
-export async function recordResolvedLink(
-  db: Db,
-  row: PostedDistribution,
-  found: { url: string | null; externalId: string | null },
-): Promise<void> {
-  // The id is replaced only TOGETHER with the link that proves it resolved.
-  if (!found.url) return;
-  const set: Record<string, unknown> = { updatedAt: sql`now()`, url: found.url };
-  if (found.externalId) set.externalId = found.externalId.slice(0, 255);
-  await db
-    .update(jobPostingDistributions)
-    .set(set)
-    .where(scopedToTenant(
-      jobPostingDistributions,
-      row.tenantId,
-      eq(jobPostingDistributions.jobPostingId, row.postingId),
-      eq(jobPostingDistributions.connectorKey, row.connectorKey),
-      eq(jobPostingDistributions.status, 'posted'),
-    ));
-}
-
-/** Remember how far the applicant import has read this board. */
-export async function saveImportCursor(db: Db, row: PostedDistribution, cursor: string): Promise<void> {
-  await db
-    .update(jobPostingDistributions)
-    .set({ importCursor: cursor.slice(0, 64) })
-    .where(scopedToTenant(
-      jobPostingDistributions,
-      row.tenantId,
-      eq(jobPostingDistributions.jobPostingId, row.postingId),
-      eq(jobPostingDistributions.connectorKey, row.connectorKey),
-    ));
-}
-
-export async function touchPostedDistribution(db: Db, row: PostedDistribution): Promise<void> {
-  await db
-    .update(jobPostingDistributions)
-    .set({ updatedAt: sql`now()` })
-    .where(scopedToTenant(
-      jobPostingDistributions,
-      row.tenantId,
-      eq(jobPostingDistributions.jobPostingId, row.postingId),
-      eq(jobPostingDistributions.connectorKey, row.connectorKey),
-    ));
 }
 
 /** What one publish attempt established — the use case's verdict, written whole. */

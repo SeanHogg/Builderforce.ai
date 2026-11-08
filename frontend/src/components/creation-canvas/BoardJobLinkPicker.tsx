@@ -40,6 +40,22 @@ export function BoardJobLinkPicker({ postingId, boards, canEdit, onLinked }: {
   if (boards.length === 0) return null;
   const disabled = !canEdit || !allowed || busy;
 
+  /** A board's job state in the reader's language; a state the board invents is left out
+   *  rather than shown raw, because an untranslated word in a translated label is worse. */
+  const stateLabel = (state: string | null): string | null => {
+    switch (state?.toLowerCase()) {
+      case 'published': return t('jobStatePublished');
+      case 'draft': return t('jobStateDraft');
+      case 'archived': return t('jobStateArchived');
+      case 'closed': return t('jobStateClosed');
+      default: return null;
+    }
+  };
+  const jobLabel = (job: BoardJob): string => {
+    const state = stateLabel(job.state);
+    return state ? t('linkJobOption', { title: job.title, state }) : job.title;
+  };
+
   const chooseBoard = async (key: string) => {
     setBoard(key);
     setJob('');
@@ -85,9 +101,7 @@ export function BoardJobLinkPicker({ postingId, boards, canEdit, onLinked }: {
           <select aria-label={t('linkJobLabel')} value={job} onChange={(event) => setJob(event.target.value)}>
             <option value="">{jobs.length ? t('linkChooseJob') : t('linkNoJobs')}</option>
             {jobs.map((entry) => (
-              <option key={entry.externalId} value={entry.externalId}>
-                {entry.state ? `${entry.title} (${entry.state})` : entry.title}
-              </option>
+              <option key={entry.externalId} value={entry.externalId}>{jobLabel(entry)}</option>
             ))}
           </select>
         )}
