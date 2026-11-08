@@ -90,6 +90,12 @@ export interface SurfaceOptions {
 
 const MAX_PINS = 12;
 
+/** What the surface holds before a graph (or its stations) arrives: no stations, no lines. One constant, so a reference compare stays cheap. */
+const EMPTY_SURFACE: SurfaceResult = {
+    stations: { stations: [], byId: new Map(), stationOf: new Map() },
+    lines: { lines: [], interchanges: new Map(), omitted: 0 },
+};
+
 export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGraph | null, opts: SurfaceOptions = {}): SurfaceModel {
     const [bindings, setBindings] = useState<Bindings>(PRESETS.risk);
     const [question, setQuestionId] = useState<QuestionId>(opts.question ?? 'where');
