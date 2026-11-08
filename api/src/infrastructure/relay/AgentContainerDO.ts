@@ -36,6 +36,17 @@ export { DESTROY_TIMEOUT_MS } from './sandboxEgressLifecycle';
 /** When the current job keep-alive began (see `jobKeepAlive.ts`); absent = none in effect. */
 const KEEPALIVE_SINCE_KEY = 'jobKeepAliveSince';
 
+/**
+ * The per-instance secret the container's control routes (`/sandbox/*`, `/web-scan`) require. The model's shell runs INSIDE
+ * the container and can reach those routes on localhost, so a network position is not authority: this DO is the only
+ * party that knows the secret (stored here, passed in the container's env at start, sent as a header on every
+ * control request it forwards). `api/container/server.mjs` removes it from its own env after reading it.
+ */
+const CONTROL_SECRET_KEY = 'containerControlSecret';
+export const CONTROL_SECRET_ENV = 'BUILDERFORCE_CONTROL_SECRET';
+export const CONTROL_SECRET_HEADER = 'x-bf-control-secret';
+const isControlPath = (pathname: string): boolean => pathname.startsWith('/sandbox/') || pathname === '/web-scan';
+
 type DoCtx = ConstructorParameters<typeof Container>[0];
 /** The durable reporter for this file; a function so the constructor can use it BEFORE `super()`. */
 const durableReporter = (env: Env, ctx: DoCtx): DurableErrorReporter =>
@@ -193,7 +204,36 @@ export class AgentContainerDO extends Container<Env> {
     try {
       if ((await this.ctx.storage.get<number>(KEEPALIVE_SINCE_KEY)) !== undefined) await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY);
     } catch (error) { this.reportError(error, { operation: 'fetch', level: 'warning' }); }
-    return super.fetch(request);
+    // A control request carries the instance secret (the caller's own copy of the header, if any, is overwritten);
+    // everything else, a preview request above all, is forwarded untouched so the secret never reaches a dev server.
+    let forwarded = request;
+    try {
+      if (isControlPath(new URL(request.url).pathname)) {
+        const secret = await this.controlSecret();
+        if (secret) {
+          forwarded = new Request(request);
+          forwarded.headers.set(CONTROL_SECRET_HEADER, secret);
+        }
+      }
+    } catch (error) { this.reportError(error, { operation: 'fetch', level: 'warning' }); }
+    return super.fetch(forwarded);
+  }
+
+  /** This instance's control secret (created once, kept in storage) — also put in the container's start env, which must happen BEFORE the container starts. Null when storage failed. */
+  private async controlSecret(): Promise<string | null> {
+    try {
+      let secret = await this.ctx.storage.get<string>(CONTROL_SECRET_KEY);
+      if (!secret) {
+        const bytes = crypto.getRandomValues(new Uint8Array(32));
+        secret = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+        await this.ctx.storage.put(CONTROL_SECRET_KEY, secret);
+      }
+      this.envVars = { ...(this.envVars ?? {}), [CONTROL_SECRET_ENV]: secret };
+      return secret;
+    } catch (error) {
+      this.reportError(error, { operation: 'controlSecret', level: 'warning' });
+      return null;
+    }
   }
 
   /**
@@ -237,10 +277,11 @@ export class AgentContainerDO extends Container<Env> {
     try {
       const executionId = await this.ctx.storage.get<number>(EXEC_KEY);
       if (typeof executionId !== 'number') return false;
+      const secret = await this.controlSecret();
       const probe = (async () => {
         const res = await this.containerFetch('http://agent-container/sandbox/job/active', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(secret ? { [CONTROL_SECRET_HEADER]: secret } : {}) },
           body: JSON.stringify({ executionId }),
           signal: AbortSignal.timeout(JOB_PROBE_TIMEOUT_MS),
         });

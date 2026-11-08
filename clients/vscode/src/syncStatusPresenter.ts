@@ -94,6 +94,33 @@ export function presentSyncStatus(input: SyncStatusInput): PresentedSyncStatus {
   return preferPresentedSyncStatus(statuses);
 }
 
+/** The journal facts a record's status is read from. `mappings` lets a legacy receipt be recognised. */
+export type SyncStatusFacts = Pick<LocalFirstSnapshot, "events" | "receipts" | "conflicts"> & {
+  readonly mappings?: LocalFirstSnapshot["mappings"];
+};
+
+/**
+ * The ONE way a row's status is read from the store's facts, given the record itself (no scan).
+ *
+ * A receipt outlives its acknowledged event, so receipts are narrowed to THIS record's: those that
+ * name it (`entityType` + `clientEntityId`), or, for a receipt written before receipts named their
+ * record, one that settles one of its pending events or carries the server id this record is mapped
+ * to. Anything else is another record's and never counts here (C7).
+ */
+export function presentRecordSyncStatus(facts: SyncStatusFacts, record: LocalRecord): PresentedSyncStatus {
+  const events = facts.events.filter((event) => event.entityType === record.entityType && event.clientEntityId === record.id);
+  const eventIds = new Set(events.map((event) => event.eventId));
+  const serverId = facts.mappings?.find((row) => row.entityType === record.entityType && row.clientEntityId === record.id)?.serverId;
+  const receipts = facts.receipts.filter((receipt) => {
+    if (receipt.entityType !== undefined || receipt.clientEntityId !== undefined) {
+      return receipt.entityType === record.entityType && receipt.clientEntityId === record.id;
+    }
+    return eventIds.has(receipt.eventId) || (serverId !== undefined && receipt.serverId === serverId);
+  });
+  return presentSyncStatus({ record, events, receipts, conflicts: facts.conflicts });
+}
+
+/** Every receipt in the snapshot is taken as the record's: for a snapshot a caller already narrowed. */
 export function presentStoreSyncStatus(
   snapshot: Pick<LocalFirstSnapshot, "records" | "events" | "receipts" | "conflicts">,
   entity: { readonly entityType: LocalEntityType; readonly id: string },

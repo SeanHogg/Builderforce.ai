@@ -229,14 +229,19 @@ export function VisualizationPanel({
   return (
     <section className="bf-viz" aria-label={t('viz.ariaLabel', 'BuilderForce Visualization')} data-view={state.view}>
       <header className="bf-viz__bar">
-        <div className="bf-viz__meters" role="status">
-          <span className="bf-viz__stat" data-active={running || undefined}>
-            {running ? t('viz.running', 'Run in progress') : t('viz.idle', 'Idle')}
-          </span>
-          <span className="bf-viz__stat">{t('viz.fileCount', '{n} files').replace('{n}', String(visible.fileCount))}</span>
-          <span className="bf-viz__stat bf-viz__stat--add">+{visible.added}</span>
-          <span className="bf-viz__stat bf-viz__stat--del">-{visible.removed}</span>
-        </div>
+        {/* The meters describe the chat run's pending changes (Canvas / Changes). The
+            Knowledge view carries its own review action, so the two status rows are
+            consolidated: no meters there. */}
+        {state.view !== 'knowledge' && (
+          <div className="bf-viz__meters" role="status">
+            <span className="bf-viz__stat" data-active={running || undefined}>
+              {running ? t('viz.running', 'Run in progress') : t('viz.idle', 'Idle')}
+            </span>
+            <span className="bf-viz__stat">{t('viz.fileCount', '{n} files').replace('{n}', String(visible.fileCount))}</span>
+            <span className="bf-viz__stat bf-viz__stat--add">+{visible.added}</span>
+            <span className="bf-viz__stat bf-viz__stat--del">-{visible.removed}</span>
+          </div>
+        )}
 
         {/* AC5. Always mounted, in EVERY view, never disabled — including mid-run,
             which is exactly when a user reaches for it. */}

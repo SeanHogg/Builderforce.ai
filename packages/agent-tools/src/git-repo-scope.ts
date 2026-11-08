@@ -139,7 +139,7 @@ export function notARepoResult(action: string, candidates: string[] = []): ToolR
 }
 
 export type GitShellCtx = {
-  caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal; cwd?: string }): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } };
+  caps: { shell?: Pick<ShellCapability, "run" | "trackedBranch" | "defaultRepo" | "git"> };
   /** The call's Stop (`ToolContext.signal`): a git command in flight is killed with the run. */
   signal?: AbortSignal;
 };

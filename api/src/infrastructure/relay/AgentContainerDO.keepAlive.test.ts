@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   forwarded: 0,
   deletes: 0,
   probes: [] as Array<{ url: string; init?: RequestInit }>,
+  lastForwarded: null as Request | null,
   probe: (async () => Response.json({ active: false })) as () => Promise<Response>,
 }));
 
@@ -23,7 +24,7 @@ vi.mock('@cloudflare/containers', () => ({
     async stop() { h.stopped += 1; }
     renewActivityTimeout() { h.renewed += 1; }
     async containerFetch(url: string, init?: RequestInit) { h.probes.push({ url, init }); return h.probe(); }
-    async fetch() { h.forwarded += 1; return new Response('proxied'); }
+    async fetch(req?: Request) { h.forwarded += 1; h.lastForwarded = req ?? null; return new Response('proxied'); }
   },
 }));
 vi.mock('../../application/observability/durableErrorReporter', () => ({ createDurableErrorReporter: () => vi.fn() }));
@@ -179,5 +180,31 @@ describe('AgentContainerDO.fetch and the keep-alive clock', () => {
     expect(h.stopped).toBe(1);
     expect(h.forwarded).toBe(0);
     expect(storage.has('jobKeepAliveSince')).toBe(false);
+  });
+});
+
+describe('AgentContainerDO control secret', () => {
+  it('stamps ONE stored per-instance secret on control requests, overwriting a caller-supplied one, and puts it in the container env', async () => {
+    const { container, storage } = makeDo();
+    const forged = new Request('https://agent-container/sandbox/run', { method: 'POST', body: '{}', headers: { 'x-bf-control-secret': 'forged' } });
+    await container.fetch(forged);
+    const secret = storage.get('containerControlSecret') as string;
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(h.lastForwarded!.headers.get('x-bf-control-secret')).toBe(secret);
+    expect((container as unknown as { envVars: Record<string, string> }).envVars.BUILDERFORCE_CONTROL_SECRET).toBe(secret);
+    await container.fetch(post('/web-scan'));
+    expect(h.lastForwarded!.headers.get('x-bf-control-secret')).toBe(secret); // stable across requests
+  });
+
+  it('never forwards the secret on a preview request (the dev server is the model\'s)', async () => {
+    const { container } = makeDo();
+    await container.fetch(new Request('https://agent-container/__preview__/x', { method: 'GET' }));
+    expect(h.lastForwarded!.headers.get('x-bf-control-secret')).toBeNull();
+  });
+
+  it('sends it on the idle job probe too', async () => {
+    const { container, storage } = makeDo();
+    await container.onActivityExpired();
+    expect((h.probes[0]!.init!.headers as Record<string, string>)['x-bf-control-secret']).toBe(storage.get('containerControlSecret'));
   });
 });

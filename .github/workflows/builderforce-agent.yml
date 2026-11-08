@@ -99,5 +99,15 @@ jobs:
           # cancel path, a protocol change — ships centrally and every repo picks
           # it up on its next run. It also keeps the file small enough to actually
           # read and audit, which is the whole point of it being visible.
-          curl -sSf "$BUILDERFORCE_API/api/runtime/github-actions/runner.mjs" -o /tmp/bf-runner.mjs
-          node /tmp/bf-runner.mjs
+          curl -sSf "$BUILDERFORCE_API/api/runtime/github-actions/runner.mjs" -o "$RUNNER_TEMP/bf-runner.mjs"
+          node "$RUNNER_TEMP/bf-runner.mjs"
+
+      # Runs even when the job is cancelled or times out (the runner's own cleanup is skipped when it is killed
+      # outright): end every process the agent's shell user left, drop the checkout's shell-written .git, and give the
+      # checkout back to the runner user so the later steps and the job's post-steps never run the agent's files.
+      - name: Clean up the agent's shell user
+        if: always()
+        run: |
+          sudo -n pkill -KILL -u bfagent || true
+          sudo -n rm -rf "$GITHUB_WORKSPACE/.git" || true
+          sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" || true

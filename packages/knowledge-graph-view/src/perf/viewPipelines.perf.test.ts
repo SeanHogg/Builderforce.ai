@@ -19,9 +19,10 @@ import { LENSES } from '../lenses';
 import { MindMap } from '../map/MindMap';
 import { SequenceView } from '../surface/SequenceDiagram';
 import { TransitMap } from '../surface/TransitMap';
-import { LAST_RUN_JSON, Recorder, writeReport } from './harness';
+import { LAST_RUN_JSON, LOCK_MS, Recorder, writeReport } from './harness';
 import { runModelSteps, type Shared } from './modelSteps';
 import { runSceneSteps } from './sceneSteps';
+import { runWorkerSteps } from './workerSteps';
 import { buildPerfGraph, describeGraph, PERF_STATS, type PerfGraph } from './syntheticGraph';
 import { runMindSteps, runSequenceSteps, runTransitSteps } from './viewSteps';
 
@@ -61,6 +62,7 @@ describe.skipIf(!process.env.KG_PERF)('view pipelines (KG_PERF=1)', () => {
         expect.soft(shared.stations?.stations.filter((x) => x.entry).length).toBe(PERF_STATS.stationLayers.entry);
         expect.soft(shared.lines?.lines.length).toBe(8);
         attempt('Graph 2D + 3D scene', () => runSceneSteps(rec, perf, shared));
+        attempt('Worker path (main-thread halves)', () => runWorkerSteps(rec, perf, shared));
         attempt('Transit map + Tower map', () => runTransitSteps(rec, perf, shared));
         attempt('Mind map', () => runMindSteps(rec, perf));
         attempt('Sequence', () => runSequenceSteps(rec, shared));
@@ -134,7 +136,7 @@ describe.skipIf(!process.env.KG_PERF)('view pipelines (KG_PERF=1)', () => {
         const rows = [...rec.rows].sort((a, b) => b.median - a.median);
         console.log(`\nKnowledge-graph view pipelines (median of 3, ms; "(!)" = a single step over 50 ms)\n${rec.table()}`);
         console.log(`\nRenders (jsdom)\n${renders.map((r) => JSON.stringify(r)).join('\n')}`);
-        writeReport({ generatedAt: new Date().toISOString(), node: process.version, graph: stats, steps: rows, renders });
+        writeReport({ generatedAt: new Date().toISOString(), node: process.version, graph: stats, steps: rows, longestMainThreadSteps: longest, overBudget: longest.filter((l) => l.over).map((l) => l.step), renders });
         console.log(`\nwrote ${LAST_RUN_JSON}`);
     });
 });

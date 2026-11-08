@@ -281,7 +281,7 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready();
             if (project === projectId) return false;
             const discarded = project !== undefined && dirty.size > 0;
-            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; }
+            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; }
             project = projectId;
             touch();
             return discarded;

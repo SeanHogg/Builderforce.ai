@@ -133,9 +133,10 @@ export class JudgementTimeout extends Error {
  * (An empty result used to be recorded as a judgement of nothing, and the section was never retried.)
  * A caller's abort passes through untouched.
  */
-export function judgementWithTimeout(port: JudgementPort, ms: number = DEFAULT_JUDGEMENT_TIMEOUT_MS): JudgementPort {
+export function judgementWithTimeout(port: JudgementPort, timeout: number | ((req: JudgementRequest) => number) = defaultJudgementTimeoutMs): JudgementPort {
     return {
         async judge(req: JudgementRequest): Promise<JudgementResult> {
+            const ms = typeof timeout === "function" ? timeout(req) : timeout;
             const own = new AbortController();
             const relay = (): void => own.abort(req.signal?.reason);
             if (req.signal?.aborted) relay(); else req.signal?.addEventListener("abort", relay, { once: true });

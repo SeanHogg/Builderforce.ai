@@ -5,6 +5,8 @@
  * in the runner only shows up as a red job in someone else's repo. These tests
  * pin the security-relevant lines of the workflow and prove the runner parses.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   AGENT_WORKFLOW_PATH,
@@ -54,12 +56,31 @@ describe('renderAgentWorkflow', () => {
 
   it('downloads the runner from the configured origin and passes it its context', () => {
     expect(workflow).toContain(
-      'curl -sSf "$BUILDERFORCE_API/api/runtime/github-actions/runner.mjs" -o /tmp/bf-runner.mjs',
+      'curl -sSf "$BUILDERFORCE_API/api/runtime/github-actions/runner.mjs" -o "$RUNNER_TEMP/bf-runner.mjs"',
     );
-    expect(workflow).toContain('node /tmp/bf-runner.mjs');
+    // The runner script lives in the job's own temp dir, never a fixed shared /tmp name (a self-hosted runner keeps /tmp).
+    expect(workflow).toContain('node "$RUNNER_TEMP/bf-runner.mjs"');
+    expect(workflow).not.toContain('/tmp/bf-runner.mjs');
     expect(workflow).toContain('BUILDERFORCE_API: https://api.builderforce.ai');
     expect(workflow).toContain('BUILDERFORCE_EXECUTION_ID: ${{ inputs.execution_id }}');
     expect(workflow).toContain('export BUILDERFORCE_TOKEN');
+  });
+
+  it('cleans up the shell user in an `if: always()` step AFTER the agent step (a cancel or timeout skips the runner\'s own finally)', () => {
+    const agent = workflow.indexOf('name: Run Builderforce agent');
+    const cleanup = workflow.indexOf('name: Clean up the agent\'s shell user');
+    expect(cleanup).toBeGreaterThan(agent);
+    const step = workflow.slice(cleanup);
+    expect(step).toContain('if: always()');
+    expect(step).toContain('sudo -n pkill -KILL -u bfagent || true');
+    expect(step).toContain('sudo -n rm -rf "$GITHUB_WORKSPACE/.git" || true');
+    expect(step).toContain('sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" || true');
+  });
+
+  it('is what the committed template carries', () => {
+    const template = readFileSync(fileURLToPath(new URL('../../../../.github/workflows/builderforce-agent.yml', import.meta.url)), 'utf8');
+    const step = (s: string) => s.slice(s.indexOf('# Runs even when the job is cancelled'));
+    expect(step(template)).toBe(step(workflow));
   });
 
   it('carries no secret of ours', () => {
@@ -91,6 +112,16 @@ describe('renderAgentRunnerScript', () => {
     // The checkout goes back to the runner without its .git however serve() ends.
     expect(serve.indexOf('releaseShellWorkspace(')).toBeGreaterThan(serve.indexOf('finally'));
     expect(serve).toContain('sweepShellProcesses()');
+  });
+
+  it('tears the shell down on SIGINT / SIGTERM / SIGHUP (a cancel skips the finally), once, then exits 130 / 143 / 129', () => {
+    for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) expect(script).toContain(`['${signal}', ${code}]`);
+    expect(script).toContain('process.on(signal');
+    const once = script.slice(script.indexOf('function teardownOnce()'), script.indexOf('for (const [signal, code]'));
+    expect(once).toContain('if (tornDown) return;');
+    expect(once).toContain('teardownShellSync(');
+    // The normal path will not repeat a teardown a signal already did.
+    expect(script).toContain('if (isolated && !tornDown)');
   });
 
   it('inlines the one spawn helper, the mirror git and the unset of the old extraheader; ships the workspace helper as a file', () => {

@@ -77,7 +77,7 @@ const started = (executionId = 900) => ({ executionId });
 const deferred = { executionId: null, deferred: true as const, refusal: { reason: 'already_running', message: 'a run is live' } };
 const refused = { executionId: null, refusal: { reason: 'budget', message: 'plan exhausted' } };
 
-const sweep = (dispatch: (...a: unknown[]) => Promise<unknown>) =>
+const sweep = (dispatch: (...a: never[]) => Promise<unknown>) =>
   runDeferredDispatchSweep(ENV, createTickDispatchBudget(), dispatch as never);
 
 describe('parkDeferredDispatch', () => {

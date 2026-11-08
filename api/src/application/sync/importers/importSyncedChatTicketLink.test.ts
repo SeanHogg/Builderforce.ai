@@ -213,6 +213,35 @@ describe('importSyncedChatTicketLink: server-origin links and guards', () => {
     expect(outcome).toEqual({ status: 'rejected', detail: 'link_ticket_not_owned' });
   });
 
+  describe('tiers other than task / epic / gap (resolved like POST /chats/:id/tickets)', () => {
+    const SPEC = '55555555-5555-4555-8555-555555555555';
+    const tier = (ticketKind: string) => ({ ...payload, ticketKind, ticketRef: SPEC });
+
+    it.each(['spec', 'objective', 'roadmap'])('accepts a %s link and stores its (kind, ref)', async (kind) => {
+      const db = dbOf([[{ label: 'A work item', status: 'open' }], [], [{ id: 77, linkType: 'linked' }]]);
+      const outcome = await importSyncedChatTicketLink(send('create', tier(kind)), ctx({ resolveTaskId: async () => null }), storesWith({ chat: chatMapped }), db);
+      expect(outcome.status).toBe('applied');
+      if (outcome.status !== 'applied') return;
+      expect(outcome.serverId).toBe('77');
+      expect(outcome.payload).toEqual({ chatId: '5', ticketId: SPEC, linkType: 'linked' });
+      expect(db.calls.find((call) => call.kind === 'insert')?.payload).toMatchObject({ chatId: 5, ticketKind: kind, ticketRef: SPEC });
+    });
+
+    it('refuses an unknown or foreign ref, and writes nothing', async () => {
+      const db = dbOf([[]]);
+      const outcome = await importSyncedChatTicketLink(send('create', tier('spec')), ctx({ resolveTaskId: async () => null }), storesWith({ chat: chatMapped }), db);
+      expect(outcome).toEqual({ status: 'rejected', detail: 'link_ticket_not_owned' });
+      expect(db.calls.filter((call) => call.kind === 'insert' || call.kind === 'update')).toHaveLength(0);
+    });
+
+    it('refuses a payload naming a kind without a ref, or an unknown kind', async () => {
+      for (const body of [{ ...payload, ticketKind: 'spec' }, { ...payload, ticketKind: 'bogus', ticketRef: SPEC }]) {
+        const outcome = await importSyncedChatTicketLink(send('create', body), withTicket(), storesWith({ chat: chatMapped }), dbOf());
+        expect(outcome).toEqual({ status: 'rejected', detail: 'link_ticket_invalid' });
+      }
+    });
+  });
+
   it('stamps the tenant segment on a new link', async () => {
     const db = dbOf([[{ taskType: 'task' }], [], [{ id: 70, linkType: 'linked' }]]);
     await importSyncedChatTicketLink(send('create'), withTicket(), storesWith({ chat: chatMapped }), db);

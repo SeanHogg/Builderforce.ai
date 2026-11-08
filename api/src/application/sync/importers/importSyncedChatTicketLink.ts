@@ -24,7 +24,8 @@
 import { and, eq } from 'drizzle-orm';
 import { isJournalEventId } from '../../../domain/sync/syncProtocol';
 import { bumpChatTicketLinkCaches, deleteChatTicketLink, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
-import { ticketKindForTaskType } from '../../brain/chatTicketTypes';
+import { isTicketKind, ticketKindForTaskType } from '../../brain/chatTicketTypes';
+import { resolveTicket } from '../../brain/ticketLookup';
 import type { LinkType } from '../../brain/chatTicketTypes';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { resolveSegment } from '../../../infrastructure/auth/segmentResolver';
@@ -53,6 +54,9 @@ interface LinkPayload {
   /** The server's ids, when the device holds a mapping for a server-origin chat / ticket. */
   chatServerId?: string;
   ticketServerId?: string;
+  /** A work item of a tier other than task/epic/gap: its address, resolved like the link route does. */
+  ticketKind?: string;
+  ticketRef?: string;
 }
 
 type Parsed = { ok: true; value: LinkPayload } | { ok: false; detail: string };
@@ -68,9 +72,14 @@ function readLink(payload: unknown): Parsed {
       return { ok: false, detail: key === 'chatServerId' ? 'link_chat_invalid' : 'link_ticket_invalid' };
     }
   }
+  if ((raw.ticketKind === undefined) !== (raw.ticketRef === undefined)) return { ok: false, detail: 'link_ticket_invalid' };
+  if (raw.ticketKind !== undefined && (!isTicketKind(String(raw.ticketKind)) || typeof raw.ticketRef !== 'string' || raw.ticketRef.trim() === '')) {
+    return { ok: false, detail: 'link_ticket_invalid' };
+  }
   return {
     ok: true,
     value: {
+      ...(typeof raw.ticketKind === 'string' && typeof raw.ticketRef === 'string' ? { ticketKind: raw.ticketKind, ticketRef: raw.ticketRef } : {}),
       chatClientId: raw.chatClientId,
       ticketClientId: raw.ticketClientId,
       linkType: raw.linkType,
@@ -81,11 +90,15 @@ function readLink(payload: unknown): Parsed {
 }
 
 /** The server form a link is stored (and its replay hashed) as. */
-function canonical(chatId: number, ticketId: number, linkType: LinkType): Record<string, unknown> {
-  return { chatId: String(chatId), ticketId: String(ticketId), linkType };
+function canonical(chatId: number, ref: string, linkType: LinkType): Record<string, unknown> {
+  return { chatId: String(chatId), ticketId: ref, linkType };
 }
 
-type Resolved = { chatId: number; ticketId: number; kind: 'epic' | 'gap' | 'task' };
+/** `ref` is the work item's address in its tier: the task id for task/epic/gap, a uuid for the rest. */
+type Resolved = { chatId: number; ref: string; kind: string };
+
+/** The kinds that live in the task table: resolved through the sync mappings, by client or server id. */
+const TASK_TABLE_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
 
 async function resolveParents(
   payload: LinkPayload,
@@ -107,6 +120,13 @@ async function resolveParents(
     if (chat.kind === 'unmapped') return pending('link_chat_pending');
     chatId = chat.chatId;
   }
+  // Every other tier (spec, objective, roadmap ...) is addressed by `(kind, ref)` on the payload and
+  // resolved by the SAME resolver the `POST /chats/:id/tickets` route links through, so the importer
+  // links exactly what that route links. An unknown or foreign ref is a permanent refusal.
+  if (payload.ticketKind !== undefined && payload.ticketRef !== undefined && !TASK_TABLE_KINDS.has(payload.ticketKind)) {
+    if (!(await resolveTicket(tx, ctx.auth.tenantId, payload.ticketKind, payload.ticketRef))) return rejected('link_ticket_not_owned');
+    return { chatId, ref: payload.ticketRef, kind: payload.ticketKind };
+  }
   let ticketId: number | null;
   if (payload.ticketServerId !== undefined) {
     // A server id the tenant does not own is a permanent refusal, like a foreign chat's.
@@ -119,7 +139,7 @@ async function resolveParents(
   const [task] = await tx.select({ taskType: tasks.taskType }).from(tasks)
     .where(and(eq(tasks.id, ticketId), eq(tasks.tenantId, ctx.auth.tenantId))).limit(1);
   if (!task) return pending('link_ticket_pending');
-  return { chatId, ticketId, kind: ticketKindForTaskType(task.taskType) };
+  return { chatId, ref: String(ticketId), kind: ticketKindForTaskType(task.taskType) };
 }
 
 /** The ONE link upsert, with the tenant's segment stamped as `linkTicket` does. */
@@ -129,7 +149,7 @@ async function upsertIn(savepoint: Tx, ctx: SyncImportContext, resolved: Resolve
     segmentId: await resolveSegment(savepoint, ctx.auth.tenantId),
     chatId: resolved.chatId,
     kind: resolved.kind,
-    ref: String(resolved.ticketId),
+    ref: resolved.ref,
     linkType,
     createdBy: ctx.auth.userId,
   });
@@ -138,7 +158,7 @@ async function upsertIn(savepoint: Tx, ctx: SyncImportContext, resolved: Resolve
 /** The link row a (chat, ticket) pair names in this tenant, or undefined. */
 async function linkRowOfPair(db: Tx, ctx: SyncImportContext, resolved: Resolved) {
   const [row] = await db.select({ id: chatTicketLinks.id }).from(chatTicketLinks)
-    .where(scopedToTenant(chatTicketLinks, ctx.auth.tenantId, eq(chatTicketLinks.chatId, resolved.chatId), eq(chatTicketLinks.ticketKind, resolved.kind), eq(chatTicketLinks.ticketRef, String(resolved.ticketId)))).limit(1);
+    .where(scopedToTenant(chatTicketLinks, ctx.auth.tenantId, eq(chatTicketLinks.chatId, resolved.chatId), eq(chatTicketLinks.ticketKind, resolved.kind), eq(chatTicketLinks.ticketRef, resolved.ref))).limit(1);
   return row;
 }
 
@@ -154,7 +174,7 @@ async function writeLink(
     ctx.afterCommit(() => bumpChatTicketLinkCaches(ctx.auth.tenantId, resolved.chatId));
     // A 'created' lineage is never downgraded, so the stored form follows the row.
     // The row's own id: a link removed on the server while the mapping lived is inserted anew.
-    return appliedNew(String(row.id), serverVersion, ctx.destinationKey, canonical(resolved.chatId, resolved.ticketId, row.linkType as LinkType));
+    return appliedNew(String(row.id), serverVersion, ctx.destinationKey, canonical(resolved.chatId, resolved.ref, row.linkType as LinkType));
   } catch (error) {
     reportCaughtError(error, { source: 'application/sync/importers/importSyncedChatTicketLink.ts', operation: 'writeLink' });
     return rejected('link_write_failed');
@@ -206,7 +226,7 @@ async function removeUnmapped(
 async function removePair(savepoint: Tx, ctx: SyncImportContext, resolved: Resolved): Promise<{ id: number } | undefined> {
   const row = await linkRowOfPair(savepoint, ctx, resolved);
   if (!row) return undefined;
-  await deleteChatTicketLink(savepoint, ctx.auth.tenantId, resolved.chatId, resolved.kind, String(resolved.ticketId));
+  await deleteChatTicketLink(savepoint, ctx.auth.tenantId, resolved.chatId, resolved.kind, resolved.ref);
   ctx.afterCommit(() => bumpChatTicketLinkCaches(ctx.auth.tenantId, resolved.chatId));
   return row;
 }
@@ -249,7 +269,7 @@ async function createLink(
   if (mapping.destinationKey !== ctx.destinationKey) return rejected('destination_mismatch');
   // A relation is revivable: re-creating a pair the server unlinked writes the link again (a new row id).
   if (mapping.deletedAt) return writeLink(ctx, tx, resolved, parsed.value.linkType, mapping.serverVersion + 1);
-  const stored = canonical(resolved.chatId, resolved.ticketId, parsed.value.linkType);
+  const stored = canonical(resolved.chatId, resolved.ref, parsed.value.linkType);
   if (sameCanonical(mapping, stored)) return appliedExisting(mapping, stored);
   return conflict(mapping, 'entity_already_imported');
 }
@@ -258,7 +278,7 @@ async function createLink(
 async function pairDiffers(db: Tx, ctx: SyncImportContext, linkId: number, resolved: Resolved): Promise<boolean> {
   const [row] = await db.select({ chatId: chatTicketLinks.chatId, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks)
     .where(scopedToTenant(chatTicketLinks, ctx.auth.tenantId, eq(chatTicketLinks.id, linkId))).limit(1);
-  return row !== undefined && (row.chatId !== resolved.chatId || row.ref !== String(resolved.ticketId));
+  return row !== undefined && (row.chatId !== resolved.chatId || row.ref !== resolved.ref);
 }
 
 async function updateLink(
@@ -282,7 +302,7 @@ async function updateLink(
   const linkId = serverNumericId(mapping.serverId);
   // The pair is the link's identity: an update that names another pair would corrupt the mapping.
   if (linkId !== null && (await pairDiffers(tx, ctx, linkId, resolved))) return rejected('link_pair_immutable');
-  const stored = canonical(resolved.chatId, resolved.ticketId, parsed.value.linkType);
+  const stored = canonical(resolved.chatId, resolved.ref, parsed.value.linkType);
   if (sameCanonical(mapping, stored)) return appliedExisting(mapping, stored);
   return writeLink(ctx, tx, resolved, parsed.value.linkType, mapping.serverVersion + 1);
 }

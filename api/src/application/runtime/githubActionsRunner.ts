@@ -165,11 +165,36 @@ async function writeWorkspaceHelper() {
   return file;
 }
 
+/** Set once the shell user may exist (before provisioning starts, so a cancel mid-provision still cleans up). */
+let shellMayExist = false;
+let tornDown = false;
+
+/**
+ * A cancelled or timed-out Actions job SIGTERMs this process (SIGINT/SIGHUP likewise) and SKIPS the \`finally\` in serve():
+ * the shell user's processes would keep running and the checkout would stay the shell user's, \`.git\` included, for the
+ * job's later steps. So the same teardown runs here, SYNCHRONOUSLY (a signal handler cannot await), exactly once.
+ */
+function teardownOnce() {
+  if (tornDown) return;
+  tornDown = true;
+  if (!shellMayExist) return;
+  const failure = teardownShellSync({ user: SHELL_USER, workdir: WORKDIR });
+  if (failure) console.error('[bf-runner] could not release the workspace: ' + failure);
+}
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+  process.on(signal, () => {
+    console.error('[bf-runner] ' + signal + ': tearing the run shell down');
+    teardownOnce();
+    process.exit(code);
+  });
+}
+
 async function serve() {
   let isolated = false;
   let box = null;
   try {
     try {
+      shellMayExist = true;
       await isolateShell();
       isolated = true;
     } catch (e) {
@@ -218,8 +243,9 @@ async function serve() {
     // and the checkout goes back to the runner WITHOUT its .git (shell-written config and hooks must never be run by
     // the job's later steps, such as actions/checkout's post step).
     if (box) await closeSandboxBox(box);
-    if (isolated) {
+    if (isolated && !tornDown) {
       await sweepShellProcesses();
+      tornDown = true;
       try {
         releaseShellWorkspace({ workdir: WORKDIR });
       } catch (e) {

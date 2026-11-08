@@ -346,7 +346,8 @@ function walk(value: unknown, depth: number, ctx: WalkContext, schemaMap = false
   const entries = <T>(list: T[]): T[] => (o.maxEntries === undefined ? list : list.slice(0, o.maxEntries));
   if (typeof value === 'string') {
     // A string leaf that is itself JSON text (an `execution.payload` / `result` column) is redacted structurally.
-    const text = redactJsonText(value);
+    // The caller's options flow through; nesting depth and size are bounded inside `redactJsonTextAt`.
+    const text = redactJsonTextAt(value, o, ctx.jsonDepth);
     return o.maxString !== undefined && text.length > o.maxString ? `${text.slice(0, o.maxString)}…[truncated]` : text;
   }
   if (typeof value === 'bigint') return value.toString();

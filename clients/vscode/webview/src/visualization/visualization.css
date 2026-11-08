@@ -113,7 +113,8 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-left: auto;
+  /* Stays end-aligned when the meters are absent (Knowledge view). */
+  margin-inline-start: auto;
 }
 
 .bf-viz__views .bf-viz__toggle { min-height: 28px; }

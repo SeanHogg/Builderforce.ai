@@ -162,6 +162,10 @@ export interface ChatTicketLinkValue {
    *  one it only ingested): the importer resolves these first, then the client ids. */
   chatServerId?: string;
   ticketServerId?: string;
+  /** A work item of a tier other than task/epic/gap (spec, objective, roadmap ...) has no numeric
+   *  server id: it is addressed by its tier and ref, which the importer resolves like the link route. */
+  ticketKind?: string;
+  ticketRef?: string;
   linkType: ChatTicketLinkType;
 }
 

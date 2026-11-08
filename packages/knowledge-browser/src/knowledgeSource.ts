@@ -46,6 +46,11 @@ import { lastSeenMemory } from './lastSeen';
 
 /** The widest graph the platform builds; the sync counts read it. */
 const SYNC_MAX_NODES = 2000;
+/** How long a finished review waits for its pack to reach the server before it reports `done` (the pump goes on in the background). */
+const REPLICA_DRAIN_MS = 120_000;
+
+/** The browser source: the view's port, plus the end of its life (stops the replica pumps and closes the local database). */
+export type BrowserKnowledgeSource = KnowledgeGraphSource & { dispose(): Promise<void> };
 
 /** One way a host can get a directory: its workspace, a folder upload or picker, a drive. */
 export interface DirectoryProvider {

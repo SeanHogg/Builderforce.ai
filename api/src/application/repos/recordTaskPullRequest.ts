@@ -19,6 +19,8 @@ export type RecordTaskPullRequestInput = RecordPullRequestInput & { taskId: numb
 export async function recordTaskPullRequest(db: Db, input: RecordTaskPullRequestInput) {
   return inTransaction(db, async (tx) => {
     const { row, written } = await upsertPullRequestRow(tx, input);
+    // Neither the insert nor the settled-row read produced a row (it vanished between them): nothing to record, and the transaction writes nothing.
+    if (!row) throw new Error(`pull request #${input.number} could not be recorded`);
     // A row the reconciler already settled (merged/closed) was left untouched: the task must not be stamped with a PR whose
     // record this write did not make (the stamp would name a dead PR and settle the single-PR claim for good).
     if (written) {

@@ -17,12 +17,12 @@ import {
 } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { notSystemTask } from '../task/taskScope';
-import type { Db } from '../../infrastructure/database/connection';
+import type { Db, Tx } from '../../infrastructure/database/connection';
 import { isTicketKind, type TicketSearchHit } from './chatTicketTypes';
 
 /** Verify a (kind, ref) resolves to a work item in this tenant. Returns its
  *  display label + status, or null when it does not exist / is cross-tenant. */
-export async function resolveTicket(db: Db, tenantId: number, kind: string, ref: string): Promise<{ label: string; status: string } | null> {
+export async function resolveTicket(db: Db | Tx, tenantId: number, kind: string, ref: string): Promise<{ label: string; status: string } | null> {
   if (!isTicketKind(kind)) return null;
   if (kind === 'task' || kind === 'epic' || kind === 'gap') {
     const id = Number(ref);

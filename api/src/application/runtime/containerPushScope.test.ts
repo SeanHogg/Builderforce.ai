@@ -27,7 +27,7 @@ describe('receivePackRefs', () => {
 
   it('refuses anything that is not a plain command list', () => {
     expect(receivePackRefs(enc.encode(''))).toBeNull();
-    expect(receivePackRefs(enc.encode('0000'))).toBeNull(); // no commands
+    expect(receivePackRefs(enc.encode('0000PACK'))).toBeNull(); // a flush with no commands, followed by junk
     expect(receivePackRefs(enc.encode('zzzz'))).toBeNull();
     expect(receivePackRefs(enc.encode(`${pkt('push-cert\0report-status')}0000`))).toBeNull(); // signed push
     expect(receivePackRefs(enc.encode(`${pkt('not a command')}0000`))).toBeNull();
@@ -51,6 +51,20 @@ describe('receivePackDenial', () => {
     expect(receivePackDenial(body(update('refs/heads/bf/5'), update('refs/heads/main')), 'bf/5')).toMatch(/refs\/heads\/main/);
   });
 
+  it('allows git\'s probe_rpc: a body that is exactly a bare flush updates nothing', () => {
+    // remote-curl sends `0000` before streaming a push larger than http.postBuffer.
+    expect(receivePackRefs(enc.encode('0000'))).toEqual([]);
+    expect(receivePackDenial(enc.encode('0000'), 'bf/5')).toBeNull();
+    // ...but an empty body, or a flush followed by anything, is still not a plain command list.
+    expect(receivePackDenial(enc.encode(''), 'bf/5')).toMatch(/could not be read/);
+    expect(receivePackDenial(enc.encode('0000PACK-bytes'), 'bf/5')).toMatch(/could not be read/);
+  });
+
+  it('refuses to DELETE the run branch (a new sha of all zeros), and still allows its update', () => {
+    expect(receivePackDenial(body(`${A} ${ZERO} refs/heads/bf/5`), 'bf/5')).toMatch(/may not delete refs\/heads\/bf\/5/);
+    expect(receivePackDenial(body(`${ZERO} ${B} refs/heads/bf/5`), 'bf/5')).toBeNull(); // creating it is fine
+  });
+
   it('refuses an unreadable body', () => {
     expect(receivePackDenial(enc.encode('garbage'), 'bf/5')).toMatch(/could not be read/);
   });
@@ -64,6 +78,14 @@ describe('the container-git door applies the scope before anything is forwarded'
   it('forwards a push to the run branch', async () => {
     executeGitProxy.mockResolvedValueOnce({ ok: true, response: new Response('ok') });
     const res = await app.request('/x/git-receive-pack', { method: 'POST', body: body(update('refs/heads/bf/5')) });
+    expect(res.status).toBe(200);
+    expect(executeGitProxy).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards the bare-flush probe (an over-postBuffer push would otherwise 403 before it starts)', async () => {
+    executeGitProxy.mockClear();
+    executeGitProxy.mockResolvedValueOnce({ ok: true, response: new Response('ok') });
+    const res = await app.request('/x/git-receive-pack', { method: 'POST', body: enc.encode('0000') });
     expect(res.status).toBe(200);
     expect(executeGitProxy).toHaveBeenCalledTimes(1);
   });
