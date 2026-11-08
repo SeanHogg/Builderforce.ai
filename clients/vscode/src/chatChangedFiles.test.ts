@@ -56,7 +56,8 @@ describe("readLocalChatChangedFiles", () => {
 
     const result = await readLocalChatChangedFiles(store, SERVER_CHAT);
     expect(result.found).toBe(true);
-    expect(result.files?.sort()).toEqual(["README.md", "src/a.ts", "src/b.ts"]);
+    if (!result.found) throw new Error("expected the seeded chat to be found locally");
+    expect([...result.files].sort()).toEqual(["README.md", "src/a.ts", "src/b.ts"]);
   });
 
   it("answers by local client id too, and a never-edited chat owns no files", async () => {

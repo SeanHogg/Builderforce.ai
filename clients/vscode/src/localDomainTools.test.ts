@@ -26,7 +26,7 @@ function harness() {
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
   });
   const syncQueue = createInMemoryLocalSyncQueue();
-  const tools: LocalDomainTools = createLocalDomainTools({ repository, store, syncQueue });
+  const tools: LocalDomainTools = createLocalDomainTools({ repository, store, syncQueue, deviceId: "device-vsix" });
   return { store, repository, syncQueue, tools };
 }
 
@@ -235,7 +235,7 @@ describe("localDomainTools", () => {
 
     it("a refused write is not queued", async () => {
       const { repository, store, syncQueue } = harness();
-      const tools = createLocalDomainTools({ repository, store, syncQueue });
+      const tools = createLocalDomainTools({ repository, store, syncQueue, deviceId: "device-vsix" });
 
       await expect(tools.execute("ticket-create", { projectId: "no-such-project", title: "Orphan" })).rejects.toThrow(
         /no such local project/i,
@@ -253,7 +253,7 @@ describe("localDomainTools", () => {
       newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
     });
     const syncQueue = createInMemoryLocalSyncQueue();
-    const tools = createLocalDomainTools({ repository, store, syncQueue });
+    const tools = createLocalDomainTools({ repository, store, syncQueue, deviceId: "device-vsix" });
 
     const created = await tools.execute("project-create", { name: "Never connected" });
     if (created.kind !== "local") throw new Error("expected a local result");
@@ -280,7 +280,7 @@ describe("localDomainTools", () => {
       export: () => store.export(),
       subscribe: (listener) => store.subscribe(listener),
     };
-    const tools = createLocalDomainTools({ repository, store: journalBlind, syncQueue });
+    const tools = createLocalDomainTools({ repository, store: journalBlind, syncQueue, deviceId: "device-vsix" });
 
     await expect(tools.execute("project-create", { name: "Unjournalled" })).rejects.toThrow(
       /produced no journal event/,

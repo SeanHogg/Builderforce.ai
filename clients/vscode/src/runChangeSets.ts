@@ -56,6 +56,8 @@ import {
 
 /** What one repository's change-set record carries (extends the shared contract). */
 export interface LocalChangeSetValue extends ChangeSetValue {
+  /** Always stamped by the writer (the agent that ran), so required locally. */
+  author: string;
   capturedAt: string;
   files: Array<{ path: string; beforeHash?: string; afterHash?: string; patchManifestId?: string; attribution: ChangeAttribution; status: string }>;
 }

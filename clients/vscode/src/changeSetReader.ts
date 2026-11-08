@@ -25,6 +25,7 @@ import {
 import { normalizePath } from "./gitChangeModel";
 import {
   changeSetCompleteness,
+  isChangeSetLifecycle,
   readChangeSetLifecycle,
   type ChangeSetLifecycleValue,
 } from "./changeSetLifecycle";
