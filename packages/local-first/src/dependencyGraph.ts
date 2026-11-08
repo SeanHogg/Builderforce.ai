@@ -10,15 +10,34 @@
  *   - otherwise the newest of the entity's CREATING writes (`import` / `create`, never an update or
  *     delete: a ticket's import must not wait on a later chat edit) plus any event carrying exactly
  *     that key: live → wait on it; dead-lettered → BLOCKED (a later live creating write for the
- *     entity, under any key, unblocks); nothing pending → satisfied.
+ *     entity, under any key, unblocks); nothing pending in the dependent's destination → AWAITING
+ *     BIND when the entity's record still sits live in the UNBOUND partition and is a type the sync
+ *     pass binds (`SYNC_PASS_BIND_TYPES`): the next `bindWorkForSync` / `bindChatHistoryForSync`
+ *     queues its import here, so the dependent must not go up first (a chat-ticket link made in a
+ *     bound chat for a ticket whose project is still unbound). Otherwise → satisfied.
  * The entity comes from the referenced event, or from the key's `type:id:…` shape when `type` is a
  * known entity type; every other key (`execution:start:<run>`) is matched by exact key only.
  *
- * Pure. No store, no network.
+ * AWAITING BIND cannot strand a dependent: it needs a live, non-deleted, device-written record of a
+ * type the sync pass ALWAYS moves out of the unbound partition, and the dependent's destination is
+ * bound, so sync is running and the very next pass binds it (an unbound record of any other type —
+ * one no pass binds — resolves satisfied, exactly as before).
+ *
+ * Pure. No store, no network (`loadMappedEntities` reads the store facts it needs up front).
  */
 
 import { destinationKey, type JournalEvent, type LocalEntityType } from './records.js';
 import type { LocalFirstTransaction } from './storeContract.js';
+
+/**
+ * The entity types a sync pass moves out of the unbound partition: the chat history
+ * (`bindChatHistoryForSync`: chat, message, usage) and the work beside it (`bindWorkForSync`:
+ * project, ticket, chat-ticket-link). The ONE list the dependency graph and the hosts' sync
+ * triggers read.
+ */
+export const SYNC_PASS_BIND_TYPES: ReadonlySet<LocalEntityType> = new Set<LocalEntityType>([
+  'chat', 'message', 'usage', 'project', 'ticket', 'chat-ticket-link',
+]);
 
 const KNOWN_TYPES: ReadonlySet<string> = new Set<LocalEntityType>([
   'project', 'ticket', 'chat', 'message', 'execution', 'step', 'approval', 'audit-definition', 'audit-run',

@@ -48,6 +48,13 @@ export interface BuiltinCtx {
    * two apart instead of reading an agent ref as a person.
    */
   agentRef?: string | null;
+  /**
+   * The chat the HOST says this call runs in — a cloud run's originating chat, or the
+   * chat an addressed-agent reply answers in. Set only by server code from its own
+   * trusted state, NEVER from tool arguments. It is what lets a self-acting agent reach
+   * its own host chat (see `chatAccessUserFor`) without granting it any other chat.
+   */
+  hostChatId?: number | null;
   /** The caller's role — used to mint a replay JWT for gateway-key callers. */
   role?: TenantRole;
   /** The caller's raw Bearer token — forwarded on route replay when it's a JWT
