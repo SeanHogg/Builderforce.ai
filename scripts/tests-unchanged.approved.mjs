@@ -72,6 +72,33 @@ export const APPROVED_PERMANENT = [
  * with a `blob`.
  * @type {{ file: string; changed: string; reason: string; approvedBy: string; cases?: number }[]}
  */
-export const APPROVED_THIS_PUSH = [];
+export const APPROVED_THIS_PUSH = [
+  {
+    file: 'brain-embedded/src/brainRunStore.test.ts',
+    changed: "One expectation: the hand-off test's `builtin_chats_link_ticket` call count is 0 (was 2).",
+    reason: "Intended change (chat-link-on-create): a created work item is linked to its chat BY the create call — the run stamps its server chat onto the create, the server links it — so no separate link call follows a create. The stamped chat is asserted in runStore/createChatStamp.test.ts.",
+    approvedBy: APPROVED_BY,
+  },
+  // The parity snapshots reconciled with the same intended change by
+  // brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs (its header names the three edits).
+  ...[
+    'ask-user-malformed', 'ask-user-terminal', 'big-read-paged', 'budget-warn-stop', 'child-own-transcript', 'child-report-exhausted-stall',
+    'child-report-ship-gate', 'child-report-turn-end', 'confirm-approved', 'confirm-declined', 'effort-balanced-thinking', 'effort-quick',
+    'effort-thorough-thinking', 'flash-pinned', 'focus-files-once', 'fold-in-tool-loop', 'fold-summary-fails', 'hand-off-execution',
+    'handed-off-commands', 'image-attachment', 'image-with-context', 'ledger-in-tail', 'long-chat-folds', 'malformed-call-args', 'mcp-tool',
+    'memory-savings', 'model-breaks-mid-answer', 'pinned-model-breaks', 'plain-chat', 'planner-ignores-forced-turn', 'preflight-once',
+    'quick-on-flash', 'quick-route', 'read-dedupe', 'reask-discarded', 'reask-fails', 'reask-transport-failure', 'reasoning-next-action',
+    'reasoning-replay', 'refusal-401', 'refusal-402-plan', 'refusal-402', 'refusal-429', 'reload-after-fold', 'restated-reply',
+    'retry-forced-turn', 'routed-tool-pin', 'ship-gate', 'six-failures-one-turn', 'small-window-tools', 'stall-exhaustion', 'stall-failover',
+    'steer-a-child', 'steer-before-command', 'steer-during-tool', 'steer-final-answer', 'steer-stop-word', 'step-numbering', 'stop-before-text',
+    'stop-during-hand-off', 'stop-during-stream', 'stop-hook', 'sub-agent-spawn', 'thorough-route', 'tool-failure-breaker',
+    'tools-without-runner', 'two-runs-one-fold', 'two-steers-turn-end', 'undelegated-request', 'unknown-tool', 'wait-interrupted', 'work-mode-tools',
+  ].map((id) => ({
+    file: `brain-embedded/src/run/parity/snapshots/${id}.json`,
+    changed: 'The work-linking prompt bullet (and the fold token arithmetic it moves by 8), the removed auto `builtin_chats_link_ticket` step/call, and the run chat stamped on `builtin_tasks_create`.',
+    reason: 'Intended change (chat-link-on-create): a created item links its chat in the create call, so the prompt no longer asks for a link step and the run fires none. Applied by brain-embedded/scripts/apply-intended-snapshot-change-chat-link.mjs, not regenerated from the agent.',
+    approvedBy: APPROVED_BY,
+  })),
+];
 
 export const APPROVED = [...APPROVED_PERMANENT, ...APPROVED_THIS_PUSH];
