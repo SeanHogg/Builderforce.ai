@@ -107,7 +107,6 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
 
-- **The Reviews-panel fix (3574c0d77) is not in an installed VSIX yet.** Package and install the next VSIX. *Blocker:* the shared working tree has other sessions' half-applied edits that break the webview build: `knowledge-graph-view/src/surface/StatusStrip.tsx` is deleted but `SurfaceHeader.tsx` still imports it, `Toolbar.tsx` uses undefined `panels`/`overlays`, and `perf/sceneSteps.ts` uses undefined `stepLabels`. Clears when those land.
 - **G27: no packaged acceptance suite runs with the network denied.** `deniedNetworkAcceptance.test.ts` mocks `vscode`. Assert zero platform requests and local-only completion in the packaged VSIX, Rovr and Web. Unblocks claiming offline behaviour.
 - **G21 + G23: bound-chat rail and sync status (in progress 2026-11-08).**
   - Done: the chat-ticket link entity, its API importer and the server-record ingestion all shipped with the sync residuals (see DONE.md).

@@ -77,6 +77,7 @@
   - **"Map the code" step:** the Now card shows it from the run record's `analyse` phase. `analyse` is in `RUN_PHASE_ORDER` and the phase labels in all five catalogs.
   - **ONE Copy diagnostics,** in the Diagnostics tab. The Server-footer copy and the RunDetail copy are gone (RunDetail links to the tab), along with the dead `diagnosticsText` / `extra` props.
   - **Proof:** targeted vitest passes (agent-tools 26/26, knowledge-graph-view 40/40 after fixes, 70/70 on the first pass), the i18n key check passes, and a Sonnet review found nothing blocking. Its five findings are fixed.
+- **Shipped in VSIX 2026.10.145** (installed and verified with `code --list-extensions --show-versions`; HEAD contains `3574c0d77`). The extension pins memory `^2026.10.60` (brain-embedded and clients/vscode), and `GitShellCtx` takes `Pick<ShellCapability, "run" | "trackedBranch" | "defaultRepo" | "git">` so `git-tools.ts` typechecks.
 
 ## ✅ RESOLVED 2026-11-08: canvas runtimes and studio: six editors, drawing block, Room media, voice marketplace and provenance (Canvas)
 
