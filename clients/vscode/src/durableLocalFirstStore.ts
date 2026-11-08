@@ -32,7 +32,6 @@ import {
   redactSnapshotForUploadOrLog,
   resetDeltaOf,
   shouldCompactJournal,
-  snapshotFrames,
   type JournalCompactionPolicy,
   type LocalFirstDelta,
   type LocalFirstListener,
@@ -41,22 +40,17 @@ import {
   type MemoryLocalFirstStore,
 } from "@builderforce/local-first";
 import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalFirstFileLockOptions } from "./localFirstLock";
-import { LocalFirstStoreCorruptError, quarantineJournal } from "./localFirstCorruption";
-import { chooseRebuildSource, describeRebuild } from "./localFirstRebuild";
-import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
-import { temporaryPathFor } from "./localFirstAtomicFile";
+import { legacyMoved, readLegacyMerge, writeLegacyBaseline } from "./localFirstLegacyMerge";
+import { createRecovery } from "./durableLocalFirstRecovery";
+import { writeSnapshotCache } from "./localFirstSnapshotCacheWrite";
 import { compactJournal } from "./localFirstCompaction";
+import { createCompactionBackoff, type CompactionBackoff } from "./localFirstCompactionBackoff";
 import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
-  PRE_V3_SUFFIX,
   checkSnapshotCache,
   hasLegacyState,
-  readLegacyJournal,
-  readSnapshotCache,
   removeOrphanedTemporaries,
-  retireSnapshotCache,
 } from "./localFirstMigration";
-import { snapshotHasState } from "./localFirstSnapshotFile";
 import { hostLog } from "./hostLog";
 
 const fs = nodeFs.promises;
@@ -100,6 +94,8 @@ export interface DurableLocalFirstStoreOptions {
   /** Overrides the shared compaction thresholds (tests). */
   compaction?: Partial<JournalCompactionPolicy>;
   lock?: LocalFirstFileLockOptions;
+  /** Pause between failed compactions (default: real clock, 30 s doubling to 15 min). Tests inject one. */
+  compactionBackoff?: CompactionBackoff;
   /** A cache write or a compaction failed after the commit was durable. Default `console.warn`. */
   onBackgroundError?: (error: unknown) => void;
   /** A commit took longer than 250 ms: how long, and the size of the frame it appended. */
@@ -126,6 +122,7 @@ export function createDurableLocalFirstStore(
   const io = createNodeJournalIo(directory, { onStageTiming });
   const lock = createLocalFirstFileLock(nodePath.join(directory, LOCK_FILE), options.lock);
   const beforeWrite = options.beforeWrite ?? Promise.resolve();
+  const compactionBackoff = options.compactionBackoff ?? createCompactionBackoff();
   const onBackgroundError = options.onBackgroundError
     ?? ((error: unknown) => console.warn("local-first: background write failed", error));
   // An open or import holds the lock far longer than a commit does (a measured 3.3 s import).
@@ -135,9 +132,13 @@ export function createDurableLocalFirstStore(
   let opened: Promise<void> | undefined;
   let tail: Promise<unknown> = Promise.resolve();
   let inTransaction = false;
+  /** Set while a commit (or compaction) holding the lock catches up; readers wait for it. `mergeLegacyWrites` also
+   *  catches up under the lock unpublished: safe only as every read awaits `ensureOpen`, so it must stay inside the open. */
+  let catchingUp: Promise<void> | undefined;
   let commitGeneration = 0;
   let dirty = false;
   let lastFrameBytes = 0;
+  let compactionPending = false;
 
   /** The delta applied to the memory store's own rows — the state a first frame must hold. */
   const snapshotAfter = (delta: LocalFirstDelta): LocalFirstSnapshot => {
@@ -179,60 +180,10 @@ export function createDurableLocalFirstStore(
     if (onStageTiming) onStageTiming({ stage: "import.rebuild", ms: Date.now() - rebuildStart });
   };
 
-  /** The baseline of v2 as just imported, so a later open merges only what an old window adds. */
-  const recordImportBaseline = async (source: LocalFirstSnapshot | undefined, legacy: LegacyStat | undefined): Promise<void> => {
-    if (legacy) await writeLegacyBaseline(directory, baselineOf(source ?? EMPTY_LOCAL_FIRST_SNAPSHOT, legacy)).catch(onBackgroundError);
-  };
-
-  /**
-   * First open with no v3 journal and an older store to bring over. UNDER THE LOCK: two
-   * windows can open at once, and the loser must find the winner's v3 rather than write its
-   * own. v2 is only read; v3 is written as a stream of frames; the JSON cache of v2's state is
-   * set aside so it is never parsed again. A damaged v3 takes the same road (`rebuildCorrupt`).
-   */
-  const importLegacy = async (): Promise<void> => {
-    await fs.mkdir(directory, { recursive: true });
-    await lock.acquire(openWaitMs);
-    try {
-      const raced = await io.load(yieldToEventLoop);
-      if (raced.corrupt) {
-        await rebuildCorrupt(raced);
-        return;
-      }
-      if (raced.latest) {
-        adopt(raced, true);
-        return;
-      }
-      const legacy = await statLegacyJournal(directory); // before the read: a later write must show as a change
-      const fromJournal = await readLegacyJournal(directory, yieldToEventLoop);
-      const source = fromJournal ?? await readSnapshotCache(snapshotFile);
-      if (source && snapshotHasState(source)) {
-        await io.compact(snapshotFrames(source, yieldToEventLoop));
-        replaceMemory(source, true);
-      } else {
-        adopt(raced, true);
-      }
-      await recordImportBaseline(source, legacy);
-      if (fromJournal) await retireSnapshotCache(snapshotFile).catch(onBackgroundError);
-    } finally {
-      await lock.release();
-    }
-  };
-
-  /**
-   * UNDER THE LOCK: v3 is damaged (not torn). It is copied aside whole and never truncated, then
-   * rebuilt from the best source left (`localFirstRebuild.ts`): this window's own state, the sound
-   * prefix, or the newer of the cache and v2. With none, the open is refused `local_first_store_corrupt`.
-   */
-  const rebuildCorrupt = async (loaded: LoadedJournal, held?: LocalFirstSnapshot): Promise<void> => {
-    const copy = await quarantineJournal(io.journalFile);
-    const plan = await chooseRebuildSource({ directory, snapshotFile, loaded, held, pause: yieldToEventLoop });
-    if (!plan) throw new LocalFirstStoreCorruptError(copy);
-    await io.compact(snapshotFrames(plan.snapshot, yieldToEventLoop));
-    replaceMemory(plan.snapshot, false);
-    if (plan.from === "v2") await recordImportBaseline(plan.snapshot, plan.legacy);
-    onBackgroundError(new Error(describeRebuild(plan, copy, loaded, (await fs.stat(copy)).size)));
-  };
+  // The one-time v2 import, the damaged-v3 rebuild and the pre-v3 copy's retirement (`durableLocalFirstRecovery.ts`).
+  const { importLegacy, rebuildCorrupt, retirePreV3Snapshot } = createRecovery({
+    directory, snapshotFile, io, lock, openWaitMs, onBackgroundError, adopt, replaceMemory,
+  });
 
   /**
    * Writes an old window made to v2 after the import (`localFirstLegacyMerge.ts`). A lock-free
@@ -255,22 +206,6 @@ export function createDurableLocalFirstStore(
       if (merge.delta) onBackgroundError(new Error(`local-first: merged ${merge.rows} rows and ${merge.events} events an older window wrote to the v2 journal`));
     } finally {
       await lock.release();
-    }
-  };
-
-  /**
-   * The pre-v3 rollback copy of the JSON cache (`local-first-v1.json.pre-v3`). It is only
-   * written by a legacy import, so it exists exactly when an import completed; a healthy v3
-   * open means v3 is the record and the copy only costs disk. Best effort: a failure to
-   * remove it must never fail the open. The v2 journal is NOT removed here: the merge
-   * baseline tracks it by size/mtime and still needs it present to detect (and merge) a
-   * write an old window makes to v2 after v3 went live.
-   */
-  const retirePreV3Snapshot = async (): Promise<void> => {
-    try {
-      await fs.rm(`${snapshotFile}${PRE_V3_SUFFIX}`, { force: true });
-    } catch (error) {
-      onBackgroundError(error);
     }
   };
 
@@ -327,10 +262,19 @@ export function createDurableLocalFirstStore(
 
   /**
    * Lock-free readers see another window's commits too. A read never waits on a running
-   * commit, never truncates, and discards what it read if a commit started or landed (or
-   * another read overtook it) meanwhile — the commit's own refresh is the authoritative one.
+   * commit's WORK, never truncates, and discards what it read if a commit started or landed (or
+   * another read overtook it) meanwhile — the commit's own refresh is the authoritative one, so
+   * a read that discarded waits for that refresh (`catchingUp`) rather than return state that
+   * predates a commit another window already finished.
    */
   const refreshForRead = async (): Promise<void> => {
+    await readTailIfIdle();
+    const pending = catchingUp, epoch = io.epoch();
+    await pending;
+    if (pending && io.epoch() === epoch) await readTailIfIdle(); // catch-up threw: look once more, never loop
+  };
+
+  const readTailIfIdle = async (): Promise<void> => {
     await ensureOpen();
     if (inTransaction) return;
     const generation = commitGeneration;
@@ -363,9 +307,16 @@ export function createDurableLocalFirstStore(
     if (onStageTiming) onStageTiming({ stage: "commit.lock", ms: lockStart ? Date.now() - lockStart : 0 });
     inTransaction = true;
     commitGeneration += 1;
+    let caughtUp!: () => void;
+    catchingUp = new Promise<void>((resolve) => { caughtUp = resolve; });
     try {
       const refreshStart = onStageTiming ? Date.now() : 0;
-      await refreshForCommit();
+      try {
+        await refreshForCommit();
+      } finally {
+        catchingUp = undefined;
+        caughtUp();
+      }
       if (onStageTiming) onStageTiming({ stage: "commit.refresh", ms: refreshStart ? Date.now() - refreshStart : 0 });
       return await work();
     } finally {
@@ -381,21 +332,22 @@ export function createDurableLocalFirstStore(
    * it; only other windows interleave. `flush()` waits for it.
    */
   const scheduleCompaction = (): void => {
-    if (!shouldCompactJournal(io.tail(), options.compaction)) return;
-    void serialized(() => compactJournal({ io, view: () => memory.view(), exclusive, policy: options.compaction }))
-      .catch(onBackgroundError);
-  };
-
-  const writeCache = async (): Promise<void> => {
-    const temporary = temporaryPathFor(snapshotFile);
-    try {
-      await fs.mkdir(directory, { recursive: true });
-      await fs.writeFile(temporary, JSON.stringify(memory.view()), { encoding: "utf8", flag: "wx" });
-      await fs.rename(temporary, snapshotFile);
-    } catch (error) {
-      await fs.rm(temporary, { force: true });
-      throw error;
-    }
+    // One job at a time: a burst of commits queues one, and a failing compaction (a rename or
+    // lock that keeps refusing) backs off rather than re-streaming the store per commit.
+    if (compactionPending || !shouldCompactJournal(io.tail(), options.compaction) || !compactionBackoff.allowed()) return;
+    compactionPending = true;
+    void serialized(async () => {
+      try {
+        if (!compactionBackoff.allowed()) return; // re-checked before the temp is streamed
+        await compactJournal({ io, view: () => memory.view(), exclusive, policy: options.compaction });
+        compactionBackoff.succeeded();
+      } catch (error) {
+        compactionBackoff.failed();
+        throw error;
+      } finally {
+        compactionPending = false;
+      }
+    }).catch(onBackgroundError);
   };
 
   const store: DurableLocalFirstStore = {
@@ -442,7 +394,7 @@ export function createDurableLocalFirstStore(
       } while (settled !== tail);
       if (!dirty) return;
       dirty = false;
-      await writeCache().catch(onBackgroundError);
+      await writeSnapshotCache(snapshotFile, memory.view()).catch(onBackgroundError);
     },
   };
   return store;

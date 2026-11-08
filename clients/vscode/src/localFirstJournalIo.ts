@@ -35,7 +35,9 @@ import nodeFs from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import nodePath from "node:path";
 import {
+  mintJournalGeneration,
   readJournalTail,
+  snapshotFrames,
   scanJournalAsync,
   type JournalOpenScan,
   type LocalFirstDelta,
@@ -43,6 +45,7 @@ import {
 } from "@builderforce/local-first";
 import { LocalFirstStoreCorruptError } from "./localFirstCorruption";
 import { renameDurably, temporaryPathFor, writeFrameFile, writeWhole } from "./localFirstAtomicFile";
+import { readBaseGeneration } from "./localFirstJournalHeader";
 
 const fs = nodeFs.promises;
 
@@ -70,10 +73,16 @@ export interface NodeJournalIoOptions {
 /** Give the thread back to the event loop (I/O callbacks, timers, the webview) before continuing. */
 export const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-/** What identifies THIS file: a compaction replaces it, which changes both fields. */
+/**
+ * What identifies THIS file: a compaction replaces it, which changes every field. `ino` and
+ * `birthtimeNs` come from BigInt stats (a number `ino` loses precision above 2^53). `generation`
+ * is the base generation (`JournalOpenScan.generation`) — the strong identity, since
+ * `(ino, birthtime)` is weak on NTFS. Absent for a pre-migration journal; those compare by stat.
+ */
 export interface FileIdentity {
-  ino: number;
-  birthtimeMs: number;
+  ino: bigint;
+  birthtimeNs: bigint;
+  generation?: string;
 }
 
 export interface JournalOpen {
@@ -126,8 +135,8 @@ export interface NodeJournalIo {
   advance(read: Extract<TailRead, { kind: "deltas" }>): void;
   /** Append one frame (the lock holder only): cut a torn tail, write, fsync. */
   append(frame: Uint8Array): Promise<void>;
-  /** Replace the journal with these frames (temp file, fsync, rename). The lock holder only. */
-  compact(frames: AsyncIterable<Uint8Array>): Promise<void>;
+  /** Replace the journal with this snapshot as a new base (temp file, fsync, rename). The lock holder only. */
+  compact(snapshot: LocalFirstSnapshot, pause?: () => Promise<void>): Promise<void>;
   /**
    * Two-phase compaction's publish step (the lock holder only). `tempPath` is a temp file a
    * lock-free phase already streamed and FSYNCED. `catchUp` copies the committed frames
@@ -136,7 +145,7 @@ export interface NodeJournalIo {
    * new base and the caught-up tail in one step. A
    * failure removes the temp and leaves the journal untouched.
    */
-  publishCompacted(tempPath: string, tempFrames: number, catchUp: CatchUp): Promise<void>;
+  publishCompacted(tempPath: string, tempFrames: number, catchUp: CatchUp, generation: string): Promise<void>;
   /** Remove a temp file a cancelled compaction left behind. */
   discardCompacted(tempPath: string): Promise<void>;
   /** Commit frames and bytes since the last base. */
@@ -151,13 +160,17 @@ export interface NodeJournalIo {
   epoch(): number;
 }
 
-function identityOf(stat: nodeFs.Stats): FileIdentity {
-  return { ino: stat.ino, birthtimeMs: stat.birthtimeMs };
+function identityOf(stat: nodeFs.BigIntStats, generation?: string): FileIdentity {
+  return generation === undefined
+    ? { ino: stat.ino, birthtimeNs: stat.birthtimeNs }
+    : { ino: stat.ino, birthtimeNs: stat.birthtimeNs, generation };
 }
 
+/** Both sides carry a generation: it decides. Otherwise (pre-migration journal) the stat identity does. */
 export function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
   if (!a || !b) return a === b;
-  return a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
+  if (a.generation !== undefined && b.generation !== undefined) return a.generation === b.generation;
+  return a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
 }
 
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -173,9 +186,9 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
   let opened = false;
   let version = 0;
 
-  const statOrUndefined = async (): Promise<nodeFs.Stats | undefined> => {
+  const statOrUndefined = async (): Promise<nodeFs.BigIntStats | undefined> => {
     try {
-      return await fs.stat(journalFile);
+      return await fs.stat(journalFile, { bigint: true });
     } catch (error) {
       if (isMissing(error)) return undefined;
       throw error;
@@ -194,9 +207,9 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
       throw error;
     }
     let raw: Buffer;
-    let stat: nodeFs.Stats;
+    let stat: nodeFs.BigIntStats;
     try {
-      stat = await handle.stat();
+      stat = await handle.stat({ bigint: true });
       raw = await handle.readFile();
     } finally {
       await handle.close();
@@ -214,7 +227,7 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
       committedBytes: scan.committedBytes,
       tailFrames: scan.tailFrames,
       tailBytes: scan.tailBytes,
-      identity: identityOf(stat),
+      identity: identityOf(stat, scan.generation),
       corrupt: scan.corrupt,
       baseClosed: scan.baseClosed,
     };
@@ -242,16 +255,23 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
     if (!opened) return { kind: "reload" };
     const stat = await statOrUndefined();
     if (!stat) return identity === undefined && committedBytes === 0 ? { kind: "unchanged" } : { kind: "reload" };
+    const size = Number(stat.size);
     if (!sameFile(identityOf(stat), identity)) return { kind: "reload" };
-    if (stat.size < committedBytes) return { kind: "reload" };
-    if (stat.size === committedBytes) return { kind: "unchanged" };
+    if (size < committedBytes) return { kind: "reload" };
+    // With a tracked generation even an equal-size file may be a different one: check its header first.
+    if (size === committedBytes && identity?.generation === undefined) return { kind: "unchanged" };
     const handle = await fs.open(journalFile, "r");
     let bytes: Buffer;
     try {
       // The file may have been replaced between the stat and the open: trust the handle's.
-      const current = await handle.stat();
-      if (!sameFile(identityOf(current), identity) || current.size < committedBytes) return { kind: "reload" };
-      bytes = Buffer.alloc(current.size - committedBytes);
+      const current = await handle.stat({ bigint: true });
+      const currentSize = Number(current.size);
+      if (!sameFile(identityOf(current), identity) || currentSize < committedBytes) return { kind: "reload" };
+      // Stat identity is weak on NTFS: the base generation the file opens with must still be the tracked one.
+      // A header with no generation (an older build's file on a reused inode) is a different file too.
+      if (identity?.generation !== undefined && (await readBaseGeneration(handle)) !== identity.generation) return { kind: "reload" };
+      if (currentSize === committedBytes) return { kind: "unchanged" };
+      bytes = Buffer.alloc(currentSize - committedBytes);
       let read = 0;
       while (read < bytes.length) {
         const { bytesRead } = await handle.read(bytes, read, bytes.length - read, committedBytes + read);
@@ -311,7 +331,9 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
           await handle.truncate(committedBytes).catch(() => undefined);
           throw error;
         }
-        identity = identityOf(await handle.stat());
+        // Appending does not change the base generation: keep it while the file is the same one.
+        const written = identityOf(await handle.stat({ bigint: true }));
+        identity = identity?.ino === written.ino && identity.generation !== undefined ? { ...written, generation: identity.generation } : written;
       } finally {
         await handle.close();
       }
@@ -322,7 +344,9 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
       opened = true;
       version += 1;
     },
-    async compact(frames) {
+    async compact(snapshot, pause = yieldToEventLoop) {
+      const generation = mintJournalGeneration();
+      const frames = snapshotFrames(snapshot, pause, undefined, generation);
       const compactStart = onStageTiming ? Date.now() : 0;
       await fs.mkdir(directory, { recursive: true });
       const temporary = temporaryPathFor(journalFile);
@@ -339,11 +363,11 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
       frameCount = written.frames;
       tailFrames = 0;
       tailBytes = 0;
-      identity = stat ? identityOf(stat) : undefined;
+      identity = stat ? identityOf(stat, generation) : undefined; // the base this host just wrote
       opened = true;
       version += 1;
     },
-    async publishCompacted(tempPath, tempFrames, catchUp) {
+    async publishCompacted(tempPath, tempFrames, catchUp, generation) {
       let handle: FileHandle | undefined;
       try {
         handle = await fs.open(tempPath, "r+");
@@ -355,12 +379,12 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
         handle = undefined;
         await renameDurably(tempPath, journalFile);
         const stat = await statOrUndefined();
-        committedBytes = stat?.size ?? 0;
+        committedBytes = stat ? Number(stat.size) : 0;
         frameCount = tempFrames + copied.frames;
         // The caught-up frames follow the new base, so they are the new tail (as a reopen counts them).
         tailFrames = copied.frames;
         tailBytes = copied.bytes;
-        identity = stat ? identityOf(stat) : undefined;
+        identity = stat ? identityOf(stat, generation) : undefined;
         opened = true;
         version += 1;
       } catch (error) {

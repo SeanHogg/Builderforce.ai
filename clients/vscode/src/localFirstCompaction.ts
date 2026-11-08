@@ -22,6 +22,7 @@ import nodeFs from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import nodePath from "node:path";
 import {
+  mintJournalGeneration,
   readJournalTail,
   shouldCompactJournal,
   snapshotFrames,
@@ -59,11 +60,12 @@ interface CompactionSource {
 export async function streamCompactionTemp(
   journalFile: string,
   snapshot: LocalFirstSnapshot,
-): Promise<{ path: string; frames: number }> {
+): Promise<{ path: string; frames: number; generation: string }> {
   await fs.mkdir(nodePath.dirname(journalFile), { recursive: true });
   const path = temporaryPathFor(journalFile);
-  const written = await writeFrameFile(path, snapshotFrames(snapshot, yieldToEventLoop));
-  return { path, frames: written.frames };
+  const generation = mintJournalGeneration();
+  const written = await writeFrameFile(path, snapshotFrames(snapshot, yieldToEventLoop, undefined, generation));
+  return { path, frames: written.frames, generation };
 }
 
 /**
@@ -139,7 +141,7 @@ export async function compactJournal(ports: CompactionPorts): Promise<void> {
         return;
       }
       await io.publishCompacted(temporary.path, temporary.frames, (temp, tempEnd, journalEnd) =>
-        copyCommittedTail(io.journalFile, source.baseCommittedBytes, journalEnd, temp, tempEnd));
+        copyCommittedTail(io.journalFile, source.baseCommittedBytes, journalEnd, temp, tempEnd), temporary.generation);
     });
   } catch (error) {
     await io.discardCompacted(temporary.path);
