@@ -31,10 +31,12 @@ describe('the first-sync case (a pack, or a root reviewed before it was linked)'
         expect(srv.log.filter((l) => l.kind === 'sync')).toHaveLength(1);
         const pack = srv.syncs()[0]!.pack!;
         expect(pack.baseGeneration).toBe(0);
-        expect(pack.files?.map((f) => f.path).sort()).toEqual(['a.md', 'missing.md']);
+        // missing.md has no extracted output: listing it without a body is the server's 409 `extracted_missing` wedge, so it is held back (below).
+        expect(pack.files?.map((f) => f.path).sort()).toEqual(['a.md']);
         expect(pack.extracted).toEqual([{ kind: 'full', hash: 'h1', entries: [ex] }]);
         expect(pack.facts?.map((f) => f.key)).toEqual(['claim:1']);
         expect(pack.scope).toMatchObject({ rootId: root, title: 'Docs' });
-        expect(state.dirty).toBe(0);
+        expect(state.awaitingReview).toBe(1);
+        expect(state.dirty).toBe(1); // only the held-back missing.md key
     });
 });
