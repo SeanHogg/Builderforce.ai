@@ -643,4 +643,14 @@ export default {
   deferred_dispatches:
     'matches `delivery` only by the word "dispatch": this is a retry queue for one-shot AGENT RUNS that admission deferred (CI auto-fix, incident triage, security audit, validation review), not a delivery of anything to anyone. A row is the parked request (`payload`), its lease (`claimed_at`), attempts and backoff (`next_attempt_at`), and a settle state; the partial unique index on (tenant, ticket, kind) WHERE pending is what makes re-parking idempotent, which `deliveries` has no key for. It replaced `dispatch.deferred` rows in the append-only audit table, which had no claim, attempt or backoff.',
 
+  governance_audit_runs:
+    'the same two-nouns answer as `system_audit_runs`: the EXECUTION that performs the audit is the agent run ' +
+      '(`agent_run_id` points at it); this row is the audit RECORD a compliance reviewer reads afterwards. ' +
+      '`governance_findings.run_id` cascades from its UUID, `project_id` is a cascading FK to `projects` (mig 1337), ' +
+      'and `(tenant_id, segment_id, project_id, status)` is the index the per-project audit history is read through. ' +
+      'Its verdict columns — `gate_result` (what holds an auto-merge), `ruleset_hash` and `packs_applied` (exactly ' +
+      'which rules governed the run) — are first-class because the gate and the evidence trail filter on them. ' +
+      '`runs` has a bigserial id, no project and no segment, so folding it in would drop the findings FK and both ' +
+      'cascades and bury the gate verdict in an `output` blob.',
+
 };

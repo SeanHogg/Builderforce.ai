@@ -31,6 +31,10 @@
  * DELETE /api/governance/policy-gates/:gateId         – delete a gate (manager+)
  * GET    /api/governance/policy-gates/effective       – resolved wire gates (preview)
  *
+ * The policy-pack RULE audits (migration 1336) the `governance_audit` agent tool drives —
+ * GET /rules/resolve, POST /audits, POST /audits/:id/findings — live in
+ * governanceRuleAuditRoutes.ts.
+ *
  * Vulnerability FINDINGS (what a tracked scan found) live in
  * vulnerabilityFindingRoutes.ts, mounted under /vuln-scans/:scanId/findings.
  */
@@ -70,6 +74,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { createStakeholderAlignmentRoutes } from './stakeholderAlignmentRoutes';
 import { createVulnerabilityFindingRoutes } from './vulnerabilityFindingRoutes';
+import { createGovernanceRuleAuditRoutes } from './governanceRuleAuditRoutes';
 import { parseBody, z } from './requestBody';
 
 /** `status` stays a string so the handler's own "must be one of" answer wins. */
@@ -330,6 +335,8 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   // What a scan FOUND — static `/:scanId/findings` subpaths, mounted before the
   // tracker so they win over its `/:id`.
   router.route('/vuln-scans', createVulnerabilityFindingRoutes(db));
+  // The `governance_audit` agent tool's ruleset resolve + audit run endpoints (PRD 08 §4.2).
+  router.route('/', createGovernanceRuleAuditRoutes(db));
   // Every other tracker is the same segment-scoped CRUD — one factory, mounted N times.
   mountTrackers(router, db, TRACKERS.map((t) => ({ ...t, opts: { ...t.opts, auditEntity: t.path.slice(1) } })));
   router.route('/stakeholder-alignment', createStakeholderAlignmentRoutes(db));
