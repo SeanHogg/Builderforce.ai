@@ -143,28 +143,42 @@ describe('size caps', () => {
 });
 
 describe('linear scanner', () => {
-    /** Fastest of a few runs: the least load-sensitive estimate of the work itself. */
-    async function fastest(bytes: Uint8Array): Promise<number> {
-        let best = Number.POSITIVE_INFINITY;
-        for (let run = 0; run < 5; run++) {
-            const started = performance.now();
-            await extractDocumentText(bytes, DOCX_MEDIA_TYPE);
-            best = Math.min(best, performance.now() - started);
-        }
-        return best;
+    const STEP = 4;
+
+    async function timed(bytes: Uint8Array): Promise<number> {
+        const started = performance.now();
+        await extractDocumentText(bytes, DOCX_MEDIA_TYPE);
+        return performance.now() - started;
     }
 
-    it('scales linearly on unclosed tags: doubling the input far less than quadruples the time', async () => {
-        const size = 512 * 1024;
-        for (const piece of ['<w:t>', '<w:t ', '<w:t><w:p>']) {
-            const once = docx(piece.repeat(Math.ceil(size / piece.length)));
-            const twice = docx(piece.repeat(Math.ceil((2 * size) / piece.length)));
-            await fastest(twice); // warm-up: JIT and the lazily loaded pieces, outside the measurement
-            const ratio = (await fastest(twice)) / Math.max(await fastest(once), 0.5);
-            // Linear ≈ 2; quadratic ≈ 4. The 0.5 ms floor keeps a sub-millisecond run from inflating the ratio.
-            expect(ratio).toBeLessThan(3);
+    /**
+     * Fastest of several runs per size (the least load-sensitive estimate of the work itself), the two sizes
+     * INTERLEAVED so a burst of runner load lands on both rather than skewing one side of the ratio.
+     */
+    async function fastestPair(small: Uint8Array, large: Uint8Array): Promise<{ small: number; large: number }> {
+        let bestSmall = Number.POSITIVE_INFINITY;
+        let bestLarge = Number.POSITIVE_INFINITY;
+        for (let run = 0; run < 7; run++) {
+            bestSmall = Math.min(bestSmall, await timed(small));
+            bestLarge = Math.min(bestLarge, await timed(large));
         }
-    });
+        return { small: bestSmall, large: bestLarge };
+    }
+
+    it('scales linearly on unclosed tags: a 4× input far less than 16× the time', async () => {
+        const size = 64 * 1024;
+        for (const piece of ['<w:t>', '<w:t ', '<w:t><w:p>']) {
+            const small = docx(piece.repeat(Math.ceil(size / piece.length)));
+            const large = docx(piece.repeat(Math.ceil((STEP * size) / piece.length)));
+            await timed(large); // warm-up: JIT and the lazily loaded pieces, outside the measurement
+            const best = await fastestPair(small, large);
+            const ratio = best.large / Math.max(best.small, 0.5);
+            // Linear ≈ 4; quadratic ≈ 16. 8 is the geometric midpoint: a 2× margin from either, so shared-runner
+            // jitter cannot fail a linear scanner and cannot pass a quadratic one. The 0.5 ms floor keeps a
+            // sub-millisecond run from inflating the ratio.
+            expect(ratio).toBeLessThan(8);
+        }
+    }, 30_000);
 });
 
 describe('abort', () => {
