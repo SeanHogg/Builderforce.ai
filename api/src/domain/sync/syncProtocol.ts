@@ -26,6 +26,8 @@ import {
 
 export {
   SYNC_PROTOCOL_VERSION,
+  /** The ticket kinds in the task table: the ONE list the device's link payload and the importer share. */
+  TASK_TABLE_KINDS,
   destinationKey,
   /** The ONE event-id shape check — the client store mints exactly this. */
   isJournalEventId,

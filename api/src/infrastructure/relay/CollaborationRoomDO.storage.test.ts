@@ -59,6 +59,8 @@ function bigUpdate(bytes: number): Uint8Array {
 }
 
 const roomOf = (state: ReturnType<typeof makeState>) => new CollaborationRoomDO(state as never);
+/** Wait for the load the newest room ran under `blockConcurrencyWhile` (several storage reads, not one microtask). */
+const loaded = async (state: ReturnType<typeof makeState>) => { await state.blockConcurrencyWhile.mock.results.at(-1)?.value; };
 const docOf = (room: CollaborationRoomDO) => (room as unknown as { doc: Y.Doc }).doc;
 type Internals = { persister: { persist: () => Promise<void>; shape: unknown }; admission: { settle: (bytes: number) => void } };
 const persist = (room: CollaborationRoomDO) => (room as unknown as Internals).persister.persist();
@@ -67,7 +69,7 @@ describe('CollaborationRoomDO storage', () => {
   it('round-trips a state larger than one chunk through several keys', async () => {
     const state = makeState();
     const room = roomOf(state);
-    await Promise.resolve();
+    await loaded(state);
     Y.applyUpdate(docOf(room), bigUpdate(CHUNK_BYTES * 2 + 5_000));
     await persist(room);
 
@@ -77,7 +79,7 @@ describe('CollaborationRoomDO storage', () => {
     for (let index = 0; index < count; index += 1) expect((state.stored.get(chunkKey(index)) as Uint8Array).byteLength).toBeLessThanOrEqual(CHUNK_BYTES);
 
     const reopened = roomOf(state);
-    await Promise.resolve();
+    await loaded(state);
     expect(docOf(reopened).getText('t').toString()).toBe(docOf(room).getText('t').toString());
   });
 
@@ -87,14 +89,14 @@ describe('CollaborationRoomDO storage', () => {
     const state = makeState();
     state.stored.set(DOC_KEY, Y.encodeStateAsUpdate(seed));
     const room = roomOf(state);
-    await Promise.resolve();
+    await loaded(state);
     expect(docOf(room).getText('t').toString()).toBe('legacy');
   });
 
   it('writes a small state as the single key and removes stale chunks when a state shrinks', async () => {
     const state = makeState();
     const room = roomOf(state);
-    await Promise.resolve();
+    await loaded(state);
     docOf(room).transact(() => docOf(room).getText('t').insert(0, 'x'.repeat(10)));
     state.stored.set(CHUNK_COUNT_KEY, 2);
     state.stored.set(chunkKey(0), new Uint8Array(1));
@@ -109,7 +111,7 @@ describe('CollaborationRoomDO storage', () => {
   it('refuses an update that would push the room past the hard cap, closing the sender and not applying it', async () => {
     const state = makeState();
     const room = roomOf(state);
-    await Promise.resolve();
+    await loaded(state);
     const sender = new FakeSocket();
     state.sockets.push(sender);
     (room as unknown as Internals).admission.settle(MAX_STATE_BYTES - 10);
@@ -129,7 +131,7 @@ describe('CollaborationRoomDO storage', () => {
       const state = makeState();
       state.storage.put.mockRejectedValue(new Error('value too large'));
       const room = roomOf(state);
-      await Promise.resolve();
+      await loaded(state);
       reported.mockClear();
       await persist(room);
       await persist(room);

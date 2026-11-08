@@ -23,6 +23,14 @@ import type { ChatTicketLinkType, ChatTicketLinkValue, LocalRecord } from './rec
 import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 import { tombstoneRecord } from './tombstone.js';
 
+/**
+ * The ticket kinds that live in the server's task table (one id space). A link to one resolves
+ * through the sync mappings (its server id is the bare ref); every other tier (spec, objective,
+ * roadmap ...) has its own id space and rides the link as `ticketKind` / `ticketRef`. The ONE
+ * list the device and the server's importer both read.
+ */
+export const TASK_TABLE_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
+
 export interface ChatTicketLinkInput {
   chatClientId: string;
   ticketClientId: string;

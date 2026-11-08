@@ -54,6 +54,25 @@ describe('requirementUnmetReason', () => {
     s.failedDiagnostics.delete('security-posture');
     expect(requirementUnmetReason(diag, s)).toBeNull();
   });
+
+  it('a sign-off by a NON-role-capable member does NOT satisfy (per-role capability re-check)', () => {
+    const s = emptySignals();
+    s.approvedRoles.add('architect');
+    s.signedOffRoles = new Map([['architect', new Set(['some-rando-agent'])]]);
+    s.roleCapableRefs = new Map([['architect', new Set(['arch-agent-1', 'arch-agent-2'])]]);
+    // The ledger row exists and says approved, but the signer is not role-capable.
+    expect(requirementUnmetReason(req(), s)).toBe('missing');
+    // A role-capable signer among the signers satisfies it.
+    s.signedOffRoles.get('architect')!.add('arch-agent-1');
+    expect(requirementUnmetReason(req(), s)).toBeNull();
+  });
+
+  it('capability re-check is skipped when the caller supplies no maps (legacy behaviour)', () => {
+    const s = emptySignals();
+    s.approvedRoles.add('architect');
+    // No signedOffRoles / roleCapableRefs ⇒ membership-only, as before this rule.
+    expect(requirementUnmetReason(req(), s)).toBeNull();
+  });
 });
 
 describe('computeCoverage — reviewer quorum (AC-4)', () => {

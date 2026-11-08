@@ -15,7 +15,7 @@
  */
 
 import { ingestServerRecords, type LocalFirstStore } from "@builderforce/local-first";
-import { readChatRunHistory, readChatTicketLinks, type ChatStateGet } from "@seanhogg/builderforce-brain-embedded";
+import { readChatRunHistory, readChatTicketLinks, type BrainPersistenceAdapter, type ChatStateGet } from "@seanhogg/builderforce-brain-embedded";
 import { linkRows, listedTickets, runRows, ticketRows, type WireRun, type WireTicket } from "./railRows";
 import type { ChatRailRefreshOutcome, ChatRef } from "./railProtocol";
 import { resolveChat } from "./resolveChat";
@@ -34,6 +34,31 @@ export interface RailRefreshPorts {
  * no row still counts.
  */
 export const railReadMark = (chatClientId: string): string => `chatRail:${chatClientId}`;
+
+/**
+ * `persistence` with `deleteChat` also dropping the chat's rail read mark: a deleted chat has no
+ * rail to be fresh, and without this the store's state kept a `readMark@chatRail:<id>` per chat
+ * ever refreshed. Mutates and returns the same adapter, so every caller of it (the command, the
+ * webview's `local.persistence` dispatch) gets the prune.
+ */
+export function pruneRailReadMarkOnDelete<P extends Pick<BrainPersistenceAdapter, "getChat" | "deleteChat">>(
+  persistence: P,
+  store: Pick<LocalFirstStore, "transact">,
+): P {
+  const getChat = persistence.getChat.bind(persistence);
+  const deleteChat = persistence.deleteChat.bind(persistence);
+  persistence.deleteChat = async (id: number) => {
+    const clientId = (await getChat(id).catch(() => undefined))?.clientId;
+    const answer = await deleteChat(id);
+    if (clientId) {
+      await store.transact(async (tx) => {
+        if ((await tx.readMark(railReadMark(clientId))) !== undefined) await tx.setReadMark(railReadMark(clientId), undefined);
+      });
+    }
+    return answer;
+  };
+  return persistence;
+}
 
 /** A platform read that failed. Distinct from "the platform listed nothing". */
 export class RailReadError extends Error {

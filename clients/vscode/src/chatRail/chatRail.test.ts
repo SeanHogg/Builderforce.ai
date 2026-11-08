@@ -6,7 +6,7 @@ import {
   type LocalFirstStore,
 } from "@builderforce/local-first";
 import { buildSyncSummary } from "../sync/syncSummary";
-import { refreshRail } from "./refreshRail";
+import { pruneRailReadMarkOnDelete, railReadMark, refreshRail } from "./refreshRail";
 import { createChatRailService } from "./railService";
 import { touchesRail, watchRail } from "./railWatch";
 import { watchRailFor } from "./railWebviewWatch";
@@ -168,6 +168,27 @@ describe("touchesRail", () => {
     expect(touchesRail(railChange(["execution", "chat-ticket-link"], { ids: ["r9"] }), scope)).toBe(true);
     // Before the first post nothing is known: any run counts.
     expect(touchesRail(railChange(["execution"], { ids: ["r9"] }), undefined)).toBe(true);
+  });
+});
+
+describe("pruneRailReadMarkOnDelete", () => {
+  it("deleting a chat drops its rail read mark and leaves every other chat's", async () => {
+    const store = createMemoryLocalFirstStore();
+    const OTHER = "00000000-0000-4000-8000-0000000000c2";
+    await store.transact(async (tx) => {
+      await tx.setReadMark(railReadMark(CHAT), NOW().toISOString());
+      await tx.setReadMark(railReadMark(OTHER), NOW().toISOString());
+    });
+    const deleted: number[] = [];
+    const persistence = pruneRailReadMarkOnDelete({
+      getChat: async (id: number) => ({ id, clientId: id === 1 ? CHAT : OTHER }) as never,
+      deleteChat: async (id: number) => { deleted.push(id); return {}; },
+    }, store);
+    await persistence.deleteChat(1);
+    expect(deleted).toEqual([1]);
+    const cursors = (await store.export()).cursors;
+    expect(cursors[`readMark@${railReadMark(CHAT)}`]).toBeUndefined();
+    expect(cursors[`readMark@${railReadMark(OTHER)}`]).toBe(NOW().toISOString());
   });
 });
 

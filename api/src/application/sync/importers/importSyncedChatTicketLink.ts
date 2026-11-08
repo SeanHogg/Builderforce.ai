@@ -22,7 +22,7 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import { isJournalEventId } from '../../../domain/sync/syncProtocol';
+import { TASK_TABLE_KINDS, isJournalEventId } from '../../../domain/sync/syncProtocol';
 import { bumpChatTicketLinkCaches, deleteChatTicketLink, upsertChatTicketLink } from '../../brain/chatTicketLinkWrite';
 import { isTicketKind, ticketKindForTaskType } from '../../brain/chatTicketTypes';
 import { resolveTicket } from '../../brain/ticketLookup';
@@ -96,9 +96,6 @@ function canonical(chatId: number, ref: string, linkType: LinkType): Record<stri
 
 /** `ref` is the work item's address in its tier: the task id for task/epic/gap, a uuid for the rest. */
 type Resolved = { chatId: number; ref: string; kind: string };
-
-/** The kinds that live in the task table: resolved through the sync mappings, by client or server id. */
-const TASK_TABLE_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
 
 async function resolveParents(
   payload: LinkPayload,

@@ -86,6 +86,14 @@ export interface SignoffRequestSpec {
    * INSTRUCTION text, which is about the work, not about where the ask came from.
    */
   chatId?: number | null;
+  /**
+   * Who speaks for the ticket (PRD §5.5 FR-5) — the Coordinator's display name, resolved
+   * by `requestRoleRun` through `resolveStakeholderVoice`. Named in the instruction so
+   * the outward ask is attributed to the ticket's single accountable voice, not an
+   * unnamed dispatcher. Optional: when absent (unowned ticket, lookup failure) the
+   * instruction simply does not name an asker, exactly as before.
+   */
+  coordinatorName?: string | null;
 }
 
 /**
@@ -99,11 +107,16 @@ export function buildSignoffRequestInstruction(spec: SignoffRequestSpec): string
   const title = spec.taskTitle?.trim() ? ` ("${spec.taskTitle.trim()}")` : '';
   const at = lane ? ` at lane '${lane}'` : '';
   const pr = spec.prUrl ? ` (pull request: ${spec.prUrl})` : '';
+  // Single accountable voice (PRD §5.5 FR-5): the outward ask is attributed to the
+  // ticket's Coordinator, so the reviewer knows who they answer to — not an unnamed
+  // dispatcher.
+  const askedBy = spec.coordinatorName?.trim() ? `You are being asked by ${spec.coordinatorName.trim()}, who is accountable for this ticket. ` : '';
   // `laneKey` is spelled out in the tool call AND called out again below, because the
   // whole round-trip is wasted when the agent omits it (see the module header).
   const laneArg = lane ? `, laneKey='${lane}'` : '';
   return (
     `You are the ${spec.roleName} accountable for ticket #${spec.taskId}${title}${at}. `
+    + askedBy
     + `Review the delivered work against the ticket description, the PRD and its acceptance criteria${pr}. `
     + `Then RECORD YOUR VERDICT — this is required, the ticket cannot complete without it: `
     + `call the \`${SIGNOFF_TOOL_NAME}\` tool with taskId=${spec.taskId}, roleKey='${spec.roleKey}'${laneArg}, `
@@ -134,9 +147,11 @@ export function buildProducerRequestInstruction(spec: SignoffRequestSpec): strin
   const lane = spec.laneKey ?? '';
   const title = spec.taskTitle?.trim() ? ` ("${spec.taskTitle.trim()}")` : '';
   const at = lane ? ` at lane '${lane}'` : '';
+  const askedBy = spec.coordinatorName?.trim() ? `You are being asked by ${spec.coordinatorName.trim()}, who is accountable for this ticket. ` : '';
   const laneArg = lane ? `, laneKey='${lane}'` : '';
   return (
     `You are the ${spec.roleName} assigned to PRODUCE the work for ticket #${spec.taskId}${title}${at}. `
+    + askedBy
     + `Implement or author the required deliverable (open a pull request for code, or write the PRD section for a spec role). `
     + `Your run is recorded as this role's participation on the ticket's accountability manifest. `
     + `When the deliverable is complete, RECORD IT — the ticket cannot complete without it: `

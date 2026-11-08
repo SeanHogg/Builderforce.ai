@@ -91,6 +91,11 @@ function makeMockState(): DurableObjectState & { sockets: MockWebSocket[]; store
   } as unknown as DurableObjectState & { sockets: MockWebSocket[]; stored: Map<string, unknown> };
 }
 
+/** Wait for the load the newest room ran under `blockConcurrencyWhile` (several storage reads, not one microtask). */
+async function loaded(state: ReturnType<typeof makeMockState>): Promise<void> {
+  await vi.mocked(state.blockConcurrencyWhile).mock.results.at(-1)?.value;
+}
+
 /** Join a socket the way `fetch` would, without needing Cloudflare's `WebSocketPair`. */
 function join(
   room: CollaborationRoomDO,
@@ -124,7 +129,7 @@ describe('CollaborationRoomDO construction', () => {
     state.stored.set('ydoc:v1', Y.encodeStateAsUpdate(seed));
 
     const room = new CollaborationRoomDO(state);
-    await Promise.resolve();
+    await loaded(state);
 
     const doc = (room as unknown as { doc: Y.Doc }).doc;
     expect(doc.getText('content').toString()).toBe('restored');

@@ -14,6 +14,20 @@ const jwt = (expSeconds: number, tag: string) =>
 
 interface Call { url: string; auth: string | undefined; op?: string }
 
+/**
+ * These tests are about the token. The shell isolation around the run (scrubbing the checkout's
+ * `.git`, `sudo useradd` of the shell user, sweeping its processes) needs a real Actions machine,
+ * would provision a real user on one, and has its own tests; so its three call sites are removed.
+ * Each must be found, so a rename fails here rather than silently running the real thing.
+ */
+function stubShellIsolation(body: string): string {
+  const sites = ['await isolateShell();', 'await sweepShellProcesses();', 'releaseShellWorkspace({ workdir: WORKDIR });'];
+  return sites.reduce((out, site) => {
+    if (!out.includes(site)) throw new Error(`runner no longer contains "${site}"; update stubShellIsolation`);
+    return out.replace(site, '');
+  }, body);
+}
+
 /** Run the rendered runner to completion: it loads its spec, is told to stop, and exits. */
 async function runRunner(opts: {
   token: string;
@@ -23,7 +37,7 @@ async function runRunner(opts: {
   withMint?: boolean;
 }): Promise<{ calls: Call[]; exitCode: number | undefined; errors: string[] }> {
   const script = renderAgentRunnerScript();
-  const body = script.replace(/^import .*$/gm, '');
+  const body = stubShellIsolation(script.replace(/^import .*$/gm, ''));
   const importLines = [...script.matchAll(/^import \{([^}]*)\} from '([^']+)';?$/gm)];
   const names: string[] = [];
   const values: unknown[] = [];
@@ -65,6 +79,8 @@ async function runRunner(opts: {
     },
     cwd: () => '/work',
     exit: (code?: number) => { exitCode = code; },
+    // The runner installs SIGINT/SIGTERM/SIGHUP teardown handlers; no signal is raised here.
+    on: () => processStub,
   };
   const consoleStub = { error: (...a: unknown[]) => { errors.push(a.map(String).join(' ')); }, log: () => {} };
   const AsyncFunction = Object.getPrototypeOf(async function noop() {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<void>;

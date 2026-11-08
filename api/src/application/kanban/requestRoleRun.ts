@@ -29,6 +29,7 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketParticipantsService } from './ticketParticipants';
 import { buildProducerRequestPayload, buildSignoffRequestPayload } from './signoffRequest';
+import { resolveStakeholderVoice } from './stakeholderVoice';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
 import { dispatchCloudRunForTask, dispatchError, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 
@@ -76,7 +77,7 @@ export interface RoleRunRequest {
  * that later replays a differently-shaped payload is an approval for a different run.
  * One builder, so the gated payload and the dispatched one cannot drift.
  */
-export function buildRoleRunPayload(req: RoleRunRequest): string {
+export function buildRoleRunPayload(req: RoleRunRequest, coordinatorName?: string | null): string {
   const spec = {
     cloudAgentRef: req.agentRef,
     model: req.model ?? null,
@@ -87,6 +88,7 @@ export function buildRoleRunPayload(req: RoleRunRequest): string {
     laneKey: req.laneKey,
     prUrl: req.prUrl ?? null,
     chatId: req.chatId ?? null,
+    coordinatorName: coordinatorName ?? null,
   };
   return req.kind === 'producer' ? buildProducerRequestPayload(spec) : buildSignoffRequestPayload(spec);
 }
@@ -104,7 +106,16 @@ export async function requestRoleRun(
   participants: TicketParticipantsService,
   req: RoleRunRequest,
 ): Promise<CloudDispatchOutcome> {
-  const payload = buildRoleRunPayload(req);
+  // Coordinator-routed voice (PRD §5.5 FR-5): every role ask is an outward,
+  // ticket-scoped message, so the instruction names the ticket's Coordinator as the
+  // single accountable voice — resolved through the ONE seam, best-effort (an
+  // unresolvable/unowned ticket simply omits the clause, exactly as before).
+  const coordinatorName = await resolveStakeholderVoice(db, {
+    tenantId: req.tenantId,
+    taskId: req.taskId,
+    actingLabel: req.roleName,
+  }).catch(() => null);
+  const payload = buildRoleRunPayload(req, coordinatorName);
 
   const deferred: Promise<unknown>[] = [];
   const outcome = await dispatchCloudRunForTask(

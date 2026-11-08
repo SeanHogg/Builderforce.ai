@@ -131,6 +131,7 @@ export {
 } from './journalRules.js';
 export { bindWorkForSync, ticketWaitsOn } from './workBinding.js';
 export {
+  TASK_TABLE_KINDS,
   chatTicketLinkId,
   chatTicketLinkWaitsOn,
   linkServerIds,

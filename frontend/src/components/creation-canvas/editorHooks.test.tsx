@@ -20,11 +20,16 @@ function withEdit(edit: (patch: Partial<CreationNodeData>) => void) {
 
 describe('useAnimationEditor', () => {
   it('adds a frame after the active one, writes the whole strip, and selects the new frame', () => {
-    const edit = vi.fn();
-    const { result } = renderHook(() => useAnimationEditor({ kind: 'animation', title: 'Loop' } as CreationNodeData), { wrapper: withEdit(edit) });
+    // Like the board's real store: `edit` persists the patch onto the object, and the
+    // card re-renders with the new `data` — the hook keeps a selection only if the
+    // stored strip contains it.
+    let data = { kind: 'animation', title: 'Loop' } as CreationNodeData;
+    const edit = vi.fn((patch: Partial<CreationNodeData>) => { data = { ...data, ...patch }; });
+    const { result, rerender } = renderHook(() => useAnimationEditor(data), { wrapper: withEdit(edit) });
     expect(result.current.editable).toBe(true);
     expect(result.current.state.frames).toHaveLength(1);
     act(() => { result.current.actions.addFrame(); });
+    rerender();
     const written = (edit.mock.calls[0]![0] as { animation: AnimationState }).animation;
     expect(written.frames).toHaveLength(2);
     expect(result.current.activeId).toBe(written.frames[1]!.id);

@@ -53,12 +53,19 @@ function fakeDb(drafts: unknown[], held: unknown[] = []) {
   const answers = [drafts, held];
   return {
     // A REAL (never-connected) query builder, so the statement's SQL can be rendered and asserted; only its `then` is replaced.
+    // `select()` returns a SelectBuilder that only has `from`; `where`/`then` live on the query `from` returns
+    // (and every later chain call returns that same query), so the hooks go on it.
     select: (...args: unknown[]) => {
       const builder = realBuilder.select(...args);
-      const where = (builder.where as (c: unknown) => unknown).bind(builder);
-      let cond: unknown;
-      builder.where = (c: unknown) => { cond = c; return where(c); };
-      builder.then = (res: (v: unknown) => unknown) => { wheres.push(cond); return Promise.resolve(answers.shift() ?? []).then(res); };
+      const from = (builder.from as (...a: unknown[]) => Record<string, unknown>).bind(builder);
+      builder.from = (...fromArgs: unknown[]) => {
+        const query = from(...fromArgs);
+        const where = (query.where as (c: unknown) => unknown).bind(query);
+        let cond: unknown;
+        query.where = (c: unknown) => { cond = c; return where(c); };
+        query.then = (res: (v: unknown) => unknown) => { wheres.push(cond); return Promise.resolve(answers.shift() ?? []).then(res); };
+        return query;
+      };
       return builder;
     },
     update: (table: unknown) => ({ set: (set: Record<string, unknown>) => ({ where: async () => { updates.push({ table, set }); } }) }),

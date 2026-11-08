@@ -11,11 +11,8 @@
  * never disagree about what names a ticket.
  */
 
-import type { TicketValue } from "@builderforce/local-first";
+import { TASK_TABLE_KINDS, type TicketValue } from "@builderforce/local-first";
 import type { RailRun, RailTicketParent } from "./railProtocol";
-
-/** The kinds that live in the server's task table (one id space). */
-const TASK_TABLE_KINDS: ReadonlySet<string> = new Set(["task", "epic", "gap"]);
 
 /** The server id a ticket of `(kind, ref)` is mapped under. */
 export function ticketServerId(kind: string, ref: string): string {

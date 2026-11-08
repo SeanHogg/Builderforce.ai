@@ -87,6 +87,8 @@ const ENV_WITH_PROVIDER: Env = {
   UPLOADS: {
     get: async () => ({ arrayBuffer: async () => new ArrayBuffer(8), httpMetadata: { contentType: 'audio/wav' } }),
     put: async () => undefined,
+    // A race loser deletes its own copy of the audio (R2 `delete`).
+    delete: async () => undefined,
   },
 } as unknown as Env;
 

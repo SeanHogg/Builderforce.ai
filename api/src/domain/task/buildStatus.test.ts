@@ -92,7 +92,9 @@ describe('there is exactly one derivation', () => {
     readFileSync(fileURLToPath(new URL(rel, import.meta.url).href), 'utf8');
 
   it('no caller re-declares the narrowing', () => {
-    for (const rel of ['../../application/manager/ManagerService.ts', '../../application/manager/triageStage.ts']) {
+    // ManagerService held the first copy; its PR conduct moved to repos/prConductTicket.ts, which now reads it.
+    expect(read('../../application/manager/ManagerService.ts')).not.toMatch(/function normalizeBuildStatus\(/);
+    for (const rel of ['../../application/repos/prConductTicket.ts', '../../application/manager/triageStage.ts']) {
       expect(read(rel), rel).not.toMatch(/function normalizeBuildStatus\(/);
       expect(read(rel), rel).toMatch(/from '\.\.\/\.\.\/domain\/task\/buildStatus'/);
     }

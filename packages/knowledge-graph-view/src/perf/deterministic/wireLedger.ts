@@ -33,9 +33,65 @@ export interface WireEntry {
 export interface WireGroup { messages: number; bytes: number; transferredBytes: number; maxBytes: number; elementRefs: number }
 export interface WireSummary { groups: Record<string, WireGroup>; maxMessageBytes: number }
 
+/**
+ * Placeholder that makes a fresh array literal PACKED_ELEMENTS (tagged) from birth; it is overwritten before the array is used.
+ * Exported only so a test can prove the canonical form never leaks it.
+ */
+const TAGGED_SEED = Object.freeze({});
+
+/**
+ * The same value, in a form whose `v8.serialize` length depends on the VALUE alone, never on V8's internal representation of it.
+ *
+ * Without this the count drifts within one process: V8 serialises a number by how it is HELD, not what it is. A Smi `1` costs
+ * 2 bytes; the same `1` read from an object field whose hidden class was generalised to a Double field (because SOME object of
+ * that shape, earlier in the process, held a 1.5), or from a PACKED_DOUBLE array (allocation-site feedback), costs 9. Those
+ * generalisations are process-wide and one-way, so the second profile in a process serialised the very same graph larger than
+ * the first (`wire:in:load-chunk:edges:bytes` 3,767,257 then 3,774,442). The canonical form rebuilds every plain object as a
+ * dictionary-mode (null-prototype) object and every array as a PACKED_ELEMENTS one, and stores each integer that fits int32 as
+ * `x | 0` (a Smi): nothing it holds carries a representation from elsewhere. Shared sub-objects stay shared (V8 writes a
+ * back-reference for a repeat, as it would for the original). Typed arrays and buffers pass through untouched: their bytes are
+ * their contents, and the transfer list is matched by identity.
+ */
+export function canonicalForSize(value: unknown): unknown {
+    const done = new Map<object, unknown>();
+    const walk = (v: unknown): unknown => {
+        if (typeof v === 'number') return Number.isInteger(v) && v === (v | 0) && !Object.is(v, -0) ? v | 0 : v;
+        if (typeof v !== 'object' || v === null || ArrayBuffer.isView(v) || v instanceof ArrayBuffer) return v;
+        const seen = done.get(v);
+        if (seen !== undefined) return seen;
+        if (Array.isArray(v)) {
+            if (v.length === 0) { const empty: unknown[] = []; done.set(v, empty); return empty; }
+            const out: unknown[] = [TAGGED_SEED];
+            done.set(v, out);
+            out[0] = walk(v[0]);
+            for (let i = 1; i < v.length; i++) out.push(walk(v[i]));
+            return out;
+        }
+        if (v instanceof Map) {
+            const out = new Map<unknown, unknown>();
+            done.set(v, out);
+            for (const [k, x] of v) out.set(walk(k), walk(x));
+            return out;
+        }
+        if (v instanceof Set) {
+            const out = new Set<unknown>();
+            done.set(v, out);
+            for (const x of v) out.add(walk(x));
+            return out;
+        }
+        const proto = Object.getPrototypeOf(v);
+        if (proto !== Object.prototype && proto !== null) return v; // a host / class object: serialised as V8 would anyway
+        const out = Object.create(null) as Record<string, unknown>;
+        done.set(v, out);
+        for (const k of Object.keys(v)) out[k] = walk((v as Record<string, unknown>)[k]);
+        return out;
+    };
+    return walk(value);
+}
+
 export function serializedBytes(value: unknown, transfer: readonly ArrayBuffer[] = []): { bytes: number; transferredBytes: number } {
     const transferredBytes = [...new Set(transfer)].reduce((n, b) => n + b.byteLength, 0);
-    return { bytes: Math.max(0, serialize(value).byteLength - transferredBytes), transferredBytes };
+    return { bytes: Math.max(0, serialize(canonicalForSize(value)).byteLength - transferredBytes), transferredBytes };
 }
 
 /** Number of values inside `value` for which `isElement` is true (objects, arrays, Map / Set values; typed arrays skipped). */
