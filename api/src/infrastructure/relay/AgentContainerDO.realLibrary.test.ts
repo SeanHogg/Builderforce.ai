@@ -201,6 +201,38 @@ describe('real Container class', () => {
     expect(renew).not.toHaveBeenCalled();
   });
 
+  it('a failed identity/marker READ is not a destroy: the idle handler falls through to stop() (fail closed)', async () => {
+    const AgentContainerDO = await load();
+    const f = fakeCtx('exec:9');
+    const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+    await f.settled();
+    f.container.running = true;
+    f.container.destroy.mockClear();
+    f.ctx.storage.get.mockRejectedValue(new Error('storage down'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stop = vi.spyOn(container, 'stop').mockResolvedValue(undefined);
+    await container.onActivityExpired();
+    expect(f.container.destroy).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('a destroy that was attempted and FAILED still counts as acted: no stop(), no keep-alive renewal (retried next expiry)', async () => {
+    const AgentContainerDO = await load();
+    const f = fakeCtx('exec:9');
+    const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+    await f.settled();
+    f.container.running = true;
+    f.container.destroy.mockReset();
+    f.container.destroy.mockRejectedValue(new Error('boom'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stop = vi.spyOn(container, 'stop').mockResolvedValue(undefined);
+    const renew = vi.spyOn(container, 'renewActivityTimeout');
+    await container.onActivityExpired();
+    expect(f.container.destroy).toHaveBeenCalledTimes(1);
+    expect(stop).not.toHaveBeenCalled();
+    expect(renew).not.toHaveBeenCalled();
+  });
+
   // ON, then OFF, then ON: with the flag off the library dropped our override and re-persisted
   // intercept-all with NO handler. Rebuilt with the flag on again it must not fall through to open.
   describe.each([['named exec:9', 'exec:9'], ['nameless (EGRESS_KEY persisted)', undefined]])('rebuild after an ON, OFF, ON toggle (%s)', (_label, name) => {
@@ -231,7 +263,9 @@ describe('real Container class', () => {
     const f = fakeCtx('exec:9');
     const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
     await f.settled();
-    await container.setOutboundHandler('egressAllowlist', { executionId: 9, internalHost: 'api.builderforce.ai' });
+    // The DO's own path: gate -> restrict -> setOutboundHandler (what `fetch` runs for an open).
+    const gated = await (container as unknown as { egress: { gate(openBody: unknown): Promise<Response | null> } }).egress.gate({ executionId: 9 });
+    expect(gated).toBeNull();
     const props = (f.proxy.mock.calls.at(-1) as unknown as [{ props: unknown }])[0].props;
     const proxy = new ContainerProxy({ props } as never, {} as never);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -268,6 +302,30 @@ describe('real Container class', () => {
       new AgentContainerDO(f.ctx as never, {} as never);
       await f.settled();
       expect(f.kv.has(OUTBOUND_KEY)).toBe(true);
+    });
+
+    it('the residue a RUNNING off-rebuild re-persists (intercept-all, no override) is removed at the next STOPPED off-rebuild', async () => {
+      const AgentContainerDO = await load();
+      const first = fakeCtx('exec:9', { running: true, persisted: ours() });
+      new AgentContainerDO(first.ctx as never, {} as never);
+      await first.settled();
+      const residue = first.kv.get(OUTBOUND_KEY) as { outboundHandlerOverride?: unknown; hasInterceptAllRegistration?: boolean } | undefined;
+      expect(residue).toBeDefined();
+      expect(residue!.outboundHandlerOverride).toBeUndefined(); // the library dropped our unregistered override
+      expect(residue!.hasInterceptAllRegistration).toBe(true);  // ...but kept intercept-all
+      const second = fakeCtx('exec:9', { running: false, persisted: Object.fromEntries(first.kv) });
+      new AgentContainerDO(second.ctx as never, {} as never);
+      await second.settled();
+      expect(second.kv.has(OUTBOUND_KEY)).toBe(false);
+      expect(second.proxy).not.toHaveBeenCalled();
+    });
+
+    it('is deleted for a non-exec instance too', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx('webscan:1', { running: false, persisted: { [OUTBOUND_KEY]: { hasInterceptAllRegistration: true } } });
+      new AgentContainerDO(f.ctx as never, {} as never);
+      await f.settled();
+      expect(f.kv.has(OUTBOUND_KEY)).toBe(false);
     });
   });
 

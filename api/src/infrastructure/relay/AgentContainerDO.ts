@@ -37,14 +37,16 @@ export { DESTROY_TIMEOUT_MS } from './sandboxEgressLifecycle';
 const KEEPALIVE_SINCE_KEY = 'jobKeepAliveSince';
 
 type DoCtx = ConstructorParameters<typeof Container>[0];
+/** The durable reporter for this file; a function so the constructor can use it BEFORE `super()`. */
+const durableReporter = (env: Env, ctx: DoCtx): DurableErrorReporter =>
+  createDurableErrorReporter('infrastructure/relay/AgentContainerDO.ts', env, ctx);
 /** How long the "is a job running?" probe may take. A wedged container process that never answers
  *  must read as "no job", not hold the idle handler open (and renew the timer) forever. */
 export const JOB_PROBE_TIMEOUT_MS = 10_000;
 
 export class AgentContainerDO extends Container<Env> {
   /** Bound once here so no call site can forget the runtime override. */
-  private readonly reportError: DurableErrorReporter =
-    createDurableErrorReporter('infrastructure/relay/AgentContainerDO.ts', this.env, this.ctx);
+  private readonly reportError: DurableErrorReporter = durableReporter(this.env, this.ctx);
 
   /** The container's HTTP server listens here (see api/container/server.mjs). */
   defaultPort = 8080;
@@ -103,7 +105,8 @@ export class AgentContainerDO extends Container<Env> {
   constructor(ctx: DoCtx, env: Env, options?: ConstructorParameters<typeof Container>[2]) {
     // Nothing touches `this` before super(). With enforcement off the only thing that can happen
     // here is removing OUR OWN stale interception config (see dropStaleEgressConfig).
-    dropStaleEgressConfig(ctx, env);
+    const report = (error: unknown, where: string) => durableReporter(env, ctx)(error, { operation: where, level: 'warning' });
+    dropStaleEgressConfig(ctx, env, report);
     // Register for every instance that might be (or have been) a run sandbox, a nameless one
     // included: otherwise a rebuilt exec DO would have its persisted override dropped by the library
     // while intercept-all is kept, and interception would apply with open internet.
@@ -112,7 +115,7 @@ export class AgentContainerDO extends Container<Env> {
     if (egressEnforced(env)) {
       // Back to restricted BEFORE the library's constructor callback resumes (it reads these only
       // after its first await): internet off, and our override even after an ON, OFF, ON toggle.
-      rehydrateRestriction(this as unknown as RestrictionTarget, this.ctx, env);
+      rehydrateRestriction(this as unknown as RestrictionTarget, this.ctx, env, (error, where) => this.reportError(error, { operation: where, level: 'warning' }));
       // A container left running from before a restart/eviction must have started restricted.
       this.ctx.blockConcurrencyWhile(() => this.egress.destroyIfStartedOpen().then(() => undefined))
         .catch((error: unknown) => this.reportError(error, { operation: 'constructor', level: 'warning' }));

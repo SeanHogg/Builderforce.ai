@@ -1,8 +1,9 @@
 /**
  * The run sandbox's egress-policy LIFECYCLE, extracted from `AgentContainerDO` so the DO keeps
  * thin hooks only. Everything here is inert unless `SANDBOX_EGRESS_ENFORCE=true`
- * (`egressEnforced`, read in `egressAllowlist.ts`), apart from {@link dropStaleEgressConfig} and
- * the marker clear in {@link SandboxEgressLifecycle.onStart}, which exist to undo our own state.
+ * (`egressEnforced`, read in `egressAllowlist.ts`), apart from {@link dropStaleEgressConfig} and the
+ * marker clears in {@link SandboxEgressLifecycle.onStart} and {@link SandboxEgressLifecycle.onStop}
+ * (both run regardless of the flag), which exist to undo our own state.
  *
  * Vocabulary:
  *  - RESTRICTED instance: an `exec:*` DO, or any DO whose persisted state says WE restricted it
@@ -29,7 +30,10 @@ export const DESTROY_TIMEOUT_MS = 10_000;
 /** The slice of the `/sandbox/open` spec the DO reads. */
 export interface OpenBody { executionId?: number; preview?: { port?: number } }
 
-type Kv = { get(key: string): unknown; delete?(key: string): unknown };
+/** Reports a swallowed error (the DO's durable error reporter); optional so the free functions stay callable bare. */
+export type ReportFn = (error: unknown, where: string) => void;
+
+type Kv ={ get(key: string): unknown; delete?(key: string): unknown };
 type PersistedConfig = { outboundHandlerOverride?: { method?: string; params?: unknown } };
 
 export const nameOf = (ctx: unknown): string | undefined => (ctx as { id?: { name?: string } }).id?.name;
@@ -60,19 +64,28 @@ export function shouldRegisterEgressHandler(ctx: unknown, env: Pick<Env, 'SANDBO
 }
 
 /**
- * Enforcement OFF and no container running: delete OUR persisted interception config (the one that
- * carries the allowlist override). Rebuilding with the flag off would otherwise make the library
- * drop the unregistered override but re-persist intercept-all with no handler. With a container
- * running we leave it: the library re-applies interception to a live container from this config,
- * and removing it would not un-intercept anything.
+ * Enforcement OFF and no container running: delete the library's persisted interception config,
+ * UNCONDITIONALLY. This class configures no other interception (no static outbound handlers, no
+ * allow/deny lists, no per-host overrides), so every such config in storage is ours — for exec and
+ * non-exec instances alike, and including the residue a flag-OFF rebuild leaves behind: with a
+ * container running we must keep the config (the library re-applies it to the live container), the
+ * library then drops our now-unregistered override and re-persists `{hasInterceptAllRegistration:
+ * true}` with no override, and only an unconditional delete on a later stopped rebuild removes it.
+ * Without that, intercept-all through the Worker (and TLS interception) would persist while the flag
+ * is OFF, and OFF would not be the rollback lever.
+ *
+ * Reach: turning the flag OFF stops the BLOCKING immediately (nothing registers a handler or gates
+ * requests any more), but a running container keeps its Worker proxying and TLS interception until
+ * the residue is removed — at the next stopped rebuild, i.e. after the container stops.
  */
-export function dropStaleEgressConfig(ctx: unknown, env: Pick<Env, 'SANDBOX_EGRESS_ENFORCE'>): void {
+export function dropStaleEgressConfig(ctx: unknown, env: Pick<Env, 'SANDBOX_EGRESS_ENFORCE'>, report?: ReportFn): void {
   try {
     if (egressEnforced(env) || (ctx as { container?: { running?: boolean } }).container?.running) return;
     const kv = kvOf(ctx);
-    const cfg = kv?.get(LIBRARY_OUTBOUND_KEY) as PersistedConfig | undefined;
-    if (kv?.delete && cfg?.outboundHandlerOverride?.method === EGRESS_HANDLER_NAME) kv.delete(LIBRARY_OUTBOUND_KEY);
-  } catch { /* best effort */ }
+    if (kv?.delete && kv.get(LIBRARY_OUTBOUND_KEY) !== undefined) kv.delete(LIBRARY_OUTBOUND_KEY);
+  } catch (error) {
+    report?.(error, 'dropStaleEgressConfig'); // best effort: a failed cleanup must never block construction
+  }
 }
 
 /** The library fields the rehydrate step sets (`outboundHandlerOverride` is not in its .d.ts). */
@@ -85,14 +98,18 @@ export interface RestrictionTarget { enableInternet: boolean; outboundHandlerOve
  * constructor callback reads `enableInternet` and the override only after its first `await`
  * (`container.js`: `await this.scheduleNextAlarm()` precedes `applyOutboundInterception`).
  */
-export function rehydrateRestriction(target: RestrictionTarget, ctx: unknown, env: Pick<Env, 'SANDBOX_EGRESS_ENFORCE' | 'INTERNAL_API_BASE_URL'>): void {
+export function rehydrateRestriction(target: RestrictionTarget, ctx: unknown, env: Pick<Env, 'SANDBOX_EGRESS_ENFORCE' | 'INTERNAL_API_BASE_URL'>, report?: ReportFn): void {
   if (!egressEnforced(env)) return;
   const name = nameOf(ctx);
   if (!isRunSandboxName(name) && !hasPersistedEgress(ctx)) return;
   target.enableInternet = false;
   if (target.outboundHandlerOverride?.method === EGRESS_HANDLER_NAME) return; // the library restored ours
   let saved: { executionId?: number | null; internalHost?: string | null } | undefined;
-  try { saved = kvOf(ctx)?.get(EGRESS_KEY) as typeof saved; } catch { /* unreadable ⇒ defaults */ }
+  try {
+    saved = kvOf(ctx)?.get(EGRESS_KEY) as typeof saved;
+  } catch (error) {
+    report?.(error, 'rehydrateRestriction'); // unreadable ⇒ defaults (id from the name, host from the env)
+  }
   target.outboundHandlerOverride = {
     method: EGRESS_HANDLER_NAME,
     params: { executionId: execIdFromName(name) ?? saved?.executionId ?? null, internalHost: saved?.internalHost ?? internalApiHost(env) },
@@ -144,14 +161,18 @@ export class SandboxEgressLifecycle {
   /** The container stopped: whatever started it is gone, so is the claim. `onStart` never runs when
    *  the port wait throws, so without this a stale `true` could outlive its container. */
   async onStop(): Promise<void> {
-    if (egressEnforced(this.host.env)) await this.storage.delete(STARTED_RESTRICTED_KEY);
+    // Regardless of the flag: a restricted container that stops AFTER the flag was turned OFF, followed
+    // by an open start under flag OFF whose port wait throws (so `onStart` never clears it), would
+    // otherwise leave a stale `true` that vouches for the open container once the flag is back ON.
+    if ((await this.storage.get(STARTED_RESTRICTED_KEY)) !== undefined) await this.storage.delete(STARTED_RESTRICTED_KEY);
   }
 
   /** SIGKILL and confirm gone; a hung destroy is abandoned after {@link DESTROY_TIMEOUT_MS} (throws). */
   async destroyAndConfirm(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const destroyed = this.host.destroy();
-    destroyed.catch(() => undefined); // a late rejection after the race has no awaiter
+    // A rejection after the race has settled has no awaiter: record it so it is never unhandled.
+    destroyed.catch((error: unknown) => this.host.report(error, 'destroyAndConfirm.late', 'warning'));
     await Promise.race([
       destroyed,
       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('container destroy timed out')), DESTROY_TIMEOUT_MS); }),
@@ -173,20 +194,26 @@ export class SandboxEgressLifecycle {
 
   /**
    * A restricted instance whose container is running but never recorded a restricted start started
-   * OPEN (before enforcement, or a destroy that timed out) and is destroyed. Returns whether it
-   * acted or tried to: a caller deciding whether to keep the container alive must not when true.
+   * OPEN (before enforcement, or a destroy that timed out) and is destroyed. Returns true only when a
+   * destroy was actually ATTEMPTED (succeeded or not): a caller deciding whether to keep the
+   * container alive must not then. A failed identity/marker READ returns false — nothing was
+   * attempted, and the caller falls through to the normal idle decision (stop unless a job is running).
    * Never throws (it may run inside `blockConcurrencyWhile`, where a throw resets the DO).
    */
   async destroyIfStartedOpen(): Promise<boolean> {
     try {
       if (!this.running || !(await this.isRestricted())) return false;
       if ((await this.storage.get(STARTED_RESTRICTED_KEY)) === true) return false;
-      await this.destroyAndConfirm();
-      return true;
     } catch (error) {
       this.host.report(error, 'destroyIfStartedOpen', 'warning');
-      return true;
+      return false;
     }
+    try {
+      await this.destroyAndConfirm();
+    } catch (error) {
+      this.host.report(error, 'destroyIfStartedOpen', 'warning');
+    }
+    return true;
   }
 
   /**
@@ -205,7 +232,9 @@ export class SandboxEgressLifecycle {
     if (this.state === 'open') return Promise.resolve(null);
     if (this.state === 'applied' && !openBody) return Promise.resolve(null);
     const run = this.gateTail.then(() => this.decide(openBody));
-    this.gateTail = run.catch(() => undefined);
+    // decide() reports and answers 503 itself; the tail only keeps the chain alive, and anything
+    // that still escapes it is reported here rather than dropped.
+    this.gateTail = run.catch((error: unknown) => this.host.report(error, 'gateEgress.tail'));
     return run;
   }
 

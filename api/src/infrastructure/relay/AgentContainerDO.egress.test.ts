@@ -218,13 +218,19 @@ describe('enforcement ON', () => {
     expect(storage.get('egressStartedRestricted')).toBe(true);
   });
 
-  it('clears the marker when the container stops (onStop), enforcement on only', async () => {
-    const on = makeDo({ storage: new Map([['egressStartedRestricted', true]]) });
-    await on.container.onStop();
-    expect(on.storage.has('egressStartedRestricted')).toBe(false);
-    const off = makeDo({ storage: new Map([['egressStartedRestricted', true]]), env: {} });
-    await off.container.onStop();
-    expect(off.storage.has('egressStartedRestricted')).toBe(true);
+  it('clears the marker when the container stops (onStop), whatever the flag says', async () => {
+    for (const env of [INTERNAL, {}]) {
+      const { container, storage } = makeDo({ storage: new Map([['egressStartedRestricted', true]]), env });
+      await container.onStop();
+      expect(storage.has('egressStartedRestricted'), JSON.stringify(env)).toBe(false);
+    }
+  });
+
+  it('onStop with no marker writes and deletes nothing', async () => {
+    const { container, ctx } = makeDo({ env: {} });
+    await container.onStop();
+    expect(ctx.storage.delete).not.toHaveBeenCalled();
+    expect(ctx.storage.put).not.toHaveBeenCalled();
   });
 
   it('derives the executionId of an exec:N instance from its NAME, not the body', async () => {
