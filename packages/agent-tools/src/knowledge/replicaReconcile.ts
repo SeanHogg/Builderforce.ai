@@ -6,9 +6,14 @@
  * Both sides compute the same `manifestTree` over the root's LEAVES (files, facts, relations): the client from its
  * local store, the server from the leaves this root synced (never from the project's shared tables). The client
  * reads the server's root digest and 4,096 bucket digests (one GET, at most 128 KB), asks only for the leaves of the
- * buckets that differ, and the touched keys are exactly the leaves the server lacks or holds with another digest,
- * plus the keys the server holds that the client does not (tombstones, which the server knows are this root's). Equal
- * root digests mean nothing is sent. A full pack is planned only when the server holds nothing for the root.
+ * buckets that differ, and the touched keys are exactly the leaves the server lacks or holds with another digest.
+ * Equal root digests, or nothing left to send, mean nothing is sent. A full pack is planned only when the server holds
+ * nothing for the root.
+ *
+ * A DELETION ONLY EVER COMES FROM EXPLICIT LOCAL EVIDENCE: a key in the dirty set (a file this machine's review saw
+ * removed, a row deleted here). A leaf the server holds that this store merely lacks belongs to another host sharing the
+ * root (or to a review that ran before this store existed); it is never tombstoned, however complete this store's own
+ * review of the root. So two machines that both fully reviewed a root never delete each other's leaves.
  *
  * Rows that are not leaves (a person's note, an agent's fact) never make the trees differ; those among the dirty
  * keys are kept, so they still reach the project through their own writer.
@@ -29,21 +34,8 @@ export type ReconcilePlan =
     | { kind: 'equal'; ack: ReplicaAck }
     /** The server holds no leaf of the root: one full pack, at the server's generation (0 when the root has no row). */
     | { kind: 'full'; touched: string[]; baseGeneration: number }
-    /** Exactly these keys differ; `owned` are the ones only the server holds (this root's leaves to tombstone). */
-    | { kind: 'delta'; touched: string[]; baseGeneration: number; owned: Set<string>; /** The server's root digest this plan was read at. */ serverDigest: string };
-
-/**
- * ADDITIVE mode (see `ReplicaQueue.additive`): a leaf only the server holds is not this store's to delete, so it leaves the plan.
- * A key the dirty set names (a file the review saw removed) is explicit work and stays, tombstone included.
- * Nothing left to send is `equal` at the server's own generation and digest: no empty pack, no generation bump.
- */
-export function additivePlan(plan: ReconcilePlan, dirty: readonly string[]): ReconcilePlan {
-    if (plan.kind !== 'delta') return plan;
-    const explicit = new Set(dirty);
-    const touched = plan.touched.filter((k) => !plan.owned.has(k) || explicit.has(k));
-    if (touched.length === 0) return { kind: 'equal', ack: { generation: plan.baseGeneration, digest: plan.serverDigest } };
-    return { ...plan, touched, owned: new Set([...plan.owned].filter((k) => explicit.has(k))) };
-}
+    /** Exactly these keys differ; `owned` are the server-only leaves the dirty set names (this root's leaves to tombstone). */
+    | { kind: 'delta'; touched: string[]; baseGeneration: number; owned: Set<string> };
 
 /** Bucket ids asked for per leaf request. */
 const BUCKETS_PER_REQUEST = 512;
@@ -69,7 +61,7 @@ export async function planReconcile(args: {
     if (server.digest === tree.root) {
         return pending.length === 0
             ? { kind: 'equal', ack: { generation: server.generation, digest: server.digest } }
-            : { kind: 'delta', touched: pending, baseGeneration: server.generation, owned: new Set(), serverDigest: server.digest };
+            : { kind: 'delta', touched: pending, baseGeneration: server.generation, owned: new Set() };
     }
     // Every LEAF goes — model rows and files. A person's note, an agent's fact or a row seeded from the project is
     // not sent here: only those the dirty set names (written locally since) reach the project, through their own writer.
@@ -89,7 +81,11 @@ export async function planReconcile(args: {
         remote.push(...answer.leaves);
     }
     const delta = leafDelta(tree, remote, differing);
-    return {
-        kind: 'delta', touched: [...new Set([...delta.upsert, ...delta.remove, ...pending])], baseGeneration: server.generation, owned: new Set(delta.remove), serverDigest: server.digest,
-    };
+    // A server-only leaf is deleted only when the dirty set names it (explicit local evidence); otherwise it is another
+    // host's and stays. Nothing left to send is `equal` at the server's own generation and digest: no empty pack, no bump.
+    const explicit = new Set(args.dirty ?? []);
+    const owned = new Set(delta.remove.filter((k) => explicit.has(k)));
+    const touched = [...new Set([...delta.upsert, ...owned, ...pending])];
+    if (touched.length === 0) return { kind: 'equal', ack: { generation: server.generation, digest: server.digest } };
+    return { kind: 'delta', touched, baseGeneration: server.generation, owned };
 }

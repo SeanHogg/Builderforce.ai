@@ -6,7 +6,8 @@
  * (a relation). They are the manifest tree's leaf keys, so the fast path (send the dirty keys) and the
  * reconcile path (send what the manifest tree says differs) speak the same key space. A key never holds
  * a body: the pump reads the current body from the local store when it builds the pack, and a key whose
- * row no longer exists becomes a tombstone.
+ * row no longer exists becomes a tombstone. The dirty set is the ONLY source of deletions: a leaf the server holds
+ * and this store merely lacks (another host's) is never deleted, however complete this store's review of the root.
  *
  * Rules the file lives by (the review's I/O must never wait on it):
  *   - `markDirty` is synchronous and never throws; nothing awaits a save inside a file's step;
@@ -103,19 +104,12 @@ export interface ReplicaQueue {
     projectId(): Promise<number | undefined>;
     /** Binds the set to `projectId`; one filled for another project is discarded. True when keys were. */
     adopt(projectId: number): Promise<boolean>;
-    /**
-     * ADDITIVE mode: the root was reviewed straight against the server before this store existed, so the server holds leaves this
-     * store lacks. While on, the pump never deletes a server leaf because it is missing locally (explicitly dirty keys still go).
-     */
-    additive(): Promise<boolean>;
-    setAdditive(on: boolean): Promise<void>;
     /** Drops everything. */
     clear(): Promise<void>;
     /** Makes the set durable now. */
     flush(): Promise<void>;
     /**
-     * Re-reads the persisted file, which another tab or process sharing it may have advanced: its ack (when newer), its additive flag
-     * (OR-ed in unless this queue turned it off since its last save) and its dirty keys (the set itself when this queue holds nothing
+     * Re-reads the persisted file, which another tab or process sharing it may have advanced: its ack (when newer) and its dirty keys (the set itself when this queue holds nothing
      * unsaved, else merged in). A pump calls it once it holds the lock, so it never pumps from a stale view and its next save never
      * drops another opener's keys. A missing, corrupt, legacy or other-project file changes nothing.
      */
@@ -137,7 +131,7 @@ export function memoryReplicaPersistence(): ReplicaPersistence {
     return { read: async () => text, write: async (t) => { text = t; } };
 }
 
-interface Parsed { keys: string[]; projectId?: number; ack?: ReplicaAck; analysis?: ReplicaAnalysis; additive?: boolean; corrupt: boolean; legacy: boolean }
+interface Parsed { keys: string[]; projectId?: number; ack?: ReplicaAck; analysis?: ReplicaAnalysis; corrupt: boolean; legacy: boolean }
 
 /** The keys an old op log owed: its fact and relation keys, and the files its stale marks named. */
 function keysOfLegacyOps(ops: unknown[]): string[] {
@@ -158,7 +152,8 @@ function keysOfLegacyOps(ops: unknown[]): string[] {
 function parse(text: string | undefined): Parsed {
     if (!text) return { keys: [], corrupt: false, legacy: false };
     try {
-        const p = JSON.parse(text) as { version?: number; dirty?: unknown; ops?: unknown; projectId?: unknown; ack?: unknown; analysis?: unknown; additive?: unknown } | null;
+        // An older file may still carry `additive: true` (a per-root flag since retired): it is ignored, and dropped on the next save.
+        const p = JSON.parse(text) as { version?: number; dirty?: unknown; ops?: unknown; projectId?: unknown; ack?: unknown; analysis?: unknown } | null;
         if (!p || typeof p !== 'object') return { keys: [], corrupt: true, legacy: false };
         const projectId = typeof p.projectId === 'number' ? p.projectId : undefined;
         if (Array.isArray(p.ops)) return { keys: keysOfLegacyOps(p.ops), ...(projectId !== undefined ? { projectId } : {}), corrupt: false, legacy: true };
@@ -170,7 +165,6 @@ function parse(text: string | undefined): Parsed {
             ...(projectId !== undefined ? { projectId } : {}),
             ...(a && Number.isSafeInteger(a.generation) && typeof a.digest === 'string' ? { ack: { generation: a.generation!, digest: a.digest } } : {}),
             ...(an && typeof an.sha === 'string' ? { analysis: { sha: an.sha, snapshot: an.snapshot } } : {}),
-            ...(p.additive === true ? { additive: true } : {}),
             corrupt: false, legacy: false,
         };
     } catch {
@@ -185,9 +179,6 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
     let project: number | undefined;
     let ack: ReplicaAck | undefined;
     let analysis: ReplicaAnalysis | undefined;
-    let isAdditive = false;
-    /** Additive was explicitly turned off since the last save: only then may a save write `additive: false` over a file that says true. */
-    let additiveOff = false;
     /** The analysis changed since it was last written to its own file. */
     let analysisChanged = false;
     let loaded: Promise<void> | undefined;
@@ -225,7 +216,6 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             project ??= from.projectId;
             if (!from.legacy) {
                 ack ??= from.ack;
-                if (from.additive) isAdditive = true;
                 if (from.analysis) { analysis ??= from.analysis; if (opts.analysis) analysisChanged = true; } // moved out of the dirty file on the next save
             }
             if (opts.analysis) {
@@ -250,14 +240,9 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
         savesBegun += 1;
         saving = saving.then(async () => {
             await ready(); // never write before the file was read: that would replace what it held
-            // Another tab may have marked the root additive since this one loaded: never write `additive: false` over it unless it was turned off HERE.
-            if (!isAdditive && !additiveOff) {
-                try { if (parse(await persistence.read()).additive) isAdditive = true; } catch (error) { opts.onError?.(error); }
-            }
-            additiveOff = false;
             await persistence.write(JSON.stringify({
                 version: 2, ...(opts.rootId ? { rootId: opts.rootId } : {}), ...(project !== undefined ? { projectId: project } : {}), ...(ack ? { ack } : {}),
-                dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}), ...(isAdditive ? { additive: true } : {}),
+                dirty: [...dirty.keys()], ...(analysis && !opts.analysis ? { analysis } : {}),
             }));
             if (opts.analysis && analysisChanged) {
                 analysisChanged = false;
@@ -310,14 +295,12 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             await ready();
             if (project === projectId) return false;
             const discarded = project !== undefined && dirty.size > 0;
-            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; additiveOff = true; }
+            if (project !== undefined) { dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; }
             project = projectId;
             touch();
             return discarded;
         },
-        async additive() { await ready(); return isAdditive; },
-        async setAdditive(on) { await ready(); if (!on) additiveOff = true; if (isAdditive !== on) { isAdditive = on; touch(); } },
-        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; isAdditive = false; additiveOff = true; touch(); },
+        async clear() { await ready(); dirty.clear(); ack = undefined; analysis = undefined; analysisChanged = true; touch(); },
         async flush() { await ready(); await save(); },
         async reload() {
             await ready();
@@ -338,8 +321,6 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
                 if (from.ack && (!ack || from.ack.generation > ack.generation)) ack = from.ack;
                 if (dirty.size > before) touch(); // a save that raced the read may have written without them
             }
-            // OR-ed in, unless this queue turned it off since its last save (a complete review here outranks the file).
-            if (from.additive && !additiveOff) isAdditive = true;
         },
         onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
     };

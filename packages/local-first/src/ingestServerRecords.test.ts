@@ -213,15 +213,14 @@ describe('ingestServerRecords: complete lists and mappings', () => {
     expect(byPair.get(OTHER_CHAT + TICKET_B)?.deletedAt).toBeUndefined();
   });
 
-  it('records a read mark in the same transaction, and a repeat at the same instant writes nothing', async () => {
+  it('records a read mark in the same transaction as its rows, kept in the store state', async () => {
     const store = await seeded();
-    let commits = 0;
-    store.subscribe(() => { commits += 1; });
-    await ingestServerRecords(store, [], { markRead: 'chatRail:x', now: NOW });
+    await ingestServerRecords(store, [ticketRow('88')], { markRead: 'chatRail:x', now: NOW });
     expect(await store.read((tx) => tx.readMark('chatRail:x'))).toBe(NOW().toISOString());
-    expect(commits).toBe(1);
-    await ingestServerRecords(store, [], { markRead: 'chatRail:x', now: NOW });
-    expect(commits).toBe(1);
+    expect((await store.export()).cursors).toMatchObject({ 'readMark@chatRail:x': NOW().toISOString() });
+    const later = () => new Date('2026-11-09T00:00:00.000Z');
+    await ingestServerRecords(store, [], { markRead: 'chatRail:x', now: later });
+    expect(await store.read((tx) => tx.readMark('chatRail:x'))).toBe(later().toISOString());
   });
 
   it('a merge hook keeps the fields the row does not own', async () => {

@@ -113,6 +113,10 @@ export function createLocalRailAdapter(remote: RemoteChatTicketsAdapter, host: L
 
   return {
     ...remote,
+    /** The files the chat's own runs recorded changing, from the LOCAL change-set records. */
+    async chatChangedFiles(chatId) {
+      return (await read(chatId)).chatChangedFiles ?? null;
+    },
     async listTickets(chatId) {
       const rail = await read(chatId);
       refreshSoon(chatId);

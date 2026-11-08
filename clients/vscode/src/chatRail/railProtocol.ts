@@ -99,6 +99,13 @@ export interface RailSnapshot {
   runHistory: RailRunHistory;
   freshness: RailFreshness;
   summary: SyncSummary;
+  /**
+   * The repo-relative paths the chat's own runs recorded changing, from LOCAL run-linked
+   * change-set records (G19) — the "Changes" pill's offline scope source. Empty when the
+   * chat recorded no files of its own; absent when the store holds no such chat (the
+   * webview then falls back to the server / keep-all semantics).
+   */
+  chatChangedFiles?: string[];
 }
 
 /** A work item a link or unlink names (the webview knows it by kind and ref, as the platform does). */

@@ -10,6 +10,7 @@ import {
   presentStoreSyncStatus,
   presentSurfaceSyncStatus,
   presentSyncStatus,
+  presentRecordSyncStatus,
   presentedSyncShownAsDone,
   preferPresentedSyncStatus,
   type PresentedSyncStatus,
@@ -44,8 +45,12 @@ function event(partial: Partial<JournalEvent> & Pick<JournalEvent, "eventId" | "
   };
 }
 
-function receipt(eventId: string, status: SyncReceipt["status"]): SyncReceipt {
-  return { eventId, status, receivedAt: "2026-10-19T00:01:00.000Z" };
+/** `of` names the record the receipt settles: a receipt whose event is gone counts only when it does (C7). */
+function receipt(eventId: string, status: SyncReceipt["status"], of?: LocalRecord): SyncReceipt {
+  return {
+    eventId, status, receivedAt: "2026-10-19T00:01:00.000Z",
+    ...(of ? { entityType: of.entityType, clientEntityId: of.id } : {}),
+  };
 }
 
 function conflict(recordId: string, entityType: LocalRecord["entityType"], resolvedAt?: string): SyncConflict {
@@ -128,7 +133,7 @@ describe("presentSyncStatus", () => {
     const row = record("ticket", "ticket-1");
     const pending = [event({ eventId: "e1", clientEntityId: "ticket-1", entityType: "ticket" })];
     expect(presentSyncStatus({ record: row, events: pending, receipts: [receipt("e1", "accepted")] })).toBe("synced");
-    expect(presentSyncStatus({ record: row, events: [], receipts: [receipt("e1", "duplicate")] })).toBe("synced");
+    expect(presentSyncStatus({ record: row, events: [], receipts: [receipt("e1", "duplicate", row)] })).toBe("synced");
     expect(presentedSyncShownAsDone(row, "synced")).toBe(true);
   });
 
@@ -191,7 +196,7 @@ describe("presentSyncStatus", () => {
 
   it("presents a rejected receipt with no remaining event as dead-letter, not synced", () => {
     const row = record("audit-run", "audit-1");
-    expect(presentSyncStatus({ record: row, events: [], receipts: [receipt("e1", "rejected")] })).toBe("dead-letter");
+    expect(presentSyncStatus({ record: row, events: [], receipts: [receipt("e1", "rejected", row)] })).toBe("dead-letter");
     expect(presentedSyncShownAsDone(row, "dead-letter")).toBe(false);
   });
 
@@ -217,7 +222,7 @@ describe("presentSyncStatus", () => {
       const deniedAfterDrop = presentSyncStatus({
         record: row,
         events: [],
-        receipts: [receipt(`${id}-e1`, "rejected")],
+        receipts: [receipt(`${id}-e1`, "rejected", row)],
       });
       expect(deniedAfterDrop).toBe("dead-letter");
       expect(deniedAfterDrop).not.toBe("synced");
@@ -297,5 +302,19 @@ describe("sync status presenter stays a pure derivation", () => {
     expect(source).not.toMatch(/\bfetch\b/);
     expect(source).toContain("deriveRecordSyncStatus");
     expect(source).toContain("syncShownAsDone");
+  });
+});
+
+describe("presentRecordSyncStatus (regression: orphan receipts)", () => {
+  it("another record's accepted and conflict receipts never change this record's status", () => {
+    const mine = record("ticket", "ticket-1");
+    const other = record("ticket", "ticket-2");
+    const facts = {
+      events: [],
+      receipts: [receipt("other-e1", "accepted", other), receipt("other-e2", "conflict", other), receipt("orphan", "accepted")],
+      conflicts: [],
+    };
+    expect(presentRecordSyncStatus(facts, mine)).toBe("pending");
+    expect(presentRecordSyncStatus(facts, other)).toBe("conflict");
   });
 });

@@ -208,6 +208,14 @@ export interface ChatTicketsAdapter {
   // A chat id is a server id (number) or a local chat's client id (string): a host that keeps the
   // rail's copy on the device answers either.
   listTickets(chatId: string | number): Promise<TicketLinkVM[]>;
+  /**
+   * The repo-relative paths the chat's OWN runs recorded changing, from the host's LOCAL
+   * run-linked change-set records (G19) — the "Changes" pill's offline scope source. A host
+   * that keeps this copy on the device answers with the platform denied; one that does not
+   * (the web app's REST client) omits it, and the caller falls back to the server. `null`
+   * when the host holds no local record of this chat.
+   */
+  chatChangedFiles?(chatId: string | number): Promise<string[] | null>;
   linkTicket(chatId: string | number, input: { kind: TicketKind; ref: string; linkType: LinkType }): Promise<void>;
   unlinkTicket(chatId: string | number, kind: TicketKind, ref: string): Promise<void>;
   listTicketChats(kind: TicketKind, ref: string): Promise<LineageVM[]>;

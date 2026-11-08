@@ -279,6 +279,7 @@ export type {
   AgentOptionVM,
   TicketOptionVM,
   ChatOptionVM,
+  ChatQuestionVM,
 } from './chatTickets/types';
 
 export {

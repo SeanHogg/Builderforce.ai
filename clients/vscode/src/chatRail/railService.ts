@@ -11,6 +11,7 @@
  */
 
 import type { LocalFirstStore } from "@builderforce/local-first";
+import { readLocalChatChangedFiles } from "../chatChangedFiles";
 import { chatClientIdOf, readRailFromFacts, type RailFacts } from "./buildRail";
 import { linkRailTicket, unlinkRailTicket } from "./railLinks";
 import type {
@@ -47,6 +48,10 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
     // changed no row still moves, and which survives a reload.
     const refreshedAt = clientId ? await deps.store.read((tx) => tx.readMark(railReadMark(clientId))) : undefined;
     const rail = readRailFromFacts(facts, ref, refreshedAt);
+    // The pill's offline scope: the files this chat's own runs recorded changing, from
+    // local change-set records only (no platform). Absent when the store holds no such
+    // chat; the webview falls back to the server / keep-all then.
+    const changed = await readLocalChatChangedFiles(deps.store, ref);
     return {
       chatId: ref,
       found: rail.found,
@@ -56,6 +61,7 @@ export function createChatRailService(deps: ChatRailDeps): ChatRailService {
       runHistory: rail.runHistory,
       freshness: rail.freshness,
       summary,
+      ...(changed.found ? { chatChangedFiles: changed.files } : {}),
     };
   }
 

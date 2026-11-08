@@ -27,10 +27,13 @@ describe('server-addressed chat ids in the VS Code chat', () => {
     expect(rail).not.toMatch(/listTickets\(chatId\)/);
   });
 
-  it('a link binds the local chat before it names a server chat', () => {
+  // G21: a link is a LOCAL record, so it names the chat's bound server id or its local CLIENT id
+  // (a string the host resolves to the record) — never the local view key, and never a bind first.
+  it('a link names the server id or the local client id, never the view key, and binds nothing', () => {
     const link = rail.slice(rail.indexOf('const linkTicket = useCallback'));
-    expect(link.indexOf('bindChat')).toBeGreaterThan(-1);
-    expect(link.indexOf('bindChat')).toBeLessThan(link.indexOf('ticketAdapter.linkTicket('));
+    expect(link).toContain('serverChatIdOf(chat) ?? chat.clientId');
+    expect(link).not.toContain('bindChat');
+    expect(link).not.toMatch(/linkTicket\(localChatId/);
   });
 
   it('memory recall is scoped by the server id', () => {

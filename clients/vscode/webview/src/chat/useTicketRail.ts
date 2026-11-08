@@ -120,8 +120,10 @@ export function useTicketRail({ init, apiReq, serverChatId, chatClientId, chats,
     return () => { live = false; };
   }, [offline, serverChatId, ticketAdapter, ticketRefresh]);
 
-  // "The agent changed code and nothing said so" — the chat's own signal, as a pill.
-  const chatFiles = useChatChangedFiles(apiReq, serverChatId, ticketRefresh);
+  // "The agent changed code and nothing said so" — the chat's own signal, as a pill. LOCAL-FIRST:
+  // the chat's changed files come from the host's local change-set records via the rail; the server
+  // is only the backstop for a chat this device never recorded.
+  const chatFiles = useChatChangedFiles(apiReq, ticketAdapter, railChatId, serverChatId == null, ticketRefresh);
   const pendingChangesExtension = usePendingChangesExtension(init.labels, chatFiles);
 
   // Link a work item to a chat — the work item that opened it (a task/epic/gap from the tree or
