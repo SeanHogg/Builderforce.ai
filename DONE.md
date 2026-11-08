@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-11-08: two hosts that fully reviewed one root no longer delete each other's leaves; recheck test asserts the asset node (Knowledge · replica sync)
+
+- **Cross-host deletes.** A deletion now comes only from explicit local evidence: `planReconcile` (`replicaReconcile.ts`) tombstones a server-only leaf only when the dirty set names it, and a leaf this store merely lacks is never deleted. Nothing to send returns `equal` at the server's generation and digest. A client pack no longer asserts `targetDigest` (with another host's leaves on the server it could never match). The server already deletes only explicit, root-owned tombstones (`applyKnowledgePack.ts`).
+- **Retired.** The per-root additive flag: `ReplicaQueue.additive/setAdditive` and the persisted field (an old file's `additive: true` is ignored), `replicaAdoption.ts` (`shouldStayAdditive`), `ReplicaHost.markAdditive`, `duringReview`'s `{ full }`, `additivePlan`. Callers migrated in knowledge-browser and agent-runtime (`markAdditiveUntilReviewed` → `await ports.migrated`). This supersedes the "Data safety on adoption" bullet of the pack-upload entry below.
+- **Tests.** `regression: two hosts that both fully reviewed a root never delete each other's leaves` (`replicaPump.additive.test.ts`); the delta 409 test asserts the other machine's leaf survives. `replicaPump.recheck.test.ts` asserts memory 2026.10.62's asset file node for the binary (`badges.asset`); the pump needed no change.
+- **Commits.** d6218801b, db713320e (recheck test in 34456a823).
+
 ## ✅ RESOLVED 2026-11-08: the visualizer's background-thread move is proven by a deterministic profiler, gated in CI (Knowledge · `packages/knowledge-graph-view`)
 
 - **Gap.** The `src/perf` harness measured wall-clock ms (median of 3, opt-in `KG_PERF=1`, never a gate), so "the work moved off the main thread" could not be checked run to run.
