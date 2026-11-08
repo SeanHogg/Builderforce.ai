@@ -5,9 +5,11 @@
  * (`settle`), React commits, DOM size, and where each compute task ran. Reads and counts, never time, so the record is the same
  * on every run.
  *
- * The test file mocks `scene/GraphScene` (jsdom has no WebGL) exactly as `KnowledgeGraphView.views.test.tsx` does; this module
- * only forces the environment the views read (a canvas that claims WebGL so `3d` is offered, reduced motion so nothing animates,
- * a 1280x720 box). A view the bar does not offer for this graph is listed in `skipped`, never silently dropped.
+ * The test file mocks `scene/GraphScene` (jsdom has no WebGL) exactly as `KnowledgeGraphView.views.test.tsx` does, and hands in
+ * the {@link ViewHost}: testing-library and vitest are dev-only, and this package's source-package guard forbids a non-test file
+ * from importing them, so everything that needs them (rendering, `act`, clicks, the stubs that make jsdom look like a browser
+ * with WebGL, reduced motion and a 1280x720 box) lives behind that one interface. A view the bar does not offer for this graph
+ * is listed in `skipped`, never silently dropped.
  *
  * "Settled" means the loopback has nothing to deliver AND the page stopped changing (reads, commits, DOM, compute events) for
  * three rounds in a row; every round runs inside `act` so the answers' state updates are flushed and the effects they trigger
