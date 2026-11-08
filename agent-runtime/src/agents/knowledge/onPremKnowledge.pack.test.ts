@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
-import { filesManifestKey } from "@seanhogg/builderforce-memory/knowledge";
 import { fakeServer } from "../../../../packages/agent-tools/src/knowledge/replicaTestkit.test-util.js";
 import { onPremOnlyPackSpies } from "./onPremKnowledge.pack.testkit.js";
 import { onPremKnowledgeRowsHost } from "./onPremKnowledge.js";
@@ -66,7 +65,9 @@ describe("resuming queues", () => {
     const host = onPremReplicaHost();
     const sub = onPremRootPorts(root, onPremRootId(root, "docs"), undefined);
     const subId = onPremRootId(root, "docs");
-    await host.markAdditive(subId, sub.files, 7); // writes the root's queue file (recording its root id)
+    const queue = host.replicaQueueFor(subId, sub.files);
+    await queue.adopt(7);
+    await queue.flush(); // writes the root's queue file (recording its root id)
     await host.disposeReplicas();
     const resumed: string[] = [];
     const real = host.resumeReplica.bind(host);
@@ -88,27 +89,6 @@ describe("the on-prem review uploads ONE pack", () => {
     expect(spies.putExtracted).not.toHaveBeenCalled();
     expect(spies.storePutExtracted).not.toHaveBeenCalled();
     expect(spies.storeWrite).not.toHaveBeenCalled();
-  });
-
-  it("marks a root reviewed against the server before (manifest entries, empty local store) additive", async () => {
-    const root = await workspace();
-    const { client } = packClient();
-    const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked: { client, projectId: 7 } });
-    const session = (await host.openReview("docs"))!;
-    const ports = onPremRootPorts(root, session.rootId, undefined);
-    await ports.manifest.set(filesManifestKey(session.rootId), [{ id: "a.md", hash: "h1" }]);
-    await session.plan(new AbortController().signal);
-    expect(await onPremReplicaHost().replicaQueueFor(session.rootId, ports.files).additive()).toBe(true);
-  });
-
-  it("marks a fresh root (no local review yet) additive too", async () => {
-    const root = await workspace();
-    const { client } = packClient();
-    const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked: { client, projectId: 7 } });
-    const session = (await host.openReview("docs"))!;
-    const ports = onPremRootPorts(root, session.rootId, undefined);
-    await session.plan(new AbortController().signal);
-    expect(await onPremReplicaHost().replicaQueueFor(session.rootId, ports.files).additive()).toBe(true);
   });
 
   it("an aborted first review on a root the server already holds deletes nothing", async () => {

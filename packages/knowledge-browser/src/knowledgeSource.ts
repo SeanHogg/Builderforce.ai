@@ -31,7 +31,7 @@
 import { factKeyOf, filesManifestKey, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import {
   KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, dirtyFileName, factRightsCache, humanFactBatch,
-  shouldStayAdditive, type PumpSource, type SkippedFolder,
+  type PumpSource, type SkippedFolder,
 } from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, ReviewControl, ReviewRequest, ReviewTarget } from '@builderforce/knowledge-graph-view';
@@ -96,18 +96,10 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     const kn = await knowledge();
     for (const rootId of rootIds) {
       if (!(await kn.files.read(dirtyFileName(rootId)))) continue;
-      await adoptRule(kn, rootId);
+      // A pump only ever deletes what this browser's dirty set names (agent-tools' reconcile rule): a server leaf the local
+      // store lacks (another host's, or an empty in-memory fallback) is never dropped, so a resume needs no guard of its own.
       await host.resumeReplica(pumpOf(kn, rootId));
     }
-  };
-  /**
-   * A root this host has not COMPLETED a review of must never make the pump delete server data (root ids are shared across a
-   * project: another user may have synced it; the in-memory fallback is empty after every reload; a root reviewed against the
-   * server before the local store existed has no scope here). The ONE rule is agent-tools' `shouldStayAdditive`; it is applied
-   * before every review and every resume.
-   */
-  const adoptRule = async (kn: BrowserKnowledge, rootId: string): Promise<void> => {
-    if (kn.degraded || (await shouldStayAdditive(kn.store, rootId))) await host.markAdditive(rootId, kn.files, opts.projectId);
   };
   /** Every directory a review opened this session: a re-review (Continue) reuses its handle, and Live watches those that can. */
   const opened = new Map<string, DirectorySource>();
@@ -191,7 +183,6 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     opened.set(dir.rootId, dir);
     const kn = await knowledge();
     const pump = pumpOf(kn, dir.rootId);
-    await adoptRule(kn, dir.rootId);
     // The review writes the LOCAL store; the replicated store queues what changed, and the pump sends it as ONE pack.
     const ports: ReviewPorts = { source: dir, store: host.replicatedStoreOf(dir.rootId, kn.files, kn.store, pump, true), judgement: client.judgement, manifest: kn.manifest };
     const base = { force: !!req.force, modelCalls: KNOWLEDGE_REVIEW_MODEL_CALLS };
@@ -215,11 +206,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     // One batch per review, as the editor's: the local store persists in checkpoints, not once per file.
     const batched = (): Promise<ReviewReport> => (ports.store.batched ? ports.store.batched(review) : review());
     void (async () => {
-      // The whole tree was covered when the review was forced, or (a first review) nothing was unchanged: only then may it end additive mode.
-      // Plan skips (binaries, ignored paths) are deterministic and never leaves, so only unchanged files matter.
-      // A plan that listed no file at all never does: a listing that failed must not license deleting the server's leaves.
-      const covered = plan.files > 0 && (!!req.force || plan.unchanged === 0);
-      const report = await replica.duringReview(dir.rootId, kn.files, pump, batched, { full: covered && !kn.degraded });
+      const report = await replica.duringReview(dir.rootId, kn.files, pump, batched);
       // The result is on the server when `done` is shown (the graph is server-built); a pump still sending after the wait goes on in the background.
       await host.drainedWithin(dir.rootId, REPLICA_DRAIN_MS).catch((error: unknown) => { onDegraded('replica drain', error, { rootId: dir.rootId }); });
       // The new review IS the files' current state: nothing is pending against it.

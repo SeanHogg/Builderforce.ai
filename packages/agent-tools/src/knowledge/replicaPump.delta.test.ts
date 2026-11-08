@@ -113,8 +113,10 @@ describe('reconcile', () => {
         expect(srv.s.files.get(pathOf(7))).toBe(hashOf(7, 1));
         const kinds = srv.log.map((l) => l.kind);
         expect(kinds).toContain('manifest');
-        // The server holds a file this machine does not: the reconcile removes it, mirroring the local root.
-        expect(srv.s.files.has('other/new.ts')).toBe(false);
+        // The server holds a file this machine does not: it is the other machine's, and the reconcile leaves it alone
+        // (a deletion only ever comes from this machine's dirty set).
+        expect(srv.s.files.get('other/new.ts')).toBe(hashOf(900));
+        expect(srv.syncs().at(-1)!.pack!.deletes).toBeUndefined();
         expect(state.dirty).toBe(0);
         expect(state.failed).toEqual([]);
         expect(state.lastPack!.mode).toBe('reconcile');

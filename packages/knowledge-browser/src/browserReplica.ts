@@ -101,6 +101,6 @@ export function createBrowserReplica(onDegraded: KnowledgeDegradedReporter): Bro
   const host = createReplicaHost({ lock, report: (what, error) => onDegraded(what, error) });
   return {
     host,
-    duringReview: (rootId, files, pump, run, opts) => host.duringReview(rootId, files, pump, () => lock.exclusive(rootId, run), opts),
+    duringReview: (rootId, files, pump, run) => host.duringReview(rootId, files, pump, () => lock.exclusive(rootId, run)),
   };
 }

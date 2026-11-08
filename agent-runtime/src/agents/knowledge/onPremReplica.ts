@@ -15,7 +15,7 @@ import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore, shouldStayAdditive,
+  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore,
   type KnowledgeFiles, type PumpSource, type ReplicaHost,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
@@ -124,15 +124,6 @@ export function onPremPumpSource(rootId: string, ports: OnPremRootPorts, linked:
 }
 
 /**
- * Before every review and every resume: a root with no completed local review is ADDITIVE (the ONE shared rule,
- * `shouldStayAdditive`) — its pump must never delete a server leaf the not-yet-complete local store lacks.
- */
-export async function markAdditiveUntilReviewed(rootId: string, ports: OnPremRootPorts, projectId: number): Promise<void> {
-  await ports.migrated; // the legacy import must have run before the local store is judged
-  if (await shouldStayAdditive(ports.local, rootId)) await onPremReplicaHost().markAdditive(rootId, ports.files, projectId);
-}
-
-/**
  * Resumes the pending upload of EVERY root of the workspace that has a queue (`*.dirty.json`), not just the base one. Each queue
  * file records its own root id (`queuedRootIdOf`); an older file without one is matched by `dirtyFileName` against the base root
  * and the roots the local store holds a scope for. Every failure is logged, never thrown.
@@ -141,7 +132,9 @@ export async function resumeQueuedReplicas(
   workspaceRoot: string, baseRootId: string, baseLegacyId: string | undefined, linked: { client: KnowledgeClient; projectId: number },
 ): Promise<void> {
   const resume = async (rootId: string, ports: OnPremRootPorts): Promise<void> => {
-    await markAdditiveUntilReviewed(rootId, ports, linked.projectId);
+    // The legacy import runs before the pump reads the local store. A pump deletes only what the dirty set names, so a
+    // server leaf this store lacks (another host's) is never dropped: no per-root guard is needed.
+    await ports.migrated;
     await onPremReplicaHost().resumeReplica(onPremPumpSource(rootId, ports, linked));
   };
   const base = onPremRootPorts(workspaceRoot, baseRootId, baseLegacyId);

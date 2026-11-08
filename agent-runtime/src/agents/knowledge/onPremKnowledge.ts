@@ -41,7 +41,7 @@ import { onPremSymbolIndex } from "../on-prem-symbol-index.js";
 import { containerKnowledgeFs } from "./containerKnowledgeFs.js";
 import { loggedFallback } from "./loggedFallback.js";
 import {
-  closeOnPremManifests, drainAfterReview, markAdditiveUntilReviewed, onPremPumpSource, onPremReplicaHost, onPremRootPorts, resumeQueuedReplicas,
+  closeOnPremManifests, drainAfterReview, onPremPumpSource, onPremReplicaHost, onPremRootPorts, resumeQueuedReplicas,
 } from "./onPremReplica.js";
 import { getHostKnowledgeIndex, onPremLegacyRootId, onPremRootId } from "./index/onPremKnowledgeIndex.js";
 
@@ -173,7 +173,7 @@ async function reviewPorts(
   // replicates to the linked project through the shared host. A root reviewed under its old,
   // name-based id keeps its manifest: migrated on first read.
   const root = onPremRootPorts(workspaceRoot, rootId, onPremLegacyRootId(workspaceRoot, rel));
-  await markAdditiveUntilReviewed(rootId, root, linked.projectId);
+  await root.migrated; // the legacy import runs before the review reads the local store
   const pump = onPremPumpSource(rootId, root, linked);
   const shared = { store: onPremReplicaHost().replicatedStoreOf(rootId, root.files, root.local, pump, true), manifest: root.manifest };
   const ports: KnowledgeReviewPorts = {
@@ -236,11 +236,8 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
           const { ports, pump } = await reviewPorts(deps, rel, rootId, title, real);
           const force = opts?.force === true;
           // The host raises the root's bulk-upload window around the run; the pack goes up once, after it.
-          // A forced review, or one with nothing unchanged, covers every file: a completed one clears the root's additive flag (`full`).
-          // A plan that listed no file at all never does (a listing that failed must not license deleting the server's leaves).
-          const full = plan.plan.files > 0 && (force || plan.plan.unchanged === 0);
           const report = await replicaHost.duringReview(
-            rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan, ...(force ? { force: true } : {}) }), { full },
+            rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan, ...(force ? { force: true } : {}) }),
           );
           keepFresh(rootId, real, ports);
           await drainAfterReview(rootId);

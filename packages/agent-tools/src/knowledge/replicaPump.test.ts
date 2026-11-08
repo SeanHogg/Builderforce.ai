@@ -98,7 +98,7 @@ describe('pumpReplica', () => {
         expect(state.dirty).toBeGreaterThan(0);
     });
 
-    it('a 413 pack_too_large cuts the pack in half (by files) until it fits; nothing is lost and the last slice asserts the digest', async () => {
+    it('a 413 pack_too_large cuts the pack in half (by files) until it fits; nothing is lost', async () => {
         const w = await ready(8);
         const srv = fakeServer();
         srv.s.rejectOver = 3;

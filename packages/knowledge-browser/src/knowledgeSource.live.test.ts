@@ -23,7 +23,6 @@ vi.mock('./browserKnowledge', () => ({
 vi.mock('./browserReplica', () => {
   const host = {
     replicatedStoreOf: (_r: string, _f: unknown, local: unknown) => local,
-    markAdditive: async () => undefined,
     drainedWithin: async () => 'drained',
     resumeReplica: async () => undefined,
     replicaStatusOf: async () => ({}),

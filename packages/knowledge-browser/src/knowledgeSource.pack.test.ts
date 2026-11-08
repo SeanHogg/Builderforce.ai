@@ -5,25 +5,12 @@ import type { KnowledgeClient } from '@builderforce/knowledge-client';
 import type { KnowledgeReviewEvent, ReviewControl } from '@builderforce/knowledge-graph-view';
 import { createKnowledgeSource, type DirectoryProvider } from './knowledgeSource';
 
-const env = vi.hoisted(() => ({ idb: undefined as unknown, hosts: [] as Array<{ markAdditive: unknown }> }));
+const env = vi.hoisted(() => ({ idb: undefined as unknown }));
 
 // Storage: the real IndexedDB-backed knowledge over fake-indexeddb, or (idb undefined) the real in-memory fallback.
 vi.mock('./browserKnowledge', async (original) => {
   const actual = await original<typeof import('./browserKnowledge')>();
   return { ...actual, openBrowserKnowledge: (report: never) => actual.openBrowserKnowledge(report, env.idb ? { idb: env.idb as IDBFactory } : {}) };
-});
-// The real replica host, with markAdditive observable.
-vi.mock('./browserReplica', async (original) => {
-  const actual = await original<typeof import('./browserReplica')>();
-  return {
-    ...actual,
-    createBrowserReplica: (report: never) => {
-      const made = actual.createBrowserReplica(report);
-      vi.spyOn(made.host, 'markAdditive');
-      env.hosts.push(made.host);
-      return made;
-    },
-  };
 });
 // The review's compute runs in-thread; this stands for it: it writes the LOCAL store the way a review does.
 vi.mock('./reviewWorkerClient', () => ({
@@ -67,7 +54,7 @@ async function review(source: ReturnType<typeof createKnowledgeSource>): Promise
   return out;
 }
 
-beforeEach(() => { env.idb = new IDBFactory(); env.hosts.length = 0; });
+beforeEach(() => { env.idb = new IDBFactory(); });
 
 describe('browser knowledge source: ONE upload path (the pack)', () => {
   it('reviews into the local store; only the pump talks to the server, with a pack', async () => {
@@ -92,16 +79,7 @@ describe('browser knowledge source: ONE upload path (the pack)', () => {
     await source.dispose();
   });
 
-  it('keeps a root additive until a COMPLETED review of it exists locally (root ids are shared across a project), and a root adopted from a server-reviewed manifest too', async () => {
-    const fresh = createKnowledgeSource({ projectId: 7, client: fakeClient() as unknown as KnowledgeClient, directorySources: async () => [provider], onDegraded: vi.fn() });
-    await review(fresh);
-    // Nothing reviewed here yet: another host may already have synced this root, so the first review is additive.
-    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledTimes(1);
-    await review(fresh);
-    // The first review completed (its scope carries a digest): the second is no longer additive.
-    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledTimes(1);
-    await fresh.dispose();
-
+  it('reviews a root adopted from a server-reviewed manifest (no local rows) through to done', async () => {
     // A root reviewed against the server before the local store existed: manifest entries (version 1 record), no rows.
     env.idb = new IDBFactory();
     const { openBrowserKnowledge } = await vi.importActual<typeof import('./browserKnowledge')>('./browserKnowledge');
@@ -109,19 +87,17 @@ describe('browser knowledge source: ONE upload path (the pack)', () => {
     await seeded.manifest.set(filesManifestKey('r'), [{ id: 'a.md', hash: 'h1' }]);
     seeded.close();
     const adopted = createKnowledgeSource({ projectId: 7, client: fakeClient() as unknown as KnowledgeClient, directorySources: async () => [provider], onDegraded: vi.fn() });
-    await review(adopted);
-    expect(env.hosts[1]!.markAdditive).toHaveBeenCalledWith('r', expect.anything(), 7);
+    expect((await review(adopted)).at(-1)).toMatchObject({ type: 'done' });
     await adopted.dispose();
   });
 
-  it('falls back to memory when IndexedDB is unavailable: reported, never thrown, and the root is additive', async () => {
+  it('falls back to memory when IndexedDB is unavailable: reported, never thrown', async () => {
     env.idb = undefined;
     const onDegraded = vi.fn();
     const source = createKnowledgeSource({ projectId: 7, client: fakeClient() as unknown as KnowledgeClient, directorySources: async () => [provider], onDegraded });
     const events = await review(source);
     expect(events.at(-1)).toMatchObject({ type: 'done' });
     expect(onDegraded).toHaveBeenCalledWith('knowledge storage', expect.anything());
-    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledWith('r', expect.anything(), 7);
     await source.dispose();
   });
 });
