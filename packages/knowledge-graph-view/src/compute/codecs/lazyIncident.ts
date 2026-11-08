@@ -24,7 +24,7 @@ export class LazyIncident implements IncidentIndex {
 
     has(ref: string): boolean { return this.place.has(ref); }
 
-    keys(): IterableIterator<string> { return this.place.keys(); }
+    keys(): ReturnType<IncidentIndex['keys']> { return this.place.keys(); }
 
     get(ref: string): KEdge[] | undefined {
         const kept = this.built.get(ref);
