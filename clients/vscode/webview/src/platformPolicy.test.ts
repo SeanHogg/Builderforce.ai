@@ -138,69 +138,58 @@ describe('webview platform gate', () => {
   });
 });
 
-describe('webviewOffline', () => {
+describe('connected capability (the composer offline decision)', () => {
   // The composer swaps `@`/`#` from server-backed (invited participants / linked
   // tickets) to LOCAL candidates (live sub-agents, persona agents / local tickets)
-  // when the platform cannot serve the typeahead. `webviewOffline` is that decision.
+  // when the platform cannot serve the typeahead. `!webviewCapability('connected')` is that decision;
+  // `useCapability` snapshots the same read, re-rendering on every pushed frame.
   const setHost = async (platformPolicy: Partial<PlatformPolicySnapshot>, inferenceMode: InferenceMode) => {
     await install();
     fromHost({ type: 'platform.policy', platformPolicy, inferenceMode, baseUrl: 'https://builderforce.ai' });
   };
+  const connected = async () => (await import('./useCapability')).webviewCapability('connected');
 
-  it('is true before the host names a mode (Local only) and when connected-features is off', async () => {
+  it('is off before the host names a mode (Local only) and when connected-features is off', async () => {
     await install();
-    expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
+    expect(await connected()).toBe(false);
 
     await setHost({ connectedFeatures: false, gatewayInference: true, synchronize: false }, 'hybrid');
-    expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
+    expect(await connected()).toBe(false);
   });
 
-  it('is false on a signed-in Hybrid with connected-features on', async () => {
+  it('is on for a signed-in Hybrid with connected-features on', async () => {
     await setHost({ connectedFeatures: true, gatewayInference: true, synchronize: false }, 'hybrid');
-    expect((await import('./platformPolicy')).webviewOffline()).toBe(false);
+    expect(await connected()).toBe(true);
   });
 
-  it('stays true on local-only even with connected-features granted', async () => {
+  it('stays off on local-only even with connected-features granted', async () => {
     await setHost({ connectedFeatures: true, gatewayInference: false, synchronize: false }, 'local-only');
-    expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
+    expect(await connected()).toBe(false);
   });
-});
 
-describe('useWebviewOffline', () => {
-  // The `@`/`#` pickers read the offline decision through this hook so a
-  // `platform.policy` frame that lands AFTER the composer first rendered flips the
-  // roster source. The non-reactive `webviewOffline()` freezes the decision at its
-  // first render and left both typeaheads starved while signed in.
-  //
-  // The vitest env is `node` (no DOM, no react-test-renderer), so mounting a hook
-  // consumer is not possible here. What this verifies is the decision the hook
-  // snapshots — `webviewOffline()` reads the same mode + snapshot pair — flipping on a
-  // late frame, plus the subscribe/notify pair firing synchronously inside
-  // `applyWebviewPlatformPolicy` (the wiring `useSyncExternalStore` depends on).
-  it('flips the snapshot when a late platform.policy frame arrives', async () => {
+  it('flips when a late platform.policy frame arrives, and notifies subscribers', async () => {
     const mod = await import('./platformPolicy');
     mod.installWebviewPlatformPolicy();
+    const notified = vi.fn();
+    const off = mod.subscribeWebviewPolicy(notified);
+    expect(await connected()).toBe(false);
 
-    // Before any host frame the decision is offline — the default-denied state that
-    // starved the pickers when a signed-in Hybrid frame landed after first render.
-    expect(mod.webviewOffline()).toBe(true);
-
-    // A signed-in Hybrid push arrives after the consumer's first render.
     fromHost({
       type: 'platform.policy',
       platformPolicy: { connectedFeatures: true, gatewayInference: true, synchronize: false },
       inferenceMode: 'hybrid',
       baseUrl: 'https://builderforce.ai',
     });
-    expect(mod.webviewOffline()).toBe(false);
+    expect(await connected()).toBe(true);
+    expect(notified).toHaveBeenCalled();
 
-    // A later denial flips it back (sign-out mid-session).
     fromHost({
       type: 'platform.policy',
       platformPolicy: { connectedFeatures: false, gatewayInference: false, synchronize: false },
       inferenceMode: 'local-only',
       baseUrl: 'https://builderforce.ai',
     });
-    expect(mod.webviewOffline()).toBe(true);
+    expect(await connected()).toBe(false);
+    off();
   });
 });

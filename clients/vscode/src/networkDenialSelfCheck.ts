@@ -24,8 +24,8 @@
  */
 import { PlatformAccessDenied } from "@builderforce/local-first";
 import { logLine } from "./errorReporter";
+import { currentCapabilityInputs } from "./capabilityContext";
 import {
-  platformCapabilityAllows,
   platformInferenceMode,
   platformPolicyResolved,
   platformRequestAccount,
@@ -95,7 +95,7 @@ export async function runNetworkDenialSelfCheck(
   // The CURRENT policy snapshot permits synchronize — there is no denial in force to
   // verify. Reading the live snapshot (not the cached request-time mode) honors a mode
   // the policy has already applied, even if a later refresh would re-derive it.
-  if (platformCapabilityAllows("synchronize")) {
+  if (currentCapabilityInputs().synchronize) {
     const reason = `mode "${platformInferenceMode()}" currently permits synchronize — nothing to deny`;
     logLine(`BuilderForce network-denial self-check: skipped (${reason})`);
     return skippedReport(reason);

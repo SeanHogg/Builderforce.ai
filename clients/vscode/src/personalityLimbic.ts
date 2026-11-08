@@ -17,6 +17,8 @@
 import type * as vscode from "vscode";
 import { turnAffectBlock, type LimbicState } from "@seanhogg/builderforce-brain-embedded";
 import { createPersonalityBlockCache } from "./personalityBlockCache";
+import { currentCapabilityInputs } from "./capabilityContext";
+import { networkDenied } from "./capabilityStates";
 
 /**
  * Personality/persona context sent to `POST /api/limbic/block` so the returned
@@ -59,6 +61,9 @@ const nonEmpty = (s: string | undefined | null): s is string => typeof s === "st
 const PERSONALITY_TIMEOUT_MS = 10_000;
 
 async function requestPersonalityLayers(secrets: vscode.SecretStorage, persona?: PersonaContext): Promise<PersonalityLayers | null> {
+  // PRD 41 A5: platform denied ⇒ nothing is attempted; the turn's affect is appraised locally and the
+  // remembered personality (the cache) still answers. Not cached as a failure.
+  if (networkDenied(currentCapabilityInputs())) return null;
   try {
     // `/api/*` is JWT-only: the session transport exchanges the editor key for the
     // selected workspace's token (a raw key 401s there). Signed out it resolves undefined.

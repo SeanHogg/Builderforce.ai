@@ -10,7 +10,34 @@ let currentUserId: string | null | undefined;
 /** Who the signed-in human is by name (the same `/me` answer), for provenance on what they review. */
 let currentUserName: string | null | undefined;
 
+/** PRD 41 A5: the identity is remembered per session, so a signed-in person who goes offline keeps their personality block. */
+interface IdentityStore {
+  memento: Pick<vscode.Memento, "get" | "update">;
+  /** True when the platform is denied: no `/me` request is attempted, the remembered identity answers. */
+  offline: () => boolean;
+}
+const IDENTITY_KEY = "builderforce.identityCache";
+interface CachedIdentity { sessionKey: string; userId: string | null; displayName: string | null }
+let identityStore: IdentityStore | undefined;
+
+export function bindIdentityCache(store: IdentityStore): void {
+  identityStore = store;
+}
+
+function identitySessionKey(): string {
+  return String(signedInTenantId() ?? "none");
+}
+
 async function loadIdentity(secrets: vscode.SecretStorage): Promise<void> {
+  const cached = identityStore?.memento.get<CachedIdentity>(IDENTITY_KEY);
+  const remembered = cached && cached.sessionKey === identitySessionKey() ? cached : undefined;
+  if (identityStore?.offline()) {
+    // Denied: nothing is attempted. Left unresolved (not cached as null) so the next online read fetches it.
+    currentUserId = remembered?.userId ?? null;
+    currentUserName = remembered?.displayName ?? null;
+    if (!remembered) { currentUserId = undefined; currentUserName = undefined; }
+    return;
+  }
   try {
     const r = await authed<{ userId?: string; displayName?: string }>(secrets, "/api/vscode/me", {
       asTenant: "any", // person-level: the signed-in user, identical under any workspace token
@@ -18,6 +45,7 @@ async function loadIdentity(secrets: vscode.SecretStorage): Promise<void> {
     currentUserId = r?.userId ?? null;
     // The display name only: an email is never written into a pack a person shares.
     currentUserName = r?.displayName || null;
+    if (currentUserId) void identityStore?.memento.update(IDENTITY_KEY, { sessionKey: identitySessionKey(), userId: currentUserId, displayName: currentUserName } satisfies CachedIdentity);
   } catch {
     currentUserId = null;
     currentUserName = null;
@@ -46,7 +74,11 @@ let workspaceCache: { id: number; name: string } | undefined;
 // Dropped on a workspace switch and on sign-out; the user id only on sign-out.
 onSessionChange((change) => {
   workspaceCache = undefined;
-  if (change === "reset") { currentUserId = undefined; currentUserName = undefined; }
+  if (change === "reset") {
+    currentUserId = undefined;
+    currentUserName = undefined;
+    void identityStore?.memento.update(IDENTITY_KEY, undefined);
+  }
 });
 
 /**

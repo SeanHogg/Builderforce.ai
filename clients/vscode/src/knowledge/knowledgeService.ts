@@ -30,6 +30,8 @@ import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { fetchAuthed, type AuthedInit } from "../bfApi";
 import { getSelectedProject } from "../projectState";
+import { currentCapabilityInputs } from "../capabilityContext";
+import { workspaceLinked } from "../capabilityStates";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
@@ -63,9 +65,20 @@ export function workspaceFolders(): WorkspaceFolderRef[] {
   return (vscode.workspace.workspaceFolders ?? []).map((f) => ({ path: f.uri.fsPath }));
 }
 
+/**
+ * The selected project when the workspace is LINKED to it (PRD 41 A2): a project is selected, a session
+ * exists AND `synchronize` is granted. A selection persisted while signed out is a pending binding, not
+ * a link, so a review on it uses the local store and never throws `NOT_SIGNED_IN`.
+ */
+export function linkedProject(): ReturnType<typeof getSelectedProject> {
+  const project = getSelectedProject();
+  const { signedIn, synchronize } = currentCapabilityInputs();
+  return workspaceLinked({ hasProject: !!project, signedIn, synchronize }) ? project : undefined;
+}
+
 /** The knowledge client for the linked project; undefined when the workspace is not linked. */
 export function linkedKnowledgeClient(secrets: vscode.SecretStorage): KnowledgeClient | undefined {
-  const project = getSelectedProject();
+  const project = linkedProject();
   if (!project) return undefined;
   return createKnowledgeClient({
     projectId: project.id,
@@ -113,7 +126,7 @@ export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot, opt
   const { rootId } = root;
   const local = rootStore(rootId, () => localKnowledgeStore(files, rootId), "local");
   const manifest = rootManifest(rootId, () => fileManifest(files, manifestFileName(rootId)), root.folderPath);
-  const projectId = getSelectedProject()?.id;
+  const projectId = linkedProject()?.id;
   const pump: PumpSource | undefined = client && projectId !== undefined ? { rootId, files, local, client, projectId, manifest, sizeOf: (p: string) => hashCache.get(`${root.rootPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${p}`)?.size } : undefined;
   return {
     root,

@@ -25,6 +25,7 @@ export type { AuthedInit } from "./bfApi/transport";
 
 // Identity and workspaces.
 export {
+  bindIdentityCache,
   canManageActiveWorkspace,
   createWorkspace,
   getCurrentUserId,

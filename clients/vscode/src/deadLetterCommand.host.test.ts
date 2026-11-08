@@ -16,7 +16,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXPORT_DEAD_LETTERS_COMMAND } from "./deadLetterCommand";
 
-const HOST_FILE = "./extension.ts";
+const HOST_FILE = "./deadLetterExport.ts";
+const ACTIVATION_FILE = "./extension.ts";
 const MANIFEST_FILE = "../package.json";
 const NLS_FILES = [
   "../package.nls.json",
@@ -43,8 +44,8 @@ function declaredCommand(): { command?: string; title?: string } | undefined {
 
 function activateBody(): string {
   const source = read(HOST_FILE);
-  const start = source.indexOf("export function activate(");
-  expect(start, `${HOST_FILE} has no activate export`).toBeGreaterThan(-1);
+  const start = source.indexOf("export function registerDeadLetterExport(");
+  expect(start, `${HOST_FILE} has no registerDeadLetterExport export`).toBeGreaterThan(-1);
   const rest = source.slice(start);
   const next = rest.slice(1).search(/\n(?:export )?(?:async )?function \w/);
   return next === -1 ? rest : rest.slice(0, next + 1);
@@ -70,6 +71,12 @@ describe("a person can reach the dead-letter export command", () => {
     expect(lines[at - 1], "the registration is not a top-level activation statement").toMatch(
       /^ {2}context\.subscriptions\.push\(\s*$/,
     );
+  });
+
+  it("activate calls the registration at its top level", () => {
+    const extension = read(ACTIVATION_FILE);
+    const activate = extension.slice(extension.indexOf("export function activate("));
+    expect(activate).toMatch(/^ {2}registerDeadLetterExport\(context, /m);
   });
 
   it("imports the command from the landed module rather than redeclaring it", () => {

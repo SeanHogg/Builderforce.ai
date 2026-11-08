@@ -14,50 +14,17 @@
 
 import * as vscode from "vscode";
 import { openWorkspace } from "../openWorkspace";
-import { getSelectedProject, onProjectChange } from "../projectState";
+import { onProjectChange } from "../projectState";
 import { VisualizationPanel } from "../visualizationPanel";
 import { rootIdOfSourceRef } from "@builderforce/agent-tools/knowledge";
-import { reviewArgumentOf, reviewedRoots, rootById, rootForPath } from "./knowledgeRoots";
+import { reviewArgumentOf, rootForPath } from "./knowledgeRoots";
 import { registerKnowledgePackCommands } from "./knowledgePackCommands";
-import { configureKnowledgeHost, linkedKnowledgeClient, log, openRoot, workspaceFolders } from "./knowledgeService";
+import { configureKnowledgeHost, linkedProject, workspaceFolders } from "./knowledgeService";
+import { pendingBinding, type PendingBinding } from "./pendingBinding";
 import { configureExtractPool, disposeExtractPool } from "./review/extractPoolHost";
 import { BuilderForceAuthProvider } from "../auth";
-import { disposeReplicas, queueFirstSyncOnce, resumeAuthPaused, resumeReplica, stopReplicaPump, type UploadMarks } from "./knowledgeReplica";
-
-/** The ONE globalState key recording which project each root's local snapshot went to. */
-export const KNOWLEDGE_UPLOADED_KEY = "builderforce.knowledge.uploaded";
-
-function uploadMarks(state: vscode.Memento): UploadMarks {
-  const read = (): Record<string, number> => state.get<Record<string, number>>(KNOWLEDGE_UPLOADED_KEY) ?? {};
-  return {
-    get: (rootId) => read()[rootId],
-    set: (rootId, projectId) => Promise.resolve(state.update(KNOWLEDGE_UPLOADED_KEY, { ...read(), [rootId]: projectId })),
-  };
-}
-
-/**
- * Linking replicates what was reviewed locally (§5.1; PRD 41 A7): each reviewed root's local snapshot
- * is queued for the project ONCE (the replica pump's first-sync case, marked per project), and a queue
- * left waiting by an earlier session resumes. The pump runs in the background; its state shows in the
- * Sync drawer.
- */
-async function replicateReviewedRoots(context: vscode.ExtensionContext, linked: boolean): Promise<void> {
-  const marks = uploadMarks(context.globalState);
-  for (const listed of reviewedRoots(context.workspaceState)) {
-    // A root listed under its old id resolves to its current one (and its migrated files).
-    const root = rootById(listed, workspaceFolders());
-    if (!root) continue;
-    try {
-      // Unlinked (or the project changed): the old project's pump stops at once; it never sends another op.
-      if (!linked || !linkedKnowledgeClient(context.secrets)) { await stopReplicaPump(root.rootId); continue; }
-      const open = openRoot(context.secrets, root);
-      if (!open.pump) continue;
-      if (!(await queueFirstSyncOnce({ ...open.pump, manifest: open.manifest, marks }))) await resumeReplica(open.pump);
-    } catch (error) {
-      log(`replicate ${root.rootId}`, error);
-    }
-  }
-}
+import { disposeReplicas, resumeAuthPaused } from "./knowledgeReplica";
+import { replicateReviewedRoots } from "./knowledgeReplicate";
 
 /** The folder the command was invoked on (explorer), else the one the person picks. */
 async function folderToReview(uri: unknown): Promise<vscode.Uri | undefined> {
@@ -72,8 +39,20 @@ async function folderToReview(uri: unknown): Promise<vscode.Uri | undefined> {
   }))?.[0];
 }
 
+let pending: PendingBinding | undefined;
+
+/** Call on every capability change: a selection made signed out binds when the link is granted. */
+export function checkPendingKnowledgeBinding(): Promise<void> {
+  return pending?.check() ?? Promise.resolve();
+}
+
 export function registerKnowledgeCommands(context: vscode.ExtensionContext): void {
   configureKnowledgeHost(context.workspaceState);
+  pending = pendingBinding({
+    linkedTo: () => linkedProject()?.id,
+    onLink: () => replicateReviewedRoots(context, true),
+    onUnlink: async () => { await replicateReviewedRoots(context, false); },
+  });
   // The review's extraction pool lives as long as the extension (started on the first review).
   configureExtractPool(context.extensionPath);
   // (the pool's width is `min(cores - 1, 8)`; at one it is not used and the review runs at memory's default width)
@@ -96,9 +75,8 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
       const rootId = typeof args?.rootId === "string" ? args.rootId : focus.map(rootIdOfSourceRef).find((r): r is string => !!r);
       return VisualizationPanel.openKnowledge(context, { focus, ...(rootId ? { rootId } : {}) });
     }),
-    onProjectChange((project) => {
-      void replicateReviewedRoots(context, !!project);
-    }),
+    // A selection change re-evaluates the link edge (the watcher owns it; never replicates directly).
+    onProjectChange(() => { void pending?.check(); }),
     // A pump that paused because the token was refused resumes when the person signs in again.
     vscode.authentication.onDidChangeSessions((e) => {
       if (e.provider.id === BuilderForceAuthProvider.id) void resumeAuthPaused();
@@ -106,5 +84,5 @@ export function registerKnowledgeCommands(context: vscode.ExtensionContext): voi
     // Queues are made durable and pumps stop with the extension; the queues resume on the next open.
     { dispose: () => { void disposeReplicas(); } },
   );
-  if (getSelectedProject()) void replicateReviewedRoots(context, true);
+  void pending.check();
 }

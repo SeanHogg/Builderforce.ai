@@ -4,7 +4,7 @@ import { manageByoConnections } from "./byoConnections";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
-import { syncCapabilityContexts } from "./capabilityContext";
+import { syncSignedInContext, wireCapabilities } from "./capabilityWiring";
 import { promptSignInAgain, watchRejectedEditorKey } from "./editorKeyGuard";
 import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
@@ -17,6 +17,8 @@ import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
+import { currentCapabilities } from "./capabilityContext";
+import { runWorkspaceScan } from "./workspaceScanRun";
 import { afterWorkspaceScan, syncWorkspaceFacts } from "./workspaceFactsSync";
 import { watchWorkspaceSymbols } from "./workspaceSymbolWatch";
 import { workspaceSymbolIndex } from "./workspaceSymbols";
@@ -70,7 +72,7 @@ import { onLocalCredentialsChange } from "./localProviderCredentials";
 import { editorAccounts } from "./providerConnect";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 import { bindLocalSuccessStorage } from "./localSuccessStorage";
-import { EXPORT_DEAD_LETTERS_COMMAND, runExportDeadLetters } from "./deadLetterCommand";
+import { registerDeadLetterExport } from "./deadLetterExport";
 import { bindOutboxSendPermissionAtActivation } from "./sendPermissionActivation";
 import { installAuditClose } from "./installAuditClose";
 import { bootVsixHost } from "./bootVsixHost";
@@ -135,20 +137,6 @@ let diagnostics: DiagnosticsController | undefined;
 
 /** The Inbox view's Meetings group (upcoming/live video calls); refreshed on auth change. */
 let meetings: MeetingsTreeProvider | undefined;
-
-/**
- * Mirror the signed-in state into the `builderforce.signedIn` context key so the
- * sidebar can hide every feature view behind a single login panel when logged out
- * (the views' `when` clauses read this key). Signed-in truth is "has an editor key
- * in SecretStorage" — the same check every surface already makes ad hoc.
- */
-async function syncSignedInContext(context: vscode.ExtensionContext): Promise<void> {
-  const signedIn = !!(await context.secrets.get(SECRET_KEY));
-  await vscode.commands.executeCommand("setContext", "builderforce.signedIn", signedIn);
-  // PRD 41 Part A1: the sidebar's capability-gated surfaces (health, evermind) refresh
-  // from the SAME auth-state sites as the signed-in key, so the two never drift.
-  await syncCapabilityContexts();
-}
 
 export function activate(context: vscode.ExtensionContext): void {
   // Lever bucketing by install id, the symbol index's grammars, the local research model.
@@ -217,6 +205,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // usage go to the account once. Inert until the `synchronize` capability is granted.
   context.subscriptions.push(installChatSync(context));
   initProjectState(context.workspaceState);
+  wireCapabilities(context);
   // Gate the sidebar on auth before anything else registers: until this resolves the
   // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.
   void syncSignedInContext(context);
@@ -479,51 +468,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
   context.subscriptions.push(initActivity());
 
-  // G13a: the person-facing entry point for durable dead letters. `runExportDeadLetters`
-  // exports what is waiting and offers to put exactly ONE back on the queue it came
-  // from; it never sends, flushes or retries, and it never calls the platform. It is
-  // registered HERE, on the activation path, rather than lazily behind a first call,
-  // so a person can always reach it from the Command Palette — the manifest
-  // declaration in package.json is what puts it there, and neither half works alone.
-  context.subscriptions.push(
-    vscode.commands.registerCommand(EXPORT_DEAD_LETTERS_COMMAND, async () => {
-      try {
-        await runExportDeadLetters({
-          showExport: async (content) => {
-            const document = await vscode.workspace.openTextDocument({ language: "json", content });
-            await vscode.window.showTextDocument(document, { preview: true });
-          },
-          offerRepair: async (choices) => {
-            const picked = await vscode.window.showQuickPick(
-              choices.map((choice) => ({
-                label: choice.id,
-                description: choice.queue,
-                detail: choice.reason || vscode.l10n.t("Durable dead letter"),
-                letterId: choice.id,
-              })),
-              {
-                title: vscode.l10n.t("Repair a dead letter"),
-                placeHolder: vscode.l10n.t("Put one durable dead letter back on the queue. Nothing is sent."),
-              },
-            );
-            return picked?.letterId;
-          },
-          showInfo: (message) => {
-            void vscode.window.showInformationMessage(message);
-          },
-        }, {
-          storage: {
-            keys: () => context.workspaceState.keys(),
-            get: (key) => context.workspaceState.get(key),
-            update: (key, value) => context.workspaceState.update(key, value),
-          },
-        });
-      } catch (error) {
-        surfaceError(error, "command:exportDeadLetters",
-          vscode.l10n.t("Could not export dead letters: {0}", (error as Error).message));
-      }
-    }),
-  );
+  registerDeadLetterExport(context, localFirst.store);
 
   context.subscriptions.push(
     participant,
@@ -1671,63 +1616,24 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   }
 }
 
-/**
- * Run the codebase scan if a folder is open. The definition-index refresh is UNGATED — it
- * needs no model, no account and no key, so it runs before any route resolution and even
- * when the summarizer has nothing to run (PRD 41 Part A4). The scan's summary/overview step
- * still resolves the model route; a route that needs a model, a local model or a key this
- * workspace lacks skips ONLY that step (with an explanation when the person asked for it),
- * leaving the agent grounded on the deterministic map.
- */
+/** Run the codebase scan if a folder is open (PRD 41 A4: the deterministic part never needs a key; see `workspaceScanRun.ts`). */
 async function maybeScan(context: vscode.ExtensionContext, force: boolean): Promise<void> {
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!root) return;
-  // Hand the folder to Builderforce Desktop (when it runs) so its index starts building
-  // now — before any sign-in gate, because the local index needs no account.
-  void registerWorkspace(root);
-  // The definition index refresh is FIRST and UNGATED (PRD 41 Part A4): it needs no model
-  // and no account, so neither gate below may skip it. Kicks off immediately, never awaited.
-  void workspaceSymbolIndex(root).refresh().catch((e) => console.error("BuilderForce symbol index refresh failed:", e));
-  // The route reads the inference mode, which is only real once the policy resolved.
-  await platformPolicyResolved();
-  const key = await context.secrets.get(SECRET_KEY);
-  // The SAME route the chat participant runs on, rather than a second reading of
-  // `builderforce.defaultModel`: that divergence meant pinning an on-device model left
-  // the scan summarizing through the gateway under a different model entirely. A local
-  // route also needs no account, so the sign-in gate follows the route, not the key.
-  const route = await resolveModelRoute(context.secrets);
-  // Nothing can summarize the workspace for a reason signing in won't fix: the overview is
-  // optional, so the scan still runs and grounds the agent on the deterministic map. A
-  // rescan the person ASKED for says why and offers the remedies.
-  const noModel = routeNeedsLocalModel(route) ? "no_local_model" : routeNeedsSpecificModel(route) ? "no_specific_model" : null;
-  const needsSignIn = !key && routeRequiresSignIn(route);
-  if (noModel || needsSignIn) {
-    if (force && noModel) void showNoLocalModelPrompt(noModel);
-    const scan = await scanCodebase(context.secrets, root, route, force);
-    setGroundingSummary(scan.grounding);
-    return;
-  }
-
-  const work = async (progress?: vscode.Progress<{ message?: string }>) => {
-    progress?.report({ message: "Scanning workspace…" });
-    try {
-      const scan = await scanCodebase(context.secrets, root, route, force);
-      setGroundingSummary(scan.grounding);
-      // Publish the digest into the project's facts in the background: grounding is ready
-      // now, and it must not hold up activation.
-      void afterWorkspaceScan(context.secrets, root, scan).catch((e) => console.error("BuilderForce workspace digest failed:", e));
-    } catch (e) {
-      console.error("BuilderForce codebase scan failed:", e);
-    }
-  };
-
-  if (force) {
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "BuilderForce: rescanning codebase" },
-      work,
-    );
-    vscode.window.showInformationMessage("BuilderForce: codebase knowledge refreshed.");
-  } else {
-    await work();
-  }
+  await runWorkspaceScan({
+    root: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    registerWorkspace: (root) => void registerWorkspace(root),
+    refreshSymbolIndex: (root) => workspaceSymbolIndex(root).refresh(),
+    policyResolved: platformPolicyResolved,
+    key: async () => context.secrets.get(SECRET_KEY),
+    resolveRoute: () => resolveModelRoute(context.secrets),
+    noModelReason: (route) => (routeNeedsLocalModel(route) ? "no_local_model" : routeNeedsSpecificModel(route) ? "no_specific_model" : null),
+    routeRequiresSignIn,
+    promptNoModel: (reason) => void showNoLocalModelPrompt(reason),
+    scan: (root, route, f) => scanCodebase(context.secrets, root, route, f),
+    setGrounding: setGroundingSummary,
+    syncAllowed: () => currentCapabilities().sync,
+    afterScan: (root, scan) => afterWorkspaceScan(context.secrets, root, scan),
+    withProgress: (title, work) => Promise.resolve(vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, work)),
+    info: (message) => void vscode.window.showInformationMessage(message),
+    error: (message, e) => console.error(message, e),
+  }, force);
 }

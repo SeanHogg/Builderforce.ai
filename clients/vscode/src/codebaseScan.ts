@@ -51,8 +51,13 @@ interface ScanCache {
   grounding: string;
   /** The model-written overview on its own, so a cache hit can still hand it to the digest. */
   overview?: string;
+  /** Whether the optional overview ran (PRD 41 A4): `skipped` with a reason when no model route could serve it. */
+  overviewStatus?: OverviewStatus;
   generatedAt: string;
 }
+
+/** The overview section's state. The deterministic map never depends on it. */
+export type OverviewStatus = { status: "written" } | { status: "skipped"; reason: "no-model-route" | "call-failed" };
 
 /** What a scan hands its callers: the prompt grounding, plus the raw digest facts are built from. */
 export interface ScanResult {
@@ -60,6 +65,7 @@ export interface ScanResult {
   /** Workspace-relative manifest paths — where the sub-projects are. */
   manifests: string[];
   overview: string;
+  overviewStatus?: OverviewStatus;
 }
 
 function isManifest(name: string): boolean {
@@ -249,7 +255,7 @@ function buildContextYaml(data: ScanData, root: string): string {
 export async function scanCodebase(
   secrets: vscode.SecretStorage,
   root: string,
-  route: ModelRoute,
+  route: ModelRoute | null,
   force = false,
 ): Promise<ScanResult> {
   const bfDir = path.join(root, ".builderforce");
@@ -262,7 +268,7 @@ export async function scanCodebase(
     try {
       const cached = JSON.parse(await fs.readFile(cachePath, "utf-8")) as ScanCache;
       if (cached.versionToken === versionToken && cached.grounding) {
-        return { grounding: cached.grounding, manifests: data.manifests, overview: cached.overview ?? "" };
+        return { grounding: cached.grounding, manifests: data.manifests, overview: cached.overview ?? "", ...(cached.overviewStatus ? { overviewStatus: cached.overviewStatus } : {}) };
       }
     } catch {
       /* recompute */
@@ -275,8 +281,10 @@ export async function scanCodebase(
   const fullMap = renderMap(data, root, { treeDepth: MAX_DEPTH, treeLines: 2000, maxManifests: 400, maxRootFiles: MAX_ROOT_FILES });
 
   // Best-effort one-shot overview (skipped silently if the call fails, e.g. quota).
+  // No route (nothing local to run it on, no key) ⇒ the overview is omitted and marked; the map is unaffected.
   let overview = "";
-  try {
+  let overviewStatus: OverviewStatus = { status: "skipped", reason: "no-model-route" };
+  if (route) try {
     overview = await routeComplete(
       route,
       secrets,
@@ -289,8 +297,10 @@ export async function scanCodebase(
         { role: "user", content: `Project map:\n\n${compactMap}` },
       ],
     );
+    overviewStatus = overview.trim() ? { status: "written" } : { status: "skipped", reason: "call-failed" };
   } catch {
     /* grounding still works from the deterministic map */
+    overviewStatus = { status: "skipped", reason: "call-failed" };
   }
 
   const grounding = [
@@ -321,7 +331,7 @@ export async function scanCodebase(
   );
   await fs.writeFile(path.join(bfDir, "memory", ".gitkeep"), "", "utf-8");
 
-  const cache: ScanCache = { versionToken, grounding, overview: overview.trim(), generatedAt: new Date().toISOString() };
+  const cache: ScanCache = { versionToken, grounding, overview: overview.trim(), overviewStatus, generatedAt: new Date().toISOString() };
   await fs.writeFile(cachePath, JSON.stringify(cache, null, 2), "utf-8");
-  return { grounding, manifests: data.manifests, overview: overview.trim() };
+  return { grounding, manifests: data.manifests, overview: overview.trim(), overviewStatus };
 }

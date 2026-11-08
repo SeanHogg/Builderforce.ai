@@ -9,11 +9,9 @@
  */
 
 import type * as vscode from "vscode";
-import { platformCapabilityAllows } from "../platformPolicy";
-import { getSelectedProject } from "../projectState";
 import type { KnowledgeNotReviewedHere } from "./knowledgeProtocol";
 import { rootById } from "./knowledgeRoots";
-import { linkedKnowledgeClient, workspaceFolders } from "./knowledgeService";
+import { linkedKnowledgeClient, linkedProject, workspaceFolders } from "./knowledgeService";
 
 const PROBE_TTL_MS = 30_000;
 let probed: { projectId: number | undefined; at: number; ok: boolean } | undefined;
@@ -22,7 +20,7 @@ let probed: { projectId: number | undefined; at: number; ok: boolean } | undefin
 export function forgetReachability(): void { probed = undefined; }
 
 async function reachable(client: { scopes(): Promise<unknown> }, now: number): Promise<boolean> {
-  const projectId = getSelectedProject()?.id;
+  const projectId = linkedProject()?.id;
   if (probed && probed.projectId === projectId && now - probed.at < PROBE_TTL_MS) return probed.ok;
   const ok = await client.scopes().then(() => true, () => false);
   probed = { projectId, at: now, ok };
@@ -33,6 +31,6 @@ async function reachable(client: { scopes(): Promise<unknown> }, now: number): P
 export async function notReviewedHere(secrets: vscode.SecretStorage, rootId: string, now: number = Date.now()): Promise<KnowledgeNotReviewedHere | null> {
   if (!rootById(rootId, workspaceFolders())) return null;
   const client = linkedKnowledgeClient(secrets);
-  const canSeed = !!client && platformCapabilityAllows("synchronize") && (await reachable(client, now));
+  const canSeed = !!client && (await reachable(client, now));
   return { notReviewedHere: { canSeed } };
 }

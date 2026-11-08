@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as vscode from "vscode";
 
-const gateway = vi.hoisted(() => ({ key: "bfk_test" as string | undefined }));
+const gateway = vi.hoisted(() => ({
+  key: "bfk_test" as string | undefined,
+  inputs: { signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true },
+}));
+
+// The capability source: granted by default, denied in the offline case below.
+vi.mock("./capabilityContext", () => ({ currentCapabilityInputs: () => gateway.inputs }));
 
 // `/api/limbic/block` goes through the session transport (tenant JWT); here it just reaches
 // the stubbed global fetch, and resolves undefined when signed out, as the real one does.
@@ -24,6 +30,7 @@ describe("personality + per-turn limbic layers", () => {
   const fetchMock = vi.fn();
   beforeEach(() => {
     gateway.key = "bfk_test";
+    gateway.inputs = { signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true };
     clearPersonalityBlockCache();
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(
@@ -32,6 +39,13 @@ describe("personality + per-turn limbic layers", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  it("attempts no request while the platform is denied, and the turn is still appraised locally (PRD 41 A5)", async () => {
+    gateway.inputs = { signedIn: true, synchronize: false, gatewayInference: false, connectedFeatures: false };
+    const block = await turnLimbicBlock(secrets, RISKY, { userId: "u1" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(block.length).toBeGreaterThan(0);
+  });
 
   it("fetches the personality ONCE for the session, however many turns follow", async () => {
     const first = await turnLimbicBlock(secrets, RISKY, { userId: "u1" });

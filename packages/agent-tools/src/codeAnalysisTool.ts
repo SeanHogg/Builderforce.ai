@@ -3,24 +3,69 @@ import { defineTool, type ToolDefinition } from './tool.js';
 import { shellRunWithStop } from './git-repo-scope.js';
 import { normalizeAnalysis, type CodeAnalysisSnapshot } from './codeAnalysis.js';
 import { toDependencyCruiserRules } from './knowledge/dependencyCruiserRules.js';
+import { ANALYZER_VERSIONS, TYPESCRIPT_PIN } from './analyzerPins.js';
 import { GIT, gitText, workspaceFingerprint } from './knowledge/workspaceFingerprint.js';
 
-export const ANALYZERS = [
-  { name: 'dependency-cruiser', version: '16.10.4', command: 'npm exec --yes --package=dependency-cruiser@16.10.4 --package=typescript@5.6.3 --call="depcruise --config=.builderforce/code-analysis/dependencies.json --output-type=json ."' },
-  { name: 'jscpd', version: '4.0.5', command: 'npm exec --yes --package=jscpd@4.0.5 --call="jscpd --silent --reporters=json --min-lines=5 --min-tokens=50 --ignore=**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.builderforce/** --output=.builderforce/code-analysis ."' },
-  { name: 'knip', version: '5.30.0', command: 'npm exec --yes --package=knip@5.30.0 --package=typescript@5.6.3 --call="knip --reporter=json --no-progress"' },
-] as const;
+/** The ONE place the analyzer versions are pinned (reported in every analysis record; comparability checks them). */
+export { TYPESCRIPT_PIN };
+export type AnalyzerName = 'dependency-cruiser' | 'jscpd' | 'knip';
+export interface AnalyzerSpec {
+  name: AnalyzerName;
+  version: string;
+  /** npm packages the fallback `npm exec` downloads (hosts without bundled analyzers: cloud images, on-prem). */
+  packages: readonly string[];
+  bin: string;
+  /** Arguments after the binary; `{scope}` is the directory it analyses. */
+  args: string;
+  /** The `npm exec` form. Never used on a host that bundles its analyzers (see {@link setBundledAnalyzers}). */
+  command: string;
+}
+
+function spec(name: AnalyzerName, version: string, extraPackages: readonly string[], bin: string, args: string): AnalyzerSpec {
+  const packages = [`${name}@${version}`, ...extraPackages];
+  return { name, version, packages, bin, args, command: analyzerCommand({ packages, bin, args }, '.') };
+}
+
+export const ANALYZERS: readonly AnalyzerSpec[] = [
+  spec('dependency-cruiser', ANALYZER_VERSIONS['dependency-cruiser'], [TYPESCRIPT_PIN], 'depcruise', '--config=.builderforce/code-analysis/dependencies.json --output-type=json {scope}'),
+  spec('jscpd', ANALYZER_VERSIONS.jscpd, [], 'jscpd', '--silent --reporters=json --min-lines=5 --min-tokens=50 --ignore=**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.builderforce/** --output=.builderforce/code-analysis {scope}'),
+  spec('knip', ANALYZER_VERSIONS.knip, [TYPESCRIPT_PIN], 'knip', '--reporter=json --no-progress'),
+];
+
+/** The entry script of each analyzer a host bundles (absolute path, forward slashes). */
+export type BundledAnalyzerEntries = Partial<Record<AnalyzerName, string>>;
+let bundled: BundledAnalyzerEntries | undefined;
+
+/**
+ * A host that SHIPS the analyzers (the VSIX, PRD 41 A3) registers their entry scripts once. From then on
+ * every analyzer launch on this host is `node <entry> …`; `npm exec` and its download are never used, and
+ * an analyzer with no entry (or one that fails to start) is `not_measured` / `analyzer-unavailable`.
+ */
+export function setBundledAnalyzers(entries: BundledAnalyzerEntries | undefined): void {
+  bundled = entries;
+}
+export function bundledAnalyzers(): BundledAnalyzerEntries | undefined {
+  return bundled;
+}
+
+/** The launch command for an analyzer over `scope`: the bundled entry when given, else the pinned `npm exec`. */
+export function analyzerCommand(a: Pick<AnalyzerSpec, 'packages' | 'bin' | 'args'>, scope: string, entry?: string): string {
+  // A replacer function: a scope containing `$&` or `$1` is taken literally, never as a replacement pattern.
+  const args = a.args.replace('{scope}', () => scope);
+  return entry ? `node "${entry}" ${args}` : `npm exec --yes ${a.packages.map((p) => `--package=${p}`).join(' ')} --call="${a.bin} ${args}"`;
+}
+
+const knipSpec = (): AnalyzerSpec => ANALYZERS.find((a) => a.name === 'knip')!;
 
 /** The pinned knip invocation that only REPORTS (JSON on stdout) and changes nothing: what a re-scan and a fix preview read. */
 export function knipReportCommand(): string {
-  return ANALYZERS.find((a) => a.name === 'knip')!.command;
+  return analyzerCommand(knipSpec(), '.', bundled?.knip);
 }
 
 /** The pinned knip invocation, applying its own fixes (`--fix`) instead of reporting. Deleting files is opt-in per call. */
 export function knipFixCommand(fixTypes: readonly ('exports' | 'files')[]): string {
-  const knip = ANALYZERS.find((a) => a.name === 'knip')!;
   const removeFiles = fixTypes.includes('files') ? '--allow-remove-files ' : '';
-  return knip.command.replace('--reporter=json --no-progress', `--fix --fix-type ${fixTypes.join(',')} ${removeFiles}--no-progress`);
+  return knipReportCommand().replace('--reporter=json --no-progress', `--fix --fix-type ${fixTypes.join(',')} ${removeFiles}--no-progress`);
 }
 
 /** npm diagnostics may surround JSON in a shell's combined stdout/stderr stream. */
@@ -64,7 +109,7 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
   const configBase64 = base64Utf8(JSON.stringify(dependencyCruiserConfig(options.partitions)));
   return defineTool({
     name: 'analyze_codebase',
-    description: 'Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Downloads pinned analyzer packages through npm cache on first use. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.',
+    description: 'Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Runs the analyzers bundled with the host when it ships them, else downloads the pinned packages through npm cache on first use; an analyzer that cannot start is reported not_measured, never as zero findings. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.',
     parameters: { type: 'object', properties: { path: { type: 'string', description: 'Relative project/package directory; use a smaller package for large monorepos. Defaults to repository root.' } } },
     requires: ['shell', 'repo.read'],
     async execute(args, ctx) {
@@ -74,23 +119,47 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
       const id = crypto.randomUUID();
       const outputDir = `.builderforce/code-analysis/${id}`;
       const outputs: unknown[] = [];
+      const entries = bundledAnalyzers();
       for (const analyzer of ANALYZERS) {
+        const entry = entries?.[analyzer.name];
+        // A host that bundles its analyzers never downloads one: a missing entry is "not measured", never zero findings.
+        if (entries && !entry) {
+          outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'not_measured', reason: 'analyzer-unavailable' });
+          continue;
+        }
+        let launched = false;
         try {
+          // A bundled analyzer whose host cannot even run `node` for setup did not start: not measured, not a failure.
+          const setupFailed = (message: string) => {
+            if (entry) return 'unavailable' as const;
+            throw new Error(message);
+          };
+          let unavailable: 'unavailable' | undefined;
           if (analyzer.name === 'dependency-cruiser') {
             const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
-            if (!config.ok) throw new Error('Could not create dependency analysis configuration');
+            if (!config.ok) unavailable = setupFailed('Could not create dependency analysis configuration');
           }
           // Unique output directories prevent stale artifacts and cross-run interference.
           if (analyzer.name === 'jscpd') {
             const cleanup = await shellRunWithStop(ctx, `node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
-            if (!cleanup.ok) throw new Error('Could not clear the previous duplication artifact');
+            if (!cleanup.ok) unavailable = setupFailed('Could not clear the previous duplication artifact');
+          }
+          if (unavailable) {
+            outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'not_measured', reason: 'analyzer-unavailable' });
+            continue;
           }
           // Knip analyses the directory it RUNS in, so the scope is its working directory (the shell's
           // `cwd`) rather than a `cd` written into the command; the others take the scope as an argument.
-          const command = analyzer.name === 'knip' ? analyzer.command : analyzer.command.replace(/ \."$/, ` ${scope}"`);
+          const command = analyzerCommand(analyzer, scope, entry);
           const result = await shellRunWithStop(ctx, command.replaceAll('.builderforce/code-analysis', outputDir), analyzer.name === 'knip' && scope !== '.' ? scope : undefined);
+          launched = true;
           const artifact = analyzer.name === 'jscpd' ? await ctx.caps.repoRead!.readFile(`${outputDir}/jscpd-report.json`) : undefined;
           const text = artifact ? artifact.content : result.stdout;
+          // A bundled analyzer that produced nothing did not start (a broken install), which is not "no findings".
+          if (entry && !text) {
+            outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'not_measured', reason: 'analyzer-unavailable' });
+            continue;
+          }
           if (!text || artifact?.truncated) throw new Error('Analyzer output is empty or truncated; scan a smaller project');
           const value = parseAnalyzerJson(text);
           if (analyzer.name === 'dependency-cruiser' && !Array.isArray(value.modules)) throw new Error('Invalid dependency report');
@@ -99,6 +168,11 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
           const unresolved = analyzer.name === 'dependency-cruiser' ? value.modules.flatMap((m: { dependencies?: Array<{ couldNotResolve?: boolean }> }) => m.dependencies ?? []).filter((d: { couldNotResolve?: boolean }) => d.couldNotResolve).length : 0;
           outputs.push(value); tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? 'failed' : 'complete', ...(unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {}) });
         } catch (error) {
+          // A bundled analyzer whose setup or spawn threw never started: not measured (like one that prints nothing), not failed.
+          if (entry && !launched) {
+            outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'not_measured', reason: 'analyzer-unavailable' });
+            continue;
+          }
           outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'failed', error: String(error).slice(0, 1000) });
         }
       }

@@ -23,7 +23,7 @@ import { authedFetch } from './authedFetch';
 function labelsFrom(bundle: LabelBundle): Partial<Project360Labels> {
   const out: Partial<Project360Labels> = {};
   for (const key of Object.keys(DEFAULT_PROJECT360_LABELS) as (keyof Project360Labels)[]) {
-    const v = bundle[`p360.${key}`];
+    const v = bundle[`p360.${String(key)}`];
     if (typeof v === 'string') out[key] = v;
   }
   return out;

@@ -6,7 +6,7 @@ export interface CodeAnalysisSnapshot {
   id: string;
   capturedAt: string;
   source: { commit: string | null; branch: string | null; dirty: boolean | null; dirtyHash?: string; repository?: string; scope?: string };
-  tools: Array<{ name: string; version: string; status: 'complete' | 'failed'; error?: string }>;
+  tools: Array<{ name: string; version: string; status: 'complete' | 'failed' | 'not_measured'; error?: string; reason?: 'analyzer-unavailable' }>;
   nodes: string[];
   edges: Array<{ from: string; to: string; circular: boolean }>;
   issues: AnalysisIssue[];

@@ -15,7 +15,7 @@ import { useChatChangedFiles } from '../useChatChangedFiles';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { getToken, refreshToken, type InitData } from '../vscodeBridge';
 import { request } from '../bridgeTransport';
-import { useWebviewOffline } from '../platformPolicy';
+import { useCapability } from '../useCapability';
 import { spendLabelsFrom } from './composerLabels';
 
 /** A linked ticket as the composer's `#` typeahead lists it. */
@@ -74,7 +74,7 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
   // from, so the typeahead lists the host's LOCAL tickets (G05 `localWorkRepository`
   // over the `local.tickets` bridge). An unbound chat offline reads local too.
   // Reactive: a late `platform.policy` frame must re-run this read on the right source.
-  const offline = useWebviewOffline();
+  const offline = !useCapability('connected');
   const [typeaheadTickets, setTypeaheadTickets] = useState<TypeaheadTicket[]>([]);
   useEffect(() => {
     if (!offline && serverChatId != null) {

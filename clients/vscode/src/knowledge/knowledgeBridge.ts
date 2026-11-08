@@ -11,7 +11,7 @@ import * as vscode from "vscode";
 import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
 import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { openWorkspace } from "../openWorkspace";
-import { SELECTED_TENANT_KEY, getSelectedProject } from "../projectState";
+import { SELECTED_TENANT_KEY } from "../projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import {
   KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
@@ -33,7 +33,7 @@ import { duringReview, isRootReviewing } from "./knowledgeReplica";
 import { subscribeLiveGraph } from "./knowledgeLive";
 import { notReviewedHere } from "./knowledgeNotHere";
 import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./packs/packRoots";
-import { linkedKnowledgeClient, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
+import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
 import { getRun, listRuns } from "./review/reviewRuns";
 
 /** Search hits the view shows at most. */
@@ -167,7 +167,7 @@ export class KnowledgeBridge implements vscode.Disposable {
 
   /** The last-seen file's key: this workspace's folders under the acting tenant + linked project ("local" when unlinked). */
   private lastSeenKey(): string {
-    const project = getSelectedProject();
+    const project = linkedProject();
     const tenant = this.host.ctx.globalState.get<number>(SELECTED_TENANT_KEY);
     return workspaceKey(workspaceFolders(), project ? `${tenant ?? "none"}:${project.id}` : "local");
   }

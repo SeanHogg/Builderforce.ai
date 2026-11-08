@@ -35,6 +35,8 @@ import { prefetchLabels } from "./prefetch/prefetchLabels";
 import { connectionsLabels } from "./connectionsLabels";
 import { knowledgeViewLabels } from "./knowledge/knowledgeLabels";
 import { platformPolicy } from "./platformPolicy";
+import { currentCapabilityInputs } from "./capabilityContext";
+import { networkDenied } from "./capabilityStates";
 import type { WorkspaceCanvasSession } from "./workspaceSession";
 
 /**
@@ -57,6 +59,9 @@ export async function buildWorkspaceInit(
   },
 ): Promise<Record<string, unknown>> {
   const signedIn = !!(await ctx.secrets.get(SECRET_KEY));
+  // PRD 41 A5: the capability check comes first. With the platform denied none of the account steps
+  // (token, project names, personality, route catalogue) is attempted; timing out is not the degrade.
+  const online = !networkDenied(currentCapabilityInputs());
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   // The panel shows "Connecting…" until this frame is posted, so NOTHING here may wait on
   // the network: the slow steps run together, each under a short budget, and a late one
@@ -67,24 +72,24 @@ export async function buildWorkspaceInit(
   const groundingP = stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late });
   const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges] = await Promise.all([
     // Null while signed in is tolerated: the webview mints its own (`WorkspaceApp.mintToken`).
-    budget.step("token", signedIn ? getTenantJwt(ctx.secrets).then(boundToken) : Promise.resolve(null), null, (t) => t !== null),
+    budget.step("token", signedIn && online ? getTenantJwt(ctx.secrets).then(boundToken) : Promise.resolve(null), null, (t) => t !== null),
     // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
     // point of shipping this: the agent must not open a chat asking where the code is.
     budget.step("editorContext", getEditorContextLive(), getEditorContext()),
     // `projectId → name` for every project, so the header can name the project an
     // existing chat belongs to (best-effort; falls back to "No project").
-    budget.step("projectNames", signedIn ? projectNamesOf(ctx) : Promise.resolve({}), {} as Record<string, string>, (names) => Object.keys(names).length > 0),
+    budget.step("projectNames", signedIn && online ? projectNamesOf(ctx) : Promise.resolve({}), {} as Record<string, string>, (names) => Object.keys(names).length > 0),
     // The signed-in user's PERSONALITY-only directive block — fetched once per
     // session (cached in `personalityLimbic.ts`) and injected into the webview's
     // ambient system channel, so the Brain chat's tone reflects the user. The
     // webview can't bundle the shared compiler (--no-dependencies), so the host
     // fetches the compiled block from the gateway. '' when the user has no
     // profile (a no-op) or offline.
-    budget.step("personality", signedIn ? personalityBlockOf(ctx) : Promise.resolve(""), "", (block) => block !== ""),
+    budget.step("personality", signedIn && online ? personalityBlockOf(ctx) : Promise.resolve(""), "", (block) => block !== ""),
     // The SAME seam every other AI surface routes through, so the panel cannot drift
     // onto a different model (or a different transport) from the chat participant.
     // Late, it shows the saved pick (read with no network), never another model.
-    budget.step("modelRoute", resolveModelRoute(ctx.secrets), fallbackRoute),
+    budget.step("modelRoute", online ? resolveModelRoute(ctx.secrets) : Promise.resolve(fallbackRoute), fallbackRoute),
     // The models this MACHINE can serve, in the shared builder's row shape. The
     // composer's menu is built from the gateway catalogue, which by definition cannot
     // know about them — so without this the panel offered no way to pick one and the

@@ -4,7 +4,9 @@
  * imported normally. `vscode` is provided by the host, so it stays external.
  */
 import * as esbuild from "esbuild";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -176,6 +178,35 @@ async function copyBfiWasm() {
   fs.copyFileSync(wasm, path.join("out", "bfi_web_bg.wasm"));
   copyBfiNative();
   await copyTreeSitterWasm();
+  installBundledAnalyzers();
+}
+
+/**
+ * The analyzers the VSIX ships (PRD 41 A3): `analyzers/package.json` pins dependency-cruiser, jscpd,
+ * knip and the `typescript@5.6.3` they share; they are installed into `out/analyzers/node_modules`
+ * (`out/` ships in the .vsix) and `src/bundledAnalyzers.ts` resolves their entry scripts at activation,
+ * so no analysis ever downloads from npm. `npm ci` when `analyzers/package-lock.json` exists. Skipped when
+ * the install is already there AND its stamp (`out/analyzers/.install-stamp`, the hash of the copied
+ * package.json + lockfile) matches, so a changed pin reinstalls; a failed install fails the build, since a VSIX without its
+ * analyzers would report every analyzer `not_measured`.
+ */
+function installBundledAnalyzers() {
+  const target = path.join("out", "analyzers");
+  const installed = path.join(target, "node_modules", "knip", "package.json");
+  fs.mkdirSync(target, { recursive: true });
+  fs.copyFileSync(path.join("analyzers", "package.json"), path.join(target, "package.json"));
+  const lock = path.join("analyzers", "package-lock.json");
+  const locked = fs.existsSync(lock);
+  if (locked) fs.copyFileSync(lock, path.join(target, "package-lock.json"));
+  const hash = createHash("sha256");
+  for (const file of [path.join(target, "package.json"), ...(locked ? [path.join(target, "package-lock.json")] : [])]) hash.update(fs.readFileSync(file));
+  const stamp = hash.digest("hex");
+  const stampFile = path.join(target, ".install-stamp");
+  const stamped = fs.existsSync(stampFile) && fs.readFileSync(stampFile, "utf8").trim() === stamp;
+  if (fs.existsSync(installed) && stamped && !process.env.BF_REINSTALL_ANALYZERS) return;
+  const run = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", [locked ? "ci" : "install", "--omit=dev", "--no-audit", "--no-fund", "--ignore-scripts"], { cwd: target, stdio: "inherit", shell: process.platform === "win32" });
+  if (run.status !== 0) throw new Error("[esbuild] could not install the bundled analyzers into out/analyzers");
+  fs.writeFileSync(stampFile, stamp);
 }
 
 /**

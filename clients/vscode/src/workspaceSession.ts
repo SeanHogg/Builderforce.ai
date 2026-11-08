@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 import * as bfApi from "./bfApi";
+import { currentCapabilityInputs } from "./capabilityContext";
+import { networkDenied } from "./capabilityStates";
 
 /**
  * THE BOARD THIS EDITOR WORKS IN.
@@ -58,6 +60,9 @@ export async function workspaceCanvasSession(
     return session;
   }
 
+  // The capability check comes FIRST (PRD 41 A5): with the platform denied nothing is attempted, so
+  // a timeout is never the way this degrades.
+  if (networkDenied(currentCapabilityInputs())) return localSession(ctx);
   const signedIn = !!(await bfApi.getTenantJwt(ctx.secrets));
   if (!signedIn) return localSession(ctx);
 

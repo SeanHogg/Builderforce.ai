@@ -8,7 +8,7 @@ import { useEffect, useMemo } from 'react';
 import { chatRosterFromParticipants, type BrainMessage, type ChatRosterAgent, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useChatActivitySignal, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
-import { useWebviewOffline } from '../platformPolicy';
+import { useCapability } from '../useCapability';
 import { childParticipants, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
 export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages, ticketRefresh, draftStore, personaAgents, onRoster }: {
@@ -45,7 +45,7 @@ export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages,
   // persona agents the Brain can answer as — so `@` still routes a turn offline.
   // Reactive: a `platform.policy` frame that arrives after mount must re-render the
   // picker roster, or the `@` typeahead stays starved on the wrong (offline) source.
-  const offline = useWebviewOffline();
+  const offline = !useCapability('connected');
   const localMentionable = useMemo<typeof participants>(
     () => (offline ? [...childParticipants(liveChildren), ...personaAgents.map((a) => ({ kind: 'agent' as const, ref: a.ref, name: a.name }))] : []),
     [offline, liveChildren, personaAgents],

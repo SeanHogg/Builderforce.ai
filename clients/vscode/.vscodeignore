@@ -22,3 +22,6 @@ out/harness.cjs
 # Stray local artefacts that must never ship in the VSIX.
 *.log
 pnpm-lock.yaml
+# The bundled analyzers (PRD 41 A3) ship whole: typescript needs its lib.*.d.ts at runtime, and the
+# rules above (**/*.ts, **/*.map, **/tsconfig.json) must not strip any package under out/analyzers.
+!out/analyzers/**
