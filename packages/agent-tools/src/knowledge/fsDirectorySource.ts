@@ -21,6 +21,7 @@ import { mediaTypeOfPath, sha256Hex, type DirectorySource } from '@seanhogg/buil
 import type { SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import { isSkippedDirName, isVcsMetadataName, skippedDirReason, WORKSPACE_SKIP_DIRS, type SkippedFolder } from '../skipDirs.js';
 import { slashPath } from './rootRelative.js';
+import { withDocumentText } from './documents/withDocumentText.js';
 
 /** Directory names no review walks, on any host (the definition index's list). */
 export const KNOWLEDGE_SKIP_DIRS: ReadonlySet<string> = WORKSPACE_SKIP_DIRS;
@@ -219,5 +220,7 @@ export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirec
         try { return (await fs.readDirectory(folder ? `${root}/${folder}` : root)).some(([name]) => name === '.git'); } catch { return false; }
     };
 
-    return { rootId, title, list, read, skippedFolders: () => [...skipped], gitRoots: () => [...gitRoots].sort(), hasGit, ...(watch ? { watch } : {}) };
+    const source: FsDirectorySource = { rootId, title, list, read, skippedFolders: () => [...skipped], gitRoots: () => [...gitRoots].sort(), hasGit, ...(watch ? { watch } : {}) };
+    // pdf/office files are read as bytes and handed to the review as their extracted text (the listing hash stays over the bytes).
+    return withDocumentText(source, (path) => fs.readFile(`${root}/${normalizePath(path)}`));
 }

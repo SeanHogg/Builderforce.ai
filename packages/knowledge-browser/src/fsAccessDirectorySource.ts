@@ -16,7 +16,7 @@
 import { isVcsMetadataName, type SkippedFolder } from '@builderforce/agent-tools/knowledge';
 import {
   byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, subtleContentHash, textDocument,
-  type ContentHashedSource,
+  withDocumentText, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -25,6 +25,8 @@ export interface FsFileLike {
   size: number;
   lastModified: number;
   text(): Promise<string>;
+  /** The file's bytes: a pdf/office file is read through them (`withDocumentText`). */
+  arrayBuffer(): Promise<ArrayBuffer>;
 }
 
 export interface FsFileHandleLike {
@@ -109,7 +111,7 @@ export function createFsAccessDirectorySource(
     return walked;
   };
 
-  return {
+  const source: ContentHashedSource & { skippedFolders(): SkippedFolder[] } = {
     rootId,
     title: handle.name,
     skippedFolders: () => [...skipped],
@@ -132,6 +134,11 @@ export function createFsAccessDirectorySource(
       return textDocument(rootId, path, entry ? await (await entry.getFile()).text() : '');
     },
   };
+  return withDocumentText(source, async (path) => {
+    await walk();
+    const entry = files.get(path);
+    return entry ? new Uint8Array(await (await entry.getFile()).arrayBuffer()) : new Uint8Array();
+  });
 }
 
 /** The File System Access review target ("Review a folder" → the picker). Re-reviewing a

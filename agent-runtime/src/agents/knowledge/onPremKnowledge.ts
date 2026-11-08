@@ -228,12 +228,19 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
       return {
         rootId,
         title,
-        plan: async () => planKnowledgeReviewDetail((await reviewPorts(deps, rel, rootId, title, await resolveRoot())).ports),
-        async review(plan, signal) {
+        plan: async (_signal, opts) => planKnowledgeReviewDetail(
+          (await reviewPorts(deps, rel, rootId, title, await resolveRoot())).ports,
+          opts?.force ? { force: true } : {},
+        ),
+        async review(plan, signal, opts) {
           const real = await resolveRoot();
           const { ports, pump } = await reviewPorts(deps, rel, rootId, title, real);
+          const force = opts?.force === true;
           // The host raises the root's bulk-upload window around the run; the pack goes up once, after it.
-          const report = await replicaHost.duringReview(rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan }));
+          // A forced review covers every file, so a completed one clears the root's additive flag (`full`).
+          const report = await replicaHost.duringReview(
+            rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan, ...(force ? { force: true } : {}) }), { full: force },
+          );
           keepFresh(rootId, real, ports);
           await drainAfterReview(rootId);
           return report;

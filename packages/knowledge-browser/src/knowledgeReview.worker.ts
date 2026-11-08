@@ -8,7 +8,7 @@
 
 import type { DirectorySource, JudgementPort, KnowledgeStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
-import { contentHash } from './directorySourceKit';
+import { contentHash, withDocumentHashes } from './directorySourceKit';
 import { runReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
 
@@ -26,7 +26,8 @@ function call<T>(port: ReviewPortName, method: string, args: unknown[] = []): Pr
 }
 
 function proxyPorts(start: Extract<ToReviewWorker, { type: 'start' }>): ReviewPorts {
-  const source: DirectorySource = {
+  // `read` already answers a pdf/office file's extracted text page-side; the listing hash stays the file's, so map the text back to it.
+  const proxied: DirectorySource = {
     rootId: start.source.rootId,
     title: start.source.title,
     async *list() { for (const entry of await call<Array<{ path: string; hash: string; size: number }>>('source', LIST_ALL)) yield entry; },

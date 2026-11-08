@@ -125,7 +125,7 @@ export function reviewForcedBy(request: string): boolean {
 
 export interface KnowledgeRowsHost {
     /** Opens `dir` (workspace-relative; '' = the workspace) for review; null when it is not a folder here. */
-    openReview(dir: string, opts?: { force?: boolean }): Promise<KnowledgeReviewSession | null>;
+    openReview(dir: string): Promise<KnowledgeReviewSession | null>;
     /** The workspace's root id — what `/graph` opens on (a browser host reads its newest reviewed root). */
     rootId(): string | Promise<string>;
     /** How this host shows a graph: VS Code opens its panel; on-prem links to the web canvas. */
@@ -144,9 +144,9 @@ export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => n
     const plan = async (request: string, signal: AbortSignal) => {
         const hit = fresh(request);
         if (hit) return hit;
-        const session = await host.openReview(reviewTargetOf(request), { force: reviewForcedOf(request) });
+        const session = await host.openReview(reviewTargetOf(request));
         if (!session || signal.aborted) return undefined;
-        const entry = { at: now(), session, plan: await session.plan(signal) };
+        const entry = { at: now(), session, plan: await session.plan(signal, { force: reviewForcedBy(request) }) };
         planned.set(request, entry);
         return entry;
     };
@@ -163,7 +163,7 @@ export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => n
                 const dir = reviewTargetOf(request);
                 return { actionId: KNOWLEDGE_REVIEW_DIR, text: `There is no folder \`${dir || '.'}\` in this workspace to review.` };
             }
-            const report = await p.session.review(p.plan, signal);
+            const report = await p.session.review(p.plan, signal, { force: reviewForcedBy(request) });
             const shown = await host.showGraph(p.session.rootId, []);
             return {
                 actionId: KNOWLEDGE_REVIEW_DIR,

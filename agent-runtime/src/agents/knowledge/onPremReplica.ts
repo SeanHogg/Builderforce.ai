@@ -29,6 +29,7 @@ let closeAtExit = false;
 export function closeOnPremManifests(): void {
   for (const folder of folders.values()) folder.close();
   folders.clear();
+  migrations.clear();
   forgetRootPorts(); // the per-root caches hold the closed handles
 }
 
@@ -59,7 +60,12 @@ export interface OnPremRootPorts {
   files: KnowledgeFiles;
   local: KnowledgeStore;
   manifest: IngestManifest;
+  /** Resolves when the root's legacy files are imported (never rejects); a read of the manifest that must see them awaits it. */
+  migrated: Promise<void>;
 }
+
+/** Each root's legacy import, started once when its manifest is first opened. */
+const migrations = new Map<string, Promise<void>>();
 
 /**
  * The root's ports. The root's old `<stem>.manifest.json` is imported once, when the manifest is first opened; a root reviewed
@@ -68,15 +74,16 @@ export interface OnPremRootPorts {
 export function onPremRootPorts(workspaceRoot: string, rootId: string, legacyRootId: string | undefined): OnPremRootPorts {
   const files = migratingRootFiles(containerKnowledgeFiles(workspaceRoot), rootId, legacyRootId);
   const local = rootStore(rootId, () => folderOf(workspaceRoot).store, "local");
+  const migrationKey = `${workspaceRoot}\u0000${rootId}`;
   const manifest = rootManifest(rootId, () => {
     const folder = folderOf(workspaceRoot);
-    void migrateLegacyKnowledge(files, folder, rootId, {
+    migrations.set(migrationKey, migrateLegacyKnowledge(files, folder, rootId, {
       ...(legacyRootId ? { legacyRootId } : {}),
       log: (line) => logDebug(`[knowledge] ${line}`),
-    }).catch(loggedFallback("legacy manifest import", undefined));
+    }).then(() => undefined, loggedFallback("legacy manifest import", undefined)));
     return folder.manifest;
   }, workspaceRoot);
-  return { files, local, manifest };
+  return { files, local, manifest, migrated: migrations.get(migrationKey) ?? Promise.resolve() };
 }
 
 /** What the pump sends from: the root's local store to the linked project. */
@@ -89,6 +96,7 @@ export function onPremPumpSource(rootId: string, ports: OnPremRootPorts, linked:
  * is ADDITIVE: its pump must never delete a server leaf the new, empty local store lacks.
  */
 export async function adoptServerReviewedRoot(rootId: string, ports: OnPremRootPorts): Promise<void> {
+  await ports.migrated; // a root with only a legacy manifest has its entries only once the import has run
   if ((await ports.local.scopes()).some((s) => s.rootId === rootId)) return;
   if (((await ports.manifest.get(filesManifestKey(rootId))) ?? []).length === 0) return;
   await onPremReplicaHost().markAdditive(rootId, ports.files);

@@ -14,8 +14,8 @@
 import { readFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { CodeSymbol } from "@builderforce/agent-tools";
-import { reviewPacks, textDocument } from "@builderforce/agent-tools/knowledge";
-import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, reasonOf, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
+import { extractDocumentText, reviewPacks, textDocument } from "@builderforce/agent-tools/knowledge";
+import { DEFAULT_MAX_FILE_BYTES, ExtractFailed, extractJob, isBinaryText, isDocumentPath, mediaTypeOfPath, reasonOf, sha256Hex, type ExtractJob, type ExtractJobResult } from "@seanhogg/builderforce-memory/knowledge";
 
 /** PRD 41 A10 rule 2: a worker's read of its file gives up after 5 s (a `timeout` failure, never a stalled run). */
 export const READ_TIMEOUT_MS = 5_000;
@@ -47,6 +47,13 @@ async function readDocument(job: HostExtractJob, from: ReadFrom, timeoutMs: numb
   if (bytes.byteLength > DEFAULT_MAX_FILE_BYTES) throw new Error("too large");
   // Hash FIRST, over the raw bytes (as `createFsDirectorySource` does): a stale plan must not store an extract under the wrong hash.
   if ((await sha256Hex(bytes)) !== from.hash) throw new Error("changed since plan");
+  // A pdf/office file is read as the text of its content (the documents pack claims it); anything else is decoded as UTF-8.
+  if (isDocumentPath(from.path)) {
+    const mediaType = mediaTypeOfPath(from.path);
+    const text = await extractDocumentText(bytes, mediaType);
+    // An unreadable document stays binary (a NUL), exactly as `withDocumentText` reports it.
+    return { id: from.path, tenantId: job.rootId, title: from.path, content: { kind: "text" as const, text: text ?? "\u0000", mediaType } };
+  }
   return textDocument(job.rootId, from.path, new TextDecoder("utf-8").decode(bytes));
 }
 

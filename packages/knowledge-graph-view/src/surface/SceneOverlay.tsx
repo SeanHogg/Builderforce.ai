@@ -7,11 +7,14 @@
  * `narrow` (a phone) stops floating: the same parts stack in flow ABOVE the scene, the View and
  * question rows become horizontal scrollers, and the scale note follows them.
  *
+ * Three slots come from the root: `tools` (Panels + Risk overlays, right after the View group), `panelToggles`
+ * (the show/hide glyphs before the zoom buttons) and `time` (the commit scrubber, at the end of the question row).
+ *
  * Pure presentation. Every datum comes in by prop; the pieces it composes are `CameraBar`
  * (View + zoom), `QuestionBar` and `ScaleLine`.
  */
 
-import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { ScaleLine, type MapCap } from './ScaleLine';
 import type { KnowledgeGraphLabels } from '../labels';
 import type { LensDef } from '../lenses';
@@ -108,14 +111,16 @@ export function SceneOverlay(p: SceneOverlayProps) {
             <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
             <CameraBar
                 labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} zoom={p.zoom} outTo={p.outTo} onOut={p.onOut}
+                tools={p.tools} stacked={narrow} panelToggles={p.panelToggles}
             />
-            <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0 }}>
+            <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: narrow ? 'nowrap' : 'wrap' }}>
                 <div style={{ pointerEvents: 'auto', width: narrow ? '100%' : 'fit-content', maxWidth: '100%' }}>
                     <QuestionBar
                         labels={labels} stations={p.stations} question={p.question} onQuestion={p.onQuestion} lenses={p.lenses} lens={p.lens} onLens={p.onLens}
                         family={p.family} onClearFamily={p.onClearFamily}
                     />
                 </div>
+                {p.time && <div style={{ pointerEvents: 'auto', flex: 'none', maxWidth: '100%', overflowX: narrow ? 'auto' : 'visible' }}>{p.time}</div>}
             </div>
             </div>
             <div style={{ flex: 1, minHeight: 0 }} />

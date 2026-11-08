@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { KnowledgeFiles, PumpArgs, ReplicaState } from "@builderforce/agent-tools/knowledge";
+import type { KnowledgeFiles } from "./fileManifest.js";
+import type { PumpArgs, ReplicaState } from "./replicaPump.js";
 
 // The pump is agent-tools' (tested there); here it is a spy, so the host's part - WHEN a quiet root's pump starts - is what is asserted.
 const pumped: PumpArgs[] = [];
@@ -8,8 +9,8 @@ const pumpResult = vi.hoisted(() => {
   let fn: (() => unknown) | undefined;
   return { set: (f: (() => unknown) | undefined) => { fn = f; }, get: () => fn as (() => ReplicaState) | undefined };
 });
-vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => {
-  const real = await importOriginal<typeof import("@builderforce/agent-tools/knowledge")>();
+vi.mock("./replicaPump.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./replicaPump.js")>();
   return {
     ...real,
     pumpReplica: vi.fn(async (args: PumpArgs): Promise<ReplicaState> => {
@@ -21,10 +22,20 @@ vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => {
   };
 });
 
-import { GENERATION_CHECK_INTERVAL_MS } from "@builderforce/agent-tools/knowledge";
-import {
-  disposeReplicas, kickReplicaPump, replicaDrained, replicaQueueFor, replicatedStoreOf, resumeReplica, setRootReviewing, startReplicaPump, stopReplicaPump, type PumpSource,
-} from "./knowledgeReplica";
+import { GENERATION_CHECK_INTERVAL_MS } from "./replicaPump.js";
+import { createReplicaHost, type PumpSource, type ReplicaHost } from "./replicaHost.js";
+
+let host: ReplicaHost;
+const disposeReplicas = ((...a: Parameters<ReplicaHost["disposeReplicas"]>) => (host.disposeReplicas as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["disposeReplicas"];
+const kickReplicaPump = ((...a: Parameters<ReplicaHost["kickReplicaPump"]>) => (host.kickReplicaPump as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["kickReplicaPump"];
+const replicaDrained = ((...a: Parameters<ReplicaHost["replicaDrained"]>) => (host.replicaDrained as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["replicaDrained"];
+const replicaQueueFor = ((...a: Parameters<ReplicaHost["replicaQueueFor"]>) => (host.replicaQueueFor as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["replicaQueueFor"];
+const replicatedStoreOf = ((...a: Parameters<ReplicaHost["replicatedStoreOf"]>) => (host.replicatedStoreOf as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["replicatedStoreOf"];
+const resumeReplica = ((...a: Parameters<ReplicaHost["resumeReplica"]>) => (host.resumeReplica as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["resumeReplica"];
+const setRootReviewing = ((...a: Parameters<ReplicaHost["setRootReviewing"]>) => (host.setRootReviewing as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["setRootReviewing"];
+const startReplicaPump = ((...a: Parameters<ReplicaHost["startReplicaPump"]>) => (host.startReplicaPump as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["startReplicaPump"];
+const stopReplicaPump = ((...a: Parameters<ReplicaHost["stopReplicaPump"]>) => (host.stopReplicaPump as (...x: unknown[]) => unknown)(...a)) as ReplicaHost["stopReplicaPump"];
+
 
 const ROOT = "repo/quiet";
 
@@ -37,7 +48,7 @@ const sourceOf = (files: KnowledgeFiles): PumpSource => ({
   rootId: ROOT, files, local: {} as never, client: {} as never, projectId: 7, manifest: {} as never,
 });
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { host = createReplicaHost(); vi.useFakeTimers(); });
 afterEach(async () => { await disposeReplicas(); pumped.length = 0; pumpResult.set(undefined); vi.useRealTimers(); });
 
 describe("a quiet linked root", () => {

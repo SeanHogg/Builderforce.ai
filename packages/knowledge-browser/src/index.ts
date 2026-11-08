@@ -5,13 +5,15 @@
  * worker URL, their reporter and their catalog lookup.
  */
 
-export { createKnowledgeSource, type DirectoryProvider, type KnowledgeSourceOptions } from './knowledgeSource';
+export { createKnowledgeSource, type BrowserKnowledgeSource, type DirectoryProvider, type KnowledgeSourceOptions } from './knowledgeSource';
 export { clearLastSeenMemory, claimLastSeenMemory, lastSeenIdentity } from './lastSeen';
 export type { PinpointHost } from './pinpoint';
 export { runReview, type RunReviewOptions, type WorkerFactory } from './reviewWorkerClient';
 export { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
 export { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ReviewStart, type ToReviewWorker } from './reviewProtocol';
-export { openManifest } from './manifestStore';
+export { openBrowserKnowledge, type BrowserKnowledge } from './browserKnowledge';
+export { indexedDbKnowledgeRows } from './knowledgeRows';
+export { indexedDbKnowledgeFiles } from './knowledgeFiles';
 export { applyLiveOverlay, LIVE_PAIR_FILES } from './liveOverlay';
 export { watchDirectory, LIVE_DEBOUNCE_MS, type LiveWatchPorts } from './liveWatch';
 export { estimateReview, type CallPricePort } from './reviewEstimate';

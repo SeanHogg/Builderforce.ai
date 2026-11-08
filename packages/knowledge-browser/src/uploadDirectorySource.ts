@@ -7,7 +7,7 @@
  */
 
 import {
-  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument, type ContentHashedSource,
+  byPath, contentHash, hashesByContent, hostRootId, isSkippedPath, metadataHash, normalizePath, textDocument, withDocumentText, type ContentHashedSource,
 } from './directorySourceKit';
 import type { DirectoryProvider } from './knowledgeSource';
 
@@ -45,7 +45,7 @@ export function createUploadDirectorySource(files: readonly File[], host: string
   const title = folder || 'folder';
   const rootId = hostRootId(host, 'upload', title);
 
-  return {
+  const source: ContentHashedSource = {
     rootId,
     title,
     // list() hashes a text file with contentHash(file.text()); the review re-hashes the text read() returns.
@@ -64,6 +64,10 @@ export function createUploadDirectorySource(files: readonly File[], host: string
       return textDocument(rootId, path, file ? await file.text() : '');
     },
   };
+  return withDocumentText(source, async (path) => {
+    const file = picked.get(path);
+    return file ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array();
+  });
 }
 
 /** The folder-upload review target. An upload cannot be re-read without a new pick. */

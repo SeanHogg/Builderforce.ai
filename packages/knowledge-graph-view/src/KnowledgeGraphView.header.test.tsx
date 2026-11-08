@@ -259,7 +259,7 @@ describe('narrow (phone) layout', () => {
         narrow();
         await mount(sourceOf({ syncStatus: async () => sync() }));
         const s = strip();
-        expect(s.getByRole('button', { name: `${L.surface.presets.risk} ▾` })).toBeTruthy();
+        expect(s.queryByRole('button', { name: `${L.surface.presets.risk} ▾` })).toBeNull(); // the overlays live in the scene overlay's tools
         expect(s.getByTestId('kg-review-action')).toBeTruthy();
         expect(s.getByTestId('kg-status-chip').textContent).toBe(''); // the chip shrinks to its dot; the words stay in its accessible name
         expect(s.getByTestId('kg-status-chip').getAttribute('aria-label')).toContain('in sync');
@@ -273,9 +273,32 @@ describe('narrow (phone) layout', () => {
         expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
     });
 
-    it('draws the wide layout otherwise: Risk overlays in the header row, not in the strip', async () => {
+    it('draws the wide layout otherwise: Risk overlays in the scene overlay, not in the strip', async () => {
         await mount(sourceOf());
         expect(strip().queryByRole('button', { name: /▾$/ })).toBeNull();
         expect(screen.getByRole('search').style.height).toBe('40px');
+    });
+});
+
+describe('the canvas tools and panel toggles', () => {
+    it('puts the Risk overlays trigger and the Coverage button inside the scene overlay', async () => {
+        await mount(sourceOf());
+        const overlay = within(screen.getByTestId('kg-scene-overlay'));
+        expect(overlay.getByRole('button', { name: `${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾` })).toBeTruthy();
+        expect(overlay.getByRole('button', { name: L.panelCoverage })).toBeTruthy();
+    });
+
+    it('hides the Act panel when the right toggle is pressed, and brings it back', async () => {
+        window.localStorage.removeItem('kg.panelVisibility.v1');
+        await mount(sourceOf());
+        const toggle = () => within(screen.getByTestId('kg-scene-overlay')).getByRole('button', { name: /./, pressed: undefined } as never);
+        void toggle;
+        const right = () => screen.getByRole('button', { name: L.surface.panelToggles.hideRight });
+        expect(document.querySelector('[data-testid="kg-act-panel"]')).not.toBeNull();
+        fireEvent.click(right());
+        expect(document.querySelector('[data-testid="kg-act-panel"]')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.showRight }));
+        expect(document.querySelector('[data-testid="kg-act-panel"]')).not.toBeNull();
+        window.localStorage.removeItem('kg.panelVisibility.v1');
     });
 });

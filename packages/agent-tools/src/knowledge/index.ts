@@ -40,6 +40,7 @@ export {
     KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
+export { extractDocumentText, withDocumentHashes, withDocumentText } from './documents/index.js';
 export { extractedLogFileName, manifestFileName, migratingRootFiles, analysisPendingFileName, dirtyFileName, replicaFileName, runFileName, runsIndexFileName, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';
 export {
     createReplicaQueue, memoryReplicaPersistence, relationKey, factKey, fileKey,
@@ -101,3 +102,14 @@ export {
 } from './systems.js';
 export { graphSystems, readSystems, recordSystems, systemsManifestKey } from './systemsRecord.js';
 export { GraphReadTally, noteGraphReads, takeGraphReads, type GraphFileReads, type GraphSkipReason } from './graphReads.js';
+export { ManifestBuffer, bufferedManifest, type ManifestSink, type PendingManifest } from './manifestBuffer.js';
+export {
+    LOCK_REFRESH_MS, LOCK_STALE_MS, acquireReplicaLock, fileReplicaLock, lockFileName,
+    type ReplicaLock, type ReplicaLockPort,
+} from './replicaLock.js';
+export {
+    BACKGROUND_TRANSIENT_STREAK, MIN_SEND_INTERVAL_MS, createReplicaHost,
+    type PumpSource, type ReplicaHost, type ReplicaHostOptions, type UploadMarks,
+} from './replicaHost.js';
+export { type ReplicaHostClient, type SeedPort } from './replicaHostParts.js';
+export { additivePlan } from './replicaReconcile.js';

@@ -3,7 +3,7 @@
  * sits behind the canvas client boundary, so a directive would mark a second entry point
  * that does not exist.
  */
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { KnowledgeGraphView, type KnowledgePanelRenderProps } from '@builderforce/knowledge-graph-view';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -64,6 +64,9 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
       pinpoint: webPinpointHost,
     });
   }, [projectId, workspaceTitle, identity]);
+
+  // A replaced or unmounted source stops its replica pumps and closes its local database (the queues stay for the next open).
+  useEffect(() => () => { void source?.dispose(); }, [source]);
 
   const renderPanel = useCallback(({ open, title, onClose, children }: KnowledgePanelRenderProps): ReactNode => (
     <SlideOutPanel open={open} onClose={onClose} title={title}>{children}</SlideOutPanel>

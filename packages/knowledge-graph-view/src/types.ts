@@ -245,7 +245,7 @@ export interface KnowledgeGraphSource {
     folders?: { exclude(rootId: string, path: string): Promise<void> };
     /** Local against server counts, skipped files and data sources. Absent ⇒ no Sync panel. */
     syncStatus?(rootId: string): Promise<SyncStatus>;
-    /** Retry upload: forget the root's recorded upload failures and send its queue now. Present only on a host that has a replica to pump (an editor); absent ⇒ no Retry. */
+    /** Retry upload: forget the root's recorded upload failures and send its queue now. Present only on a host that has a replica to pump (any host with a replica: an editor, the web, Rovr); absent ⇒ no Retry. */
     retrySync?(rootId: string): Promise<void>;
     /** Where this host builds the graph it hands `load`: its own store (`local`, an editor: PRD 41 A7) or the platform (`server`). Named in the copied diagnostics; a server map in an editor is a defect they flag. Absent ⇒ not said. */
     mapSource?: 'local' | 'server';

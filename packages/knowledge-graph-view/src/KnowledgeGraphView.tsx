@@ -2,10 +2,11 @@
  * `KnowledgeGraphView` — the ONE view of a knowledge graph, on every host (PRD 38 §4.6).
  *
  * A composition root: it holds the graph's state and the surface's state, and lays out the
- * parts, each its own module. Header (`surface/SurfaceHeader.tsx`: the status strip, then the
- * spine, ask bar, Panels and overlays); left, the lines and their stations; centre, the scene
- * with its floating controls (`surface/SceneOverlay.tsx`) and the path strip below; right, the
- * Act panel. The cameras and the panels are registries (`surface/cameras.tsx`,
+ * parts, each its own module. Header (`surface/SurfaceHeader.tsx`: the spine, ask bar and review
+ * action); left, the lines and their stations; centre, the scene with its floating controls
+ * (`surface/SceneOverlay.tsx`: View, Panels + Risk overlays, panel toggles, questions, commit
+ * scrubber) and the path strip below; right, the Act panel. The three panels hide via
+ * `surface/usePanelVisibility.ts`. The cameras and the panels are registries (`surface/cameras.tsx`,
  * `surface/panels.ts`), so this file names none of them. What the chrome derives from the state
  * (the layout steps, the spine, the titles, the overlay's props) is `surface/useSurfaceChrome.ts`.
  *
@@ -57,7 +58,10 @@ import { groupTermini } from './surface/transit/termini';
 import { PathStrip } from './surface/PathStrip';
 import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
-import { useHistory } from './surface/TimeSlider';
+import { TimeSlider, useHistory } from './surface/TimeSlider';
+import { SceneTools } from './surface/SceneTools';
+import { PanelVisibilityToggles } from './surface/PanelVisibilityToggles';
+import { usePanelVisibility } from './surface/usePanelVisibility';
 import { Pill } from './surface/ui';
 import { questionForLens } from './surface/questions';
 import { useSurfaceActions } from './surface/useSurfaceActions';
@@ -211,19 +215,26 @@ export function KnowledgeGraphView({
             coverage={surface.coverage} extras={legendExtras} kinds={mode === 'system' ? graph.findings.map((f) => f.kind) : undefined} findings={graph.findings}
         />
     );
-    const overlay = <SceneOverlay {...chrome.overlayProps} />;
-    const stackLines = hasLines && layout.linesStacked && !layout.phone;
+    const panels = usePanelVisibility();
+    const changedStations = new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size;
+    const overlay = (
+        <SceneOverlay
+            {...chrome.overlayProps}
+            tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone} /> : undefined}
+            panelToggles={<PanelVisibilityToggles labels={labels} visibility={panels.visibility} onToggle={panels.toggle} available={{ left: hasLines && !layout.phone, bottom: hasLines, right: !!real }} />}
+            time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
+        />
+    );
+    const showLeft = hasLines && panels.visibility.left;
+    const stackLines = showLeft && layout.linesStacked && !layout.phone;
 
     return (
         <RetryUploadContext.Provider value={retryUpload}>
         <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} hasGraph={!!real} surface={surface} env={surfaceEnv} narrow={layout.phone} sync={sync.status}
-                panelsMenu={layout.panelsMenu} run={runRead.live} rootTitle={titleOf(graph.scope.rootId)} onOpenReviews={openReviews}
+                run={runRead.live} rootTitle={titleOf(graph.scope.rootId)} onOpenReviews={openReviews}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
-                panel={panel} onPanel={setPanel} history={history} pickedCommit={picked}
-                onPickCommit={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }}
-                changedStations={new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size}
                 askName={chrome.askName}
                 linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}
                 onSearch={(q) => void kg.search(q)} onSelect={select} onMatches={pinpointed} onClear={unpin} onCompose={onCompose}
@@ -231,7 +242,7 @@ export function KnowledgeGraphView({
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: layout.actBelow ? 'column' : 'row', overflow: layout.actBelow ? 'auto' : 'hidden' }}>
                 <div style={{ display: 'flex', minWidth: 0, ...(layout.actBelow ? { flex: 'none' } : { flex: 1, minHeight: 0 }) }}>
-                    {hasLines && !layout.linesStacked && linesPanel(true)}
+                    {showLeft && !layout.linesStacked && linesPanel(true)}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         {layout.phone && overlay}
                         <div style={{ position: 'relative', flex: 1, minHeight: layout.actBelow ? 320 : 0 }}>
@@ -255,7 +266,7 @@ export function KnowledgeGraphView({
                             {surface.highlight && (mode === '3d' || mode === 'tower') && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
                         </div>
                         {stackLines && <div style={{ padding: 12, maxHeight: 260, overflow: 'auto', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>{linesPanel(false)}</div>}
-                        {hasLines && (
+                        {hasLines && panels.visibility.bottom && (
                             <PathStrip
                                 path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
                                 stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone}
@@ -263,7 +274,7 @@ export function KnowledgeGraphView({
                         )}
                     </div>
                 </div>
-                {real && <ActPanel
+                {real && panels.visibility.right && <ActPanel
                     graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
                     compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
                     evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} pathTitle={chrome.pathTitle}

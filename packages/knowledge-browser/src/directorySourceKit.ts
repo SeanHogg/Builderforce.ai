@@ -25,7 +25,7 @@ export type ContentHashedSource = DirectorySource & { readonly hashKind: 'conten
 export const isContentHashed = (source: DirectorySource): boolean =>
   (source as { hashKind?: unknown }).hashKind === 'content' && typeof source.hashOf === 'function';
 
-export { isSkippedPath, normalizePath, textDocument } from '@builderforce/agent-tools/knowledge';
+export { isSkippedPath, normalizePath, textDocument, withDocumentHashes, withDocumentText } from '@builderforce/agent-tools/knowledge';
 
 /**
  * `<host>:<kind>:<…parts>` — a reviewed root's id (`knowledge_scopes.root_id`), by THE

@@ -15,7 +15,23 @@ vi.mock('./reviewWorkerClient', () => ({
     ? { rootId: 'web:vfs:7', files: 2, byPack: { docs: 2 }, unchanged: 0, changed: ['a.md'], removed: [], skipped: [], estimatedModelCalls: 4 } satisfies ReviewPlan
     : { rootId: 'web:vfs:7', unjudged: 0, aborted: false })),
 }));
-vi.mock('./manifestStore', () => ({ openManifest: vi.fn(async () => ({})) }));
+// Premise changed: the review no longer goes straight to `client.store` with an IndexedDB manifest; it reviews a local store
+// through the replica host. Both are stubbed here (the replica path is covered by knowledgeSource.pack.test.ts).
+vi.mock('./browserKnowledge', () => ({
+  openBrowserKnowledge: vi.fn(async () => ({ store: { scopes: async () => [] }, manifest: { get: async () => undefined }, files: { read: async () => undefined }, degraded: false, close: () => undefined })),
+}));
+vi.mock('./browserReplica', () => {
+  const host = {
+    replicatedStoreOf: (_r: string, _f: unknown, local: unknown) => local,
+    markAdditive: async () => undefined,
+    drainedWithin: async () => 'drained',
+    resumeReplica: async () => undefined,
+    replicaStatusOf: async () => ({}),
+    retryReplica: () => undefined,
+    disposeReplicas: async () => undefined,
+  };
+  return { createBrowserReplica: () => ({ host, duringReview: (_r: string, _f: unknown, _p: unknown, run: () => unknown) => run() }) };
+});
 
 function graph(): KnowledgeGraph {
   const nodes = ['a.md', 'b.md'].map((path) => ({ ref: srcRef(ROOT, path), kind: 'file', label: path, pack: 'docs', importance: 0.5, origin: 'extracted' }) as KNode);

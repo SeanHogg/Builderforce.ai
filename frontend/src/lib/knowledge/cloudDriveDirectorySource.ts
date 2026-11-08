@@ -11,7 +11,7 @@
 
 import type { DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import { driveApi, type DriveConnection, type DriveItem } from '@/lib/driveApi';
-import { byPath, metadataHash, normalizePath, textDocument } from '@builderforce/knowledge-browser';
+import { byPath, metadataHash, normalizePath, textDocument, withDocumentText } from '@builderforce/knowledge-browser';
 import { webRootId } from './webHost';
 
 /** Files walked at most, and how deep — a drive is arbitrarily large. */
@@ -55,7 +55,7 @@ export function createDriveDirectorySource(
     return walked;
   };
 
-  return {
+  const source: DirectorySource = {
     rootId,
     title,
     async *list() {
@@ -72,4 +72,9 @@ export function createDriveDirectorySource(
       return textDocument(rootId, path, await file.text());
     },
   };
+  return withDocumentText(source, async (path) => {
+    await walk();
+    const item = items.get(path);
+    return item ? new Uint8Array(await (await driveApi.fetchFile(connection.id, item)).arrayBuffer()) : new Uint8Array();
+  });
 }

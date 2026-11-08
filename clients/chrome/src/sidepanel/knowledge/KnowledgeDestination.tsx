@@ -8,7 +8,7 @@
  * with no project chosen, the destination says so and points at Settings.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { pageClientFirst } from '@seanhogg/builderforce-brain-embedded';
 import { t } from '../../i18n/t';
 import { useServices, useSetting, useSignedIn } from '../hooks';
@@ -35,6 +35,9 @@ export default function KnowledgeDestination({ onCompose, onOpenSettings, intent
     () => (gap || projectId == null ? null : createRovrKnowledgeSource({ projectId, fetch: services.apiFetch, reportError: services.reportError, clientFirst: pageClientFirst(services.onDeviceTasks) })),
     [gap, projectId, services],
   );
+
+  // A replaced or unmounted source stops its replica pumps and closes its local database.
+  useEffect(() => () => { void source?.dispose(); }, [source]);
 
   if (signedIn && projectId === undefined) return <p className="rovr-empty">{t('loading')}</p>;
   return <KnowledgeView source={source} gap={gap} labels={labels} onCompose={onCompose} onOpenSettings={onOpenSettings} intent={intent ?? null} />;
