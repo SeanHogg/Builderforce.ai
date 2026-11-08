@@ -113,7 +113,7 @@ describe('caughtErrorReporter', () => {
   it('never lets the raw error, its stack or its cause reach the log or the sink unredacted', async () => {
     const logged: unknown[] = [];
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { logged.push(args); });
-    const sink = vi.fn(async () => undefined);
+    const sink = vi.fn(async (_record: unknown) => undefined);
     configureCaughtErrorReporter(sink);
     const ghp = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8';
     const error = Object.assign(new Error(`clone failed with GITHUB_TOKEN=${ghp}`, { cause: new Error(`inner ${ghp}`) }), { code: 'E_CLONE' });

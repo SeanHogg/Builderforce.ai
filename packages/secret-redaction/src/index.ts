@@ -137,8 +137,9 @@ export function compileSecretPattern(raw: string): RegExp | null {
   const match = raw.match(/^\/(.+)\/([gimsuy]*)$/);
   try {
     if (match) {
-      const flags = match[2].includes('g') ? match[2] : `${match[2]}g`;
-      return new RegExp(match[1], flags);
+      const [, body = '', flagsRaw = ''] = match;
+      const flags = flagsRaw.includes('g') ? flagsRaw : `${flagsRaw}g`;
+      return new RegExp(body, flags);
     }
     return new RegExp(raw, 'gi');
   } catch {
