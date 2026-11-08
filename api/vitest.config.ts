@@ -17,7 +17,18 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
  * with no install of its own: the set `sourcePackageRoots()` already computes.
  */
 const API_ROOT = fileURLToPath(new URL('.', import.meta.url));
-const sourcePackageTests = sourcePackageRoots(REPO_ROOT).map(
+/**
+ * Source-only packages that are NOT the API's to test: they are consumed by the web
+ * host, resolve their peers (react, testing-library, jsdom) from `frontend/node_modules`
+ * through their own `vitest.config.ts`, and run in their own CI leg
+ * (`pnpm --dir ../packages/knowledge-graph-view run test`). Collected here their
+ * React-rendering `.test.ts` files failed every API shard on "Cannot find package
+ * '@testing-library/react'" — the same failure brain-ui caused before it was excluded.
+ */
+const TESTED_BY_THEIR_HOST = new Set(['knowledge-graph-view']);
+const sourcePackageTests = sourcePackageRoots(REPO_ROOT)
+  .filter((root) => !TESTED_BY_THEIR_HOST.has(path.basename(path.dirname(root))))
+  .map(
   (root) => `${path.relative(API_ROOT, root).split(path.sep).join('/')}/**/*.test.ts`,
 );
 

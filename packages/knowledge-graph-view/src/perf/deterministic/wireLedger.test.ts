@@ -53,4 +53,14 @@ describe('WireLedger', () => {
         ledger.reset();
         expect(ledger.entries).toHaveLength(0);
     });
+
+    it('regression: the same value measures the same after V8 generalised its shape to double fields and double arrays', () => {
+        // A shape and an array site no other test uses, so the first measurement sees them as Smi-only.
+        const edge = (w: number) => { const o: Record<string, unknown> = {}; o.wlRegressionFrom = 1; o.wlRegressionWeight = w; return o; };
+        const row = (w: number) => [1, 2, w].map((x) => x);
+        const message = () => ({ type: 'load-chunk', field: 'edges', items: [edge(3), edge(4)], at: row(5) });
+        const before = serializedBytes(message()).bytes;
+        for (let i = 0; i < 1000; i++) { edge(i + 0.5); row(i + 0.5); } // the field turns Double, the array site PACKED_DOUBLE
+        expect(serializedBytes(message()).bytes).toBe(before);
+    });
 });

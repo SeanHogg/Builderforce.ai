@@ -78,6 +78,8 @@ describe('PinpointInput', () => {
         const props = mount(vi.fn().mockResolvedValue(result));
         fireEvent.change(screen.getByTestId('kg-pinpoint-file'), { target: { files: [png()] } });
         fireEvent.click(await screen.findByRole('button', { name: L.surface.pinpoint.diagnose }));
+        // Diagnose composes once the matched path is computed (`getComputeClient().once('path', …)`): asynchronous by design.
+        await waitFor(() => expect(props.onCompose).toHaveBeenCalledTimes(1));
         const text = props.onCompose.mock.calls[0]![0] as string;
         expect(text).toContain(result.description);
         expect(text).toContain('API → repositories');

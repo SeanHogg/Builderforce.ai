@@ -33,10 +33,7 @@ export interface WireEntry {
 export interface WireGroup { messages: number; bytes: number; transferredBytes: number; maxBytes: number; elementRefs: number }
 export interface WireSummary { groups: Record<string, WireGroup>; maxMessageBytes: number }
 
-/**
- * Placeholder that makes a fresh array literal PACKED_ELEMENTS (tagged) from birth; it is overwritten before the array is used.
- * Exported only so a test can prove the canonical form never leaks it.
- */
+/** Placeholder that makes a fresh array literal PACKED_ELEMENTS (tagged) from birth; it is overwritten before the array is used. */
 const TAGGED_SEED = Object.freeze({});
 
 /**
