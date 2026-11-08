@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-08: the visualizer's background-thread move is proven by a deterministic profiler, gated in CI (Knowledge · `packages/knowledge-graph-view`)
+
+- **Gap.** The `src/perf` harness measured wall-clock ms (median of 3, opt-in `KG_PERF=1`, never a gate), so "the work moved off the main thread" could not be checked run to run.
+- **Seams.** `compute/workerHost.ts` (`createWorkerHost`) is the ONE worker message loop; `graphCompute.worker.ts` is a thin binding over it. `ComputeClient.probe` + `setComputeProbe` (sharedClient) report each task's realm: `worker`, `main-idle`, `main-inline`.
+- **Profiler** (`src/perf/deterministic/`): `LoopbackWorker` runs the real host in-process on one FIFO (no wall clock); `WorkMeter` counting proxies (main thread vs worker reads, frozen-graph safe); `WireLedger` (exact `v8.serialize` bytes, transferred bytes, graph objects on the wire); `canonicalHash` parity; `sceneBudget` GPU buffer sizes; `renderProbe` mounts the whole view and visits every camera (boot, system, graph, map, tower, 3d, heat, list, transit, sequence).
+- **Gate** (`deterministic.test.ts`, normal `npm test`, synthetic graph at scale 0.15, ~80 s): invariants — no main-thread task on a graph above `INLINE_WEIGHT`, zero graph objects in any `run`/`done` message, upload chunks within `UPLOAD_SLICE`/`LINK_SLICE`, worker ≡ in-process for all 12 task kinds, two profiles identical, small graph inline. Metrics (reads, commits, DOM, wire bytes, worker reads per step, GPU bytes) ratchet against the committed `baseline.gate.json`: any increase fails; `KG_PERF_UPDATE=1` rewrites it. Full scale (`baseline.full.json`) runs under `KG_PERF=1`.
+- **Shared.** `perf/taskInputs.ts` builds the task requests for both harnesses; `buildPerfGraph({ scale })` (scale 1 unchanged).
+
 ## ✅ RESOLVED 2026-11-08: every knowledge host uploads through the ONE pack; the per-file PUT is gone (Knowledge · web, Rovr, on-prem, VS Code)
 
 - **Symptom.** Web and Rovr (`packages/knowledge-browser`) and on-prem (`agent-runtime/src/agents/knowledge/onPremKnowledge.ts`) reviewed straight against `knowledge-client` `client.store`, so every extraction went up as `PUT …/knowledge/extracted/:hash` and every fact batch as `client.store.write`. Only VS Code used the BFKP pack replica.

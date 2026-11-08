@@ -68,6 +68,47 @@ describe('WorkMeter', () => {
         expect(m.unwrap(5)).toBe(5);
     });
 
+    it('regression: a deep-frozen array of frozen elements wraps without breaking the Proxy get invariant', () => {
+        const m = new WorkMeter('t');
+        const raw = Object.freeze(rows().map((r) => Object.freeze(r)));
+        const list = m.wrapArray(raw);
+        expect(m.isElement(list[0])).toBe(true); // index access returns the element proxy, not a throw
+        expect(m.reads).toBe(1);
+        const mark = m.mark();
+        expect(list.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+        expect(m.since(mark)).toBe(6);
+        expect([...list].map((r) => r.n)).toEqual([1, 2, 3]);
+        expect(new Map(list.map((n) => [n.id, n])).get('b')).toBe(list[1]);
+        expect(m.unwrap(list)).toBe(raw);
+        expect(m.unwrap(list[2])).toBe(raw[2]);
+        expect(unwrapDeep(list, [m])).toEqual(rows());
+    });
+
+    it('regression: Object.freeze on the wrapped array keeps it readable and counted', () => {
+        const m = new WorkMeter('t');
+        const raw = rows();
+        const list = m.wrapArray(raw);
+        expect(() => Object.freeze(list)).not.toThrow();
+        expect(Object.isFrozen(list)).toBe(true);
+        const mark = m.mark();
+        expect(list[0]!.id).toBe('a');
+        expect(list.map((r) => r.n)).toEqual([1, 2, 3]);
+        expect(m.since(mark)).toBe(2 + 6);
+        expect(m.wrapArray(raw)).toBe(list);
+        Object.freeze(list[1]!);
+        expect(list[1]!.id).toBe('b');
+        expect(m.isElement(list[1])).toBe(true);
+    });
+
+    it('shares one element proxy across arrays holding the same element', () => {
+        const m = new WorkMeter('t');
+        const raw = rows();
+        const a = m.wrapArray(raw);
+        const b = m.wrapArray([raw[2]!, raw[0]!]);
+        expect(b[0]).toBe(a[2]);
+        expect(b[1]).toBe(a[0]);
+    });
+
     it('wrapArray on primitives and wrapGraph meter the right arrays', () => {
         const m = new WorkMeter('t');
         const nums = m.wrapArray([1, 2, 3]);
