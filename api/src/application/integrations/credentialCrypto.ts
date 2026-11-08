@@ -103,6 +103,8 @@ export async function encryptCredentials(
   data: Record<string, unknown>,
   secret: string,
   tenantId: number,
+  /** Optional AEAD additional data: binds the blob to a context (a row id), so it cannot be swapped between rows. */
+  additionalData?: string,
   /** Optional AEAD additional data: binds the blob to a context (a row id) so it cannot be swapped between rows. */
   additionalData?: string,
 ): Promise<{ enc: string; iv: string }> {
@@ -130,6 +132,8 @@ export async function decryptCredentials(
   tenantId?: number,
   /** Must equal the `additionalData` the blob was sealed with (none for legacy callers). */
   additionalData?: string,
+  /** Must equal the `additionalData` the blob was sealed with (none for legacy callers). */
+  additionalData?: string,
 ): Promise<Record<string, unknown> | null> {
   try {
     let salt: string;
@@ -155,4 +159,9 @@ export async function decryptCredentials(
   } catch {
     return null;
   }
+}
+
+/** The AES-GCM `additionalData` param, or nothing when the caller binds no context. */
+function aad(additionalData: string | undefined): { additionalData?: Uint8Array } {
+  return additionalData === undefined ? {} : { additionalData: new TextEncoder().encode(additionalData) };
 }
