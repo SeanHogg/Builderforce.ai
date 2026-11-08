@@ -19,11 +19,12 @@ export { redactDeep, redactJsonText, redactSecrets, redactThenCap, isSecretKey, 
  * (JSON text) is redacted structurally, `result` (text, possibly JSON) likewise. Other fields pass
  * through untouched.
  */
-export function redactAuditRow<T extends { args?: string | null; result?: string | null }>(row: T): T {
-  const out = { ...row };
+export function redactAuditRow<T extends { args?: unknown; result?: unknown }>(row: T): T {
+  // `args` / `result` may also be a SQL expression (an insert value), which is not text and passes through untouched.
+  const out: { args?: unknown; result?: unknown } = { ...row };
   if (typeof out.args === 'string') out.args = redactJsonText(out.args, AUDIT_LIMITS);
   if (typeof out.result === 'string') out.result = redactJsonText(out.result, AUDIT_LIMITS);
-  return out;
+  return out as T;
 }
 
 /** Bounds for a structurally-redacted audit blob: a runaway tool result cannot make the walk (or the row) unbounded. Far above any real arg/result. */

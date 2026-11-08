@@ -232,6 +232,9 @@ export async function absorbHead(box) {
   return (await box.workspace.call({ op: 'absorb', branch: head })).ok === true;
 }
 
+/** A bundle from the workspace helper (base64) past ~2 GiB decoded is refused before it is written to disk. */
+const MAX_BUNDLE_BASE64_CHARS = Math.ceil((2 * 1024 * 1024 * 1024 * 4) / 3);
+
 /** A full object id from the workspace helper (sha1 or sha256 repository): validated before it reaches `rev-parse` / `update-ref`. */
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -245,7 +248,7 @@ const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 export async function importBundle(m, file, head) {
   const verified = await mirrorGit(m, ['bundle', 'verify', file]);
   if (verified.exitCode !== 0) return { ok: false, error: verified.output.trim().slice(-200) };
-  const unbundled = await mirrorGit(m, ['bundle', 'unbundle', file]);
+  const unbundled = await mirrorGit(m, ['-c', 'transfer.fsckObjects=true', 'bundle', 'unbundle', file]);
   if (unbundled.exitCode !== 0) return { ok: false, error: unbundled.output.trim().slice(-200) };
   const line = unbundled.output.split('\n').map((l) => l.trim().split(/\s+/)).find((p) => p[1] === `refs/heads/${head}`);
   const sha = line && line[0];
@@ -279,6 +282,7 @@ export function publishHead(box, { force = false } = {}) {
     } else {
       const out = await box.workspace.call({ op: 'bundleOut', branch: head, basis: remoteTip });
       if (!out.ok) return { ok: false, error: out.error ?? 'could not bundle the branch' };
+      if (typeof out.bundle !== 'string' || out.bundle.length > MAX_BUNDLE_BASE64_CHARS) return { ok: false, error: 'the branch bundle is missing or over the size limit' };
       const file = join(m.privateDir, `out-${++m.seq}.bundle`);
       await writeFile(file, Buffer.from(out.bundle, 'base64'), { mode: 0o600 });
       const imported = await importBundle(m, file, head);

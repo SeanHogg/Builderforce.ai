@@ -30,22 +30,30 @@ const RAW_WRITE = /\b(?:insert\s+into|update)\s+(?:"?[\w]+"?\.)?"?tool_audit_eve
 function tableNames(text) {
   const names = new Set([TABLE]);
   for (const m of text.matchAll(new RegExp(`\\b${TABLE}\\s+as\\s+(\\w+)`, 'g'))) names.add(m[1]);
+  // A destructured alias: `const { toolAuditEvents: t } = schema`, `const { a, toolAuditEvents: t } = ...`.
+  for (const m of text.matchAll(new RegExp(`\\b${TABLE}\\s*:\\s*(\\w+)`, 'g'))) names.add(m[1]);
   for (const m of text.matchAll(new RegExp(`\\b(?:const|let|var)\\s+(\\w+)\\s*=\\s*(?:\\w+\\.)?${TABLE}\\b(?!\\s*[.(\\[])`, 'g'))) names.add(m[1]);
   return [...names];
+}
+
+/** `text` with `//` and block comments blanked (newlines and offsets kept, so line numbers stay right; `://` in a URL is not a comment). */
+function stripComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, ' '));
 }
 
 /** Offsets of every write to the table in `text`: `insert(<name>)`, `update(<name>).set(`, raw INSERT/UPDATE SQL. */
 function writeOffsets(text) {
   const offsets = [];
   const names = tableNames(text).map((n) => `(?:\\w+\\.)?${n}`).join('|');
-  for (const re of [new RegExp(`\\binsert\\(\\s*(?:${names})\\s*\\)`, 'g'), RAW_WRITE]) {
-    for (const m of text.matchAll(re)) offsets.push(m.index);
-  }
+  const insertRe = new RegExp(`\\binsert\\(\\s*(?:${names})\\s*\\)`, 'g');
+  for (const m of text.matchAll(insertRe)) offsets.push(m.index);
+  // Raw SQL is matched on comment-stripped text: a comment that mentions "update tool_audit_events" is not a write.
+  for (const m of stripComments(text).matchAll(RAW_WRITE)) offsets.push(m.index);
   // An UPDATE can store a secret only by writing `args` / `result`; blanking them (`{ args: null, result: null }`, the retention
-  // sweep) or touching other columns stores nothing.
+  // sweep) or touching other columns stores nothing. A spread in the set body (`.set({ ...patch })`) can carry them unseen: flagged.
   for (const m of text.matchAll(new RegExp(`\\bupdate\\(\\s*(?:${names})\\s*\\)\\s*\\.set\\(`, 'g'))) {
-    const setBody = text.slice(m.index + m[0].length, m.index + m[0].length + 400).split(/\)\s*\.(?:where|returning)\b/)[0];
-    if (/\b(?:args|result)\s*:(?!\s*null\b)/.test(setBody)) offsets.push(m.index);
+    const setBody = text.slice(m.index + m[0].length, m.index + m[0].length + 1000).split(/\)\s*\.(?:where|returning)\b/)[0];
+    if (/\.\.\./.test(setBody) || /\b(?:args|result)\s*:(?!\s*null\b)/.test(setBody)) offsets.push(m.index);
   }
   return offsets;
 }

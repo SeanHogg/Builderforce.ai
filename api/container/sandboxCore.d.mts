@@ -93,3 +93,6 @@ export function teardownShellSync(args: { user: string; workdir: string }): stri
 
 /** Import `refs/heads/<head>` from a server-chosen bundle file into a mirror (`bundle verify` + `unbundle` + `update-ref`; no file transport). */
 export function importBundle(m: { repo: string; privateDir: string }, file: string, head: string): Promise<{ ok: true; sha: string } | { ok: false; error: string }>;
+
+/** The isolation probe's bash script and positional args. A parent pid of 0 or 1 (node as PID 1 in the container) skips the parent-environ check. */
+export function isolationProbe(args: { workdir: string; serverPid: number; parentPid: number; pathDirs: string[] }): { script: string; args: string[] };

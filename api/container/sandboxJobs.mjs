@@ -98,6 +98,8 @@ const SHELL_ENV_DENY = [
   /^(GITHUB_TOKEN|GH_TOKEN|NODE_AUTH_TOKEN)$/,
   // `COREPACK_*` is allowlisted for its settings (home, registry URL…), but its credential-bearing names are not.
   /^COREPACK_.*(TOKEN|PASSWORD|SECRET|AUTH)/i,
+  // Likewise `npm_config_*`: its settings pass, a registry credential (`npm_config__authToken`, `…_password`) does not.
+  /^npm_config_.*(_auth|_authtoken|_password|token)/i,
 ];
 
 /** `NODE_OPTIONS` that preloads code (`--require`, `--import`, a loader) could run the server's code path in the
@@ -207,14 +209,29 @@ function groupAlive(child) {
 
 /** Run a file synchronously; a non-zero exit is a thrown, descriptive error (these are all fail-closed setup steps). */
 function mustRun(name, args, what) {
-  const r = spawnSync(trustedBinary(name), args, { encoding: 'utf8', env: { PATH: TRUSTED_PATH } });
+  const r = spawnSync(trustedBinary(name), args, { encoding: 'utf8', timeout: 60_000, env: { PATH: TRUSTED_PATH } });
   if (r.status !== 0) throw new Error(`${what} (${name} exited ${r.status}): ${String(r.stderr || r.stdout || r.error || '').trim().slice(0, 300)}`);
   return String(r.stdout || '');
 }
 
 /** Run a binary for its side effect only: a failure (nothing to kill, no crontab) is the normal case. */
-function tryRun(name, args) {
-  spawnSync(trustedBinary(name), args, { stdio: 'ignore', env: { PATH: TRUSTED_PATH } });
+function tryRun(name, args, timeout = 8000) {
+  return spawnSync(trustedBinary(name), args, { stdio: 'ignore', timeout, env: { PATH: TRUSTED_PATH } });
+}
+
+/** Passes of `kill -KILL -1` as the user before giving up: a process that forks as it dies is caught by the next pass. */
+const KILL_PASSES = 5;
+
+/**
+ * End EVERY process `user` owns, however it hops pids. Signalling one pid (or `pkill -u`, which reads a process list
+ * that the next fork changes) can be evaded; `kill -KILL -1` AS the user reaches all of its processes at once, and it
+ * repeats until `pgrep -u` finds none. Absolute paths throughout; failures are the normal case and are ignored.
+ */
+function killShellUserProcessesSync(user) {
+  for (let pass = 0; pass < KILL_PASSES; pass++) {
+    tryRun('sudo', ['-n', '-u', user, trustedBinary('kill'), '-KILL', '--', '-1']);
+    if (tryRun('pgrep', ['-u', user]).status !== 0) return; // 1 = nothing left (an unrunnable pgrep also ends the loop)
+  }
 }
 
 /** The PATH directories the shell user must not be able to write: absolute, deduplicated, free of NUL. */
@@ -233,19 +250,30 @@ function pathDirsOf(pathValue) {
 export function verifyShellIsolation({ user, workdir, serverPid = process.pid, parentPid = process.ppid, pathDirs = pathDirsOf(process.env.PATH) }) {
   const groups = mustRun('id', ['-Gn', user], `could not read ${user}'s groups`).trim().split(/\s+/);
   if (groups.length !== 1 || groups[0] !== user) throw new Error(`the shell user must belong only to its own group; ${user} is in: ${groups.join(' ')}`);
-  for (const pid of [serverPid, parentPid]) if (!Number.isSafeInteger(pid) || pid < 1) throw new Error(`the isolation probe needs real pids, got ${pid}`);
-  // Positional args: $1 workspace, $2 server pid, $3 its parent pid, then every PATH directory.
+  const probe = isolationProbe({ workdir, serverPid, parentPid, pathDirs });
+  const r = spawnSync(trustedBinary('sudo'), ['-n', '-u', user, 'env', '-i', `PATH=${TRUSTED_PATH}`, 'bash', '-c', probe.script, 'bash', ...probe.args], { encoding: 'utf8', timeout: 30_000, env: { PATH: TRUSTED_PATH } });
+  if (r.status !== 0) throw new Error(`the run shell is not isolated (${user}): ${String(r.stdout || r.stderr || r.error || `exit ${r.status}`).trim().slice(0, 300)}`);
+}
+
+/**
+ * The probe script and its positional args. The parent's environ is checked only when the parent is a real process:
+ * the container runs `node server.mjs` as PID 1, whose parent pid is 0 (and a parent of 1 is init, not the launching
+ * shell), so those have nothing to read and the check is skipped rather than refusing every open.
+ */
+export function isolationProbe({ workdir, serverPid, parentPid, pathDirs }) {
+  if (!Number.isSafeInteger(serverPid) || serverPid < 1) throw new Error(`the isolation probe needs the server's real pid, got ${serverPid}`);
+  if (!Number.isSafeInteger(parentPid) || parentPid < 0) throw new Error(`the isolation probe needs a parent pid, got ${parentPid}`);
+  // Positional args: $1 workspace, $2 server pid, $3 its parent pid (0 ⇒ skip), then every PATH directory.
   const script = [
     'if test -w /var/run/docker.sock; then echo "can write /var/run/docker.sock"; exit 11; fi',
     'if sudo -n true >/dev/null 2>&1; then echo "can sudo"; exit 12; fi',
     'if cat "/proc/$2/environ" >/dev/null 2>&1; then echo "can read the sandbox server\'s environ"; exit 13; fi',
-    'if cat "/proc/$3/environ" >/dev/null 2>&1; then echo "can read the server\'s parent environ"; exit 14; fi',
+    'if [ "$3" -gt 1 ] && cat "/proc/$3/environ" >/dev/null 2>&1; then echo "can read the server\'s parent environ"; exit 14; fi',
     'if ! test -w "$1"; then echo "cannot write the workspace"; exit 15; fi',
     'shift 3',
     'for d in "$@"; do if test -w "$d"; then echo "can write $d, a directory on the server\'s PATH"; exit 16; fi; done',
   ].join('\n');
-  const r = spawnSync(trustedBinary('sudo'), ['-n', '-u', user, 'env', '-i', `PATH=${TRUSTED_PATH}`, 'bash', '-c', script, 'bash', workdir, String(serverPid), String(parentPid), ...pathDirs], { encoding: 'utf8', env: { PATH: TRUSTED_PATH } });
-  if (r.status !== 0) throw new Error(`the run shell is not isolated (${user}): ${String(r.stdout || r.stderr || r.error || `exit ${r.status}`).trim().slice(0, 300)}`);
+  return { script, args: [workdir, String(serverPid), String(parentPid), ...pathDirs] };
 }
 
 /**
@@ -263,8 +291,9 @@ export function provisionShellUser({ user, workdir }) {
     if (!/is not allowed to run sudo/.test(listing)) throw new Error(`the existing user ${user} has sudo rights; refusing to run the shell as it`);
     // A self-hosted runner keeps the account between jobs: nothing a previous run left may survive into this one —
     // not a process, a cron job, nor a dotfile (a `.bashrc` or `.npmrc` planted last run would execute in this one).
-    tryRun('sudo', ['-n', trustedBinary('pkill'), '-KILL', '-u', user]);
+    killShellUserProcessesSync(user);
     tryRun('sudo', ['-n', trustedBinary('crontab'), '-r', '-u', user]);
+    tryRun('sudo', ['-n', trustedBinary('find'), '/tmp', '/var/tmp', '/dev/shm', '-xdev', '-user', user, '-delete'], 30_000);
     mustRun('sudo', ['-n', 'sh', '-c', 'for p in "$2"/* "$2"/.[!.]* "$2"/..?*; do if [ -e "$p" ] || [ -L "$p" ]; then "$1" -rf -- "$p"; fi; done', 'sh', trustedBinary('rm'), `/home/${user}`], `could not wipe ${user}'s home`);
   } else {
     mustRun('sudo', ['-n', 'useradd', '--create-home', '--shell', '/bin/bash', '--user-group', user], `could not create ${user}`);
@@ -283,8 +312,7 @@ export function provisionShellUser({ user, workdir }) {
  * Call after every shell process is dead.
  */
 export function releaseShellWorkspace({ workdir }) {
-  const owner = userInfo().username;
-  mustRun('sudo', ['-n', 'sh', '-c', 'set -e; "$3" -rf -- "$1/.git"; "$4" -R "$2" "$1"', 'sh', workdir, owner, trustedBinary('rm'), trustedBinary('chown')], 'could not release the workspace');
+  mustRun('sudo', ['-n', 'sh', '-c', 'set -e; "$3" -rf -- "$1/.git"; "$4" -R "$2" "$1"', 'sh', workdir, `${userInfo().uid}:${userInfo().gid}`, trustedBinary('rm'), trustedBinary('chown')], 'could not release the workspace');
 }
 
 /**
@@ -292,7 +320,7 @@ export function releaseShellWorkspace({ workdir }) {
  * kill every process the shell user owns, then hand the checkout back. Never throws; returns the failure message or null.
  */
 export function teardownShellSync({ user, workdir }) {
-  tryRun('sudo', ['-n', trustedBinary('pkill'), '-KILL', '-u', user]);
+  killShellUserProcessesSync(user);
   try {
     releaseShellWorkspace({ workdir });
     return null;

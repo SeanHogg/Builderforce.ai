@@ -72,9 +72,12 @@ describe('renderAgentWorkflow', () => {
     expect(cleanup).toBeGreaterThan(agent);
     const step = workflow.slice(cleanup);
     expect(step).toContain('if: always()');
-    expect(step).toContain('sudo -n pkill -KILL -u bfagent || true');
-    expect(step).toContain('sudo -n rm -rf "$GITHUB_WORKSPACE/.git" || true');
-    expect(step).toContain('sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" || true');
+    // `kill -1` as the user, repeated until pgrep finds nothing (pkill can be evaded by pid-hopping); absolute paths only.
+    expect(step).toContain('/usr/bin/sudo -n -u bfagent /usr/bin/kill -KILL -- -1 || true');
+    expect(step).toContain('/usr/bin/pgrep -u bfagent >/dev/null || break');
+    expect(step).toContain('/usr/bin/sudo -n /bin/rm -rf "$GITHUB_WORKSPACE/.git" || true');
+    expect(step).toContain('/usr/bin/sudo -n /bin/chown -R "$(/usr/bin/id -u):$(/usr/bin/id -g)" "$GITHUB_WORKSPACE" || true');
+    expect(step).not.toMatch(/pkill/);
   });
 
   it('is what the committed template carries', () => {

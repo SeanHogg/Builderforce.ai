@@ -60,6 +60,8 @@ export interface BuildArgs {
     forceBodies?: ReadonlySet<string>;
     /** Keys already known to be leaves of the root on the server (a reconcile's removals): no lookup needed. */
     ownedKeys?: ReadonlySet<string>;
+    /** ADDITIVE root: the server holds leaves this store lacks, so the pack never asserts the root digest (it would be the local tree's alone). */
+    additive?: boolean;
     /** The pack is cut before its DECODED body passes this (default 48 MB of the server's 64 MB). */
     maxDecodedBytes?: number;
     /** The pack is cut before it holds more rows than this (default 600,000 of the server's 1,000,000). */
@@ -180,7 +182,7 @@ async function buildOnce(args: BuildArgs, limit: number | undefined): Promise<Bu
     const sentFileKeys = cut ? fileKeys.slice(0, limit) : fileKeys;
     // A pack that is not cut carries the rows, scope, analysis and side rows, held files or not. It asserts the root digest only when nothing is held back.
     const final = !cut;
-    const asserts = final && holdKeys.size === 0;
+    const asserts = final && holdKeys.size === 0 && !args.additive;
     // The local state, as the tree sees it: which keys are leaves, which rows exist.
     let allFacts: StoredFact[] = [], allRels: StoredRelation[] = [];
     let treeKeys = new Set<string>();

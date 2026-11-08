@@ -4,7 +4,7 @@
  */
 
 import type { KnowledgePack, ReviewArgs } from '@seanhogg/builderforce-memory/knowledge';
-import { DEFAULT_JUDGEMENT_TIMEOUT_MS, judgementWithTimeout } from './judgement.js';
+import { defaultJudgementTimeoutMs, judgementWithTimeout } from './judgement.js';
 import type { KnowledgeReviewOptions, KnowledgeReviewPorts } from './reviewRunner.js';
 
 export function directoryArgs(

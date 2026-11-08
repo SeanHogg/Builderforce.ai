@@ -11,6 +11,9 @@ import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { killTree, spawnShell } from './sandboxJobs.mjs';
 
+/** A helper reply line past this is refused (the helper is the model's user: its output is not trusted to be small). */
+const MAX_REPLY_LINE_CHARS = 64 * 1024 * 1024;
+
 /** POSIX single-quote a word for the `bash -lc` line that starts the helper. */
 function quote(word) {
   return `'${String(word).replace(/'/g, `'\\''`)}'`;
@@ -41,6 +44,7 @@ export function createWorkspaceClient({ workdir, helperPath }) {
     proc.stderr.on('error', () => { /* the helper ended */ });
     createInterface({ input: proc.stdout }).on('line', (line) => {
       let reply;
+      if (line.length > MAX_REPLY_LINE_CHARS) { failAll(`the workspace helper's reply was over the ${MAX_REPLY_LINE_CHARS}-character limit`); return; }
       try { reply = JSON.parse(line); } catch (e) { console.error(`[workspace] unparseable reply: ${e.message}`); return; }
       const settle = pending.get(reply.id);
       if (!settle) return;

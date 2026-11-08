@@ -2,7 +2,55 @@ import { describe, expect, it, vi } from 'vitest';
 import type { JudgementPort } from '@seanhogg/builderforce-memory/knowledge';
 import { InMemoryIngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import { reviewDirectory, DOCS_PACK, localSnapshotStore } from '@seanhogg/builderforce-memory/knowledge';
-import { JudgementTimeout, judgementWithTimeout } from './judgement.js';
+import { JudgementTimeout, defaultJudgementTimeoutMs, judgementWithTimeout } from './judgement.js';
+
+const sized = (chars: number) => ({ kind: 'extract' as const, items: [{ ref: 'src:r::a.md#a' as never, text: 'x'.repeat(chars), sourceHash: 'h' }] });
+
+describe('defaultJudgementTimeoutMs', () => {
+    it('gives a short request 60 s, scales with text, and caps at 300 s', () => {
+        expect(defaultJudgementTimeoutMs(sized(1))).toBe(60_000);
+        expect(defaultJudgementTimeoutMs(sized(40_000))).toBe(210_000);
+        expect(defaultJudgementTimeoutMs(sized(10_000_000))).toBe(300_000);
+    });
+
+    it('sums the text of every item', () => {
+        const req = { kind: 'extract' as const, items: [sized(20_000).items[0]!, sized(20_000).items[0]!] };
+        expect(defaultJudgementTimeoutMs(req)).toBe(210_000);
+    });
+});
+
+describe('judgementWithTimeout scaling', () => {
+    it('honours a function ms and reports the ms the request got', async () => {
+        vi.useFakeTimers();
+        try {
+            const hang: JudgementPort = { judge: (req) => new Promise((_, reject) => req.signal?.addEventListener('abort', () => reject(new Error('aborted')))) };
+            const settled = judgementWithTimeout(hang, (req) => req.items.length * 2_000).judge(request()).then(() => 'answered', (e: unknown) => e);
+            await vi.advanceTimersByTimeAsync(2_000);
+            const out = await settled;
+            expect(out).toBeInstanceOf(JudgementTimeout);
+            expect((out as Error).message).toBe('judge: timeout after 2s');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('uses the scaled default when no ms is given', async () => {
+        vi.useFakeTimers();
+        try {
+            const hang: JudgementPort = { judge: (req) => new Promise((_, reject) => req.signal?.addEventListener('abort', () => reject(new Error('aborted')))) };
+            const settled = judgementWithTimeout(hang).judge(sized(40_000)).then(() => 'answered', (e: unknown) => e);
+            await vi.advanceTimersByTimeAsync(209_000);
+            let done = false;
+            void settled.then(() => { done = true; });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(done).toBe(false);
+            await vi.advanceTimersByTimeAsync(1_000);
+            expect(((await settled) as Error).message).toBe('judge: timeout after 210s');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
 
 const request = (signal?: AbortSignal) => ({ kind: 'extract' as const, items: [{ ref: 'src:r::a.md#a' as never, text: 'x', sourceHash: 'h' }], ...(signal ? { signal } : {}) });
 

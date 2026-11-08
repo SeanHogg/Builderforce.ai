@@ -131,6 +131,11 @@ export class AgentContainerDO extends Container<Env> {
       this.ctx.blockConcurrencyWhile(() => this.egress.destroyIfStartedOpen().then(() => undefined))
         .catch((error: unknown) => this.reportError(error, { operation: 'constructor', level: 'warning' }));
     }
+    // Load (or create) the control secret and put it in `envVars` before the library can auto-start the container.
+    if (typeof this.ctx.blockConcurrencyWhile === 'function') {
+      this.ctx.blockConcurrencyWhile(async () => { await this.controlSecret(); })
+        .catch((error: unknown) => this.reportError(error, { operation: 'constructor', level: 'warning' }));
+    }
   }
 
   /** The egress lifecycle (gate, marker, destroy). Everything about it lives in `sandboxEgressLifecycle.ts`. */
@@ -160,6 +165,9 @@ export class AgentContainerDO extends Container<Env> {
    * name (`exec:<id>`) is one-way. Best-effort; never blocks the proxied request.
    */
   override async fetch(request: Request): Promise<Response> {
+    // The secret must be in `envVars` before ANY request can start the container: a /health (web scan, managed host) or a
+    // preview hit after an eviction boots it too, and a container started without the secret would 401 every later control call.
+    const secret = await this.controlSecret();
     let openBody: OpenBody | null = null;
     try {
       const url = new URL(request.url);
@@ -209,7 +217,6 @@ export class AgentContainerDO extends Container<Env> {
     let forwarded = request;
     try {
       if (isControlPath(new URL(request.url).pathname)) {
-        const secret = await this.controlSecret();
         if (secret) {
           forwarded = new Request(request);
           forwarded.headers.set(CONTROL_SECRET_HEADER, secret);

@@ -7,7 +7,9 @@
 
 import { DOCS_PACK, type KnowledgePack } from '@seanhogg/builderforce-memory/knowledge';
 import { createCodePack, type CodePackDeps } from './codePack.js';
+import { DOCUMENTS_PACK } from './documents/documentsPack.js';
 
 export function knowledgePacks(deps: CodePackDeps = {}): KnowledgePack[] {
-    return [createCodePack(deps), DOCS_PACK];
+    // The documents pack claims pdf/office text a host source extracted (documents/); the builtin docs parsers refuse those types, so its position is free.
+    return [createCodePack(deps), DOCS_PACK, DOCUMENTS_PACK];
 }

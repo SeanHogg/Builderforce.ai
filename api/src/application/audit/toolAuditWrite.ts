@@ -9,12 +9,14 @@
  * Returns the Drizzle insert builder, so a caller keeps `.returning()` / `.onConflictDoNothing()` /
  * `.catch()`.
  */
+import type { PgInsertValue } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditEvents } from '../../infrastructure/database/schema';
 import { redactAuditRow } from '../../infrastructure/security/redactSecrets';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 
-export type ToolAuditRow = typeof toolAuditEvents.$inferInsert;
+/** What `insert().values()` accepts: the plain row plus SQL expressions per column (`ts: sql\`now()\``, as the reaper writes it). */
+export type ToolAuditRow = PgInsertValue<typeof toolAuditEvents>;
 
 /** Redact, then insert one row (a single object) or many (one statement). */
 export function insertToolAudit(db: Db, rows: ToolAuditRow | ToolAuditRow[]) {

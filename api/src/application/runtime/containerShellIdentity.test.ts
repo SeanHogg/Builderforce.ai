@@ -11,7 +11,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { TRUSTED_PATH, closeSandboxBox, createSandboxBox, serveSandbox, shellEnv, shellInvocation, shellUser, trustedBinary, type SandboxBox } from '../../../container/sandboxCore.mjs';
+import { TRUSTED_PATH, closeSandboxBox, createSandboxBox, isolationProbe, serveSandbox, shellEnv, shellInvocation, shellUser, trustedBinary, type SandboxBox } from '../../../container/sandboxCore.mjs';
 import { WORKSPACE_HELPER } from './containerTestHelper';
 
 const posix = process.platform !== 'win32';
@@ -80,6 +80,20 @@ describe('shellInvocation', () => {
     });
     expect(env.COREPACK_HOME).toBe('/cp');
     for (const name of ['COREPACK_NPM_TOKEN', 'COREPACK_NPM_PASSWORD', 'COREPACK_NPM_REGISTRY_AUTH', 'COREPACK_X_SECRET']) expect(env[name], name).toBeUndefined();
+  });
+
+  it('keeps npm_config_* settings but drops its credentials', () => {
+    const env = shellEnv({ PATH: '/usr/bin', npm_config_registry: 'https://r.test', npm_config__authToken: 't', NPM_CONFIG_PASSWORD: 'p', npm_config_token: 'x' });
+    expect(env.npm_config_registry).toBe('https://r.test');
+    for (const name of ['npm_config__authToken', 'NPM_CONFIG_PASSWORD', 'npm_config_token']) expect(env[name], name).toBeUndefined();
+  });
+
+  it('the isolation probe tolerates a parent pid of 0 (node is PID 1 in the container) and only checks a real parent', () => {
+    const probe = isolationProbe({ workdir: '/w', serverPid: 1, parentPid: 0, pathDirs: ['/usr/bin'] });
+    expect(probe.args).toEqual(['/w', '1', '0', '/usr/bin']);
+    expect(probe.script).toContain('[ "$3" -gt 1 ] && cat "/proc/$3/environ"');
+    expect(() => isolationProbe({ workdir: '/w', serverPid: 0, parentPid: 0, pathDirs: [] })).toThrow(/real pid/);
+    expect(() => isolationProbe({ workdir: '/w', serverPid: 5, parentPid: -1, pathDirs: [] })).toThrow(/parent pid/);
   });
 
   it('never hands the shell the container control secret', () => {

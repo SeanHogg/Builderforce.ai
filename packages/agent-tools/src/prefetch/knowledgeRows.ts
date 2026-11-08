@@ -109,8 +109,18 @@ export interface KnowledgeReviewSession {
     rootId: string;
     title: string;
     /** The walk and its numbers; handed back to {@link review} so the confirmed run does not re-walk (§4.3). */
-    plan(signal: AbortSignal): Promise<PlanDetail>;
-    review(plan: PlanDetail, signal: AbortSignal): Promise<ReviewReport>;
+    plan(signal: AbortSignal, opts?: KnowledgeReviewRequestOptions): Promise<PlanDetail>;
+    review(plan: PlanDetail, signal: AbortSignal, opts?: KnowledgeReviewRequestOptions): Promise<ReviewReport>;
+}
+
+/** What the request asked for beyond the folder: *re-review all* (every file planned as changed, whatever the manifest holds). */
+export interface KnowledgeReviewRequestOptions {
+    force?: boolean;
+}
+
+/** True when the request asks for every file to be reviewed again (`/review docs force`, "re-review all of docs"). */
+export function reviewForcedBy(request: string): boolean {
+    return /\b(?:force|forced|re-?review\s+all|full\s+re-?review)\b/i.test(request);
 }
 
 export interface KnowledgeRowsHost {

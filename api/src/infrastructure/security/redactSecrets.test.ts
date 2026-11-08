@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SECRET_PATTERNS, findSecretShapes, redactText } from '@builderforce/secret-redaction';
-import { maskTail, redactAuditRow, redactDeep, redactJsonText, redactSecrets, redactThenCap } from './redactSecrets';
+import { isSecretKey, maskTail, redactAuditRow, redactDeep, redactJsonText, redactSecrets, redactThenCap } from './redactSecrets';
 
 const tail = 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4';
 
@@ -375,4 +375,104 @@ describe('regression: structural walk', () => {
     expect(out.errors).toHaveLength(1);
     expect(JSON.stringify(out)).not.toContain(tail);
   });
+
+  it('regression: a node that emitted [CIRCULAR] is not memoised for another path', () => {
+    const a: Record<string, unknown> = { name: 'a' };
+    const b: Record<string, unknown> = { name: 'b', a };
+    a.b = b;
+    // `b` is reached first inside `a` (where `a` is an ancestor: circular), then directly as a sibling (where it is not).
+    const out = redactDeep({ first: a, second: b }) as { first: { b: { a: unknown } }; second: { a: { b: unknown } } };
+    expect(out.first.b.a).toBe('[CIRCULAR]');
+    expect(out.second.a.b).toBe('[CIRCULAR]');
+    expect((out.second.a as Record<string, unknown>).name).toBe('a');
+  });
+});
+
+describe('regression: B1 ReDoS — every pattern is linear on adversarial input', () => {
+  redactSecrets('warm up token_a = x'); // first call compiles the regexes; time only the steady state
+  it.each([
+    ['40 underscore segments after token', 'token' + '_a'.repeat(40) + ' '],
+    ['26 underscore segments after token', 'token' + '_a'.repeat(26) + ' '],
+    ['KEY_ x 30000', 'KEY_'.repeat(30000)],
+    ['password_x x 5000', 'password_x'.repeat(5000)],
+    ['-a x 5000 then token', '-a'.repeat(5000) + ' token'],
+    ['Authorization: x 20000', 'Authorization:'.repeat(20000)],
+    ['password: x 20000', 'password:'.repeat(20000)],
+    ['unterminated JSON key', '"' + 'password_x'.repeat(5000)],
+  ])('regression: %s redacts in under 200ms', (_label, input) => {
+    const started = performance.now();
+    redactSecrets(input);
+    expect(performance.now() - started).toBeLessThan(200);
+  });
+});
+
+describe('regression: M2 short / unusual unquoted values', () => {
+  it.each([
+    ['password=hunter2', 'hunter2'],
+    ['secret_token=abcdefgh;', 'abcdefgh'],
+    ['password=a;b;c1234567', 'c1234567'],
+    ['secret = "abc"', '"abc"'],
+  ])('regression: %s is masked', (text, secret) => {
+    expect(redactSecrets(text)).not.toContain(secret);
+  });
+
+  it('regression: prose and code stay unmasked', () => {
+    for (const text of ['const token = getToken();', 'const token = process.env.X;', 'interface U { password: string; }', 'password: string']) {
+      expect(redactSecrets(text)).toBe(text);
+    }
+  });
+});
+
+describe('regression: M3 uppercase env-assignment over-masking', () => {
+  it.each(['PRIMARY_KEY: users_id', 'SORT_KEY=timestamp', 'MONKEY: banana', 'HOTKEY=abcdefgh', 'PARTITION_KEY=abcdefgh', 'CACHE_KEY=abcdefgh'])(
+    'regression: %s is not masked', (text) => {
+      expect(redactSecrets(text)).toBe(text);
+    });
+
+  it.each(['API_KEY=abcdefgh12', 'SECRET_KEY_BASE=abcdefgh12', 'GITHUB_TOKEN=abcdefgh12', 'AWS_SECRET_ACCESS_KEY=abcdefgh12'])(
+    'regression: %s is masked', (text) => {
+      expect(redactSecrets(text)).toBe(`${text.split('=')[0]}=***`);
+    });
+});
+
+describe('regression: M4 redactJsonText round trip', () => {
+  it('regression: a big integer is preserved while a secret in the same JSON is still masked', () => {
+    const out = redactJsonText('{"id":12345678901234567890,"password":"hunter2hunter2"}');
+    expect(out).toContain('12345678901234567890');
+    expect(out).not.toContain('hunter2hunter2');
+    expect(() => JSON.parse(out)).not.toThrow();
+  });
+
+  it('regression: an out-of-range exponent is not turned into null', () => {
+    const out = redactJsonText('{"n":1e400,"api_key":"abcdefgh12345678"}');
+    expect(out).toContain('1e400');
+    expect(out).not.toContain('abcdefgh12345678');
+  });
+});
+
+describe('regression: m5 bounded nested-JSON work', () => {
+  it('regression: caller options reach a JSON-text string leaf', () => {
+    const out = redactDeep({ payload: JSON.stringify({ list: [1, 2, 3, 4] }) }, { maxEntries: 2 }) as { payload: string };
+    expect(JSON.parse(out.payload)).toEqual({ list: [1, 2] });
+  });
+
+  it('regression: JSON nested in JSON strings stops being re-parsed after 3 levels but is still redacted as text', () => {
+    let text = JSON.stringify({ token: 'x', cmd: 'DB_PASSWORD=hunter2hunter2 run' });
+    for (let i = 0; i < 8; i++) text = JSON.stringify({ inner: text });
+    const out = JSON.stringify(redactDeep({ text }));
+    expect(out).not.toContain('hunter2hunter2');
+  });
+});
+
+describe('regression: m6 / m7 key rules', () => {
+  it.each(['webhookSecretUrl', 'signedTokenUrl', 'tokenUri'])('regression: %s is a secret key', (key) => {
+    expect(isSecretKey(key)).toBe(true);
+    expect((redactDeep({ [key]: 'https://x.test/abc' }) as Record<string, unknown>)[key]).toBe('[REDACTED]');
+  });
+
+  it.each(['passwordPolicy', 'cookiesEnabled', 'authorizationStatus', 'secretary', 'credentialsProvided', 'secret_provider', 'tokenMode'])(
+    'regression: %s keeps its data', (key) => {
+      expect(isSecretKey(key)).toBe(false);
+      expect(redactDeep({ [key]: 'visible' })).toEqual({ [key]: 'visible' });
+    });
 });

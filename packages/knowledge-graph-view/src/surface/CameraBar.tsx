@@ -1,7 +1,8 @@
 /**
  * The camera bar: the segmented *View* group (the cameras from the registry, minus those marked
  * `switcher: false` such as Sequence, which the path strip owns) and, at the far end, "↑ Out to …"
- * (while a station is open), + , − and Fit. The zoom buttons call the api the ACTIVE camera
+ * (while a station is open), the panel show/hide toggles, + , − and Fit. Right after the View group sits the `tools` slot
+ * (the Panels group and Risk overlays; on a phone its own scrolling line). The zoom buttons call the api the ACTIVE camera
  * registered (`zoom.tsx`); with none registered (the 3D tower) they are disabled.
  */
 
@@ -50,7 +51,7 @@ function ZoomButtons({ labels, zoom }: { labels: KnowledgeGraphLabels; zoom: Zoo
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom }: CameraBarProps) {
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom, tools, stacked = false, panelToggles }: CameraBarProps) {
     // One line, never wrapped: the scene sits below a MEASURED controls block (`SceneOverlay`), so a bar that wrapped
     // would only grow it. The View group is what scrolls sideways when the row is too narrow.
     return (
@@ -64,15 +65,19 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, zoom }:
                         onChange={(id) => onMode(id as ViewMode)}
                     />
                 </div>
+                {tools && !stacked && <div data-testid="kg-scene-tools" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', pointerEvents: 'auto' }}>{tools}</div>}
                 {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
                 {mode === 'sequence' && <button type="button" data-back-to-map style={zoomButton} onClick={() => onMode('transit')}>{labels.surface.sequence.backToMap}</button>}
                 <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none' }}>
                     {outTo && onOut && (
                         <button type="button" data-out style={zoomButton} onClick={onOut}>{fillTemplate(labels.surface.overlay.outTo, { name: outTo })}</button>
                     )}
+                    {panelToggles}
                     <ZoomButtons labels={labels} zoom={zoom} />
                 </div>
             </div>
+            {/* A phone: the tools scroll sideways on their own line (their popover is anchored to the overlay, so the scroller does not clip it). */}
+            {tools && stacked && <div data-testid="kg-scene-tools" style={{ display: 'flex', gap: 8, alignItems: 'center', overflowX: 'auto', pointerEvents: 'auto', maxWidth: '100%', padding: 3, margin: -3 }}>{tools}</div>}
         </div>
     );
 }

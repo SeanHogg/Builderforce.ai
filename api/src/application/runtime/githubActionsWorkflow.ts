@@ -227,8 +227,13 @@ jobs:
       - name: Clean up the agent's shell user
         if: always()
         run: |
-          sudo -n pkill -KILL -u bfagent || true
-          sudo -n rm -rf "$GITHUB_WORKSPACE/.git" || true
-          sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" || true
+          # \`kill -1\` as the user reaches every process it owns at once (a kill by name can be outrun by a process that keeps
+          # forking); repeat until none is left. Absolute paths: nothing here is looked up on a PATH the agent could touch.
+          for _ in 1 2 3 4 5; do
+            /usr/bin/sudo -n -u bfagent /usr/bin/kill -KILL -- -1 || true
+            /usr/bin/pgrep -u bfagent >/dev/null || break
+          done
+          /usr/bin/sudo -n /bin/rm -rf "$GITHUB_WORKSPACE/.git" || true
+          /usr/bin/sudo -n /bin/chown -R "$(/usr/bin/id -u):$(/usr/bin/id -g)" "$GITHUB_WORKSPACE" || true
 `;
 }

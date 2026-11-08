@@ -33,7 +33,19 @@ export interface ServerRecordRow {
   entityType: LocalEntityType;
   /** The server's id for the record (numeric text for a ticket, run or link). */
   serverId: string;
-  payload: unknown;
+  /**
+   * The server's form of the record. A FUNCTION is evaluated in the batch's transaction with the
+   * client id every EARLIER row resolved to (in input order, including a row skipped for a pending
+   * local edit), so a row can name another row of the same batch (a link naming its ticket). It may
+   * answer `undefined` to leave the row out.
+   */
+  payload: unknown | ((resolvedClientIds: ReadonlyArray<string | undefined>) => unknown);
+  /**
+   * How the server's payload lands on a record the device already holds. Omitted, the server's form
+   * REPLACES it (the server owns the whole record). A row that owns only some fields (the rail owns a
+   * ticket's title, status and progress, not its project or description) merges them over `existing`.
+   */
+  merge?: (existing: unknown, incoming: unknown) => unknown;
   /** When the server last changed the record (ISO). */
   updatedAt: string;
   destination: EntityDestination;
@@ -41,7 +53,7 @@ export interface ServerRecordRow {
 
 export interface IngestServerRecordsOptions {
   /** The rows are the COMPLETE ticket list of this chat; links the server dropped are tombstoned. */
-  completeListFor?: { chatClientId: string; total: number };
+  completeListFor?: { chatClientId: string; total?: number };
   now?: () => Date;
 }
 
@@ -99,9 +111,19 @@ export async function ingestServerRecords(
     });
 
     const incomingTickets = new Set<string>();
-    for (const row of rows) {
+    /** The client id each row resolved to, skipped rows included: what a later row's payload may name. */
+    const resolvedIds: Array<string | undefined> = [];
+    for (const source of rows) {
+      const payload = typeof source.payload === 'function' ? source.payload(resolvedIds) : source.payload;
+      if (payload === undefined) {
+        resolvedIds.push(undefined);
+        result.clientIds.push(undefined);
+        continue;
+      }
+      const row: ServerRecordRow & { payload: unknown } = { ...source, payload };
       const mapping = await tx.mappingByServerId(row.entityType, row.serverId);
       const clientId = mapping?.clientEntityId ?? newClientId(row);
+      resolvedIds.push(clientId);
       if (row.entityType === 'ticket') incomingTickets.add(clientId);
       if (row.entityType === 'chat-ticket-link') {
         const link = row.payload as Partial<ChatTicketLinkValue> | null;
@@ -115,11 +137,12 @@ export async function ingestServerRecords(
       }
       result.clientIds.push(clientId);
       const existing = await tx.get(row.entityType, clientId);
+      const incoming = await withServerIds(tx, row);
       const next = materialize(
         {
           clientEntityId: clientId,
           entityType: row.entityType,
-          payload: await withServerIds(tx, row),
+          payload: row.merge && existing && !existing.deletedAt ? row.merge(existing.payload, incoming) : incoming,
           updatedAt: row.updatedAt,
           destination: row.destination,
           provenance: { deviceId: SERVER_DEVICE, source: 'imported', evidence: 'server-observed' },
@@ -159,7 +182,7 @@ export async function ingestServerRecords(
       }
     }
 
-    if (options.completeListFor && incomingTickets.size >= options.completeListFor.total) {
+    if (options.completeListFor && incomingTickets.size >= (options.completeListFor.total ?? 0)) {
       const { chatClientId } = options.completeListFor;
       const dropped: LocalRecord<ChatTicketLinkValue>[] = [];
       await tx.scan<ChatTicketLinkValue>('chat-ticket-link', (link) => {

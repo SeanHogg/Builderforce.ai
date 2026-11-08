@@ -35,7 +35,7 @@ import { buildPack, type PackQueries, type ReplicaSource } from './replicaPack.j
 import type { ReplicaQueue } from './replicaQueue.js';
 import { generationCheckDue, readServerGeneration, type GenerationReader } from './replicaGenerationCheck.js';
 export { GENERATION_CHECK_INTERVAL_MS } from './replicaGenerationCheck.js';
-import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
+import { additivePlan, planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 
 /** The knowledge client's sync calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
 export interface ReplicaClient extends PackQueries, ReconcileQueries, Partial<Pick<GenerationReader, 'syncGeneration'>> {
@@ -262,11 +262,12 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
             await emit();
             try {
                 const sources = await args.sources();
+                const additive = await queue.additive();
                 let baseGeneration = snap.ack?.generation ?? 0;
                 let mode: ReplicaPackStats['mode'] = 'delta';
                 if (!snap.ack) {
                     const whole = await planReconcile({ rootId, local, sources, client: guarded, dirty: snap.keys });
-                    const plan = (await queue.additive()) ? additivePlan(whole, snap.keys) : whole;
+                    const plan = additive ? additivePlan(whole, snap.keys) : whole;
                     if (plan.kind === 'equal') {
                         await queue.settle(snap, plan.ack);
                         state.lastSyncAt = new Date(now()).toISOString();

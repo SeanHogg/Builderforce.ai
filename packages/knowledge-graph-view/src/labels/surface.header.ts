@@ -6,6 +6,8 @@ import type { NoteKey, QuestionId } from '../surface/questions';
 export interface HeaderLabels {
     spineLabel: string;
     panelsLabel: string;
+    /** The three show/hide toggles of the side panels (lines, path strip, act panel). */
+    panelToggles: Record<'label' | 'showLeft' | 'hideLeft' | 'showBottom' | 'hideBottom' | 'showRight' | 'hideRight', string>;
     overlaysButton: string;
     overlaysTitle: string;
     /** The overlay button's name: `{preset}`. */
@@ -56,6 +58,10 @@ export interface HeaderLabels {
 export const HEADER_DEFAULTS: HeaderLabels = {
     spineLabel: 'Where you are',
     panelsLabel: 'Panels',
+    panelToggles: {
+        label: 'Panels shown', showLeft: 'Show lines panel', hideLeft: 'Hide lines panel', showBottom: 'Show path strip', hideBottom: 'Hide path strip',
+        showRight: 'Show act panel', hideRight: 'Hide act panel',
+    },
     overlaysButton: 'Overlays',
     overlaysTitle: 'What the map shows',
     presetLabel: '{preset} overlays',

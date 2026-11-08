@@ -6,9 +6,11 @@
  *             (agent-tools `factRightsCache` — the server's delete rule, one copy)
  *   baseline → the root's previous review, server-built at its stored digest
  *             (`graph(root, { at: previousDigest })`) — the same "before" on every host
- *   review  → memory's planReview/reviewDirectory in a Web Worker, with `client.store` as
- *             the KnowledgeStore, `client.judgement` as the JudgementPort, the shared pack
- *             list and an IndexedDB manifest per root (`reviewWorkerClient.ts`)
+ *   review  → memory's planReview/reviewDirectory in a Web Worker, into a LOCAL store (IndexedDB rows,
+ *             `browserKnowledge.ts`) replicated to the project by ONE pack per root (the agent-tools replica
+ *             host, `browserReplica.ts`), with `client.judgement` as the JudgementPort, the shared pack
+ *             list and the manifest committed with the facts (`reviewWorkerClient.ts`). Nothing goes up per file.
+ *   rememberFact → `client.writeRows` (the pump's own endpoint); retrySync → the host's Retry upload
  *   live    → the directory's `watch` (the web's webcontainer VFS), as a Live overlay — the
  *             directory is the one a review opened this session, or re-opened by a provider's
  *             `reopen` (no picker), so Live runs on a root reviewed in an earlier session.
@@ -26,7 +28,7 @@
  * this yields the plan, awaits `ctl.confirm`, and only then reviews.
  */
 
-import { factKeyOf, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
+import { factKeyOf, filesManifestKey, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import {
   KNOWLEDGE_REVIEW_MODEL_CALLS, createReviewRecorder, currentSourcesOf, dirtyFileName, factRightsCache, humanFactBatch,
   type PumpSource, type SkippedFolder,
@@ -240,6 +242,10 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
       scopesListing = listing.catch(() => undefined);
       const records = await listing;
       for (const r of records) scopeRecords.set(r.rootId, r);
+      if (!resumed) {
+        resumed = true;
+        void resumeQueues(records.map((r) => r.rootId)).catch((error: unknown) => onDegraded('replica resume', error));
+      }
       const found = records.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
       seen.scopes(found);
       return found;
@@ -296,8 +302,18 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     },
     async rememberFact({ content, ref, rootId }) {
       const scope = scopeRecords.get(rootId) ?? { rootId, title: rootId, packs: [] };
-      await client.store.write(humanFactBatch({ scope, ref, content }));
+      // The pump's own endpoint, straight to the project: a queued human fact on a root never reviewed here would start a pump with an empty manifest.
+      const { facts, relations } = humanFactBatch({ scope, ref, content });
+      await client.writeRows(rootId, { facts, relations });
       rights.invalidate(rootId);
+    },
+    async retrySync(rootId) {
+      const kn = await knowledge();
+      host.retryReplica(pumpOf(kn, rootId));
+    },
+    async dispose() {
+      await host.disposeReplicas();
+      if (localKnowledge) (await localKnowledge.catch(() => undefined))?.close();
     },
     ...(opts.pinpoint ? {
       pinpoint: (image: Blob, rootId: string) => pinpointImage({
@@ -309,7 +325,13 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     } : {}),
     async syncStatus(rootId) {
       const graph = await client.graph(rootId, { maxNodes: SYNC_MAX_NODES });
-      return browserSyncStatus({ graph, record: reviewRecords.get(rootId) });
+      const kn = await knowledge();
+      const [state, held] = await Promise.all([host.replicaStatusOf(rootId, kn.files), kn.store.scopes()]);
+      // Local counts come from the local store when it holds the root; otherwise the session's record of the last review.
+      const local = held.some((s) => s.rootId === rootId)
+        ? localCountsOf(((await kn.manifest.get(filesManifestKey(rootId))) ?? []).map((f) => f.id))
+        : undefined;
+      return browserSyncStatus({ graph, record: reviewRecords.get(rootId), ...(local ? { local } : {}), replica: state });
     },
     async factActions(ref) {
       const key = factKeyOf(ref as NodeRef);

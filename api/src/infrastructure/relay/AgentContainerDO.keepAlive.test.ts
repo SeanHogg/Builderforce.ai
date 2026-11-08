@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   deletes: 0,
   probes: [] as Array<{ url: string; init?: RequestInit }>,
   lastForwarded: null as Request | null,
+  envAtFetch: null as string | null,
   probe: (async () => Response.json({ active: false })) as () => Promise<Response>,
 }));
 
@@ -24,7 +25,7 @@ vi.mock('@cloudflare/containers', () => ({
     async stop() { h.stopped += 1; }
     renewActivityTimeout() { h.renewed += 1; }
     async containerFetch(url: string, init?: RequestInit) { h.probes.push({ url, init }); return h.probe(); }
-    async fetch(req?: Request) { h.forwarded += 1; h.lastForwarded = req ?? null; return new Response('proxied'); }
+    async fetch(req?: Request) { h.forwarded += 1; h.lastForwarded = req ?? null; h.envAtFetch = this.envVars?.BUILDERFORCE_CONTROL_SECRET ?? null; return new Response('proxied'); }
   },
 }));
 vi.mock('../../application/observability/durableErrorReporter', () => ({ createDurableErrorReporter: () => vi.fn() }));
@@ -206,5 +207,19 @@ describe('AgentContainerDO control secret', () => {
     const { container, storage } = makeDo();
     await container.onActivityExpired();
     expect((h.probes[0]!.init!.headers as Record<string, string>)['x-bf-control-secret']).toBe(storage.get('containerControlSecret'));
+  });
+});
+
+describe('AgentContainerDO control secret at start', () => {
+  it('has the secret in envVars before the FIRST start, even when /health (not a control path) is what starts the container', async () => {
+    const { container, storage } = makeDo();
+    await container.fetch(new Request('https://agent-container/health', { method: 'GET' }));
+    const secret = storage.get('containerControlSecret') as string;
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(h.envAtFetch).toBe(secret); // already in the env the start would use
+    expect(h.lastForwarded!.headers.get('x-bf-control-secret')).toBeNull(); // but never sent on a non-control path
+    await container.fetch(post('/sandbox/run'));
+    expect(h.lastForwarded!.headers.get('x-bf-control-secret')).toBe(secret); // the same one the booted container holds
+    expect(h.envAtFetch).toBe(secret);
   });
 });
