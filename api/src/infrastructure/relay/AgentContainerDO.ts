@@ -16,34 +16,27 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
 import { Container } from '@cloudflare/containers';
 import { PREVIEW_CONTROL_STOP_PATH } from '../../application/runtime/previewSessions';
 import { decideJobKeepAlive } from '../../application/runtime/sandbox/jobKeepAlive';
-import { egressAllowlistHandler, egressEnforced, execIdFromName, internalApiHost, isRunSandboxName, type EgressHandlerParams } from '../../application/runtime/sandbox/egressAllowlist';
+import { egressAllowlistHandler, egressEnforced, execIdFromName, type EgressHandlerParams } from '../../application/runtime/sandbox/egressAllowlist';
+import {
+  EGRESS_HANDLER_NAME,
+  EXEC_KEY,
+  SandboxEgressLifecycle,
+  dropStaleEgressConfig,
+  nameOf,
+  rehydrateRestriction,
+  shouldRegisterEgressHandler,
+  type EgressHost,
+  type OpenBody,
+  type RestrictionTarget,
+} from './sandboxEgressLifecycle';
 import type { Env } from '../../env';
 
-const EXEC_KEY = 'executionId';
-/** The slice of the `/sandbox/open` spec this DO reads. */
-interface OpenBody { executionId?: number; preview?: { port?: number } }
-/** Persisted marker that this instance is a run sandbox under the egress allowlist. */
-const EGRESS_KEY = 'egressPolicy';
-/** Written by {@link AgentContainerDO.onStart} only when the container ACTUALLY started with
- *  `enableInternet = false`; a running container without it started open and must be destroyed. */
-const STARTED_RESTRICTED_KEY = 'egressStartedRestricted';
+export { DESTROY_TIMEOUT_MS } from './sandboxEgressLifecycle';
+
 /** When the current job keep-alive began (see `jobKeepAlive.ts`); absent = none in effect. */
 const KEEPALIVE_SINCE_KEY = 'jobKeepAliveSince';
-/** The library's own persisted outbound-interception config (`container.js` OUTBOUND_CONFIGURATION_KEY).
- *  Its presence on a rebuilt instance means a handler override and intercept-all were set earlier. */
-const LIBRARY_OUTBOUND_KEY = 'OUTBOUND_CONFIGURATION';
-/** A destroy that has not returned by now is treated as failed (the gate answers 503 and retries). */
-export const DESTROY_TIMEOUT_MS = 10_000;
 
 type DoCtx = ConstructorParameters<typeof Container>[0];
-const nameOf = (ctx: unknown): string | undefined => (ctx as { id?: { name?: string } }).id?.name;
-/** Synchronous (it runs before `super()`): does persisted state say this instance was restricted? */
-function hasPersistedEgress(ctx: DoCtx): boolean {
-  try {
-    const kv = (ctx as { storage?: { kv?: { get(key: string): unknown } } }).storage?.kv;
-    return !!kv && (kv.get(LIBRARY_OUTBOUND_KEY) !== undefined || kv.get(EGRESS_KEY) !== undefined);
-  } catch { return false; }
-}
 /** How long the "is a job running?" probe may take. A wedged container process that never answers
  *  must read as "no job", not hold the idle handler open (and renew the timer) forever. */
 export const JOB_PROBE_TIMEOUT_MS = 10_000;
@@ -73,8 +66,8 @@ export class AgentContainerDO extends Container<Env> {
   /**
    * Default for instances that are NOT run sandboxes (web scans must reach arbitrary
    * targets), and for every instance while enforcement is off. An enforced run sandbox
-   * flips this off in {@link gateEgress} and has all its
-   * outbound HTTP(S) routed through the allowlist handler.
+   * has this turned off (by the lifecycle's gate, and at construction when it is rebuilt) and has all
+   * its outbound HTTP(S) routed through the allowlist handler.
    */
   enableInternet = true;
 
@@ -108,144 +101,44 @@ export class AgentContainerDO extends Container<Env> {
   }
 
   constructor(ctx: DoCtx, env: Env, options?: ConstructorParameters<typeof Container>[2]) {
-    // Nothing touches `this` before super(); with enforcement off nothing at all happens here.
-    const enforced = egressEnforced(env);
-    if (enforced) {
-      // Register for every instance that might be (or have been) a run sandbox. An UNDEFINED name
-      // must register too: otherwise an evicted exec DO rebuilt without its name would have its
-      // persisted override dropped by the library while intercept-all is kept, and the constructor
-      // would apply interception with open internet and no catch-all handler.
-      const name = nameOf(ctx);
-      if (isRunSandboxName(name) || name === undefined || hasPersistedEgress(ctx)) AgentContainerDO.registerEgressHandler();
-    }
+    // Nothing touches `this` before super(). With enforcement off the only thing that can happen
+    // here is removing OUR OWN stale interception config (see dropStaleEgressConfig).
+    dropStaleEgressConfig(ctx, env);
+    // Register for every instance that might be (or have been) a run sandbox, a nameless one
+    // included: otherwise a rebuilt exec DO would have its persisted override dropped by the library
+    // while intercept-all is kept, and interception would apply with open internet.
+    if (shouldRegisterEgressHandler(ctx, env)) AgentContainerDO.registerEgressHandler();
     super(ctx, env, options);
-    // A container left running from before a restart/eviction must have started restricted.
-    if (enforced) void this.ctx.blockConcurrencyWhile(() => this.destroyIfStartedOpen());
-  }
-
-  /** In-memory egress verdict for this instance: unknown (not yet decided), open (not a run
-   *  sandbox — cached so scans pay no storage read), or applied (policy in force). */
-  private egressState: 'unknown' | 'open' | 'applied' = 'unknown';
-  private egressDisabledLogged = false;
-  /** Tail of the serialized gate chain: concurrent requests queue behind ONE in-flight gate. */
-  private egressGateTail: Promise<unknown> = Promise.resolve();
-
-  /**
-   * Keep {@link STARTED_RESTRICTED_KEY} equal to "the CURRENT container started without internet".
-   * Written only when enforcement is on and internet really is off; cleared on ANY start that has
-   * internet (e.g. enforcement was toggled off, then on mid-run), so a stale marker can never vouch
-   * for an open-started container. Off, the cost is one read and no write unless a marker exists.
-   */
-  override async onStart(): Promise<void> {
-    if (this.enableInternet === false) {
-      if (egressEnforced(this.env)) await this.ctx.storage.put(STARTED_RESTRICTED_KEY, true);
-    } else if ((await this.ctx.storage.get(STARTED_RESTRICTED_KEY)) !== undefined) {
-      await this.ctx.storage.delete(STARTED_RESTRICTED_KEY);
+    if (egressEnforced(env)) {
+      // Back to restricted BEFORE the library's constructor callback resumes (it reads these only
+      // after its first await): internet off, and our override even after an ON, OFF, ON toggle.
+      rehydrateRestriction(this as unknown as RestrictionTarget, this.ctx, env);
+      // A container left running from before a restart/eviction must have started restricted.
+      this.ctx.blockConcurrencyWhile(() => this.egress.destroyIfStartedOpen().then(() => undefined))
+        .catch((error: unknown) => this.reportError(error, { operation: 'constructor', level: 'warning' }));
     }
   }
 
-  /** SIGKILL the container and confirm it is gone. A hung destroy is abandoned after
-   *  {@link DESTROY_TIMEOUT_MS} (it throws, so the gate fails closed with a 503 and the next request retries). */
-  private async destroyAndConfirm(): Promise<void> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const destroyed = this.destroy();
-    destroyed.catch(() => undefined); // a late rejection after the race has no awaiter
-    await Promise.race([
-      destroyed,
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('container destroy timed out')), DESTROY_TIMEOUT_MS); }),
-    ]).finally(() => clearTimeout(timer));
-    await this.waitUntilStopped();
-    await this.ctx.storage.delete(STARTED_RESTRICTED_KEY);
-  }
-
-  /**
-   * Run once per construction with enforcement on: a restricted-looking instance whose container is
-   * already running but never recorded a restricted start (it started open, e.g. before enforcement
-   * was enabled) is destroyed now rather than waiting for the next request. Never throws: this runs
-   * inside `blockConcurrencyWhile`, where a throw would reset the DO.
-   */
-  private async destroyIfStartedOpen(): Promise<void> {
-    try {
-      if (!this.ctx.container?.running) return;
-      const restricted = isRunSandboxName(nameOf(this.ctx)) || hasPersistedEgress(this.ctx) || (await this.ctx.storage.get(EXEC_KEY)) !== undefined;
-      if (!restricted || (await this.ctx.storage.get(STARTED_RESTRICTED_KEY)) === true) return;
-      await this.destroyAndConfirm();
-    } catch (error) {
-      this.reportError(error, { operation: 'destroyIfStartedOpen', level: 'warning' });
-    }
-  }
-
-  /**
-   * Gate every proxied request on the egress policy. Returns a Response to answer with
-   * (fail closed: a run sandbox whose policy cannot be applied is never proxied), or null to
-   * proceed. Off unless `SANDBOX_EGRESS_ENFORCE=true`; off, nothing here runs but one log line.
-   * Concurrent calls are serialized so a request arriving mid-destroy waits for it.
-   */
-  private gateEgress(openBody: OpenBody | null): Promise<Response | null> {
-    if (!egressEnforced(this.env)) {
-      if (!this.egressDisabledLogged) {
-        this.egressDisabledLogged = true;
-        console.info(JSON.stringify({ event: 'sandbox.egress.enforcement_disabled', note: 'SANDBOX_EGRESS_ENFORCE is not "true"' }));
-      }
-      return Promise.resolve(null);
-    }
-    if (this.egressState === 'open') return Promise.resolve(null);
-    if (this.egressState === 'applied' && !openBody) return Promise.resolve(null);
-    const run = this.egressGateTail.then(() => this.applyEgressGate(openBody));
-    this.egressGateTail = run.catch(() => undefined);
-    return run;
-  }
-
-  /**
-   * Identity, not request order, decides: run sandboxes are the `exec:*` instances. The flag is
-   * persisted BEFORE anything is applied, so a restart restricts the instance even when applying
-   * fails. A container running without {@link STARTED_RESTRICTED_KEY} started with open internet
-   * and is destroyed (SIGKILL) and confirmed gone before the policy is applied.
-   */
-  private async applyEgressGate(openBody: OpenBody | null): Promise<Response | null> {
-    if (this.egressState === 'open') return null;
-    if (this.egressState === 'applied' && !openBody) return null;
-    try {
-      const name = (this.ctx.id as { name?: string } | undefined)?.name;
-      if (name !== undefined && !isRunSandboxName(name)) { this.egressState = 'open'; return null; }
-      const saved = await this.ctx.storage.get<{ executionId: number | null; internalHost: string | null }>(EGRESS_KEY);
-      const execKey = await this.ctx.storage.get<number>(EXEC_KEY);
-      if (!isRunSandboxName(name) && !saved && execKey === undefined && !openBody && !hasPersistedEgress(this.ctx)) {
-        // Nameless instance and nothing persisted says it is a run sandbox: let it through (a scan or
-        // managed host must not get a permanent 503). NOT cached — if this turns out to be an exec
-        // sandbox, its `/sandbox/open` arrives later and is gated normally.
-        return null;
-      }
-      const executionId = typeof openBody?.executionId === 'number' ? openBody.executionId : saved?.executionId ?? execKey ?? null;
-      const internalHost = internalApiHost(this.env);
-      if (this.egressState === 'applied' && saved?.executionId === executionId) return null;
-      await this.ctx.storage.put(EGRESS_KEY, { executionId, internalHost });
+  /** The egress lifecycle (gate, marker, destroy). Everything about it lives in `sandboxEgressLifecycle.ts`. */
+  private readonly egress = new SandboxEgressLifecycle({
+    ctx: this.ctx as unknown as EgressHost['ctx'],
+    env: this.env,
+    destroy: () => this.destroy(),
+    restrict: async (executionId, internalHost) => {
       this.enableInternet = false;
-      const marker = await this.ctx.storage.get(STARTED_RESTRICTED_KEY);
-      if (this.ctx.container?.running) {
-        if (marker !== true) await this.destroyAndConfirm();
-      } else if (marker !== undefined) {
-        // Not running: any marker is stale (the next start rewrites it in onStart).
-        await this.ctx.storage.delete(STARTED_RESTRICTED_KEY);
-      }
       AgentContainerDO.registerEgressHandler();
       // `setOutboundHandler` does not enable interception itself (only the constructor and the
       // allow/deny setters do); an instance built before registration needs it on, or the
       // library's refresh is a no-op and the container would start open.
       this.usingInterception = true;
-      await this.setOutboundHandler<EgressHandlerParams>('egressAllowlist', { executionId, internalHost });
-      this.egressState = 'applied';
-      return null;
-    } catch (error) {
-      this.reportError(error, { operation: 'gateEgress' });
-      return Response.json({ ok: false, error: 'sandbox egress policy could not be applied' }, { status: 503 });
-    }
-  }
+      await this.setOutboundHandler<EgressHandlerParams>(EGRESS_HANDLER_NAME, { executionId, internalHost });
+    },
+    report: (error, operation, level) => this.reportError(error, { operation, ...(level ? { level } : {}) }),
+  });
 
-  private async waitUntilStopped(): Promise<void> {
-    for (let i = 0; i < 100 && this.ctx.container?.running; i++) await new Promise((r) => setTimeout(r, 100));
-    if (this.ctx.container?.running) throw new Error('container did not stop before the egress policy');
-  }
+  override async onStart(): Promise<void> { await this.egress.onStart(this.enableInternet !== false); }
+
+  override async onStop(): Promise<void> { await this.egress.onStop(); }
 
   /**
    * Capture the executionId off `/sandbox/open` so {@link onError} can attribute a hard
@@ -288,7 +181,7 @@ export class AgentContainerDO extends Container<Env> {
       this.reportError(error, { operation: "fetch" });
     }
     // Egress policy BEFORE anything is proxied (proxying is what starts the container).
-    const denied = await this.gateEgress(openBody);
+    const denied = await this.egress.gate(openBody);
     if (denied) return denied;
     // Any request forwarded to the container is real activity: the job keep-alive clock restarts.
     // (The idle probe goes through `containerFetch`, not this method, so it never resets it.)
@@ -320,6 +213,9 @@ export class AgentContainerDO extends Container<Env> {
    */
   override async onActivityExpired(): Promise<void> {
     if (!this.ctx.container?.running) return;
+    // A restricted instance whose container never recorded a restricted start (e.g. a destroy that
+    // timed out left an open-started one alive) must not be kept warm: destroy it, or retry later.
+    if (egressEnforced(this.env) && (await this.egress.destroyIfStartedOpen())) return;
     const now = Date.now();
     const since = await this.ctx.storage.get<number>(KEEPALIVE_SINCE_KEY).catch((error: unknown) => {
       this.reportError(error, { operation: 'onActivityExpired', level: 'warning' });

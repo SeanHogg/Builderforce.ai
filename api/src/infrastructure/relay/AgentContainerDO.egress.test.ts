@@ -189,22 +189,49 @@ describe('enforcement ON', () => {
     expect(h.handlerCalls).toHaveLength(1);
   });
 
-  it('re-applies once when the executionId becomes known (handler params changed), and never when nothing changed', async () => {
+  it('applies once whatever the request order (the id comes from the name), and re-applies only when the id changes', async () => {
     const { container } = makeDo();
-    await container.fetch(other()); // arrives before open: run id unknown
-    await container.fetch(open());  // now known: the handler's attribution params differ
-    await container.fetch(open());  // same again: idempotent
+    await container.fetch(other()); // before open
+    await container.fetch(open());
+    await container.fetch(open());
     await container.fetch(other());
+    expect(h.handlerCalls.map((c) => (c.params as { executionId: number | null }).executionId)).toEqual([9]);
+  });
+
+  it('for a nameless instance the id is learned from the open, so the handler is re-applied once when it becomes known', async () => {
+    const storage = new Map<string, unknown>([['egressPolicy', { executionId: null, internalHost: 'api.builderforce.ai' }]]);
+    const { container } = makeDo({ name: null, storage });
+    await container.fetch(other());
+    await container.fetch(open());
+    await container.fetch(open());
     expect(h.handlerCalls.map((c) => (c.params as { executionId: number | null }).executionId)).toEqual([null, 9]);
   });
 
   it('records a restricted start in onStart, and only when internet really is off', async () => {
     const { container, storage } = makeDo();
+    expect(container.enableInternet).toBe(false); // an enforced exec instance is rebuilt restricted
+    container.enableInternet = true;
     await container.onStart();
     expect(storage.get('egressStartedRestricted')).toBeUndefined();
     container.enableInternet = false;
     await container.onStart();
     expect(storage.get('egressStartedRestricted')).toBe(true);
+  });
+
+  it('clears the marker when the container stops (onStop), enforcement on only', async () => {
+    const on = makeDo({ storage: new Map([['egressStartedRestricted', true]]) });
+    await on.container.onStop();
+    expect(on.storage.has('egressStartedRestricted')).toBe(false);
+    const off = makeDo({ storage: new Map([['egressStartedRestricted', true]]), env: {} });
+    await off.container.onStop();
+    expect(off.storage.has('egressStartedRestricted')).toBe(true);
+  });
+
+  it('derives the executionId of an exec:N instance from its NAME, not the body', async () => {
+    const { container, storage } = makeDo({ name: 'exec:9' });
+    await container.fetch(other()); // no body at all
+    expect(storage.get('egressPolicy')).toEqual({ executionId: 9, internalHost: 'api.builderforce.ai' });
+    expect(h.handlerCalls[0]!.params).toEqual({ executionId: 9, internalHost: 'api.builderforce.ai' });
   });
 
   it('clears the marker on a start WITH internet — whatever the flag says (ON, OFF, ON toggle)', async () => {
