@@ -19,8 +19,8 @@ import type { ChatRef } from '../../src/chatRail/railProtocol';
  * work mid-chat.
  */
 export interface ChatChangedFilesReader {
-  /** The chat's changed files from local change-set records, or null when unknown locally. */
-  chatChangedFiles(chatId: ChatRef): Promise<string[] | null>;
+  /** The chat's changed files from local change-set records, or null when unknown locally. May be absent. */
+  chatChangedFiles?(chatId: ChatRef): Promise<string[] | null>;
 }
 
 export function useChatChangedFiles(
@@ -42,7 +42,7 @@ export function useChatChangedFiles(
     (async () => {
       // Local first: the chat's own runs recorded their changed files on this device.
       try {
-        const localFiles = await local.chatChangedFiles(chatRef);
+        const localFiles = await local.chatChangedFiles?.(chatRef);
         if (localFiles != null) {
           if (!cancelled) setFiles(localFiles);
           return;
