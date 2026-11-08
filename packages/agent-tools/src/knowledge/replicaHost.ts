@@ -89,7 +89,7 @@ export interface ReplicaHost {
     resumeReplica(source: PumpSource): Promise<void>;
     queueFirstSyncOnce(args: PumpSource & { manifest: IngestManifest; marks: UploadMarks }): Promise<boolean>;
     /** The root was reviewed straight against the server before: its pump never deletes a server leaf the local store lacks. */
-    markAdditive(rootId: string, files: KnowledgeFiles): Promise<void>;
+    markAdditive(rootId: string, files: KnowledgeFiles, projectId: number): Promise<void>;
     disposeReplicas(): Promise<void>;
 }
 
@@ -121,10 +121,16 @@ interface Entry {
 
 /** A review report that says it was aborted (memory's `ReviewReport.aborted`); a thrown review never gets here. */
 const wasAborted = (result: unknown): boolean => typeof result === 'object' && result !== null && (result as { aborted?: unknown }).aborted === true;
-/** A report that says a file could not be read or extracted: that file is missing from the local tree, so the review did not cover it. */
-const hadFileErrors = (result: unknown): boolean => {
-    const r = (typeof result === 'object' && result !== null ? result : {}) as { readErrors?: unknown; extractErrors?: unknown };
-    return (typeof r.readErrors === 'number' && r.readErrors > 0) || (typeof r.extractErrors === 'number' && r.extractErrors > 0);
+/**
+ * A report that left work undone: a file that could not be read or extracted is missing from the local tree, and judging that
+ * stopped or is still owed leaves the tree short of what the server may hold. Such a review is not complete.
+ */
+const leftWorkUndone = (result: unknown): boolean => {
+    const r = (typeof result === 'object' && result !== null ? result : {}) as Record<string, unknown>;
+    const positive = (v: unknown): boolean => typeof v === 'number' && v > 0;
+    return positive(r.readErrors) || positive(r.extractErrors) || positive(r.unjudged) || positive(r.awaitingJudgeCount)
+        || (Array.isArray(r.awaitingJudge) && r.awaitingJudge.length > 0)
+        || (typeof r.judgeStopped === 'string' && r.judgeStopped !== '');
 };
 
 export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
@@ -138,6 +144,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
         if (!held) {
             const made: Entry = {
                 queue: createReplicaQueue(persistenceOf(files, dirtyFileName(rootId)), {
+                    rootId,
                     legacy: persistenceOf(files, replicaFileName(rootId)),
                     analysis: persistenceOf(files, analysisPendingFileName(rootId)),
                     onError: (error) => report('replica queue', error),
@@ -206,7 +213,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             let complete = false;
             try {
                 const result = await run();
-                complete = reviewOpts?.full === true && !wasAborted(result) && !hadFileErrors(result);
+                complete = reviewOpts?.full === true && !wasAborted(result) && !leftWorkUndone(result);
                 return result;
             } finally {
                 host.setRootReviewing(rootId, files, false);
@@ -228,7 +235,7 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
 
         async drainedWithin(rootId, ms) {
             const running = entries.get(rootId)?.running;
-            if (!running) return 'drained';
+            if (!running) return entries.get(rootId)?.lockMissed ? 'pending' : 'drained';
             let timer: ReturnType<typeof setTimeout> | undefined;
             const late = new Promise<'pending'>((resolve) => {
                 timer = setTimeout(() => resolve('pending'), ms);
@@ -268,6 +275,8 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                 held.lockMissed = !held2;
                 if (!held2) return;
                 try {
+                    // Another tab sharing the queue file may have advanced its ack since this one loaded: start from the file, never a stale view.
+                    await held.queue.reload().catch((error) => report('replica queue reload', error));
                     const state = await pumpReplica({
                         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
                         projectId: source.projectId, rootId: source.rootId, maxTransientStreak: BACKGROUND_TRANSIENT_STREAK,
@@ -356,8 +365,10 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             return true;
         },
 
-        async markAdditive(rootId, files) {
+        async markAdditive(rootId, files, projectId) {
             const queue = entryOf(rootId, files).queue;
+            // Bind to the project FIRST: adopting another project resets the flag, and the review's first write would otherwise do that after this.
+            await queue.adopt(projectId);
             await queue.setAdditive(true);
             await queue.flush();
         },
@@ -389,7 +400,10 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
             return;
         }
         // Only a quiet, healthy root: a failed one waits for Retry upload, an auth-paused one for sign-in (unreachable may recover by itself).
-        if ((await held.queue.size()) > 0 || held.state.failed.length > 0 || (held.state.paused !== undefined && held.state.paused !== 'unreachable')) return;
+        const owes = (await held.queue.size()) > 0;
+        // A queue with keys waiting whose last pump missed the lock (another tab held it) is retried: nobody else may be sending it now.
+        if ((owes && !held.lockMissed) || held.state.failed.length > 0 || (held.state.paused !== undefined && held.state.paused !== 'unreachable')) return;
+        if (owes) { void host.startReplicaPump(source); return; }
         const { generationCheckedAt: _checked, ...rest } = held.state;
         held.state = rest; // forget the last check, so this pump really asks the server
         void host.startReplicaPump(source, { probe: true });

@@ -13,7 +13,7 @@
 import type { ComputeTaskEvent } from '../../compute/client';
 import { LINK_SLICE, UPLOAD_SLICE } from '../../compute/loader';
 import type { TaskKind } from '../../compute/protocol';
-import { weightOf } from '../../compute/size';
+import { INLINE_WEIGHT, weightOf } from '../../compute/size';
 import { makeGraph } from '../../compute/testKit';
 import { makeOverlay, PRESETS } from '../../surface/overlays';
 import { buildPerfGraph } from '../syntheticGraph';
@@ -28,7 +28,7 @@ export const SIZE_GATED: readonly TaskKind[] = ['focus', 'insights', 'partitionM
 export interface Invariants {
     weight: number;
     drawnEdges: number;
-    /** Compute events that ran on the main thread over every view of the large graph. */
+    /** Compute events that ran on the main thread, over every view of the large graph, on a graph above INLINE_WEIGHT (the empty placeholder the view computes while loading is not one). */
     mainThreadEvents: ComputeTaskEvent[];
     /** Graph elements found inside `run` requests and `done` replies. */
     runDoneElementRefs: number;
@@ -78,8 +78,18 @@ function oversized(report: RenderReport): string[] {
         .map((e) => `${e.field}: ${e.items}`);
 }
 
+/**
+ * One throwaway pass over a small graph before anything is measured. Some costs are paid once per process, not per mount: the
+ * 3D camera's `lazy` GraphScene renders its Suspense fallback (the 2D graph, with its own tasks) until its module has loaded,
+ * and only the FIRST profile would pay that. Paying it here makes every profile, the first included, start from the same state.
+ */
+async function warmUp(host: ViewHost): Promise<void> {
+    await probeViews(makeGraph(50), host);
+}
+
 export async function profile(scale: number, host: ViewHost): Promise<Profile> {
     const metrics: Metrics = {};
+    await warmUp(host);
 
     const measured = buildPerfGraph({ scale }).graph;
     const parity = await runParity(measured);
@@ -100,7 +110,7 @@ export async function profile(scale: number, host: ViewHost): Promise<Profile> {
         viewIds: large.views.map((v) => v.id),
         invariants: {
             weight: weightOf(measured), drawnEdges: drawn.edges.length,
-            mainThreadEvents: large.probe.mainThread(),
+            mainThreadEvents: large.probe.mainThreadAbove(INLINE_WEIGHT),
             runDoneElementRefs: large.wireEntries.filter((e) => (e.dir === 'in' && e.type === 'run') || (e.dir === 'out' && e.type === 'done')).reduce((n, e) => n + e.elementRefs, 0),
             failedReplies: large.wireEntries.filter((e) => e.type === 'failed').length,
             oversizedChunks: oversized(large),

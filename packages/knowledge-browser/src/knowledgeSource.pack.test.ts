@@ -110,7 +110,7 @@ describe('browser knowledge source: ONE upload path (the pack)', () => {
     seeded.close();
     const adopted = createKnowledgeSource({ projectId: 7, client: fakeClient() as unknown as KnowledgeClient, directorySources: async () => [provider], onDegraded: vi.fn() });
     await review(adopted);
-    expect(env.hosts[1]!.markAdditive).toHaveBeenCalledWith('r', expect.anything());
+    expect(env.hosts[1]!.markAdditive).toHaveBeenCalledWith('r', expect.anything(), 7);
     await adopted.dispose();
   });
 
@@ -121,7 +121,7 @@ describe('browser knowledge source: ONE upload path (the pack)', () => {
     const events = await review(source);
     expect(events.at(-1)).toMatchObject({ type: 'done' });
     expect(onDegraded).toHaveBeenCalledWith('knowledge storage', expect.anything());
-    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledWith('r', expect.anything());
+    expect(env.hosts[0]!.markAdditive).toHaveBeenCalledWith('r', expect.anything(), 7);
     await source.dispose();
   });
 });

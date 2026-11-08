@@ -192,7 +192,7 @@ describe('importSyncedChatTicketLink: server-origin links and guards', () => {
   });
 
   it('rejects an update that names a different pair than the stored link', async () => {
-    const db = dbOf([[{ taskType: 'task' }], [{ chatId: 6, ref: '9' }]]);
+    const db = dbOf([[{ taskType: 'task' }], [{ chatId: 6, kind: 'task', ref: '9' }]]);
     const outcome = await importSyncedChatTicketLink(
       send('update', payload, 1),
       withTicket(),
@@ -239,6 +239,51 @@ describe('importSyncedChatTicketLink: server-origin links and guards', () => {
         const outcome = await importSyncedChatTicketLink(send('create', body), withTicket(), storesWith({ chat: chatMapped }), dbOf());
         expect(outcome).toEqual({ status: 'rejected', detail: 'link_ticket_invalid' });
       }
+    });
+
+    it('unlinks a mapped spec link by its stored (kind, ref)', async () => {
+      const db = dbOf([[{ chatId: 5, kind: 'spec', ref: SPEC }], [{ id: 55 }]]);
+      const outcome = await importSyncedChatTicketLink(send('delete', null, 1), withTicket(), storesWith({ 'chat-ticket-link': mapping({ serverId: '55', serverVersion: 1 }) }), db);
+      expect(outcome.status).toBe('applied');
+      if (outcome.status !== 'applied') return;
+      expect(outcome.serverVersion).toBe(2);
+      expect(db.calls.filter((call) => call.kind === 'delete')).toHaveLength(1);
+    });
+
+    it('unlinks an unmapped objective link by pair, and settles an absent one as link_not_found', async () => {
+      const db = dbOf([[{ label: 'An objective', status: 'open' }], [{ id: 61 }], [{ id: 61 }]]);
+      const outcome = await importSyncedChatTicketLink(send('delete', tier('objective'), 1), ctx({ resolveTaskId: async () => null }), storesWith({ chat: chatMapped }), db);
+      expect(outcome.status).toBe('applied');
+      if (outcome.status !== 'applied') return;
+      expect(outcome.serverId).toBe('61');
+      expect(db.calls.filter((call) => call.kind === 'delete')).toHaveLength(1);
+
+      const goneDb = dbOf([[{ label: 'An objective', status: 'open' }], []]);
+      const gone = await importSyncedChatTicketLink(send('delete', tier('objective'), 1), ctx({ resolveTaskId: async () => null }), storesWith({ chat: chatMapped }), goneDb);
+      expect(gone).toEqual({ status: 'rejected', detail: 'link_not_found' });
+      expect(goneDb.calls.filter((call) => call.kind === 'delete')).toHaveLength(0);
+    });
+
+    it('is pending until the chat is mapped, before resolving the ticket', async () => {
+      const db = dbOf();
+      const outcome = await importSyncedChatTicketLink(send('create', tier('spec')), ctx({ resolveTaskId: async () => null }), storesWith({}), db);
+      expect(outcome).toEqual({ status: 'pending', detail: 'link_chat_pending' });
+      expect(db.calls).toHaveLength(0);
+    });
+
+    it.each([
+      ['another tier', { chatId: 5, kind: 'objective', ref: SPEC }],
+      ['another ref', { chatId: 5, kind: 'spec', ref: '66666666-6666-4666-8666-666666666666' }],
+    ])('rejects an update whose stored link is on %s as link_pair_immutable', async (_label, stored) => {
+      const db = dbOf([[{ label: 'A spec', status: 'open' }], [stored]]);
+      const outcome = await importSyncedChatTicketLink(
+        send('update', tier('spec'), 1),
+        ctx({ resolveTaskId: async () => null }),
+        storesWith({ chat: chatMapped, 'chat-ticket-link': mapping({ serverId: '55', serverVersion: 1 }) }),
+        db,
+      );
+      expect(outcome).toEqual({ status: 'rejected', detail: 'link_pair_immutable' });
+      expect(db.calls.filter((call) => call.kind === 'update' || call.kind === 'insert')).toHaveLength(0);
     });
   });
 

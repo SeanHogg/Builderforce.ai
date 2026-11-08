@@ -30,7 +30,10 @@ export interface ReplicaLock { release(): Promise<void> }
 /** Who holds the lock when the caller names no owner: the process id where there is one, else an id made once. */
 function defaultOwner(): Owner {
     const pid = (globalThis as { process?: { pid?: unknown } }).process?.pid;
-    return typeof pid === 'number' ? pid : globalThis.crypto.randomUUID();
+    if (typeof pid === 'number') return pid;
+    // Typed structurally: the api's lib has no WebCrypto global; node and browsers do.
+    const uuid = (globalThis as { crypto?: { randomUUID?(): string } }).crypto?.randomUUID?.();
+    return uuid ?? `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 /** The lock for `rootId`, or undefined when another live holder has it. */

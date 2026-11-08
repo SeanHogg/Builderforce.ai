@@ -8,6 +8,12 @@
  * Block 1 times every pure step between "graph arrives" and "first frame" (median of 3 runs + max; idle-step tasks also
  * report their longest single step: over 50 ms locks the screen). Block 2 renders Graph 2D, Mind map, Transit map,
  * Tower map and Sequence once each with this graph. Output: a sorted table on the console and `last-run.json` here.
+ *
+ * This harness is DIAGNOSIS: wall-clock milliseconds vary run to run, so it says which step is slow but cannot gate anything.
+ * The GATE is the deterministic suite in `./deterministic/` (`deterministic.test.ts`, part of the normal `npm test`): it counts
+ * graph reads, wire bytes, React commits and where each compute task ran, identical on every run, asserts the hard invariants
+ * (no main-thread compute on a big graph, an index-only wire, worker == in-process results) and ratchets every metric against a
+ * committed baseline (`KG_PERF_UPDATE=1` to re-record after an improvement).
  */
 
 import { createElement as h, type ReactElement } from 'react';

@@ -115,8 +115,9 @@ export interface ReplicaQueue {
     flush(): Promise<void>;
     /**
      * Re-reads the persisted file, which another tab or process sharing it may have advanced: its ack (when newer), its additive flag
-     * (OR-ed in) and, when this queue holds nothing unsaved, its dirty keys. A pump calls it once it holds the lock, so it never
-     * reconciles from a stale view. A missing, corrupt, legacy or other-project file changes nothing.
+     * (OR-ed in unless this queue turned it off since its last save) and its dirty keys (the set itself when this queue holds nothing
+     * unsaved, else merged in). A pump calls it once it holds the lock, so it never pumps from a stale view and its next save never
+     * drops another opener's keys. A missing, corrupt, legacy or other-project file changes nothing.
      */
     reload(): Promise<void>;
     /** Told after every change. */
@@ -325,8 +326,13 @@ export function createReplicaQueue(persistence: ReplicaPersistence, opts: Replic
             if (from.corrupt || from.legacy) return;
             if (from.projectId !== undefined && from.projectId !== project) return; // another project's queue is not ours to merge
             if (!changedSinceSave) { dirty.clear(); add(from.keys); ack = from.ack; }
-            else if (from.ack && (!ack || from.ack.generation > ack.generation)) ack = from.ack; // our unsaved marks stay; the newer ack wins
-            if (from.additive) isAdditive = true;
+            else {
+                // Our unsaved marks stay and the other opener's unsent keys join them (a resend is harmless, a lost key is not); the newer ack wins.
+                for (const k of from.keys) if (!dirty.has(k)) dirty.set(k, ++seq);
+                if (from.ack && (!ack || from.ack.generation > ack.generation)) ack = from.ack;
+            }
+            // OR-ed in, unless this queue turned it off since its last save (a complete review here outranks the file).
+            if (from.additive && !additiveOff) isAdditive = true;
         },
         onChange(cb) { listeners.add(cb); return () => { listeners.delete(cb); }; },
     };

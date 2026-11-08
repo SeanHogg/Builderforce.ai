@@ -48,3 +48,32 @@ export interface RailRunPayload extends RailRun {
 export function isRailOnlyTicket(payload: Partial<RailTicketPayload>): boolean {
   return payload.railKind !== undefined && !TASK_TABLE_KINDS.has(payload.railKind);
 }
+
+/**
+ * What a link payload carries so the server's importer can resolve a tier that has no numeric
+ * server id (spec, objective, roadmap …): `{ ticketKind, ticketRef }`. A task-table kind is
+ * resolved through `ticketServerId` instead, so it carries nothing here.
+ */
+export function linkTierFields(kind: string, ref: string): { ticketKind?: string; ticketRef?: string } {
+  return TASK_TABLE_KINDS.has(kind) ? {} : { ticketKind: kind, ticketRef: ref };
+}
+
+/** The fields a rail read OWNS on a ticket: everything else (project, description, archived …) is the device's. */
+const RAIL_OWNED = ["title", "status", "progressPct", "done", "total", "railKind", "railRef", "exists", "parent"] as const;
+
+/**
+ * Merge a rail row over a ticket the device already holds (`ingestServerRecords`' merge hook): the
+ * rail's fields replace their counterparts, every other field of `existing` is kept. A rail field the
+ * server no longer sends (a parent that went away) is removed.
+ */
+export function mergeRailTicket(existing: unknown, incoming: unknown): unknown {
+  const base = { ...(existing && typeof existing === "object" ? existing as Record<string, unknown> : {}) };
+  const rail = (incoming ?? {}) as Record<string, unknown>;
+  for (const key of RAIL_OWNED) {
+    // An untitled row (a stub, a server that sent no label) never blanks a title the device holds.
+    if (key === "title" && !rail[key] && typeof base.title === "string") continue;
+    if (rail[key] === undefined) delete base[key];
+    else base[key] = rail[key];
+  }
+  return base;
+}

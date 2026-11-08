@@ -93,6 +93,14 @@ export interface LocalFirstTransaction {
   cursor(destination: EntityDestination): Promise<string | undefined>;
   /** When the last pull for `destination` completed, or undefined when none has. */
   lastPullAt(destination: EntityDestination): Promise<string | undefined>;
+  /**
+   * Record (or, with `undefined`, clear) when a named read of the server last completed, beside
+   * the pull cursor in the store's state, so it survives a reload. A refresh that changed no row
+   * still counts as a read (the rail's "Updated <time>"). `key` is the caller's, e.g. `chatRail:<id>`.
+   */
+  setReadMark(key: string, at: string | undefined): Promise<void>;
+  /** When the named read last completed, or undefined when it never has. */
+  readMark(key: string): Promise<string | undefined>;
 }
 
 /**

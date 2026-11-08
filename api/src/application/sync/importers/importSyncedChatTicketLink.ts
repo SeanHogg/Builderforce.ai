@@ -276,9 +276,10 @@ async function createLink(
 
 /** Whether the live link row `linkId` is on a DIFFERENT (chat, ticket) pair than `resolved`. */
 async function pairDiffers(db: Tx, ctx: SyncImportContext, linkId: number, resolved: Resolved): Promise<boolean> {
-  const [row] = await db.select({ chatId: chatTicketLinks.chatId, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks)
+  const [row] = await db.select({ chatId: chatTicketLinks.chatId, kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks)
     .where(scopedToTenant(chatTicketLinks, ctx.auth.tenantId, eq(chatTicketLinks.id, linkId))).limit(1);
-  return row !== undefined && (row.chatId !== resolved.chatId || row.ref !== resolved.ref);
+  // The tier is part of the pair: a spec and an objective may not share a ref, but a link of one is never the other.
+  return row !== undefined && (row.chatId !== resolved.chatId || row.kind !== resolved.kind || row.ref !== resolved.ref);
 }
 
 async function updateLink(

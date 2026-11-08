@@ -236,9 +236,11 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
           const { ports, pump } = await reviewPorts(deps, rel, rootId, title, real);
           const force = opts?.force === true;
           // The host raises the root's bulk-upload window around the run; the pack goes up once, after it.
-          // A forced review covers every file, so a completed one clears the root's additive flag (`full`).
+          // A forced review, or one with nothing unchanged, covers every file: a completed one clears the root's additive flag (`full`).
+          // A plan that listed no file at all never does (a listing that failed must not license deleting the server's leaves).
+          const full = plan.plan.files > 0 && (force || plan.plan.unchanged === 0);
           const report = await replicaHost.duringReview(
-            rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan, ...(force ? { force: true } : {}) }), { full: force },
+            rootId, pump.files, pump, () => runKnowledgeReview(ports, { signal, plan, ...(force ? { force: true } : {}) }), { full },
           );
           keepFresh(rootId, real, ports);
           await drainAfterReview(rootId);

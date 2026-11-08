@@ -22,6 +22,8 @@ import { hashPayload } from './payloadHash.js';
  * escapes), so it rides the existing delta / snapshot / journal paths unchanged.
  */
 const lastPullKey = (destKey: string): string => `lastPullAt@${destKey}`;
+/** A read mark (`setReadMark`) lives in the same map, under its own prefix. */
+const readMarkKey = (key: string): string => `readMark@${key}`;
 
 export class Transaction implements LocalFirstTransaction {
   private readonly records: DraftMap<LocalRecord>;
@@ -219,6 +221,16 @@ export class Transaction implements LocalFirstTransaction {
 
   async lastPullAt(destination: EntityDestination): Promise<string | undefined> {
     return this.cursors.get(lastPullKey(destinationKey(destination)));
+  }
+
+  async setReadMark(key: string, at: string | undefined): Promise<void> {
+    this.assertMutable();
+    if (at === undefined) this.cursors.delete(readMarkKey(key));
+    else this.cursors.set(readMarkKey(key), at);
+  }
+
+  async readMark(key: string): Promise<string | undefined> {
+    return this.cursors.get(readMarkKey(key));
   }
 
   /** Everything this transaction changed, as one delta. Empty when it wrote nothing. */

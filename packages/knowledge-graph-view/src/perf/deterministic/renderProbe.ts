@@ -18,8 +18,8 @@
 
 import { createElement, Profiler, type ReactElement } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { setWorkerFactory } from '../../compute/workerFactory';
-import { setComputeProbe } from '../../compute/sharedClient';
+import { getComputeClient, setComputeProbe, setWorkerFactory } from '../../compute/sharedClient';
+import { weightOf } from '../../compute/size';
 import { KnowledgeGraphView } from '../../KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
 import { fixtureSource } from '../../testing';
@@ -70,7 +70,8 @@ const MAX_ROUNDS = 400;
 export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise<RenderReport> {
     const main = new WorkMeter('main');
     const loop = new LoopbackWorker({ main, worker: new WorkMeter('worker') });
-    const probe = new ProbeLog();
+    // Weighed at the moment of the event, while the shared client (the one emitting it) still holds the graph.
+    const probe = new ProbeLog((id) => { const held = getComputeClient().residency.handleOf(id)?.graph; return held ? weightOf(held) : undefined; });
     let commits = 0;
     const restore = host.environment();
     setWorkerFactory(() => loop);
@@ -82,7 +83,7 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         const skipped: string[] = [];
         let container!: HTMLElement;
         const dom = (): number => container.querySelectorAll('*').length;
-        const fingerprint = (): string => `${main.reads}|${commits}|${dom()}|${probe.events.length}`;
+        const fingerprint = (): string => `${main.reads}|${commits}|${dom()}|${probe.events.length}|${loop.ledger.entries.length}`;
 
         async function settled(): Promise<void> {
             let calm = 0, last = fingerprint();
@@ -110,18 +111,27 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
             });
         }
 
-        const seg = (id: string): HTMLButtonElement | null => container.querySelector<HTMLButtonElement>(`[data-seg="${id}"]`);
+        // The camera bar's View group only: other segmented controls (the panel dock, drawers) carry `data-seg` too.
+        const bar = (): Element | null => container.querySelector(`[role="radiogroup"][aria-label="${L.viewModesLabel}"]`);
+        const seg = (id: string): HTMLButtonElement | null => bar()?.querySelector<HTMLButtonElement>(`[data-seg="${id}"]`) ?? null;
+        const current = (): string | null | undefined => bar()?.querySelector('[data-seg][aria-checked="true"]')?.getAttribute('data-seg');
         const button = (text: string): HTMLButtonElement | undefined => [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === text && !b.disabled);
 
         await visit('boot', () => { container = host.render(tree); });
-        const first = container.querySelector('[data-seg][aria-checked="true"]')?.getAttribute('data-seg');
+        const first = current();
         for (const id of VIEW_ORDER) {
             const target = seg(id);
             if (id === first) continue; // the boot record is this view's
             if (!target || target.disabled) { skipped.push(id); continue; }
             await visit(id, () => { host.click(target); });
         }
-        // Sequence has no button in the bar: the path strip's toggle opens it, its "enlarge" switches the view to it.
+        // Sequence has no button in the bar: the path strip's toggle opens it, its "enlarge" switches the view to it. The strip is
+        // the transit map's, so go back there first (unrecorded) when the loop ended elsewhere (the boot view was transit).
+        const transit = seg('transit');
+        if (current() !== 'transit' && transit && !transit.disabled) {
+            host.click(transit);
+            await settled();
+        }
         if (button(L.surface.path.sequence)) {
             await visit('sequence', () => {
                 host.click(button(L.surface.path.sequence)!);
@@ -132,11 +142,13 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         } else {
             skipped.push('sequence');
         }
-        return { views, skipped, wire: loop.ledger.summary(), wireEntries: loop.ledger.entries, tasks: loop.tasks, probe };
+        // Copies: the unmount below still posts (cancels) into the live ledger, and the report is what the views did.
+        return { views, skipped, wire: loop.ledger.summary(), wireEntries: [...loop.ledger.entries], tasks: [...loop.tasks], probe };
     } finally {
+        // The probe goes first: replacing the shared client settles what it still owed IN-PROCESS, which is teardown, not the view.
+        setComputeProbe(null);
         host.cleanup();
         setWorkerFactory(null);
-        setComputeProbe(null);
         loop.terminate();
         restore();
     }

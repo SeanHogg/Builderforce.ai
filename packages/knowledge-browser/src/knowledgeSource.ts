@@ -107,7 +107,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
    * before every review and every resume.
    */
   const adoptRule = async (kn: BrowserKnowledge, rootId: string): Promise<void> => {
-    if (kn.degraded || (await shouldStayAdditive(kn.store, rootId))) await host.markAdditive(rootId, kn.files);
+    if (kn.degraded || (await shouldStayAdditive(kn.store, rootId))) await host.markAdditive(rootId, kn.files, opts.projectId);
   };
   /** Every directory a review opened this session: a re-review (Continue) reuses its handle, and Live watches those that can. */
   const opened = new Map<string, DirectorySource>();
@@ -215,8 +215,10 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): BrowserKnow
     // One batch per review, as the editor's: the local store persists in checkpoints, not once per file.
     const batched = (): Promise<ReviewReport> => (ports.store.batched ? ports.store.batched(review) : review());
     void (async () => {
-      // The whole tree was covered when the review was forced, or (a first review) nothing was unchanged or skipped: only then may it end additive mode.
-      const covered = !!req.force || (plan.unchanged === 0 && plan.skipped.length === 0);
+      // The whole tree was covered when the review was forced, or (a first review) nothing was unchanged: only then may it end additive mode.
+      // Plan skips (binaries, ignored paths) are deterministic and never leaves, so only unchanged files matter.
+      // A plan that listed no file at all never does: a listing that failed must not license deleting the server's leaves.
+      const covered = plan.files > 0 && (!!req.force || plan.unchanged === 0);
       const report = await replica.duringReview(dir.rootId, kn.files, pump, batched, { full: covered && !kn.degraded });
       // The result is on the server when `done` is shown (the graph is server-built); a pump still sending after the wait goes on in the background.
       await host.drainedWithin(dir.rootId, REPLICA_DRAIN_MS).catch((error: unknown) => { onDegraded('replica drain', error, { rootId: dir.rootId }); });

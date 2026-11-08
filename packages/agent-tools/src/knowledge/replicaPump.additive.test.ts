@@ -7,7 +7,7 @@ import { filesManifestKey } from '@seanhogg/builderforce-memory/knowledge';
 import { createReplicaHost } from './replicaHost.js';
 import { shouldStayAdditive } from './replicaAdoption.js';
 import { pathOfRef } from './replicaPack.js';
-import { createReplicaQueue, memoryReplicaPersistence } from './replicaQueue.js';
+import { createReplicaQueue, memoryReplicaPersistence, queuedRootIdOf } from './replicaQueue.js';
 import { pumpReplica, type ReplicaClient } from './replicaPump.js';
 import { fakeServer, ROOT, world, type World } from './replicaTestkit.test-util.js';
 
@@ -93,7 +93,7 @@ describe('regression: an additive root never loses a server leaf it lacks locall
 
         // The local store has no completed review of this root: the shared rule keeps it additive before the review starts.
         expect(await shouldStayAdditive(local.local, ROOT)).toBe(true);
-        await host.markAdditive(ROOT, files);
+        await host.markAdditive(ROOT, files, 1);
         await host.duringReview(ROOT, files, source, async () => ({ aborted: true }), { full: true });
         await host.replicaDrained(ROOT);
         expect(deletesOf(srv)).toEqual([]);
@@ -103,6 +103,98 @@ describe('regression: an additive root never loses a server leaf it lacks locall
         await host.duringReview(ROOT, files, undefined, async () => ({ aborted: false }), { full: true });
         expect(await queue.additive()).toBe(false);
         await host.disposeReplicas();
+    });
+
+    it('regression: marking additive while the queue is bound to project A survives the review\'s adopt of project B, and sends no tombstones', async () => {
+        const { srv, local } = await adopted();
+        const store = new Map<string, string>();
+        const files = { read: async (n: string) => store.get(n), write: async (n: string, t: string) => { store.set(n, t); } };
+        const manifest = {
+            get: async (key: string) => (key === filesManifestKey(ROOT) ? local.sources.map((s) => ({ id: pathOfRef(ROOT, s.ref), hash: s.hash })) : undefined),
+            set: async () => undefined, delete: async () => undefined,
+        };
+        const host = createReplicaHost();
+        const queue = host.replicaQueueFor(ROOT, files);
+        await queue.adopt(1); // the root was linked to project A
+        await queue.setAdditive(true);
+        await host.markAdditive(ROOT, files, 2); // the review is for project B
+        await queue.adopt(2); // what the review's first write does: now a no-op
+        expect(await queue.additive()).toBe(true);
+
+        queue.markDirty(local.sources.map((s) => `f:${pathOfRef(ROOT, s.ref)}`));
+        const source = { rootId: ROOT, files, local: local.local, client: srv.client as never, projectId: 2, manifest: manifest as never };
+        await host.duringReview(ROOT, files, source, async () => ({ aborted: true }), { full: false });
+        await host.replicaDrained(ROOT);
+        expect(deletesOf(srv)).toEqual([]);
+        expect(srv.s.files.size).toBe(4);
+        await host.disposeReplicas();
+    });
+
+    it('a review that stopped judging, or still owes judgement, is not complete: additive stays; a clean one clears it', async () => {
+        const host = createReplicaHost();
+        const files = { read: async () => undefined, write: async () => undefined };
+        const queue = host.replicaQueueFor(ROOT, files);
+        for (const report of [{ unjudged: 2 }, { awaitingJudgeCount: 3 }, { awaitingJudge: ['a.ts'] }, { judgeStopped: 'provider failed' }, { readErrors: 1 }, { extractErrors: 1 }]) {
+            await host.markAdditive(ROOT, files, 1);
+            await host.duringReview(ROOT, files, undefined, async () => ({ aborted: false, ...report }), { full: true });
+            expect(await queue.additive()).toBe(true);
+        }
+        await host.duringReview(ROOT, files, undefined, async () => ({ aborted: false }), { full: false });
+        expect(await queue.additive()).toBe(true); // a partial review keeps it too
+        await host.duringReview(ROOT, files, undefined, async () => ({ aborted: false, unjudged: 0, awaitingJudgeCount: 0, readErrors: 0, extractErrors: 0 }), { full: true });
+        expect(await queue.additive()).toBe(false);
+        await host.disposeReplicas();
+    });
+
+    it('regression: a tab that reloads the shared queue file takes the other tab\'s newer ack and keeps its unsent keys beside its own', async () => {
+        const srv = fakeServer();
+        const a = world();
+        await a.review(0, 2);
+        await pump(a, srv.client); // ack at generation 1
+        await a.queue.flush();
+
+        // Another tab over the SAME local store and queue file: it sent a pack (a newer ack), then marked f1 again without sending it.
+        const other = createReplicaQueue(a.persistence);
+        await other.settle(await other.snapshot(), { generation: 7, digest: 'd'.repeat(64) });
+        other.markDirty(['f:src/f1.ts']);
+        await other.flush();
+
+        await a.review(0, 1, 1); // this tab changes f0: unsaved here
+        await a.queue.reload();
+        expect(await a.queue.ack()).toEqual({ generation: 7, digest: 'd'.repeat(64) });
+        const keys = (await a.queue.snapshot()).keys;
+        expect(keys).toContain('f:src/f1.ts'); // the other tab's key survives this tab's next save
+        expect(keys.some((k) => k.startsWith('f:src/f0.ts'))).toBe(true);
+        await a.queue.flush();
+        expect(JSON.parse((await a.persistence.read())!).dirty).toContain('f:src/f1.ts');
+    });
+
+    it('reload never turns additive back on over a complete review here, and ORs it in otherwise', async () => {
+        const persistence = memoryReplicaPersistence();
+        const mine = createReplicaQueue(persistence);
+        await mine.adopt(1);
+        await mine.flush();
+        const other = createReplicaQueue(persistence);
+        await other.setAdditive(true);
+        await other.flush();
+        await mine.reload();
+        expect(await mine.additive()).toBe(true); // another opener marked the root additive
+        await mine.setAdditive(false); // a complete review here, not yet saved
+        await mine.reload();
+        expect(await mine.additive()).toBe(false);
+    });
+
+    it('persists the root id in the queue file; queuedRootIdOf reads it back and an older file without it returns undefined', async () => {
+        const persistence = memoryReplicaPersistence();
+        const queue = createReplicaQueue(persistence, { rootId: 'ws:abc' });
+        queue.markDirty(['f:x.ts']);
+        await queue.flush();
+        expect(queuedRootIdOf((await persistence.read())!)).toBe('ws:abc');
+        expect(queuedRootIdOf(JSON.stringify({ version: 2, projectId: 1, dirty: ['f:x.ts'] }))).toBeUndefined();
+        expect(queuedRootIdOf('not json')).toBeUndefined();
+        const old = memoryReplicaPersistence();
+        await old.write(JSON.stringify({ version: 2, projectId: 1, dirty: ['f:x.ts'] }));
+        expect(await createReplicaQueue(old, { rootId: 'ws:abc' }).size()).toBe(1); // an old file still loads
     });
 
     it('shouldStayAdditive: false only once the local store holds a completed review of the root', async () => {
