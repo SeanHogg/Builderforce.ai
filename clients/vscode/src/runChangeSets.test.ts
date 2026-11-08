@@ -66,6 +66,8 @@ vi.mock("./localFirstStore", () => ({
 vi.mock("./installRunRecovery", () => ({
   installRunRecovery: () => ({
     recovered: Promise.resolve([]),
+    interrupted: async () => [],
+    recordAcknowledged: async () => undefined,
     recordStarted: async () => undefined,
     recordCheckpoint: async () => undefined,
     recordFinished: async () => undefined,

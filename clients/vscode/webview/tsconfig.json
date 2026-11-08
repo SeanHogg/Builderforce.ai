@@ -42,6 +42,7 @@
       // The page-engine bridge protocol (`../src/pageEngineBridgeProtocol.ts`) names
       // the local-runtime ids, and the webview reaches it by a relative import.
       "@builderforce/json-schema": ["../../../packages/json-schema/src/index.ts"],
+      "@builderforce/local-first": ["../../../packages/local-first/src/index.ts"],
       "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],
       "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
       // The composer's Connected accounts section lists, tests and reconnects through it.
