@@ -27,6 +27,7 @@ import type { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import { parseModel, parseExecutor, withRunSandbox } from '../../application/runtime/cloudDispatch';
 import { parseCloudTickPayload } from '../../application/runtime/cloudTickPayload';
 import { ACTIONS_RUNNER_WAIT_MS, RunSandboxHost, type RunSandboxKind } from '../../application/runtime/sandbox/runSandboxHost';
+import type { SandboxOpenWait } from '../../application/runtime/sandbox/sandboxOpenWait';
 import { dispatchGithubActionsRun } from '../../application/runtime/githubActionsDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
@@ -77,6 +78,8 @@ interface Cursor extends StartBody {
   sandbox?: RunSandboxKind;
   /** When the loop started waiting for its Actions runner to poll. */
   sandboxWaitSince?: number;
+  /** The prep tick found the container pool full: when that began and how often it has been retried. */
+  sandboxOpenWait?: SandboxOpenWait;
 }
 
 const CURSOR_KEY = 'cursor';
@@ -225,7 +228,16 @@ export class CloudRunnerDO implements DurableObject {
     try {
       if (cursor.stage === 'prep') {
         // The sandbox first: whether the run has a shell decides its tools and its prompt.
-        cursor.sandbox = await this.sandboxHost.prepare(sandboxRunOf(cursor), parseExecutor(cursor.payload) === 'github_actions' ? 'github_actions' : 'durable');
+        const prepared = await this.sandboxHost.prepare(sandboxRunOf(cursor), parseExecutor(cursor.payload) === 'github_actions' ? 'github_actions' : 'durable', cursor.sandboxOpenWait);
+        if ('wait' in prepared) {
+          // Every container is in use: stay on the prep stage and retry on a later tick (the wait rides the cursor).
+          cursor.sandboxOpenWait = prepared.wait;
+          await this.state.storage.put(CURSOR_KEY, cursor);
+          await this.state.storage.setAlarm(Date.now() + prepared.delayMs);
+          return;
+        }
+        cursor.sandboxOpenWait = undefined;
+        cursor.sandbox = prepared.kind;
         // Stamped on the row too, so run history and diagnostics can say whether this run
         // could build and test what it wrote.
         cursor.payload = withRunSandbox(cursor.payload, cursor.sandbox ?? 'none');

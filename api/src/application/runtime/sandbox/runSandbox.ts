@@ -16,6 +16,7 @@
  */
 import type { ShellJobStart, ShellJobStatus, ShellResult } from '@builderforce/agent-tools';
 import type { SandboxOpenSpec } from './sandboxOpenSpec';
+import { isSandboxCapacityFailure } from './sandboxCapacity';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
 
 /** A list / read / write / delete in the sandbox's clone. */
@@ -206,16 +207,23 @@ export function createContainerSandbox(args: {
 
 /** Open the sandbox now (the run's first tick), so the clone and the preview are warming
  *  while the first model turn is in flight. Verdict, never throws. */
-export async function openRunSandbox(target: SandboxTarget, spec: SandboxOpenSpec): Promise<{ ok: boolean; error?: string }> {
+export async function openRunSandbox(target: SandboxTarget, spec: SandboxOpenSpec): Promise<{ ok: boolean; error?: string; capacity?: true }> {
   try {
     const res = await target.fetch(`${ORIGIN}/sandbox/open`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(spec),
     });
-    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-    return res.ok && body.ok ? { ok: true } : { ok: false, error: body.error ?? `sandbox open answered ${res.status}` };
+    const text = await res.text().catch(() => '');
+    const body = (() => { try { return JSON.parse(text) as { ok?: boolean; error?: string }; } catch { return {} as { ok?: boolean; error?: string }; } })();
+    if (res.ok && body.ok) return { ok: true };
+    // `capacity` is set only for the pool-is-full shapes (`sandboxCapacity`); anything else keeps today's no-shell fallback.
+    return {
+      ok: false, error: body.error ?? `sandbox open answered ${res.status}`,
+      ...(isSandboxCapacityFailure({ status: res.status, text }) ? { capacity: true as const } : {}),
+    };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const message = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: message, ...(isSandboxCapacityFailure({ message }) ? { capacity: true as const } : {}) };
   }
 }

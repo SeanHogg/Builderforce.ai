@@ -17,10 +17,16 @@ import type { Env } from '../../../env';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { createContainerSandbox, openRunSandbox, type RunSandbox, type SandboxTarget } from './runSandbox';
 import { buildSandboxOpenSpec } from './sandboxOpenSpec';
+import { nextCapacityWait, type SandboxOpenWait } from './sandboxOpenWait';
 import { createMailboxSandbox, SandboxMailbox, type SandboxMailPoll } from './sandboxMailbox';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
 
 export type RunSandboxKind = 'container' | 'actions';
+
+/** The prep tick's answer: the sandbox the run has (or none), or a wait the cursor must carry to the next tick. */
+export type SandboxPrepared =
+  | { kind: RunSandboxKind | undefined }
+  | { wait: SandboxOpenWait; delayMs: number };
 
 /** What the host needs to know about the run. */
 export interface SandboxRun {
@@ -57,22 +63,41 @@ export class RunSandboxHost {
    * other run gets the container when one is bound and the repository can be cloned,
    * opened now so the clone and the preview warm while the first turn is in flight.
    */
-  async prepare(run: SandboxRun, executor: 'durable' | 'github_actions'): Promise<RunSandboxKind | undefined> {
-    if (executor === 'github_actions') return 'actions';
+  async prepare(
+    run: SandboxRun, executor: 'durable' | 'github_actions',
+    /** The capacity wait the run already carries (none on the first attempt) and the clock — injected for tests. */
+    waiting?: SandboxOpenWait, now: number = Date.now(),
+  ): Promise<SandboxPrepared> {
+    if (executor === 'github_actions') return { kind: 'actions' };
     const target = this.containerTarget(run.executionId);
-    if (!target) return undefined;
+    if (!target) return { kind: undefined };
     const spec = await buildSandboxOpenSpec(this.env, this.db, run);
-    if (!spec) return undefined;
+    if (!spec) return { kind: undefined };
     const opened = await openRunSandbox(target, spec);
-    await recordCloudToolEvent(this.db, {
+    const note = (result: string, detail: Record<string, unknown>) => recordCloudToolEvent(this.db, {
       tenantId: run.tenantId, cloudAgentRef: run.cloudAgentRef, executionId: run.executionId,
-      toolName: 'runtime.sandbox', category: 'planning',
-      detail: { kind: 'container', opened: opened.ok, ...(opened.error ? { reason: opened.error } : {}) },
-      result: opened.ok
-        ? 'Run sandbox ready: a shell and a clone of the ticket branch.'
-        : `The run sandbox could not open (${opened.error}) — this run edits through the git API and has no shell.`,
+      toolName: 'runtime.sandbox', category: 'planning', detail: { kind: 'container', ...detail }, result,
     }).catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/runSandboxHost.ts', operation: 'recordSandboxOpened', context: { executionId: run.executionId } }));
-    return opened.ok ? 'container' : undefined;
+    if (opened.ok) {
+      await note('Run sandbox ready: a shell and a clone of the ticket branch.', { opened: true });
+      return { kind: 'container' };
+    }
+    // The container pool is full (shared with live previews): wait for an instance on later ticks instead of
+    // giving the run up its shell. Any other failure falls through to the no-shell path, as before.
+    const step = opened.capacity ? nextCapacityWait(waiting, now) : undefined;
+    if (step && !step.exhausted) {
+      await note(
+        `Waiting for a sandbox: every container is in use. Retrying in ${Math.round(step.delayMs / 1000)}s (attempt ${step.wait.attempts}).`,
+        { opened: false, waiting: true, reason: opened.error, attempts: step.wait.attempts },
+      );
+      return { wait: step.wait, delayMs: step.delayMs };
+    }
+    const gaveUp = step?.exhausted ? ` after waiting ${Math.round(step.waitedMs / 60_000)} min for a free container` : '';
+    await note(
+      `The run sandbox could not open${gaveUp} (${opened.error}) — this run edits through the git API and has no shell.`,
+      { opened: false, reason: opened.error, ...(step?.exhausted ? { capacityWaitExhausted: true } : {}) },
+    );
+    return { kind: undefined };
   }
 
   /** The sandbox for one tick, or undefined for a run without one. */
