@@ -29,6 +29,8 @@ export interface Env {
   CORS_ORIGINS: string;
   /** "production" | "development" */
   ENVIRONMENT: string;
+  /** 'true' enforces the run-sandbox egress allowlist (`egressAllowlist.ts`); anything else leaves the sandbox as before. */
+  SANDBOX_EGRESS_ENFORCE?: string;
   /** Secret used to sign JWTs.  Set via `wrangler secret put JWT_SECRET`. */
   JWT_SECRET: string;
   /** Kill switch for the logged-out guest Brain/Ideas chat. Guests can try the

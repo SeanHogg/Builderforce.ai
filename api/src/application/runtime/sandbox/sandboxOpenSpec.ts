@@ -16,6 +16,7 @@ import { resolveTicketRepoContext, type TicketRepoContext } from '../../repos/co
 import { containerGitCloneUrl, mintContainerRunToken } from '../containerRunToken';
 import { sandboxLevers } from '../costLoop/runLevers';
 import { previewStepForRun, type PreviewDevServerStep } from '../previewDevServer';
+import { internalApiBaseUrl } from './egressAllowlist';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 
@@ -42,7 +43,7 @@ export async function buildSandboxOpenSpec(
   const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), run.tenantId, run.taskId);
   if (!repo.ok || !sandboxCanClone(repo.ctx)) return null;
   const token = await mintContainerRunToken(env.JWT_SECRET, run.executionId);
-  const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
+  const internalBaseUrl = internalApiBaseUrl(env);
   // Live preview: the port, the host-tuned config files, the env (project secrets) and the
   // ordered start candidates. Null while preview ingress is off or the plan lacks it.
   const preview = await previewStepForRun(env, db, run.tenantId, run.projectId);

@@ -65,6 +65,10 @@ export default defineConfig({
      * first making that state per-file.
      */
     pool: 'threads',
+    // `@cloudflare/containers` imports `cloudflare:workers`, which Node cannot load. Inlining it
+    // lets a test `vi.mock('cloudflare:workers')` and exercise the REAL Container class
+    // (AgentContainerDO.realLibrary.test.ts). Tests that mock the package itself are unaffected.
+    server: { deps: { inline: ['@cloudflare/containers'] } },
     // The source-only packages under `packages/` have no install of their own, so
     // their tests ran NOWHERE: `packages/kimi-oauth/src/index.test.ts` was green by
     // never executing. This suite already aliases every one of them, so it runs

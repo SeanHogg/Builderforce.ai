@@ -19,6 +19,8 @@ COPY server.mjs ./
 # GitHub Actions runner inlines (via the generated sandboxCoreSource.ts), so both
 # transports serve one implementation.
 COPY sandboxCore.mjs ./
+# Trusts the platform egress-interception CA for spawned tools (see egressTrust.mjs).
+COPY egressTrust.mjs ./
 # THE tool-output policy (@builderforce/tool-output-policy), compiled by
 # api/scripts/gen-container-shared.mjs, the post-edit fast checks (D7 / D1) and the
 # background-job table (`run_command` background / `command_status`).
@@ -26,6 +28,10 @@ COPY toolOutputPolicy.mjs postEditChecks.mjs sandboxJobs.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080
+# Node reads NODE_EXTRA_CA_CERTS once, at process start, so it must be an image ENV for
+# server.mjs itself (and everything it spawns) to trust the egress-interception CA. A path
+# that does not exist (enforcement off) only produces a startup warning.
+ENV NODE_EXTRA_CA_CERTS=/etc/cloudflare/certs/cloudflare-containers-ca.crt
 EXPOSE 8080
 
 # Run as the unprivileged node user (image ships uid 1000) to shrink the blast radius

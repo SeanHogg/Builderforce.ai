@@ -49,6 +49,8 @@ import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 // THE sandbox primitives (shell, working tree, post-edit checks) — the same module the
 // GitHub Actions runner inlines, so both transports serve one implementation.
+// Side-effect import, FIRST among our modules: spawned git/npm/pip must trust the egress CA.
+import './egressTrust.mjs';
 import { bootJobIdPrefix, closeSandboxBox, createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
