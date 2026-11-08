@@ -255,7 +255,7 @@ describe('the ask bar', () => {
 describe('narrow (phone) layout', () => {
     const narrow = () => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 360, height: 640, top: 0, left: 0, right: 360, bottom: 640, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
 
-    it('keeps only the chip dot, the action button and Risk ▾ in the strip; the Panels row scrolls sideways; the ask bar is 44px', async () => {
+    it('keeps only the chip dot and the action button in the review action; Risk ▾ and the Panels row scroll sideways in the View bar; the ask bar is 44px', async () => {
         narrow();
         await mount(sourceOf({ syncStatus: async () => sync() }));
         const s = strip();
@@ -273,7 +273,7 @@ describe('narrow (phone) layout', () => {
         expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
     });
 
-    it('draws the wide layout otherwise: Risk overlays in the scene overlay, not in the strip', async () => {
+    it('draws the wide layout otherwise: Risk overlays in the View bar, not beside the review action', async () => {
         await mount(sourceOf());
         expect(strip().queryByRole('button', { name: /▾$/ })).toBeNull();
         expect(screen.getByRole('search').style.height).toBe('40px');
