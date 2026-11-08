@@ -1,3 +1,35 @@
+## ✅ RESOLVED 2026-11-08: one tool classifier fails closed, security gates every merge, and shipped milestones reach the investor update (Governance · Finance)
+
+- **One tool classifier, failing closed.** `packages/agent-tools/src/tool-side-effect.ts` is the only classifier.
+  - `classifyTool(name, declared?, args?)` resolves in this order: the shared catalog, then the host's own declaration, then the host's read-only tools, then a read-only `action` (honoured only on tools that dispatch on one: `process`, `cron`, `canvas`, `gateway`, `nodes`, `browser`, `*_actions`). Anything else counts as `mutate`.
+  - The VS Code copy (`clients/vscode/src/policy.ts`) is deleted, and its callers use `toolMutating.ts`.
+  - `BrainActionsContext` requires each action to declare `mutates`, and agent-runtime's heuristic now goes through the classifier.
+  - `scripts/check-single-tool-classifier.mjs` fails CI on a second copy.
+- **A gate can govern a whole class.** `policy_gates.side_effect` (migration 1327) lets a gate cover read, verify or mutate tools as well as named tools.
+  - Gate ids on the wire are `packId:gateKey` and carry `baseGateId`. Changing the id asks for each existing approval once more.
+  - Hosts that ask for `?gates=2` get the compact form. Older hosts get the gates expanded per tool by the relay.
+  - The tenant's gates are always resolved for a run. Gates sent by the caller are merged in alongside them, never in their place, and are removed from route bodies. A follow-up run resolves the current gates instead of reusing its parent's.
+- **Security automation ([PRD 08 §10](./docs/specs/08-prd-agentic-governance.md)).**
+  - **PR checks:** `SECURITY_SCAN` (a secrets and OSV dependency scan at the PR's head SHA, which marks a truncated or failed scan) and `SECURITY_REVIEW` produce one verdict per PR, head SHA and check type (migrations 1320–1322).
+  - **Merge gating:** `evaluateSecurityGate` blocks merges on HIGH and CRITICAL findings, on a scan that is stale, failed or truncated, or on a head that has moved. The gate applies to every merge path: merge-on-green, the sweep, human merges and the cloud finalize step. A merge re-checks the head SHA it expects.
+  - **Overrides:** only an OWNER can override the gate for a whole tenant, and every override is recorded as evidence.
+  - **Catch-up:** `security-verdict-catchup` fills missing verdicts, 5 PRs every 90 seconds, and skips a PR whose task still has a live run.
+  - **Audit and evidence:** `mutationAudit` is the shared audit envelope for governance and security writes. `automatedSocEvidence` and the SOC 2 control baseline feed `governance-auditor`, a cron job that records gaps.
+  - **Data subject requests:** a request runs as a private export, identity verification and delivery, and the private export key never leaves the tenant's asset store.
+  - **Findings:** a CRITICAL finding opens an incident once.
+- **Shipped milestones reach the investor update.**
+  - Tasks carry an `investor_milestone` tag (migration 1325).
+  - `listShippedMilestones` merges tagged tasks with board milestones (`listBoardMilestonesSince`) over a half-open window, newest 50 plus a count of the rest. It is not cached, because the window moves every send.
+  - A delivery stores its window end, so the next update starts where the last one stopped. The board-pack period follows each schedule.
+  - `GET /api/investor-updates/milestones/pending` and `POST …/send` require MANAGER.
+  - The canvas inspector previews what the next update will say.
+- **Main's red build, cleared on the slices above.** These fixes went into `24f6bb8c6` and `dcb6432fe`:
+  - a duplicate `body` in `findOpenPr`;
+  - apostrophes inside single-quoted test names;
+  - the gate fetch URL a test expected;
+  - tenant scoping on the DSR purge and on PR-scan updates;
+  - catches that now record a reason instead of swallowing the error.
+
 ## ✅ RESOLVED 2026-11-08: autonomous delivery closes its loops: one lane door, one landing path, reviews that reopen work, and boards that earn budget (Autonomous delivery)
 
 - **Backlog lanes no longer spend tokens.** `templateCatalog.ts` derives a lane's gate from its key, so `backlog` seeds `human` (`BACKLOG_LANE_GATE` in `defaultSwimlanes.ts`). Migration 1311 re-gates every live `backlog` lane that was `auto` and records `gate_source = 'seed'`, because the operator chose to re-gate them all.

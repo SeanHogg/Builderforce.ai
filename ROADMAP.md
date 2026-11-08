@@ -27,8 +27,8 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 | P | Promise | Status | Proof still missing |
 |---|---|---|---|
 | P0 | One canvas from idea to real | Beta | A release gate per marketed artifact. `qa-e2e` runs in no workflow and its `ci` script swallows failure |
-| P0 | People control agent work | Beta | `TOOL_SIDE_EFFECT` wired into policy, failing closed, with a CI check. It has no runtime caller today |
-| P0 | Complete agent auditability | Beta | One audit envelope at every mutation entry point. None exists |
+| P0 | People control agent work | Beta | Wired, failing closed and guarded in CI (2026-11-08). Still missing: a release that ships it on green CI |
+| P0 | Complete agent auditability | Beta | The `mutationAudit` envelope exists and covers the governance and security writes. Still missing: coverage at every other mutation entry point |
 | P0 | Private, local AI work | Planned | A boundary manifest per action, shown before execution |
 | P1 | Evermind stays current | Beta | Freshness budgets, stale-recall evals, contradiction detection beyond docs |
 | P1 | Same work in VS Code | Beta | A web↔extension parity matrix; contract tests are partial |
@@ -52,7 +52,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 |---|---|---|
 | [💡 Idea](#-idea--read--prove) | Sessions, briefs, choosing and running a cheap proof | Experiment verdicts; validate by asking the market |
 | [🔨 Make](#-make--build) | Agents and people building: runs, boards, canvas runtimes, previews, hosting | One execution core; live preview on |
-| [⚙️ Run](#️-run--operate-the-company) | Finance, hiring, people, governance, phone, investor | Tool classification wired; SOC 2 Type I |
+| [⚙️ Run](#️-run--operate-the-company) | Finance, hiring, people, governance, phone, investor | SOC 2 Type I |
 | [📊 Measure](#-measure--grade-the-proof) | Grading proofs and seats: metrics, experiments, OKRs, sessions | `experiment` cards measured |
 | [📣 Reach](#-reach--sell-be-found-grow) | Billing, marketplace, marketing, SEO, distribution | First paying tenant; first customer proof |
 | [🧰 OTHER](#-other--enabling-work-outside-the-arc) | CI, gateway, Evermind, runtime, data model, code health, infrastructure | $0 platform plan |
@@ -177,13 +177,14 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 
 ## ⚙️ Run — operate the company
 
-- **[governance] Tool classification is unwired.** `TOOL_SIDE_EFFECT` is reached only by its test; `evaluatePolicyGate` matches by name and defaults to allow; `clients/vscode/src/policy.ts` is a second copy; `BrainActionsContext` and agent-runtime's heuristic fail open. One classifier, fail closed, CI check.
-- **[governance] Security automation ([PRD 08 §10](./docs/specs/08-prd-agentic-governance.md)).** Not built: `SECURITY_SCAN`, `SECURITY_REVIEW`, governance-auditor, one mutation-audit envelope, automated evidence, merge gating. `/vuln-scans`, `/dsr` and `/suppression` are CRUD only.
-- **[governance] SOC 2 Type I,** the enterprise gate, not started (epic #3062).
-- **[finance] Delivery doesn't reach the investor seam.** No milestone tag; `workitem.released` is an outbound webhook only.
-- **[hiring] Greenhouse, Indeed and LinkedIn postings have no public URL.** Indeed has none; build the others from the id.
-- **[hiring] Source attribution is exact-match;** no applicants imported.
-- **[hiring] No Workable connector.**
+- **[governance] SOC 2 Type I,** the enterprise gate (epic #3062). The automation side is built: control baseline, automated evidence and the governance-auditor sweep. *Blocker: a CPA firm must be engaged to issue the Type I report.*
+- **[governance] DSR erasure skips non-segment stores.** `dsrExecution.ts` erases segment-scoped rows, but `marketing_audience_members` and `candidate_records` hold the same person outside the segment tier. *Blocker: operator decision on whether erasure reaches marketing audiences and hiring records, which carry their own retention duties.*
+- **[hiring] Greenhouse, Indeed and LinkedIn postings have no public URL.** Indeed has none; build the others from the id. *In progress: resolution is built; the round-3 fixes (LinkedIn Rest.li encoding, Ashby job-id filter, Workable/Lever paging tokens) are being finished.*
+- **[hiring] Source attribution is exact-match;** no applicants imported. *In progress with the item above.*
+- **[hiring] No Workable connector.** *In progress: the link-only connector is built; it moves to DONE with the item above.*
+- **[hiring] Board API shapes unproven live.** LinkedIn's `ids=List(...)` encoding and Ashby's `jobPosting.info` → `jobId` are coded from the vendors' docs, not proven with a live call. *Blocker: a tenant's LinkedIn and Ashby credentials to probe with.*
+- **[data] `tasks.tenant_id` is NOT NULL in the database but nullable in Drizzle** (`schema/delivery.ts:228`, filled by `trg_tasks_tenant`, migration 0944). `TaskRepository.toDomain` has to map `null` to `undefined`. Marking it `.notNull()` lets the mapper pass it straight through.
+- **[vscode] Webview `platformPolicy` tests fail** (three time out, one mock is called three times). The rewrite in `325f4faaf` didn't update the older cases. agentic-7d is placing an owner.
 - **[integrations] Business Phone is Twilio CPaaS,** no port-in or SIM. `burnrateCutoverPolicy.json` says `retire_port_out`. *Blocker: operator confirms.*
 - **[integrations] No A2P 10DLC registration.** *Blocker: operator decision on fees.*
 - **[integrations] Drive / OneDrive can't complete consent.** *Blocker: enable the Drive API and `drive.readonly`, `Files.Read`, register both `/api/drive/callback/*`.*
