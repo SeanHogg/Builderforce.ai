@@ -44,7 +44,7 @@ function scripted(opts: ScriptOptions = {}) {
 async function startReview(source: ReturnType<typeof scripted>['source']) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
   await openList({ screen, fireEvent });
-  await openReviews({ screen, fireEvent }); // the strip's action button opens the Reviews panel, which counts the files at once
+  await openReviews({ screen, fireEvent }); // the review action's button opens the Reviews panel, which counts the files at once
   await screen.findByTestId('kg-review-start');
 }
 

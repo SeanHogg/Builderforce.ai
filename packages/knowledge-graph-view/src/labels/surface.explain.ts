@@ -1,6 +1,6 @@
 /**
  * The words that EXPLAIN what the view shows: why a channel is "Not set up", that the map is a cut
- * of the real graph, what the sync strip's counts mean, and what a one-station path can and cannot
+ * of the real graph, what the review status chip's counts mean, and what a one-station path can and cannot
  * do. The interface and its English defaults (a host overrides them per key).
  */
 

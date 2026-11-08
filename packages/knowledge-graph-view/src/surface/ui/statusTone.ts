@@ -1,4 +1,4 @@
-/** The strip's state (the chip's dot) and the colour token each one takes. The state is never colour-only: the chip's accessible name carries it in words. */
+/** The review status chip's state (its dot) and the colour token each one takes. The state is never colour-only: the chip's accessible name carries it in words. */
 
 import type { ThemeTone } from '../../scene/themeColors';
 

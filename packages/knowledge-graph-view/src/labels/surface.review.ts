@@ -1,7 +1,7 @@
 /** The words of the Reviews panel (tabs, start, watch, stop, runs, server, diagnostics) and of the review action's chip and button: English defaults, typed by their own shape. */
 
 export const REVIEW_WORDS = {
-    /** The strip's status chip. `{files}` is a counted phrase ("18,886 files"), `{date}`, `{age}`, `{stored}`, `{done}`, `{total}`, `{eta}`, `{pct}`, `{left}`. */
+    /** The review action's status chip (right end of the ask-bar row). `{files}` is a counted phrase ("18,886 files"), `{date}`, `{age}`, `{stored}`, `{done}`, `{total}`, `{eta}`, `{pct}`, `{left}`. */
     chipNotReviewed: 'Not reviewed · {files}',
     chipNotReviewedPlain: 'Not reviewed',
     chipReviewedStored: 'Reviewed {date} · {stored}',
@@ -17,7 +17,7 @@ export const REVIEW_WORDS = {
     chipStopping: 'Stopping · saving what was read',
     chipStopped: 'Stopped at {pct}% · {left} left',
     chipStoppedPlain: 'Stopped',
-    /** The strip's action button, by what the next action is. `{root}`. */
+    /** The review action's button, by what the next action is. `{root}`. */
     actionReview: 'Review {root}',
     actionUpdate: 'Update review',
     actionStart: 'Start review',

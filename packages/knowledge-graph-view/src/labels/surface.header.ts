@@ -45,7 +45,7 @@ export interface HeaderLabels {
     pinpointProvenance: Record<'vision' | 'exact' | 'catalog' | 'import', string>;
     /** `{title}`, `{at}`, `{count}`. */
     time: Record<'label' | 'aria' | 'now' | 'commitAria', string>;
-    /** The header: the strip's failure words, the parity line (`{local}`, `{server}`) and the overlay sentence. */
+    /** The header: the review action's failure words, the parity line (`{local}`, `{server}`) and the overlay sentence. */
     header: Record<'statusLabel' | 'updateFailed' | 'reviewFailed' | 'parityDiffers' | 'overlaysNote' | 'rootsLabel', string>;
     /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
     askSentence: Record<QuestionId, string>;

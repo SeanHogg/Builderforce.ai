@@ -19,7 +19,7 @@ export interface SyncRead {
 }
 
 /**
- * The host's sync status for a root: the ONE read, shared by the status strip and the Reviews panel (Server and Diagnostics tabs).
+ * The host's sync status for a root: the ONE read, shared by the review action (status chip + button on the ask-bar row) and the Reviews panel (Server and Diagnostics tabs).
  * Re-read when `refreshKey` changes (a new graph landed), on `refresh()`, and every `SYNC_POLL_MS` while the replica is sending or waiting with changes and nothing has failed (uploads the person did not
  * start included); polling stops when the queue is idle and when the view unmounts. A new root starts from nothing, never from the last root's status.
  */

@@ -1,4 +1,4 @@
-/** A small borderless text button: status strip, breadcrumbs, "Copy as Mermaid". */
+/** A small borderless text button: the review action, breadcrumbs, "Copy as Mermaid". */
 
 import type { ButtonHTMLAttributes, CSSProperties } from 'react';
 import { cssVar } from '../../scene/themeColors';

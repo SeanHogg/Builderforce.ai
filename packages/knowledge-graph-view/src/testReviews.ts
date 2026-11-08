@@ -1,5 +1,5 @@
 /**
- * Test helper (not shipped): the status strip's action button is the one way into the Reviews panel, where a review is started. Like `openList`, it takes
+ * Test helper (not shipped): the review action's button (`surface/ReviewAction.tsx`, at the right end of the ask-bar row) is the one way into the Reviews panel, where a review is started. Like `openList`, it takes
  * testing-library injected so this module imports none.
  */
 
@@ -12,7 +12,7 @@ export interface ReviewsDeps {
 }
 
 
-/** Presses the strip's action button (opens the Reviews panel; with nothing planned it starts counting). */
+/** Presses the review action's button (opens the Reviews panel; with nothing planned it starts counting). */
 export async function openReviews({ screen, fireEvent }: ReviewsDeps): Promise<void> {
     fireEvent.click(await screen.findByTestId('kg-review-action'));
 }

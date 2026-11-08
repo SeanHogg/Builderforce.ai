@@ -322,7 +322,7 @@ describe('KnowledgeGraphView: no loading gate', () => {
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={p.source} /></div>);
         expect(screen.getByRole('region', { name: L.regionLabel })).toBeTruthy();
         expect(screen.getByRole('search')).toBeTruthy();
-        // The inline loading status, beside the strip's own sync pill (a status too, "Not synced" until a folder is open).
+        // The inline loading status, beside the review action's own sync pill (a status too, "Not synced" until a folder is open).
         expect(screen.getAllByRole('status').map((el) => el.textContent)).toContain(L.loading);
     });
 

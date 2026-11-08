@@ -96,6 +96,8 @@ describe('the surface', () => {
         expect(screen.getByRole('button', { name: L.surface.questions.wrong }).getAttribute('aria-pressed')).toBe('true');
 
         fireEvent.click(await screen.findByRole('button', { name: L.surface.pinpoint.diagnose }));
+        // Diagnose awaits the compute client for the path, so the composer is filled after the click returns.
+        await waitFor(() => expect(onCompose).toHaveBeenCalledTimes(1));
         const text = onCompose.mock.calls[0]![0] as string;
         expect(text).toContain(result.description);
         expect(text).toContain('API → repositories');

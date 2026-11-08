@@ -15,7 +15,7 @@ import { extractProgress } from './run/runPace';
 import type { ReviewsTab } from './run/useReviewsTab';
 import type { StatusState } from './ui';
 
-/** The situation the strip describes: the chip's words and the button's action both follow it. */
+/** The situation the review action describes: the chip's words and the button's action both follow it. */
 export type PillKind =
     | 'counting' | 'ready' | 'running' | 'stopping' | 'stopped' | 'failed' | 'refresh'
     | 'notStored' | 'serverOnly' | 'uploadFailed' | 'uploading' | 'outOfDate' | 'never' | 'upToDate';
@@ -126,7 +126,7 @@ export interface StripAction {
     tab: ReviewsTab;
 }
 
-/** The button for the situation: it opens the panel on Review, where the action itself is; a failed upload opens the Server tab (the strip makes it Retry upload when the source can retry). */
+/** The button for the situation: it opens the panel on Review, where the action itself is; a failed upload opens the Server tab (the review action makes it Retry upload when the source can retry). */
 export function stripAction(labels: KnowledgeGraphLabels, pill: Pick<SyncPill, 'kind'>, rootTitle: string | undefined): StripAction {
     const r = labels.surface.run.review;
     const go = (label: string, disabled = false, tab: ReviewsTab = 'review'): StripAction => ({ label, disabled, tab });
@@ -136,7 +136,7 @@ export function stripAction(labels: KnowledgeGraphLabels, pill: Pick<SyncPill, '
         case 'running': return go(labels.reviewStop);
         case 'stopping': return go(r.stoppingTitle, true);
         case 'stopped': return go(r.actionResume);
-        case 'uploadFailed': return go(r.actionSeeUpload, false, 'server'); // the strip turns this into Retry upload when the source has the port
+        case 'uploadFailed': return go(r.actionSeeUpload, false, 'server'); // the review action turns this into Retry upload when the source has the port
         case 'never': return go(fillTemplate(r.actionReview, { root: rootTitle ?? labels.reviewFolder }));
         case 'serverOnly': return go(fillTemplate(r.actionReview, { root: rootTitle ?? labels.reviewFolder }));
         case 'notStored': case 'outOfDate': case 'refresh': return go(r.actionUpdate);

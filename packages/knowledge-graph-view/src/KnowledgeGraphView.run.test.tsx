@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The Reviews panel from the view (PRD 41 A8): the strip's button and chip open it; it counts at once; closing it cancels a plan but never stops a run. */
+/** The Reviews panel from the view (PRD 41 A8): the review action's button and chip (ask-bar row) open it; it counts at once; closing it cancels a plan but never stops a run. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
@@ -45,7 +45,7 @@ async function mount(source: ReturnType<typeof runSource>['source']) {
     await openList({ screen, fireEvent });
 }
 
-/** The strip's button → the plan is ready → Start review: the review is running. */
+/** The review action's button → the plan is ready → Start review: the review is running. */
 async function reviewRunning(source: ReturnType<typeof runSource>['source']) {
     await mount(source);
     await openReviews({ screen, fireEvent });

@@ -97,7 +97,7 @@ describe('search beyond the loaded graph', () => {
     expect(load).toHaveBeenLastCalledWith('docs', { focus: [hidden.ref] });
 
     search('slow');
-    await startReviewing({ screen, fireEvent }); // the strip's button opens the Reviews panel; Start review runs it
+    await startReviewing({ screen, fireEvent }); // the review action's button opens the Reviews panel; Start review runs it
     await screen.findByText(L.reviewDoneTitle);
     await waitFor(() => expect(load).toHaveBeenLastCalledWith('docs', undefined));
 
