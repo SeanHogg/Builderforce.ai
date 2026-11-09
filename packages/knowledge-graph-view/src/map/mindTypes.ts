@@ -2,6 +2,7 @@
 
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import type { Bounds } from '../graph2d/layout2d';
+import type { NodeShape } from '../lenses';
 import type { ThemeTone } from '../scene/themeColors';
 
 export type Severity = Finding['severity'];
@@ -27,6 +28,8 @@ export interface MapBranch {
     page?: { parent: string; next: number; of?: 'files' };
     severity?: Severity;
     tone: ThemeTone;
+    /** The branch's silhouette, from its node's kind (redundant encoding beside the tone); `circle` is the neutral dot. */
+    shape: NodeShape;
     children: MapBranch[];
 }
 

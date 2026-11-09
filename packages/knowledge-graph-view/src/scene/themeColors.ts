@@ -106,7 +106,8 @@ export function cssVar(tone: ThemeTone): string {
 
 /** Any CSS colour → `rgb(r, g, b)` via a 1×1 canvas, so three.js never sees oklch()/color-mix(). */
 function toRgb(color: string, ctx: CanvasRenderingContext2D | null): string {
-    if (!ctx || !color) return color;
+    // Some hosts/tests hand back a partial 2D context; an incomplete one cannot convert, so pass the colour through.
+    if (!ctx || !color || typeof ctx.clearRect !== 'function' || typeof ctx.fillRect !== 'function' || typeof ctx.getImageData !== 'function') return color;
     ctx.clearRect(0, 0, 1, 1);
     ctx.fillStyle = color;
     ctx.fillRect(0, 0, 1, 1);

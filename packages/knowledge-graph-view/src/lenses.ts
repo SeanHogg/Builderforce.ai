@@ -61,10 +61,15 @@ const KIND_TONE: Record<string, ThemeTone> = {
     fact: 'nodeFact', missing: 'nodeMissing', area: 'nodeArea',
 };
 
-/** A distinct silhouette per concept, so colour is never the only cue (redundant encoding). */
+/** A distinct silhouette per concept, so colour is never the only cue (redundant encoding). Base kinds first. */
 const KIND_SHAPE: Record<string, NodeShape> = {
     file: 'circle', section: 'square', symbol: 'diamond', entity: 'hexagon', claim: 'triangle',
     fact: 'octagon', missing: 'star', area: 'pentagon',
+    // Finer code-symbol kinds a pack may emit: give each its own silhouette so a class, method,
+    // function, interface, type, enum, constant and module never collapse to the neutral dot.
+    class: 'hexagon', method: 'triangle', function: 'triangle', interface: 'square', type: 'square',
+    enum: 'octagon', constant: 'square', module: 'pentagon', struct: 'square', trait: 'diamond',
+    property: 'diamond', field: 'diamond', variable: 'circle', parameter: 'circle', macro: 'star',
 };
 
 export function kindTone(n: KNode): ThemeTone {

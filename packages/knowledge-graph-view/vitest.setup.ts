@@ -7,3 +7,13 @@
 import { configure } from '@testing-library/react';
 
 configure({ asyncUtilTimeout: 15_000 });
+
+// jsdom has no ResizeObserver; the 3D view (react-three-fiber via react-use-measure) needs one.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+    class ResizeObserverPolyfill {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverPolyfill;
+}

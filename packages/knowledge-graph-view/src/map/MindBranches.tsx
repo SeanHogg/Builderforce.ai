@@ -83,9 +83,13 @@ export const Branches = memo(function Branches(p: LayerProps) {
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(b); } else onArrow(e); }}
                     >
                         <title>{w.title}</title>
-                        <circle
-                            cx={b.x} cy={b.y} r={r} pointerEvents="none" fill={b.kind === 'more' ? cssVar('bg') : cssVar(b.tone)}
-                            stroke={cssVar(b.tone)} strokeWidth={1.5} vectorEffect="non-scaling-stroke"
+                        {/* The branch's silhouette: the SHAPE_PATHS mark for its kind, so colour is never the only cue
+                            (redundant encoding). The path is unit-radius data centred on the origin, so a translate to
+                            the branch plus a uniform scale by its radius draws it exactly where the dot was. */}
+                        <path
+                            data-shape={b.shape} transform={`translate(${b.x} ${b.y}) scale(${r})`} pointerEvents="none"
+                            d={SHAPE_PATHS[b.shape]} fill={b.kind === 'more' ? cssVar('bg') : cssVar(b.tone)}
+                            stroke={cssVar(b.tone)} strokeWidth={1.5 / r} vectorEffect="non-scaling-stroke"
                         />
                         {active && <circle data-selected="true" cx={b.x} cy={b.y} r={r + 4 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={3 * perPx} pointerEvents="none" />}
                         {labelled && !onTop(b) && <BranchLabel b={b} text={w.text} r={r} font={font} bold={root || b.kind === 'folder'} />}

@@ -16,6 +16,7 @@
 
 import type { Finding, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../graphModel';
+import { kindShape } from '../names';
 import { cmp } from '../order';
 import { buildDirs, refsOf, walkDirs, worst, worstSeverity, type Dir } from './folderTree';
 import { layoutMindMap } from './mindLayout';
@@ -69,7 +70,7 @@ function fileBranches(dir: Dir, severities: ReadonlyMap<string, Severity>, start
         const severity = severities.get(n.ref);
         return {
             id: n.ref, kind: 'file', name: pathOf(n.ref)?.split('/').pop() ?? n.label, count: 1, refs: [n.ref], ref: n.ref,
-            ...(severity ? { severity } : {}), tone: toneOf(severity, 'nodeFile'), children: [],
+            ...(severity ? { severity } : {}), tone: toneOf(severity, 'nodeFile'), shape: kindShape(n), children: [],
         };
     });
     const rest = dir.files.slice(start + FILES_PER_FOLDER);
@@ -78,7 +79,7 @@ function fileBranches(dir: Dir, severities: ReadonlyMap<string, Severity>, start
         shown.push({
             id: `${dir.path}\u0000more`, kind: 'more', name: '', count: rest.length, refs: rest.map((n) => n.ref),
             page: { parent: dir.path, next: start + FILES_PER_FOLDER, of: 'files' },
-            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), children: [],
+            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), shape: 'circle', children: [],
         });
     }
     return shown;
@@ -92,7 +93,7 @@ function toBranch(dir: Dir, kind: 'root' | 'folder', ctx: Ctx): MapBranch {
     ];
     return {
         id: dir.path || '\u0000root', kind, name: dir.name, count: dir.count, refs: refsOf(dir),
-        ...(dir.severity ? { severity: dir.severity } : {}), tone: toneOf(dir.severity, 'edge'), children,
+        ...(dir.severity ? { severity: dir.severity } : {}), tone: toneOf(dir.severity, 'edge'), shape: 'circle', children,
     };
 }
 
@@ -126,7 +127,7 @@ function fold(b: MapBranch, keep: ReadonlySet<string>, win: Window | null): MapB
         children.push({
             id: `${b.id}\u0000folders`, kind: 'more', name: '', count: dropped.reduce((n, c) => n + c.count, 0), refs: dropped.flatMap((c) => c.refs),
             folders: dropped.length, page: { parent, next: start + kept.filter((c) => c.kind === 'folder').length },
-            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), children: [],
+            ...(severity ? { severity } : {}), tone: toneOf(severity, 'edge'), shape: 'circle', children: [],
         });
     }
     return { ...b, children };
