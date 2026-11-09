@@ -12,7 +12,9 @@ const plugin = {
   register(api: BuilderForceAgentsPluginApi) {
     setBlueBubblesRuntime(api.runtime);
     api.registerChannel({ plugin: bluebubblesPlugin });
-    api.registerHttpHandler(handleBlueBubblesWebhookRequest);
+    // Public webhook: the handler verifies its own per-account token
+    // (guid/password via safeEqualSecret in src/monitor.ts).
+    api.registerHttpHandler(handleBlueBubblesWebhookRequest, { auth: "public" });
   },
 };
 

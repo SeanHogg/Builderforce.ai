@@ -260,8 +260,24 @@ export type BuilderForceAgentsPluginApi = {
     handler: InternalHookHandler,
     opts?: BuilderForceAgentsPluginHookOptions,
   ) => void;
-  registerHttpHandler: (handler: BuilderForceAgentsPluginHttpHandler) => void;
-  registerHttpRoute: (params: { path: string; handler: BuilderForceAgentsPluginHttpRouteHandler }) => void;
+  /**
+   * Authentication mode for a plugin HTTP registration.
+   * - "gateway" (default): the request must carry a valid gateway bearer token,
+   *   checked by `authorizeGatewayConnect` before the handler runs. Routes that
+   *   omit `auth` get this — plugin authors cannot forget auth by omission.
+   * - "public": the handler answers without gateway auth. Only allowed when the
+   *   handler verifies its own signature/token (e.g. a Slack-style webhook
+   *   signature check); record which check it uses in a comment at the call site.
+   */
+  registerHttpHandler: (
+    handler: BuilderForceAgentsPluginHttpHandler,
+    opts?: { auth?: "gateway" | "public" },
+  ) => void;
+  registerHttpRoute: (params: {
+    path: string;
+    handler: BuilderForceAgentsPluginHttpRouteHandler;
+    auth?: "gateway" | "public";
+  }) => void;
   registerChannel: (registration: BuilderForceAgentsPluginChannelRegistration | ChannelPlugin) => void;
   registerGatewayMethod: (method: string, handler: GatewayRequestHandler) => void;
   registerCli: (registrar: BuilderForceAgentsPluginCliRegistrar, opts?: { commands?: string[] }) => void;

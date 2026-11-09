@@ -52,6 +52,7 @@ export type PluginCliRegistration = {
 export type PluginHttpRegistration = {
   pluginId: string;
   handler: BuilderForceAgentsPluginHttpHandler;
+  auth?: "gateway" | "public";
   source: string;
 };
 
@@ -59,6 +60,7 @@ export type PluginHttpRouteRegistration = {
   pluginId?: string;
   path: string;
   handler: BuilderForceAgentsPluginHttpRouteHandler;
+  auth?: "gateway" | "public";
   source?: string;
 };
 
@@ -288,18 +290,25 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     record.gatewayMethods.push(trimmed);
   };
 
-  const registerHttpHandler = (record: PluginRecord, handler: BuilderForceAgentsPluginHttpHandler) => {
+  const registerHttpHandler = (
+    record: PluginRecord,
+    handler: BuilderForceAgentsPluginHttpHandler,
+    opts?: { auth?: "gateway" | "public" },
+  ) => {
     record.httpHandlers += 1;
+    // Default "gateway": a route without an explicit auth declaration requires
+    // gateway auth, so a plugin author cannot forget auth by omitting it.
     registry.httpHandlers.push({
       pluginId: record.id,
       handler,
+      auth: opts?.auth ?? "gateway",
       source: record.source,
     });
   };
 
   const registerHttpRoute = (
     record: PluginRecord,
-    params: { path: string; handler: BuilderForceAgentsPluginHttpRouteHandler },
+    params: { path: string; handler: BuilderForceAgentsPluginHttpRouteHandler; auth?: "gateway" | "public" },
   ) => {
     const normalizedPath = normalizePluginHttpPath(params.path);
     if (!normalizedPath) {
@@ -325,6 +334,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       pluginId: record.id,
       path: normalizedPath,
       handler: params.handler,
+      auth: params.auth ?? "gateway",
       source: record.source,
     });
   };
@@ -489,7 +499,7 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       registerTool: (tool, opts) => registerTool(record, tool, opts),
       registerHook: (events, handler, opts) =>
         registerHook(record, events, handler, opts, params.config),
-      registerHttpHandler: (handler) => registerHttpHandler(record, handler),
+      registerHttpHandler: (handler, opts) => registerHttpHandler(record, handler, opts),
       registerHttpRoute: (params) => registerHttpRoute(record, params),
       registerChannel: (registration) => registerChannel(record, registration),
       registerProvider: (provider) => registerProvider(record, provider),

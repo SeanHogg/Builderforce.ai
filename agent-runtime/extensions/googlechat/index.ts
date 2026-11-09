@@ -12,7 +12,9 @@ const plugin = {
   register(api: BuilderForceAgentsPluginApi) {
     setGoogleChatRuntime(api.runtime);
     api.registerChannel({ plugin: googlechatPlugin, dock: googlechatDock });
-    api.registerHttpHandler(handleGoogleChatWebhookRequest);
+    // Public webhook: the handler verifies the Google Chat request itself
+    // (verifyGoogleChatRequest in src/auth.ts).
+    api.registerHttpHandler(handleGoogleChatWebhookRequest, { auth: "public" });
   },
 };
 

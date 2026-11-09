@@ -12,7 +12,9 @@ const plugin = {
   register(api: BuilderForceAgentsPluginApi) {
     setZaloRuntime(api.runtime);
     api.registerChannel({ plugin: zaloPlugin, dock: zaloDock });
-    api.registerHttpHandler(handleZaloWebhookRequest);
+    // Public webhook: the handler verifies its own per-account token
+    // (token check in src/monitor.ts).
+    api.registerHttpHandler(handleZaloWebhookRequest, { auth: "public" });
   },
 };
 
