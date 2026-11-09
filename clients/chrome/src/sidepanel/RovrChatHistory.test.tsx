@@ -77,7 +77,7 @@ describe('RovrChatHistory linked-ticket column', () => {
     expect(row?.textContent).not.toContain('67% · Ship the onboarding');
     const column = container.querySelector('.bf-chatrow__tickets');
     expect(column?.textContent).toBe('67% · 3 tickets');
-    expect(column?.getAttribute('aria-label')).toBe('67% complete across 3 tickets');
+    expect(column?.getAttribute('title')).toBe('67% complete across 3 tickets');
     expect(container.querySelector('.bf-chatrow__stats')).toBeNull();
   });
 
@@ -87,7 +87,7 @@ describe('RovrChatHistory linked-ticket column', () => {
     const { container } = renderHistory([local], servers);
     const column = container.querySelector('.bf-chatrow__tickets');
     expect(column?.textContent).toBe('62% · 3 open · 5 done');
-    expect(column?.getAttribute('aria-label')).toBe('62% complete: 3 open and 5 done tickets');
+    expect(column?.getAttribute('title')).toBe('62% complete: 3 open and 5 done tickets');
   });
 
   it('a chat with tickets but a null pct shows the count only (no misleading 0%)', () => {
