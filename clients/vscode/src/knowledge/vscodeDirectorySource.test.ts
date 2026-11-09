@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
-import { createDirectorySource, type KnowledgeFs } from "./vscodeDirectorySource";
+import { createDirectorySource, EVENT_LOOP_YIELD_EVERY, withEventLoopYield, type KnowledgeFs } from "./vscodeDirectorySource";
 
 const enc = new TextEncoder();
 
@@ -76,6 +76,36 @@ describe("the editor's DirectorySource", () => {
     const { fs } = fakeFs(tree);
     const doc = await createDirectorySource({ fs, rootPath: "/ws", rootId: "ws", title: "ws" }).read("src/a.ts");
     expect(doc).toMatchObject({ id: "src/a.ts", content: { kind: "text", text: "export const a = 1;" } });
+  });
+
+  it("yields a macrotask to the event loop every yieldEvery files, so a plan walk never freezes the host", async () => {
+    // A plan walk hashes in this thread; without a yield between batches the extension host's UI starves
+    // until the whole repo is counted. The injected delay stands in for the real macrotask yield: it must
+    // run between batches (mid-walk), not only after the last file.
+    const files: Record<string, string> = {};
+    for (let i = 0; i < EVENT_LOOP_YIELD_EVERY + 5; i++) files[`/big/f${i}.ts`] = `export const f${i} = ${i};`;
+    const yields: number[] = [];
+    const source = createDirectorySource({
+      fs: fakeFs(files).fs, rootPath: "/big", rootId: "big", title: "big",
+      yieldDelay: () => { yields.push(0); return Promise.resolve(); },
+    });
+    const out = await listAll(source);
+    expect(out.length).toBe(EVENT_LOOP_YIELD_EVERY + 5);
+    // One yield after file 250 (EVENT_LOOP_YIELD_EVERY), none after the final 5 files.
+    expect(yields).toHaveLength(1);
+  });
+
+  it("does not yield when yieldEvery is 0 (tests walk synchronously)", async () => {
+    const { fs } = fakeFs(tree);
+    const source = createDirectorySource({ fs, rootPath: "/ws", rootId: "ws", title: "ws", yieldEvery: 0 });
+    const out = await listAll(source);
+    expect(out.map((e) => e.path).sort()).toEqual([".builderforce/ignore", "README.md", "src/a.ts"]);
+  });
+
+  it("withEventLoopYield(0) returns the source untouched", () => {
+    const { fs } = fakeFs(tree);
+    const source = createDirectorySource({ fs, rootPath: "/ws", rootId: "ws", title: "ws", yieldEvery: 0 });
+    expect(withEventLoopYield(source, 0)).toBe(source);
   });
 
   it("reviews a sub-folder with paths relative to it, and watches only what it lists", async () => {

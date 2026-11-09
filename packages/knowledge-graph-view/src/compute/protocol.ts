@@ -17,6 +17,7 @@ import type { AntiPatternGroup } from '../surface/drawers/antiPatternGroups';
 import type { LinesModel } from '../surface/lines';
 import type { PathModel } from '../surface/path';
 import type { Station, StationModel } from '../surface/stations';
+import type { TransitLayout } from '../surface/transitLayout';
 import type { EdgeBuffer } from '../scene/buffers';
 import type { Layout3D } from '../scene/layout3d';
 import type { PartitionCell } from '../graphModel';
@@ -68,6 +69,21 @@ export interface FocusRaw { whole: boolean; nodes: Uint32Array; edges: Uint32Arr
 
 export interface SurfaceRaw { stations: StationModel; lines: LinesModel }
 export interface MatrixRaw { partitions: string[]; cells: Map<string, PartitionCell> }
+/** The transit layout as it crosses the wire: every field the view reads, with positions and bandIndex flattened to arrays (no Map crosses the wire). */
+export interface TransitLayoutRaw {
+    width: number;
+    height: number;
+    bands: Array<{ layer: string; y: number; h: number }>;
+    /** Drawn station ids, in draw order. */
+    drawn: string[];
+    /** Station id → position, as parallel arrays. */
+    positions: Array<{ id: string; x: number; y: number }>;
+    /** Station id → band index, as parallel arrays. */
+    bandIndex: Array<{ id: string; band: number }>;
+    hiddenOnLine: number;
+}
+export interface TransitRoutesRaw { layout: TransitLayoutRaw; routes: HopRouteWire[] }
+interface HopRouteWire { lineId: string; index: number; from: string; to: string; d: string; pts: Array<{ x: number; y: number }>; mid: { x: number; y: number } }
 
 /** Every task: what the main thread asks (`req`) and what the worker answers (`raw`). */
 export interface TaskTable {
@@ -80,6 +96,8 @@ export interface TaskTable {
     edgeBuffers: { req: { refs: Refs; placed: PlacedWire; selected: string | null }; raw: EdgeBuffer[] };
     mindMap: { req: { refs: Refs; opts: MindOptions }; raw: MindMap };
     surface: { req: { graph: GraphId; changed: string[]; repoConfigName?: string }; raw: SurfaceRaw };
+    /** The transit map's layout and hop routes, computed off the main thread from the worker-built stations and lines. */
+    transitLayout: { req: { stations: StationModel; lines: LinesModel; width: number; order?: readonly string[] }; raw: TransitRoutesRaw };
     path: { req: { graph: GraphId; refs: string[]; stations: StationLookup }; raw: PathModel };
     insights: { req: { graph: GraphId }; raw: Insights };
     partitionMatrix: { req: { graph: GraphId }; raw: MatrixRaw };

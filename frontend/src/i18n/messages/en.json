@@ -37360,6 +37360,7 @@
       "unused": "Unused",
       "changed": "Changed",
       "edge": "Reference",
+      "area": "Area",
       "catSource": "Source",
       "catTest": "Tests",
       "catDoc": "Docs",

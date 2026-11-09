@@ -83,7 +83,7 @@ describe('lens effects on the 3D scene', () => {
   it('tones nodes the way each lens means', async () => {
     await mount3D(graph);
     await pick('duplication');
-    expect(style('app/billing.tsx')).toEqual({ tone: 'duplicate', emphasis: 'strong' });
+    expect(style('app/billing.tsx')).toEqual({ tone: 'duplicate', emphasis: 'strong', shape: 'circle' });
     expect(style('app/page.tsx').emphasis).toBe('dim');
 
     await pick('claims');
@@ -91,11 +91,11 @@ describe('lens effects on the 3D scene', () => {
     expect(style('policy/termination.md').emphasis).toBe('dim');
 
     await pick('links');
-    expect(style('missing.md')).toEqual({ tone: 'nodeMissing', emphasis: 'strong' });
+    expect(style('missing.md')).toEqual({ tone: 'nodeMissing', emphasis: 'strong', shape: 'star' });
     expect(style('app/page.tsx').emphasis).toBe('normal');
 
     await pick('unused');
-    expect(style('infrastructure/legacy.ts')).toEqual({ tone: 'unused', emphasis: 'strong' });
+    expect(style('infrastructure/legacy.ts')).toEqual({ tone: 'unused', emphasis: 'strong', shape: 'circle' });
     expect(style('app/page.tsx').emphasis).toBe('dim');
 
     await pick('knowledge');

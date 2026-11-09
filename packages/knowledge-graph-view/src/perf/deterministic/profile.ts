@@ -23,7 +23,7 @@ import { runParity, type ParityRow } from './parity';
 import { probeViews, type RenderReport, type ViewHost } from './renderProbe';
 
 /** Kinds whose call sites choose inline-or-worker by the size of the graph (the others always go to the worker). */
-export const SIZE_GATED: readonly TaskKind[] = ['focus', 'insights', 'partitionMatrix', 'antiPatterns', 'surface', 'path', 'rankEdges', 'edgePaths'];
+export const SIZE_GATED: readonly TaskKind[] = ['focus', 'insights', 'partitionMatrix', 'antiPatterns', 'surface', 'path', 'rankEdges', 'edgePaths', 'transitLayout'];
 
 export interface Invariants {
     weight: number;

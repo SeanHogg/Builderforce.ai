@@ -37360,6 +37360,7 @@
       "unused": "未使用",
       "changed": "已变更",
       "edge": "引用",
+      "area": "区域",
       "catSource": "源代码",
       "catTest": "测试",
       "catDoc": "文档",

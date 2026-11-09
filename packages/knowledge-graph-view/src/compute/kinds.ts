@@ -16,8 +16,11 @@ import type { AntiPatternGroup } from '../surface/drawers/antiPatternGroups';
 import type { LinesModel } from '../surface/lines';
 import type { PathModel } from '../surface/path';
 import type { StationModel } from '../surface/stations';
+import type { TransitLayout } from '../surface/transitLayout';
 
 export interface SurfaceResult { stations: StationModel; lines: LinesModel }
+
+export interface TransitRoutesResult { layout: TransitLayout; routes: import('../surface/transit/corridors').HopRoute[] }
 
 export interface Kinds {
     layout2d: { input: { rootId: string; nodes: readonly KNode[]; edges: readonly KEdge[] }; result: Layout2D };
@@ -27,6 +30,7 @@ export interface Kinds {
     edgeBuffers: { input: { nodes: readonly KNode[]; edges: readonly KEdge[]; layout: Layout3D; selected: string | null }; result: EdgeBuffer[] };
     mindMap: { input: { nodes: readonly KNode[]; findings: readonly Finding[]; opts: MindOptions }; result: MindMap };
     surface: { input: { graph: KnowledgeGraph; changed: readonly string[]; repoConfigName?: string | undefined }; result: SurfaceResult };
+    transitLayout: { input: { stations: StationModel; lines: LinesModel; width: number; order?: readonly string[] | undefined }; result: TransitRoutesResult };
     path: { input: { graph: KnowledgeGraph; refs: readonly string[]; stations: StationModel }; result: PathModel };
     insights: { input: { graph: KnowledgeGraph }; result: Insights };
     partitionMatrix: { input: { graph: KnowledgeGraph }; result: { partitions: string[]; cells: Map<string, PartitionCell> } };

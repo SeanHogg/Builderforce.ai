@@ -2,6 +2,7 @@
 
 import type { KindResult } from '../kinds';
 import { lookupOf } from '../stationLookup';
+import type { TransitLayout } from '../../surface/transitLayout';
 import { mapBack, type Codec } from './codec';
 
 export const mindMap: Codec<'mindMap'> = {
@@ -18,6 +19,35 @@ export const surface: Codec<'surface'> = {
         return { graph: id, req: { graph: id, changed: [...changed], ...(repoConfigName ? { repoConfigName } : {}) } };
     },
     decode: (raw) => raw,
+};
+
+/** The transit layout is a pure function of the worker-produced stations and lines (no graph residency needed): passes through. */
+/** The layout reads no graph (a pure function of the stations and lines): name this shared empty one so the
+ *  client's in-process paths (`runSync` for a small surface, the idle-step fallback) can adopt a store for it. */
+const NO_GRAPH = {
+    scope: { rootId: '', packs: [], digest: '' },
+    nodes: [], edges: [], findings: [],
+    stats: { sources: 0, nodes: 0, edges: 0, stale: 0, truncated: false },
+} as never;
+
+export const transitLayout: Codec<'transitLayout'> = {
+    encode: ({ stations, lines, width, order }, residency) => ({
+        graph: residency.graphId(NO_GRAPH),
+        req: { stations, lines, width, ...(order ? { order } : {}) },
+    }),
+    decode: (raw): KindResult<'transitLayout'> => {
+        // Rebuild the two Maps the view reads; bands and drawn cross as plain arrays.
+        const positions = new Map(raw.layout.positions.map((p) => [p.id, { x: p.x, y: p.y }] as const));
+        const bandIndex = new Map(raw.layout.bandIndex.map((b) => [b.id, b.band] as const));
+        const routes = raw.routes.map((r) => ({ lineId: r.lineId, index: r.index, from: r.from, to: r.to, d: r.d, pts: r.pts, mid: r.mid }));
+        return {
+            layout: {
+                width: raw.layout.width, height: raw.layout.height, bands: raw.layout.bands,
+                positions, bandIndex, drawn: raw.layout.drawn, routes, hiddenOnLine: raw.layout.hiddenOnLine,
+            },
+            routes,
+        };
+    },
 };
 
 export const path: Codec<'path'> = {

@@ -90,6 +90,19 @@ describe('the knowledge view\'s neutrals', () => {
         expect(MAIN).toContain("'@builderforce/knowledge-graph-view/tokens.css'");
     });
 
+    it('define the file-category tones and the area tone in both themes (each distinct from the non-file tones)', () => {
+        const dark = rule(TOKENS, ':where(:root)');
+        const light = rule(TOKENS, ":where(html[data-theme='light'])");
+        const cats = ['--kg-cat-source', '--kg-cat-test', '--kg-cat-doc', '--kg-cat-config', '--kg-cat-style', '--kg-cat-data', '--kg-cat-other'];
+        for (const set of [dark, light]) {
+            for (const name of cats) expect(set.get(name), name).toBeTruthy();
+            expect(set.get('--kg-node-area')).toBeTruthy();
+        }
+        // Each category tone differs from every other (the redundant encoding would be lost otherwise).
+        const seen = new Set(cats.map((c) => dark.get(c)!));
+        expect(seen.size).toBe(cats.length);
+    });
+
     it('keep text legible on every surface, in both themes (text 4.5:1, muted 4.5:1, on-accent 4.5:1)', () => {
         for (const set of [DARK, LIGHT]) {
             for (const surface of ['--kg-bg', '--kg-panel', '--kg-panel2', '--kg-raise'] as const) {

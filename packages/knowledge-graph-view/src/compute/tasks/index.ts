@@ -6,7 +6,7 @@ import { edgeBufferTask, edgePaths, rankEdgesTask } from './edges';
 import { once, type Handler } from './handler';
 import { layout2d, layout3d } from './layout';
 import { antiPatterns, focus, insights, matrix } from './reads';
-import { path, surface } from './surface';
+import { path, surface, transitLayout } from './surface';
 
 export const HANDLERS: { [K in TaskKind]: Handler<K> } = {
     layout2d,
@@ -16,6 +16,7 @@ export const HANDLERS: { [K in TaskKind]: Handler<K> } = {
     edgeBuffers: edgeBufferTask,
     mindMap: (store, { refs, opts }) => once(() => { const { nodes, findings } = store.subset(refs); return mindMap(nodes, findings, opts); }),
     surface,
+    transitLayout,
     path,
     insights,
     partitionMatrix: matrix,

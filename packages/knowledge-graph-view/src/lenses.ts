@@ -99,7 +99,8 @@ const CATEGORY_LEGEND = FILE_CATEGORY_ORDER.map((cat) => ({
 
 const KIND_LEGEND = [
     { tone: 'nodeSection', key: 'section', shape: 'square' }, { tone: 'nodeEntity', key: 'entity', shape: 'hexagon' },
-    { tone: 'nodeClaim', key: 'claim', shape: 'triangle' }, { tone: 'nodeFact', key: 'fact', shape: 'octagon' }, { tone: 'stale', key: 'stale' },
+    { tone: 'nodeClaim', key: 'claim', shape: 'triangle' }, { tone: 'nodeFact', key: 'fact', shape: 'octagon' },
+    { tone: 'nodeArea', key: 'area', shape: 'pentagon' }, { tone: 'stale', key: 'stale' },
 ] as const satisfies ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }>;
 
 export const LENSES: Record<LensId, LensDef> = {

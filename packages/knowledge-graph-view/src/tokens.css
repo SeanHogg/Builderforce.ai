@@ -44,6 +44,19 @@
   --kg-node-claim: #a3e635;
   --kg-node-fact: #f472b6;
   --kg-node-missing: #d4a373;
+  /* The file-category hues (PRD 38's redundant encoding): a file node reads its category from
+   * `fileCategory` and takes that tone. One blue→green arc, each distinct from every non-file
+   * tone on screen: source the base blue, tests cyan, docs teal, config amber (the warning
+   * family), styles magenta (fact's hue), data green (entity's), other neutral grey. */
+  --kg-cat-source: #4d9eff;
+  --kg-cat-test: #22d3ee;
+  --kg-cat-doc: #2dd4bf;
+  --kg-cat-config: #facc15;
+  --kg-cat-style: #f472b6;
+  --kg-cat-data: #34d399;
+  --kg-cat-other: #a8a29e;
+  /* The area nodes: a visible grey-blue region, a clear step above the `--kg-plane` surface. */
+  --kg-node-area: #4b5563;
   --kg-edge: #7b8698;
   --kg-violation: #f87171;
   --kg-cycle: #fb923c;
@@ -126,6 +139,15 @@
   --kg-node-claim: #4d7c0f;
   --kg-node-fact: #be185d;
   --kg-node-missing: #92400e;
+  /* Light twins of the category hues (the darker twin of each dark hue above). */
+  --kg-cat-source: #2d60ff;
+  --kg-cat-test: #0e7490;
+  --kg-cat-doc: #0f766e;
+  --kg-cat-config: #a16207;
+  --kg-cat-style: #be185d;
+  --kg-cat-data: #047857;
+  --kg-cat-other: #64748b;
+  --kg-node-area: #64748b;
   --kg-edge: #7c8799;
   --kg-violation: #b91c1c;
   --kg-cycle: #c2410c;

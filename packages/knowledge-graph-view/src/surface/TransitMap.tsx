@@ -39,6 +39,7 @@ import { satelliteBoxes, satellitePlaces, satellitesOf } from './transit/unfold'
 import type { EnterCheck } from './transit/useDrill';
 import { useCardAnchor } from './transit/useCardAnchor';
 import { useTransitLabels } from './transit/useTransitLabels';
+import { LayingOut } from './LayingOut';
 import { useTransitModel } from './transit/useTransitModel';
 import { FONT_UI, TYPE } from './ui/type';
 import type { Pin } from './useSurface';
@@ -95,7 +96,7 @@ export function TransitMap(p: TransitMapProps) {
     const width = useContainerWidth(hostRef);
     const compact = width > 0 && width < COMPACT_WIDTH;
     const model = useTransitModel({ graph: p.graph ?? null, stations, lines, overlay, width, order: p.order });
-    const { layout } = model;
+    const { layout, layoutPending } = model;
     // Zoom is the viewBox only (the scene overlay's +, − and Fit): no wheel or drag hook, so the page still scrolls over the map.
     const fitted = useMemo(() => ({ x: 0, y: 0, w: layout.width, h: layout.height }), [layout.width, layout.height]);
     const zoom = usePanZoom(fitted, layout);
@@ -183,6 +184,9 @@ export function TransitMap(p: TransitMapProps) {
     return (
         <div ref={boxRef} style={{ position: 'relative', width: '100%' }}>
             <div ref={hostRef} data-testid="kg-transit" style={{ position: 'relative', width: '100%', overflow: 'auto' }}>
+                {layoutPending ? (
+                    <LayingOut labels={labels} />
+                ) : (
                 <svg
                     role="group" aria-label={p.label} width={layout.width} height={layout.height} viewBox={zoom.viewBox ?? `0 0 ${layout.width} ${layout.height}`}
                     // Wider than the container: scroll sideways at full size rather than shrink the labels to a few pixels.
@@ -254,6 +258,7 @@ export function TransitMap(p: TransitMapProps) {
                         );
                     })}
                 </svg>
+                )}
                 {p.levelNote && <p data-level-note style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{p.levelNote}</p>}
                 {undrawn > 0 && <p style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{counted(labels, 'moreStations', undrawn)}</p>}
                 {layout.hiddenOnLine > 0 && <p data-more-stops style={{ margin: 0, padding: '4px 12px', ...TYPE.bodyMuted }}>{counted(labels, 'moreStops', layout.hiddenOnLine)}</p>}

@@ -16,7 +16,7 @@ import { litStations, type QuestionContext, type QuestionId } from './questions'
 import { changedRefs, stationOfRef, type Station, type StationModel } from './stations';
 import { EMPTY_GRAPH } from '../emptyGraph';
 import { useComputed } from '../compute/useComputed';
-import type { SurfaceResult } from '../compute/kinds';
+import type { SurfaceResult, TransitRoutesResult } from '../compute/kinds';
 import { isSmall } from '../compute/size';
 import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
 import type { TowerHighlight } from './towerHighlight';

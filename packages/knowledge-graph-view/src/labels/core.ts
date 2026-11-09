@@ -241,6 +241,7 @@ legend: {
     file: 'File', section: 'Section', symbol: 'Symbol', entity: 'Entity', claim: 'Claim', fact: 'Fact',
     missing: 'Missing target', stale: 'Stale', violation: 'Breaks a rule', cycle: 'Cycle', duplicate: 'Duplicate',
     contradicts: 'Contradicts', agrees: 'Agrees', unused: 'Unused', changed: 'Changed', edge: 'Reference',
+    area: 'Area',
     catSource: 'Source', catTest: 'Tests', catDoc: 'Docs', catConfig: 'Config', catStyle: 'Styles',
     catData: 'Data', catOther: 'Other',
 },
