@@ -3,6 +3,7 @@ import { desktopRepoMapSection } from "./desktopContext";
 import { hostCostLeverOn } from "./hostCostLevers";
 import { symbolIndexGrounding } from "./workspaceSymbols";
 import { withinMs } from "./contextPack/withinMs";
+import { workspaceMapFor } from "./contextPack/workspaceMapScan";
 
 /** Single source of truth for the current workspace grounding summary, shared by the
  *  chat panels and the native chat participant (so none holds its own copy). */
@@ -102,11 +103,12 @@ export async function stableGroundingWithin(
 }
 
 async function buildStableGrounding(root: string, map: string | undefined): Promise<string | undefined> {
-  const [repoMap, symbols] = await Promise.all([
+  const [workspaceMap, repoMap, symbols] = await Promise.all([
+    workspaceMapFor(root),
     desktopRepoMapSection(root, { adaptive: hostCostLeverOn("c4_adaptive_context") }),
     symbolIndexGrounding(root),
   ]);
-  const sections = [map, repoMap, symbols].filter((s): s is string => !!s);
+  const sections = [map, workspaceMap, repoMap, symbols].filter((s): s is string => !!s);
   return sections.length ? sections.join("\n\n") : undefined;
 }
 

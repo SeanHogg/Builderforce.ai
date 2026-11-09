@@ -6,9 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repoMap = vi.hoisted(() => vi.fn(async () => "## Repo map"));
 const symbols = vi.hoisted(() => vi.fn(async () => "## Symbol index"));
+const workspaceMap = vi.hoisted(() => vi.fn(async () => "## Workspace map\n- api [type-check test]"));
 
 vi.mock("./desktopContext", () => ({ desktopRepoMapSection: repoMap }));
 vi.mock("./workspaceSymbols", () => ({ symbolIndexGrounding: symbols }));
+vi.mock("./contextPack/workspaceMapScan", () => ({ workspaceMapFor: workspaceMap }));
 vi.mock("./hostCostLevers", () => ({ hostCostLeverOn: () => false }));
 vi.mock("./sessionNotes", () => ({ readRecentSessionNotes: async () => "" }));
 
@@ -18,6 +20,7 @@ beforeEach(() => {
   setGroundingSummary("## Map");
   repoMap.mockClear();
   symbols.mockClear();
+  workspaceMap.mockClear();
 });
 
 describe("getStableGrounding memo", () => {
@@ -26,15 +29,16 @@ describe("getStableGrounding memo", () => {
     symbols.mockResolvedValueOnce("## Symbol index (changed on save)");
     const second = await getStableGrounding("/repo");
     expect(second).toBe(first);
-    expect(first).toBe("## Map\n\n## Repo map\n\n## Symbol index");
+    expect(first).toBe("## Map\n\n## Workspace map\n- api [type-check test]\n\n## Repo map\n\n## Symbol index");
     expect(repoMap).toHaveBeenCalledTimes(1);
     expect(symbols).toHaveBeenCalledTimes(1);
+    expect(workspaceMap).toHaveBeenCalledTimes(1);
   });
 
   it("recomputes after a rescan (a new summary)", async () => {
     await getStableGrounding("/repo");
     setGroundingSummary("## Map v2");
-    expect(await getStableGrounding("/repo")).toBe("## Map v2\n\n## Repo map\n\n## Symbol index");
+    expect(await getStableGrounding("/repo")).toBe("## Map v2\n\n## Workspace map\n- api [type-check test]\n\n## Repo map\n\n## Symbol index");
     expect(symbols).toHaveBeenCalledTimes(2);
   });
 
@@ -59,7 +63,7 @@ describe("stableGroundingWithin", () => {
   it("serves the full grounding when the build beats the deadline, and never fires onLate", async () => {
     invalidateStableGrounding();
     const onLate = vi.fn();
-    expect(await stableGroundingWithin("/repo", 1_000, { onLate })).toBe("## Map\n\n## Repo map\n\n## Symbol index");
+    expect(await stableGroundingWithin("/repo", 1_000, { onLate })).toBe("## Map\n\n## Workspace map\n- api [type-check test]\n\n## Repo map\n\n## Symbol index");
     await new Promise((r) => setTimeout(r, 0));
     expect(onLate).not.toHaveBeenCalled();
   });
@@ -73,7 +77,7 @@ describe("stableGroundingWithin", () => {
     expect(onLate).not.toHaveBeenCalled();
     finish("## Symbol index");
     await vi.waitFor(() => expect(onLate).toHaveBeenCalledTimes(1));
-    expect(await getStableGrounding("/repo")).toBe("## Map\n\n## Repo map\n\n## Symbol index");
+    expect(await getStableGrounding("/repo")).toBe("## Map\n\n## Workspace map\n- api [type-check test]\n\n## Repo map\n\n## Symbol index");
   });
 
   it("does not fire onLate for a build that failed after the deadline", async () => {
