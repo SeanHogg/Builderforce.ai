@@ -54,7 +54,7 @@ export interface ResolvedGovernanceRuleset {
 
 export type GovernanceAuditOutcome<T> = { ok: true; value: T } | { ok: false; status: 404 | 409; error: string };
 
-const projectNotFound = { ok: false, status: 404, error: 'project not found' };
+const projectNotFound = { ok: false, status: 404, error: 'project not found' } as const;
 
 /** A caller-named project must belong to the tenant; `null` (tenant-wide) always passes. */
 async function projectAllowed(db: Db, tenantId: number, projectId: number | null): Promise<boolean> {

@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { chatProgressIsStale, type ChatTicketHealthInput } from '@builderforce/agent-loop';
+import { chatProgressIsStale, rollupChatTicketHealth, type ChatTicketHealthInput } from '@builderforce/agent-loop';
 import type { ChatOptionVM } from './types';
+
+/**
+ * The row's open/done counts disagree with the live tickets. Only when the row carries
+ * them (an older server omits them — unknown, never stale); the open/done rule is the
+ * shared rollup's, not a copy.
+ */
+function ticketCountsAreStale(row: ChatOptionVM | undefined, tickets: readonly ChatTicketHealthInput[]): boolean {
+  if (!row || row.ticketCount == null || row.ticketOpenCount == null || row.ticketDoneCount == null) return false;
+  const health = rollupChatTicketHealth(tickets);
+  return row.ticketOpenCount !== health.openTickets || row.ticketDoneCount !== health.completedTickets;
+}
 
 /**
  * Keeps the host's chat list in step with the tickets the rail just read.
@@ -34,7 +45,7 @@ export function useChatProgressSync(
 
   return useCallback((tickets: readonly ChatTicketHealthInput[]) => {
     const row = rowRef.current;
-    if (!onStaleRef.current || !chatProgressIsStale(row, tickets)) return;
+    if (!onStaleRef.current || !(chatProgressIsStale(row, tickets) || ticketCountsAreStale(row, tickets))) return;
     const signature = `${chatId}:${tickets.length}:${tickets.map((t) => `${t.progressPct}/${t.status ?? ''}`).join(',')}`;
     if (reported.current === signature) return;
     reported.current = signature;

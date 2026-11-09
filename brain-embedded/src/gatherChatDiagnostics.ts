@@ -25,6 +25,7 @@
 import type { SpendSavingsSummary } from './spendSavings';
 import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
 import { toolExposureInTrace, type BrainTraceEvent } from './brainTriage';
+import { publishHoldFromPersonTurns } from './runStore/publishHold';
 import { isStepMessage } from './types';
 
 /** The `/api/consumption` snapshot, structurally — each host has its own named type
@@ -64,6 +65,9 @@ export interface ChatDiagnosticsEvermindHead {
 export interface ChatDiagnosticsMessageLike {
   role: string;
   evermindLearn?: { learned: boolean; version: number; reason?: string | null } | null;
+  /** The turn's text — read to re-derive the publish hold from the PERSON's own words.
+   *  Optional: a surface that cannot supply it simply reports no hold line. */
+  content?: string | null;
 }
 
 /**
@@ -216,6 +220,18 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
   // the ceiling used to stand in for. Nulls when no turn in this run was measured.
   const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
 
+  // The publish hold, re-derived from the PERSON's own user turns in the durable
+  // transcript. The person-turn mark (`chatAsks.personTurns`) lives on the run's working
+  // transcript, not the durable message rows, so here — where only role + text survive —
+  // every `role: 'user'` turn is read as the person's own words. That is CONSERVATIVE in
+  // the safe direction: it may report a hold a loop-injected turn set, never miss one the
+  // person set. The runtime's `publishHold(convo)` (person-marked only) stays the
+  // authority for actually refusing calls.
+  const publishHold = publishHoldFromPersonTurns(
+    msgs.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
+        .map((m) => ({ text: m.content!.trim() })),
+  );
+
   const account: ChatDiagnosticsAccount = {
     plan: plan?.plan.effective ?? null,
     billingStatus: plan?.plan.billingStatus ?? null,
@@ -256,6 +272,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,
+    publishHold,
     agents: agents.map((a) => ({
       agentRef: a.agentRef,
       role: a.role,

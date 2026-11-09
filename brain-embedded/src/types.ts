@@ -45,6 +45,10 @@ export interface BrainChat {
    */
   ticketCount?: number;
   ticketProgressPct?: number | null;
+  /** Non-cancelled linked tickets below 100%. Absent on older servers (unknown, not 0). */
+  ticketOpenCount?: number;
+  /** Non-cancelled linked tickets at 100%. Absent on older servers (unknown, not 0). */
+  ticketDoneCount?: number;
   /**
    * The per-chat Memory switch (1228): whether this conversation recalls from and
    * writes back to the project's memory. A property of the conversation, so every

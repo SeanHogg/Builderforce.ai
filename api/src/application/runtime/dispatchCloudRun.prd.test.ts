@@ -26,6 +26,7 @@ vi.mock('./cloudAgentEngine', () => ({
 }));
 vi.mock('../observability/caughtErrorReporter', () => ({
   reportCaughtError: (...a: unknown[]) => reportCaughtError(...a),
+  reportedFallback: (fallback: unknown) => () => fallback,
 }));
 vi.mock('../tenant/featureEntitlements', () => ({
   tenantHasFeature: async () => false,

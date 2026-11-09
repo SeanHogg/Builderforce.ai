@@ -26,6 +26,7 @@ import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
 import { createLinkedToChat, isTicketRecordingTool, stampRunChat } from '../chatWorkLinking';
 import { attachDeltaToRunTicket } from './runBackstops';
+import { isPublishCall, publishHoldRefusal } from './publishHold';
 import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
 export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
@@ -160,6 +161,16 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
     // stamped here — before the confirm gate, the trace and the dispatch — so the server
     // links the item to this conversation in the create call itself.
     stampRunChat(call.name, args, run.serverChatId);
+    // PUBLISH HOLD (incident #56886): refuse commit / push / PR calls BEFORE the confirm
+    // gate, so neither `acceptEdits` nor a sub-agent's inherited context can waive it.
+    // The hold is the ROOT chat's (the run's own transcript IS the root's when seeded),
+    // so a child can never lift its owner's hold. The model gets a recoverable refusal
+    // naming the exact user turn that set it.
+    if (c.publishHold && isPublishCall(call.name, args)) {
+      const refusal = publishHoldRefusal(c.publishHold);
+      pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { publishHold: c.publishHold.messageNumber, note: refusal.error } });
+      return { result: { data: refusal } };
+    }
     // Human-in-the-loop gate: pause for an explicit confirm when the host's
     // predicate says so. The resolver lives on the cell, so whichever Brain
     // instance is mounted (even after a navigation swapped it) can answer.

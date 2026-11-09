@@ -6,19 +6,33 @@
  */
 
 import type { KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { fileCategory, FILE_CATEGORY_ORDER, type FileCategory } from './fileCategory';
 import type { ThemeTone } from './scene/themeColors';
 import type { LensId } from './types';
 
 export type NodeEmphasis = 'strong' | 'normal' | 'dim';
+
+/**
+ * A node's SHAPE, read beside its colour so two kinds are never told apart by hue alone.
+ * Every renderer maps these to its own primitive (SVG, instanced mesh, branch glyph), so a
+ * kind keeps one recognisable silhouette across the Graph, Map, Tower and 3D views.
+ */
+export type NodeShape = 'circle' | 'square' | 'diamond' | 'triangle' | 'hexagon' | 'octagon' | 'pentagon' | 'star';
+
+export interface NodeStyle {
+    tone: ThemeTone;
+    emphasis: NodeEmphasis;
+    shape: NodeShape;
+}
 
 export interface LensDef {
     id: LensId;
     /** Packs it applies to; `'all'` for every pack. */
     packs: readonly string[] | 'all';
     edgeFilter(e: KEdge): boolean;
-    nodeStyle(n: KNode): { tone: ThemeTone; emphasis: NodeEmphasis };
-    /** Legend entries: a tone and a key into `labels.legend`. */
-    legend: ReadonlyArray<{ tone: ThemeTone; key: string }>;
+    nodeStyle(n: KNode): NodeStyle;
+    /** Legend entries: a tone and a key into `labels.legend`; a `shape` draws the glyph beside the swatch. */
+    legend: ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }>;
     /** Finding kinds this lens surfaces; `'all'` for every one. */
     insights: readonly string[] | 'all';
     /** The lens needs a model's judgement (an explained empty state without it). */
@@ -27,36 +41,68 @@ export interface LensDef {
     panel?: 'matrix' | 'compare';
 }
 
+/**
+ * The file-category tones (PRD 38's redundant encoding — the 1990 file nodes stop collapsing to one
+ * blue). One coherent palette in the view's blue→green arc, each distinct from every NON-file tone on
+ * screen: source is the base blue, tests shift cyan, docs teal, config steps to amber (config is the
+ * warning family), styles magenta (fact's), data green (entity's), and other stays neutral grey.
+ * The lens overrides (violation/cycle/changed/unused/strong) still win: those pass an explicit tone
+ * through `dimUnless(..., tone)`/`base`, never the `kindTone` default, and `'dim'` emphasis is set by
+ * the emphasis flag, independent of tone. So the category default here only colours what no override
+ * claims.
+ */
+const CATEGORY_TONE: Record<FileCategory, ThemeTone> = {
+    source: 'catSource', test: 'catTest', doc: 'catDoc', config: 'catConfig',
+    style: 'catStyle', data: 'catData', other: 'catOther',
+};
+
 const KIND_TONE: Record<string, ThemeTone> = {
-    file: 'nodeFile', section: 'nodeSection', symbol: 'nodeSymbol', entity: 'nodeEntity', claim: 'nodeClaim',
-    fact: 'nodeFact', missing: 'nodeMissing', area: 'plane',
+    section: 'nodeSection', symbol: 'nodeSymbol', entity: 'nodeEntity', claim: 'nodeClaim',
+    fact: 'nodeFact', missing: 'nodeMissing', area: 'nodeArea',
+};
+
+/** A distinct silhouette per concept, so colour is never the only cue (redundant encoding). */
+const KIND_SHAPE: Record<string, NodeShape> = {
+    file: 'circle', section: 'square', symbol: 'diamond', entity: 'hexagon', claim: 'triangle',
+    fact: 'octagon', missing: 'star', area: 'pentagon',
 };
 
 export function kindTone(n: KNode): ThemeTone {
     if (n.stale) return 'stale';
-    return KIND_TONE[n.kind] ?? 'nodeFile';
+    if (n.kind === 'file') return CATEGORY_TONE[fileCategory(n)];
+    return KIND_TONE[n.kind] ?? 'catSource';
 }
 
-const base = (n: KNode, strong = false): { tone: ThemeTone; emphasis: NodeEmphasis } =>
-    ({ tone: kindTone(n), emphasis: strong ? 'strong' : 'normal' });
-const dimUnless = (hit: boolean, n: KNode, tone?: ThemeTone): { tone: ThemeTone; emphasis: NodeEmphasis } =>
-    hit ? { tone: tone ?? kindTone(n), emphasis: 'strong' } : { tone: kindTone(n), emphasis: 'dim' };
+/** The shape a kind draws; unrecognised kinds keep the neutral dot. */
+export function kindShape(n: KNode): NodeShape {
+    return KIND_SHAPE[n.kind] ?? 'circle';
+}
+
+const base = (n: KNode, strong = false): NodeStyle =>
+    ({ tone: kindTone(n), emphasis: strong ? 'strong' : 'normal', shape: kindShape(n) });
+const dimUnless = (hit: boolean, n: KNode, tone?: ThemeTone): NodeStyle =>
+    hit ? { tone: tone ?? kindTone(n), emphasis: 'strong', shape: kindShape(n) } : { tone: kindTone(n), emphasis: 'dim', shape: kindShape(n) };
 const isJudged = (n: KNode): boolean => n.origin !== 'extracted';
 const isChanged = (n: KNode): boolean => n.badges?.added !== undefined || n.badges?.removed !== undefined || n.badges?.changed !== undefined;
 const isUnused = (n: KNode): boolean =>
     n.badges?.unused !== undefined || Number(n.badges?.unusedExports ?? 0) > 0 || Number(n.badges?.unusedDependencies ?? 0) > 0;
 
+/** The category legend rows, in display order (`FILE_CATEGORY_ORDER`), so the Legend names each file hue. */
+const CATEGORY_LEGEND = FILE_CATEGORY_ORDER.map((cat) => ({
+    tone: CATEGORY_TONE[cat], key: `cat${cat.charAt(0).toUpperCase()}${cat.slice(1)}`, shape: 'circle',
+})) as unknown as ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }>;
+
 const KIND_LEGEND = [
-    { tone: 'nodeFile', key: 'file' }, { tone: 'nodeSection', key: 'section' }, { tone: 'nodeEntity', key: 'entity' },
-    { tone: 'nodeClaim', key: 'claim' }, { tone: 'nodeFact', key: 'fact' }, { tone: 'stale', key: 'stale' },
-] as const satisfies ReadonlyArray<{ tone: ThemeTone; key: string }>;
+    { tone: 'nodeSection', key: 'section', shape: 'square' }, { tone: 'nodeEntity', key: 'entity', shape: 'hexagon' },
+    { tone: 'nodeClaim', key: 'claim', shape: 'triangle' }, { tone: 'nodeFact', key: 'fact', shape: 'octagon' }, { tone: 'stale', key: 'stale' },
+] as const satisfies ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeShape }>;
 
 export const LENSES: Record<LensId, LensDef> = {
     structure: {
         id: 'structure', packs: 'all',
         edgeFilter: (e) => e.origin === 'extracted' && e.kind !== 'duplicate' && e.kind !== 'near-duplicate',
         nodeStyle: (n) => base(n),
-        legend: [...KIND_LEGEND, { tone: 'edge', key: 'edge' }],
+        legend: [...CATEGORY_LEGEND, { tone: 'edge', key: 'edge' }],
         insights: ['cycle', 'stale'],
     },
     partitions: {
@@ -85,8 +131,8 @@ export const LENSES: Record<LensId, LensDef> = {
     links: {
         id: 'links', packs: ['docs'],
         edgeFilter: (e) => e.kind === 'links',
-        nodeStyle: (n) => (n.kind === 'missing' ? { tone: 'nodeMissing', emphasis: 'strong' } : base(n)),
-        legend: [{ tone: 'nodeFile', key: 'file' }, { tone: 'nodeMissing', key: 'missing' }, { tone: 'edge', key: 'edge' }],
+        nodeStyle: (n) => (n.kind === 'missing' ? { tone: 'nodeMissing', emphasis: 'strong', shape: kindShape(n) } : base(n)),
+        legend: [...CATEGORY_LEGEND, { tone: 'nodeMissing', key: 'missing' }, { tone: 'edge', key: 'edge' }],
         insights: ['broken-link', 'orphan'],
     },
     unused: {

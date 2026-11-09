@@ -37351,7 +37351,14 @@
       "agrees": "Coincide",
       "unused": "Sin usar",
       "changed": "Cambiado",
-      "edge": "Referencia"
+      "edge": "Referencia",
+      "catSource": "Código fuente",
+      "catTest": "Pruebas",
+      "catDoc": "Documentos",
+      "catConfig": "Configuración",
+      "catStyle": "Estilos",
+      "catData": "Datos",
+      "catOther": "Otros"
     },
     "statsLine": "{nodes} nodos · {edges} aristas · {sources} fuentes",
     "filesLoaded": "{loaded} de {total} cargados",

@@ -327,9 +327,9 @@ Rules:
 
 | Measure | Baseline (W0) | Target |
 |---|---|---|
-| Base-branch pushes on the VSIX without passing (or reported-unavailable) evidence and a different-model review | — | 0 |
-| #214 replay: defects reaching main (missing params via a failing test, no tests) | 2 | 0 |
-| #216 replay: prompt tokens | 2.08M | ≤ 1.0M |
-| #216 replay: code turns for the same edits | 15 | ≤ 5 |
-| Median tool calls per turn (VSIX, 7-day telemetry) | ~1.5 | ≥ 2.5 |
-| Readiness claims followed by ≥ 2 read-only turns | 3 in #216 | ≤ 1 |
+| Base-branch pushes on the VSIX without passing (or reported-unavailable) evidence and a different-model review | unknown (live telemetry behind gates; measure at W9) | 0 |
+| #214 replay: defects reaching main (missing params via a failing test, no tests) | 2 — git-verified at `4df6b756e`: `inbound.ts` calls `runEmbeddedAgent` without `timeoutMs`/`runId`; 6 new source files, 0 tests; plus unused `spawnSync`/`messageToText` | 0 |
+| #216 replay: prompt tokens | 2.08M (PRD narrative) | ≤ 1.0M |
+| #216 replay: code turns for the same edits | 15 (PRD narrative) | ≤ 5 |
+| Median tool calls per turn (VSIX, 7-day telemetry) | ~1.5 (PRD narrative) | ≥ 2.5 |
+| Readiness claims followed by ≥ 2 read-only turns | 3 in #216 (PRD narrative) | ≤ 1 |

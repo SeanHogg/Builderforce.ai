@@ -4,7 +4,7 @@ import { highlightFor } from '../surface/towerHighlight';
 import type { Body } from './channels';
 import { applyRoles } from './highlightRoles';
 
-const body = (ref: string): Body => ({ ref, x: 0, y: 0, z: 0, radius: 1, height: 1, tone: 'nodeFile', dim: false, shell: false });
+const body = (ref: string): Body => ({ ref, x: 0, y: 0, z: 0, radius: 1, height: 1, tone: 'nodeFile', dim: false, shell: false, shape: 'circle' });
 const f = (kind: string, nodes: string[]): Finding => ({ id: nodes.join('|'), kind, pack: 'code', nodes: nodes as Finding['nodes'], severity: 'warn', params: {} });
 
 describe('Tower highlight roles', () => {

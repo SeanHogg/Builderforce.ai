@@ -237,6 +237,10 @@ export class RunGuards {
 
   private async onTrip(action: ProgressAction, ports: GuardPorts): Promise<void> {
     let outcome: string = action.kind;
+    if (action.kind === "advisory") {
+      // B1: an early-readiness steer, never a ladder trip — no pause, no escalation.
+      return;
+    }
     if (action.kind === "escalate") {
       const model = ports.model;
       const ladder = ports.ladder?.() ?? ports.cascade?.ladder;

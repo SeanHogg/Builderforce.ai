@@ -148,8 +148,6 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
           tenantId, tool: toolIdOf(name), arguments: withHostChat(toolIdOf(name), args, input.chatId), env,
           // Trusted server state, never read from the arguments: the chat this reply runs in.
           hostChatId: input.chatId,
-          // Trusted server state, never read from the arguments: the chat this reply runs in.
-          hostChatId: input.chatId,
           userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
           // The reply IS this agent acting: the ref is what lets a tool act "as me" and credits a replayed write to the agent.
           agentRef,

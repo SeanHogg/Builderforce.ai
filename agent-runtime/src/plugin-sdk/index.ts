@@ -77,6 +77,7 @@ export type {
 export type { PluginRuntime, RuntimeLogger } from "../plugins/runtime/types.js";
 export { normalizePluginHttpPath } from "../plugins/http-path.js";
 export { registerPluginHttpRoute } from "../plugins/http-registry.js";
+export type { PluginHttpRouteAuth } from "../plugins/http-registry.js";
 export { emptyPluginConfigSchema } from "../plugins/config-schema.js";
 export type { BuilderForceAgentsConfig } from "../config/config.js";
 

@@ -13,10 +13,16 @@ const { machine, portOf, Harness, tab, footer } = createKit({ fn: vi.fn as never
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('the Review tab', () => {
-    it('counts the files at once when opened with nothing planned, and not again over a plan', () => {
+    it('does not count the files on open; counting starts only from the "count and start" action', () => {
+        // Opening the panel used to plan a review immediately, which made the host walk and hash every file in
+        // the folder — work the person never asked for just by opening the panel. That auto-plan was removed:
+        // the idle panel shows the "count and start" action, and planning starts only when it is pressed.
         const idle = machine({ status: 'idle' });
         render(<Harness port={portOf().port} review={idle} />);
-        expect(idle.start).toHaveBeenCalledWith({ rootId: 'docs' });
+        expect(idle.start).not.toHaveBeenCalled();
+        expect(idle.answer).not.toHaveBeenCalled();
+        fireEvent.click(footer());
+        expect(idle.start).toHaveBeenCalledTimes(1);
         cleanup();
         const planned = machine({ status: 'confirm', plan: { ...FIXTURE_PLAN } });
         render(<Harness port={portOf().port} review={planned} />);

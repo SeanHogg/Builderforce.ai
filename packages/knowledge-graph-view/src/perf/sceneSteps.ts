@@ -81,7 +81,7 @@ export function runSceneSteps(rec: Recorder, p: PerfGraph, s: Shared): void {
         rec.time('groupEdges + SVG path strings (picked edges)', 'Graph 2D ' + defer, `picked=${picked.length}`, () => paths(picked));
         rec.time('groupEdges + SVG path strings (ALL drawn edges)', 'Graph 2D (what the cap avoids)', size, () => paths(edges));
         rec.time('edgeBuffers (picked edges)', '3D scene (lines)', `picked=${picked.length}`, () => edgeBuffers(picked, layout));
-        const lens = LENSES.structure;
+        const lens = LENSES.structure; // the shape+shade lens: node geometry is a per-kind silhouette
         const inst = rec.time('nodeInstances', '3D scene, Towers', size, () => nodeInstances(nodes as KNode[], layout, lens));
         const channels = rec.time('nodeChannels', '3D Towers', `nodes=${nodes.length} stations=${stations.stations.length}`, () => nodeChannels(nodes, stations, overlay));
         if (inst && channels) {

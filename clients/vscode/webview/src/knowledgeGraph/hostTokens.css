@@ -26,6 +26,20 @@
   --kg-node-claim: var(--vscode-terminal-ansiBrightGreen, #a3e635);
   --kg-node-fact: var(--vscode-terminal-ansiMagenta, #f472b6);
   --kg-node-missing: color-mix(in srgb, var(--vscode-editorWarning-foreground, #d4a373) 50%, var(--vscode-foreground, #cccccc));
+  /* The file-category hues (PRD 38): a file node reads its category and takes that tone. The
+   * coherent blue→green arc keeps the categories one family while each stays distinct from the
+   * non-file kinds. source is the base blue; tests cyan; docs teal; config amber (config is the
+   * warning family); styles magenta (fact's hue); data green (entity's); other neutral grey. */
+  --kg-cat-source: var(--vscode-charts-blue, #4d9eff);
+  --kg-cat-test: var(--vscode-terminal-ansiCyan, #22d3ee);
+  --kg-cat-doc: var(--vscode-terminal-ansiGreen, #34d399);
+  --kg-cat-config: var(--vscode-charts-yellow, #facc15);
+  --kg-cat-style: var(--vscode-terminal-ansiMagenta, #f472b6);
+  --kg-cat-data: var(--vscode-charts-green, #34d399);
+  --kg-cat-other: var(--vscode-descriptionForeground, #a8a29e);
+  /* The area nodes (the 1138 grey backgrounds): a visible grey-blue, a clear step above the
+   * `--kg-plane` background surface so an area reads as a region, not the page. */
+  --kg-node-area: var(--vscode-sideBar-background, #4b5563);
   --kg-edge: var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #7b8698));
   --kg-violation: var(--vscode-charts-red, #f87171);
   --kg-cycle: var(--vscode-charts-orange, #fb923c);

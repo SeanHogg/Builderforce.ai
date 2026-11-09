@@ -1,13 +1,14 @@
 import { memo, type ReactNode } from 'react';
-import { chatSwitcherLabel } from '../chatTickets/chatSwitcherLabel';
 import { stringsFrom, type LabelLookup } from '../labelCatalog';
+import { ChatTicketStats, type ChatTicketStatsLabels } from './ChatTicketStats';
 
 /**
  * The ONE chat-history list every AI surface opens from its header's History lever —
  * moved from the web Brain panel (`BrainChatList` / `BrainChatRow`) so the editor's and
  * Rovr's native `<select>` pickers become the same rows.
  *
- * A row is the title (or its rename input), a meta line the host fills (project tag,
+ * A row is the title (or its rename input), its linked-ticket column (`ChatTicketStats`,
+ * on every row — the host never recomposes it), a meta line the host fills (project tag,
  * time, attention, unread — `meta`), and its revealed actions: Rename / Summarize /
  * Delete, each offered only when the host supplies its handler, plus host extras
  * (`extraActions`, e.g. "Add to project"). Rows reveal actions per-row, not "whatever
@@ -15,7 +16,7 @@ import { stringsFrom, type LabelLookup } from '../labelCatalog';
  * selection put them somewhere nobody can see.
  */
 
-export interface ChatHistoryLabels {
+export interface ChatHistoryLabels extends ChatTicketStatsLabels {
   loading: string;
   /** No chats at all. */
   empty: string;
@@ -43,6 +44,12 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   delete: 'Delete',
   archive: 'Archive',
   unarchive: 'Unarchive',
+  ticketStats: '{pct}% · {open} open · {done} done',
+  ticketStatsAria: '{pct}% complete: {open} open and {done} done tickets',
+  ticketStatsCount: '{pct}% · {count} tickets',
+  ticketStatsCountAria: '{pct}% complete across {count} tickets',
+  ticketStatsCountOnly: '{count} tickets',
+  ticketStatsNone: 'No tickets',
 };
 
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */
@@ -55,10 +62,15 @@ export interface ChatHistoryChat {
   title: string;
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
+  /** Non-cancelled linked tickets below 100%. Absent (older server) = unknown, not 0. */
+  ticketOpenCount?: number | null;
+  /** Non-cancelled linked tickets at 100%. Absent (older server) = unknown, not 0. */
+  ticketDoneCount?: number | null;
   /**
-   * Per-row cost/progress chips the host wants beside the overflow menu — e.g. the
-   * VSIX history's `67% · $1.20/$3.40`. A short string the host has already composed;
-   * the row renders it verbatim (null/empty = no chip). Kept opaque so the shared row
+   * Per-row cost chips the host wants beside the overflow menu — e.g. the VSIX
+   * history's `2 agents · $1.20/$3.40`. Linked-ticket progress is NOT composed here:
+   * the row renders it itself (`ChatTicketStats`) from the ticket fields above.
+   * A short string the host has already composed; the row renders it verbatim (null/empty = no chip). Kept opaque so the shared row
    * does not own each surface's spend formatting.
    */
   stats?: string | null;
@@ -164,9 +176,7 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
             onClick={() => onOpen(chat.id)}
           >
             {marker != null && <span className="bf-chatrow__marker">{marker}</span>}
-            <span className="bf-chatrow__title">
-              {chatSwitcherLabel({ title: chat.title, id: chat.id, ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct })}
-            </span>
+            <span className="bf-chatrow__title">{chat.title.trim() || `Chat ${chat.id}`}</span>
           </button>
         )}
         {renaming && (
@@ -184,6 +194,7 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
             }}
           />
         )}
+        {!renaming && <ChatTicketStats chat={chat} labels={labels} />}
         {!renaming && chat.stats != null && chat.stats !== '' && (
           <span className="bf-chatrow__stats" title={chat.stats}>{chat.stats}</span>
         )}

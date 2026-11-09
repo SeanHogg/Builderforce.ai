@@ -16,6 +16,7 @@ import type { BrainRunSnapshot, RunServedBy, RunTurn } from './runSnapshotTypes'
 import type { PendingTurn } from '../usePendingTurns';
 import type { PendingGateOutcome } from './prefetchGate';
 import type { RunClaim } from './runClaim';
+import type { PublishHold } from './publishHold';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
 export interface LiveTurn {
@@ -193,6 +194,15 @@ export interface RunCell {
   claim: RunClaim | null;
   /** What the last Stop cut off, until the unwinding run persists it ({@link keepStoppedTurn}). */
   stoppedTurn: StoppedTurn | null;
+  /**
+   * This chat's PUBLISH HOLD ({@link publishHold}), derived once per run in the preamble
+   * from the transcript's person turns: non-null while a real user turn has declined
+   * shipping and no later person turn has explicitly asked to ship. While set,
+   * `callPreflight` refuses every commit/push/PR publish call before the confirm gate.
+   * A child reads its ROOT chat's hold (the run's own transcript IS the root's when it
+   * is seeded), so a child can never lift its owner's hold.
+   */
+  publishHold: PublishHold | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -256,6 +266,7 @@ export function makeCell(): RunCell {
     stopEpoch: 0,
     claim: null,
     stoppedTurn: null,
+    publishHold: null,
     snapshot: EMPTY_SNAPSHOT,
   };
 }

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { LADDER_RESET_TURNS, ProgressDetector } from "./progressDetector.js";
+import { LADDER_RESET_TURNS, ProgressDetector, type ProgressAction } from "./progressDetector.js";
 import { CHURN_TURNS, NO_PROGRESS_TURNS, REGROUND_TURNS, NoProgressTracker } from "./noProgress.js";
 
 const READS = new Set(["read_file", "search_code"]);
 const ports = { isReadOnly: (tool: string) => READS.has(tool) };
 const okData = { data: { ok: true } };
 const failed = { data: { ok: false, error: "no match" }, isError: true };
+
+/** The trip a turn ended in — narrowed off the B1 advisory (none of these tests claim
+ *  readiness, so an advisory never appears, but tsc must see the union discriminated). */
+const trip = (a: ProgressAction | null) => (a && a.kind !== "advisory" ? a.signal : undefined);
 
 function edit(d: ProgressDetector, path: string, from: string, to: string, result = okData): void {
   d.observe("edit_file", { path, old_string: from, new_string: to }, result);
@@ -51,7 +55,7 @@ describe("no_progress counts changes the run has not made before", () => {
       expect(d.endTurn()).toBeNull();
     }
     edit(d, "a.ts", "x", "y");
-    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+    expect(trip(d.endTurn())?.kind).toBe("no_progress");
   });
 
   it("counts a distinct successful mutating command as progress, and the same command repeated as idle", () => {
@@ -67,7 +71,7 @@ describe("no_progress counts changes the run has not made before", () => {
       expect(d.endTurn()).toBeNull();
     }
     d.observe("run_command", { command: "mkdir out" }, okData);
-    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+    expect(trip(d.endTurn())?.kind).toBe("no_progress");
   });
 
   it("does not count a failed edit as progress", () => {
@@ -77,7 +81,7 @@ describe("no_progress counts changes the run has not made before", () => {
       expect(d.endTurn()).toBeNull();
     }
     edit(d, "a.ts", "miss-last", "z", failed);
-    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+    expect(trip(d.endTurn())?.kind).toBe("no_progress");
   });
 });
 
@@ -167,7 +171,7 @@ describe("re-ground: spaced revisits across a wide survey are re-engagement, not
     let kinds: Array<string | undefined> = [];
     for (let i = 0; i < 6; i++) {
       d.observe("read_file", { path: "a.ts" }, okData);
-      kinds.push(d.endTurn()?.signal.kind);
+      kinds.push(trip(d.endTurn())?.kind);
     }
     expect(kinds.some((k) => k === "circling_read")).toBe(true);
     expect(kinds.filter(Boolean).slice(0, 1)).toEqual(["circling_read"]);
@@ -198,7 +202,7 @@ describe("platform progress: a turn that moved the board is not idle", () => {
     const kinds: Array<string | null> = [];
     for (let i = 0; i < NO_PROGRESS_TURNS + 1; i++) {
       d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
-      kinds.push(d.endTurn()?.signal.kind ?? null);
+      kinds.push(trip(d.endTurn())?.kind ?? null);
     }
     expect(kinds[NO_PROGRESS_TURNS - 1]).toBe("no_progress");
   });
@@ -250,7 +254,7 @@ describe("churn is bounded", () => {
       expect(d.endTurn()).toBeNull();
     }
     d.observe("run_command", { command: "cat a.ts last" }, okData);
-    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+    expect(trip(d.endTurn())?.kind).toBe("no_progress");
   });
 
   it("never clears the ladder by churn alone", () => {

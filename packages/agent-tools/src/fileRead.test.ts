@@ -24,6 +24,10 @@ function provider(files: Record<string, string>): CapabilityProvider {
 const read = async (files: Record<string, string>, args: Record<string, unknown>) =>
   (await readFileTool.execute(args, { caps: provider(files) })).data as Record<string, unknown>;
 
+/** Same as {@link read}, but with the host's B2 lever answer on the tool context. */
+const readB2 = async (files: Record<string, string>, args: Record<string, unknown>, outlineFirstReads?: boolean) =>
+  (await readFileTool.execute(args, { caps: provider(files), outlineFirstReads })).data as Record<string, unknown>;
+
 /** A long PRD: three headed sections, each well past the read cap together. */
 function longDoc(): string {
   const body = (n: number) => Array.from({ length: n }, (_, i) => `Paragraph ${i + 1} ${"x".repeat(80)}`).join("\n");
@@ -93,5 +97,64 @@ describe("read_file on a large Markdown document", () => {
     const [mdx, ts] = r.files as Array<Record<string, unknown>>;
     expect(Array.isArray(mdx!.outline)).toBe(true);
     expect(ts!.outline).toBeUndefined();
+  });
+});
+
+// B2 (PRD 45 §4.7): a first whole-file read of a large file answers with the definition
+// outline + the first 40 lines when the host's `outlineFirstReads` lever answer is on
+// (the VSIX `builderforce.agent.outlineFirstReads` setting, default true). Off/absent =
+// the read behaves exactly as before. The lever rides on `ToolContext.outlineFirstReads`.
+describe("read_file B2 outline-first reads", () => {
+  // A code file over the 16K-char threshold, with enough lines to also clear the 300-line
+  // clause — so BOTH thresholds are exercised. Uses `function` declarations so the symbol
+  // extractor returns a definition outline.
+  function bigCode(): string {
+    const fns = Array.from(
+      { length: 400 },
+      (_, i) => `export function fn${i}(): number {\n  // ${"y".repeat(90)}\n  return ${i};\n}`,
+    );
+    return fns.join("\n");
+  }
+
+  it("a first whole-file read of a large file returns outline + first 40 lines when the lever is on", async () => {
+    const code = bigCode();
+    expect(code.length).toBeGreaterThan(16000);
+    const r = await readB2({ "src/big.ts": code }, { path: "src/big.ts" }, true);
+    expect(r.ok).toBe(true);
+    expect(Array.isArray(r.outline)).toBe(true);
+    // The outline lists definitions with line numbers, one formatted line per symbol
+    // (the same `L<line> <kind> <name>` shape `find_symbol` returns).
+    expect(String((r.outline as string[])[0])).toMatch(/L\d+ function fn\d+/);
+    // Only the 40-line prefix is returned, marked truncated, with a pointer to page.
+    expect(String(r.content).split("\n").length).toBeLessThanOrEqual(40);
+    expect(r.truncated).toBe(true);
+    expect(String(r.note)).toMatch(/offset/);
+  });
+
+  it("a paged read or the lever off/absent behaves exactly as before (no B2 outline)", async () => {
+    const code = bigCode();
+    // Lever on but an explicit window: the read wants that window, not an outline.
+    const paged = await readB2({ "src/big.ts": code }, { path: "src/big.ts", offset: 200, limit: 10 }, true);
+    expect(paged.outline).toBeUndefined();
+    expect(paged.offset).toBe(200);
+    // Lever off: first whole-file read returns the ordinary line window.
+    const off = await readB2({ "src/big.ts": code }, { path: "src/big.ts" }, false);
+    expect(off.outline).toBeUndefined();
+    // Lever absent (the host never set it): unchanged behavior.
+    const absent = await read({ "src/big.ts": code }, { path: "src/big.ts" });
+    expect(absent.outline).toBeUndefined();
+  });
+
+  it("applies inside a paths[] read, per file", async () => {
+    const code = bigCode();
+    const r = await readB2(
+      { "src/big.ts": code, "src/small.ts": "export const x = 1;" },
+      { paths: ["src/big.ts", "src/small.ts"] },
+      true,
+    );
+    const [big, small] = r.files as Array<Record<string, unknown>>;
+    expect(Array.isArray(big!.outline)).toBe(true);
+    expect(small!.outline).toBeUndefined();
+    expect(small!.content).toBe("export const x = 1;");
   });
 });

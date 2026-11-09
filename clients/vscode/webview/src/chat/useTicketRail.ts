@@ -75,7 +75,7 @@ export function useTicketRail({ init, apiReq, serverChatId, chatClientId, chats,
   // is not one of its options.
   const ticketChatList = useMemo(() => chats.flatMap((c) => {
     const id = serverChatIdOf(c);
-    return id == null ? [] : [{ id, title: c.title, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct }];
+    return id == null ? [] : [{ id, title: c.title, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct, ticketOpenCount: c.ticketOpenCount, ticketDoneCount: c.ticketDoneCount }];
   }), [chats]);
   const onTicketsChanged = useCallback(() => { reloadChats(); reloadMessages(); }, [reloadChats, reloadMessages]);
 

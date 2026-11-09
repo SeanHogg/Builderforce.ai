@@ -33,6 +33,9 @@ export interface DeliveryGate {
 export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
+  // A held chat is told NOT to ship (`runPreamble`'s hold directive) — the unshipped gate
+  // stays quiet so a held run that made its edit and stopped is not re-prompted to ship.
+  const held = () => run.publishHold != null;
   const files = () => ({ files: c.touchedFiles.slice(0, 20) });
   return [
     {
@@ -40,7 +43,7 @@ export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
       // reviewer. Quiet when the user said not to commit, when a commit/push/PR was attempted, and on a host that cannot commit.
       id: 'brain.ship',
       entersVerify: true,
-      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped(facts()),
+      applies: () => !run.shipRecoveryUsed && !held() && leftChangeUnshipped(facts()),
       nudge: unshippedChangeNudge,
       trace: { label: 'loop.recover_unshipped_change', args: files, result: "Run changed code and ended without committing or pushing it — re-prompted to verify, self-review and ship (this local session is the change's only reviewer)." },
       spend: () => { run.shipRecoveryUsed = true; },

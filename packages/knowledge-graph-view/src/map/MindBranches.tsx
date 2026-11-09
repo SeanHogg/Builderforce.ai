@@ -7,9 +7,10 @@
 import { memo, type KeyboardEvent } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { counted, isOne } from '../surface/plural';
-import { kindLabel } from '../names';
+import { kindLabel, kindShape } from '../names';
 import { cssVar } from '../scene/themeColors';
 import { labelFitsAt } from './labelBudget';
+import { SHAPE_PATHS } from '../shapes';
 import type { MapKind, MindMap as MindMapModel, PlacedBranch } from './mindMapModel';
 
 const MAX_LABEL = 24;

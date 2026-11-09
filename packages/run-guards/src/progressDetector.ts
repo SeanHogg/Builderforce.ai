@@ -26,6 +26,7 @@ import { NO_PROGRESS_TURNS, NoProgressTracker, type NoProgressPorts, type NoProg
 import { REVISIT_HARD_AT, VisitTally, type VisitTallyState } from "./visitTally.js";
 import { pathArgOf } from "./fingerprint.js";
 import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./readinessClaim.js";
+import { ReadinessAdvisory, type ReadinessAdvisoryState } from "./readinessAdvisory.js";
 
 /** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
  *  separate stuck stretches, and only back-to-back ones should end in a pause. */
@@ -55,7 +56,10 @@ export interface ProgressSignal {
 export type ProgressAction =
   | { kind: "steer"; trip: number; signal: ProgressSignal; note: string }
   | { kind: "escalate"; trip: number; signal: ProgressSignal; note: string }
-  | { kind: "pause"; trip: number; signal: ProgressSignal; question: string };
+  | { kind: "pause"; trip: number; signal: ProgressSignal; question: string }
+  /** B1: a one-off note on the next turn — the FIRST unkept readiness claim. Never a
+   *  trip: it does not touch the ladder, the trip count or `tripsBySignal`. */
+  | { kind: "advisory"; note: string };
 
 export interface ProgressDetectorState {
   visits?: VisitTallyState;
@@ -74,6 +78,8 @@ export interface ProgressDetectorState {
   quietTurns?: number;
   /** The steer the NEXT turn shows the model, until that turn ends. */
   steer?: string;
+  /** B1: the one-off readiness advisory awaiting its one turn ("" when none). */
+  advisory?: ReadinessAdvisoryState;
 }
 
 export interface ProgressDetectorPorts extends NoProgressPorts {
@@ -118,6 +124,8 @@ export class ProgressDetector {
   private unkeptTurns: number;
   private quietTurns: number;
   private steer: string | undefined;
+  /** B1: the readiness advisory — one note at the FIRST unkept claim, never a trip. */
+  private readonly readiness: ReadinessAdvisory;
   private turnSignal: ProgressSignal | null = null;
   /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
   private writtenPaths: Set<string>;
@@ -135,6 +143,7 @@ export class ProgressDetector {
     this.unkeptTurns = state.unkeptTurns ?? 0;
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
+    this.readiness = new ReadinessAdvisory(state.advisory);
     this.writtenPaths = new Set();
     this.readThisTurn = [];
   }
@@ -199,7 +208,8 @@ export class ProgressDetector {
     });
   }
 
-  /** Every call of the turn ran. The trip this turn caused, if any. */
+  /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
+   *  cheaper (B1), the readiness advisory on the FIRST unkept claim (never a trip). */
   endTurn(): ProgressAction | null {
     // The previous trip's steer has now been shown for one turn.
     this.steer = undefined;
@@ -226,6 +236,14 @@ export class ProgressDetector {
     const signal = this.turnSignal;
     this.turnSignal = null;
     if (!signal) {
+      // B1: judge the advisory AFTER the trip logic, on the trip-invariant total: a trip
+      // resets the streak but the run has still shown the habit, so the note fires (once)
+      // either way. The pending note from a previous turn rode exactly one turn — consume
+      // it first; `ReadinessAdvisory.observe` fires at most once per run (`fired` persists
+      // in the JSON snapshot), so a non-empty return here is always a fresh, one-off fire.
+      this.readiness.endTurn();
+      const advisoryNote = this.readiness.observe(this.unkeptTurns);
+      if (advisoryNote) return { kind: "advisory", note: advisoryNote };
       // Sustained GROUND progress ends the stuck stretch the ladder was counting. A churn
       // turn neither adds to the streak nor breaks it; an idle turn resets it.
       if (this.progress.lastTurnGround) this.quietTurns += 1;
@@ -261,6 +279,11 @@ export class ProgressDetector {
     this.steer = note;
   }
 
+  /** B1: the readiness advisory awaiting its one turn ("" when none). */
+  readinessNote(): string {
+    return this.readiness.snapshot().note;
+  }
+
   /** The note the current turn's request carries ("" when none). */
   steerNote(): string {
     return this.steer ?? "";
@@ -282,6 +305,7 @@ export class ProgressDetector {
       ...(this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {}),
       ...(this.quietTurns ? { quietTurns: this.quietTurns } : {}),
       ...(this.steer ? { steer: this.steer } : {}),
+      ...(this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {}),
     };
   }
 }

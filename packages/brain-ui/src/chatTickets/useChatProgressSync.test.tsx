@@ -49,6 +49,18 @@ describe('useChatProgressSync', () => {
     expect(run([{ id: 7, title: 'implement', ticketCount: 2, ticketProgressPct: 75 }], [LIVE])).not.toHaveBeenCalled();
   });
 
+  it('asks when the percent agrees but the open/done counts are behind', () => {
+    expect(
+      run([{ id: 7, title: 'implement', ticketCount: 2, ticketProgressPct: 75, ticketOpenCount: 2, ticketDoneCount: 0 }], [LIVE]),
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays quiet when percent and open/done counts all agree', () => {
+    expect(
+      run([{ id: 7, title: 'implement', ticketCount: 2, ticketProgressPct: 75, ticketOpenCount: 1, ticketDoneCount: 1 }], [LIVE]),
+    ).not.toHaveBeenCalled();
+  });
+
   it('stays quiet for a host whose list carries no ticket summary', () => {
     expect(run([{ id: 7, title: 'implement' }], [LIVE])).not.toHaveBeenCalled();
   });

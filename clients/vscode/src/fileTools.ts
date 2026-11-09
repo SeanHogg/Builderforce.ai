@@ -14,6 +14,7 @@ import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabil
 import { findRipgrep } from "./ripgrep";
 import { toolMutating } from "./toolMutating";
 import { hostCostLeverOn } from "./hostCostLevers";
+import { outlineFirstReadsOn } from "./outlineFirstReads";
 import { resolveLocalSemantic } from "./localSemantic";
 import { editorResearchCapability } from "./localResearch/researchCapability";
 
@@ -95,6 +96,9 @@ export const TOOL_DEFS: ToolDef[] = registry
         }),
         workspaceRoot: root,
         compressLargeOutputs,
+        // B2 (PRD 45 §4.7): a first whole-file read of a large file answers in outline
+        // when the `builderforce.agent.outlineFirstReads` setting (default true) is on.
+        outlineFirstReads: outlineFirstReadsOn(),
         // Stop reaches the tool (and `run_command`'s process tree) through here.
         ...(run?.signal ? { signal: run.signal } : {}),
       });

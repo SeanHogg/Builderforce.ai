@@ -37351,7 +37351,14 @@
       "agrees": "Agrees",
       "unused": "Unused",
       "changed": "Changed",
-      "edge": "Reference"
+      "edge": "Reference",
+      "catSource": "Source",
+      "catTest": "Tests",
+      "catDoc": "Docs",
+      "catConfig": "Config",
+      "catStyle": "Styles",
+      "catData": "Data",
+      "catOther": "Other"
     },
     "statsLine": "{nodes} nodes · {edges} edges · {sources} sources",
     "filesLoaded": "{loaded} of {total} loaded",

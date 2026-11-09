@@ -189,6 +189,10 @@ export interface ChatOptionVM {
   title: string;
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
+  /** Non-cancelled linked tickets below 100%. Absent (older server) = unknown. */
+  ticketOpenCount?: number | null;
+  /** Non-cancelled linked tickets at 100%. Absent (older server) = unknown. */
+  ticketDoneCount?: number | null;
 }
 
 /** A pending human question associated with one of this chat's linked tasks. */

@@ -1021,6 +1021,11 @@
           "default": 500,
           "markdownDescription": "%config.knowledgeJudgeBudgetFiles.desc%"
         },
+        "builderforce.agent.outlineFirstReads": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.agent.outlineFirstReads.desc%"
+        },
         "builderforce.defaultModel": {
           "type": "string",
           "default": "",

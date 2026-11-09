@@ -4,13 +4,17 @@
  * a snapshot round trip (a cloud run resumes the detector from JSON every tick).
  */
 import { describe, expect, it } from "vitest";
-import { ProgressDetector } from "./progressDetector.js";
+import { ProgressDetector, type ProgressAction } from "./progressDetector.js";
 import { NO_PROGRESS_TURNS } from "./noProgress.js";
 import { UNKEPT_READY_AT } from "./readinessClaim.js";
 
 const READS = new Set(["read_file", "search_code"]);
 const ports = { isReadOnly: (tool: string) => READS.has(tool) };
 const okData = { data: { ok: true } };
+
+/** The trip a turn ended in — narrowed off the B1 advisory (an advisory is not a trip,
+ *  but tsc must see the ProgressAction union discriminated to read `.signal`). */
+const trip = (a: ProgressAction | null) => (a && a.kind !== "advisory" ? a.signal : undefined);
 
 /** One turn that says it is ready, then only reads a file it has not read before. */
 function unkeptTurn(d: ProgressDetector, i: number): ReturnType<ProgressDetector["endTurn"]> {
@@ -34,18 +38,18 @@ describe("ProgressDetector run telemetry", () => {
     d.observe("write_file", { path: "a.ts", content: "A" }, okData);
     d.observe("write_file", { path: "a.ts", content: "B" }, okData);
     d.observe("write_file", { path: "a.ts", content: "A" }, okData);
-    expect(d.endTurn()?.signal.kind).toBe("edit_revert");
+    expect(trip(d.endTurn())?.kind).toBe("edit_revert");
     d = new ProgressDetector(JSON.parse(JSON.stringify(d.snapshot())), ports);
     for (let i = 0; i < NO_PROGRESS_TURNS - 1; i++) expect(d.endTurn()).toBeNull();
-    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+    expect(trip(d.endTurn())?.kind).toBe("no_progress");
     expect(d.snapshot().trips).toBe(2);
     expect(d.snapshot().tripsBySignal).toEqual({ edit_revert: 1, no_progress: 1 });
   });
 
   it("counts every unkept readiness claim, including the one that tripped and reset the streak", () => {
     const d = new ProgressDetector({}, ports);
-    for (let i = 0; i < UNKEPT_READY_AT - 1; i++) expect(unkeptTurn(d, i)).toBeNull();
-    expect(unkeptTurn(d, UNKEPT_READY_AT)?.signal.kind).toBe("unkept_ready");
+    for (let i = 0; i < UNKEPT_READY_AT - 1; i++) expect(unkeptTurn(d, i)).toMatchObject({ kind: "advisory" });
+    expect(trip(unkeptTurn(d, UNKEPT_READY_AT))?.kind).toBe("unkept_ready");
     expect(d.snapshot().claims).toBeUndefined();
     expect(d.snapshot().unkeptTurns).toBe(UNKEPT_READY_AT);
     expect(d.snapshot().tripsBySignal).toEqual({ unkept_ready: 1 });

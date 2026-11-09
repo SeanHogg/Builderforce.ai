@@ -56,6 +56,9 @@ import { localResearchTool } from "./local-research-tool.js";
 import { analyzeCodebaseTool } from './codeAnalysisTool.js';
 import { probeFromRepoRead, refuseWriteOverwrite } from "./writeOverwriteGuard.js";
 import { emptyGlobListingNote } from "./glob.js";
+// The B3 batch-edit helpers (PRD 45 §4.7): one `edit_file` call carrying several edits,
+// applied atomically through the same `applyStringEdit` a lone call uses.
+import { applyBatchEdits, planBatchEdits } from "./edit.js";
 
 // Zero-match wording lives in `emptyGlobListingNote` (glob.ts) so the container
 // and GitHub Actions runner — which cannot import this package — can mirror the
@@ -156,8 +159,8 @@ export const readFileTool: ToolDefinition = defineTool({
       limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined,
       key: typeof args.key === "string" ? args.key.trim() : "",
     };
-    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps) } };
-    return { data: await readOneFile(path, opts, ctx.caps) };
+    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
+    return { data: await readOneFile(path, opts, ctx.caps, ctx.outlineFirstReads) };
   },
 });
 
@@ -231,7 +234,7 @@ export const deleteFileTool: ToolDefinition = defineTool({
 export const editFileTool: ToolDefinition = defineTool({
   name: "edit_file",
   description:
-    "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files. A success returns `excerpt` — the edited lines with line numbers and a little context — so do NOT re-read the file to check the edit. A miss returns `nearest` — the closest matching line and its neighbours — copy `old_string` from there.",
+    "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files. A success returns `excerpt` — the edited lines with line numbers and a little context — so do NOT re-read the file to check the edit. A miss returns `nearest` — the closest matching line and its neighbours — copy `old_string` from there. To change SEVERAL files (or several spots) in one call, pass `edits`: an array of {path, old_string, new_string, replace_all?} (up to 20). A batch is ATOMIC — all edits apply or none, and on failure the result names the FIRST edit that did not match — so a multi-file refactor is one call, not a chain that can half-apply.",
   parameters: {
     type: "object",
     properties: {
@@ -239,11 +242,61 @@ export const editFileTool: ToolDefinition = defineTool({
       old_string: { type: "string", description: "The exact text to replace (must match the file byte-for-byte)." },
       new_string: { type: "string", description: "The replacement text." },
       replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match. Default false." },
+      edits: {
+        type: "array",
+        maxItems: 20,
+        description: "BATCH (instead of path/old_string/new_string): up to 20 {path, old_string, new_string, replace_all?} edits applied atomically in one call. All apply or none; a failure names the first edit that did not match.",
+        items: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+            old_string: { type: "string", description: "The exact text to replace (must match the file byte-for-byte)." },
+            new_string: { type: "string", description: "The replacement text." },
+            replace_all: { type: "boolean", description: "Replace every occurrence. Default false." },
+          },
+          required: ["path", "old_string", "new_string"],
+        },
+      },
     },
-    required: ["path", "old_string", "new_string"],
+    required: [],
   },
   requires: ["repo.edit"],
   async execute(args, ctx): Promise<ToolResult> {
+    // B3: the batch form rides alongside the single form; both go through the provider.
+    if (Array.isArray(args.edits)) {
+      const plan = planBatchEdits(args.edits);
+      if (plan.error) return { data: { ok: false, error: plan.error } };
+      const read = async (p: string) => {
+        const r = await ctx.caps.repoRead?.readFile(p);
+        return r && r.ok && typeof r.content === "string" ? r.content : null;
+      };
+      const batch = await applyBatchEdits(plan, {
+        read,
+        write: async (p, content) => {
+          await ctx.caps.repoWrite!.writeFile(p, content, "edit_file batch");
+        },
+      });
+      if (!batch.ok) {
+        const failed = batch.files[batch.files.length - 1]!;
+        return { data: { ok: false, error: failed.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+      }
+      // Each file's excerpt rides on its entry — the model sees what the file now says,
+      // so it does not re-read to check.
+      return {
+        data: {
+          ok: true,
+          batched: true,
+          count: batch.files.length,
+          files: batch.files.map(({ content: _c, ok, path, error, nearest, ...facts }) => ({
+            path,
+            ok,
+            ...(Object.keys(facts).length ? facts : {}),
+            ...(error ? { error } : {}),
+            ...(nearest ? { nearest } : {}),
+          })),
+        },
+      };
+    }
     const path = typeof args.path === "string" ? args.path : "";
     const oldString = typeof args.old_string === "string" ? args.old_string : "";
     const newString = typeof args.new_string === "string" ? args.new_string : "";

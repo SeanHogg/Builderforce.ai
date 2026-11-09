@@ -16,6 +16,7 @@ import { skillToolsIn } from '../skillLibraryTools';
 import { chatModeDirective, normalizeChatMode } from '../chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from '../turnOptimization';
 import { selfReviewShipDirective } from '../selfReviewShip';
+import { publishHold, publishHoldDirective, attemptedPublishWhileHeld } from './publishHold';
 import { previewReviewDirective } from '../previewReview';
 import { ticketToolVocabulary } from '../ticketToolVocabulary';
 import { previousReplyText } from '../restatedReply';
@@ -210,7 +211,24 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
   // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
   // Rides both modes: it only binds a turn that changes code.
   const canShip = canShipHere(catalogToolNames);
-  if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(serverChatId)}`;
+  // The chat's PUBLISH HOLD (incident #56886): derived once per run from the transcript's
+  // PERSON turns, so a hold the person set survives a follow-up turn that drops the
+  // phrase, and a child run (seeded from the root's transcript) reads the SAME hold its
+  // owner set — it can never lift it.
+  const hold = publishHold(convo);
+  c.publishHold = hold;
+  if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'run.publish_hold_refused',
+      args: { setByMessage: hold.messageNumber },
+      result: `Publish hold is ON (set by user message #${hold.messageNumber}). A prior run still tried to commit/push — the tool gate now refuses these until the user explicitly asks to ship.`,
+    });
+  }
+  if (canShip) {
+    systemPrompt = `${systemPrompt}\n\n${hold ? publishHoldDirective() : selfReviewShipDirective(serverChatId)}`;
+  }
   // The Studio's twin: its change lives in a preview no one else can reach, so the
   // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
   if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
@@ -297,6 +315,7 @@ export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunR
     recallBlockTokens,
     memoryReplay,
     userRequest,
+    publishHold: hold,
     // The goal a hand-off states to coders who see none of this chat: the latest
     // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
     goal: reading.goal,

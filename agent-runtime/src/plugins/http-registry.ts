@@ -3,6 +3,19 @@ import { normalizePluginHttpPath } from "./http-path.js";
 import type { PluginHttpRouteRegistration, PluginRegistry } from "./registry.js";
 import { requireActivePluginRegistry } from "./runtime.js";
 
+/**
+ * Per-route auth classification for a plugin HTTP route.
+ *
+ * - "gateway" (the default): the gateway authenticates the request (shared
+ *   gateway token / shared secret) before the plugin handler runs. A plugin
+ *   that omits `auth` cannot accidentally expose an unauthenticated route.
+ * - "public": the gateway runs the handler without any gateway auth. Use ONLY
+ *   when the handler authenticates the request itself (e.g. a webhook that
+ *   validates a provider signature); name that check in a comment at the
+ *   registration site.
+ */
+export type PluginHttpRouteAuth = "gateway" | "public";
+
 export type PluginHttpRouteHandler = (
   req: IncomingMessage,
   res: ServerResponse,
@@ -15,6 +28,7 @@ export function registerPluginHttpRoute(params: {
   pluginId?: string;
   source?: string;
   accountId?: string;
+  auth?: PluginHttpRouteAuth;
   log?: (message: string) => void;
   registry?: PluginRegistry;
 }): () => void {
@@ -40,6 +54,9 @@ export function registerPluginHttpRoute(params: {
     handler: params.handler,
     pluginId: params.pluginId,
     source: params.source,
+    // Default "gateway": a route without an explicit auth declaration requires
+    // gateway auth, so a plugin author cannot forget auth by omitting it.
+    auth: params.auth ?? "gateway",
   };
   routes.push(entry);
 

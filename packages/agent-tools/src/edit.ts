@@ -166,6 +166,117 @@ export interface EditFacts {
 }
 
 /**
+ * B3 (PRD 45 §4.7): ONE `edit_file` call carrying SEVERAL edits. `edits` is the batch
+ * form of the single `{path, old_string, new_string, replace_all}`; each entry applies
+ * through {@link applyStringEdit} exactly as a lone call would. ATOMIC: either every
+ * edit lands or NONE do — a caller must never be left with half of a refactor applied.
+ * On failure the result names the FIRST edit (1-based) that did not match, with that
+ * edit's `nearest`/`error` hint so the retry copies the real text.
+ */
+export interface BatchEditEntry {
+  path: string;
+  old_string: string;
+  new_string: string;
+  replace_all?: boolean;
+}
+
+/** The most edits one `edit_file` call applies in a batch (PRD 45 §4.7 B3). */
+export const EDIT_BATCH_MAX = 20;
+
+export interface BatchEditFileOutcome {
+  path: string;
+  ok: boolean;
+  content?: string;
+  replaced?: number;
+  region?: { startLine: number; endLine: number };
+  excerpt?: string;
+  error?: string;
+  nearest?: { line: number; excerpt: string };
+}
+
+export interface BatchEditPlan {
+  edits: BatchEditEntry[];
+  /** A structural problem that refuses the whole call before any edit is attempted. */
+  error?: string;
+  /** The first index (into `edits`) whose entry is structurally invalid. */
+  invalidAt?: number;
+}
+
+/** Shape one batch entry; returns an error string when a required field is missing. */
+function entryProblem(e: BatchEditEntry): string | null {
+  if (typeof e.path !== "string" || e.path.trim() === "") return "path is required";
+  if (typeof e.old_string !== "string" || e.old_string.length === 0) return "old_string is required";
+  if (typeof e.new_string !== "string") return "new_string is required";
+  return null;
+}
+
+/**
+ * Parse + validate the `edits[]` payload. Returns the plan, or `{ edits: [], error,
+ * invalidAt }` naming the FIRST structurally invalid edit (1-based for the model).
+ */
+export function planBatchEdits(raw: unknown): BatchEditPlan {
+  if (!Array.isArray(raw) || raw.length === 0) return { edits: [], error: "edits must be a non-empty array" };
+  if (raw.length > EDIT_BATCH_MAX) return { edits: [], error: `edits takes at most ${EDIT_BATCH_MAX} edits per call — split the rest into another edit_file` };
+  const edits = raw as BatchEditEntry[];
+  for (let i = 0; i < edits.length; i += 1) {
+    const problem = entryProblem(edits[i]!);
+    if (problem) return { edits: [], error: `edit ${i + 1} (${edits[i]!.path ?? "?"}): ${problem}`, invalidAt: i };
+  }
+  return { edits };
+}
+
+/**
+ * Apply a batch ATOMICALLY against an in-memory file table (`read` returns the current
+ * text, or null when the path is missing). No entry is read until every earlier one has
+ * been validated against the table, and nothing is written until ALL have applied — so a
+ * failure leaves every file untouched and names the first edit that did not match.
+ */
+export async function applyBatchEdits(
+  plan: BatchEditPlan,
+  io: { read: (path: string) => Promise<string | null>; write: (path: string, content: string) => Promise<void> },
+): Promise<{ ok: boolean; files: BatchEditFileOutcome[] }> {
+  if (plan.error || plan.invalidAt !== undefined) {
+    return { ok: false, files: [{ path: "", ok: false, error: plan.error ?? "invalid edits" }] };
+  }
+  // Phase 1 — compute every edit against a LOCAL overlay; the first miss aborts before
+  // any write. Edits to the SAME file stack on the overlay, so two edits to one path in
+  // one batch behave like two sequential lone calls.
+  const overlay = new Map<string, string>();
+  const outcomes: BatchEditFileOutcome[] = [];
+  for (let i = 0; i < plan.edits.length; i += 1) {
+    const e = plan.edits[i]!;
+    const base = overlay.has(e.path) ? overlay.get(e.path)! : ((await io.read(e.path)) ?? null);
+    if (base === null || base === undefined) {
+      return { ok: false, files: [...outcomes, { path: e.path, ok: false, error: `edit ${i + 1}: file not found — ${e.path}` }] };
+    }
+    const r = applyStringEdit(overlay.get(e.path) ?? base, e.old_string, e.new_string, e.replace_all === true);
+    if (!r.ok || r.content == null) {
+      return {
+        ok: false,
+        files: [...outcomes, { path: e.path, ok: false, error: `edit ${i + 1} (${e.path}): ${r.error ?? "did not match"}`, ...(r.nearest ? { nearest: r.nearest } : {}) }],
+      };
+    }
+    overlay.set(e.path, r.content);
+    outcomes.push({
+      path: e.path,
+      ok: true,
+      content: r.content,
+      ...(r.replaced != null ? { replaced: r.replaced } : {}),
+      ...(r.region ? { region: r.region } : {}),
+      ...(r.excerpt ? { excerpt: r.excerpt } : {}),
+    });
+  }
+  // Phase 2 — every edit matched; persist the touched files exactly once, in batch order.
+  const written = new Set<string>();
+  for (const o of outcomes) {
+    if (written.has(o.path)) continue;
+    written.add(o.path);
+    await io.write(o.path, overlay.get(o.path)!);
+  }
+  return { ok: true, files: outcomes.map(({ content: _c, ...rest }) => rest) };
+}
+
+/**
  * The ONE mapping from {@link applyStringEdit}'s result to what a provider returns.
  *
  * The core computed `nearest` on a miss and `region` on a hit, and two of the three

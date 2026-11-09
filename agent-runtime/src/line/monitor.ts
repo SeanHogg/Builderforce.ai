@@ -300,6 +300,9 @@ export async function monitorLineProvider(
     path: normalizedPath,
     pluginId: "line",
     accountId: resolvedAccountId,
+    // "public": LINE webhook signatures are verified by the handler itself —
+    // see validateLineSignature in src/line/webhook-node.ts.
+    auth: "public",
     log: (msg) => logVerbose(msg),
     handler: createLineNodeWebhookHandler({ channelSecret: secret, bot, runtime }),
   });

@@ -65,6 +65,14 @@ export interface ToolContext {
    * Absent/false = outputs are returned verbatim.
    */
   readonly compressLargeOutputs?: boolean;
+  /**
+   * The host's cost-lever B2 decision (`isCostLeverOn(env, "c10_outline_first_reads", …)` /
+   * the VSIX `builderforce.agent.outlineFirstReads` setting), resolved once by the host —
+   * agent-tools has no env. When true, a first whole-file `read_file` (no `offset`/`limit`)
+   * of a large file returns the file's OUTLINE plus its first 40 lines instead of paging
+   * the whole file at the model. Absent/false = reads behave exactly as before.
+   */
+  readonly outlineFirstReads?: boolean;
 }
 
 /**

@@ -64,6 +64,27 @@ export {
 } from "./progressDetector.js";
 // "Now I have everything I need", then another read (PRD 35 WS8p).
 export { UNKEPT_READY_AT, UnkeptClaimTracker, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
+// B1: the one-off advisory on the FIRST unkept claim (PRD 45 §4.7) — earlier than the ladder.
+export {
+  READINESS_ADVISORY_NOTE,
+  ReadinessAdvisory,
+  UNKEPT_STEER_AT,
+  type ReadinessAdvisoryState,
+} from "./readinessAdvisory.js";
+export {
+  DURABLE_IN_RUN_VERIFY_NOTE,
+  IN_RUN_VERIFY_SCRIPT_NAMES,
+  inRunVerifyOutcome,
+  packageVerifyCommands,
+  planInRunVerify,
+  SANDBOX_IN_RUN_VERIFY_NOTE,
+  type InRunVerifyCommandResult,
+  type InRunVerifyOutcome,
+  type InRunVerifyPlan,
+  type InRunVerifySurface,
+  type PackageScriptRunner,
+  PUBLISH_TOOLS,
+} from "./inRunVerify.js";
 export { BACK_TO_BACK_AT } from "./streak.js";
 // "STOP executing" typed mid-run means the Stop button (PRD 35 E10).
 export { ABORT_TRIGGERS, isAbortTrigger, stopIntent } from "./stopIntent.js";
@@ -73,3 +94,26 @@ export {
   type DelegationCallKind,
   type ReadsWithoutSpawnState,
 } from "./readsWithoutSpawn.js";
+// Deterministic ship gates (PRD 45 §4.2/§4.3): evidence keyed by bytes on disk.
+export {
+  MAX_CHECK_FINDINGS,
+  createEvidenceLedger,
+  normalizeEvidencePath,
+  type CheckKind,
+  type CheckRecord,
+  type EvidenceLedger,
+  type FileEvidence,
+} from "./evidence/ledger.js";
+export {
+  DEFAULT_EVIDENCE_POLICY,
+  commitGate,
+  outgoingGate,
+  reviewGate,
+  shellBypass,
+  shellPublishHint,
+  type EvidencePolicy,
+  type GateVerdict,
+  type OutgoingFile,
+  type ReviewVerdict,
+} from "./evidence/gates.js";
+export { gitCommandPattern } from "./evidence/gitCommandPattern.js";

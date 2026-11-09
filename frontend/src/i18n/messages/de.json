@@ -37351,7 +37351,14 @@
       "agrees": "Stimmt überein",
       "unused": "Ungenutzt",
       "changed": "Geändert",
-      "edge": "Verweis"
+      "edge": "Verweis",
+      "catSource": "Quellcode",
+      "catTest": "Tests",
+      "catDoc": "Dokumente",
+      "catConfig": "Konfiguration",
+      "catStyle": "Styles",
+      "catData": "Daten",
+      "catOther": "Sonstiges"
     },
     "statsLine": "{nodes} Knoten · {edges} Kanten · {sources} Quellen",
     "filesLoaded": "{loaded} von {total} geladen",

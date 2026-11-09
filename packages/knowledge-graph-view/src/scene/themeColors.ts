@@ -26,8 +26,20 @@ export const KG_TOKENS = {
     nodeSymbol: ['--kg-node-symbol', '--bf-text-secondary'],
     nodeEntity: ['--kg-node-entity', '--bf-success'],
     nodeClaim: ['--kg-node-claim', '--bf-warning'],
-    nodeFact: ['--kg-node-fact', '--bf-text-secondary'],
+    nodeFact: ['--kg-node-fact', '--bf-danger'],
     nodeMissing: ['--kg-node-missing', '--bf-danger'],
+    // The file-category hues (PRD 38's redundant encoding): a file node reads its category from
+    // `./fileCategory`, and each category gets one tone. They fall back to the existing `--bf-*`
+    // palette so a host that defines no `--kg-cat-*` still gets a distinct, coherent hue per category.
+    catSource: ['--kg-cat-source', '--bf-accent'],
+    catTest: ['--kg-cat-test', '--bf-link'],
+    catDoc: ['--kg-cat-doc', '--bf-text-secondary'],
+    catConfig: ['--kg-cat-config', '--bf-warning'],
+    catStyle: ['--kg-cat-style', '--bf-danger'],
+    catData: ['--kg-cat-data', '--bf-success'],
+    catOther: ['--kg-cat-other', '--bf-text-muted'],
+    // The 1138 area nodes: a visible tone, distinct from the `plane` background surface (`--bf-surface-2`).
+    nodeArea: ['--kg-node-area', '--bf-border-strong'],
     edge: ['--kg-edge', '--bf-border-strong'],
     violation: ['--kg-violation', '--bf-danger'],
     cycle: ['--kg-cycle', '--bf-warning'],

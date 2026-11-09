@@ -20,6 +20,10 @@ export interface BfBrainChat {
   ticketCount?: number;
   /** Overall linked-ticket progress 0–100, or null when none are linked. */
   ticketProgressPct?: number | null;
+  /** Non-cancelled linked tickets below 100%. Absent on older servers (unknown, not 0). */
+  ticketOpenCount?: number;
+  /** Non-cancelled linked tickets at 100%. Absent on older servers (unknown, not 0). */
+  ticketDoneCount?: number;
   /** What the chat cost and what memory saved it (`attachChatSpend`). Absent on older servers. */
   spend?: SpendSavingsSummary | null;
 }

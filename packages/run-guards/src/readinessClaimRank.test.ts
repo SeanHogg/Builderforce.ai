@@ -21,14 +21,16 @@ describe("ProgressDetector: where unkept_ready ranks", () => {
     const d = detector();
     // Idle turns: a listing names no path, so nothing is new ground.
     for (let i = 0; i < NO_PROGRESS_TURNS - 2; i++) expect(turn(d, "", [["list_files", {}]])).toBeNull();
-    expect(turn(d, READY, [["list_files", {}]])).toBeNull();
+    // B1: the FIRST unkept claim fires the one-off advisory before the trip.
+    expect(turn(d, READY, [["list_files", {}]])).toMatchObject({ kind: "advisory" });
     const action = turn(d, READY, [["list_files", {}]]);
     expect(action).toMatchObject({ kind: "steer", signal: { kind: "unkept_ready" } });
   });
 
   it("is outranked by circling_read when both fill on the same turn", () => {
     const d = detector();
-    expect(turn(d, READY, [["read_file", { path: "a.md" }]])).toBeNull();
+    // B1: the FIRST unkept claim fires the one-off advisory (never a trip).
+    expect(turn(d, READY, [["read_file", { path: "a.md" }]])).toMatchObject({ kind: "advisory" });
     const again = Array.from({ length: REVISIT_HARD_AT - 1 }, (): [string, Record<string, unknown>] => ["read_file", { path: "a.md" }]);
     const action = turn(d, READY, again);
     expect(action).toMatchObject({ kind: "steer", signal: { kind: "circling_read", target: "a.md" } });

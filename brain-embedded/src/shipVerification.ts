@@ -29,6 +29,7 @@
  */
 
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import { gitCommandPattern } from '@builderforce/run-guards';
 
 /**
  * Branches whose content is, by definition, shipped: the two conventional defaults,
@@ -77,14 +78,9 @@ export function parseGitShortStatus(output: string): GitShortStatus | null {
 }
 
 /**
- * A raw shell `git <verb>`, however git's own options precede the verb. The options
- * that TAKE A VALUE (`-C <path>`, `-c <key=value>`) are matched as a pair: a
- * multi-checkout workspace runs `git -C Builderforce.ai push`, and a pattern that only
- * skipped single-token flags stopped at the path and never saw the verb.
+ * Moved to `@builderforce/run-guards` (PRD 45 §4.3: the helper lives in exactly one
+ * place); this module imports it from there.
  */
-export function gitCommandPattern(verbs: string): RegExp {
-  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, 'i');
-}
 
 /** A push has landed when a successful shell step ran `git push`. */
 const GIT_PUSH = gitCommandPattern('push');

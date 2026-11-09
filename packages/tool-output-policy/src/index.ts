@@ -32,6 +32,14 @@ export { projectJson } from './jsonProjection.js';
 export type { JsonProjection, ProjectionStep } from './jsonProjection.js';
 export { READ_FILE_RESULT_CHARS, isReadFileResult, isReadFilesResult, sliceReadFile, windowReadFile, windowReadFiles } from './readFileWindow.js';
 export type { AttachAdvisory, ReadFileResult, ReadFilesResult, ReadFileWindowed, ReadFileWindowOptions } from './readFileWindow.js';
+export {
+  OUTLINE_FIRST_MIN_CHARS,
+  OUTLINE_FIRST_MIN_LINES,
+  OUTLINE_FIRST_PREFIX_LINES,
+  outlineFirstContinuationNote,
+  shouldOutlineFirst,
+  type OutlineFirstInput,
+} from './outlineFirst.js';
 export { fitToolText, isLogLike, shapeToolResult, truncatedResultNote } from './policy.js';
 export type { FitToolTextOptions, ShapeToolResultOptions, ShapedToolResult } from './policy.js';
 export { modelToolResultPolicy } from './modelPolicy.js';

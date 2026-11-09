@@ -37351,7 +37351,14 @@
       "agrees": "一致",
       "unused": "未使用",
       "changed": "已变更",
-      "edge": "引用"
+      "edge": "引用",
+      "catSource": "源代码",
+      "catTest": "测试",
+      "catDoc": "文档",
+      "catConfig": "配置",
+      "catStyle": "样式",
+      "catData": "数据",
+      "catOther": "其他"
     },
     "statsLine": "{nodes} 个节点 · {edges} 条边 · {sources} 个来源",
     "filesLoaded": "已加载 {loaded} / {total}",

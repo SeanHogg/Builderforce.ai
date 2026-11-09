@@ -162,6 +162,7 @@ __export(src_exports, {
   askStopHook: () => askStopHook,
   askUserAnchorId: () => askUserAnchorId,
   askUserBlock: () => askUserBlock,
+  asksToShip: () => asksToShip,
   attachEvermindLearn: () => attachEvermindLearn,
   attemptedPublish: () => attemptedPublish,
   bindChatHistoryForSync: () => bindChatHistoryForSync,
@@ -322,6 +323,7 @@ __export(src_exports, {
   isMutationTool: () => isMutationTool,
   isPageEngineReply: () => isPageEngineReply,
   isPageEngineRequest: () => isPageEngineRequest,
+  isPublishCall: () => isPublishCall,
   isReadOnlyShellCall: () => isReadOnlyShellCall,
   isRepoPublishTool: () => isRepoPublishTool,
   isRouterTool: () => isRouterTool,
@@ -424,6 +426,10 @@ __export(src_exports, {
   promptStreamDeltas: () => promptStreamDeltas,
   providerFailureEvent: () => providerFailureEvent,
   providerFailureTrace: () => providerFailureTrace,
+  publishHold: () => publishHold,
+  publishHoldDirective: () => publishHoldDirective,
+  publishHoldFromPersonTurns: () => publishHoldFromPersonTurns,
+  publishHoldRefusal: () => publishHoldRefusal,
   queueRunSteering: () => queueRunSteering2,
   ratedTurnContext: () => ratedTurnContext,
   ratedTurnTool: () => ratedTurnTool,
@@ -431,6 +437,7 @@ __export(src_exports, {
   readChatTicketLinks: () => readChatTicketLinks,
   readWithIdleWatchdog: () => readWithIdleWatchdog,
   reasoningForRun: () => reasoningForRun,
+  recordPublishRefusal: () => recordPublishRefusal,
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
   requeueRunSteering: () => requeueRunSteering2,
   resetApiVersionCache: () => resetApiVersionCache,
@@ -9095,6 +9102,135 @@ function delegationRole(raw) {
   return isModelRole(raw) ? raw : "code";
 }
 
+// ../packages/agent-tools/src/edit.ts
+var toLF = (s) => s.replace(/\r\n/g, "\n");
+var toCRLF = (s) => toLF(s).replace(/\n/g, "\r\n");
+var countNewlines = (s) => s.split("\n").length - 1;
+var MIN_CONTAINS_NEEDLE = 8;
+var EXCERPT_RADIUS = 3;
+var EDIT_EXCERPT_CONTEXT = 2;
+var EDIT_EXCERPT_MAX_LINES = 40;
+function numberedLines(lines, from, to) {
+  return lines.slice(from, to).map((l, i) => `${from + i + 1}: ${l}`).join("\n");
+}
+function excerptAfterEdit(content, region) {
+  const lines = content.split(/\r?\n/);
+  const from = Math.max(0, region.startLine - 1 - EDIT_EXCERPT_CONTEXT);
+  const to = Math.min(lines.length, region.endLine + EDIT_EXCERPT_CONTEXT);
+  if (to - from <= EDIT_EXCERPT_MAX_LINES) return numberedLines(lines, from, to);
+  const half = Math.floor(EDIT_EXCERPT_MAX_LINES / 2);
+  return `${numberedLines(lines, from, from + half)}
+\u2026
+${numberedLines(lines, to - half, to)}`;
+}
+function regionAt(content, offset, newS) {
+  const startLine = countNewlines(content.slice(0, offset)) + 1;
+  return { startLine, endLine: startLine + countNewlines(newS) };
+}
+function findNearest(content, oldString) {
+  const needle = oldString.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0);
+  if (!needle) return void 0;
+  const lines = content.split(/\r?\n/);
+  let index = lines.findIndex((l) => l.trim() === needle);
+  if (index === -1 && needle.length >= MIN_CONTAINS_NEEDLE) index = lines.findIndex((l) => l.includes(needle));
+  if (index === -1) return void 0;
+  const from = Math.max(0, index - EXCERPT_RADIUS);
+  const to = Math.min(lines.length, index + EXCERPT_RADIUS + 1);
+  return { line: index + 1, excerpt: numberedLines(lines, from, to) };
+}
+function applyStringEdit(content, oldString, newString, replaceAll = false) {
+  if (typeof oldString !== "string" || oldString.length === 0) {
+    return { ok: false, error: "oldString is required" };
+  }
+  const fileIsCRLF = content.includes("\r\n");
+  const ordered = fileIsCRLF ? [
+    { oldS: oldString, newS: newString },
+    { oldS: toCRLF(oldString), newS: toCRLF(newString) },
+    { oldS: toLF(oldString), newS: toLF(newString) }
+  ] : [
+    { oldS: oldString, newS: newString },
+    { oldS: toLF(oldString), newS: toLF(newString) },
+    { oldS: toCRLF(oldString), newS: toCRLF(newString) }
+  ];
+  const candidates = ordered.filter(
+    (c, i) => ordered.findIndex((d) => d.oldS === c.oldS) === i
+  );
+  for (const { oldS, newS } of candidates) {
+    const first = content.indexOf(oldS);
+    if (first === -1) continue;
+    if (!replaceAll && content.indexOf(oldS, first + oldS.length) !== -1) {
+      return {
+        ok: false,
+        error: "oldString is not unique; add more surrounding context or set replaceAll"
+      };
+    }
+    const next = replaceAll ? content.split(oldS).join(newS) : content.replace(oldS, newS);
+    const replaced = replaceAll ? content.split(oldS).length - 1 : 1;
+    const region = regionAt(content, first, newS);
+    return { ok: true, content: next, replaced, region, excerpt: excerptAfterEdit(next, region) };
+  }
+  const nearest = findNearest(content, oldString);
+  return {
+    ok: false,
+    error: "oldString not found in file \u2014 read_file and copy the exact text (including indentation)",
+    ...nearest ? { nearest } : {}
+  };
+}
+var EDIT_BATCH_MAX = 20;
+function entryProblem(e) {
+  if (typeof e.path !== "string" || e.path.trim() === "") return "path is required";
+  if (typeof e.old_string !== "string" || e.old_string.length === 0) return "old_string is required";
+  if (typeof e.new_string !== "string") return "new_string is required";
+  return null;
+}
+function planBatchEdits(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) return { edits: [], error: "edits must be a non-empty array" };
+  if (raw.length > EDIT_BATCH_MAX) return { edits: [], error: `edits takes at most ${EDIT_BATCH_MAX} edits per call \u2014 split the rest into another edit_file` };
+  const edits = raw;
+  for (let i = 0; i < edits.length; i += 1) {
+    const problem = entryProblem(edits[i]);
+    if (problem) return { edits: [], error: `edit ${i + 1} (${edits[i].path ?? "?"}): ${problem}`, invalidAt: i };
+  }
+  return { edits };
+}
+async function applyBatchEdits(plan, io) {
+  if (plan.error || plan.invalidAt !== void 0) {
+    return { ok: false, files: [{ path: "", ok: false, error: plan.error ?? "invalid edits" }] };
+  }
+  const overlay = /* @__PURE__ */ new Map();
+  const outcomes = [];
+  for (let i = 0; i < plan.edits.length; i += 1) {
+    const e = plan.edits[i];
+    const base = overlay.has(e.path) ? overlay.get(e.path) : await io.read(e.path) ?? null;
+    if (base === null || base === void 0) {
+      return { ok: false, files: [...outcomes, { path: e.path, ok: false, error: `edit ${i + 1}: file not found \u2014 ${e.path}` }] };
+    }
+    const r = applyStringEdit(overlay.get(e.path) ?? base, e.old_string, e.new_string, e.replace_all === true);
+    if (!r.ok || r.content == null) {
+      return {
+        ok: false,
+        files: [...outcomes, { path: e.path, ok: false, error: `edit ${i + 1} (${e.path}): ${r.error ?? "did not match"}`, ...r.nearest ? { nearest: r.nearest } : {} }]
+      };
+    }
+    overlay.set(e.path, r.content);
+    outcomes.push({
+      path: e.path,
+      ok: true,
+      content: r.content,
+      ...r.replaced != null ? { replaced: r.replaced } : {},
+      ...r.region ? { region: r.region } : {},
+      ...r.excerpt ? { excerpt: r.excerpt } : {}
+    });
+  }
+  const written = /* @__PURE__ */ new Set();
+  for (const o of outcomes) {
+    if (written.has(o.path)) continue;
+    written.add(o.path);
+    await io.write(o.path, overlay.get(o.path));
+  }
+  return { ok: true, files: outcomes.map(({ content: _c, ...rest }) => rest) };
+}
+
 // ../packages/agent-tools/src/workstreamScope.ts
 function normalizeScopePath(path2) {
   return path2.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
@@ -9956,6 +10092,14 @@ function markdownOutline(path2, content) {
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
 // ../packages/agent-tools/src/fileRead.ts
+var OUTLINE_FIRST_MIN_CHARS = 16e3;
+var OUTLINE_FIRST_MIN_LINES = 300;
+var OUTLINE_FIRST_PREFIX_LINES = 40;
+function outlineFirstApplies(content, leverOn2) {
+  if (leverOn2 !== true) return false;
+  const lines = content.split("\n").length;
+  return content.length >= OUTLINE_FIRST_MIN_CHARS || lines >= OUTLINE_FIRST_MIN_LINES;
+}
 var READ_FILE_MAX_PATHS = 8;
 var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
 function readFileKey(path2, file, key) {
@@ -9976,11 +10120,25 @@ function readFileKey(path2, file, key) {
   return { ok: true, path: path2, key: read2.key, content: read2.content };
 }
 var isMarkdown = (path2) => /\.mdx?$/i.test(path2);
-async function readOneFile(path2, opts, caps) {
+async function readOneFile(path2, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path2);
   if (!r.ok) return r;
   if (opts.key) return readFileKey(r.path ?? path2, r, opts.key);
   const content = r.content ?? "";
+  if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
+    const symbols = extractSymbols(path2, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
+    const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
+    return {
+      ok: true,
+      path: r.path ?? path2,
+      outline: symbols,
+      totalLines: head.totalLines,
+      content: head.content,
+      truncated: true,
+      offset: 1,
+      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a specific span, call read_file again with \`offset\` (1-based line) and a small \`limit\`.`
+    };
+  }
   const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
   const data = {
     ok: true,
@@ -10002,10 +10160,10 @@ async function readOneFile(path2, opts, caps) {
   if (note) data.note = note;
   return data;
 }
-async function readManyFiles(paths, opts, caps) {
+async function readManyFiles(paths, opts, caps, leverOn2) {
   return Promise.all(
     paths.map(
-      (path2) => readOneFile(path2, opts, caps).catch((err) => ({ ok: false, path: path2, error: err instanceof Error ? err.message : String(err) }))
+      (path2) => readOneFile(path2, opts, caps, leverOn2).catch((err) => ({ ok: false, path: path2, error: err instanceof Error ? err.message : String(err) }))
     )
   );
 }
@@ -11667,8 +11825,8 @@ var readFileTool = defineTool({
       limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0,
       key: typeof args.key === "string" ? args.key.trim() : ""
     };
-    if (!path2) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps) } };
-    return { data: await readOneFile(path2, opts, ctx.caps) };
+    if (!path2) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps, ctx.outlineFirstReads) } };
+    return { data: await readOneFile(path2, opts, ctx.caps, ctx.outlineFirstReads) };
   }
 });
 var writeFileTool = defineTool({
@@ -11732,19 +11890,66 @@ var deleteFileTool = defineTool({
 });
 var editFileTool = defineTool({
   name: "edit_file",
-  description: "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files. A success returns `excerpt` \u2014 the edited lines with line numbers and a little context \u2014 so do NOT re-read the file to check the edit. A miss returns `nearest` \u2014 the closest matching line and its neighbours \u2014 copy `old_string` from there.",
+  description: "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files. A success returns `excerpt` \u2014 the edited lines with line numbers and a little context \u2014 so do NOT re-read the file to check the edit. A miss returns `nearest` \u2014 the closest matching line and its neighbours \u2014 copy `old_string` from there. To change SEVERAL files (or several spots) in one call, pass `edits`: an array of {path, old_string, new_string, replace_all?} (up to 20). A batch is ATOMIC \u2014 all edits apply or none, and on failure the result names the FIRST edit that did not match \u2014 so a multi-file refactor is one call, not a chain that can half-apply.",
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
       old_string: { type: "string", description: "The exact text to replace (must match the file byte-for-byte)." },
       new_string: { type: "string", description: "The replacement text." },
-      replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match. Default false." }
+      replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match. Default false." },
+      edits: {
+        type: "array",
+        maxItems: 20,
+        description: "BATCH (instead of path/old_string/new_string): up to 20 {path, old_string, new_string, replace_all?} edits applied atomically in one call. All apply or none; a failure names the first edit that did not match.",
+        items: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+            old_string: { type: "string", description: "The exact text to replace (must match the file byte-for-byte)." },
+            new_string: { type: "string", description: "The replacement text." },
+            replace_all: { type: "boolean", description: "Replace every occurrence. Default false." }
+          },
+          required: ["path", "old_string", "new_string"]
+        }
+      }
     },
-    required: ["path", "old_string", "new_string"]
+    required: []
   },
   requires: ["repo.edit"],
   async execute(args, ctx) {
+    if (Array.isArray(args.edits)) {
+      const plan = planBatchEdits(args.edits);
+      if (plan.error) return { data: { ok: false, error: plan.error } };
+      const read2 = async (p) => {
+        const r2 = await ctx.caps.repoRead?.readFile(p);
+        return r2 && r2.ok && typeof r2.content === "string" ? r2.content : null;
+      };
+      const batch = await applyBatchEdits(plan, {
+        read: read2,
+        write: async (p, content) => {
+          await ctx.caps.repoWrite.writeFile(p, content, "edit_file batch");
+        }
+      });
+      if (!batch.ok) {
+        const failed3 = batch.files[batch.files.length - 1];
+        return { data: { ok: false, error: failed3.error ?? "batch failed", files: batch.files.map(({ content: _c, ...rest }) => rest) } };
+      }
+      return {
+        data: {
+          ok: true,
+          batched: true,
+          count: batch.files.length,
+          files: batch.files.map(({ content: _c, ok, path: path3, error, nearest, ...facts }) => ({
+            path: path3,
+            ok,
+            ...Object.keys(facts).length ? facts : {},
+            ...error ? { error } : {},
+            ...nearest ? { nearest } : {}
+          }))
+        }
+      };
+    }
     const path2 = typeof args.path === "string" ? args.path : "";
     const oldString = typeof args.old_string === "string" ? args.old_string : "";
     const newString = typeof args.new_string === "string" ? args.new_string : "";
@@ -13264,6 +13469,7 @@ var COST_LEVERS = [
   // 10 like every lever that changes what the model sees; it runs only where the local
   // engine's health probe reports a loaded compressor, so it never triggers a download.
   { id: "c8_token_compression", requirement: "C8", rollout: 10, summary: "LLMLingua-2 token compression of large context" },
+  { id: "c10_outline_first_reads", requirement: "B2", rollout: 100, summary: "Large-file first read returns outline + first 40 lines" },
   { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
   { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
   { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
@@ -17673,6 +17879,7 @@ var NoProgressTracker = class {
 
 // ../packages/run-guards/src/readinessClaim.ts
 var UNKEPT_READY_AT = 2;
+var UNKEPT_STEER_AT = 1;
 var READY_PATTERNS = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"
   /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
@@ -17735,6 +17942,39 @@ var UnkeptClaimTracker = class {
   }
 };
 
+// ../packages/run-guards/src/readinessAdvisory.ts
+var READINESS_ADVISORY_NOTE = "You said you have what you need. Make the edit now; read only files you will change.";
+var ReadinessAdvisory = class {
+  note;
+  fired;
+  constructor(state) {
+    this.note = state?.note ?? "";
+    this.fired = state?.fired ?? false;
+  }
+  /**
+   * `unkeptTotal` — every unkept claim this run, from the detector's trip-invariant
+   * counter (never reset by a trip). The advisory fires exactly once per run: the first
+   * time the total reaches {@link UNKEPT_STEER_AT}; a reset streak cannot re-trigger it
+   * because `fired` persists in the JSON snapshot. Returns the pending note ("" when
+   * none or already consumed by {@link endTurn}).
+   */
+  observe(unkeptTotal) {
+    if (!this.fired && unkeptTotal >= UNKEPT_STEER_AT) {
+      this.fired = true;
+      this.note = READINESS_ADVISORY_NOTE;
+    }
+    return this.note;
+  }
+  /** The pending note has now been shown for its one turn — consume it (the one-shot
+   *  `fired` flag is NOT cleared, so it never re-fires). */
+  endTurn() {
+    this.note = "";
+  }
+  snapshot() {
+    return { note: this.note, ...this.fired ? { fired: true } : {} };
+  }
+};
+
 // ../packages/run-guards/src/progressDetector.ts
 var LADDER_RESET_TURNS = 8;
 var SIGNAL_RANK = {
@@ -17771,6 +18011,7 @@ var ProgressDetector = class {
     this.unkeptTurns = state.unkeptTurns ?? 0;
     this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
+    this.readiness = new ReadinessAdvisory(state.advisory);
     this.writtenPaths = /* @__PURE__ */ new Set();
     this.readThisTurn = [];
   }
@@ -17785,6 +18026,8 @@ var ProgressDetector = class {
   unkeptTurns;
   quietTurns;
   steer;
+  /** B1: the readiness advisory — one note at the FIRST unkept claim, never a trip. */
+  readiness;
   turnSignal = null;
   /** Every path this run has written, so a re-read of one is re-verification, not discovery. */
   writtenPaths;
@@ -17842,7 +18085,8 @@ var ProgressDetector = class {
       return target === path2 || target.startsWith(`${path2} \u220B `);
     });
   }
-  /** Every call of the turn ran. The trip this turn caused, if any. */
+  /** Every call of the turn ran. The trip this turn caused, if any — or, earlier and
+   *  cheaper (B1), the readiness advisory on the FIRST unkept claim (never a trip). */
   endTurn() {
     this.steer = void 0;
     const idle = this.progress.endTurn();
@@ -17861,6 +18105,9 @@ var ProgressDetector = class {
     const signal = this.turnSignal;
     this.turnSignal = null;
     if (!signal) {
+      this.readiness.endTurn();
+      const advisoryNote = this.readiness.observe(this.unkeptTurns);
+      if (advisoryNote) return { kind: "advisory", note: advisoryNote };
       if (this.progress.lastTurnGround) this.quietTurns += 1;
       else if (idle > 0) this.quietTurns = 0;
       if (this.quietTurns >= LADDER_RESET_TURNS) {
@@ -17891,6 +18138,10 @@ var ProgressDetector = class {
   setSteer(note) {
     this.steer = note;
   }
+  /** B1: the readiness advisory awaiting its one turn ("" when none). */
+  readinessNote() {
+    return this.readiness.snapshot().note;
+  }
   /** The note the current turn's request carries ("" when none). */
   steerNote() {
     return this.steer ?? "";
@@ -17909,7 +18160,8 @@ var ProgressDetector = class {
       ...Object.keys(this.tripsBySignal).length ? { tripsBySignal: { ...this.tripsBySignal } } : {},
       ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
       ...this.quietTurns ? { quietTurns: this.quietTurns } : {},
-      ...this.steer ? { steer: this.steer } : {}
+      ...this.steer ? { steer: this.steer } : {},
+      ...this.readiness.snapshot().note ? { advisory: this.readiness.snapshot() } : {}
     };
   }
 };
@@ -17943,6 +18195,122 @@ function progressPauseQuestion(signal, trip) {
     no_progress: "has stopped making progress (no new files, no test changes)"
   };
   return `This run ${what[signal.kind]} \u2014 progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
+}
+
+// ../packages/run-guards/src/inRunVerify.ts
+var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
+var IN_RUN_VERIFY_SCRIPT_NAMES = ["typecheck", "type-check", "test"];
+var DURABLE_IN_RUN_VERIFY_NOTE = "Durable/Worker has no shell. Typecheck/test are skipped in-run; CI on the pull request is the source of truth. Never claim those checks passed.";
+var SANDBOX_IN_RUN_VERIFY_NOTE = "After code changes, run these via the sandbox shell (`run_command`) before finish. Do not invent SSH.";
+function firstDeclaredScript(scripts, names) {
+  if (!scripts) return null;
+  for (const name of names) {
+    const body = scripts[name];
+    if (typeof body === "string" && body.trim()) return name;
+  }
+  return null;
+}
+function packageVerifyCommands(scripts, runner = "npm") {
+  const cmds = [];
+  const typecheck = firstDeclaredScript(scripts, ["typecheck", "type-check"]);
+  if (typecheck) cmds.push(`${runner} run ${typecheck}`);
+  const test = firstDeclaredScript(scripts, ["test"]);
+  if (test) cmds.push(`${runner} run ${test}`);
+  return cmds;
+}
+function planInRunVerify(input) {
+  if (input.surface === "durable") {
+    return {
+      kind: "skipped",
+      surface: "durable",
+      reason: "no_shell",
+      commands: [],
+      scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
+      note: DURABLE_IN_RUN_VERIFY_NOTE
+    };
+  }
+  const commands = packageVerifyCommands(input.packageScripts, input.runner);
+  return {
+    kind: "run",
+    surface: input.surface,
+    reason: null,
+    commands,
+    scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
+    note: commands.length > 0 ? SANDBOX_IN_RUN_VERIFY_NOTE : "No typecheck/test scripts in package.json; skip package verify (CI on the PR still applies)."
+  };
+}
+function wroteCode(writtenPaths) {
+  if (!writtenPaths) return false;
+  return "size" in writtenPaths ? writtenPaths.size > 0 : writtenPaths.length > 0;
+}
+function inRunVerifyOutcome(input) {
+  const plan = planInRunVerify(input);
+  if (plan.kind === "skipped") {
+    return {
+      surface: "durable",
+      kind: "skipped",
+      reason: "no_shell",
+      commands: [],
+      failedCommands: [],
+      mayFinish: true,
+      note: plan.note
+    };
+  }
+  if (!wroteCode(input.writtenPaths)) {
+    return {
+      surface: plan.surface,
+      kind: "skipped",
+      reason: "nothing_written",
+      commands: plan.commands,
+      failedCommands: [],
+      mayFinish: true,
+      note: "No code written this run; in-run typecheck/test is not required."
+    };
+  }
+  if (plan.commands.length === 0) {
+    return {
+      surface: plan.surface,
+      kind: "skipped",
+      reason: "no_scripts",
+      commands: [],
+      failedCommands: [],
+      mayFinish: true,
+      note: plan.note
+    };
+  }
+  if (input.results == null) {
+    return {
+      surface: plan.surface,
+      kind: "pending",
+      reason: "not_yet_run",
+      commands: plan.commands,
+      failedCommands: [],
+      mayFinish: false,
+      note: `${SANDBOX_IN_RUN_VERIFY_NOTE} Planned: ${plan.commands.join(" && ")}.`
+    };
+  }
+  const byCommand = new Map(input.results.map((r) => [r.command, r.exitCode]));
+  const failedCommands = plan.commands.filter((c) => (byCommand.get(c) ?? 1) !== 0);
+  if (failedCommands.length > 0) {
+    return {
+      surface: plan.surface,
+      kind: "ran",
+      reason: "verify_failed",
+      commands: plan.commands,
+      failedCommands,
+      mayFinish: false,
+      note: `In-run verify failed: ${failedCommands.join(", ")}. Fix before finish.`
+    };
+  }
+  return {
+    surface: plan.surface,
+    kind: "ran",
+    reason: "verify_passed",
+    commands: plan.commands,
+    failedCommands: [],
+    mayFinish: true,
+    note: `In-run verify passed: ${plan.commands.join(" && ")}.`
+  };
 }
 
 // ../packages/run-guards/src/streak.ts
@@ -18022,6 +18390,11 @@ var ReadsWithoutSpawn = class {
     return { ...this.state };
   }
 };
+
+// ../packages/run-guards/src/evidence/gitCommandPattern.ts
+function gitCommandPattern(verbs) {
+  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
+}
 
 // src/finishReason.ts
 var TRUNCATED_REASONS = /* @__PURE__ */ new Set(["length", "max_tokens", "maxtokens", "model_length", "output_limit"]);
@@ -20378,121 +20751,6 @@ async function evaluateFinishGates(a) {
   return absorbed ? { block: null, writtenPaths: absorbed } : { block: null };
 }
 
-// ../packages/agent-run/src/policy/verify/inRunVerify.ts
-var IN_RUN_VERIFY_SCRIPT_NAMES = ["typecheck", "type-check", "test"];
-var DURABLE_IN_RUN_VERIFY_NOTE = "Durable/Worker has no shell. Typecheck/test are skipped in-run; CI on the pull request is the source of truth. Never claim those checks passed.";
-var SANDBOX_IN_RUN_VERIFY_NOTE = "After code changes, run these via the sandbox shell (`run_command`) before finish. Do not invent SSH.";
-function firstDeclaredScript(scripts, names) {
-  if (!scripts) return null;
-  for (const name of names) {
-    const body = scripts[name];
-    if (typeof body === "string" && body.trim()) return name;
-  }
-  return null;
-}
-function packageVerifyCommands(scripts, runner = "npm") {
-  const cmds = [];
-  const typecheck = firstDeclaredScript(scripts, ["typecheck", "type-check"]);
-  if (typecheck) cmds.push(`${runner} run ${typecheck}`);
-  const test = firstDeclaredScript(scripts, ["test"]);
-  if (test) cmds.push(`${runner} run ${test}`);
-  return cmds;
-}
-function planInRunVerify(input) {
-  if (input.surface === "durable") {
-    return {
-      kind: "skipped",
-      surface: "durable",
-      reason: "no_shell",
-      commands: [],
-      scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
-      note: DURABLE_IN_RUN_VERIFY_NOTE
-    };
-  }
-  const commands = packageVerifyCommands(input.packageScripts, input.runner);
-  return {
-    kind: "run",
-    surface: input.surface,
-    reason: null,
-    commands,
-    scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
-    note: commands.length > 0 ? SANDBOX_IN_RUN_VERIFY_NOTE : "No typecheck/test scripts in package.json; skip package verify (CI on the PR still applies)."
-  };
-}
-function wroteCode(writtenPaths) {
-  if (!writtenPaths) return false;
-  return "size" in writtenPaths ? writtenPaths.size > 0 : writtenPaths.length > 0;
-}
-function inRunVerifyOutcome(input) {
-  const plan = planInRunVerify(input);
-  if (plan.kind === "skipped") {
-    return {
-      surface: "durable",
-      kind: "skipped",
-      reason: "no_shell",
-      commands: [],
-      failedCommands: [],
-      mayFinish: true,
-      note: plan.note
-    };
-  }
-  if (!wroteCode(input.writtenPaths)) {
-    return {
-      surface: plan.surface,
-      kind: "skipped",
-      reason: "nothing_written",
-      commands: plan.commands,
-      failedCommands: [],
-      mayFinish: true,
-      note: "No code written this run; in-run typecheck/test is not required."
-    };
-  }
-  if (plan.commands.length === 0) {
-    return {
-      surface: plan.surface,
-      kind: "skipped",
-      reason: "no_scripts",
-      commands: [],
-      failedCommands: [],
-      mayFinish: true,
-      note: plan.note
-    };
-  }
-  if (input.results == null) {
-    return {
-      surface: plan.surface,
-      kind: "pending",
-      reason: "not_yet_run",
-      commands: plan.commands,
-      failedCommands: [],
-      mayFinish: false,
-      note: `${SANDBOX_IN_RUN_VERIFY_NOTE} Planned: ${plan.commands.join(" && ")}.`
-    };
-  }
-  const byCommand = new Map(input.results.map((r) => [r.command, r.exitCode]));
-  const failedCommands = plan.commands.filter((c) => (byCommand.get(c) ?? 1) !== 0);
-  if (failedCommands.length > 0) {
-    return {
-      surface: plan.surface,
-      kind: "ran",
-      reason: "verify_failed",
-      commands: plan.commands,
-      failedCommands,
-      mayFinish: false,
-      note: `In-run verify failed: ${failedCommands.join(", ")}. Fix before finish.`
-    };
-  }
-  return {
-    surface: plan.surface,
-    kind: "ran",
-    reason: "verify_passed",
-    commands: plan.commands,
-    failedCommands: [],
-    mayFinish: true,
-    note: `In-run verify passed: ${plan.commands.join(" && ")}.`
-  };
-}
-
 // ../packages/agent-run/src/policy/verify/runEndMemory.ts
 var SHELL_SURFACES = /* @__PURE__ */ new Set(["sandbox", "on-prem"]);
 var hasShell = (surface2) => SHELL_SURFACES.has(surface2);
@@ -20893,6 +21151,9 @@ var RunGuards = class {
   }
   async onTrip(action, ports) {
     let outcome = action.kind;
+    if (action.kind === "advisory") {
+      return;
+    }
     if (action.kind === "escalate") {
       const model = ports.model;
       const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
@@ -23970,6 +24231,7 @@ function makeCell() {
     stopEpoch: 0,
     claim: null,
     stoppedTurn: null,
+    publishHold: null,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -27092,9 +27354,6 @@ function parseGitShortStatus(output) {
     behind: behind ? Number(behind[1]) : 0
   };
 }
-function gitCommandPattern(verbs) {
-  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
-}
 var GIT_PUSH = gitCommandPattern("push");
 var GIT_STATUS_CMD = gitCommandPattern("status");
 function commandOf(ev) {
@@ -27662,7 +27921,6 @@ function selfReviewShipDirective(chatId) {
 1. VERIFY \u2014 ${VERIFY_STEP}
 2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
 }
-var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
 var RAW_PUBLISH = gitCommandPattern("commit|push");
 function attemptedPublish(events) {
   return events.some(
@@ -27678,6 +27936,130 @@ function leftChangeUnshipped(input) {
 }
 function unshippedChangeNudge() {
   return "You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it \u2014 " + VERIFY_STEP + ' Then self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/runStore/convoText.ts
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return userTextOf(m);
+  }
+  return "";
+}
+function userTextOf(m) {
+  if (typeof m.content === "string") return m.content.trim();
+  if (Array.isArray(m.content)) {
+    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+  }
+  return "";
+}
+function isFollowUpTurn(convo) {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === "assistant") return true;
+    if (m.role === "user") users += 1;
+  }
+  return users > 1;
+}
+function lastAssistantText(convo) {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
+  }
+  return "";
+}
+
+// src/runStore/chatAsks.ts
+var personTurns = /* @__PURE__ */ new WeakSet();
+function markPersonTurn(m) {
+  if (m.role === "user") personTurns.add(m);
+  return m;
+}
+var MAX_ASKS = 4;
+var MAX_ASK_CHARS = 300;
+function chatAsks(convo) {
+  const seen = /* @__PURE__ */ new Set();
+  const asks = [];
+  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
+    const m = convo[i];
+    if (m?.role !== "user" || !personTurns.has(m)) continue;
+    const text2 = userTextOf(m).replace(/\s+/g, " ").trim();
+    if (!text2 || isContinuationDirective(text2) || !asksForChange(text2)) continue;
+    const key = text2.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    asks.unshift(text2.length > MAX_ASK_CHARS ? `${text2.slice(0, MAX_ASK_CHARS)}\u2026` : text2);
+  }
+  return asks;
+}
+var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
+var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
+function chatGoalText(convo) {
+  const latest = latestUserText(convo);
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return latest;
+  return `${latest}
+
+${EARLIER_ASKS}
+${numbered(asks)}`;
+}
+function chatAsksDirective(convo) {
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return null;
+  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
+}
+
+// src/runStore/publishHold.ts
+var ASKS_TO_SHIP = /\b(?:commit|push|ship|merg\w*|land|publish|release)\b/i;
+function asksToShip(text2) {
+  return ASKS_TO_SHIP.test(text2 ?? "");
+}
+var RAW_PUBLISH2 = gitCommandPattern("commit|push");
+function isPublishCall(name, args) {
+  if (PUBLISH_TOOLS.has(name)) return true;
+  if (name !== "run_command") return false;
+  const a = args;
+  const command = typeof a?.command === "string" ? a.command : typeof a?.cmd === "string" ? a.cmd : "";
+  return RAW_PUBLISH2.test(command);
+}
+function publishHoldFromPersonTurns(personTurns2) {
+  let hold = null;
+  personTurns2.forEach((turn, index) => {
+    const text2 = turn.text;
+    if (!text2) return;
+    if (declinesShipping(text2)) hold = { messageNumber: index + 1, text: text2 };
+    else if (hold && asksToShip(text2)) hold = null;
+  });
+  return hold;
+}
+function publishHold(convo) {
+  const turns = [];
+  for (const m of convo) {
+    if (m?.role === "user" && personTurns.has(m)) turns.push({ text: userTextOf(m) });
+  }
+  return publishHoldFromPersonTurns(turns);
+}
+function attemptedPublishWhileHeld(hold, events) {
+  if (!hold) return false;
+  return events.some((e) => e.category === "tool" && isPublishCall(e.label, e.args));
+}
+function recordPublishRefusal(runKey, name, args, events) {
+  for (const e of events) {
+    const r = e.result;
+    if (r && typeof r === "object" && r.publishHold) {
+      return { runKey, tool: e.label };
+    }
+  }
+  return isPublishCall(name, args) ? { runKey, tool: name } : null;
+}
+function publishHoldDirective() {
+  return "PUBLISH HOLD \u2014 the user is holding all commits, pushes and pull requests until they have validated the changes. Do NOT run git_commit, git_push or open_pull_request, and do not publish through a raw `git commit`/`git push` shell command \u2014 the tool gate will refuse them. Leave every change uncommitted. Finish your turn with a list of the changed paths and what still needs validation, so the user can review.";
+}
+function publishHoldRefusal(hold) {
+  return {
+    ok: false,
+    error: "Publish hold is ON for this chat (set by user message #" + hold.messageNumber + ': "' + hold.text + '"). The user is holding all commits/pushes until they validate the changes. Leave the changes uncommitted; finish with a list of changed paths for review. The hold is lifted only when the user explicitly asks to commit, push or ship.'
+  };
 }
 
 // src/restatedReply.ts
@@ -28015,15 +28397,22 @@ var RunProgressGuard = class {
   observe(tool, args, result) {
     this.detector?.observe(tool, args, result);
   }
-  /** The turn's calls all ran. The trip it caused, if any. */
+  /** The turn's calls all ran. The trip it caused, if any — or the B1 readiness
+   *  advisory ({@link readinessAdvisory}) on the FIRST unkept claim, which is never a
+   *  trip and must not be queued like one. */
   endTurn() {
     this.steer = void 0;
     const action = this.detector?.endTurn() ?? null;
-    if (action?.kind === "escalate") this.detector?.setSteer(void 0);
-    if (action && action.kind !== "steer") this.due = action;
+    if (!action) return null;
+    if (action.kind === "advisory") {
+      this.steer = action.note;
+      return null;
+    }
+    if (action.kind === "escalate") this.detector?.setSteer(void 0);
+    if (action.kind === "escalate" || action.kind === "pause") this.due = action;
     return action;
   }
-  /** The note the next turn opens with ("" when none). */
+  /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
   steerNote() {
     return this.steer ?? this.detector?.steerNote() ?? "";
   }
@@ -28086,77 +28475,6 @@ function trace2(run, step, due, forced) {
     args: { step, trip: due.trip, signal: due.signal.kind, forced },
     result: `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${forced === "ask_user" ? "ask_user alone" : forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
   });
-}
-
-// src/runStore/convoText.ts
-function latestUserText(convo) {
-  for (let i = convo.length - 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return userTextOf(m);
-  }
-  return "";
-}
-function userTextOf(m) {
-  if (typeof m.content === "string") return m.content.trim();
-  if (Array.isArray(m.content)) {
-    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
-  }
-  return "";
-}
-function isFollowUpTurn(convo) {
-  let users = 0;
-  for (const m of convo) {
-    if (m.role === "assistant") return true;
-    if (m.role === "user") users += 1;
-  }
-  return users > 1;
-}
-function lastAssistantText(convo) {
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const m = convo[i];
-    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
-  }
-  return "";
-}
-
-// src/runStore/chatAsks.ts
-var personTurns = /* @__PURE__ */ new WeakSet();
-function markPersonTurn(m) {
-  if (m.role === "user") personTurns.add(m);
-  return m;
-}
-var MAX_ASKS = 4;
-var MAX_ASK_CHARS = 300;
-function chatAsks(convo) {
-  const seen = /* @__PURE__ */ new Set();
-  const asks = [];
-  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
-    const m = convo[i];
-    if (m?.role !== "user" || !personTurns.has(m)) continue;
-    const text2 = userTextOf(m).replace(/\s+/g, " ").trim();
-    if (!text2 || isContinuationDirective(text2) || !asksForChange(text2)) continue;
-    const key = text2.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    asks.unshift(text2.length > MAX_ASK_CHARS ? `${text2.slice(0, MAX_ASK_CHARS)}\u2026` : text2);
-  }
-  return asks;
-}
-var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
-var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
-function chatGoalText(convo) {
-  const latest = latestUserText(convo);
-  const asks = chatAsks(convo);
-  if (asks.length <= 1) return latest;
-  return `${latest}
-
-${EARLIER_ASKS}
-${numbered(asks)}`;
-}
-function chatAsksDirective(convo) {
-  const asks = chatAsks(convo);
-  if (asks.length <= 1) return null;
-  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
 }
 
 // src/runStore/requestReading.ts
@@ -29004,9 +29322,22 @@ ${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogTo
 
 ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
-  if (canShip) systemPrompt = `${systemPrompt}
+  const hold = publishHold(convo);
+  c.publishHold = hold;
+  if (hold && attemptedPublishWhileHeld(hold, c.trace)) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.publish_hold_refused",
+      args: { setByMessage: hold.messageNumber },
+      result: `Publish hold is ON (set by user message #${hold.messageNumber}). A prior run still tried to commit/push \u2014 the tool gate now refuses these until the user explicitly asks to ship.`
+    });
+  }
+  if (canShip) {
+    systemPrompt = `${systemPrompt}
 
-${selfReviewShipDirective(serverChatId)}`;
+${hold ? publishHoldDirective() : selfReviewShipDirective(serverChatId)}`;
+  }
   if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
 
 ${previewReviewDirective(serverChatId, ticketToolVocabulary(catalogToolNames))}`;
@@ -29070,6 +29401,7 @@ ${turnContext}` : systemPrompt),
     recallBlockTokens,
     memoryReplay,
     userRequest,
+    publishHold: hold,
     // The goal a hand-off states to coders who see none of this chat: the latest
     // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
     goal: reading.goal,
@@ -29216,6 +29548,7 @@ function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
 function deliveryGates(run) {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
+  const held = () => run.publishHold != null;
   const files = () => ({ files: c.touchedFiles.slice(0, 20) });
   return [
     {
@@ -29223,7 +29556,7 @@ function deliveryGates(run) {
       // reviewer. Quiet when the user said not to commit, when a commit/push/PR was attempted, and on a host that cannot commit.
       id: "brain.ship",
       entersVerify: true,
-      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped(facts()),
+      applies: () => !run.shipRecoveryUsed && !held() && leftChangeUnshipped(facts()),
       nudge: unshippedChangeNudge,
       trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)." },
       spend: () => {
@@ -29462,6 +29795,11 @@ function callPreflight(run) {
     const args = call2.args;
     attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
     stampRunChat(call2.name, args, run.serverChatId);
+    if (c.publishHold && isPublishCall(call2.name, args)) {
+      const refusal2 = publishHoldRefusal(c.publishHold);
+      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { publishHold: c.publishHold.messageNumber, note: refusal2.error } });
+      return { result: { data: refusal2 } };
+    }
     if (needsConfirm && needsConfirm({ name: call2.name, args })) {
       const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
       if (!ok) {
@@ -33519,6 +33857,9 @@ function formatChatDiagnostics(d) {
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   if (d.mode) lines.push(`- Mode: ${d.mode}`);
+  if (d.publishHold) {
+    lines.push(`- Publish hold: ON (set by user message #${d.publishHold.messageNumber}: "${d.publishHold.text.slice(0, 120)}") \u2014 commit/push/PR calls are refused until the user explicitly asks to ship`);
+  }
   if (d.history) {
     lines.push(
       `- History (loaded): ${d.history.messages} message(s) \xB7 ${d.history.steps} run step(s) \xB7 full dialogue: ${d.history.location ?? "not reported by this surface"}`
@@ -33698,6 +34039,9 @@ async function gatherChatDiagnostics(src) {
     }
   }
   const exposure = src.trace ? toolExposureInTrace([...src.trace]) : null;
+  const publishHold2 = publishHoldFromPersonTurns(
+    msgs.filter((m) => m.role === "user" && typeof m.content === "string" && m.content.trim()).map((m) => ({ text: m.content.trim() }))
+  );
   const account = {
     plan: plan?.plan.effective ?? null,
     billingStatus: plan?.plan.billingStatus ?? null,
@@ -33737,6 +34081,7 @@ async function gatherChatDiagnostics(src) {
     role: src.role ?? null,
     evermind: toEvermind(head),
     lastLearn,
+    publishHold: publishHold2,
     agents: agents.map((a) => ({
       agentRef: a.agentRef,
       role: a.role,
@@ -34803,6 +35148,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   askStopHook,
   askUserAnchorId,
   askUserBlock,
+  asksToShip,
   attachEvermindLearn,
   attemptedPublish,
   bindChatHistoryForSync,
@@ -34963,6 +35309,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   isMutationTool,
   isPageEngineReply,
   isPageEngineRequest,
+  isPublishCall,
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRouterTool,
@@ -35065,6 +35412,10 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   promptStreamDeltas,
   providerFailureEvent,
   providerFailureTrace,
+  publishHold,
+  publishHoldDirective,
+  publishHoldFromPersonTurns,
+  publishHoldRefusal,
   queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
@@ -35072,6 +35423,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   readChatTicketLinks,
   readWithIdleWatchdog,
   reasoningForRun,
+  recordPublishRefusal,
   repeatedFailureAdvisory,
   requeueRunSteering,
   resetApiVersionCache,

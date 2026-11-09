@@ -15,6 +15,11 @@
 /** Unkept claims in a run that make a trip. One is a model thinking aloud; two is a habit. */
 export const UNKEPT_READY_AT = 2;
 
+/** Unkept claims in a run that raise the B1 advisory ({@link readinessAdvisory.ts}) —
+ *  one is enough: the note arrives a full {@link UNKEPT_READY_AT} turns before the
+ *  ladder's first steer. Advisory only; never trips. */
+export const UNKEPT_STEER_AT = 1;
+
 /** The model's own declaration that it has gathered enough, or is about to write. */
 const READY_PATTERNS: readonly RegExp[] = [
   // "Now I have everything I need", "I've got all the context", "we now have enough"

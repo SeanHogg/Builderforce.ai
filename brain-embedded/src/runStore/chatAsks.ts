@@ -27,10 +27,21 @@ import { latestUserText, userTextOf } from './convoText';
  */
 const personTurns = new WeakSet<object>();
 
+/**
+ * The person-turn mark set itself — exported so `publishHold.ts` can fold the same
+ * marked turns (no second WeakSet, which would never see the same marks).
+ */
+export { personTurns };
+
 /** Mark `m` as written by the person (a no-op for any other role). */
 export function markPersonTurn(m: ChatCompletionMessage): ChatCompletionMessage {
   if (m.role === 'user') personTurns.add(m);
   return m;
+}
+
+/** Is this user turn one the PERSON wrote? (Sole owner of the `personTurns` mark.) */
+export function isPersonTurn(m: ChatCompletionMessage): boolean {
+  return personTurns.has(m);
 }
 
 /** Asks carried — the most recent ones; an older ask is history the fold already holds. */

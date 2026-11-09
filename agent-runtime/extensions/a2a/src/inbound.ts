@@ -106,10 +106,15 @@ export function buildA2AHandler() {
 export function serveA2AHttp(api: BuilderForceAgentsPluginApi): () => void {
   const handler = createA2AHttpHandler(buildA2AHandler(), { path: "/a2a" });
   let disposed = false;
-  api.registerHttpHandler(async (req, res) => {
-    if (disposed) return false;
-    return handler(req as never, res as never);
-  });
+  // "gateway": no auth of its own; A2A callers authenticate by sending the
+  // gateway token as a Bearer token (packages/agent-tools/src/a2a.ts supports `token`).
+  api.registerHttpHandler(
+    async (req, res) => {
+      if (disposed) return false;
+      return handler(req as never, res as never);
+    },
+    { auth: "gateway" },
+  );
   return () => {
     disposed = true;
   };

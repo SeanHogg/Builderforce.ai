@@ -14,13 +14,14 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, OrbitControls } from '@react-three/drei';
 import { Color, DoubleSide, InstancedMesh, Matrix4, Vector3 } from 'three';
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import type { LensDef } from '../lenses';
+import type { LensDef, NodeShape } from '../lenses';
 import { EMPTY_LAYOUT_3D, type Layout3D } from './layout3d';
 import { useComputed } from '../compute/useComputed';
 import { DEFER_EDGES_ABOVE } from './edgeBudget';
 import { nodeInstances, type EdgeBuffer } from './buffers';
 import { towerBodies, type SceneChannels } from './channels';
 import { Pipes, Towers } from './Towers';
+import { shapeBuckets, selOf, Cylinders, type Item } from './shapeMeshes';
 import { applyRoles, type TowerRole } from './highlightRoles';
 import { cssVar, useThemeColors, type ThemeColors } from './themeColors';
 
@@ -48,38 +49,22 @@ type OrbitHandle = { target: Vector3; update(): void };
 function Nodes({ layout, nodes, lens, colors, selected, onSelect }: {
     layout: Layout3D; nodes: readonly KNode[]; lens: LensDef; colors: ThemeColors; selected: string | null; onSelect(ref: string): void;
 }) {
-    const mesh = useRef<InstancedMesh>(null);
-    const invalidate = useThree((s) => s.invalidate);
     const inst = useMemo(() => nodeInstances(nodes, layout, lens), [nodes, layout, lens]);
-    useEffect(() => {
-        const m = mesh.current;
-        if (!m) return;
-        const matrix = new Matrix4();
-        const color = new Color();
-        for (let i = 0; i < inst.refs.length; i++) {
-            const s = inst.scales[i]! * (inst.refs[i] === selected ? 1.6 : 1);
-            matrix.makeScale(s, s, s).setPosition(inst.positions[i * 3]!, inst.positions[i * 3 + 1]!, inst.positions[i * 3 + 2]!);
-            m.setMatrixAt(i, matrix);
-            color.set(colors[inst.tones[i]!]);
-            if (inst.dim[i]) color.lerp(new Color(colors.bg), 0.65);
-            m.setColorAt(i, color);
-        }
-        m.count = inst.refs.length;
-        m.instanceMatrix.needsUpdate = true;
-        if (m.instanceColor) m.instanceColor.needsUpdate = true;
-        m.computeBoundingSphere();
-        invalidate(); // matrices/colours are written straight to the mesh, which the reconciler never sees
-    }, [inst, colors, selected, invalidate]);
-    const pick = (e: ThreeEvent<MouseEvent>) => {
-        e.stopPropagation();
-        const ref = e.instanceId !== undefined ? inst.refs[e.instanceId] : undefined;
-        if (ref) onSelect(ref);
-    };
+    const items = useMemo<Item[]>(() => inst.refs.map((ref, i) => ({
+        pos: [inst.positions[i * 3]!, inst.positions[i * 3 + 1]!, inst.positions[i * 3 + 2]!] as const,
+        scale: [inst.scales[i]!, inst.scales[i]!, inst.scales[i]!] as const,
+        tone: inst.tones[i]!,
+        dim: inst.dim[i]!,
+        ref,
+    })), [inst]);
+    // One instanced mesh per shape, so a kind keeps its silhouette without a rebuild on selection.
+    const buckets = useMemo(() => shapeBuckets(items, inst.shapes), [items, inst.shapes]);
     return (
-        <instancedMesh ref={mesh} args={[undefined, undefined, Math.max(1, inst.refs.length)]} onClick={pick}>
-            <sphereGeometry args={[1, 14, 10]} />
-            <meshStandardMaterial roughness={0.6} metalness={0.05} />
-        </instancedMesh>
+        <>
+            {buckets.map(([shape, b]) => (
+                <Cylinders key={shape} items={b.items} colors={colors} shape={shape} pickable={b.refs} onPick={onSelect} highlight={selOf(b, selected)} />
+            ))}
+        </>
     );
 }
 

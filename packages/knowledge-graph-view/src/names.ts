@@ -15,6 +15,9 @@ export function kindLabel(labels: Pick<KnowledgeGraphLabels, 'legend'>, kind: st
     return labels.legend[kind] ?? kind;
 }
 
+/** A node's shape, re-exported from the lens so the map branches and legend glyphs share the one table. */
+export { kindShape } from './lenses';
+
 export function packLabel(labels: Pick<KnowledgeGraphLabels, 'packs'>, pack: string): string {
     return labels.packs[pack] ?? pack;
 }

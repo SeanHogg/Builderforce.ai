@@ -1,14 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { PluginRegistry } from "../../plugins/registry.js";
-import {
-  authorizeGatewayConnect,
-  type GatewayAuthResult,
-  type ResolvedGatewayAuth,
-} from "../auth.js";
+import type { ResolvedGatewayAuth } from "../auth.js";
 import type { AuthRateLimiter } from "../auth-rate-limit.js";
-import { sendGatewayAuthFailure } from "../http-common.js";
-import { getBearerToken } from "../http-utils.js";
+import {
+  authorizeGatewayBearerRequest,
+  authorizeGatewayBearerRequestOrReply,
+} from "../http-auth-helpers.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -22,26 +20,6 @@ type PluginHttpAuthContext = {
   trustedProxies: string[];
   rateLimiter?: AuthRateLimiter;
 };
-
-async function authorizePluginHttpEntry(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: PluginHttpAuthContext,
-): Promise<boolean> {
-  const token = getBearerToken(req);
-  const authResult = await authorizeGatewayConnect({
-    auth: ctx.auth,
-    connectAuth: token ? { token, password: token } : null,
-    req,
-    trustedProxies: ctx.trustedProxies,
-    rateLimiter: ctx.rateLimiter,
-  });
-  if (!authResult.ok) {
-    sendGatewayAuthFailure(res, authResult);
-    return false;
-  }
-  return true;
-}
 
 export function createGatewayPluginRequestHandler(params: {
   registry: PluginRegistry;
@@ -70,7 +48,16 @@ export function createGatewayPluginRequestHandler(params: {
         // Default-deny: entries without an explicit auth declaration require
         // gateway auth before the handler runs.
         if ((route.auth ?? "gateway") !== "public") {
-          if (!(await authorizePluginHttpEntry(req, res, ctx))) {
+          if (
+            !(await authorizeGatewayBearerRequestOrReply({
+              req,
+              res,
+              auth: ctx.auth,
+              trustedProxies: ctx.trustedProxies,
+              rateLimiter: ctx.rateLimiter,
+            }))
+          ) {
+            // The 401 is the answer for this path — the handler must not run.
             return true;
           }
         }
@@ -89,23 +76,27 @@ export function createGatewayPluginRequestHandler(params: {
       }
     }
 
-    let authFailure: GatewayAuthResult | null = null;
+    // Resolve gateway auth AT MOST ONCE per request, lazily: only when a
+    // gateway-auth entry is reached, and memoized across entries. A rejected
+    // gateway entry is skipped (its handler never runs — that is the security
+    // property); if nothing handles the request we return false so it falls
+    // through to OpenAI/canvas/Control UI instead of a plugin-owned 401
+    // swallowing unrelated paths.
+    let gatewayAuth: Promise<boolean> | null = null;
+    const ensureGatewayAuth = () => {
+      gatewayAuth ??= authorizeGatewayBearerRequest({
+        req,
+        auth: ctx.auth,
+        trustedProxies: ctx.trustedProxies,
+        rateLimiter: ctx.rateLimiter,
+      }).then((result) => result.ok);
+      return gatewayAuth;
+    };
+
     for (const entry of handlers) {
-      // Per-entry decision because handlers carry no path: a gateway-auth
-      // failure on one entry is remembered and the scan continues, so a
-      // public webhook later in the list can still answer. If nothing handled
-      // the request, the remembered failure is sent (default-deny).
       if ((entry.auth ?? "gateway") !== "public") {
-        const token = getBearerToken(req);
-        const authResult = await authorizeGatewayConnect({
-          auth: ctx.auth,
-          connectAuth: token ? { token, password: token } : null,
-          req,
-          trustedProxies: ctx.trustedProxies,
-          rateLimiter: ctx.rateLimiter,
-        });
-        if (!authResult.ok) {
-          authFailure ??= authResult;
+        if (!(await ensureGatewayAuth())) {
+          // Gateway auth failed: skip this entry. Its handler never runs.
           continue;
         }
       }
@@ -123,13 +114,6 @@ export function createGatewayPluginRequestHandler(params: {
         }
         return true;
       }
-    }
-    // Nothing handled the request. If a gateway-auth entry rejected it,
-    // default-deny answers with that failure rather than falling through to
-    // the next non-plugin handler.
-    if (authFailure) {
-      sendGatewayAuthFailure(res, authFailure);
-      return true;
     }
     return false;
   };

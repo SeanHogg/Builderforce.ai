@@ -36,9 +36,10 @@
 
 import { asksForChange } from '@builderforce/agent-stall';
 import { VERIFY_STEP } from '@builderforce/agent-tools';
+import { gitCommandPattern, PUBLISH_TOOLS } from '@builderforce/run-guards';
 import type { BrainTraceEvent } from './brainTriage';
 import { canShipHere } from './localWorkspaceTools';
-import { commandOf, gitCommandPattern } from './shipVerification';
+import { commandOf } from './shipVerification';
 
 /**
  * The directive. Uses the names the model actually sees: plain names for the local git
@@ -60,9 +61,6 @@ export function selfReviewShipDirective(chatId: number | null): string {
     'Exceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error — never claim a change shipped when it did not.'
   );
 }
-
-/** The local publish tools. Calling any of them — successfully or not — is an attempt. */
-const PUBLISH_TOOLS: ReadonlySet<string> = new Set(['git_commit', 'git_push', 'open_pull_request']);
 
 /** A raw `git commit` / `git push` through the shell is an attempt too. */
 const RAW_PUBLISH = gitCommandPattern('commit|push');

@@ -6,7 +6,7 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import type { LensDef } from '../lenses';
+import type { LensDef, NodeShape } from '../lenses';
 import { cmp, importanceOf } from '../order';
 import type { Layout3D } from './layout3d';
 import type { ThemeTone } from './themeColors';
@@ -17,6 +17,7 @@ export interface NodeInstances {
     positions: Float32Array;
     scales: Float32Array;
     tones: ThemeTone[];
+    shapes: NodeShape[];
     dim: boolean[];
 }
 
@@ -38,6 +39,7 @@ export function nodeInstances(nodes: readonly KNode[], layout: Layout3D, lens: L
     const positions = new Float32Array(placed.length * 3);
     const scales = new Float32Array(placed.length);
     const tones: ThemeTone[] = [];
+    const shapes: NodeShape[] = [];
     const dim: boolean[] = [];
     placed.forEach((n, i) => {
         const [x, y, z] = layout.positions.get(n.ref) ?? [0, 0, 0];
@@ -45,9 +47,10 @@ export function nodeInstances(nodes: readonly KNode[], layout: Layout3D, lens: L
         scales[i] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * Math.sqrt(Math.max(0, Math.min(1, importanceOf(n))));
         const style = lens.nodeStyle(n);
         tones.push(style.tone);
+        shapes.push(style.shape);
         dim.push(style.emphasis === 'dim');
     });
-    return { refs: placed.map((n) => n.ref), positions, scales, tones, dim };
+    return { refs: placed.map((n) => n.ref), positions, scales, tones, shapes, dim };
 }
 
 const KIND_TONE: Record<string, ThemeTone> = {

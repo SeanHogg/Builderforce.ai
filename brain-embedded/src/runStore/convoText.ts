@@ -4,6 +4,9 @@
  */
 
 import type { ChatCompletionMessage } from '../streamChatCompletion';
+import { isPersonTurn } from './chatAsks.js';
+
+export { isPersonTurn };
 
 /**
  * The text of the most recent user turn in a transcript — the query the Evermind
@@ -17,6 +20,12 @@ export function latestUserText(convo: ChatCompletionMessage[]): string {
   }
   return '';
 }
+
+/**
+ * Is this user turn one the PERSON wrote? (`isPersonTurn` is owned by
+ * `chatAsks.ts`, which holds the `personTurns` mark; re-exported here for the
+ * existing callers of this module.)
+ */
 
 /** One user turn's text — a vision turn's text parts joined, never its image bytes. */
 export function userTextOf(m: ChatCompletionMessage): string {

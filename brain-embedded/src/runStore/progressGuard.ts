@@ -33,6 +33,10 @@ import { isMutatingPlatformTool } from '../chatWorkLinking';
 import { budgeted, forcedProgressTurn, type ForcedTurn } from './progressBudget';
 import { deviceLeverOn } from './deviceLevers';
 
+/** A ladder trip (escalate / pause / steer) — everything except the B1 advisory, which
+ *  carries no `trip`/`signal` and is consumed inside {@link RunProgressGuard.endTurn}. */
+type TripAction = Exclude<ProgressAction, { kind: 'advisory' }>;
+
 /** A call that only reads: a deduplicable read, a read-only shell command, a router lookup. */
 export function isReadOnlyCall(tool: string, args: unknown): boolean {
   return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
@@ -43,7 +47,7 @@ export class RunProgressGuard {
   private readonly detector: ProgressDetector | null;
   /** An escalate / pause a later turn's menu acts on — kept until one takes it, so a
    *  budget that forces the next turn first never drops it. */
-  private due: ProgressAction | null = null;
+  private due: TripAction | null = null;
   /** The note the next turn opens with, when the host shows it in place of an escalation. */
   private steer: string | undefined;
 
@@ -63,24 +67,33 @@ export class RunProgressGuard {
     this.detector?.observe(tool, args, result);
   }
 
-  /** The turn's calls all ran. The trip it caused, if any. */
-  endTurn(): ProgressAction | null {
+  /** The turn's calls all ran. The trip it caused, if any — or the B1 readiness
+   *  advisory ({@link readinessAdvisory}) on the FIRST unkept claim, which is never a
+   *  trip and must not be queued like one. */
+  endTurn(): TripAction | null {
     this.steer = undefined;
     const action = this.detector?.endTurn() ?? null;
+    if (!action) return null;
+    if (action.kind === 'advisory') {
+      this.steer = action.note;
+      return null;
+    }
     // The detector's second note says the run moved to a stronger model; here the second
     // step is a forced turn, whose brief carries the advice instead.
-    if (action?.kind === 'escalate') this.detector?.setSteer(undefined);
-    if (action && action.kind !== 'steer') this.due = action;
+    if (action.kind === 'escalate') this.detector?.setSteer(undefined);
+    // Only an escalation or pause waits for a later turn's menu — a steer rides the next
+    // turn's opening note, it is never forced.
+    if (action.kind === 'escalate' || action.kind === 'pause') this.due = action;
     return action;
   }
 
-  /** The note the next turn opens with ("" when none). */
+  /** The note the next turn opens with ("" when none) — a trip steer, or the B1 advisory. */
   steerNote(): string {
     return this.steer ?? this.detector?.steerNote() ?? '';
   }
 
   /** The escalation or pause waiting for this turn, taken once. */
-  takeDue(): ProgressAction | null {
+  takeDue(): TripAction | null {
     const due = this.due;
     this.due = null;
     return due;
@@ -141,7 +154,7 @@ export function progressGuardTurn(run: BrainRunContext, step: number, selected: 
   return out.turn;
 }
 
-function trace(run: BrainRunContext, step: number, due: ProgressAction, forced: 'hand_off' | 'change' | 'ask_user'): void {
+function trace(run: BrainRunContext, step: number, due: TripAction, forced: 'hand_off' | 'change' | 'ask_user'): void {
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',

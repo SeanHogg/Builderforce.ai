@@ -25,23 +25,16 @@ function usd(n: number): string {
 }
 
 /**
- * The per-row cost/progress chip the history shows beside the overflow menu:
- * the sub-agents that ran on the chat (live when any, else the announced total
- * this session), the linked tickets and % done (when the chat has any), and the
- * chat's `$ spent / $ saved` rollup (when the server attached one). Absent
- * pieces are simply omitted so a chat with no usage reads as its title only,
- * not a wall of zeros.
+ * The per-row cost chip the history shows beside the overflow menu: the
+ * sub-agents that ran on the chat (live when any, else the announced total this
+ * session) and the chat's `$ spent / $ saved` rollup (when the server attached
+ * one). Linked-ticket progress is NOT here — the shared row renders it itself
+ * (`ChatTicketStats`). Absent pieces are omitted, not a wall of zeros.
  */
 function runStatsOf(chat: BrainChat, agents: number, t: (key: string, fallback: string) => string): string | null {
   const parts: string[] = [];
   if (agents > 0) {
     parts.push(t('app.chatStatsAgents', '{count} agents').replace('{count}', String(agents)));
-  }
-  const count = chat.ticketCount ?? 0;
-  const pct = chat.ticketProgressPct;
-  if (count > 0 && typeof pct === 'number' && Number.isFinite(pct)) {
-    parts.push(t('app.chatStatsTickets', '{count} tickets').replace('{count}', String(count)));
-    parts.push(t('app.chatStatsPct', '{pct}%').replace('{pct}', String(Math.round(pct))));
   }
   const spend = chat.spend;
   if (spend) {
@@ -169,6 +162,8 @@ function VsCodeChatHistoryRow({
         title: titleOf(chat),
         ticketCount: chat.ticketCount,
         ticketProgressPct: chat.ticketProgressPct,
+        ticketOpenCount: chat.ticketOpenCount,
+        ticketDoneCount: chat.ticketDoneCount,
         stats: runStatsOf(chat, agents, t),
       }}
       active={active}

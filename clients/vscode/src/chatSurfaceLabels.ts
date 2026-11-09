@@ -27,6 +27,14 @@ export function chatSurfaceLabels(): Record<string, string> {
     "app.chatDelete": t("Delete"),
     "app.chatArchive": t("Archive"),
     "app.chatStatsAgents": t("{count} agents"),
+    // The history row's linked-ticket column (brain-ui `ChatTicketStats`). The
+    // `{pct}`/`{open}`/`{done}`/`{count}` tokens are filled by the row, not by l10n.
+    "app.chatTicketStats": t("{pct}% · {open} open · {done} done"),
+    "app.chatTicketStatsAria": t("{pct}% complete: {open} open and {done} done tickets"),
+    "app.chatTicketStatsCount": t("{pct}% · {count} tickets"),
+    "app.chatTicketStatsCountAria": t("{pct}% complete across {count} tickets"),
+    "app.chatTicketStatsCountOnly": t("{count} tickets"),
+    "app.chatTicketStatsNone": t("No tickets"),
     "app.emptyTitle": t("What are we working on?"),
     "app.emptyHint": t("Ask about this workspace, or start from one of these."),
     "app.startersHeading": t("Start with"),

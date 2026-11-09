@@ -101,7 +101,7 @@ describe('Graph2D', () => {
         expect(width()).toBeLessThan(fitted);
         act(() => api!.fit());
         expect(width()).toBe(fitted);
-        const opacities = [...container.querySelectorAll('circle[data-dot]')].map((c) => c.getAttribute('opacity'));
+        const opacities = [...container.querySelectorAll('[data-dot]')].map((c) => c.getAttribute('opacity'));
         expect(opacities).toContain('0.35');
         expect(opacities).toContain('1');
         expect(LABELLED_NODES).toBe(25);

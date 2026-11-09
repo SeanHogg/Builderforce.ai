@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import type { ResolvedGatewayAuth } from "../auth.js";
+import type { AuthRateLimiter } from "../auth-rate-limit.js";
 import { makeMockHttpResponse } from "../test-http-response.js";
 import { createTestRegistry } from "./__tests__/test-utils.js";
 import { createGatewayPluginRequestHandler } from "./plugins-http.js";
@@ -14,19 +15,40 @@ const testAuth: ResolvedGatewayAuth = {
 
 type HandlerLog = Parameters<typeof createGatewayPluginRequestHandler>[0]["log"];
 
-function makeParams(registry?: ReturnType<typeof createTestRegistry>, log?: HandlerLog) {
+function makeParams(
+  registry?: ReturnType<typeof createTestRegistry>,
+  log?: HandlerLog,
+  rateLimiter?: AuthRateLimiter,
+) {
   return {
     registry: registry ?? createTestRegistry(),
     log: log ?? ({ warn: vi.fn() } as unknown as HandlerLog),
     auth: testAuth,
     trustedProxies: [] as string[],
+    ...(rateLimiter ? { rateLimiter } : {}),
   };
 }
 
 function makeRequest(url: string, authorization?: string): IncomingMessage {
   const headers: Record<string, string> = {};
-  if (authorization) headers.authorization = authorization;
+  if (authorization) {
+    headers.authorization = authorization;
+  }
   return { url, headers, socket: { remoteAddress: "127.0.0.1" } } as IncomingMessage;
+}
+
+function createMockRateLimiter() {
+  const check = vi.fn(() => ({ allowed: true, remaining: 10, retryAfterMs: 0 }));
+  const recordFailure = vi.fn();
+  const limiter = {
+    check,
+    recordFailure,
+    reset: vi.fn(),
+    size: vi.fn(() => 0),
+    prune: vi.fn(),
+    dispose: vi.fn(),
+  } satisfies AuthRateLimiter;
+  return { limiter, check, recordFailure };
 }
 
 describe("createGatewayPluginRequestHandler", () => {
@@ -114,7 +136,7 @@ describe("createGatewayPluginRequestHandler", () => {
     expect(end).toHaveBeenCalledWith("Internal Server Error");
   });
 
-  it("rejects a route registered without auth when the request carries no token", async () => {
+  it("regression: a plugin handler registered without \"auth\" rejects a request with no token", async () => {
     const routeHandler = vi.fn(async () => undefined);
     const handler = createGatewayPluginRequestHandler(
       makeParams(
@@ -168,7 +190,7 @@ describe("createGatewayPluginRequestHandler", () => {
     expect(routeHandler).toHaveBeenCalledTimes(1);
   });
 
-  it("lets a public webhook handler answer without a token", async () => {
+  it("regression: a \"public\" webhook still answers", async () => {
     const webhook = vi.fn(async (_req, res: ServerResponse) => {
       res.statusCode = 200;
       res.end("webhook-ok");
@@ -215,7 +237,7 @@ describe("createGatewayPluginRequestHandler", () => {
     expect(webhook).toHaveBeenCalledTimes(1);
   });
 
-  it("sends the remembered 401 when no entry handles the request and auth failed", async () => {
+  it("regression: an unhandled request falls through (returns false) when a gateway handler rejects it", async () => {
     const secure = vi.fn(async () => false);
     const handler = createGatewayPluginRequestHandler(
       makeParams(
@@ -227,9 +249,49 @@ describe("createGatewayPluginRequestHandler", () => {
 
     const { res, end } = makeMockHttpResponse();
     const handled = await handler(makeRequest("/unmatched"), res);
-    expect(handled).toBe(true);
-    expect(res.statusCode).toBe(401);
+    expect(handled).toBe(false);
     expect(secure).not.toHaveBeenCalled();
-    expect(String(end.mock.calls[0]?.[0])).toContain("Unauthorized");
+    expect(end).not.toHaveBeenCalled();
+  });
+
+  it("regression: a request with no bearer records no rate-limit failure", async () => {
+    const { limiter, recordFailure } = createMockRateLimiter();
+    const handler = createGatewayPluginRequestHandler(
+      makeParams(
+        createTestRegistry({
+          httpHandlers: [{ pluginId: "secure", handler: async () => false, source: "secure" }],
+        }),
+        undefined,
+        limiter,
+      ),
+    );
+
+    const { res } = makeMockHttpResponse();
+    const handled = await handler(makeRequest("/unmatched"), res);
+    expect(handled).toBe(false);
+    expect(recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("regression: auth is resolved once per request across N gateway handlers", async () => {
+    const handlers = Array.from({ length: 5 }, (_, i) => ({
+      pluginId: `h${i}`,
+      handler: vi.fn(async () => false),
+      source: `h${i}`,
+    }));
+    const { limiter, check, recordFailure } = createMockRateLimiter();
+    const handler = createGatewayPluginRequestHandler(
+      makeParams(createTestRegistry({ httpHandlers: handlers }), undefined, limiter),
+    );
+
+    const { res } = makeMockHttpResponse();
+    const handled = await handler(makeRequest("/unmatched", "Bearer test-token"), res);
+    expect(handled).toBe(false);
+    for (const entry of handlers) {
+      expect(entry.handler).toHaveBeenCalledTimes(1);
+    }
+    // One auth resolution for the whole request, not one per entry.
+    expect(check).toHaveBeenCalledTimes(1);
+    // A bad-token request never records a failure.
+    expect(recordFailure).not.toHaveBeenCalled();
   });
 });

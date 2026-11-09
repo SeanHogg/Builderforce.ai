@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ProgressDetector } from "./progressDetector.js";
+import { ProgressDetector, type ProgressAction } from "./progressDetector.js";
 import { NO_PROGRESS_TURNS } from "./noProgress.js";
 import { REVISIT_HARD_AT } from "./visitTally.js";
 import { FAILURE_HARD_AT } from "./failureTally.js";
@@ -7,6 +7,10 @@ import { FAILURE_HARD_AT } from "./failureTally.js";
 const READS = new Set(["read_file", "search_code"]);
 const ports = { isReadOnly: (tool: string) => READS.has(tool) };
 const okData = { data: { ok: true } };
+
+/** The trip a turn ended in — narrowed off the B1 advisory (none of these tests claim
+ *  readiness, so an advisory never appears, but tsc must see the union discriminated). */
+const trip = (a: ProgressAction | null) => (a && a.kind !== "advisory" ? a.signal : undefined);
 
 describe("ProgressDetector", () => {
   it("is silent for a run that keeps reaching new files", () => {
@@ -27,7 +31,7 @@ describe("ProgressDetector", () => {
       actions.push(d.endTurn());
     }
     expect(actions.map((a) => a?.kind)).toEqual(["steer", "escalate", "pause"]);
-    expect(actions[0]?.signal.kind).toBe("no_progress");
+    expect(trip(actions[0] ?? null)?.kind).toBe("no_progress");
   });
 
   it("shows a steer for exactly one turn", () => {
@@ -50,13 +54,13 @@ describe("ProgressDetector", () => {
     d.observe("read_file", { path: "a.ts" }, okData);
     expect(d.endTurn()).toBeNull();
     for (let i = 0; i < REVISIT_HARD_AT; i++) d.observe("read_file", { path: "b.ts", offset: i }, okData);
-    expect(d.endTurn()?.signal).toMatchObject({ kind: "circling_read", target: "b.ts", count: REVISIT_HARD_AT });
+    expect(trip(d.endTurn())).toMatchObject({ kind: "circling_read", target: "b.ts", count: REVISIT_HARD_AT });
   });
 
   it("trips repeated_failure on the identical failing call, quoting its error", () => {
     const d = new ProgressDetector({}, ports);
     for (let i = 0; i < FAILURE_HARD_AT; i++) d.observe("search_code", { query: "x" }, { data: { ok: false, error: "bad scope" }, isError: true });
-    expect(d.endTurn()?.signal).toMatchObject({ kind: "repeated_failure", tool: "search_code", reason: "bad scope" });
+    expect(trip(d.endTurn())).toMatchObject({ kind: "repeated_failure", tool: "search_code", reason: "bad scope" });
   });
 
   it("reports the strongest signal of a turn", () => {
@@ -64,7 +68,7 @@ describe("ProgressDetector", () => {
     for (let i = 0; i < FAILURE_HARD_AT; i++) d.observe("search_code", { query: "x" }, { data: { ok: false }, isError: true });
     d.observe("edit_file", { path: "a.ts", old_string: "x", new_string: "y" }, okData);
     d.observe("edit_file", { path: "a.ts", old_string: "y", new_string: "x" }, okData);
-    expect(d.endTurn()?.signal.kind).toBe("edit_revert");
+    expect(trip(d.endTurn())?.kind).toBe("edit_revert");
   });
 
   it("keeps judging the whole run across a durable resume", () => {
@@ -74,7 +78,7 @@ describe("ProgressDetector", () => {
     d.endTurn();
     const resumed = new ProgressDetector(JSON.parse(JSON.stringify(d.snapshot())), ports);
     resumed.observe("write_file", { path: "a.ts", content: "A" }, okData);
-    expect(resumed.endTurn()?.signal.kind).toBe("edit_revert");
+    expect(trip(resumed.endTurn())?.kind).toBe("edit_revert");
   });
 
   it("trips reverifying when a turn only re-reads files the run itself wrote", () => {

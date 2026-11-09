@@ -3,11 +3,13 @@
  * four tabs - Review, Runs, Server, Diagnostics - a body that scrolls on its own, and a footer OUTSIDE that scroller with the one action for the state. It composes;
  * each tab is its own file. The panel is a flex column that fills its host panel's body (`fill`), so the footer stays put at 360px as it does wide.
  *
- * Opening the panel with nothing planned counts the files at once (free and local), so the plan is ready when it is read. Closing it while a plan awaits an
- * answer cancels it (`useReviewsPanel` does that), and nothing is written. Closing it never stops a review that is running.
+ * Opening the panel does NOT count the files: planning walks and hashes every file in the folder, which is not free
+ * enough to spend on an open. Counting starts only when the person asks — the footer's "count and start" (idle /
+ * cancelled) or Update review (over a plan). Closing it while a plan awaits an answer cancels it (`useReviewsPanel`
+ * does that), and nothing is written. Closing it never stops a review that is running.
  */
 
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { cssVar } from '../../scene/themeColors';
 import type { ReviewRequest } from '../../types';
 import type { PanelProps } from '../registry';
@@ -50,11 +52,9 @@ function ReviewsPanelBody({ labels, source, runs, reviews, sync, history, rootId
     const running = state.status === 'running' || hostRunning;
 
     const canStart = review.available && !!rootId;
-    // Opening with nothing planned counts the files now. Once, on open: later states are the person's to move.
-    useEffect(() => {
-        if (canStart && !hostRunning && (state.status === 'idle' || state.status === 'cancelled')) review.start({ rootId: rootId! });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    // Opening the panel does NOT plan a review: planning walks and hashes every file in the folder, which the
+    // person did not ask for just by opening the panel. Counting starts only on the footer's "count and start"
+    // click (or Update review) — see ReviewsPanelFooter's onCountAndStart below.
 
     const request: ReviewRequest = rootId ? { rootId } : { pick: true };
     const stopHostRun = () => { if (live && port) { setHostStop({ runId: live.id, at: Date.now() }); void port.stop(live.id).catch(() => undefined); } };

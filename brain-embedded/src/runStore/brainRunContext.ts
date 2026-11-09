@@ -20,6 +20,7 @@ import type { PlaceholderLedger } from '../completionGuard';
 import type { turnInterruption } from '../finishReason.js';
 import type { RunWindowFit } from '../windowFit/runWindowFit';
 import type { RunCell } from './runCell';
+import type { PublishHold } from './publishHold';
 import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
@@ -82,6 +83,8 @@ export interface BrainRunContext {
   memoryReplay: boolean;
   /** The user's OWN request for this run, captured before the loop writes any nudge. */
   userRequest: string;
+  /** This chat's PUBLISH HOLD ({@link publishHold}), or null while the chat may ship. */
+  publishHold: PublishHold | null;
   /** The goal a hand-off states to its coders — {@link userRequest} plus the chat's earlier asks. */
   goal: string;
   /** The previous turn's reply — what a restated final answer is compared against. */

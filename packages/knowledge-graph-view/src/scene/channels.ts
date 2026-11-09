@@ -7,6 +7,7 @@
  */
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import type { NodeShape } from '../lenses';
 import { frac, level5 } from '../surface/overlays';
 import type { OverlayModel } from '../surface/overlays';
 import { stationOfRef, type StationModel } from '../surface/stations';
@@ -73,6 +74,7 @@ export interface Body {
     radius: number;
     height: number;
     tone: ThemeTone;
+    shape: NodeShape;
     dim: boolean;
     shell: boolean;
     fill?: number;
@@ -85,7 +87,7 @@ export function towerBodies(inst: NodeInstances, channels: NodeChannels): Body[]
         const c = channels.get(ref) ?? { height: towerHeight(undefined), shell: false };
         return {
             ref, x: inst.positions[i * 3]!, y: inst.positions[i * 3 + 1]! + c.height / 2, z: inst.positions[i * 3 + 2]!,
-            radius: inst.scales[i]! * 0.8, height: c.height, tone: inst.tones[i]!, dim: inst.dim[i]!, shell: c.shell,
+            radius: inst.scales[i]! * 0.8, height: c.height, tone: inst.tones[i]!, shape: inst.shapes[i]!, dim: inst.dim[i]!, shell: c.shell,
             ...(c.fill !== undefined && c.fillTone ? { fill: c.fill, fillTone: c.fillTone } : {}),
         };
     });

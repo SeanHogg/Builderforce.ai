@@ -61,7 +61,9 @@ const plugin = {
       log: api.logger,
     });
 
-    api.registerHttpHandler(httpHandler);
+    // "gateway": these are profile admin endpoints with no auth of their own;
+    // the gateway shared-secret check is their only protection.
+    api.registerHttpHandler(httpHandler, { auth: "gateway" });
   },
 };
 

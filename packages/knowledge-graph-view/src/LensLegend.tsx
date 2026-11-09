@@ -9,6 +9,7 @@ import type { KnowledgeGraphLabels } from './labels';
 import type { LensDef } from './lenses';
 import { kindLabel } from './names';
 import { cssVar } from './scene/themeColors';
+import { SHAPE_PATHS } from './shapes';
 import { list, muted, swatch } from './styles';
 
 export interface LensLegendProps {
@@ -27,7 +28,13 @@ export function LensLegend({ lens, labels, applicable }: LensLegendProps) {
                     <ul style={{ ...list, display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
                         {lens.legend.map((row) => (
                             <li key={`${row.tone}:${row.key}`} data-legend={row.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, minHeight: 20 }}>
-                                <span style={swatch(cssVar(row.tone))} aria-hidden="true" />
+                                {row.shape ? (
+                                    <svg width={12} height={12} viewBox="-1.4 -1.4 2.8 2.8" aria-hidden="true" style={{ flex: 'none' }}>
+                                        <path d={SHAPE_PATHS[row.shape]} transform="scale(0.9)" fill={cssVar(row.tone)} stroke={cssVar('bg')} strokeWidth={0.1} />
+                                    </svg>
+                                ) : (
+                                    <span style={{ ...swatch(cssVar(row.tone)), borderRadius: 999 }} aria-hidden="true" />
+                                )}
                                 <span>{kindLabel(labels, row.key)}</span>
                             </li>
                         ))}

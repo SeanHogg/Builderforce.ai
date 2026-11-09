@@ -29,6 +29,7 @@
       "@builderforce/ide-templates": ["../../packages/ide-templates/src/index.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../../packages/run-guards/src/index.ts"],
+      "@builderforce/run-guards/inRunVerify": ["../../packages/run-guards/src/inRunVerify.ts"],
       "@builderforce/run-policy": ["../../packages/run-policy/src/index.ts"],
       "@builderforce/spend-contract": ["../../packages/spend-contract/src/index.ts"],
       "@builderforce/voice-provenance": ["../../packages/voice-provenance/src/index.ts"],

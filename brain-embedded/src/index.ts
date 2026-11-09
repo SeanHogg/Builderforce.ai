@@ -617,6 +617,21 @@ export {
 } from './selfReviewShip';
 export type { UnshippedChangeInput } from './selfReviewShip';
 
+// PUBLISH HOLD — a chat-scoped standing hold that refuses every commit/push/PR until
+// the person who set it explicitly asks to ship (incident #56886). Set and lifted ONLY
+// by person turns; the tool gate refuses a publish call BEFORE the confirm gate, so
+// neither `acceptEdits` nor a sub-agent's inherited context can waive it.
+export {
+  asksToShip,
+  isPublishCall,
+  publishHold,
+  publishHoldFromPersonTurns,
+  publishHoldDirective,
+  publishHoldRefusal,
+  recordPublishRefusal,
+} from './runStore/publishHold';
+export type { PublishHold } from './runStore/publishHold';
+
 // STOP HOOKS — the host's (workspace's) say over whether a run may end; bounded per run.
 export { askStopHook, MAX_STOP_HOOK_ROUNDS } from './stopHooks';
 export type { RunStopHook, RunStopInput } from './stopHooks';

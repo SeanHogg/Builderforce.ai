@@ -192,6 +192,13 @@ export interface ChatDiagnosticsData {
    * broken run in work mode. A report that omits it makes those two indistinguishable.
    */
   mode?: string | null;
+  /**
+   * This chat's PUBLISH HOLD (incident #56886), if one is in force: which user turn set
+   * it, and that turn's words. Reported because it inverts the ship contract — a held
+   * chat that changed code and left it uncommitted is CORRECT, not a parked ticket —
+   * so a report without it reads a deliberate hold as an unfinished execution.
+   */
+  publishHold?: { messageNumber: number; text: string } | null;
   /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
   projectId?: number | null;
   projectName?: string | null;
@@ -827,6 +834,11 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   // Directly under the chat line, because it qualifies everything below it: the same
   // trace reads as a healthy answer in `chat` and as an unfinished execution in `work`.
   if (d.mode) lines.push(`- Mode: ${d.mode}`);
+  // A publish hold inverts the ship contract below: commits/pushes are REFUSED on
+  // purpose until the person lifts it, so the run ending uncommitted is correct.
+  if (d.publishHold) {
+    lines.push(`- Publish hold: ON (set by user message #${d.publishHold.messageNumber}: "${d.publishHold.text.slice(0, 120)}") — commit/push/PR calls are refused until the user explicitly asks to ship`);
+  }
   // Directly under the chat too: this report is a trimmed view, and the count plus the
   // location is how a reader gets from it to the whole conversation.
   if (d.history) {

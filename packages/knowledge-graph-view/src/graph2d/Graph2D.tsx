@@ -8,9 +8,9 @@
  * the viewBox and re-renders nothing.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type MouseEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type MouseEvent } from 'react';
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
-import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import type { KnowledgeGraphLabels } from '../labels';
 import type { LensDef } from '../lenses';
 import { useContainerSize } from '../environment';
 import { byImportance } from '../graphModel';
@@ -23,10 +23,10 @@ import { useRoving } from '../useRoving';
 import { HIT_PX, useSvgScale } from '../useSvgScale';
 import { nearestHit } from '../hitTest';
 import { usePanZoomRegistration } from '../surface/zoom';
-import { kindLabel } from '../names';
+import { cssVar } from '../scene/themeColors';
 import { groupEdges } from '../scene/buffers';
-import { cssVar, type ThemeTone } from '../scene/themeColors';
 import { pathsOf } from './edgePaths';
+import { NodeCanvas } from './NodeCanvas';
 import { EMPTY_LAYOUT_2D, fitView, nodeRadius, type Layout2D } from './layout2d';
 
 /** Nodes labelled by default (besides the selection and its neighbours), and nodes that are Tab stops. */
@@ -76,66 +76,6 @@ const Edges = memo(function Edges({ edges, nodes, layout, selected }: { edges: r
             {incident.map((g) => (
                 <path key={g.bucket} data-incident={g.bucket} d={g.d} stroke={cssVar('accent')} vectorEffect="non-scaling-stroke" strokeWidth={2} />
             ))}
-        </g>
-    );
-});
-
-interface NodeLayerProps {
-    ordered: readonly KNode[];
-    layout: Layout2D;
-    lens: LensDef;
-    selected: string | null;
-    stops: ReadonlySet<string>;
-    perPx: number;
-    labels: KnowledgeGraphLabels;
-    onActivate(ref: string): void;
-    onArrow(e: KeyboardEvent<SVGElement>): void;
-}
-
-interface NodeDotProps {
-    n: KNode;
-    at: readonly [number, number];
-    tone: ThemeTone;
-    dim: boolean;
-    r: number;
-    tab: boolean;
-    pressed: boolean;
-    labels: KnowledgeGraphLabels;
-    onActivate(ref: string): void;
-    onArrow(e: KeyboardEvent<SVGElement>): void;
-}
-
-/** ONE node. Memoised on primitives and stable objects, so a click re-renders the two nodes whose state changed, not all of them. */
-const NodeDot = memo(function NodeDot({ n, at, tone, dim, r, tab, pressed, labels, onActivate, onArrow }: NodeDotProps) {
-    return (
-        <g
-            data-id={n.ref} role="button" aria-pressed={pressed} style={{ cursor: 'pointer' }}
-            tabIndex={tab ? 0 : -1} data-keep={tab ? '1' : undefined}
-            aria-label={fillTemplate(labels.nodeAria, { label: n.label, kind: kindLabel(labels, n.kind) })}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(n.ref); } else onArrow(e);
-            }}
-        >
-            <circle cx={at[0]} cy={at[1]} r={r} fill={cssVar(tone)} opacity={dim ? 0.35 : 1} stroke={cssVar('bg')} strokeWidth={0.1} data-dot="true" pointerEvents="none" />
-        </g>
-    );
-});
-
-const NodeLayer = memo(function NodeLayer({ ordered, layout, lens, selected, stops, perPx, labels, onActivate, onArrow }: NodeLayerProps) {
-    const styles = useMemo(() => ordered.map((n) => lens.nodeStyle(n)), [ordered, lens]);
-    return (
-        <g>
-            {ordered.map((n, i) => {
-                const at = layout.positions.get(n.ref);
-                if (!at) return null;
-                const style = styles[i]!;
-                return (
-                    <NodeDot
-                        key={n.ref} n={n} at={at} tone={style.tone} dim={style.emphasis === 'dim'} r={Math.max(nodeRadius(n.importance), 3 * perPx)}
-                        tab={stops.has(n.ref) || n.ref === selected} pressed={n.ref === selected} labels={labels} onActivate={onActivate} onArrow={onArrow}
-                    />
-                );
-            })}
         </g>
     );
 });
@@ -216,9 +156,10 @@ export function Graph2D({ rootId, nodes, edges, lens, selected, onSelect, planeL
                         <desc>{labels.graphHint}</desc>
                         <Bands layout={layout} font={font} planeLabel={planeLabel} />
                         <Edges edges={edges} nodes={nodes} layout={layout} selected={selected} />
-                        <NodeLayer
+                        <NodeCanvas
                             ordered={ordered} layout={layout} lens={lens} selected={selected} stops={stops}
-                            perPx={perPx} labels={labels} onActivate={activate} onArrow={roving.onArrow}
+                            perPx={perPx} view={pan.view} size={size} hostEl={host.current} labels={labels}
+                            onActivate={activate} onArrow={roving.onArrow}
                         />
                         {selected && at && (
                             <circle data-selected="true" cx={at[0]} cy={at[1]} r={nodeRadius(1) + 4 * perPx} fill="none" stroke={cssVar('accent')} strokeWidth={3 * perPx} pointerEvents="none" />

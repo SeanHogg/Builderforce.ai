@@ -66,7 +66,7 @@ async function dispatchRequest(
 }
 
 describe("gateway plugin HTTP auth boundary", () => {
-  test("requires gateway auth for /api/channels/* plugin routes and allows authenticated pass-through", async () => {
+  test("relies on per-entry plugin auth for /api/channels/* (no prefix-level block) and allows authenticated pass-through", async () => {
     const resolvedAuth: ResolvedGatewayAuth = {
       mode: "token",
       token: "test-token",
@@ -107,15 +107,17 @@ describe("gateway plugin HTTP auth boundary", () => {
           resolvedAuth,
         });
 
+        // No prefix-level auth: the unauthenticated request reaches the plugin
+        // handler, whose own per-entry "gateway" auth (plugins-http.ts) is now
+        // the only gate. This mock answers, proving pass-through.
         const unauthenticated = createResponse();
         await dispatchRequest(
           server,
           createRequest({ path: "/api/channels/nostr/default/profile" }),
           unauthenticated.res,
         );
-        expect(unauthenticated.res.statusCode).toBe(401);
-        expect(unauthenticated.getBody()).toContain("Unauthorized");
-        expect(handlePluginRequest).not.toHaveBeenCalled();
+        expect(unauthenticated.res.statusCode).toBe(200);
+        expect(unauthenticated.getBody()).toContain('"route":"channel"');
 
         const authenticated = createResponse();
         await dispatchRequest(
@@ -138,7 +140,7 @@ describe("gateway plugin HTTP auth boundary", () => {
         expect(unauthenticatedPublic.res.statusCode).toBe(200);
         expect(unauthenticatedPublic.getBody()).toContain('"route":"public"');
 
-        expect(handlePluginRequest).toHaveBeenCalledTimes(2);
+        expect(handlePluginRequest).toHaveBeenCalledTimes(3);
       },
     });
   });

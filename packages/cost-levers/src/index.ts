@@ -35,6 +35,10 @@ export type CostLeverId =
   | 'c6_rerank'
   | 'c7_tool_output_policy'
   | 'c8_token_compression'
+  // Outline-first reads (PRD 45 §4.7 B2): a first whole-file read of a large file
+  // returns its outline + the first 40 lines instead of the file. On at 100 — the VSIX
+  // sets `builderforce.agent.outlineFirstReads` (default true) at activation.
+  | 'c10_outline_first_reads'
   | 'c9_price_tier_budget'
   | 'd1_verifier_cascade'
   | 'd2_difficulty_router'
@@ -80,6 +84,7 @@ export const COST_LEVERS: readonly CostLeverSpec[] = [
   // 10 like every lever that changes what the model sees; it runs only where the local
   // engine's health probe reports a loaded compressor, so it never triggers a download.
   { id: 'c8_token_compression', requirement: 'C8', rollout: 10, summary: 'LLMLingua-2 token compression of large context' },
+  { id: 'c10_outline_first_reads', requirement: 'B2', rollout: 100, summary: 'Large-file first read returns outline + first 40 lines' },
   { id: 'c9_price_tier_budget', requirement: 'C9', rollout: 100, summary: 'Compaction budget under long-context price tiers' },
   { id: 'd1_verifier_cascade', requirement: 'D1', rollout: 10, summary: 'Weak model first, verifier, escalate one tier' },
   { id: 'd2_difficulty_router', requirement: 'D2', rollout: 10, summary: 'Predict weak-model failure, skip the wasted attempt' },

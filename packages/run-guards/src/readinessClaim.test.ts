@@ -85,7 +85,9 @@ describe("ProgressDetector: unkept_ready", () => {
   it("trips on the second unkept claim even though every turn reads a new file", () => {
     const d = detector();
     const first = turn(d, "Now I have everything I need.", [["read_file", { path: "a.md" }]]);
-    expect(first).toBeNull();
+    // B1 (PRD 45 §4.7): the FIRST unkept claim is already worth a one-off advisory on
+    // the next turn — never a trip, never a ladder move.
+    expect(first).toMatchObject({ kind: "advisory" });
     const second = turn(d, "One final check, then I write.", [["read_file", { path: "b.md" }]]);
     expect(second).toMatchObject({ kind: "steer", trip: 1, signal: { kind: "unkept_ready", count: UNKEPT_READY_AT } });
     expect(d.steerNote()).toContain("you have said 2 times that you have what you need");
@@ -103,7 +105,9 @@ describe("ProgressDetector: unkept_ready", () => {
     const d = detector();
     const actions = [];
     for (let i = 0; i < 6; i++) actions.push(turn(d, "Now I have everything I need.", [["read_file", { path: `f${i}.md` }]]));
-    expect(actions.filter(Boolean).map((a) => a!.kind)).toEqual(["steer", "escalate", "pause"]);
+    // B1 fires exactly one advisory (on the first unkept claim); the ladder itself is
+    // unchanged — steer → escalate → pause.
+    expect(actions.filter(Boolean).map((a) => a!.kind)).toEqual(["advisory", "steer", "escalate", "pause"]);
     expect(actions[5]).toMatchObject({ kind: "pause", question: expect.stringContaining("keeps saying it has everything it needs") });
   });
 
@@ -113,7 +117,11 @@ describe("ProgressDetector: unkept_ready", () => {
       const calls: Array<[string, Record<string, unknown>]> = i % 2
         ? [["edit_file", { path: `src/f${i}.ts`, old_string: "a", new_string: "b" }]]
         : [["read_file", { path: `src/f${i}.ts` }]];
-      expect(turn(d, "Now I have everything I need.", calls)).toBeNull();
+      // B1: the FIRST unkept (read-only) claim fires the one-off advisory; a turn that
+      // acts keeps its claim and raises nothing. No turn here trips the ladder.
+      const action = turn(d, "Now I have everything I need.", calls);
+      if (i === 0) expect(action).toMatchObject({ kind: "advisory" });
+      else expect(action).toBeNull();
     }
   });
 
