@@ -11,6 +11,7 @@ import {
   conversationAccessibilityName,
   conversationTreeLabel,
   ticketProgressTooltipLine,
+  type TicketCountLabels,
 } from "./ticketProgressDisplay";
 import { archive as archiveRows, unarchive, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
 import { SessionsSnapshotStore, type SessionsSnapshot } from "./sessionsSnapshotStore";
@@ -18,6 +19,12 @@ import { SessionsSnapshotStore, type SessionsSnapshot } from "./sessionsSnapshot
 /** globalState keys for archive state and view toggle. */
 const ARCHIVE_STATE_KEY = "builderforce.sessions.archive";
 const SHOW_ARCHIVED_KEY = "builderforce.sessions.showArchived";
+
+/** The row's open/done ticket counts, localized (`2h · 62% · 3 open · 5 done`). */
+const TICKET_COUNT_LABELS: TicketCountLabels = {
+  open: (n) => vscode.l10n.t("{n} open", { n }),
+  done: (n) => vscode.l10n.t("{n} done", { n }),
+};
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
 
 /** Extract the row key from a SessionTreeNode, if it has one. */
@@ -213,7 +220,12 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // the marker (#2442 / #2439). Absent/non-finite pct omits the suffix; a real
     // 0% still shows.
     const ticketPct = displayChatProgressPct(chat.ticketProgressPct);
-    const timeAndPct = appendTicketProgress(time, ticketPct);
+    const timeAndPct = appendTicketProgress(
+      time,
+      ticketPct,
+      { open: chat.ticketOpenCount, done: chat.ticketDoneCount },
+      TICKET_COUNT_LABELS,
+    );
     // Filtered: the project is implied by the header, so just show the time. Unfiltered:
     // prefix the project name (or "No project") so a mixed history stays readable.
     let description = timeAndPct;

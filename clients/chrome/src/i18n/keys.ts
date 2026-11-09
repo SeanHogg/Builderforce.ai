@@ -31,6 +31,13 @@ export const MESSAGE_KEYS = [
   'chatActions',
   'chatActionsFor',
   'chatRename',
+  // The history row's linked-ticket column; placeholders arrive as literal {name}s the shared row fills.
+  'chatTicketStats',
+  'chatTicketStatsAria',
+  'chatTicketStatsCount',
+  'chatTicketStatsCountAria',
+  'chatTicketStatsCountOnly',
+  'chatTicketStatsNone',
   // THE inline-editable header title: the button's accessible name, the field's label,
   // and the two outcomes (which are also Enter and Escape).
   'editTitle',

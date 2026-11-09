@@ -1256,5 +1256,7 @@
   "{n} B": "{n} B",
   "{n} KB": "{n} KB",
   "{n} MB": "{n} MB",
-  "{kind} {ref}": "{kind} {ref}"
+  "{kind} {ref}": "{kind} {ref}",
+  "{n} open": "{n} 个未完成",
+  "{n} done": "{n} 个已完成"
 }

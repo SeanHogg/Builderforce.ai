@@ -51,6 +51,12 @@ describe("isSessionComplete", () => {
     // The label prints `Math.round(pct)`, so 99.6 already READS as 100% to the user.
     expect(isSessionComplete(chatRow({ ticketProgressPct: 99.6 }))).toBe(true);
   });
+
+  it("decides on the percent the row shows, not the open/done counts beside it", () => {
+    // The row now reads `62% · 3 open · 5 done`; the counts are display only.
+    expect(isSessionComplete(chatRow({ ticketOpenCount: 0, ticketDoneCount: 2 }))).toBe(true);
+    expect(isSessionComplete(chatRow({ ticketProgressPct: 62, ticketOpenCount: 0, ticketDoneCount: 2 }))).toBe(false);
+  });
 });
 
 describe("sweepArchivable", () => {

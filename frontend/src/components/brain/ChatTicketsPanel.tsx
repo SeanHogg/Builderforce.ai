@@ -55,7 +55,7 @@ const IDLE_SUBAGENT_POLL_MS = 30_000;
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT, spend, originalRequest }: {
   chatId: number;
   projectId: number | null;
-  chatList: Array<Pick<BrainChat, 'id' | 'title' | 'ticketCount' | 'ticketProgressPct'>>;
+  chatList: Array<Pick<BrainChat, 'id' | 'title' | 'ticketCount' | 'ticketProgressPct' | 'ticketOpenCount' | 'ticketDoneCount'>>;
   onChanged?: () => void;
   /** The chat's live messages — a new run-milestone line re-reads the Agents list. */
   transcript?: ReadonlyArray<{ metadata?: string | null }>;
@@ -155,6 +155,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
           title: c.title,
           ticketCount: c.ticketCount,
           ticketProgressPct: c.ticketProgressPct,
+          ticketOpenCount: c.ticketOpenCount,
+          ticketDoneCount: c.ticketDoneCount,
         }))}
         adapter={adapter}
         labels={labels}

@@ -19,6 +19,12 @@ const CHAT_HISTORY_PATH: Readonly<Record<string, string>> = {
   rename: 'brain.rename',
   summarize: 'brain.summarize',
   delete: 'common.delete',
+  ticketStats: 'brain.chatTicketStats',
+  ticketStatsAria: 'brain.chatTicketStatsAria',
+  ticketStatsCount: 'brain.chatTicketStatsCount',
+  ticketStatsCountAria: 'brain.chatTicketStatsCountAria',
+  ticketStatsCountOnly: 'brain.chatTicketStatsCountOnly',
+  ticketStatsNone: 'brain.chatTicketStatsNone',
 };
 const chatHistoryPath = (key: string): string | undefined => CHAT_HISTORY_PATH[key];
 
@@ -33,13 +39,6 @@ export function BrainChatList() {
   const tBrain = useTranslations('brain');
   const lookup = useLabelLookup(chatHistoryPath);
   const labels = useMemo(() => chatHistoryLabelsFrom(lookup), [lookup]);
-  /** Linked-ticket % done for a row's stats chip — the same `ticketCount > 0 && pct != null`
-   *  guard as the title's `chatSwitcherLabel`, so a chat with no tickets never reads `0%`. */
-  const progressStatsOf = (chat: (typeof filteredChats)[number]): string | null => {
-    const count = chat.ticketCount ?? 0;
-    const pct = chat.ticketProgressPct;
-    return count > 0 && typeof pct === 'number' && Number.isFinite(pct) ? `${Math.round(pct)}%` : null;
-  };
   const projectOptions = useMemo(() => [
     { value: '', label: tBrain('addToProject') },
     { value: '__new__', label: tBrain('createNewProject') },
@@ -53,7 +52,7 @@ export function BrainChatList() {
         return (
           <ChatHistoryRow
             key={chat.id}
-            chat={{ ...chat, stats: progressStatsOf(chat) }}
+            chat={chat}
             active={active}
             labels={labels}
             {...rows.rowProps(chat.id)}

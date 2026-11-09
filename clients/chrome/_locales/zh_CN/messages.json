@@ -77,6 +77,24 @@
   "chatRename": {
     "message": "重命名"
   },
+  "chatTicketStats": {
+    "message": "$1% · $2 个未完成 · $3 个已完成"
+  },
+  "chatTicketStatsAria": {
+    "message": "已完成 $1%：$2 个未完成工单，$3 个已完成工单"
+  },
+  "chatTicketStatsCount": {
+    "message": "$1% · $2 个工单"
+  },
+  "chatTicketStatsCountAria": {
+    "message": "$2 个工单整体完成 $1%"
+  },
+  "chatTicketStatsCountOnly": {
+    "message": "$1 个工单"
+  },
+  "chatTicketStatsNone": {
+    "message": "没有工单"
+  },
   "contextLabel": {
     "message": "Rovr 正在操作"
   },
@@ -1799,4 +1817,4 @@
     "message": "下载",
     "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

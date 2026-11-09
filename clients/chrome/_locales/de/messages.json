@@ -77,6 +77,24 @@
   "chatRename": {
     "message": "Umbenennen"
   },
+  "chatTicketStats": {
+    "message": "$1 % · $2 offen · $3 erledigt"
+  },
+  "chatTicketStatsAria": {
+    "message": "$1 % abgeschlossen: $2 offene und $3 erledigte Tickets"
+  },
+  "chatTicketStatsCount": {
+    "message": "$1 % · $2 Tickets"
+  },
+  "chatTicketStatsCountAria": {
+    "message": "$1 % abgeschlossen über $2 Tickets"
+  },
+  "chatTicketStatsCountOnly": {
+    "message": "$1 Tickets"
+  },
+  "chatTicketStatsNone": {
+    "message": "Keine Tickets"
+  },
   "contextLabel": {
     "message": "Rovr arbeitet auf"
   },
@@ -1799,4 +1817,4 @@
     "message": "Herunterladen",
     "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

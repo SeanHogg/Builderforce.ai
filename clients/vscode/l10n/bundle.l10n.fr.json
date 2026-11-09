@@ -1256,5 +1256,7 @@
   "{n} B": "{n} o",
   "{n} KB": "{n} Ko",
   "{n} MB": "{n} Mo",
-  "{kind} {ref}": "{kind} {ref}"
+  "{kind} {ref}": "{kind} {ref}",
+  "{n} open": "{n} ouverts",
+  "{n} done": "{n} terminés"
 }

@@ -103,6 +103,30 @@
     "message": "Rename",
     "description": "Chat history row: rename a chat"
   },
+  "chatTicketStats": {
+    "message": "$1% · $2 open · $3 done",
+    "description": "Chat history row: linked-ticket column; $1 = percent complete, $2 = open tickets, $3 = done tickets"
+  },
+  "chatTicketStatsAria": {
+    "message": "$1% complete: $2 open and $3 done tickets",
+    "description": "Chat history row: accessible sentence for the ticket column; $1 = percent, $2 = open, $3 = done"
+  },
+  "chatTicketStatsCount": {
+    "message": "$1% · $2 tickets",
+    "description": "Chat history row: ticket column when open/done are unknown; $1 = percent, $2 = ticket count"
+  },
+  "chatTicketStatsCountAria": {
+    "message": "$1% complete across $2 tickets",
+    "description": "Chat history row: accessible sentence for the count form; $1 = percent, $2 = ticket count"
+  },
+  "chatTicketStatsCountOnly": {
+    "message": "$1 tickets",
+    "description": "Chat history row: tickets linked but no percent yet; $1 = ticket count"
+  },
+  "chatTicketStatsNone": {
+    "message": "No tickets",
+    "description": "Chat history row: the chat has no linked tickets"
+  },
   "contextLabel": {
     "message": "Rovr is acting on",
     "description": "Accessible name of the composer chip naming the site Rovr acts on"
@@ -1919,4 +1943,4 @@
     "message": "Download",
     "description": "Chat: action beside the hint that opens the model picker's Download"
   }
-}
+}

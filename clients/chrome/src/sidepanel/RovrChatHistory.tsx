@@ -26,12 +26,31 @@ const CHAT_HISTORY_KEY: Readonly<Record<string, MessageKey>> = {
   actions: 'chatActions',
   actionsAria: 'chatActionsFor',
   rename: 'chatRename',
+  ticketStats: 'chatTicketStats',
+  ticketStatsAria: 'chatTicketStatsAria',
+  ticketStatsCount: 'chatTicketStatsCount',
+  ticketStatsCountAria: 'chatTicketStatsCountAria',
+  ticketStatsCountOnly: 'chatTicketStatsCountOnly',
+  ticketStatsNone: 'chatTicketStatsNone',
 };
 
-/** The rows' copy through brain-ui's one table. `chatActionsFor`'s `$1` gets the literal `{title}` the row fills. */
+/**
+ * The literal `{name}` placeholders the shared row fills itself, in each message's
+ * positional order (`$1`, `$2`, …) — Chrome substitutes them back as written.
+ */
+const LITERAL_PLACEHOLDERS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  actionsAria: { title: '{title}' },
+  ticketStats: { pct: '{pct}', open: '{open}', done: '{done}' },
+  ticketStatsAria: { pct: '{pct}', open: '{open}', done: '{done}' },
+  ticketStatsCount: { pct: '{pct}', count: '{count}' },
+  ticketStatsCountAria: { pct: '{pct}', count: '{count}' },
+  ticketStatsCountOnly: { count: '{count}' },
+};
+
+/** The rows' copy through brain-ui's one table, placeholders handed through literally. */
 function rovrChatHistoryLabels(): ChatHistoryLabels {
   const lookup = rovrLookup((key) => CHAT_HISTORY_KEY[key]);
-  return chatHistoryLabelsFrom((key, values) => lookup(key, key === 'actionsAria' ? { title: '{title}' } : values));
+  return chatHistoryLabelsFrom((key, values) => lookup(key, LITERAL_PLACEHOLDERS[key] ?? values));
 }
 
 export interface RovrChatHistoryProps {
@@ -44,23 +63,10 @@ export interface RovrChatHistoryProps {
   rows: ChatRowActions;
   /**
    * Synced server chats by serverId — the platform rollup (`ticketCount`,
-   * `ticketProgressPct`) the device record does not carry. A chat with no
+   * `ticketProgressPct`, open/done counts) the device record does not carry. A chat with no
    * entry (unsynced, offline, signed out) renders title-only, as before.
    */
   serverChats?: ReadonlyMap<number, BrainChat>;
-}
-
-/**
- * The row's stats pill — the same rule the VSIX history and the web BrainChatList
- * share: `% done` only when the chat has at least one linked ticket and a finite
- * pct, so a no-ticket chat never reads a misleading `0%`.
- */
-function progressStatsOf(serverChat: BrainChat | undefined): string {
-  if (!serverChat) return '';
-  const ticketCount = serverChat.ticketCount ?? 0;
-  const pct = serverChat.ticketProgressPct;
-  if (ticketCount <= 0 || pct == null || !Number.isFinite(pct)) return '';
-  return `${Math.round(pct)}%`;
 }
 
 export function RovrChatHistory({ id, chats, loading, chatId, rows, serverChats }: RovrChatHistoryProps) {
@@ -70,18 +76,18 @@ export function RovrChatHistory({ id, chats, loading, chatId, rows, serverChats 
     <ChatHistoryList id={id} className="rovr-history" loading={loading} total={chats.length} labels={labels}>
       {chats.map((c) => {
         const serverChat = c.serverId != null ? serverChats?.get(c.serverId) : undefined;
-        const stats = progressStatsOf(serverChat);
         return (
           <ChatHistoryRow
             key={c.id}
             chat={{
               id: c.id,
               title: c.title,
-              // The title's `67% · ` prefix rides the shared chatSwitcherLabel once
-              // the rollup is present — same read as the web and the editor.
+              // The shared row renders the linked-ticket column (`ChatTicketStats`)
+              // from these — same read as the web and the editor.
               ticketCount: serverChat?.ticketCount,
               ticketProgressPct: serverChat?.ticketProgressPct,
-              stats: stats || undefined,
+              ticketOpenCount: serverChat?.ticketOpenCount,
+              ticketDoneCount: serverChat?.ticketDoneCount,
             }}
             active={c.id === chatId}
             {...rows.rowProps(c.id)}

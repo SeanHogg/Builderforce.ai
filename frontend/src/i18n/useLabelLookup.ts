@@ -12,7 +12,7 @@ const PASSTHROUGH = {
   amount: '{amount}', tokens: '{tokens}', pct: '{pct}', count: '{count}', days: '{days}',
   used: '{used}', limit: '{limit}', unit: '{unit}', version: '{version}',
   size: '{size}', percent: '{percent}', runtime: '{runtime}', title: '{title}', owner: '{owner}',
-  code: '{code}', action: '{action}', vendor: '{vendor}',
+  code: '{code}', action: '{action}', vendor: '{vendor}', open: '{open}', done: '{done}',
 } as const;
 
 /**

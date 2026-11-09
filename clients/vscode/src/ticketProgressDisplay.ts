@@ -15,14 +15,44 @@ export function conversationTreeLabel(chat: { id: number; title?: string | null 
   return chat.title || `Chat ${chat.id}`;
 }
 
+/** A chat's non-cancelled linked tickets split by state. Absent (older server) = unknown, never 0. */
+export interface TicketCounts {
+  open?: number | null;
+  done?: number | null;
+}
+
+/** The open/done copy — the host passes `vscode.l10n` labels; the English default keeps this vscode-free. */
+export interface TicketCountLabels {
+  open: (n: number) => string;
+  done: (n: number) => string;
+}
+
+export const DEFAULT_TICKET_COUNT_LABELS: TicketCountLabels = {
+  open: (n) => `${n} open`,
+  done: (n) => `${n} done`,
+};
+
+const isCount = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
+
 /**
- * Append ` · {n}%` after the relative time when a percent is present.
- * Empty time + a percent yields `{n}%` (no dangling ` · `). Absent percent
- * returns the time unchanged — including the empty string.
+ * Append ` · {n}%` after the relative time when a percent is present, then
+ * ` · {open} open · {done} done` when BOTH counts are known (the same column the
+ * shared chat-history row shows). Empty time + a percent yields `{n}%` (no
+ * dangling ` · `). Absent percent returns the time unchanged — including the
+ * empty string — and never shows counts on their own.
  */
-export function appendTicketProgress(relativeTime: string, pct: number | null): string {
+export function appendTicketProgress(
+  relativeTime: string,
+  pct: number | null,
+  counts?: TicketCounts,
+  labels: TicketCountLabels = DEFAULT_TICKET_COUNT_LABELS,
+): string {
   if (pct == null) return relativeTime;
-  return relativeTime ? `${relativeTime} · ${pct}%` : `${pct}%`;
+  const parts = relativeTime ? [relativeTime, `${pct}%`] : [`${pct}%`];
+  if (counts && isCount(counts.open) && isCount(counts.done)) {
+    parts.push(labels.open(counts.open), labels.done(counts.done));
+  }
+  return parts.join(" · ");
 }
 
 /** Tooltip-only wording. The row itself never says "ticket progress" or "context". */

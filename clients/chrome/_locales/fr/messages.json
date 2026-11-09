@@ -77,6 +77,24 @@
   "chatRename": {
     "message": "Renommer"
   },
+  "chatTicketStats": {
+    "message": "$1 % · $2 ouverts · $3 terminés"
+  },
+  "chatTicketStatsAria": {
+    "message": "$1 % terminé : $2 tickets ouverts et $3 terminés"
+  },
+  "chatTicketStatsCount": {
+    "message": "$1 % · $2 tickets"
+  },
+  "chatTicketStatsCountAria": {
+    "message": "$1 % terminé sur $2 tickets"
+  },
+  "chatTicketStatsCountOnly": {
+    "message": "$1 tickets"
+  },
+  "chatTicketStatsNone": {
+    "message": "Aucun ticket"
+  },
   "contextLabel": {
     "message": "Rovr agit sur"
   },

@@ -36,6 +36,27 @@ describe("appendTicketProgress", () => {
     expect(appendTicketProgress("", 85)).toBe("85%");
     expect(appendTicketProgress("", 85)).not.toMatch(/^ · /);
   });
+
+  it("appends open/done counts after the percent when both are known", () => {
+    expect(appendTicketProgress("2h", 62, { open: 3, done: 5 })).toBe("2h · 62% · 3 open · 5 done");
+    expect(appendTicketProgress("", 62, { open: 3, done: 5 })).toBe("62% · 3 open · 5 done");
+    expect(appendTicketProgress("now", 0, { open: 4, done: 0 })).toBe("now · 0% · 4 open · 0 done");
+  });
+
+  it("omits counts when either is unknown (older server) — absent is never 0", () => {
+    expect(appendTicketProgress("2h", 62, { open: 3 })).toBe("2h · 62%");
+    expect(appendTicketProgress("2h", 62, { open: null, done: 5 })).toBe("2h · 62%");
+    expect(appendTicketProgress("2h", 62, {})).toBe("2h · 62%");
+  });
+
+  it("never shows counts without a percent", () => {
+    expect(appendTicketProgress("2h", null, { open: 3, done: 5 })).toBe("2h");
+  });
+
+  it("renders the counts through the host's localized labels", () => {
+    const labels = { open: (n: number) => `${n} offen`, done: (n: number) => `${n} erledigt` };
+    expect(appendTicketProgress("2h", 62, { open: 3, done: 5 }, labels)).toBe("2h · 62% · 3 offen · 5 erledigt");
+  });
 });
 
 describe("ticketProgressTooltipLine", () => {
@@ -74,6 +95,11 @@ describe("sessionsTree row contract", () => {
 
   it("feeds description through appendTicketProgress and sets a11y from the helper", () => {
     expect(source).toContain("appendTicketProgress");
+    // The open/done counts reach the row, localized.
+    expect(source).toContain("ticketOpenCount");
+    expect(source).toContain("ticketDoneCount");
+    expect(source).toContain('vscode.l10n.t("{n} open"');
+    expect(source).toContain('vscode.l10n.t("{n} done"');
     // The percent goes through the ONE rounding rule the picker and the rail use.
     expect(source).toContain("displayChatProgressPct");
     expect(source).toContain("conversationAccessibilityName");
