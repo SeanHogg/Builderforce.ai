@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-09T03:21:09.083Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-09T04:28:11.240Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -17,7 +17,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 3e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.634e-7, 0.0000101489],
+  "~moonshotai/kimi-latest": [1.824e-7, 0.0000093388],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
