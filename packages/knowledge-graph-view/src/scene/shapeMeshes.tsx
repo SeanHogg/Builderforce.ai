@@ -3,7 +3,9 @@
  * graph (GraphScene.tsx). Each kind is ONE instanced mesh, so a graph of a thousand nodes
  * stays a handful of draw calls; the geometries are normalised so every silhouette covers
  * about the same volume (the box was a 1.7-wide outlier; cone and octahedron are tuned to
- * comparable bounding volume).
+ * comparable bounding volume). Visualizer §2: shape in all four views — the picking +
+ * selection behaviour is preserved per bucket (selOf), so a kind keeps its silhouette
+ * without losing click-to-focus or the grown selection ring.
  */
 
 import { useThree, type ThreeEvent } from '@react-three/fiber';
