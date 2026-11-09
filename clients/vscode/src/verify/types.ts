@@ -7,6 +7,7 @@
  * evidence ledger, A1) — this file re-exports them so the VSIX verifier builds
  * against the one canonical contract instead of a mirror.
  */
+import type { CheckRecord } from "@builderforce/run-guards";
 export type { CheckKind, CheckRecord } from "@builderforce/run-guards";
 
 /** The verifier port the VSIX binds (PRD 45 §4.4). */

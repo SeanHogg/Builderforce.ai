@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-08T22:24:42.378Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-09T01:44:04.332Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -17,7 +17,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 3e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.624e-7, 0.0000097471],
+  "~moonshotai/kimi-latest": [1.824e-7, 0.0000105572],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -94,7 +94,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v4-flash-0731": [4.34e-8, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [4.8e-8, 1.44e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [4.4e-7, 0.00000132],
-  "deepseek/deepseek-v4-pro": [2.088e-7, 4.176e-7],
+  "deepseek/deepseek-v4-pro": [9.483e-7, 0.0000018966],
   "deepseek/deepseek-v4-pro-0813": [1.11e-7, 0.00000444],
   "deepseek/deepseek-v4.1-flash": [5.1e-8, 5.67e-7],
   "deepseek/deepseek-v4.1-flash-1017": [6e-9, 5e-7],
@@ -184,7 +184,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "minimax/minimax-m2.7": [2.1e-7, 8.4e-7],
   "minimax/minimax-m3": [3e-7, 0.0000012],
   "minimax/minimax-m3:batch": [2.24e-7, 8.8e-7],
-  "minimax/minimax-m3.1-flash": [7.5e-8, 3e-7],
+  "minimax/minimax-m3.1-flash": [1.5e-7, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 0.000002],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -323,7 +323,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [2e-8, 7.5e-8],
+  "openai/gpt-oss-120b": [1.5e-7, 6e-7],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
@@ -373,7 +373,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "qwen/qwen3.5-122b-a10b": [2.6e-7, 0.00000208],
   "qwen/qwen3.5-27b": [2.6e-7, 0.0000026],
   "qwen/qwen3.5-35b-a3b": [1.4e-7, 0.000001],
-  "qwen/qwen3.5-397b-a17b": [5e-7, 0.0000036],
+  "qwen/qwen3.5-397b-a17b": [6e-7, 0.0000036],
   "qwen/qwen3.5-9b": [1.7e-7, 2.5e-7],
   "qwen/qwen3.5-flash-02-23": [6.5e-8, 2.6e-7],
   "qwen/qwen3.5-plus-02-15": [2.6e-7, 0.00000156],
@@ -416,10 +416,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "tencent/hy-mt2-1.8b": [4.4e-8, 1.77e-7],
   "tencent/hy-mt2-30b-a3b": [7.4e-8, 2.95e-7],
   "tencent/hy-mt2-7b": [7.4e-8, 2.95e-7],
-  "tencent/hy3": [8.25e-8, 3.3e-7],
+  "tencent/hy3": [1.32e-7, 5.28e-7],
   "tencent/hy3-preview": [1.8e-7, 6e-7],
   "tencent/hy4": [4.17e-7, 0.0000012505],
-  "tencent/hy4-preview": [7.506e-7, 0.0000022509],
+  "tencent/hy4-preview": [8.34e-7, 0.000002501],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [5.5e-7, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -460,13 +460,13 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [6e-9, 0.0000068],
-  "z-ai/glm-5.2:batch": [3.49e-7, 0.000001271],
+  "z-ai/glm-5.2:batch": [5.04e-7, 0.000001271],
   "z-ai/glm-5.3": [6.99e-8, 0.0000014],
   "z-ai/glm-5.3-flash": [3.35e-8, 8.3e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],
   "z-ai/glm-5.3-flashx-legal": [3.7e-7, 0.00000125],
   "z-ai/glm-5.3-prime": [0.0000028, 0.0000088],
-  "z-ai/glm-5.3:batch": [3.49e-7, 0.000001271],
+  "z-ai/glm-5.3:batch": [4.5e-7, 0.000002],
   "z-ai/glm-5v-turbo": [0.0000012, 0.000004],
 };

@@ -44,6 +44,9 @@ export function nodeAriaLabel(labels: KnowledgeGraphLabels, n: KNode): string {
 interface StopItem {
     n: KNode;
     at: readonly [number, number] | undefined;
+    /** The lens's emphasis for this node — mirrored on the hit circle's `opacity` so the
+     *  dim state stays observable in the DOM (and in jsdom, which has no canvas). */
+    dim: boolean;
 }
 
 /**
@@ -62,7 +65,7 @@ const TabStops = memo(function TabStops({ items, selected, labels, onActivate, o
 }) {
     return (
         <>
-            {items.map(({ n, at }) => {
+            {items.map(({ n, at, dim }) => {
                 if (!at) return null;
                 const pressed = n.ref === selected;
                 return (
@@ -74,7 +77,7 @@ const TabStops = memo(function TabStops({ items, selected, labels, onActivate, o
                             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(n.ref); } else onArrow(e);
                         }}
                     >
-                        <circle data-dot="true" cx={at[0]} cy={at[1]} r={Math.max(nodeRadius(n.importance), 0.35)} fill="transparent" />
+                        <circle data-dot="true" cx={at[0]} cy={at[1]} r={Math.max(nodeRadius(n.importance), 0.35)} fill="transparent" opacity={dim ? 0.35 : 1} />
                     </g>
                 );
             })}
@@ -97,8 +100,11 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
         });
     }, [ordered, layout, lens, perPx]);
 
-    /** One Path2D per shape kind, reused across frames — the WebGL `Cylinders` bucketing, in 2D. */
+    /** One Path2D per shape kind, reused across frames — the WebGL `Cylinders` bucketing, in 2D.
+     *  Null where there is no canvas runtime (jsdom, a headless host): the paint effect bails,
+     *  and the component still renders its tab-stop overlay, instead of crashing on `new Path2D`. */
     const shapePaths = useMemo(() => {
+        if (typeof Path2D === 'undefined') return null;
         const out = {} as Record<keyof typeof SHAPE_PATHS, Path2D>;
         for (const shape of Object.keys(SHAPE_PATHS) as (keyof typeof SHAPE_PATHS)[]) out[shape] = new Path2D(SHAPE_PATHS[shape]);
         return out;
@@ -115,7 +121,7 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
-        if (!canvas || !ctx || !view || !size.width || !size.height || !colors) {
+        if (!canvas || !ctx || !view || !size.width || !size.height || !colors || !shapePaths) {
             setReady(false);
             return undefined;
         }
@@ -157,11 +163,14 @@ export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, sele
     // move off per-node DOM. Stable per node (memoised on primitives + selected) so a selection
     // change re-renders only the two overlay stops whose pressed state moved.
     const stopsItems = useMemo(
-        () => ordered.filter((n) => stops.has(n.ref) || n.ref === selected).map((n): StopItem => ({ n, at: layout.positions.get(n.ref) })),
-        [ordered, stops, layout, selected],
+        () => ordered.filter((n) => stops.has(n.ref) || n.ref === selected).map((n): StopItem => ({ n, at: layout.positions.get(n.ref), dim: lens.nodeStyle(n).emphasis === 'dim' })),
+        [ordered, stops, layout, selected, lens],
     );
 
     const onOverlayClick = (e: MouseEvent<SVGGElement>) => {
+        // The overlay already mapped the click to a node — do NOT let it bubble to the
+        // svg's nearest-hit handler, which would activate the same node a second time.
+        e.stopPropagation();
         if (e.target === e.currentTarget) return;
         const g = (e.target as Element).closest('[data-id]');
         const id = g?.getAttribute('data-id');

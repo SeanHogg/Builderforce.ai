@@ -15,8 +15,6 @@ export function chatSwitcherLabel(input: {
   id: number;
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
-  ticketOpenCount?: number | null;
-  ticketDoneCount?: number | null;
   runGlyph?: string;
 }): string {
   const title = input.title.trim() || `Chat ${input.id}`;
@@ -25,8 +23,5 @@ export function chatSwitcherLabel(input: {
   // The ONE display rule the Sessions tree and the ticket rail share.
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (count <= 0 || pct == null) return `${glyph}${title}`;
-  const open = input.ticketOpenCount;
-  const done = input.ticketDoneCount;
-  const counts = typeof open === 'number' && typeof done === 'number' ? `${open} open · ${done} done · ` : '';
-  return `${glyph}${count} tickets · ${pct}% · ${counts}${title}`;
+  return `${glyph}${count} tickets · ${pct}% · ${title}`;
 }

@@ -6100,10 +6100,7 @@ function chatSwitcherLabel(input) {
   const count = input.ticketCount ?? 0;
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (count <= 0 || pct == null) return `${glyph}${title}`;
-  const open = input.ticketOpenCount;
-  const done = input.ticketDoneCount;
-  const counts = typeof open === "number" && typeof done === "number" ? `${open} open \xB7 ${done} done \xB7 ` : "";
-  return `${glyph}${count} tickets \xB7 ${pct}% \xB7 ${counts}${title}`;
+  return `${glyph}${count} tickets \xB7 ${pct}% \xB7 ${title}`;
 }
 
 // src/chatTickets/MergeSection.tsx

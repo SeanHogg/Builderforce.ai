@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@builderforce/run-guards':
+        specifier: link:../run-guards
+        version: link:../run-guards
       '@seanhogg/builderforce-memory':
         specifier: ^2026.10.62
         version: 2026.10.62(@seanhogg/builderforce-memory-engine@2026.10.62)
